@@ -3537,7 +3537,7 @@ public:
                 .RelPath = "status",
                 .ActorSystem = TActivationContext::ActorSystem(),
                 .ActorId = SelfId(),
-                .UseAuth = false,
+                .AuthMode = TMon::EAuthMode::Disabled,
             });
         }
         Become(&THealthCheckService::StateWork);

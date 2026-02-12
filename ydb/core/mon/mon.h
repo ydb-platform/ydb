@@ -3,6 +3,7 @@
 #include <future>
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/page.h>
 #include <library/cpp/monlib/service/pages/index_mon_page.h>
 #include <library/cpp/monlib/service/pages/resources/css_mon_page.h>
 #include <library/cpp/monlib/service/pages/resources/fonts_mon_page.h>
@@ -17,6 +18,10 @@
 
 #include "mon.h"
 
+namespace NKikimr {
+    struct TAppData;
+}
+
 namespace NActors {
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
@@ -24,6 +29,12 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
 
 class TMon {
 public:
+    enum class EAuthMode {
+        Disabled,      // Don't check authorization
+        Enforce,       // Check authorization in monitoring layer
+        ExtractOnly    // Extract token only, check authorization in handler
+    };
+
     using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::THttpIncomingRequest* request)>;
 
     static IEventHandle* DefaultAuthorizer(const TActorId& owner, NHttp::THttpIncomingRequest* request);
@@ -41,6 +52,8 @@ public:
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
         TString AllowOrigin;
+        bool RequireCountersAuthentication = false;
+        bool RequireHealthcheckAuthentication = false;
     };
 
     TMon(TConfig config);
@@ -59,7 +72,7 @@ public:
         NMonitoring::TIndexMonPage* Index;
         bool PreTag = false;
         TActorId ActorId;
-        bool UseAuth = true;
+        EAuthMode AuthMode = EAuthMode::Enforce;
         TVector<TString> AllowedSIDs;
         bool SortPages = true;
         TString MonServiceName = "utils";
@@ -74,7 +87,7 @@ public:
     struct TRegisterHandlerFields {
         TString Path;
         TActorId Handler;
-        bool UseAuth = true;
+        EAuthMode AuthMode = EAuthMode::Enforce;
         TVector<TString> AllowedSIDs;
     };
 
@@ -98,6 +111,9 @@ protected:
     TActorId HttpProxyActorId;
     TActorId HttpMonServiceActorId;
     TActorId NodeProxyServiceActorId;
+    TActorId CountersServiceActorId;
+    TActorId PingServiceActorId;
+    TIntrusivePtr<NMonitoring::TDynamicCountersPage> CountersMonPage;
 
     struct TActorMonPageInfo {
         NMonitoring::TMonPagePtr Page;
@@ -111,6 +127,8 @@ protected:
     std::shared_ptr<NMonitoring::IMetricFactory> Metrics;
 
     void RegisterActorMonPage(const TActorMonPageInfo& pageInfo);
+
+    static TVector<TString> GetCountersAllowedSIDs(const NKikimr::TAppData* appData);
 };
 
-} // NActors
+} // namespace NActors

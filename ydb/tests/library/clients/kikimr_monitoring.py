@@ -6,23 +6,29 @@ from six.moves.urllib import request
 
 
 class KikimrMonitor(object):
-    def __init__(self, host, mon_port, update_interval_seconds=1.0):
+    def __init__(self, host, mon_port, update_interval_seconds=1.0, token=None):
         super(KikimrMonitor, self).__init__()
         self.__host = host
         self.__mon_port = mon_port
         self.__url = "http://{host}:{mon_port}/counters/json".format(host=host, mon_port=mon_port)
+        self.__token = token
         self.__pdisks = set()
         self.__data = {}
         self.__next_update_time = time.time()
         self.__update_interval_seconds = update_interval_seconds
         self._by_sensor_name = collections.defaultdict(list)
 
+    def __open_url(self, url_str):
+        if self.__token:
+            req = request.Request(url_str, headers={'Authorization': self.__token})
+            return request.urlopen(req)
+        return request.urlopen(url_str)
+
     def tabletcounters(self, tablet_id):
-        url = request.urlopen(
-            "http://{host}:{mon_port}/viewer/json/tabletcounters?tablet_id={tablet_id}".format(
-                host=self.__host, mon_port=self.__mon_port, tablet_id=tablet_id
-            )
+        url_str = "http://{host}:{mon_port}/viewer/json/tabletcounters?tablet_id={tablet_id}".format(
+            host=self.__host, mon_port=self.__mon_port, tablet_id=tablet_id
         )
+        url = self.__open_url(url_str)
         return json.load(url)
 
     @property
@@ -38,7 +44,7 @@ class KikimrMonitor(object):
             return
 
         try:
-            url = request.urlopen(self.__url)
+            url = self.__open_url(self.__url)
         except Exception:
             return False
         try:

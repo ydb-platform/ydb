@@ -41,7 +41,7 @@ class NodeInterface(object):
 
     @property
     def monitor(self):
-        return KikimrMonitor(self.host, self.mon_port)
+        return KikimrMonitor(self.host, self.mon_port, token=getattr(self, '_monitor_token', None))
 
     @abc.abstractproperty
     def cwd(self):

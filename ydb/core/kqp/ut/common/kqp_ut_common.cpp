@@ -1980,5 +1980,26 @@ void CheckOwner(TSession& session, const TString& path, const TString& name) {
     UNIT_ASSERT_VALUES_EQUAL_C(name, currentOwner, "name is not currentOwner");
 }
 
+void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
+    auto driver = NYdb::TDriver(NYdb::TDriverConfig()
+        .SetEndpoint(kikimr.GetEndpoint())
+        .SetDatabase("/Root")
+        .SetAuthToken(subject));
+
+    NYdb::NQuery::TQueryClient client(driver);
+    while (true) {
+        auto result = client.ExecuteScript("SELECT 1").ExtractValueSync();
+        NYdb::EStatus scriptStatus = result.Status().GetStatus();
+        UNIT_ASSERT_C(
+            scriptStatus == NYdb::EStatus::UNAVAILABLE ||
+            scriptStatus == NYdb::EStatus::SUCCESS ||
+            scriptStatus == NYdb::EStatus::UNAUTHORIZED,
+            result.Status().GetIssues().ToString());
+        if (scriptStatus == NYdb::EStatus::SUCCESS)
+            return;
+        Sleep(TDuration::Seconds(1));
+    };
+}
+
 } // namspace NKqp
 } // namespace NKikimr

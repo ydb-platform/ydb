@@ -42,11 +42,11 @@ feature_flags:
   enable_external_data_sources: true
 ```
 
-4. [В конфигурационный файл](../../../../reference/configuration/index.md) {{ ydb-short-name }} добавьте [настройки внешних источников данных](../../../../reference/configuration/query_service_config.md).
+1. [В конфигурационный файл](../../../../reference/configuration/index.md) {{ ydb-short-name }} добавьте [настройки внешних источников данных](../../../../reference/configuration/query_service_config.md).
 
 {% list tabs %}
 
-- Без использования коннектора
+* Без использования коннектора
 
     ```yaml
     query_service_config:
@@ -59,7 +59,7 @@ feature_flags:
       - ObjectStorage
     ```
 
-- С использованием коннектора
+* С использованием коннектора
 
     ```yaml
     query_service_config:
@@ -81,4 +81,4 @@ feature_flags:
 
 {% endlist %}
 
-5. Продолжайте развёртывание динамического узла {{ ydb-short-name }} по [инструкции](../initial-deployment/index.md).
+1. Продолжайте развёртывание динамического узла {{ ydb-short-name }} по [инструкции](../initial-deployment/index.md).

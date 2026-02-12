@@ -1,11 +1,11 @@
 Spirit
 ======
 
-Spirit is a set of C++ libraries for parsing and output generation implemented as 
-Domain Specific Embedded Languages (DSEL) using Expression templates and Template 
-Meta-Programming. The Spirit libraries enable a target grammar to be written 
-exclusively in C++. Inline grammar specifications can mix freely with other 
-C++ code and, thanks to the generative power of C++ templates, are immediately 
+Spirit is a set of C++ libraries for parsing and output generation implemented as
+Domain Specific Embedded Languages (DSEL) using Expression templates and Template
+Meta-Programming. The Spirit libraries enable a target grammar to be written
+exclusively in C++. Inline grammar specifications can mix freely with other
+C++ code and, thanks to the generative power of C++ templates, are immediately
 executable.
 
 ### Spirit.X3 (3rd generation)
@@ -19,6 +19,7 @@ The newest Spirit shines faster compile times. Currently only a parser framework
 Spirit X3 in Boost 1.81 (scheduled to November 2022) will use C++17 features.
 
 Supported compilers will be:
+
 * Clang 4 (currently 3.6)
 * GCC 7 (currently 5)
 * VS 2017 v15.8 (currently 2015 U3)
@@ -31,13 +32,13 @@ The latest Long Term Support version of Spirit. A Swiss Army knife for data
 manipulation on any kind of input.
 
 Consists of:
-  - [Qi]: Parser framework.
-  - [Karma]: Generator framework.
-  - [Lex]: Lexical analyzer framework.
+
+* [Qi]: Parser framework.
+* [Karma]: Generator framework.
+* [Lex]: Lexical analyzer framework.
   
 Runs on most C++03 compilers (GCC 4.1, Clang 3.0, VS 2005).
 
-[Spirit V2]: http://www.boost.org/doc/libs/develop/libs/spirit/doc/html/index.html
 [Qi]: http://www.boost.org/doc/libs/develop/libs/spirit/doc/html/spirit/qi.html
 [Karma]: http://www.boost.org/doc/libs/develop/libs/spirit/doc/html/spirit/karma.html
 [Lex]: http://www.boost.org/doc/libs/develop/libs/spirit/doc/html/spirit/lex.html

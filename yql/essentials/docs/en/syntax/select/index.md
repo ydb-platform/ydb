@@ -36,7 +36,6 @@ The `SELECT` query result is calculated as follows:
 * Perform sorting with [ORDER BY](order_by.md).
 * Apply [OFFSET and LIMIT](limit_offset.md) to the result.
 
-
 ## Column order in YQL {#orderedcolumns}
 
 The standard SQL is sensitive to the order of columns in projections (that is, in `SELECT`). While the order of columns must be preserved in the query results or when writing data to a new table, some SQL constructs use this order.
@@ -54,7 +53,6 @@ If you enable `PRAGMA OrderedColumns;`, the order of columns is preserved in the
 * The order of columns after [JOIN](../join.md): First output the left-hand columns, then the right-hand ones. If the column order in any of the sides in the `JOIN` output is undefined, the column order in the result is also undefined.
 * The order in `UNION ALL` depends on the [UNION ALL](union.md#union-all) execution mode.
 * The column order for [AS_TABLE](from_as_table.md) is undefined.
-
 
 ### Combining queries {#combining-queries}
 

@@ -4,34 +4,34 @@
 
 # Table of contents
 
- * [Features](#features)
- * [Getting started](#getting-started)
-     * [Compare two strings](#compare-two-strings)
-     * [Compare two data has arbitrary type](#compare-two-data-has-arbitrary-type)
-     * [Merge three sequences](#merge-three-sequences)
-     * [Patch function](#patch-function)
-     * [Difference as Unified Format](#difference-as-unified-format)
-     * [Compare large sequences](#compare-large-sequences)
-     * [Unserious difference](#unserious-difference)
-     * [Calculate only Edit Distance](#calculate-only-edit-distance)
- * [Algorithm](#algorithm)
-     * [Computational complexity](#computational-complexity)
-     * [Comparison when difference between two sequences is very large](#comparison-when-difference-between-two-sequences-is-very-large)
-     * [Implementations with various programming languages](#implementations-with-various-programming-languages)
- * [Examples](#examples)
-     * [strdiff](#strdiff)
-     * [intdiff](#intdiff)
-     * [unidiff](#unidiff)
-     * [unistrdiff](#unistrdiff)
-     * [strdiff3](#strdiff3)
-     * [intdiff3](#intdiff3)
-     * [patch](#patch)
-     * [fpatch](#fpatch)
- * [Running tests](#running-tests)
-     * [Building test programs](#building-test-programs)
-     * [Running test programs](#running-test-programs)
- * [Old commit histories](#old-commit-histories)
- * [License](#license)
+* [Features](#features)
+* [Getting started](#getting-started)
+  * [Compare two strings](#compare-two-strings)
+  * [Compare two data has arbitrary type](#compare-two-data-has-arbitrary-type)
+  * [Merge three sequences](#merge-three-sequences)
+  * [Patch function](#patch-function)
+  * [Difference as Unified Format](#difference-as-unified-format)
+  * [Compare large sequences](#compare-large-sequences)
+  * [Unserious difference](#unserious-difference)
+  * [Calculate only Edit Distance](#calculate-only-edit-distance)
+* [Algorithm](#algorithm)
+  * [Computational complexity](#computational-complexity)
+  * [Comparison when difference between two sequences is very large](#comparison-when-difference-between-two-sequences-is-very-large)
+  * [Implementations with various programming languages](#implementations-with-various-programming-languages)
+* [Examples](#examples)
+  * [strdiff](#strdiff)
+  * [intdiff](#intdiff)
+  * [unidiff](#unidiff)
+  * [unistrdiff](#unistrdiff)
+  * [strdiff3](#strdiff3)
+  * [intdiff3](#intdiff3)
+  * [patch](#patch)
+  * [fpatch](#fpatch)
+* [Running tests](#running-tests)
+  * [Building test programs](#building-test-programs)
+  * [Running test programs](#running-test-programs)
+* [Old commit histories](#old-commit-histories)
+* [License](#license)
 
 # Features
 
@@ -74,9 +74,9 @@ If one sequence is "abc" and another sequence is "abd", Edit Distance and LCS an
 | LCS           | ab              |
 | SES           | C a C b D c A d |
 
- * 「C」：Common
- * 「D」：Delete
- * 「A」：ADD
+* 「C」：Common
+* 「D」：Delete
+* 「A」：ADD
 
 If you want to know in more detail, please see [examples/strdiff.cpp](https://github.com/cubicdaiya/dtl/blob/master/examples/strdiff.cpp).
 
@@ -386,7 +386,7 @@ The program uses that algorithm don't consider that will burst in the worst case
 
 There are the Wu's O(NP) Algorithm implementations with various programming languages below.
 
-https://github.com/cubicdaiya/onp
+<https://github.com/cubicdaiya/onp>
 
 # Examples
 
@@ -655,7 +655,7 @@ $
 If you build test programs for `dtl`, run `scons` in test direcotry.
 
 ```bash
-$ scons
+scons
 ```
 
 # Running test programs
@@ -663,14 +663,14 @@ $ scons
 If you run all tests for `dtl`, run 'scons check' in test direcotry. (it is necessary that gtest is compiled)
 
 ```bash
-$ scons check
+scons check
 ```
 
 If you run sectional tests, you may exeucte `dtl_test` directly after you run `scons`.
 Following command is the example for testing only Strdifftest.
 
 ```bash
-$ ./dtl_test --gtest_filter='Strdifftest.*'
+./dtl_test --gtest_filter='Strdifftest.*'
 ```
 
 `--gtest-filters` is the function of googletest. googletest has many useful functions for testing software flexibly.

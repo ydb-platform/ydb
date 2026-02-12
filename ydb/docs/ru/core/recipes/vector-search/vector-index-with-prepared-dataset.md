@@ -18,8 +18,8 @@
 * Установленная БД {{ ydb-short-name }} с включённой поддержкой [векторных индексов](../../dev/vector-indexes.md). Об установке простого одноузлового кластера {{ ydb-short-name }} можно прочитать [здесь](../../quickstart.md). Рекомендации по развёртыванию {{ ydb-short-name }} для промышленного использования см. [здесь](../../devops/deployment-options/index.md?version=main).
 
 * На рабочей машине:
-    * Утилита [{{ ydb-short-name }} CLI](../../reference/ydb-cli/);
-    * Python 3;
+  * Утилита [{{ ydb-short-name }} CLI](../../reference/ydb-cli/);
+  * Python 3;
 
 * Необходим сетевой доступ с рабочей машины к хостам, где установлена {{ ydb-short-name }}.
 

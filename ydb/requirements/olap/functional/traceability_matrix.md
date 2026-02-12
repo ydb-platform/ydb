@@ -3,7 +3,9 @@
 ## Functional Requirements
 
 ### Bulk Upsert Data Insertion
+
 #### [ISSUE-14639](https://github.com/ydb-platform/ydb/issues/14639): Test suite: cs/write data
+
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F8:25%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14639-test-suite-cswrite-data)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -18,7 +20,9 @@
 | #14648 | When inserting a large amount of data ALTER TABLE ADD COLUMN, bulk_upsert should complete successfully |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14648)](https://github.com/ydb-platform/ydb/issues/14648) | Pending |
 
 ### INSERT INTO, UPSERT, and REPLACE Operations
+
 #### [ISSUE-14668](https://github.com/ydb-platform/ydb/issues/14668): Test suite: CS/(INSERT INTO/UPSERT/REPLACE) support
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F9:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14668-test-suite-cs-insert-intoupsertreplace-support)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -34,7 +38,9 @@
 | #14678 | If the cluster is stopped during INSERT INTO execution, an error is returned to the user. Alternatively, INSERT is expected to be retried until the server is restarted |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14678)](https://github.com/ydb-platform/ydb/issues/14678) | Pending |
 
 ### Data Reading Operations
+
 #### [ISSUE-14680](https://github.com/ydb-platform/ydb/issues/14680): Test Suite: Reading data
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F2:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14680-test-suite-reading-data)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -43,6 +49,7 @@
 | #14681 | TPCH S100 is successful |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14681)](https://github.com/ydb-platform/ydb/issues/14681) | Pending |
 
 #### [ISSUE-13527](https://github.com/ydb-platform/ydb/issues/13527): Test Suite: cs/read-write
+
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-1%2F8:12%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13527-test-suite-csread-write)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -57,6 +64,7 @@
 | #13848 | Test CS RW load. Write, modify, read TBs | Проверка записи/модификации/чтения на больших объёмах данных (единицы-десятки. TB) | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13848)](https://github.com/ydb-platform/ydb/issues/13848) | Pending |
 
 #### [ISSUE-14639](https://github.com/ydb-platform/ydb/issues/14639): Test suite: cs/write data
+
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F8:25%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14639-test-suite-cswrite-data)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -71,6 +79,7 @@
 | #14648 | When inserting a large amount of data ALTER TABLE ADD COLUMN, bulk_upsert should complete successfully |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14648)](https://github.com/ydb-platform/ydb/issues/14648) | Pending |
 
 #### [ISSUE-14693](https://github.com/ydb-platform/ydb/issues/14693): Test Suite: Deletion by command
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F6:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14693-test-suite-deletion-by-command)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -83,7 +92,9 @@
 | #14699 | When data is deleted in a transaction, the data remains in place when the transaction is rolled back |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14699)](https://github.com/ydb-platform/ydb/issues/14699) | Pending |
 
 ### Other
+
 #### [ISSUE-13952](https://github.com/ydb-platform/ydb/issues/13952): Test Suite: cs/introspection
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13952-test-suite-csintrospection)
 
 **Description**: статистики по таблицам для UI, доступность информации через .sys
@@ -93,6 +104,7 @@
 | #13955 | TBD |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13955)](https://github.com/ydb-platform/ydb/issues/13955) | Pending |
 
 #### [ISSUE-13956](https://github.com/ydb-platform/ydb/issues/13956): Test suite: cs/schema
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13956-test-suite-csschema)
 
 **Description**: взаимодействие со ским-шардом, создание/удаление таблиц/сторов, представление/оптимизиация хранения схем, актуализация данных
@@ -102,6 +114,7 @@
 | #13957 | TBD |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13957)](https://github.com/ydb-platform/ydb/issues/13957) | Pending |
 
 #### [ISSUE-13959](https://github.com/ydb-platform/ydb/issues/13959): Test suite: cs/indexes
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13959-test-suite-csindexes)
 
 **Description**: индексы/статистики
@@ -111,6 +124,7 @@
 | #13960 | TBD |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13960)](https://github.com/ydb-platform/ydb/issues/13960) | Pending |
 
 #### [ISSUE-14601](https://github.com/ydb-platform/ydb/issues/14601): Test Suite: Workload Manager
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F1:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14601-test-suite-workload-manager)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -118,6 +132,7 @@
 | #14602 | Test WM. Classifiers move queires to right resource pool |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14602)](https://github.com/ydb-platform/ydb/issues/14602) | Pending |
 
 #### [ISSUE-14682](https://github.com/ydb-platform/ydb/issues/14682): Test Suite: CS/Pushdown предикатов
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F2:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14682-test-suite-cspushdown-предикатов)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -126,7 +141,9 @@
 | #14684 | When queries are executed, a pushdown of the desired data-calculus types is performed (check that the pushdown has been executed). In the scalar variant |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14684)](https://github.com/ydb-platform/ydb/issues/14684) | Pending |
 
 ### Federated Queries Support
+
 #### [ISSUE-14700](https://github.com/ydb-platform/ydb/issues/14700): Test Suite: Federated Queries
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F2:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14700-test-suite-federated-queries)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -134,10 +151,12 @@
 | #14701 | federated source cross-requests |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14701)](https://github.com/ydb-platform/ydb/issues/14701) | Pending |
 | #14702 | inserts from a federated source |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14702)](https://github.com/ydb-platform/ydb/issues/14702) | Pending |
 
-## 
+##
 
 ### TTL
+
 #### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
+
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13526-test-suite-cstieringttl)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -156,6 +175,7 @@
 | #13621 | Test tiering. Alter column works well for offloaded data |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13621)](https://github.com/ydb-platform/ydb/issues/13621) | Pending |
 
 #### [ISSUE-14685](https://github.com/ydb-platform/ydb/issues/14685): Test Suite: CS/TTL deletion
+
 [![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F7:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14685-test-suite-csttl-deletion)
 
 | Case ID | Name | Description | Issues |  Status |
@@ -169,7 +189,9 @@
 | #14692 | TTL deletes data at a sufficient rate (must exceed the insertion rate) |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14692)](https://github.com/ydb-platform/ydb/issues/14692) | Pending |
 
 ### Compression
+
 #### [ISSUE-13626](https://github.com/ydb-platform/ydb/issues/13626): Test Suite: cs/compression
+
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F11:18%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13626-test-suite-cscompression)
 
 **Description**: Сжатие (в широком смысле, напр., dictionary encoding), sparse, column_family
@@ -187,4 +209,3 @@
 | #13648 | Test cs column family. Column family with data types: text, string, json, jsondocument | Проверяем, что поддерживаются типы данных максимальной длины (text, string, json, jsondocument), условная запись 1 MB данных в ячейку | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13648)](https://github.com/ydb-platform/ydb/issues/13648) | Pending |
 | #13650 | Test cs column family. Zip-bomba | Выполняем запись в колонку 1 млн строк одной длинной, но одинаковой строки (в пределе из одного символа) (zip-бомба), проверяем, что запись и чтение выполняется | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13650)](https://github.com/ydb-platform/ydb/issues/13650) | Pending |
 | #13651 | Test cs column family. Write highly randomized data | Выполняем запись сильнорандомизированных данных (после сжатия размер должен вырасти), проверяем, что запись и чтение выполняется  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13651)](https://github.com/ydb-platform/ydb/issues/13651) | Pending |
-

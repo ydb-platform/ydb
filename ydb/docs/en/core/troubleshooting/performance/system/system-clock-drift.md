@@ -8,7 +8,6 @@ It is important to keep system clocks on the {{ ydb-short-name }} servers in syn
 
 {% endnote %}
 
-
 If the system clocks of the nodes running the [coordinator](../../../concepts/glossary.md#coordinator) tablets differ, transaction latencies increase by the time difference between the fastest and slowest system clocks. This occurs because a transaction planned on a node with a faster system clock can only be executed once the coordinator with the slowest clock reaches the same time.
 
 Furthermore, if the system clock drift exceeds 30 seconds, {{ ydb-short-name }} will refuse to process distributed transactions. Before coordinators start planning a transaction, affected [Data shards](../../../concepts/glossary.md#data-shard) determine an acceptable range of timestamps for the transaction. The start of this range is the current time of the mediator tablet's clock, while the 30-second planning timeout determines the end. If the coordinator's system clock exceeds this time range, it cannot plan a distributed transaction, resulting in errors for such queries.
@@ -41,7 +40,6 @@ To diagnose the system clock drift, use the following methods:
 
     {% endnote %}
 
-
 1. Open the [Interconnect overview](../../../reference/embedded-ui/interconnect-overview.md) page of the [Embedded UI](../../../reference/embedded-ui/index.md).
 
 1. Use such tools as `pssh` or `ansible` to run the command (for example, `date +%s%N`) on all {{ ydb-short-name }} nodes to display the system clock value.
@@ -53,7 +51,6 @@ To diagnose the system clock drift, use the following methods:
     {% endnote %}
 
     If you use time synchronization utilities, you can also request their status instead of requesting the current timestamps. For example, `timedatectl show-timesync --all`.
-
 
 ## Recommendations
 

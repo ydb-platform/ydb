@@ -17,7 +17,7 @@ The `UPDATE ... SET ... WHERE` statements works as follows:
 
 ## Updating a single row in a table with conditions
 
-#|
+# |
 || Update without conditions | Update with conditions ||
 ||
 
@@ -38,7 +38,7 @@ In the example "Update with conditions", the condition combining operator `AND` 
 
 Frequently during updates, it is necessary to perform mathematical actions on the data or to modify it using functions.
 
-#|
+# |
 || Update with the use of expressions | Update with the use of functions ||
 ||
 
@@ -50,7 +50,6 @@ Frequently during updates, it is necessary to perform mathematical actions on th
 
 ||
 |#
-
 
 ## Updating multiple fields of a table row {#update_set_where}
 

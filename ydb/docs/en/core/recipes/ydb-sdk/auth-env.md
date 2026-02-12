@@ -13,7 +13,7 @@ Below are examples of the code for authentication using environment variables in
 
 {% list tabs %}
 
-- Go (native)
+* Go (native)
 
   ```go
   package main
@@ -40,7 +40,7 @@ Below are examples of the code for authentication using environment variables in
   }
   ```
 
-- Go (database/sql)
+* Go (database/sql)
 
   ```go
   package main
@@ -74,7 +74,7 @@ Below are examples of the code for authentication using environment variables in
   }
   ```
 
-- Java
+* Java
 
   ```java
   public void work(String connectionString) {
@@ -93,7 +93,7 @@ Below are examples of the code for authentication using environment variables in
   }
   ```
 
-- Node.js
+* Node.js
 
   ```typescript
     import { Driver, getCredentialsFromEnv } from 'ydb-sdk';
@@ -111,7 +111,7 @@ Below are examples of the code for authentication using environment variables in
     }
   ```
 
-- Python
+* Python
 
   ```python
     import os
@@ -125,7 +125,7 @@ Below are examples of the code for authentication using environment variables in
         ...
   ```
 
-- Python (asyncio)
+* Python (asyncio)
 
   ```python
     import os
@@ -144,7 +144,7 @@ Below are examples of the code for authentication using environment variables in
     asyncio.run(ydb_init())
   ```
 
-- PHP
+* PHP
 
   ```php
   <?php

@@ -2,7 +2,6 @@
 [![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/simdjson.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:simdjson)
 [![][license img]][license] [![][licensemit img]][licensemit]
 
-
 [![Doxygen Documentation](https://img.shields.io/badge/docs-doxygen-green.svg)](https://simdjson.github.io/simdjson/)
 
 simdjson : Parsing gigabytes of JSON per second
@@ -38,33 +37,31 @@ Table of Contents
 * [Contributing to simdjson](#contributing-to-simdjson)
 * [License](#license)
 
-
 Real-world usage
 ----------------
 
-- [Node.js](https://nodejs.org/)
-- [ClickHouse](https://github.com/ClickHouse/ClickHouse)
-- [Meta Velox](https://velox-lib.io)
-- [Google Pax](https://github.com/google/paxml)
-- [milvus](https://github.com/milvus-io/milvus)
-- [QuestDB](https://questdb.io/blog/questdb-release-8-0-3/)
-- [Clang Build Analyzer](https://github.com/aras-p/ClangBuildAnalyzer)
-- [Shopify HeapProfiler](https://github.com/Shopify/heap-profiler)
-- [StarRocks](https://github.com/StarRocks/starrocks)
-- [Microsoft FishStore](https://github.com/microsoft/FishStore)
-- [Intel PCM](https://github.com/intel/pcm)
-- [WatermelonDB](https://github.com/Nozbe/WatermelonDB)
-- [Apache Doris](https://github.com/apache/doris)
-- [Dgraph](https://github.com/dgraph-io/dgraph)
-- [UJRPC](https://github.com/unum-cloud/ujrpc)
-- [fastgltf](https://github.com/spnda/fastgltf)
-- [vast](https://github.com/tenzir/vast)
-- [ada-url](https://github.com/ada-url/ada)
-- [fastgron](https://github.com/adamritter/fastgron)
-- [WasmEdge](https://wasmedge.org)
-- [RonDB](https://github.com/logicalclocks/rondb)
-- [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)
-
+* [Node.js](https://nodejs.org/)
+* [ClickHouse](https://github.com/ClickHouse/ClickHouse)
+* [Meta Velox](https://velox-lib.io)
+* [Google Pax](https://github.com/google/paxml)
+* [milvus](https://github.com/milvus-io/milvus)
+* [QuestDB](https://questdb.io/blog/questdb-release-8-0-3/)
+* [Clang Build Analyzer](https://github.com/aras-p/ClangBuildAnalyzer)
+* [Shopify HeapProfiler](https://github.com/Shopify/heap-profiler)
+* [StarRocks](https://github.com/StarRocks/starrocks)
+* [Microsoft FishStore](https://github.com/microsoft/FishStore)
+* [Intel PCM](https://github.com/intel/pcm)
+* [WatermelonDB](https://github.com/Nozbe/WatermelonDB)
+* [Apache Doris](https://github.com/apache/doris)
+* [Dgraph](https://github.com/dgraph-io/dgraph)
+* [UJRPC](https://github.com/unum-cloud/ujrpc)
+* [fastgltf](https://github.com/spnda/fastgltf)
+* [vast](https://github.com/tenzir/vast)
+* [ada-url](https://github.com/ada-url/ada)
+* [fastgron](https://github.com/adamritter/fastgron)
+* [WasmEdge](https://wasmedge.org)
+* [RonDB](https://github.com/logicalclocks/rondb)
+* [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)
 
 If you are planning to use simdjson in a product, please work from one of our releases.
 
@@ -82,6 +79,7 @@ The simdjson library is easily consumable with a single .h and .cpp file.
    ```
    wget https://raw.githubusercontent.com/simdjson/simdjson/master/singleheader/simdjson.h https://raw.githubusercontent.com/simdjson/simdjson/master/singleheader/simdjson.cpp https://raw.githubusercontent.com/simdjson/simdjson/master/jsonexamples/twitter.json
    ```
+
 2. Create `quickstart.cpp`:
 
 ```c++
@@ -95,13 +93,12 @@ int main(void) {
     std::cout << uint64_t(tweets["search_metadata"]["count"]) << " results." << std::endl;
 }
 ```
-3. `c++ -o quickstart quickstart.cpp simdjson.cpp`
-4. `./quickstart`
+1. `c++ -o quickstart quickstart.cpp simdjson.cpp`
+2. `./quickstart`
 
   ```
    100 results.
   ```
-
 
 Documentation
 -------------
@@ -118,6 +115,7 @@ Godbolt
 -------------
 
 Some users may want to browse code along with the compiled assembly. You want to check out the following lists of examples:
+
 * [simdjson examples with errors handled through exceptions](https://godbolt.org/z/7G5qE4sr9)
 * [simdjson examples with errors without exceptions](https://godbolt.org/z/e9dWb9E4v)
 
@@ -143,43 +141,41 @@ speed for [synthetic files over various sizes generated with a script](https://g
 
 [All our experiments are reproducible](https://github.com/simdjson/simdjson_experiments_vldb2019).
 
-
 For NDJSON files, we can exceed 3 GB/s with [our  multithreaded parsing functions](https://github.com/simdjson/simdjson/blob/master/doc/parse_many.md).
-
 
 Packages
 ------------------------------
-[![Packaging status](https://repology.org/badge/vertical-allrepos/simdjson.svg)](https://repology.org/project/simdjson/versions)
 
+[![Packaging status](https://repology.org/badge/vertical-allrepos/simdjson.svg)](https://repology.org/project/simdjson/versions)
 
 Bindings and Ports of simdjson
 ------------------------------
 
 We distinguish between "bindings" (which just wrap the C++ code) and a port to another programming language (which reimplements everything).
 
-- [ZippyJSON](https://github.com/michaeleisel/zippyjson): Swift bindings for the simdjson project.
-- [libpy_simdjson](https://github.com/gerrymanoim/libpy_simdjson/): high-speed Python bindings for simdjson using [libpy](https://github.com/quantopian/libpy).
-- [pysimdjson](https://github.com/TkTech/pysimdjson): Python bindings for the simdjson project.
-- [cysimdjson](https://github.com/TeskaLabs/cysimdjson): high-speed Python bindings for the simdjson project.
-- [simdjson-rs](https://github.com/simd-lite): Rust port.
-- [simdjson-rust](https://github.com/SunDoge/simdjson-rust): Rust wrapper (bindings).
-- [SimdJsonSharp](https://github.com/EgorBo/SimdJsonSharp): C# version for .NET Core (bindings and full port).
-- [simdjson_nodejs](https://github.com/luizperes/simdjson_nodejs): Node.js bindings for the simdjson project.
-- [simdjson_php](https://github.com/crazyxman/simdjson_php): PHP bindings for the simdjson project.
-- [simdjson_ruby](https://github.com/saka1/simdjson_ruby): Ruby bindings for the simdjson project.
-- [fast_jsonparser](https://github.com/anilmaurya/fast_jsonparser): Ruby bindings for the simdjson project.
-- [simdjson-go](https://github.com/minio/simdjson-go): Go port using Golang assembly.
-- [rcppsimdjson](https://github.com/eddelbuettel/rcppsimdjson): R bindings.
-- [simdjson_erlang](https://github.com/ChomperT/simdjson_erlang): erlang bindings.
-- [simdjsone](https://github.com/saleyn/simdjsone): erlang bindings.
-- [lua-simdjson](https://github.com/FourierTransformer/lua-simdjson): lua bindings.
-- [hermes-json](https://hackage.haskell.org/package/hermes-json): haskell bindings.
-- [zimdjson](https://github.com/EzequielRamis/zimdjson): Zig port.
-- [simdjzon](https://github.com/travisstaloch/simdjzon): Zig port.
-- [JSON-Simd](https://github.com/rawleyfowler/JSON-simd): Raku bindings.
-- [JSON::SIMD](https://metacpan.org/pod/JSON::SIMD): Perl bindings; fully-featured JSON module that uses simdjson for decoding.
-- [gemmaJSON](https://github.com/sainttttt/gemmaJSON): Nim JSON parser based on simdjson bindings.
-- [simdjson-java](https://github.com/simdjson/simdjson-java): Java port.
+* [ZippyJSON](https://github.com/michaeleisel/zippyjson): Swift bindings for the simdjson project.
+* [libpy_simdjson](https://github.com/gerrymanoim/libpy_simdjson/): high-speed Python bindings for simdjson using [libpy](https://github.com/quantopian/libpy).
+* [pysimdjson](https://github.com/TkTech/pysimdjson): Python bindings for the simdjson project.
+* [cysimdjson](https://github.com/TeskaLabs/cysimdjson): high-speed Python bindings for the simdjson project.
+* [simdjson-rs](https://github.com/simd-lite): Rust port.
+* [simdjson-rust](https://github.com/SunDoge/simdjson-rust): Rust wrapper (bindings).
+* [SimdJsonSharp](https://github.com/EgorBo/SimdJsonSharp): C# version for .NET Core (bindings and full port).
+* [simdjson_nodejs](https://github.com/luizperes/simdjson_nodejs): Node.js bindings for the simdjson project.
+* [simdjson_php](https://github.com/crazyxman/simdjson_php): PHP bindings for the simdjson project.
+* [simdjson_ruby](https://github.com/saka1/simdjson_ruby): Ruby bindings for the simdjson project.
+* [fast_jsonparser](https://github.com/anilmaurya/fast_jsonparser): Ruby bindings for the simdjson project.
+* [simdjson-go](https://github.com/minio/simdjson-go): Go port using Golang assembly.
+* [rcppsimdjson](https://github.com/eddelbuettel/rcppsimdjson): R bindings.
+* [simdjson_erlang](https://github.com/ChomperT/simdjson_erlang): erlang bindings.
+* [simdjsone](https://github.com/saleyn/simdjsone): erlang bindings.
+* [lua-simdjson](https://github.com/FourierTransformer/lua-simdjson): lua bindings.
+* [hermes-json](https://hackage.haskell.org/package/hermes-json): haskell bindings.
+* [zimdjson](https://github.com/EzequielRamis/zimdjson): Zig port.
+* [simdjzon](https://github.com/travisstaloch/simdjzon): Zig port.
+* [JSON-Simd](https://github.com/rawleyfowler/JSON-simd): Raku bindings.
+* [JSON::SIMD](https://metacpan.org/pod/JSON::SIMD): Perl bindings; fully-featured JSON module that uses simdjson for decoding.
+* [gemmaJSON](https://github.com/sainttttt/gemmaJSON): Nim JSON parser based on simdjson bindings.
+* [simdjson-java](https://github.com/simdjson/simdjson-java): Java port.
 
 About simdjson
 --------------
@@ -190,15 +186,15 @@ CPU's multiple execution cores.
 
 Our default front-end is called On-Demand, and we wrote a paper about it:
 
-- John Keiser, Daniel Lemire, [On-Demand JSON: A Better Way to Parse Documents?](http://arxiv.org/abs/2312.17149), Software: Practice and Experience 54 (6), 2024.
+* John Keiser, Daniel Lemire, [On-Demand JSON: A Better Way to Parse Documents?](http://arxiv.org/abs/2312.17149), Software: Practice and Experience 54 (6), 2024.
 
 Some people [enjoy reading the first (2019) simdjson paper](https://arxiv.org/abs/1902.08318): A description of the design
 and implementation of simdjson is in our research article:
-- Geoff Langdale, Daniel Lemire, [Parsing Gigabytes of JSON per Second](https://arxiv.org/abs/1902.08318), VLDB Journal 28 (6), 2019.
+* Geoff Langdale, Daniel Lemire, [Parsing Gigabytes of JSON per Second](https://arxiv.org/abs/1902.08318), VLDB Journal 28 (6), 2019.
 
 We have an in-depth paper focused on the UTF-8 validation:
 
-- John Keiser, Daniel Lemire, [Validating UTF-8 In Less Than One Instruction Per Byte](https://arxiv.org/abs/2010.03090), Software: Practice & Experience 51 (5), 2021.
+* John Keiser, Daniel Lemire, [Validating UTF-8 In Less Than One Instruction Per Byte](https://arxiv.org/abs/2010.03090), Software: Practice & Experience 51 (5), 2021.
 
 We also have an informal [blog post providing some background and context](https://branchfree.org/2019/02/25/paper-parsing-gigabytes-of-json-per-second/).
 
@@ -215,10 +211,8 @@ RGPIN-2017-03910 and RGPIN-2024-03787.
 [license]: LICENSE
 [license img]: https://img.shields.io/badge/License-Apache%202-blue.svg
 
-
 [licensemit]: LICENSE-MIT
 [licensemit img]: https://img.shields.io/badge/License-MIT-blue.svg
-
 
 Contributing to simdjson
 ------------------------

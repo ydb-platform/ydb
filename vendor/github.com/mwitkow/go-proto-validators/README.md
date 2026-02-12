@@ -51,36 +51,36 @@ Third, the generated code is understandable and has clear understandable error m
 
 ```go
 func (this *InnerMessage) Validate() error {
-	if !(this.SomeInteger > 0) {
-		return fmt.Errorf("validation error: InnerMessage.SomeInteger must be greater than '0'")
-	}
-	if !(this.SomeInteger < 100) {
-		return fmt.Errorf("validation error: InnerMessage.SomeInteger must be less than '100'")
-	}
-	if !(this.SomeFloat >= 0) {
-		return fmt.Errorf("validation error: InnerMessage.SomeFloat must be greater than or equal to '0'")
-	}
-	if !(this.SomeFloat <= 1) {
-		return fmt.Errorf("validation error: InnerMessage.SomeFloat must be less than or equal to '1'")
-	}
-	return nil
+ if !(this.SomeInteger > 0) {
+  return fmt.Errorf("validation error: InnerMessage.SomeInteger must be greater than '0'")
+ }
+ if !(this.SomeInteger < 100) {
+  return fmt.Errorf("validation error: InnerMessage.SomeInteger must be less than '100'")
+ }
+ if !(this.SomeFloat >= 0) {
+  return fmt.Errorf("validation error: InnerMessage.SomeFloat must be greater than or equal to '0'")
+ }
+ if !(this.SomeFloat <= 1) {
+  return fmt.Errorf("validation error: InnerMessage.SomeFloat must be less than or equal to '1'")
+ }
+ return nil
 }
 
 var _regex_OuterMessage_ImportantString = regexp.MustCompile("^[a-z]{2,5}$")
 
 func (this *OuterMessage) Validate() error {
-	if !_regex_OuterMessage_ImportantString.MatchString(this.ImportantString) {
-		return fmt.Errorf("validation error: OuterMessage.ImportantString must conform to regex '^[a-z]{2,5}$'")
-	}
-	if nil == this.Inner {
-		return fmt.Errorf("validation error: OuterMessage.Inner message must exist")
-	}
-	if this.Inner != nil {
-		if err := validators.CallValidatorIfExists(this.Inner); err != nil {
-			return err
-		}
-	}
-	return nil
+ if !_regex_OuterMessage_ImportantString.MatchString(this.ImportantString) {
+  return fmt.Errorf("validation error: OuterMessage.ImportantString must conform to regex '^[a-z]{2,5}$'")
+ }
+ if nil == this.Inner {
+  return fmt.Errorf("validation error: OuterMessage.Inner message must exist")
+ }
+ if this.Inner != nil {
+  if err := validators.CallValidatorIfExists(this.Inner); err != nil {
+   return err
+  }
+ }
+ return nil
 }
 ```
 
@@ -107,7 +107,7 @@ protoc  \
   *.proto
 ```
 
-That's fine, until you encounter `.proto` includes. Because `go-proto-validators` uses field options inside the `.proto` 
+That's fine, until you encounter `.proto` includes. Because `go-proto-validators` uses field options inside the `.proto`
 files themselves, it's `.proto` definition (and the Google `descriptor.proto` itself) need to on the `protoc` include
 path. Hence the above becomes:
 
@@ -133,7 +133,7 @@ protoc  \
   *.proto
 ```
 
-Basically the magical incantation (apart from includes) is the `--govalidators_out`. That triggers the 
+Basically the magical incantation (apart from includes) is the `--govalidators_out`. That triggers the
 `protoc-gen-govalidators` plugin to generate `mymessage.validator.pb.go`. That's it :)
 
 ## License

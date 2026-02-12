@@ -3,19 +3,19 @@ Protocol Buffers - Google's data interchange format
 
 Copyright 2008 Google Inc.
 
-https://developers.google.com/protocol-buffers/
+<https://developers.google.com/protocol-buffers/>
 
 C++ Installation - Unix
 -----------------------
 
 To build protobuf from source, the following tools are needed:
 
-  * autoconf
-  * automake
-  * libtool
-  * make
-  * g++
-  * unzip
+* autoconf
+* automake
+* libtool
+* make
+* g++
+* unzip
 
 On Ubuntu/Debian, you can install them with:
 
@@ -45,7 +45,6 @@ if you are using a release .tar.gz or .zip package):
 
 To build and install the C++ Protocol Buffer runtime and the Protocol
 Buffer compiler (protoc) execute the following:
-
 
      ./configure
      make
@@ -82,11 +81,9 @@ Protocol Buffers integrates with pkg-config to manage this.  If you
 have pkg-config installed, then you can invoke it to get a list of
 flags like so:
 
-
     pkg-config --cflags protobuf         # print compiler flags
     pkg-config --libs protobuf           # print linker flags
     pkg-config --cflags --libs protobuf  # print both
-
 
 For example:
 
@@ -97,7 +94,6 @@ Buffers may not yet integrate with pkg-config to get flags, and may
 not pass the correct set of flags to correctly link against
 libprotobuf.  If the package in question uses autoconf, you can
 often fix the problem by invoking its configure script like:
-
 
     configure CXXFLAGS="$(pkg-config --cflags protobuf)" \
               LIBS="$(pkg-config --libs protobuf)"
@@ -124,7 +120,7 @@ a terminal:
     sudo xcode-select --install
 
 To install Unix tools, you can install "port" following the instructions at
-https://www.macports.org . This will reside in /opt/local/bin/port for most
+<https://www.macports.org> . This will reside in /opt/local/bin/port for most
 Mac installations.
 
     sudo /opt/local/bin/port install autoconf automake libtool
@@ -200,7 +196,7 @@ If zlib support is desired, you'll also need to install the zlib feature:
 
     >vcpkg install protobuf[zlib] protobuf[zlib]:x64-windows
 
-See https://github.com/Microsoft/vcpkg for more information.
+See <https://github.com/Microsoft/vcpkg> for more information.
 
 To build from source using Microsoft Visual C++, see [cmake/README.md](../cmake/README.md).
 
@@ -227,4 +223,4 @@ Usage
 The complete documentation for Protocol Buffers is available via the
 web at:
 
-https://developers.google.com/protocol-buffers/
+<https://developers.google.com/protocol-buffers/>

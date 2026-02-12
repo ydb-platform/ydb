@@ -26,7 +26,6 @@
   </tr>
 </table>
 
-
 This package was split of from ruamel.yaml, so that ruamel.yaml can be
 build as a universal wheel. Apart from the C code seldom changing, and
 taking a long time to compile for all platforms, this allows

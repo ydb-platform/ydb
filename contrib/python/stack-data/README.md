@@ -76,7 +76,6 @@ foo at line 9
 
 Note that these parameters are not the number of *lines* before and after to include, but the number of *pieces*. A piece is a range of one or more lines in a file that should logically be grouped together. A piece contains either a single simple statement or a part of a compound statement (loops, if, try/except, etc) that doesn't contain any other statements. Most pieces are a single line, but a multi-line statement or `if` condition is a single piece. In the example above, all pieces are one line, because nothing is spread across multiple lines. If we change our code to include some multiline bits:
 
-
 ```python
 def foo():
     result = []
@@ -179,7 +178,6 @@ foo at line 14
 ```
 
 To avoid wasting space, pieces never start or end with a blank line, and blank lines between pieces are excluded. So if our code looks like this:
-
 
 ```python
     for i in range(5):

@@ -3,6 +3,7 @@
 ## Base image
 
 Base image is official `ubuntu:focal` with installed packages:
+
 - libcap2-bin (for setcap to binaries)
 - ca-certificates (for working with CA bundle)
 
@@ -12,6 +13,7 @@ and dynamic cpp libraries `libiconv`, `liblibidn` and `libaio`.
 ### Base breakpad image
 
 Extend base image with:
+
 - additional packages to collect and manage minidump format (binutils, gdb, strace, linux-tools-generic)
 - dynamic library `libbreakpad_init.so` from breakpad_init image (ydb/deploy/breakpad_init)
 - environment variable `LD_PRELOAD` for loading breakpad library on process start
@@ -30,6 +32,7 @@ ya package --docker ydb/deploy/docker/release/pkg.json
 ```
 
 Used base image and included:
+
 - ydb cli binary
 - ydbd server strip'ed binary baked with build type `Release`
 
@@ -55,6 +58,7 @@ ya package --docker ydb/deploy/docker/debug/pkg.json
 ```
 
 Used base breakpad image and included:
+
 - additional packages with debug utils (dnsutils, telnet, netcat-openbsd, iputils-ping, curl)
 - ydb cli binary
 - ydbd server strip'ed binary baked with build type `Release`

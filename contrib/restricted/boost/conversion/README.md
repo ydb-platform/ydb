@@ -1,5 +1,6 @@
 # [Boost.Conversion](https://boost.org/libs/conversion)
-Boost.Conversion is one of the [Boost C++ Libraries](https://github.com/boostorg). This library improves program safety and clarity by performing otherwise messy conversions. 
+
+Boost.Conversion is one of the [Boost C++ Libraries](https://github.com/boostorg). This library improves program safety and clarity by performing otherwise messy conversions.
 
 ### Test results
 

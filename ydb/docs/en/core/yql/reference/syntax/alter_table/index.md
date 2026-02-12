@@ -19,4 +19,3 @@ An action is any modification to the table, as described below:
 * Modifying [additional table](set.md) parameters.
 
 {% endif %}
-

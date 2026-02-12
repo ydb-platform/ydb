@@ -134,7 +134,6 @@ order by
 
 You can get the logical execution plan with the command:
 
-
 ```bash
 {{ ydb-cli }} -p <profile_name> sql --explain -f q18.sql
 ```

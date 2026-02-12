@@ -4,7 +4,7 @@
 
 ## Linux (amd64)
 
-#|
+# |
 || Version | Release date | Download | Changelog ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/linux/amd64/ydb) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/linux/amd64/ydb) | [See list](../changelog-cli.md#2-26-0) ||
@@ -30,7 +30,7 @@
 
 ## Linux (arm64)
 
-#|
+# |
 || Version | Release date | Download | Changelog ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/linux/arm64/ydb) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/linux/arm64/ydb) | [See list](../changelog-cli.md#2-26-0) ||
@@ -54,7 +54,7 @@
 
 Use the amd64 binary file if your Mac is based on an Intel processor.
 
-#|
+# |
 || Version | Release date | Download | Changelog ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/darwin/amd64/ydb) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/darwin/amd64/ydb) | [See list](../changelog-cli.md#2-26-0) ||
@@ -82,7 +82,7 @@ Use the amd64 binary file if your Mac is based on an Intel processor.
 
 Use the arm64 binary file if your Mac is based on an Apple Silicon processor (M1, M2, or later).
 
-#|
+# |
 || Version | Release date | Download | Changelog ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/darwin/arm64/ydb) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/darwin/arm64/ydb) | [See list](../changelog-cli.md#2-26-0) ||
@@ -108,7 +108,7 @@ Use the arm64 binary file if your Mac is based on an Apple Silicon processor (M1
 
 ## Windows
 
-#|
+# |
 || Version | Release date | Download | Changelog ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/windows/amd64/ydb.exe) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/windows/amd64/ydb.exe) | [See list](../changelog-cli.md#2-26-0) ||

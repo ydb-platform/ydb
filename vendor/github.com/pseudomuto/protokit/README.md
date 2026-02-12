@@ -59,7 +59,7 @@ Then invoke your plugin via `protoc`. For example (assuming your app is called `
 
 [travis-svg]:
   https://travis-ci.org/pseudomuto/protokit.svg?branch=master
-	"Travis CI build status SVG"
+ "Travis CI build status SVG"
 [travis-ci]:
   https://travis-ci.org/pseudomuto/protokit
   "protoc-gen-twagger at Travis CI"

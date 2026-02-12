@@ -1,4 +1,5 @@
 # llhttp
+
 [![CI](https://github.com/nodejs/llhttp/workflows/CI/badge.svg)](https://github.com/nodejs/llhttp/actions?query=workflow%3ACI)
 
 Port of [http_parser][0] to [llparse][1].
@@ -66,38 +67,39 @@ checks could be performed to get even stricter verification of the llhttp.
 #include "string.h"
 
 int handle_on_message_complete(llhttp_t* parser) {
-	fprintf(stdout, "Message completed!\n");
-	return 0;
+ fprintf(stdout, "Message completed!\n");
+ return 0;
 }
 
 int main() {
-	llhttp_t parser;
-	llhttp_settings_t settings;
+ llhttp_t parser;
+ llhttp_settings_t settings;
 
-	/*Initialize user callbacks and settings */
-	llhttp_settings_init(&settings);
+ /*Initialize user callbacks and settings */
+ llhttp_settings_init(&settings);
 
-	/*Set user callback */
-	settings.on_message_complete = handle_on_message_complete;
+ /*Set user callback */
+ settings.on_message_complete = handle_on_message_complete;
 
-	/*Initialize the parser in HTTP_BOTH mode, meaning that it will select between
-	*HTTP_REQUEST and HTTP_RESPONSE parsing automatically while reading the first
-	*input.
-	*/
-	llhttp_init(&parser, HTTP_BOTH, &settings);
+ /*Initialize the parser in HTTP_BOTH mode, meaning that it will select between
+ *HTTP_REQUEST and HTTP_RESPONSE parsing automatically while reading the first
+ *input.
+ */
+ llhttp_init(&parser, HTTP_BOTH, &settings);
 
-	/*Parse request! */
-	const char* request = "GET / HTTP/1.1\r\n\r\n";
-	int request_len = strlen(request);
+ /*Parse request! */
+ const char* request = "GET / HTTP/1.1\r\n\r\n";
+ int request_len = strlen(request);
 
-	enum llhttp_errno err = llhttp_execute(&parser, request, request_len);
-	if (err == HPE_OK) {
-		fprintf(stdout, "Successfully parsed!\n");
-	} else {
-		fprintf(stderr, "Parse error: %s %s\n", llhttp_errno_name(err), llhttp_get_error_reason(&parser));
-	}
+ enum llhttp_errno err = llhttp_execute(&parser, request, request_len);
+ if (err == HPE_OK) {
+  fprintf(stdout, "Successfully parsed!\n");
+ } else {
+  fprintf(stderr, "Parse error: %s %s\n", llhttp_errno_name(err), llhttp_get_error_reason(&parser));
+ }
 }
 ```
+
 For more information on API usage, please refer to [src/native/api.h](https://github.com/nodejs/llhttp/blob/main/src/native/api.h).
 
 ## API
@@ -120,15 +122,15 @@ The following callbacks can return `0` (proceed normally), `-1` (error) or `HPE_
 * `on_chunk_header`: Invoked after a new chunk is started. The current chunk length is stored in `parser->content_length`.
 * `on_chunk_extension_name_complete`: Invoked after a chunk extension name is started.
 * `on_chunk_extension_value_complete`: Invoked after a chunk extension value is started.
-* `on_chunk_complete`: Invoked after a new chunk is received. 
-* `on_reset`: Invoked after `on_message_complete` and before `on_message_begin` when a new message 
+* `on_chunk_complete`: Invoked after a new chunk is received.
+* `on_reset`: Invoked after `on_message_complete` and before `on_message_begin` when a new message
    is received on the same parser. This is not invoked for the first message of the parser.
 
-The following callbacks can return `0` (proceed normally), `-1` (error) or `HPE_USER` (error from the callback): 
+The following callbacks can return `0` (proceed normally), `-1` (error) or `HPE_USER` (error from the callback):
 
-* `on_url`: Invoked when another character of the URL is received. 
+* `on_url`: Invoked when another character of the URL is received.
 * `on_status`: Invoked when another character of the status is received.
-* `on_method`: Invoked when another character of the method is received. 
+* `on_method`: Invoked when another character of the method is received.
    When parser is created with `HTTP_BOTH` and the input is a response, this also invoked for the sequence `HTTP/`
    of the first message.
 * `on_protocol`: Invoked when another character of the protocol is received.
@@ -176,7 +178,7 @@ Returns `1` if request includes the `Connection: upgrade` header.
 
 ### `void llhttp_reset(llhttp_t* parser)`
 
-Reset an already initialized parser back to the start state, preserving the 
+Reset an already initialized parser back to the start state, preserving the
 existing parser type, callback settings, user data, and lenient flags.
 
 ### `void llhttp_settings_init(llhttp_settings_t* settings)`
@@ -187,16 +189,16 @@ Initialize the settings object.
 
 Parse full or partial request/response, invoking user callbacks along the way.
 
-If any of `llhttp_data_cb` returns errno not equal to `HPE_OK` - the parsing interrupts, 
-and such errno is returned from `llhttp_execute()`. If `HPE_PAUSED` was used as a errno, 
-the execution can be resumed with `llhttp_resume()` call. In that case the input should be advanced 
+If any of `llhttp_data_cb` returns errno not equal to `HPE_OK` - the parsing interrupts,
+and such errno is returned from `llhttp_execute()`. If `HPE_PAUSED` was used as a errno,
+the execution can be resumed with `llhttp_resume()` call. In that case the input should be advanced
 to the last processed byte from the parser, which can be obtained via `llhttp_get_error_pos()`.
 
-In a special case of CONNECT/Upgrade request/response `HPE_PAUSED_UPGRADE` is returned 
-after fully parsing the request/response. If the user wishes to continue parsing, 
+In a special case of CONNECT/Upgrade request/response `HPE_PAUSED_UPGRADE` is returned
+after fully parsing the request/response. If the user wishes to continue parsing,
 they need to invoke `llhttp_resume_after_upgrade()`.
 
-**if this function ever returns a non-pause type error, it will continue to return 
+**if this function ever returns a non-pause type error, it will continue to return
 the same error upon each successive call up until `llhttp_init()` is called.**
 
 If this function returns `HPE_OK`, it means all the input has been consumed and parsed.
@@ -208,11 +210,10 @@ send (e.g. shutdown of readable side of the TCP connection.)
 
 Requests without `Content-Length` and other messages might require treating
 all incoming bytes as the part of the body, up to the last byte of the
-connection. 
+connection.
 
 This method will invoke `on_message_complete()` callback if the
 request was terminated safely. Otherwise a error code would be returned.
-
 
 ### `int llhttp_message_needs_eof(const llhttp_t* parser)`
 
@@ -287,7 +288,7 @@ Returns textual name of HTTP status.
 
 Enables/disables lenient header value parsing (disabled by default).
 Lenient parsing disables header value token checks, extending llhttp's
-protocol support to highly non-compliant clients/server. 
+protocol support to highly non-compliant clients/server.
 
 No `HPE_INVALID_HEADER_TOKEN` will be raised for incorrect header values when
 lenient parsing is "on".
@@ -300,7 +301,7 @@ Enables/disables lenient handling of conflicting `Transfer-Encoding` and
 `Content-Length` headers (disabled by default).
 
 Normally `llhttp` would error when `Transfer-Encoding` is present in
-conjunction with `Content-Length`. 
+conjunction with `Content-Length`.
 
 This error is important to prevent HTTP request smuggling, but may be less desirable
 for small number of cases involving legacy servers.
@@ -312,11 +313,11 @@ for small number of cases involving legacy servers.
 Enables/disables lenient handling of `Connection: close` and HTTP/1.0
 requests responses.
 
-Normally `llhttp` would error the HTTP request/response 
-after the request/response with `Connection: close` and `Content-Length`. 
+Normally `llhttp` would error the HTTP request/response
+after the request/response with `Connection: close` and `Content-Length`.
 
 This is important to prevent cache poisoning attacks,
-but might interact badly with outdated and insecure clients. 
+but might interact badly with outdated and insecure clients.
 
 With this flag the extra request/response will be parsed normally.
 
@@ -328,7 +329,7 @@ Enables/disables lenient handling of `Transfer-Encoding` header.
 
 Normally `llhttp` would error when a `Transfer-Encoding` has `chunked` value
 and another value after it (either in a single header or in multiple
-headers whose value are internally joined using `, `).
+headers whose value are internally joined using `,`).
 
 This is mandated by the spec to reliably determine request body size and thus
 avoid request smuggling.
@@ -457,11 +458,11 @@ _Note that using the git repo directly (e.g., via a git repo url and tag) will n
 1. Ensure that `Clang` and `make` are in your system path.
 2. Using Git Bash, clone the repo to your preferred location.
 3. Cd into the cloned directory and run `npm ci`
-5. Run `make`
-6. Your `repo/build` directory should now have `libllhttp.a` and `libllhttp.so` static and dynamic libraries.
-7. When building your executable, you can link to these libraries. Make sure to set the build folder as an include path when building so you can reference the declarations in `repo/build/llhttp.h`.
+4. Run `make`
+5. Your `repo/build` directory should now have `libllhttp.a` and `libllhttp.so` static and dynamic libraries.
+6. When building your executable, you can link to these libraries. Make sure to set the build folder as an include path when building so you can reference the declarations in `repo/build/llhttp.h`.
 
-### A simple example on linking with the library:
+### A simple example on linking with the library
 
 Assuming you have an executable `main.cpp` in your current working directory, you would run: `clang++ -Os -g3 -Wall -Wextra -Wno-unused-parameter -I/path/to/llhttp/build main.cpp /path/to/llhttp/build/libllhttp.a -o main.exe`.
 
@@ -494,11 +495,6 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 [0]: https://github.com/nodejs/http-parser
 [1]: https://github.com/nodejs/llparse
-[2]: https://en.wikipedia.org/wiki/Register_allocation#Spilling
-[3]: https://en.wikipedia.org/wiki/Tail_call
-[4]: https://llvm.org/docs/LangRef.html
-[5]: https://llvm.org/docs/LangRef.html#call-instruction
-[6]: https://clang.llvm.org/
 [7]: https://github.com/nodejs/node
 [8]: https://github.com/pallas/pyllhttp
 [9]: https://github.com/metabahn/llhttp

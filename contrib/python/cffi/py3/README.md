@@ -2,7 +2,6 @@
 [![PyPI version](https://img.shields.io/pypi/v/cffi.svg)](https://pypi.org/project/cffi)
 [![Read the Docs](https://img.shields.io/badge/docs-latest-blue.svg)][Documentation]
 
-
 CFFI
 ====
 
@@ -34,6 +33,5 @@ To run tests under CPython, run the following in the source root directory:
     pip install pytest
     pip install -e .  # editable install of CFFI for local development
     pytest c/ testing/
-
 
 [Documentation]: http://cffi.readthedocs.org/

@@ -189,7 +189,7 @@ When using a newline character as a separator between parameter sets, ensure tha
 
 {% list tabs %}
 
-- JSON
+* JSON
 
   Suppose you need to run your query three times with the following sets of values for the `a` and `b` parameters:
 
@@ -253,7 +253,7 @@ When using a newline character as a separator between parameter sets, ensure tha
 
   This output can be passed as input to the next query command if it has a `column0` parameter.
 
-- CSV
+* CSV
 
   Suppose you need to run your query three times with the following sets of values for the `a` and `b` parameters:
 
@@ -320,7 +320,7 @@ When using a newline character as a separator between parameter sets, ensure tha
 
   This output can be passed as input to another command running a different parameterized query.
 
-- TSV
+* TSV
 
   Suppose you need to run your query three times, with the following sets of values for the `a` and `b` parameters:
 
@@ -423,8 +423,8 @@ The {{ ydb-short-name }} CLI supports automatic conversion of multiple consecuti
 
 Two batch modes are supported:
 
-- Full
-- Adaptive
+* Full
+* Adaptive
 
 ### Full batch mode {#batch-full}
 

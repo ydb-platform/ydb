@@ -24,9 +24,9 @@ kube-prometheus-stack:
         key: additional-scrape-configs.yaml
 ```
 
-2. Secret (ydb-prometheus-additional-scrape-configs) will be generated with chart installation and referenced in prometheus CRD.
+1. Secret (ydb-prometheus-additional-scrape-configs) will be generated with chart installation and referenced in prometheus CRD.
 
-3. Set following in values.yaml to cluster monitor:
+2. Set following in values.yaml to cluster monitor:
 
 ```yaml
 
@@ -49,7 +49,7 @@ ydb:
 
 ```
 
-4. Install chart with `helm`
+1. Install chart with `helm`
 
 ## Monitoring Internal YDB Cluster (deployed with ydb-operator)
 
@@ -76,4 +76,4 @@ ydb:
 
 ```
 
-2. Install chart with `helm`
+1. Install chart with `helm`

@@ -21,9 +21,10 @@ This document defines roles in the oneTBB project.
 # Roles and Responsibilities
 
 oneTBB project defines three main roles:
- * [Contributor](#contributor)
- * [Code Owner](#code-Owner)
- * [Maintainer](#maintainer)
+
+* [Contributor](#contributor)
+* [Code Owner](#code-owner)
+* [Maintainer](#maintainer)
 
 [permissions]: https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization#permissions-for-each-role
 
@@ -57,12 +58,13 @@ requirements and the nomination process.
 
 A Contributor invests time and resources to improve oneTBB project.
 Anyone can become a Contributor by bringing value in any following way:
-  * Answer questions from community members.
-  * Propose changes to the design.
-  * Provide feedback on design proposals.
-  * Review and/or test pull requests.
-  * Test releases and report bugs.
-  * Contribute code, including bug fixes, features implementations,
+
+* Answer questions from community members.
+* Propose changes to the design.
+* Provide feedback on design proposals.
+* Review and/or test pull requests.
+* Test releases and report bugs.
+* Contribute code, including bug fixes, features implementations,
 and performance optimizations.
 
 ## Code Owner
@@ -75,34 +77,39 @@ whether those changes are ready to be merged. Code Owners have a track record of
 contribution and review in the project.
 
 **Requirements:**
-  * Track record of accepted code contributions to a specific project component.
-  * Track record of contributions to the code review process.
-  * Demonstrate in-depth knowledge of the architecture of a specific project
+
+* Track record of accepted code contributions to a specific project component.
+* Track record of contributions to the code review process.
+* Demonstrate in-depth knowledge of the architecture of a specific project
     component.
-  * Commit to being responsible for that specific area.
+* Commit to being responsible for that specific area.
 
 How to become a Code Owner?
+
 1. A Contributor is nominated by opening a PR modifying the MAINTAINERS.md file
 including name, Github username, and affiliation.
 2. At least two specific component Maintainers approve the PR.
 3. [CODEOWNERS](./CODEOWNERS) file is updated to represent corresponding areas of responsibility.
 
 ## Maintainer
-Maintainers are the most established contributors responsible for the 
+
+Maintainers are the most established contributors responsible for the
 project technical direction. They participate in making decisions about the
 strategy and priorities of the project.
 
 **Requirements:**
-  * Have experience as a Code Owner.
-  * Track record of major project contributions to a specific project component.
-  * Demonstrate deep knowledge of a specific project component.
-  * Demonstrate broad knowledge of the project across multiple areas.
-  * Commit to using privileges responsibly for the good of the project.
-  * Be able to exercise judgment for the good of the project, independent of
+
+* Have experience as a Code Owner.
+* Track record of major project contributions to a specific project component.
+* Demonstrate deep knowledge of a specific project component.
+* Demonstrate broad knowledge of the project across multiple areas.
+* Commit to using privileges responsibly for the good of the project.
+* Be able to exercise judgment for the good of the project, independent of
     their employer, friends, or team.
 
 Process of becoming a maintainer:
-1. A Maintainer may nominate a current code owner to become a new Maintainer by 
+
+1. A Maintainer may nominate a current code owner to become a new Maintainer by
 opening a PR against MAINTAINERS.md file.
 2. A majority of the current Maintainers must then approve the PR.
 
@@ -126,13 +133,11 @@ opening a PR against MAINTAINERS.md file.
 | --------------------- | --------------------- | ----------------- | ---------- |
 | Łukasz Plewa          | @lplewa               | Intel Corporation | Maintainer |
 
-
 ## oneTBB Documentation
 
 | Name                   | Github ID             | Affiliation       | Role       |
 | ---------------------- | --------------------- | ----------------- | ---------- |
 | Alexandra Epanchinzeva | @aepanchi             | Intel Corporation | Code Owner |
-
 
 ## oneTBB Release Management
 

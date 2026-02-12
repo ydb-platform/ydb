@@ -13,7 +13,7 @@ ydb [global options...] monitoring healthcheck [options...]
 
 ## Параметры подкоманды {#options}
 
-#|
+# |
 || Имя | Описание ||
 ||`--timeout` | Время, в течение которого должна быть выполнена операция на сервере, мс.||
 ||`--format` | Формат вывода. Возможные значения:
@@ -45,7 +45,6 @@ Healthcheck status: DEGRADED
 ```
 
 ### Подробный результат проверки {#example-json}
-
 
 ```bash
 {{ ydb-cli }} --profile quickstart monitoring healthcheck --format json

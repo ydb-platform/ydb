@@ -1,6 +1,7 @@
 
 ASN.1 library for Python
 ------------------------
+
 [![PyPI](https://img.shields.io/pypi/v/pyasn1.svg?maxAge=2592000)](https://pypi.org/project/pyasn1)
 [![Python Versions](https://img.shields.io/pypi/pyversions/pyasn1.svg)](https://pypi.org/project/pyasn1/)
 [![Build status](https://github.com/pyasn1/pyasn1/actions/workflows/main.yml/badge.svg)](https://github.com/pyasn1/pyasn1/actions/workflows/main.yml)
@@ -14,7 +15,7 @@ of protocols based on
 [ASN.1 specification](https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-X.208-198811-W!!PDF-E&type=items).
 
 **NOTE:** The package is now maintained by *Christian Heimes* and
-*Simon Pichugin* in project https://github.com/pyasn1/pyasn1.
+*Simon Pichugin* in project <https://github.com/pyasn1/pyasn1>.
 
 Features
 --------
@@ -41,9 +42,9 @@ That probably explains why many network protocols and file formats
 still rely on the 30+ years old technology. Including a number of
 high-profile Internet protocols and file formats.
 
-Quite a number of books cover the topic of ASN.1. 
+Quite a number of books cover the topic of ASN.1.
 [Communication between heterogeneous systems](http://www.oss.com/asn1/dubuisson.html)
-by Olivier Dubuisson is one of those high quality books freely 
+by Olivier Dubuisson is one of those high quality books freely
 available on the Internet.
 
 The pyasn1 package is designed to help Python programmers tackling
@@ -84,7 +85,7 @@ class Record(Sequence):
     )
 ```
 
-It is in the spirit of ASN.1 to take abstract data description 
+It is in the spirit of ASN.1 to take abstract data description
 and turn it into a programming language specific form.
 Once you have your ASN.1 data structure expressed in Python, you
 can use it along the lines of similar Python type (e.g. ASN.1
@@ -158,7 +159,7 @@ Record:
 ```
 
 With ASN.1 design, serialisation codecs are decoupled from data objects,
-so you could turn every single ASN.1 object into many different 
+so you could turn every single ASN.1 object into many different
 serialised forms. As of this moment, pyasn1 supports BER, DER, CER and
 Python built-ins codecs. The extremely compact PER encoding is expected
 to be introduced in the upcoming pyasn1 release.
@@ -166,7 +167,7 @@ to be introduced in the upcoming pyasn1 release.
 More information on pyasn1 APIs can be found in the
 [documentation](https://pyasn1.readthedocs.io/en/latest/pyasn1/contents.html),
 compiled ASN.1 modules for different protocols and file formats
-could be found in the pyasn1-modules 
+could be found in the pyasn1-modules
 [repo](https://github.com/pyasn1/pyasn1-modules).
 
 How to get pyasn1
@@ -178,10 +179,10 @@ available as a GitHub [repo](https://github.com/pyasn1/pyasn1).
 
 You could `pip install pyasn1` or download it from [PyPI](https://pypi.org/project/pyasn1).
 
-If something does not work as expected, 
+If something does not work as expected,
 [open an issue](https://github.com/epyasn1/pyasn1/issues) at GitHub or
 post your question [on Stack Overflow](https://stackoverflow.com/questions/ask)
-or try browsing pyasn1 
+or try browsing pyasn1
 [mailing list archives](https://sourceforge.net/p/pyasn1/mailman/pyasn1-users/).
 
 Copyright (c) 2005-2020, [Ilya Etingof](mailto:etingof@gmail.com).

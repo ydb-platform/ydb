@@ -31,7 +31,7 @@ Timeout usage example:
 
 {% list tabs %}
 
-- Python
+* Python
 
   ```python
   import ydb
@@ -50,7 +50,7 @@ Timeout usage example:
 
 {% if oss == true %}
 
-- C++
+* C++
 
   ```cpp
   #include <ydb/public/sdk/cpp/client/ydb.h>
@@ -73,7 +73,7 @@ Timeout usage example:
 
 {% endif %}
 
-- Go
+* Go
 
   ```go
   import (
@@ -95,4 +95,3 @@ Timeout usage example:
   ```
 
 {% endlist %}
-

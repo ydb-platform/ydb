@@ -44,6 +44,7 @@ void DoSmth(/*... , */ const TSensorsOwner& sensorsOwner)
 ```
 
 * When you need to construct child metrics not by specifying not only the profiler and key:
+
 ```cpp
 struct THistogramSensors
 {
@@ -57,6 +58,7 @@ owner.Get<THistogramSensors>(/*Key*/ 132, /*Buckets*/ std::vector<TDuration>{5s,
 ```
 
 * It is allowed to explicitly imlement a constructor for the structure with metrics:
+
 ```cpp
 struct TChildSensors
 {
@@ -69,6 +71,7 @@ struct TChildSensors
 ```
 
 * If you want to pass a metrics structure somewhere else and not worry about its lifetime:
+
 ```cpp
 struct TSharedSensors final
 {
@@ -81,6 +84,7 @@ owner.Get<TSharedSensorsPtr>()->Counter.Increment(1);
 ```
 
 * `TSensorsOwner` mimics `TProfiler` in a number of ways:
+
 ```cpp
 auto subOwner = owner.WithPrefix("/prefix").WithTags(NYT::NProfiling::TTagSet().WithTag({"key", "value2"}));
 ```
@@ -97,4 +101,3 @@ it is important that the error metric object does not die immediately. Otherwies
 * When you simply do not want metric objects to be destroyed.  
 
 In this case, you can attach everything to `GetRootSensorsOwner()`.
-

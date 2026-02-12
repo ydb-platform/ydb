@@ -51,4 +51,3 @@ A test app performs the following steps:
 {% if oss %}[C++](../example-cpp.md#tcl) | {% endif %} C# (.NET) | Go | [Java](../java/index.md#tcl) | JavaScript | PHP | [Python](../python/index.md#tcl)
 
 {% include [error_handling.md](steps/50_error_handling.md) %}
-

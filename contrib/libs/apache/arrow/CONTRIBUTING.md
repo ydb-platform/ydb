@@ -59,8 +59,8 @@ Any functionality change should have a JIRA opened.  For minor changes that
 affect documentation, you do not need to open up a JIRA.  Instead you can
 prefix the title of your PR with "MINOR: " if meets the following guidelines:
 
-*  Grammar, usage and spelling fixes that affect no more than 2 files
-*  Documentation updates affecting no more than 2 files and not more
+* Grammar, usage and spelling fixes that affect no more than 2 files
+* Documentation updates affecting no more than 2 files and not more
    than 500 words.
 
 ## Do you want to propose a significant new feature or an important refactoring?

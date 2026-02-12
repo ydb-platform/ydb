@@ -31,4 +31,3 @@ CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
 ```yql
 CREATE OBJECT `MySecretName:another_user` (TYPE SECRET_ACCESS)
 ```
-

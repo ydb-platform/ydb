@@ -1,5 +1,6 @@
 # CharConv
-This library is a C++11 compatible implementation of `<charconv>`. The full documentation can be found here: https://www.boost.org/doc/libs/master/libs/charconv/doc/html/charconv.html
+
+This library is a C++11 compatible implementation of `<charconv>`. The full documentation can be found here: <https://www.boost.org/doc/libs/master/libs/charconv/doc/html/charconv.html>
 
 # Build Status
 
@@ -88,6 +89,7 @@ to_chars_result to_chars(char* first, char* last, Real value, chars_format fmt =
 ````
 
 ## Notes
+
 - `BOOST_CXX14_CONSTEXPR` is defined as `constexpr` when compiling with C++14 or newer.
 
 - `BOOST_CHARCONV_CONSTEXPR` is defined as `constexpr` when compiling with C++14 or newer, and the compiler has `__builtin_is_constant_evaluated`
@@ -124,6 +126,7 @@ auto r = boost::charconv::from_chars(buffer, buffer + std::strlen(buffer), v, bo
 assert(r);
 assert(v == 8.0427e-18);
 ````
+
 ## `to_chars`
 
 ````

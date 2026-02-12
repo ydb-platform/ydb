@@ -52,11 +52,11 @@ point.
 
 Our active mailing lists (which are mirrored on Discourse) are:
 
--   [Users](https://mail.python.org/mailman/listinfo/matplotlib-users)
+- [Users](https://mail.python.org/mailman/listinfo/matplotlib-users)
     mailing list: <matplotlib-users@python.org>
--   [Announcement](https://mail.python.org/mailman/listinfo/matplotlib-announce)
+- [Announcement](https://mail.python.org/mailman/listinfo/matplotlib-announce)
     mailing list: <matplotlib-announce@python.org>
--   [Development](https://mail.python.org/mailman/listinfo/matplotlib-devel)
+- [Development](https://mail.python.org/mailman/listinfo/matplotlib-devel)
     mailing list: <matplotlib-devel@python.org>
 
 [Gitter](https://gitter.im/matplotlib/matplotlib) is for coordinating

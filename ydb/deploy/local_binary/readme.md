@@ -8,4 +8,4 @@
   tar -czf linux.tar.gz --strip-components=1 * -C linux
   ```  
 
-2. Archives to be published to binary.ydb.tech bucket in the `local_binary` subfolder.
+1. Archives to be published to binary.ydb.tech bucket in the `local_binary` subfolder.

@@ -4,50 +4,50 @@
 
 2024-12-31
 
- - Unicode 16 support ([#277]).
- - New `utf8proc_charwidth_ambiguous` function to return whether a character has
+- Unicode 16 support ([#277]).
+- New `utf8proc_charwidth_ambiguous` function to return whether a character has
    East Asian width class A (Ambiguous) ([#270]).
 
 ## Version 2.9.0 ##
 
 2023-10-20
 
- - Unicode 15.1 support ([#253]).
+- Unicode 15.1 support ([#253]).
 
 ## Version 2.8.0 ##
 
 2022-10-30
 
- - Unicode 15 support ([#247]).
+- Unicode 15 support ([#247]).
 
 ## Version 2.7.0 ##
 
 2021-12-16
 
- - Unicode 14 support ([#233]).
+- Unicode 14 support ([#233]).
 
- - Support `GNUInstallDirs` in CMake build ([#159]).
+- Support `GNUInstallDirs` in CMake build ([#159]).
 
- - `cmake` build now installs `pkg-config` file ([#224]).
+- `cmake` build now installs `pkg-config` file ([#224]).
 
- - Various build and portability improvements.
+- Various build and portability improvements.
 
 ## Version 2.6.1 ##
 
 2020-12-15
 
- - Bugfix in `utf8proc_grapheme_break_stateful` for `NULL` state argument, which
+- Bugfix in `utf8proc_grapheme_break_stateful` for `NULL` state argument, which
    also broke `utf8proc_grapheme_break`.
 
 ## Version 2.6 ##
 
 2020-11-23
 
- - New `utf8proc_islower` and `utf8proc_isupper` functions ([#196]).
+- New `utf8proc_islower` and `utf8proc_isupper` functions ([#196]).
 
- - Bugfix for manual calls to `grapheme_break_extended` for initial characters ([#205]).
+- Bugfix for manual calls to `grapheme_break_extended` for initial characters ([#205]).
 
- - Various build and portability improvements.
+- Various build and portability improvements.
 
 ## Version 2.5 ##
 
@@ -297,6 +297,7 @@
 - Included a target `libutf8proc.dylib` for MacOSX.
 
 2009-05-01:
+
 - PostgreSQL 8.3 compatibility (use of `SET_VARSIZE` macro)
 
 ## Version 1.1.2 ##

@@ -52,10 +52,10 @@ Where:
 - `<connection options>` are optional [connection parameters](../../connect.md#command-line-pars) to be written to the profile.
 - `<reset options>` are optional settings for deleting parameters from an existing profile. Possible values:
 
-   - `--no-endpoint`: Delete an endpoint from the profile
-   - `--no-database`: Delete the database path from the profile
-   - `--no-auth`: Delete authentication information from the profile
-   - `--no-iam-endpoint`: Delete the IAM server URL
+  - `--no-endpoint`: Delete an endpoint from the profile
+  - `--no-database`: Delete the database path from the profile
+  - `--no-auth`: Delete authentication information from the profile
+  - `--no-iam-endpoint`: Delete the IAM server URL
 
 The profile will update with the parameters entered on the command line. Any properties not listed on the command line will remain unchanged.
 
@@ -69,10 +69,10 @@ To connect to a DB in a single-node {{ ydb-short-name }} cluster, you can use th
 ydb config profile create quickstart --endpoint grpc://localhost:2136 --database <path_database>
 ```
 
-* `path_database`: Database path. Specify one of these values:
+- `path_database`: Database path. Specify one of these values:
 
-  * `/Root/test`: If you used an executable to deploy your cluster.
-  * `/local`: If you deployed your cluster from a Docker image.
+  - `/Root/test`: If you used an executable to deploy your cluster.
+  - `/local`: If you deployed your cluster from a Docker image.
 
 #### Creating a profile from previous connection settings {#cmdline-example-from-explicit}
 

@@ -26,7 +26,7 @@ ydb admin cluster config replace --help
 
 ## Параметры подкоманды {#options}
 
-#|
+# |
 || Имя | Описание ||
 || `-f`, `--filename` | Путь к файлу, содержащему конфигурацию. ||
 || `--allow-unknown-fields`

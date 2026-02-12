@@ -10,5 +10,5 @@ Table of contents:
 
 See also:
 
-- [{#T}](../../reference/ydb-cli/index.md)
-- [{#T}](../../dev/index.md)
+* [{#T}](../../reference/ydb-cli/index.md)
+* [{#T}](../../dev/index.md)

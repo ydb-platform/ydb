@@ -15,13 +15,11 @@ All bug reports, feature requests and contributions are welcome at
 
 To install pg8000 using `pip` type: `pip install pg8000`
 
-
 ## Native API Interactive Examples
 
 pg8000 comes with two APIs, the native pg8000 API and the DB-API 2.0 standard
 API. These are the examples for the native API, and the DB-API 2.0 examples
 follow in the next section.
-
 
 ### Basic Example
 
@@ -54,7 +52,6 @@ query the table:
 >>> con.close()
 
 ```
-
 
 ### Transactions
 
@@ -115,7 +112,6 @@ PostgreSQL server whereby if a `COMMIT` is issued against a failed transaction, 
 transaction is silently rolled back, rather than an error being returned. pg8000
 attempts to detect when this has happened and raise an `InterfaceError`.
 
-
 ### Query Using Functions
 
 Another query, using some PostgreSQL functions:
@@ -131,7 +127,6 @@ Another query, using some PostgreSQL functions:
 >>> con.close()
 
 ```
-
 
 ### Interval Type
 
@@ -152,7 +147,6 @@ A query that returns the PostgreSQL interval type:
 
 ```
 
-
 ### Point Type
 
 A round-trip with a
@@ -170,7 +164,6 @@ type:
 >>> con.close()
 
 ```
-
 
 ### Client Encoding
 
@@ -240,7 +233,6 @@ JSON queries can be have parameters:
 
 ```
 
-
 ### Retrieve Column Metadata From Results
 
 Find the column metadata returned from a query:
@@ -272,7 +264,6 @@ Find the column metadata returned from a query:
 
 ```
 
-
 ### Notices And Notifications
 
 PostgreSQL [notices
@@ -297,7 +288,6 @@ Similarly there are `Connection.notifications` for [notifications
 
 ```
 
-
 ### Parameter Statuses
 
 [Certain parameter values are reported by the server automatically at connection startup or whenever
@@ -319,7 +309,6 @@ an example where we set the `aplication_name` parameter and then read it from th
 >>> con.close()
 
 ```
-
 
 ### LIMIT ALL
 
@@ -352,7 +341,6 @@ can send `null` as an alternative to `ALL`, which does work:
 >>> con.close()
 
 ```
-
 
 ### IN and NOT IN
 
@@ -408,7 +396,6 @@ with the [unnest
 
 and you can do the same for `NOT IN`.
 
-
 ### Many SQL Statements Can't Be Parameterized
 
 In PostgreSQL parameters can only be used for [data values, not identifiers
@@ -452,7 +439,6 @@ attacks](https://en.wikipedia.org/wiki/SQL_injection>):
 >>> con.close()
 
 ```
-
 
 ### COPY FROM And TO A Stream
 
@@ -535,7 +521,6 @@ programmatically:
 
 ```
 
-
 ### Execute Multiple SQL Statements
 
 If you want to execute a series of SQL statements (eg. an `.sql` file), you can run
@@ -557,7 +542,6 @@ them as expected:
 
 The only caveat is that when executing multiple statements you can't have any
 parameters.
-
 
 ### Quoted Identifiers in SQL
 
@@ -640,7 +624,6 @@ SELECT lanname FROM "pg_catalog"."pg_language" WHERE lanname = 'sql'
 
 ```
 
-
 ### Custom adapter from a Python type to a PostgreSQL type
 
 pg8000 has a mapping from Python types to PostgreSQL types for when it needs to send
@@ -675,7 +658,6 @@ Note that it still came back as a `datetime.timedelta` object because we only ch
 the mapping from Python to PostgreSQL. See below for an example of how to change the
 mapping from PostgreSQL to Python.
 
-
 ### Custom adapter from a PostgreSQL type to a Python type
 
 pg8000 has a mapping from PostgreSQL types to Python types for when it receives SQL
@@ -709,7 +691,6 @@ register an adapter:
 Note that registering the 'in' adapter only afects the mapping from the PostgreSQL type
 to the Python type. See above for an example of how to change the mapping from
 PostgreSQL to Python.
-
 
 ### Could Not Determine Data Type Of Parameter
 
@@ -757,7 +738,6 @@ Another way is to override the type that pg8000 sends along with each parameter:
 
 ```
 
-
 ### Prepared Statements
 
 [Prepared statements](https://www.postgresql.org/docs/current/sql-prepare.html) can be
@@ -786,7 +766,6 @@ Here's an example:
 >>> con.close()
 
 ```
-
 
 ### Use Environment Variables As Connection Defaults
 
@@ -839,7 +818,6 @@ follows the second aphorism of [The Zen of Python
 So we've taken the approach of only being able to set connection parameters using the
 `pg8000.native.Connection()` constructor.
 
-
 ### Connect To PostgreSQL Over SSL
 
 By default the `ssl_context` connection parameter has the value `None` which means pg8000 will
@@ -880,7 +858,6 @@ can give pg8000 the SSL socket with the `sock` parameter, and then set
 `ssl_context=False` which means that no attempt will be made to create an SSL connection
 to the server.
 
-
 ### Server-Side Cursors
 
 You can use the SQL commands [DECLARE
@@ -907,7 +884,6 @@ server-side cursors. For example:
 >>> con.close()
 
 ```
-
 
 ### BLOBs (Binary Large Objects)
 
@@ -950,7 +926,6 @@ Here's an example:
 >>> con.close()
 
 ```
-
 
 ### Replication Protocol
 
@@ -1013,11 +988,9 @@ these additional parameters can be specified using the `startup_params` paramete
 
 ```
 
-
 ## DB-API 2 Interactive Examples
 
 These examples stick to the DB-API 2.0 standard.
-
 
 ### Basic Example
 
@@ -1045,7 +1018,6 @@ id = 2, title = Speaker for the Dead
 
 ```
 
-
 ### Query Using Functions
 
 Another query, using some PostgreSQL functions:
@@ -1063,7 +1035,6 @@ Another query, using some PostgreSQL functions:
 >>> con.close()
 
 ```
-
 
 ### Interval Type
 
@@ -1085,7 +1056,6 @@ A query that returns the PostgreSQL interval type:
 
 ```
 
-
 ### Point Type
 
 A round-trip with a [PostgreSQL point
@@ -1104,7 +1074,6 @@ A round-trip with a [PostgreSQL point
 >>> con.close()
 
 ```
-
 
 ### Numeric Parameter Style
 
@@ -1127,7 +1096,6 @@ pg8000 supports all the DB-API parameter styles. Here's an example of using the
 
 ```
 
-
 ### Autocommit
 
 Following the DB-API specification, autocommit is off by default. It can be turned on by
@@ -1147,7 +1115,6 @@ using the autocommit property of the connection:
 >>> con.close()
 
 ```
-
 
 ### Client Encoding
 
@@ -1171,7 +1138,6 @@ Another way of changing the client encoding is by using an SQL command. For exam
 >>> con.close()
 
 ```
-
 
 ### JSON
 
@@ -1207,7 +1173,6 @@ JSON queries can be have parameters:
 
 ```
 
-
 ### Retrieve Column Names From Results
 
 Use the columns names retrieved from a query:
@@ -1230,7 +1195,6 @@ Use the columns names retrieved from a query:
 >>> conn.close()
 
 ```
-
 
 ### COPY from and to a file
 
@@ -1262,7 +1226,6 @@ be used to copy from and to a file or file-like object:
 
 ```
 
-
 ### Server-Side Cursors
 
 You can use the SQL commands [DECLARE
@@ -1293,7 +1256,6 @@ server-side cursors. For example:
 >>> con.close()
 
 ```
-
 
 ### BLOBs (Binary Large Objects)
 
@@ -1339,7 +1301,6 @@ Here's an example:
 
 ```
 
-
 ### Parameter Limit
 
 The protocol that PostgreSQL uses limits the number of parameters to 6,5535. The following will give
@@ -1378,7 +1339,6 @@ One way of working round this problem is to use the [unnest
 
 ```
 
-
 ## Type Mapping
 
 The following table shows the default mapping between Python types and PostgreSQL types,
@@ -1416,7 +1376,6 @@ possible to change the default mapping using adapters (see the examples).
 | JSON                  | json, jsonb     | The Python JSON is provided as a Python serialized string. Results returned as de-serialized JSON. |
 | pg8000.Range | range | PostgreSQL multirange types are | represented in Python as a list of  range types. |
 | tuple                 | composite type  | Only from Python to PostgreSQL          |
-
 
 ## Theory Of Operation
 
@@ -1463,18 +1422,15 @@ pg8000 encounters a network problem it'll raise an `InterfaceError` with the mes
 `network error` and with the original exception set as the [cause
 ](https://docs.python.org/3/reference/simple_stmts.html#the-raise-statement).
 
-
 ## Native API Docs
 
 ### pg8000.native.Error
 
 Generic exception that is the base exception of the other error exceptions.
 
-
 ### pg8000.native.InterfaceError
 
 For errors that originate within pg8000.
-
 
 ### pg8000.native.DatabaseError
 
@@ -1500,8 +1456,8 @@ Creates a connection to a PostgreSQL database.
 - *tcp_keepalive* - If `True` then use [TCP keepalive](https://en.wikipedia.org/wiki/Keepalive#TCP_keepalive). The default is `True`.
 - *application_name* - Sets the [application\_name](https://www.postgresql.org/docs/current/runtime-config-logging.html#GUC-APPLICATION-NAME). If your server character encoding is not `ascii` or `utf8`, then you need to provide values as bytes, eg.  `'my_application_name'.encode('EUC-JP')`. The default is `None` which means that the server will set the application name.
 - *replication* - Used to run in [streaming replication mode](https://www.postgresql.org/docs/current/protocol-replication.html). If your server character encoding is not `ascii` or `utf8`, then you need to provide values as bytes, eg. `'database'.encode('EUC-JP')`.
-- *sock*  - A socket-like object to use for the connection. For example, `sock` could be a plain `socket.socket`, or it could represent an SSH tunnel or perhaps an `ssl.SSLSocket` to an SSL proxy. If an `ssl.SSLContext` is provided, then it will be used to attempt to create an SSL socket from the provided socket. 
-- *startup_params* - The standard startup parameters 'user', 'database' and 'replication' have their own parameters in this constructor. Other startup parameters can be specified in this dictionary. To quote the [docs](https://www.postgresql.org/docs/current/protocol-message-formats.html): "Parameter names beginning with _pq_. are reserved for use as protocol extensions, while others are treated as run-time parameters to be set at backend start time. Such settings will be applied during backend start (after parsing the command-line arguments if any) and will act as session defaults."
+- *sock*  - A socket-like object to use for the connection. For example, `sock` could be a plain `socket.socket`, or it could represent an SSH tunnel or perhaps an `ssl.SSLSocket` to an SSL proxy. If an `ssl.SSLContext` is provided, then it will be used to attempt to create an SSL socket from the provided socket.
+- *startup_params* - The standard startup parameters 'user', 'database' and 'replication' have their own parameters in this constructor. Other startup parameters can be specified in this dictionary. To quote the [docs](https://www.postgresql.org/docs/current/protocol-message-formats.html): "Parameter names beginning with *pq*. are reserved for use as protocol extensions, while others are treated as run-time parameters to be set at backend start time. Such settings will be applied during backend start (after parsing the command-line arguments if any) and will act as session defaults."
 
 ### pg8000.native.Connection.notifications
 
@@ -1511,16 +1467,13 @@ this database connection (via the `LISTEN` / `NOTIFY` PostgreSQL commands). Each
 item is a three-element tuple containing the PostgreSQL backend PID that issued the
 notify, the channel and the payload.
 
-
 ### pg8000.native.Connection.notices
 
 A deque of server-side notices received by this database connection.
 
-
 ### pg8000.native.Connection.parameter\_statuses
 
 A `dict` of server-side parameter statuses received by this database connection.
-
 
 ### pg8000.native.Connection.run(sql, stream=None, types=None, \*\*kwargs)
 
@@ -1535,9 +1488,8 @@ con.run("SELECT * FROM cities where population > :pop", pop=10000)
   - `COPY FROM` - The stream parameter must be a readable file-like object or an iterable. If it's an
     iterable then the items can be ``str`` or binary.
   - `COPY TO` - The stream parameter must be a writable file-like object.
-- *types* - A dictionary of oids. A key corresponds to a parameter. 
+- *types* - A dictionary of oids. A key corresponds to a parameter.
 - *kwargs* - The parameters of the SQL statement.
-
 
 ### pg8000.native.Connection.row\_count
 
@@ -1549,7 +1501,6 @@ The value is -1 if:
 
 - No `run()` method has been performed yet.
 - There was no rowcount associated with the last `run()`.
-
 
 ### pg8000.native.Connection.columns
 
@@ -1564,13 +1515,11 @@ keys:
 - type\_modifier
 - format
 
-
 ### pg8000.native.Connection.close()
 
 Closes the database connection. First the connection is closed at the PostgreSQL protocol
 level, and then regardless of whether that succeeds or not, the underlying socket is
 closed.
-
 
 ### pg8000.native.Connection.register\_out\_adapter(typ, out\_func)
 
@@ -1578,7 +1527,6 @@ Register a type adapter for types going out from pg8000 to the server.
 
 - *typ* - The Python class that the adapter is for.
 - *out_func* - A function that takes the Python object and returns its string representation in the format that the server requires.
-
 
 ### pg8000.native.Connection.register\_in\_adapter(oid, in\_func)
 
@@ -1588,7 +1536,6 @@ Register a type adapter for types coming in from the server to pg8000.
 - *in_func*  - A function that takes the PostgreSQL string representation and returns a corresponding
   Python object.
 
-
 ### pg8000.native.Connection.prepare(sql)
 
 Returns a `PreparedStatement` object which represents a [prepared statement
@@ -1597,12 +1544,10 @@ subsequently be repeatedly executed.
 
 - *sql* - The SQL statement to prepare. Parameter placeholders appear as a `:` followed by the parameter name.
 
-
 ### pg8000.native.PreparedStatement
 
 A prepared statement object is returned by the `pg8000.native.Connection.prepare()`
 method of a connection. It has the following methods:
-
 
 #### pg8000.native.PreparedStatement.run(\*\*kwargs)
 
@@ -1610,25 +1555,23 @@ Executes the prepared statement, and returns the results as a `tuple`.
 
 - *kwargs* - The parameters of the prepared statement.
 
-
 #### pg8000.native.PreparedStatement.close()
 
 Closes the prepared statement, releasing the prepared statement held on the server.
-
 
 ### pg8000.native.identifier(ident)
 
 Correctly quotes and escapes a string to be used as an [SQL identifier
 ](https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS).
-- *ident* - The `str` to be used as an SQL identifier.
 
+- *ident* - The `str` to be used as an SQL identifier.
 
 ### pg8000.native.literal(value)
 
 Correctly quotes and escapes a value to be used as an [SQL literal
 ](https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-CONSTANTS).
-- *value* - The value to be used as an SQL literal.
 
+- *value* - The value to be used as an SQL literal.
 
 ## DB-API 2 Docs
 
@@ -1638,13 +1581,11 @@ Correctly quotes and escapes a value to be used as an [SQL literal
 
 The DBAPI level supported, currently "2.0".
 
-
 #### pg8000.dbapi.threadsafety
 
 Integer constant stating the level of thread safety the DBAPI interface supports. For
 pg8000, the threadsafety value is 1, meaning that threads may share the module but not
 connections.
-
 
 #### pg8000.dbapi.paramstyle
 
@@ -1661,29 +1602,23 @@ changed to any of the following values:
 - *format* - printf format codes, eg. `WHERE name=%s`
 - *pyformat* - Python format codes, eg. `WHERE name=%(paramname)s`
 
-
 #### pg8000.dbapi.STRING
 
 String type oid.
 
-
 #### pg8000.dbapi.BINARY
-
 
 #### pg8000.dbapi.NUMBER
 
 Numeric type oid.
 
-
 #### pg8000.dbapi.DATETIME
 
 Timestamp type oid
 
-
 #### pg8000.dbapi.ROWID
 
 ROWID type oid
-
 
 ### Functions
 
@@ -1707,9 +1642,8 @@ Creates a connection to a PostgreSQL database.
 - *tcp_keepalive* - If `True` then use [TCP keepalive](https://en.wikipedia.org/wiki/Keepalive#TCP_keepalive). The default is `True`.
 - *application_name* - Sets the [application\_name](https://www.postgresql.org/docs/current/runtime-config-logging.html#GUC-APPLICATION-NAME). If your server character encoding is not `ascii` or `utf8`, then you need to provide values as bytes, eg. `'my_application_name'.encode('EUC-JP')`. The default is `None` which means that the server will set the application name.
 - *replication* - Used to run in [streaming replication mode](https://www.postgresql.org/docs/current/protocol-replication.html). If your server character encoding is not `ascii` or `utf8`, then you need to provide values as bytes, eg. `'database'.encode('EUC-JP')`.
-- *sock* - A socket-like object to use for the connection. For example, `sock` could be a plain `socket.socket`, or it could represent an SSH tunnel or perhaps an `ssl.SSLSocket` to an SSL proxy. If an `ssl.SSLContext` is provided, then it will be used to attempt to create an SSL socket from the provided socket. 
-- *startup_params* - The standard startup parameters 'user', 'database' and 'replication' have their own parameters in this constructor. Other startup parameters can be specified in this dictionary. To quote the [docs](https://www.postgresql.org/docs/current/protocol-message-formats.html): "Parameter names beginning with _pq_. are reserved for use as protocol extensions, while others are treated as run-time parameters to be set at backend start time. Such settings will be applied during backend start (after parsing the command-line arguments if any) and will act as session defaults."
-
+- *sock* - A socket-like object to use for the connection. For example, `sock` could be a plain `socket.socket`, or it could represent an SSH tunnel or perhaps an `ssl.SSLSocket` to an SSL proxy. If an `ssl.SSLContext` is provided, then it will be used to attempt to create an SSL socket from the provided socket.
+- *startup_params* - The standard startup parameters 'user', 'database' and 'replication' have their own parameters in this constructor. Other startup parameters can be specified in this dictionary. To quote the [docs](https://www.postgresql.org/docs/current/protocol-message-formats.html): "Parameter names beginning with *pq*. are reserved for use as protocol extensions, while others are treated as run-time parameters to be set at backend start time. Such settings will be applied during backend start (after parsing the command-line arguments if any) and will act as session defaults."
 
 #### pg8000.dbapi.Date(year, month, day)
 
@@ -1720,20 +1654,17 @@ This property is part of the
 
 Returns: `datetime.date`
 
-
 #### pg8000.dbapi.Time(hour, minute, second)
 
 Construct an object holding a time value.
 
 Returns: `datetime.time`
 
-
 #### pg8000.dbapi.Timestamp(year, month, day, hour, minute, second)
 
 Construct an object holding a timestamp value.
 
 Returns: `datetime.datetime`
-
 
 #### pg8000.dbapi.DateFromTicks(ticks)
 
@@ -1742,14 +1673,12 @@ since the epoch).
 
 Returns: `datetime.datetime`
 
-
 #### pg8000.dbapi.TimeFromTicks(ticks)
 
 Construct an object holding a time value from the given ticks value (number of seconds
 since the epoch).
 
 Returns: `datetime.time`
-
 
 #### pg8000.dbapi.TimestampFromTicks(ticks)
 
@@ -1758,13 +1687,11 @@ seconds since the epoch).
 
 Returns: `datetime.datetime`
 
-
 #### pg8000.dbapi.Binary(value)
 
 Construct an object holding binary data.
 
 Returns: `bytes`
-
 
 ### Generic Exceptions
 
@@ -1777,11 +1704,9 @@ from the generic exceptions.
 Generic exception raised for important database warnings like data truncations. This
 exception is not currently used by pg8000.
 
-
 #### pg8000.dbapi.Error
 
 Generic exception that is the base exception of all other error exceptions.
-
 
 #### pg8000.dbapi.InterfaceError
 
@@ -1789,18 +1714,15 @@ Generic exception raised for errors that are related to the database interface r
 than the database itself. For example, if the interface attempts to use an SSL
 connection but the server refuses, an InterfaceError will be raised.
 
-
 #### pg8000.dbapi.DatabaseError
 
 Generic exception raised for errors that are related to the database. This exception is
 currently never raised by pg8000.
 
-
 #### pg8000.dbapi.DataError
 
 Generic exception raised for errors that are due to problems with the processed data.
 This exception is not currently raised by pg8000.
-
 
 #### pg8000.dbapi.OperationalError
 
@@ -1808,12 +1730,10 @@ Generic exception raised for errors that are related to the database's operation
 necessarily under the control of the programmer. This exception is currently never
 raised by pg8000.
 
-
 #### pg8000.dbapi.IntegrityError
 
 Generic exception raised when the relational integrity of the database is affected. This
 exception is not currently raised by pg8000.
-
 
 #### pg8000.dbapi.InternalError
 
@@ -1821,33 +1741,27 @@ Generic exception raised when the database encounters an internal error. This is
 currently only raised when unexpected state occurs in the pg8000 interface itself, and
 is typically the result of a interface bug.
 
-
 #### pg8000.dbapi.ProgrammingError
 
 Generic exception raised for programming errors. For example, this exception is raised
 if more parameter fields are in a query string than there are available parameters.
-
 
 #### pg8000.dbapi.NotSupportedError
 
 Generic exception raised in case a method or database API was used which is not
 supported by the database.
 
-
 ### Classes
-
 
 #### pg8000.dbapi.Connection
 
 A connection object is returned by the `pg8000.dbapi.connect()` function. It represents a
 single physical connection to a PostgreSQL database.
 
-
 #### pg8000.dbapi.Connection.autocommit
 
 Following the DB-API specification, autocommit is off by default. It can be turned on by
 setting this boolean pg8000-specific autocommit property to ``True``.
-
 
 #### pg8000.dbapi.Connection.close()
 
@@ -1855,16 +1769,13 @@ Closes the database connection. First the connection is closed at the PostgreSQL
 level, and then regardless of whether that succeeds or not, the underlying socket is
 closed.
 
-
 #### pg8000.dbapi.Connection.cursor()
 
 Creates a `pg8000.dbapi.Cursor` object bound to this connection.
 
-
 #### pg8000.dbapi.Connection.rollback()
 
 Rolls back the current database transaction.
-
 
 #### pg8000.dbapi.Connection.tpc\_begin(xid)
 
@@ -1873,7 +1784,6 @@ called outside of a transaction (i.e. nothing may have executed since the last
 `commit()`  or `rollback()`. Furthermore, it is an error to call `commit()` or
 `rollback()` within the TPC transaction. A `ProgrammingError` is raised, if the
 application calls `commit()` or `rollback()` during an active TPC transaction.
-
 
 #### pg8000.dbapi.Connection.tpc_commit(xid=None)
 
@@ -1888,7 +1798,6 @@ form should be called outside of a transaction, and is intended for use in recov
 
 On return, the TPC transaction is ended.
 
-
 #### pg8000.dbapi.Connection.tpc_prepare()
 
 Performs the first phase of a transaction started with `.tpc_begin()`. A
@@ -1897,12 +1806,10 @@ Performs the first phase of a transaction started with `.tpc_begin()`. A
 After calling `tpc_prepare()`, no statements can be executed until `tpc_commit()` or
 `tpc_rollback()` have been called.
 
-
 #### pg8000.dbapi.Connection.tpc_recover()
 
 Returns a list of pending transaction IDs suitable for use with `tpc_commit(xid)` or
 `tpc_rollback(xid)`.
-
 
 #### pg8000.dbapi.Connection.tpc_rollback(xid=None)
 
@@ -1915,14 +1822,12 @@ be called outside of a transaction, and is intended for use in recovery.
 
 On return, the TPC transaction is ended.
 
-
 #### pg8000.dbapi.Connection.xid(format_id, global_transaction_id, branch_qualifier)
 
 Create a Transaction IDs (only global_transaction_id is used in pg) format_id and
 branch_qualifier are not used in postgres global_transaction_id may be any string
 identifier supported by postgres returns a tuple (format_id, global_transaction_id,
 branch_qualifier)
-
 
 #### pg8000.dbapi.Cursor
 
@@ -1934,12 +1839,10 @@ connection. It has the following attributes and methods:
 This read/write attribute specifies the number of rows to fetch at a time with
 `pg8000.dbapi.Cursor.fetchmany()`.  It defaults to 1.
 
-
 ##### pg8000.dbapi.Cursor.connection
 
 This read-only attribute contains a reference to the connection object (an instance of
 `pg8000.dbapi.Connection`) on which the cursor was created.
-
 
 ##### pg8000.dbapi.Cursor.rowcount
 
@@ -1954,7 +1857,6 @@ The value is -1 if:
 - At least one of the statements executed as part of an `executemany()` had no row
   count associated with it.
 
-
 ##### pg8000.dbapi.Cursor.description
 
 This read-only attribute is a sequence of 7-item sequences. Each value contains
@@ -1962,11 +1864,9 @@ information describing one result column. The 7 items returned for each column a
 (name, type_code, display_size, internal_size, precision, scale, null_ok). Only the
 first two values are provided by the current implementation.
 
-
 ##### pg8000.dbapi.Cursor.close()
 
 Closes the cursor.
-
 
 ##### pg8000.dbapi.Cursor.execute(operation, args=None, stream=None)
 
@@ -1978,7 +1878,6 @@ which may be iterated over.
 - *args* - If `pg8000.dbapi.paramstyle` is `qmark`, `numeric`, or `format`, this argument should be an array of parameters to bind into the statement. If `pg8000.dbapi.paramstyle` is `named`, the argument should be a `dict` mapping of parameters. If `pg8000.dbapi.paramstyle` is `pyformat`, the argument value may be either an array or a mapping.
 - *stream* - This is a pg8000 extension for use with the PostgreSQL [COPY](http://www.postgresql.org/docs/current/static/sql-copy.html) command. For a `COPY FROM` the parameter must be a readable file-like object, and for `COPY TO` it must be writable.
 
-
 ##### pg8000.dbapi.Cursor.executemany(operation, param_sets)
 
 Prepare a database operation, and then execute it against all parameter sequences or
@@ -1987,7 +1886,6 @@ mappings provided.
 - *operation* - The SQL statement to execute.
 - *parameter_sets* - A sequence of parameters to execute the statement with. The values in the sequence should be sequences or mappings of parameters, the same as the args argument of the `pg8000.dbapi.Cursor.execute()` method.
 
-
 ##### pg8000.dbapi.Cursor.callproc(procname, parameters=None)
 
 Call a stored database procedure with the given name and optional parameters.
@@ -1995,13 +1893,11 @@ Call a stored database procedure with the given name and optional parameters.
 - *procname* - The name of the procedure to call.
 - *parameters* - A list of parameters.
 
-
 ##### pg8000.dbapi.Cursor.fetchall()
 
 Fetches all remaining rows of a query result.
 
 Returns: A sequence, each entry of which is a sequence of field values making up a row.
-
 
 ##### pg8000.dbapi.Cursor.fetchmany(size=None)
 
@@ -2012,13 +1908,11 @@ Fetches the next set of rows of a query result.
 Returns: A sequence, each entry of which is a sequence of field values making up a row.
 If no more rows are available, an empty sequence will be returned.
 
-
 ##### pg8000.dbapi.Cursor.fetchone()
 
 Fetch the next row of a query result set.
 
 Returns: A row as a sequence of field values, or `None` if no more rows are available.
-
 
 ##### pg8000.dbapi.Cursor.setinputsizes(\*sizes)
 
@@ -2028,11 +1922,9 @@ None).
 
 - *sizes* - Positional parameters that are either the Python type of the parameter to be sent, or the PostgreSQL oid. Common oids are available as constants such as `pg8000.STRING`, `pg8000.INTEGER`, `pg8000.TIME` etc.
 
-
 ##### pg8000.dbapi.Cursor.setoutputsize(size, column=None)
 
 Not implemented by pg8000.
-
 
 #### pg8000.dbapi.Interval
 
@@ -2044,7 +1936,6 @@ Note that values of the `pg8000.dbapi.Interval.microseconds`,
 `pg8000.dbapi.Interval.days`, and `pg8000.dbapi.Interval.months` properties are
 independently measured and cannot be converted to each other. A month may be 28, 29, 30,
 or 31 days, and a day may occasionally be lengthened slightly by a leap second.
-
 
 ## Design Decisions
 
@@ -2059,7 +1950,6 @@ the easiest to express:
 >>> pg_range = Range(2, 6)
 
 ```
-
 
 ## Tests
 
@@ -2091,11 +1981,9 @@ environment variable if set.
 
 Benchmarks are run as part of the test suite at `tests/test_benchmarks.py`.
 
-
 ## Doing A Release Of pg8000
 
 Run `tox` to make sure all tests pass, then update the release notes, then do:
-
 
 ```
 git tag -a x.y.z -m "version x.y.z"
@@ -2104,13 +1992,11 @@ python -m build
 twine upload dist/*
 ```
 
-
 ## Release Notes
 
 ### Version 1.31.4, 2025-07-20
 
 - Various speed optimisations.
-
 
 ### Version 1.31.3, 2025-07-19
 
@@ -2123,11 +2009,9 @@ twine upload dist/*
 - Fix bug where `parameter_statuses` fails for non-ascii encoding.
 - Add support for Python 3.12
 
-
 ### Version 1.31.1, 2024-04-01
 
 - Move to src style layout, and also for packaging use Hatch rather than setuptools. This means that if the source distribution has a directory added to it (as is needed for packaging for OS distributions) the package can still be built.
-
 
 ### Version 1.31.0, 2024-03-31
 
@@ -2137,56 +2021,46 @@ twine upload dist/*
   - False - It'll not try to connect over SSL.
   - SSLContext object - It'll use this object to connect over SSL.
 
-
 ### Version 1.30.5, 2024-02-22
 
 - Fix bug that now means the number of parameters cam be as high as an unsigned 16 bit
   integer will go.
-
 
 ### Version 1.30.4, 2024-01-03
 
 - Add support for more range and multirange types.
 - Make the `Connection.parameter_statuses` property a `dict` rather than a `dequeue`.
 
-
 ### Version 1.30.3, 2023-10-31
 
 - Fix problem with PG date overflowing Python types. Now we return the `str` we got from the
-  server if we can't parse it. 
-
+  server if we can't parse it.
 
 ### Version 1.30.2, 2023-09-17
 
 - Bug fix where dollar-quoted string constants weren't supported.
 
-
 ### Version 1.30.1, 2023-07-29
 
 - There was a problem uploading the previous version (1.30.0) to PyPI because the markup of the README.rst was invalid. There's now a step in the automated tests to check for this.
-
 
 ### Version 1.30.0, 2023-07-27
 
 - Remove support for Python 3.7
 - Add a `sock` keyword parameter for creating a connection from a pre-configured socket.
 
-
 ### Version 1.29.8, 2023-06-16
 
 - Ranges don't work with legacy API.
-
 
 ### Version 1.29.7, 2023-06-16
 
 - Add support for PostgreSQL `range` and `multirange` types. Previously pg8000 would just return them as strings, but now they're returned as `Range` and lists of `Range`.
 - The PostgreSQL `record` type is now returned as a `tuple` of strings, whereas before it was returned as one string.
 
-
 ### Version 1.29.6, 2023-05-29
 
 - Fixed two bugs with composite types. Nulls should be represented by an empty string, and in an array of composite types, the elements should be surrounded by double quotes.
-
 
 ### Version 1.29.5, 2023-05-09
 
@@ -2194,65 +2068,53 @@ twine upload dist/*
 - When using the `PGInterval` type, if a response from the server contained the period `millennium`, it wasn't recognised. This was caused by a spelling mistake where we had `millenium` rather than `millennium`.
 - Added support for sending PostgreSQL composite types. If a value is sent as a `tuple`, pg8000 will send it to the server as a `(` delimited composite string.
 
-
 ### Version 1.29.4, 2022-12-14
 
 - Fixed bug in `pg8000.dbapi` in the `setinputsizes()` method where if a `size` was a recognized Python type, the method failed.
 
-
 ### Version 1.29.3, 2022-10-26
 
 - Upgrade the SCRAM library to version 1.4.3. This adds support for the case where the client supports channel binding but the server doesn't.
-
 
 ### Version 1.29.2, 2022-10-09
 
 - Fixed a bug where in a literal array, items such as `\n` and `\r` weren't escaped properly before being sent to the server.
 - Fixed a bug where if the PostgreSQL server has a half-hour time zone set, values of type `timestamp with time zone` failed. This has been fixed by using the `parse` function of the `dateutil` package if the `datetime` parser fails.
 
-
 ### Version 1.29.1, 2022-05-23
 
 - In trying to determine if there's been a failed commit, check for `ROLLBACK TO SAVEPOINT`.
-
 
 ### Version 1.29.0, 2022-05-21
 
 - Implement a workaround for the [silent failed commit](https://github.com/tlocke/pg8000/issues/36) bug.
 - Previously if an empty string was sent as the query an exception would be raised, but that isn't done now.
 
-
 ### Version 1.28.3, 2022-05-18
 
 - Put back `__version__` attributes that were inadvertently removed.
-
 
 ### Version 1.28.2, 2022-05-17
 
 - Use a build system that's compliant with PEP517.
 
-
 ### Version 1.28.1, 2022-05-17
 
 - If when doing a `COPY FROM` the `stream` parameter is an iterator of `str`, pg8000 used to silently append a newline to the end. That no longer happens.
 
-
 ### Version 1.28.0, 2022-05-17
 
 - When using the `COPY FROM` SQL statement, allow the `stream` parameter to be an iterable.
-
 
 ### Version 1.27.1, 2022-05-16
 
 - The `seconds` attribute of `PGInterval` is now always a `float`, to cope with fractional seconds.
 - Updated the `interval` parsers for `iso_8601` and `sql_standard` to take account of fractional seconds.
 
-
 ### Version 1.27.0, 2022-05-16
 
 - It used to be that by default, if pg8000 received an `interval` type from the server and it was too big to fit into a `datetime.timedelta` then an exception would be raised. Now if an interval is too big for `datetime.timedelta` a `PGInterval` is returned.
 - pg8000 now supports all the output formats for an `interval` (`postgres`, `postgres_verbose`, `iso_8601` and `sql_standard`).
-
 
 ### Version 1.26.1, 2022-04-23
 
@@ -2260,43 +2122,35 @@ twine upload dist/*
 - Remove support for Python 3.6
 - Remove support for PostgreSQL 9.6
 
-
 ### Version 1.26.0, 2022-04-18
 
 - When connecting, raise an `InterfaceError('network error')` rather than let the underlying `struct.error` float up.
-- Make licence text the same as that used by the OSI. Previously the licence wording differed slightly from the BSD 3 Clause licence at https://opensource.org/licenses/BSD-3-Clause. This meant that automated tools didn't pick it up as being Open Source. The changes are believed to not alter the meaning of the license at all.
-
+- Make licence text the same as that used by the OSI. Previously the licence wording differed slightly from the BSD 3 Clause licence at <https://opensource.org/licenses/BSD-3-Clause>. This meant that automated tools didn't pick it up as being Open Source. The changes are believed to not alter the meaning of the license at all.
 
 ### Version 1.25.0, 2022-04-17
 
 - Fix more cases where a `ResourceWarning` would be raise because of a socket that had been left open.
 - We now have a single `InterfaceError` with the message 'network error' for all network errors, with the underlying exception held in the `cause` of the exception.
 
-
 ### Version 1.24.2, 2022-04-15
 
 - To prevent a `ResourceWarning` close socket if a connection can't be created.
-
 
 ### Version 1.24.1, 2022-03-02
 
 - Return pg +/-infinity dates as `str`. Previously +/-infinity pg values would cause an error when returned, but now we return +/-infinity as strings.
 
-
 ### Version 1.24.0, 2022-02-06
 
 - Add SQL escape functions identifier() and literal() to the native API. For use when a query can't be parameterised and the SQL string has to be created using untrusted values.
-
 
 ### Version 1.23.0, 2021-11-13
 
 - If a query has no parameters, then the query will no longer be parsed. Although there are performance benefits for doing this, the main reason is to avoid query rewriting, which can introduce errors.
 
-
 ### Version 1.22.1, 2021-11-10
 
 - Fix bug in PGInterval type where `str()` failed for a millennia value.
-
 
 ### Version 1.22.0, 2021-10-13
 

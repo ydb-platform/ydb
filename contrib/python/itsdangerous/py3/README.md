@@ -10,7 +10,6 @@ It's possible to customize how data is serialized. Data is compressed as
 needed. A timestamp can be added and verified automatically while
 loading a token.
 
-
 ## A Simple Example
 
 Here's how you could generate a token for transmitting a user's id and
@@ -28,7 +27,6 @@ data = auth_s.loads(token)
 print(data["name"])
 # itsdangerous
 ```
-
 
 ## Donate
 

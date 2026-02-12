@@ -1,7 +1,7 @@
 gRPC C++ - Building from source
 ===========================
 
-This document has detailed instructions on how to build gRPC C++ from source. Note that it only covers the build of gRPC itself and is meant for gRPC C++ contributors and/or power users. 
+This document has detailed instructions on how to build gRPC C++ from source. Note that it only covers the build of gRPC itself and is meant for gRPC C++ contributors and/or power users.
 Other should follow the user instructions. See the [How to use](https://github.com/grpc/grpc/tree/master/src/cpp#to-start-using-grpc-c) instructions for guidance on how to add gRPC as a dependency to a C++ application (there are several ways and system-wide installation is often not the best choice).
 
 # Pre-requisites
@@ -9,18 +9,20 @@ Other should follow the user instructions. See the [How to use](https://github.c
 ## Linux
 
 ```sh
- $ [sudo] apt-get install build-essential autoconf libtool pkg-config
+ [sudo] apt-get install build-essential autoconf libtool pkg-config
 ```
 
 If you plan to build using CMake
+
 ```sh
- $ [sudo] apt-get install cmake
+ [sudo] apt-get install cmake
 ```
 
 If you are a contributor and plan to build and run tests, install the following as well:
+
 ```sh
- $ # clang and LLVM C++ lib is only required for sanitizer builds
- $ [sudo] apt-get install clang libc++-dev
+ # clang and LLVM C++ lib is only required for sanitizer builds
+ [sudo] apt-get install clang libc++-dev
 ```
 
 ## MacOS
@@ -31,17 +33,17 @@ install Xcode or
 and then run the following command from a terminal:
 
 ```sh
- $ [sudo] xcode-select --install
+ [sudo] xcode-select --install
 ```
 
 To build gRPC from source, you may need to install the following
 packages from [Homebrew](https://brew.sh):
 
 ```sh
- $ brew install autoconf automake libtool shtool
+ brew install autoconf automake libtool shtool
 ```
 
-If you plan to build using CMake, follow the instructions from https://cmake.org/download/
+If you plan to build using CMake, follow the instructions from <https://cmake.org/download/>
 
 *Tip*: when building,
 you *may* want to explicitly set the `LIBTOOL` and `LIBTOOLIZE`
@@ -49,12 +51,13 @@ environment variables when running `make` to ensure the version
 installed by `brew` is being used:
 
 ```sh
- $ LIBTOOL=glibtool LIBTOOLIZE=glibtoolize make
+ LIBTOOL=glibtool LIBTOOLIZE=glibtoolize make
 ```
 
 ## Windows
 
 To prepare for cmake + Microsoft Visual C++ compiler build
+
 - Install Visual Studio 2019 or later (Visual C++ compiler will be used).
 - Install [Git](https://git-scm.com/).
 - Install [CMake](https://cmake.org/download/).
@@ -70,9 +73,9 @@ to clone the gRPC repository at the [latest stable release tag](https://github.c
 ## Unix
 
 ```sh
- $ git clone -b RELEASE_TAG_HERE https://github.com/grpc/grpc
- $ cd grpc
- $ git submodule update --init
+ git clone -b RELEASE_TAG_HERE https://github.com/grpc/grpc
+ cd grpc
+ git submodule update --init
  ```
 
 ## Windows
@@ -102,6 +105,7 @@ See [Installing Bazel](https://docs.bazel.build/versions/master/install.html) fo
 We support building with `bazel` on Linux, MacOS and Windows.
 
 From the grpc repository root
+
 ```
 # Build gRPC C++
 $ bazel build :all
@@ -120,11 +124,12 @@ to get significant improvement to the build and test speed (and a bunch of other
 ### Linux/Unix, Using Make
 
 Run from the grpc directory after cloning the repo with --recursive or updating submodules.
+
 ```
-$ mkdir -p cmake/build
-$ cd cmake/build
-$ cmake ../..
-$ make
+mkdir -p cmake/build
+cd cmake/build
+cmake ../..
+make
 ```
 
 If you want to build shared libraries (`.so` files), run `cmake` with `-DBUILD_SHARED_LIBS=ON`.
@@ -136,6 +141,7 @@ cmake will generate a solution (`grpc.sln`) that contains a VS project for
 every target defined in `CMakeLists.txt` (+ a few extra convenience projects
 added automatically by cmake). After opening the solution with Visual Studio
 you will be able to browse and build the code.
+
 ```
 > @rem Run from grpc directory after cloning the repo with --recursive or updating submodules.
 > md .build
@@ -144,12 +150,13 @@ you will be able to browse and build the code.
 > cmake --build . --config Release
 ```
 
-Using gRPC C++ as a DLL is not recommended, but you can still enable it by running `cmake` with `-DBUILD_SHARED_LIBS=ON`. 
+Using gRPC C++ as a DLL is not recommended, but you can still enable it by running `cmake` with `-DBUILD_SHARED_LIBS=ON`.
 
-### Windows, Using Ninja (faster build).
+### Windows, Using Ninja (faster build)
 
 Please note that when using Ninja, you will still need Visual C++ (part of Visual Studio)
 installed to be able to compile the C/C++ sources.
+
 ```
 > @rem Run from grpc directory after cloning the repo with --recursive or updating submodules.
 > cd cmake
@@ -168,6 +175,7 @@ Windows DLL build is supported at a "best effort" basis and we don't recommend u
 
 That said, we don't actively prohibit building DLLs on windows (it can be enabled in cmake with `-DBUILD_SHARED_LIBS=ON`), and are free to use the DLL builds
 at your own risk.
+
 - you've been warned that there are some important drawbacks and some things might not work at all or will be broken in interesting ways.
 - we don't have extensive testing for DLL builds in place (to avoid maintenance costs, increased test duration etc.) so regressions / build breakages might occur
 
@@ -180,9 +188,9 @@ that are already installed on your system and use them to build gRPC.
 This behavior is controlled by the `gRPC_<depname>_PROVIDER` CMake variables,
 e.g. `gRPC_CARES_PROVIDER`. The options that these variables take are as follows:
 
-* module - build dependencies alongside gRPC. The source code is obtained from
+- module - build dependencies alongside gRPC. The source code is obtained from
 gRPC's git submodules.
-* package - use external copies of dependencies that are already available
+- package - use external copies of dependencies that are already available
 on your system. These could come from your system package manager, or perhaps
 you pre-installed them using CMake with the `CMAKE_INSTALL_PREFIX` option.
 
@@ -194,8 +202,8 @@ that's already installed on your system and use it to build gRPC.
 ### Install after build
 
 Perform the following steps to install gRPC using CMake.
-* Set `-DgRPC_INSTALL=ON`
-* Build the `install` target
+- Set `-DgRPC_INSTALL=ON`
+- Build the `install` target
 
 The install destination is controlled by the
 [`CMAKE_INSTALL_PREFIX`](https://cmake.org/cmake/help/latest/variable/CMAKE_INSTALL_PREFIX.html) variable.
@@ -208,7 +216,7 @@ If you are building gRPC < 1.27 or if you are using CMake < 3.13 you will need
 to select "package" mode (rather than "module" mode) for the dependencies.
 This means you will need to have external copies of these libraries available
 on your system. This [example](test/distrib/cpp/run_distrib_test_cmake.sh) shows
-how to install dependencies with cmake before proceeding to installing gRPC itself. 
+how to install dependencies with cmake before proceeding to installing gRPC itself.
 
 ```
 # NOTE: all of gRPC's dependencies need to be already installed
@@ -238,9 +246,10 @@ that will be used for this build.
 
 This toolchain file is specified to CMake by setting the `CMAKE_TOOLCHAIN_FILE`
 variable.
+
 ```
-$ cmake ../.. -DCMAKE_TOOLCHAIN_FILE=path/to/file
-$ make
+cmake ../.. -DCMAKE_TOOLCHAIN_FILE=path/to/file
+make
 ```
 
 [Cross-compile example](test/distrib/cpp/run_distrib_test_cmake_aarch64_cross.sh)
@@ -256,15 +265,17 @@ can be made about any sort of ABI stability across the same SONAME version.
 NOTE: `make` used to be gRPC's default build system, but we're no longer recommending it. You should use `bazel` or `cmake` instead. The `Makefile` is only intended for internal usage and is not meant for public consumption.
 
 From the grpc repository root
+
 ```sh
- $ make
+ make
 ```
 
 NOTE: if you get an error on linux such as 'aclocal-1.15: command not found', which can happen if you ran 'make' before installing the pre-reqs, try the following:
+
 ```sh
-$ git clean -f -d -x && git submodule foreach --recursive git clean -f -d -x
-$ [sudo] apt-get install build-essential autoconf libtool pkg-config
-$ make
+git clean -f -d -x && git submodule foreach --recursive git clean -f -d -x
+[sudo] apt-get install build-essential autoconf libtool pkg-config
+make
 ```
 
 ### A note on `protoc`

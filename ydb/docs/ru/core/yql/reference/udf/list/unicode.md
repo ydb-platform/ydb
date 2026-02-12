@@ -42,7 +42,6 @@ SELECT Unicode::Substring("0123456789abcdefghij", 10); -- "abcdefghij"
   * `Unicode::NormalizeNFKD(Utf8{Flags:AutoMap}) -> Utf8`
   * `Unicode::NormalizeNFKC(Utf8{Flags:AutoMap}) -> Utf8`
 
-
 * `Unicode::Translit(string:Utf8{Flags:AutoMap}, [lang:String?]) -> Utf8`
 
   Транслитерирует в латинский алфавит слова переданной строки, целиком состоящие из символов алфавита языка, переданного вторым аргументом. Если язык не указан, то транслитерация ведется с русского. Доступные языки: "kaz", "rus", "tur", "ukr".
@@ -60,11 +59,11 @@ SELECT Unicode::Translit("Тот уголок земли, где я провел
   Выполняет [case folding](https://www.w3.org/TR/charmod-norm/#definitionCaseFolding) для переданной строки.
   Параметры:
 
-  - `Language` задается по тем же правилам, что и в `Unicode::Translit()`
-  - `DoLowerCase` приводит строку к нижнему регистру, по умолчанию `true`
-  - `DoRenyxa` приводить символы с диокрифами к аналогичным латинским символам, по умолчанию `true`
-  - `DoSimpleCyr` приводить кирилические символы с диокрифами к аналогичным латинским символам, по умолчанию `true`
-  - `FillOffset` параметр не используется
+  * `Language` задается по тем же правилам, что и в `Unicode::Translit()`
+  * `DoLowerCase` приводит строку к нижнему регистру, по умолчанию `true`
+  * `DoRenyxa` приводить символы с диокрифами к аналогичным латинским символам, по умолчанию `true`
+  * `DoSimpleCyr` приводить кирилические символы с диокрифами к аналогичным латинским символам, по умолчанию `true`
+  * `FillOffset` параметр не используется
 
 ```yql
 SELECT Unicode::Fold("Kongreßstraße",  false AS DoSimpleCyr, false AS DoRenyxa); -- "kongressstrasse"
@@ -118,9 +117,9 @@ SELECT Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,1
   `separator` -- разделитель
   Параметры:
 
-  - DelimeterString:Bool? — считать разделитель строкой (true, по умолчанию) или набором символов "любой из" (false)
-  - SkipEmpty:Bool? - пропускать ли пустые строки в результате, по умолчанию false
-  - Limit:Uint64? - ограничение на число извлекаемых компонент, по умолчанию не ограничено; необработанный суффикс оригинальной строки возвращается последним элементом при превышении лимита
+  * DelimeterString:Bool? — считать разделитель строкой (true, по умолчанию) или набором символов "любой из" (false)
+  * SkipEmpty:Bool? - пропускать ли пустые строки в результате, по умолчанию false
+  * Limit:Uint64? - ограничение на число извлекаемых компонент, по умолчанию не ограничено; необработанный суффикс оригинальной строки возвращается последним элементом при превышении лимита
 
 * `Unicode::JoinFromList(List<Utf8>{Flags:AutoMap}, separator:Utf8) -> Utf8`
 

@@ -14,4 +14,3 @@ $data = AsList(
 
 SELECT Key, Value FROM AS_TABLE($data);
 ```
-

@@ -104,18 +104,17 @@ supported versions of Kubernetes clusters.
 - [client 32.y.z](https://pypi.org/project/kubernetes/32.0.1/): Kubernetes 1.31 or below (+-), Kubernetes 1.32 (✓), Kubernetes 1.33 or above (+-)
 - [client 33.y.z](https://pypi.org/project/kubernetes/33.1.0/): Kubernetes 1.32 or below (+-), Kubernetes 1.33 (✓), Kubernetes 1.34 or above (+-)
 
-
 > See [here](#homogenizing-the-kubernetes-python-client-versions) for an explanation of why there is no v13-v16 release.
 
 Key:
 
-* `✓` Exactly the same features / API objects in both client-python and the Kubernetes
+- `✓` Exactly the same features / API objects in both client-python and the Kubernetes
   version.
-* `+` client-python has features or API objects that may not be present in the Kubernetes
+- `+` client-python has features or API objects that may not be present in the Kubernetes
  cluster, either due to that client-python has additional new API, or that the server has
  removed old API. However, everything they have in common (i.e., most APIs) will work.
  Please note that alpha APIs may vanish or change significantly in a single release.
-* `-` The Kubernetes cluster has features the client-python library can't use, either due
+- `-` The Kubernetes cluster has features the client-python library can't use, either due
  to the server has additional new API, or that client-python has removed old API. However,
  everything they share in common (i.e., most APIs) will work.
 
@@ -179,8 +178,8 @@ between client-python versions.
 
 Key:
 
-* `✓` Changes in main Kubernetes repo are manually ([should be automated](https://github.com/kubernetes-client/python/issues/177)) published to client-python when they are available.
-* `✗` No longer maintained; please upgrade.
+- `✓` Changes in main Kubernetes repo are manually ([should be automated](https://github.com/kubernetes-client/python/issues/177)) published to client-python when they are available.
+- `✗` No longer maintained; please upgrade.
 
 Kubernetes supports [three minor releases](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/release/versioning.md#supported-releases-and-component-skew) at a time. "Support" means we expect users to be running that version in production, though we may not port fixes back before the latest minor version. For example, when v1.3 comes out, v1.0 will no longer be supported. In consistent with Kubernetes support policy, we expect to support **three GA major releases** (corresponding to three Kubernetes minor releases) at a time.
 
@@ -255,4 +254,4 @@ logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.DEBUG)
 ```
 
-**[⬆ back to top](#Installation)**
+**[⬆ back to top](#installation)**

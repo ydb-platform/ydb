@@ -1,4 +1,4 @@
-Implementation of BLAKE3, originating from https://github.com/BLAKE3-team/BLAKE3/tree/1.3.1/c
+Implementation of BLAKE3, originating from <https://github.com/BLAKE3-team/BLAKE3/tree/1.3.1/c>
 
 # Example
 
@@ -98,6 +98,7 @@ private:
   llvm_blake3_hasher Hasher;
 };
 ```
+
 ```c
 typedef struct {
   // private fields
@@ -119,6 +120,7 @@ BLAKE3::BLAKE3();
 
 void BLAKE3::init();
 ```
+
 ```c
 void llvm_blake3_hasher_init(
   llvm_blake3_hasher *self);
@@ -133,6 +135,7 @@ void BLAKE3::update(ArrayRef<uint8_t> Data);
 
 void BLAKE3::update(StringRef Str);
 ```
+
 ```c
 void llvm_blake3_hasher_update(
   llvm_blake3_hasher *self,
@@ -154,6 +157,7 @@ void BLAKE3::final(BLAKE3Result<NumBytes> &Result);
 template <size_t NumBytes = LLVM_BLAKE3_OUT_LEN>
 BLAKE3Result<NumBytes> BLAKE3::final();
 ```
+
 ```c
 void llvm_blake3_hasher_finalize(
   const llvm_blake3_hasher *self,
@@ -256,7 +260,6 @@ Reset the hasher to its initial state, prior to any calls to
 `llvm_blake3_hasher_init` or similar again. However, if this implementation gains
 multithreading support in the future, and if `llvm_blake3_hasher` holds (optional)
 threading resources, this function will reuse those resources.
-
 
 # Building
 

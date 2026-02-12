@@ -19,41 +19,41 @@ again.
 
 All submissions, including submissions by project members, require review. We
 use a [Gerrit](https://www.gerritcodereview.com) instance hosted at
-https://chromium-review.googlesource.com for this purpose.
+<https://chromium-review.googlesource.com> for this purpose.
 
 ## Sending patches
 
 The basic git workflow for modifying libwebp code and sending for review is:
 
-1.  Get the latest version of the repository locally:
+1. Get the latest version of the repository locally:
 
     ```sh
     git clone https://chromium.googlesource.com/webm/libwebp && cd libwebp
     ```
 
-2.  Copy the commit-msg script into ./git/hooks (this will add an ID to all of
+2. Copy the commit-msg script into ./git/hooks (this will add an ID to all of
     your commits):
 
     ```sh
     curl -Lo .git/hooks/commit-msg https://chromium-review.googlesource.com/tools/hooks/commit-msg && chmod u+x .git/hooks/commit-msg
     ```
 
-3.  Modify the local copy of libwebp. Make sure the code
+3. Modify the local copy of libwebp. Make sure the code
     [builds successfully](https://chromium.googlesource.com/webm/libwebp/+/HEAD/doc/building.md#cmake).
 
-4.  Choose a short and representative commit message:
+4. Choose a short and representative commit message:
 
     ```sh
     git commit -a -m "Set commit message here"
     ```
 
-5.  Send the patch for review:
+5. Send the patch for review:
 
     ```sh
     git push https://chromium-review.googlesource.com/webm/libwebp HEAD:refs/for/main
     ```
 
-    Go to https://chromium-review.googlesource.com to view your patch and
+    Go to <https://chromium-review.googlesource.com> to view your patch and
     request a review from the maintainers.
 
 See the

@@ -2,7 +2,6 @@
 
 При помощи команды `ALTER TABLE` можно изменить состав колонок и дополнительные параметры {% if backend_name == "YDB" and oss == true %}[строковых](../../../../concepts/datamodel/table.md#row-tables) и [колоночных](../../../../concepts/datamodel/table.md#colums-tables) таблиц{% else %}таблиц {% endif %}. В одной команде можно указать несколько действий. В общем случае команда `ALTER TABLE` выглядит так:
 
-
 ```yql
 ALTER TABLE table_name action1, action2, ..., actionN;
 ```

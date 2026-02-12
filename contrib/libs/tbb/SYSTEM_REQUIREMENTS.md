@@ -15,9 +15,11 @@
 *******************************************************************************/-->
 
 # System Requirements <!-- omit in toc -->
-This document provides details about hardware, operating system, and software prerequisites for the oneAPI Threading Building Blocks (oneTBB). 
+
+This document provides details about hardware, operating system, and software prerequisites for the oneAPI Threading Building Blocks (oneTBB).
 
 ## Table of Contents <!-- omit in toc -->
+
 - [Supported Hardware](#supported-hardware)
 - [Software](#software)
   - [Supported Operating Systems](#supported-operating-systems)
@@ -25,31 +27,31 @@ This document provides details about hardware, operating system, and software pr
   - [Supported Compilers](#supported-compilers)
 - [Limitations](#limitations)
 
-
 ## Supported Hardware
+
 - Intel(R) Celeron(R) processor family
 - Intel(R) Core* processor family
 - Intel(R) Xeon(R) processor family
 - Intel(R) Atom* processor family
 - Non-Intel(R) processors compatible with the processors listed above
 
-
 ## Software
 
 ### Supported Operating Systems
-- Systems with Microsoft* Windows* operating systems:
-  - Microsoft* Windows* 10
-  - Microsoft* Windows* 11
-  - Microsoft* Windows* Server 2019
-  - Microsoft* Windows* Server 2022
-  - Microsoft* Windows* Server 2025
+
+- Systems with Microsoft*Windows* operating systems:
+  - Microsoft*Windows* 10
+  - Microsoft*Windows* 11
+  - Microsoft*Windows* Server 2019
+  - Microsoft*Windows* Server 2022
+  - Microsoft*Windows* Server 2025
 - Systems with Linux* operating systems:
   - Amazon* Linux 2023
   - Debian* 11, 12
   - Fedora* 40, 41
-  - Rocky* Linux* 9
-  - Red Hat* Enterprise Linux* 8, 9
-  - SuSE* Linux* Enterprise Server 15
+  - Rocky*Linux* 9
+  - Red Hat*Enterprise Linux* 8, 9
+  - SuSE*Linux* Enterprise Server 15
   - Ubuntu* 22.04, 24.04
 - Systems with macOS* operating systems:
   - macOS* 12.x, 13.x, 14.x, 15.x
@@ -57,29 +59,30 @@ This document provides details about hardware, operating system, and software pr
   - Android* 9
 
 ### Community-Supported Platforms
+
 - MinGW*
 - FreeBSD*
-- Microsoft* Windows* on ARM*/ARM64*
-- macOS* on ARM64*
+- Microsoft*Windows* on ARM*/ARM64*
+- macOS*on ARM64*
 
 ### Supported Compilers
+
 - Intel* oneAPI DPC++/C++ Compiler
-- Microsoft* Visual C++ 14.2 (Microsoft* Visual Studio* 2019, Windows* OS only)
-- Microsoft* Visual C++ 14.3 (Microsoft* Visual Studio* 2022, Windows* OS only)
+- Microsoft*Visual C++ 14.2 (Microsoft* Visual Studio*2019, Windows* OS only)
+- Microsoft*Visual C++ 14.3 (Microsoft* Visual Studio*2022, Windows* OS only)
 - For each supported Linux* operating system, the standard gcc version provided with that operating system is supported:
   - GNU Compilers (gcc) 8.x – 14.x
   - GNU C Library (glibc) version 2.28 – 2.40
 - Clang* 7.x - 19.x
 
 ## Limitations
-There are some cases where we cannot provide support for your platforms. It includes: 
+
+There are some cases where we cannot provide support for your platforms. It includes:
 
 1. The platform is out of official support (met end of life). When you use an unsupported platform, you can face a security risk that can be difficult to resolve.
-2. We do not have the infrastructure to test a platform. Therefore we cannot guarantee that oneTBB works correctly on that platform. 
+2. We do not have the infrastructure to test a platform. Therefore we cannot guarantee that oneTBB works correctly on that platform.
 3. Changes affect more code than just platform-specific macros.
 4. The platform is incompatible with oneTBB. Some platforms may have limitations that prevent oneTBB from working correctly. We cannot provide support in these cases as the issue is beyond our control.
-5. The platform is modified or customized. If you made significant updates to your platform, it might be hard for us to find the root cause of the issue. Therefore, we may not be able to provide support as the modification could affect the oneTBB functionality. 
-
+5. The platform is modified or customized. If you made significant updates to your platform, it might be hard for us to find the root cause of the issue. Therefore, we may not be able to provide support as the modification could affect the oneTBB functionality.
 
 We understand that these limitations can be frustrating. Thus, we suggest creating a branch specifically for the unsupported platform, allowing other users to contribute to or use your implementation.
-

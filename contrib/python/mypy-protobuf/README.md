@@ -240,7 +240,7 @@ protoc \
 ```
 
 Note that generated code for grpc will work only together with code for python and locations should be the same.
-If you need stubs for grpc internal code we suggest using this package https://github.com/shabbyrobe/grpc-stubs
+If you need stubs for grpc internal code we suggest using this package <https://github.com/shabbyrobe/grpc-stubs>
 
 ### Targeting python2 support
 
@@ -303,7 +303,7 @@ black .
 - [@fergyfresh](https://github.com/fergyfresh)
 - [@AlexWaygood](https://github.com/AlexWaygood)
 
-## Licence etc.
+## Licence etc
 
 1. License: Apache 2.0.
 2. Copyright attribution: Copyright (c) 2022 Nipunn Koorapati

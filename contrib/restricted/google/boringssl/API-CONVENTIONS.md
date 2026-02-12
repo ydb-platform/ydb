@@ -5,7 +5,6 @@ guide](./STYLE.md) also includes guidelines, but this document is targeted at
 both API consumers and developers. API documentation in BoringSSL may assume
 these conventions by default, rather than repeating them for every function.
 
-
 ## Documentation
 
 All supported public APIs are documented in the public header files, found in
@@ -22,7 +21,6 @@ Do not write `typedef struct foo_st FOO` or try otherwise to define BoringSSL's
 types. Including `openssl/base.h` (or `openssl/ossl_typ.h` for consumers who
 wish to be OpenSSL-compatible) will forward-declare each type without importing
 the rest of the library or invasive macros.
-
 
 ## Error-handling
 
@@ -52,14 +50,12 @@ situation in the future.
 Where possible, avoid conditioning on specific reason codes and limit usage to
 logging. The reason codes are very specific and may change over time.
 
-
 ## Memory allocation
 
 BoringSSL allocates memory via `OPENSSL_malloc`, found in `mem.h`. Use
 `OPENSSL_free`, found in the same header file, to release it. BoringSSL
 functions will fail gracefully on allocation error, but it is recommended to use
 a `malloc` implementation that `abort`s on failure.
-
 
 ## Pointers and slices
 
@@ -128,14 +124,12 @@ recommend consumers build with `-fno-strict-aliasing`.
 Pointer parameters additionally have ownership and lifetime requirements,
 discussed in the section below.
 
-
 ## Object initialization and cleanup
 
 BoringSSL defines a number of structs for use in its APIs. It is a C library,
 so the caller is responsible for ensuring these structs are properly
 initialized and released. Consult the documentation for a module for the
 proper use of its types. Some general conventions are listed below.
-
 
 ### Heap-allocated types
 
@@ -168,7 +162,6 @@ declarations.) Note, despite the name, `bssl::UniquePtr` is also used with
 reference-counted types. It owns a single reference to the object. To take an
 additional reference, use the `bssl::UpRef` function, which will return a
 separate `bssl::UniquePtr`.
-
 
 ### Stack-allocated types
 
@@ -236,13 +229,11 @@ C++ consumers are recommended to use the wrappers named like
 wrappers are automatically initialized to the zero state and are automatically
 cleaned up.
 
-
 ### Data-only types
 
 A few types, such as `SHA_CTX`, are data-only types and do not require cleanup.
 These are usually for low-level cryptographic operations. These types may be
 used freely without special cleanup conventions.
-
 
 ### Ownership and lifetime
 
@@ -303,7 +294,6 @@ Memory errors are one of the most common and dangerous bugs in C and C++, so
 callers are encouraged to make use of tools such as
 [AddressSanitizer](https://clang.llvm.org/docs/AddressSanitizer.html) and
 higher-level languages.
-
 
 ## Thread safety
 

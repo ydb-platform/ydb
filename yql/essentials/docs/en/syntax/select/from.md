@@ -19,4 +19,3 @@ SELECT * FROM
 $table_name = "my_table";
 SELECT * FROM $table_name;
 ```
-

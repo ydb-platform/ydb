@@ -16,4 +16,3 @@ FROM my_table;
 ```
 
 The `DISTINCT` keyword can also be used to apply [aggregate functions](../../builtins/aggregation.md) only to distinct values. For more information, see the documentation for [GROUP BY](../group_by.md).
-

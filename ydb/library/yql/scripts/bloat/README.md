@@ -7,4 +7,3 @@ it generates two files in current directory:
 
 $PGM.by_size.txt
 $PGM.by_count.txt
-

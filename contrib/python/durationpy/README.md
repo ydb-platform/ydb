@@ -5,9 +5,8 @@
 ### Install
 
 ``` sh
-$ pip install durationpy
+pip install durationpy
 ```
-
 
 ### Parse
 

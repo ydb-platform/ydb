@@ -15,4 +15,3 @@
 ```yql
 DROP OBJECT my_secret (TYPE SECRET);
 ```
-

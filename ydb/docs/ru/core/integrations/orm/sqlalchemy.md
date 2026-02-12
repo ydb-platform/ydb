@@ -52,7 +52,6 @@ yql+ydb://localhost:2136/local
       print(result.fetchone())
   ```
 
-
 - Асинхронное подключение
 
   ```python
@@ -212,7 +211,6 @@ engine = sa.create_engine(
 )
 ```
 
-
 ## Поддерживаемые типы данных
 
 {{ ydb-short-name }} SQLAlchemy предоставляет полную поддержку типов данных {{ ydb-short-name }} через пользовательские типы SQLAlchemy. Для получения подробной информации о системе типов {{ ydb-short-name }} см. [документацию по типам данных {{ ydb-short-name }}](https://ydb.tech/docs/ru/concepts/datatypes).
@@ -245,7 +243,6 @@ engine = sa.create_engine(
 | `List<T>` | `ListType` | `ARRAY` | `list` | |
 | `Struct<...>` | `StructType` | | `dict` | |
 | `Optional<T>` | `nullable=True` | | `None + базовый тип` | |
-
 
 ## Миграции с Alembic
 

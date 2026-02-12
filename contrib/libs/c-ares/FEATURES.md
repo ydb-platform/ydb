@@ -9,7 +9,6 @@
 - [Event Thread](#event-thread)
 - [System Configuration Change Monitoring](#system-configuration-change-monitoring)
 
-
 ## Dynamic Server Timeout Calculation
 
 Metrics are stored for every server in time series buckets for both the current
@@ -21,13 +20,13 @@ These metrics are then used to calculate the average latency for queries on
 each server, which automatically adjusts to network conditions.  This average
 is then multiplied by 5 to come up with a timeout to use for the query before
 re-queuing it.  If there is not sufficient data yet to calculate a timeout
-(need at least 3 prior queries), then the default of 2000ms is used (or an 
+(need at least 3 prior queries), then the default of 2000ms is used (or an
 administrator-set `ARES_OPT_TIMEOUTMS`).
 
 The timeout is then adjusted to a minimum bound of 250ms which is the
 approximate RTT of network traffic half-way around the world, to account for the
 upstream server needing to recurse to a DNS server far away.  It is also
-bounded on the upper end to 5000ms (or an administrator-set 
+bounded on the upper end to 5000ms (or an administrator-set
 `ARES_OPT_MAXTIMEOUTMS`).
 
 If a server does not reply within the given calculated timeout, the next time
@@ -43,7 +42,6 @@ cache results.
 
 This feature requires the c-ares channel to persist for the lifetime of the
 application.
-
 
 ## Failed Server Isolation
 
@@ -71,7 +69,6 @@ omitted from the random selection.
 This feature requires the c-ares channel to persist for the lifetime of the
 application.
 
-
 ## Query Cache
 
 Every successful query response, as well as `NXDOMAIN` responses containing
@@ -96,7 +93,6 @@ already.  However if desired it can be disabled by setting `qcache_max_ttl` to
 
 This feature requires the c-ares channel to persist for the lifetime of the
 application.
-
 
 ## DNS 0x20 Query Name Case Randomization
 
@@ -129,7 +125,6 @@ able to be enabled by default.
 Another feature which can be used to prevent off-path cache poisoning attacks
 is [DNS Cookies](#dns-cookies).
 
-
 ## DNS Cookies
 
 DNS Cookies are are a method of learned mutual authentication between a server
@@ -158,7 +153,6 @@ by default.
 This feature requires the c-ares channel to persist for the lifetime of the
 application.
 
-
 ## TCP FastOpen (0-RTT)
 
 TCP Fast Open is defined in [RFC7413](https://datatracker.ietf.org/doc/html/rfc7413)
@@ -181,6 +175,7 @@ Supported systems also need to be configured appropriately on both the client
 and server systems.
 
 ### Linux TFO
+
 In linux a single sysctl value is used with flags to set the desired fastopen
 behavior.
 
@@ -190,11 +185,13 @@ might need to update `/etc/sysctl.conf` directly.  After modifying the
 configuration, it can be loaded via `sysctl -p`.
 
 `net.ipv4.tcp_fastopen`:
-   - `1` = client only (typically default)
-   - `2` = server only
-   - `3` = client and server
+
+- `1` = client only (typically default)
+- `2` = server only
+- `3` = client and server
 
 ### MacOS TFO
+
 In MacOS, TCP FastOpen is enabled by default for clients and servers.  You can
 verify via the `net.inet.tcp.fastopen` sysctl.
 
@@ -202,11 +199,13 @@ If any change is needed, you should make it persistent as per this guidance:
 [Persistent Sysctl Settings](https://discussions.apple.com/thread/253840320?)
 
 `net.inet.tcp.fastopen`
-   - `1` = client only
-   - `2` = server only
-   - `3` = client and server (typically default)
+
+- `1` = client only
+- `2` = server only
+- `3` = client and server (typically default)
 
 ### FreeBSD TFO
+
 In FreeBSD, server mode TCP FastOpen is typically enabled by default but
 client mode is disabled.  It is recommended to edit `/etc/sysctl.conf` and
 place in the values you wish to persist to enable or disable TCP Fast Open.
@@ -214,7 +213,6 @@ Once the file is modified, it can be loaded via `sysctl -f /etc/sysctl.conf`.
 
 - `net.inet.tcp.fastopen.server_enable` (boolean) - enable/disable server
 - `net.inet.tcp.fastopen.client_enable` (boolean) - enable/disable client
-
 
 ## Event Thread
 
@@ -236,7 +234,6 @@ Using the Event Thread feature also facilitates some other features like
 [System Configuration Change Monitoring](#system-configuration-change-monitoring),
 and automatically enables the `ares_set_pending_write_cb()` feature to optimize
 multi-query writing.
-
 
 ## System Configuration Change Monitoring
 

@@ -2,7 +2,6 @@
 
 Ниже описаны функции общего назначения, а для специализированных функций есть отдельные статьи: [агрегатные](aggregation.md){% if feature_window_functions %}, [оконные](window.md){% endif %}, а также для работы со [списками](list.md), [словарями](dict.md), [структурами](struct.md), [типами данных](types.md){% if feature_codegen %} и [генерацией кода](codegen.md){% endif %}.
 
-
 ## COALESCE {#coalesce}
 
 Перебирает аргументы слева направо и возвращает первый найденный непустой аргумент. Чтобы результат получился гарантированно непустым (не [optional типа](../types/optional.md)), самый правый аргумент должен быть такого типа (зачастую используют литерал). При одном аргументе возвращает его без изменений.
@@ -42,7 +41,6 @@ SELECT NVL(
 
 Все три примера выше эквивалентны.
 
-
 ## LENGTH {#length}
 
 Возвращает длину строки в байтах. Также эта функция доступна под именем `LEN`.
@@ -69,7 +67,6 @@ SELECT LEN("bar");
 Для вычисления длины строки в unicode символах можно воспользоваться функцией [Unicode::GetLength](../udf/list/unicode.md).<br/><br/>Для получения числа элементов в списке нужно использовать функцию [ListLength](list.md#listlength).
 
 {% endnote %}
-
 
 ## SUBSTRING {#substring}
 
@@ -107,7 +104,6 @@ SELECT SUBSTRING("abcdefg", 3); -- defg
 ```yql
 SELECT SUBSTRING("abcdefg", NULL, 3); -- abc
 ```
-
 
 ## FIND {#find}
 
@@ -185,7 +181,6 @@ SELECT RFIND("abcdefg_abcdefg", "bcd", 8); -- 1
 SELECT RFIND("abcdefg_abcdefg", "bcd", 0); -- null
 ```
 
-
 ## StartsWith, EndsWith {#starts_ends_with}
 
 Проверка наличия префикса или суффикса в строке.
@@ -228,7 +223,6 @@ SELECT EndsWith(NULL, Utf8("")); -- null
 SELECT StartsWith("abc_efg"u, "abc"p) AND EndsWith("abc_efg", "efg"pv); -- true
 ```
 
-
 ## IF {#if}
 
 Проверяет условие `IF(condition_expression, then_expression, else_expression)`.
@@ -252,7 +246,6 @@ SELECT
   IF(foo > 0, foo) AS only_positive_foo
 FROM my_table;
 ```
-
 
 ## NANVL {#nanvl}
 
@@ -279,7 +272,6 @@ SELECT
   NANVL(double_column, 0.0)
 FROM my_table;
 ```
-
 
 ## Random... {#random}
 
@@ -308,6 +300,7 @@ RandomUuid(T1[, T2, ...])->Uuid
 * Повторный вызов Random в рамках **одного запроса** при идентичном наборе аргументов возвращает тот же самый набор случайных чисел. Важно понимать, что речь именно про сами аргументы (текст между круглыми скобками), а не их значения.
 
 {% endif %}
+
 * Вызовы Random с одним и тем же набором аргументов в **разных запросах** вернут разные наборы случайных чисел.
 
 {% note warning %}
@@ -354,7 +347,6 @@ SELECT
 FROM my_table;
 ```
 
-
 ## Udf {#udf}
 
 Строит `Callable` по заданному названию функции и опциональным `external user types`, `RunConfig` и `TypeConfig`.
@@ -391,7 +383,6 @@ $config = @@{
 SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
 ```
 
-
 ## CurrentUtc... {#current-utc}
 
 `CurrentUtcDate()`, `CurrentUtcDatetime()` и `CurrentUtcTimestamp()` - получение текущей даты и/или времени в UTC. Тип данных результата указан в конце названия функции.
@@ -415,7 +406,6 @@ SELECT CurrentUtcDate();
 ```yql
 SELECT CurrentUtcTimestamp(TableRow()) FROM my_table;
 ```
-
 
 ## CurrentTz... {#current-tz}
 
@@ -496,7 +486,6 @@ RemoveTimezone(TzTimestamp?)->Timestamp?
 SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 ```
 
-
 ## Version {#version}
 
 `Version()` возвращает строку, описывающую текущую версию узла, обрабатывающего запрос. В некоторых случаях, например, во время постепенного обновлений кластера, она может возвращать разные строки в зависимости от того, какой узел обрабатывает запрос. Функция не принимает никаких аргументов.
@@ -506,7 +495,6 @@ SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 ```yql
 SELECT Version();
 ```
-
 
 ## MAX_OF, MIN_OF, GREATEST и LEAST {#max-min}
 
@@ -528,7 +516,6 @@ MAX_OF(T[,T,...})->T
 ```yql
 SELECT MIN_OF(1, 2, 3);
 ```
-
 
 ## AsTuple, AsStruct, AsList, AsDict, AsSet, AsListStrict, AsDictStrict и AsSetStrict {#as-container}
 
@@ -568,7 +555,6 @@ SELECT
   AsSet(1, 2, 3) AS `set`
 ```
 
-
 ## Литералы контейнеров {#containerliteral}
 
 Для некоторых контейнеров возможна операторная форма записи их литеральных значений:
@@ -604,7 +590,6 @@ SELECT
   } AS `dict`,
   {1, 2, 3} AS `set`
 ```
-
 
 ## Variant {#variant}
 
@@ -808,7 +793,6 @@ SELECT
    AsEnum("Foo");
 ```
 
-
 ## AsTagged, Untag {#as-tagged}
 
 Оборачивает значение в [Tagged тип данных](../types/special.md) с указанной меткой с сохранением физического типа данных. `Untag` — обратная операция.
@@ -841,7 +825,6 @@ Untag(Tagged<T, tagName>?)->T?
 {% endif %}
 
 * Дополнительные уточнения на уровне типов возвращаемых колонок.
-
 
 {% if feature_bulk_tables %}
 
@@ -922,7 +905,6 @@ TableRecordIndex()->Uint64
 SELECT TableRecordIndex() FROM my_table;
 ```
 
-
 {% endif %}
 
 ## TableRow{% if feature_join %}, JoinTableRow{% endif %} {#tablerow}
@@ -940,7 +922,6 @@ TableRow()->Struct
 ```yql
 SELECT TableRow() FROM my_table;
 ```
-
 
 {% if feature_mapreduce %}
 
@@ -969,6 +950,7 @@ SELECT "Content of "
   || ":\n"
   || FileContent("my_file.txt");
 ```
+
 ## FolderPath {#folderpath}
 
 Получение пути до корня директории с несколькими «приложенными» файлами с указанным общим префиксом.
@@ -1027,7 +1009,6 @@ SELECT ListLength(ParseFile("String", "my_file.txt"));
 SELECT * FROM my_table
 WHERE int_column IN ParseFile("Int64", "my_file.txt");
 ```
-
 
 ## WeakField {#weakfield}
 
@@ -1104,7 +1085,6 @@ SELECT EnsureConvertibleTo(
 ) AS value FROM my_table;
 ```
 
-
 ## AssumeStrict {#assumestrict}
 
 ### Сигнатура
@@ -1130,7 +1110,6 @@ WHERE AssumeStrict(Unwrap(CAST(a.key AS Int32))) == 1;
 При налиичии `AssumeStrict` оптимизатор сможет выполнить сначала фильтрацию, а потом JOIN.
 Без `AssumeStrict` такая оптимизация не выполняется – оптимизатор обязан учитывать ситуацию, при которой в колонке `a.key` есть нечисловые значения, которые отфильтровываются `JOIN`ом.
 
-
 ## Likely {#likely}
 
 ### Сигнатура
@@ -1151,7 +1130,6 @@ WHERE Likely(a.amount > 0)  -- почти всегда верно
 ```
 
 При наличии `Likely` оптимизатор не будет стараться выполнить фильтрацию перед `JOIN`.
-
 
 {% if feature_codegen %}
 
@@ -1186,7 +1164,6 @@ SELECT EvaluateExpr(
     )
 );
 ```
-
 
 {% endif %}
 
@@ -1247,7 +1224,6 @@ SELECT
     CurrentAuthenticatedUser();
 ```
 
-
 {% endif %}
 
 ## ToBytes и FromBytes {#to-from-bytes}
@@ -1276,7 +1252,6 @@ SELECT
     ); -- 1234567890ul
 ```
 
-
 ## ByteAt {#byteat}
 
 Получение значение байта в строке по индексу от её начала. В случае некорректного индекса возвращается `NULL`.
@@ -1304,7 +1279,6 @@ SELECT
     ByteAt("foo", 1), -- 111
     ByteAt("foo", 9); -- NULL
 ```
-
 
 ## ...Bit {#bitops}
 
@@ -1341,7 +1315,6 @@ SELECT
     SetBit(8u, 0); -- 9
 ```
 
-
 ## Abs {#abs}
 
 Абсолютное значение числа.
@@ -1358,7 +1331,6 @@ Abs(T?)->T?
 ```yql
 SELECT Abs(-123); -- 123
 ```
-
 
 ## Just {#optional-ops}
 
@@ -1425,7 +1397,6 @@ SELECT
 
 [Подробнее о ParseType и других функциях для работы с типами данных](types.md).
 
-
 ## Callable {#callable}
 
 Создать вызываемое значение с заданной сигнатурой из лямбда-функции. Обычно используется для того, чтобы размещать вызываемые значения в контейнерах.
@@ -1456,7 +1427,6 @@ $callables = AsTuple(
 SELECT $callables.0(10), $callables.1(true);
 ```
 
-
 ## Pickle, Unpickle {#pickle}
 
 `Pickle()` и `StablePickle()` сериализуют произвольный объект в последовательность байт, если это возможно. Типовыми несериализуемыми объектами являются Callable и Resource. Формат сериализации не версионируется, допускается использовать в пределах одного запроса. Для типа Dict функция StablePickle предварительно сортирует ключи, а для Pickle порядок элементов словаря в сериализованном представлении не определен.
@@ -1483,7 +1453,6 @@ WHERE Digest::MurMurHash32(
 $buf = Pickle(123);
 SELECT Unpickle(Int32, $buf);
 ```
-
 
 ## StaticMap
 
@@ -1516,8 +1485,6 @@ FROM (
 ) FLATTEN COLUMNS; -- преобразование всех колонок в строки
 ```
 
-
-
 ## StaticZip
 
 Поэлементно "склеивает" структуры или кортежи. Все аргументы (один и более) должны быть либо структурами с одинаковым набором полей, либо кортежами одинаковой длины.
@@ -1541,7 +1508,6 @@ $two = <|k1:3.0, k2:4|>;
 SELECT StaticMap(StaticZip($one, $two), ($tuple)->($tuple.0 + $tuple.1)) AS sum;
 ```
 
-
 ## StaticFold, StaticFold1 {#staticfold}
 
 ```yql
@@ -1552,10 +1518,10 @@ StaticFold1(obj:Struct/Tuple, initLambda, updateLambda)
 Статическая левоассоциативная свертка структуры или кортежа.
 Для кортежей свертка производится в порядке от меньшего индекса к большему, для структур порядок не гарантируется.
 
-- `obj` - объект, элементы которого нужно свернуть
-- `initVal` - *(для StaticFold)* исходное состояние свертки
-- `initLambda` - *(для StaticFold1)* функция для получения исходного состояния по первому элементу
-- `updateLambda` - функция обновления состояния (принимает в аргументах следующий элемент объекта и предыдущее состояние)
+* `obj` - объект, элементы которого нужно свернуть
+* `initVal` - *(для StaticFold)* исходное состояние свертки
+* `initLambda` - *(для StaticFold1)* функция для получения исходного состояния по первому элементу
+* `updateLambda` - функция обновления состояния (принимает в аргументах следующий элемент объекта и предыдущее состояние)
 
 `StaticFold(<|key_1:$el_1, key_2:$el_2, ..., key_n:$el_n|>, $init, $f)` преобразуется в свертку:
 
@@ -1572,7 +1538,6 @@ $f($el_n, ...$f($el_2, $f($f0($init), el_1))...)
 `StaticFold1(<||>, $f0, $f)` вернет `NULL`.
 
 Аналогично работает и с кортежами.
-
 
 ## AggregationFactory {#aggregationfactory}
 
@@ -1661,6 +1626,5 @@ SELECT AggregateBy(x, $j) from (
 Полный список внутренних функций YQL находится в [документации к s-expressions](/docs/s_expressions/functions), альтернативному низкоуровневому синтаксису YQL. Любую из перечисленных там функций можно вызвать и из SQL синтаксиса, добавив к её имени префикс `YQL::`, но это не рекомендуется делать, т.к. данный механизм предназначен в первую очередь для временного обхода возможных проблем, а также для нужд внутреннего тестирования.
 
 Если функция доступна в SQL синтаксисе без префикса `YQL::`, то её поведение имеет право отличаться от одноименной функции из документации по s-expressions, если таковая существует.
-
 
 {% endif %}

@@ -84,5 +84,3 @@ There's also a separate section of [YDB documentation for contributors](https://
 ## Success Stories
 
 Visit YDB [website](https://ydb.tech/) for the latest success stories and user scenarios.
-
-

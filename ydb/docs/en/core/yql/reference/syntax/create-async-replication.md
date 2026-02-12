@@ -17,25 +17,23 @@ WITH (option = value [, ...])
 * `local_path` — a relative or absolute path to a target table or directory in the local database.
 * `WITH (option = value [, ...])` — asynchronous replication parameters:
 
+  * `CONNECTION_STRING` — a [connection string](../../../concepts/connect.md#connection_string) for the source database (mandatory).
+  * `CA_CERT` — a [root certificate for TLS](../../../concepts/connect.md#tls-cert). Optional parameter. Can be specified if the source database supports an encrypted data interchange protocol (`CONNECTION_STRING` starts with `grpcs://`).
+  * Authentication details for the source database (mandatory) depending on the authentication method:
 
-    * `CONNECTION_STRING` — a [connection string](../../../concepts/connect.md#connection_string) for the source database (mandatory).
-    * `CA_CERT` — a [root certificate for TLS](../../../concepts/connect.md#tls-cert). Optional parameter. Can be specified if the source database supports an encrypted data interchange protocol (`CONNECTION_STRING` starts with `grpcs://`).
-    * Authentication details for the source database (mandatory) depending on the authentication method:
+    * [Access token](../../../recipes/ydb-sdk/auth-access-token.md):
 
-        * [Access token](../../../recipes/ydb-sdk/auth-access-token.md):
+      * `TOKEN_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the token.
 
-            * `TOKEN_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the token.
+    * [Login and password](../../../recipes/ydb-sdk/auth-static.md):
 
-        * [Login and password](../../../recipes/ydb-sdk/auth-static.md):
+      * `USER` — a database user name.
+      * `PASSWORD_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the password for the source database user.
 
-            * `USER` — a database user name.
-            * `PASSWORD_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the password for the source database user.
+    * [Delegated service account](https://yandex.cloud/en/docs/iam/concepts/service-control):
 
-        * [Delegated service account](https://yandex.cloud/en/docs/iam/concepts/service-control):
-
-            * `SERVICE_ACCOUNT_ID` — identifier of the service account.
-            * `INITIAL_TOKEN_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the token for the service account. Used for initialization.
-
+      * `SERVICE_ACCOUNT_ID` — identifier of the service account.
+      * `INITIAL_TOKEN_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the token for the service account. Used for initialization.
 
 * `CONSISTENCY_LEVEL` — [consistency level of replicated data](../../../concepts/async-replication.md#consistency-levels):
   * `ROW` — [row-level data consistency](../../../concepts/async-replication.md#consistency-level-row). Default mode.

@@ -72,7 +72,9 @@ int aws_mqtt_client_init(
     struct aws_allocator *allocator,
     struct aws_event_loop_group *elg);
 ```
+
 Initializes an instance of `aws_mqtt_client` with the required parameters.
+
 * `client` is effectively the `this` parameter.
 * `allocator` will be used to initialize the client (note that the client itself is NOT allocated).
     *This resource must outlive `client`*.
@@ -83,6 +85,7 @@ Initializes an instance of `aws_mqtt_client` with the required parameters.
 ```c
 void aws_mqtt_client_clean_up(struct aws_mqtt_client *client);
 ```
+
 Cleans up a client and frees all owned resources.
 
 **NOTE**: DO NOT CALL THIS FUNCTION UNTIL ALL OUTSTANDING CONNECTIONS ARE CLOSED.
@@ -98,8 +101,10 @@ struct aws_mqtt_client_connection *aws_mqtt_client_connection_new(
     struct aws_socket_options *socket_options,
     struct aws_tls_ctx_options *tls_options);
 ```
+
 Allocates and initializes a new connection object (does NOT actually connect). You may use the returned object to
 configure connection parameters, and then call `aws_mqtt_client_connection_connect` to actually open the connection.
+
 * `client` is required in order to use an existing DNS resolver, event loop group, and allocator.
 * `callbacks` provides the connection-level (not operation level) callbacks and the userdata to be given back.
 * `host_name` lists the end point to connect to. This may be a DNS address or an IP address.
@@ -113,6 +118,7 @@ configure connection parameters, and then call `aws_mqtt_client_connection_conne
 ```c
 void aws_mqtt_client_connection_destroy(struct aws_mqtt_client_connection *connection);
 ```
+
 Destroys a connection and frees all outstanding resources.
 
 **NOTE**: DO NOT CALL THIS FUNCTION UNTIL THE CONNECTION IS CLOSED.
@@ -125,6 +131,7 @@ int aws_mqtt_client_connection_set_will(
     bool retain,
     const struct aws_byte_cursor *payload);
 ```
+
 Sets the last will and testament to be distributed by the server upon client disconnection. Must be called before
 `aws_mqtt_client_connection_connect`. See `aws_mqtt_client_connection_publish` for information on the parameters.
 `topic` and `payload` must persist past the call to `aws_mqtt_client_connection_connect`.
@@ -135,6 +142,7 @@ int aws_mqtt_client_connection_set_login(
     const struct aws_byte_cursor *username,
     const struct aws_byte_cursor *password);
 ```
+
 Sets the username and password to be sent to the server on connection. Must be called before
 `aws_mqtt_client_connection_connect`. `username` and `password` must persist past the call to
 `aws_mqtt_client_connection_connect`.
@@ -145,6 +153,7 @@ int aws_mqtt_client_connection_set_reconnect_timeout(
     uint64_t min_timeout,
     uint64_t max_timeout);
 ```
+
 Sets the minimum and maximum reconnect timeouts. The time between reconnect attempts will start at min and multipy by 2
 until max is reached.
 
@@ -155,11 +164,13 @@ int aws_mqtt_client_connection_connect(
     bool clean_session,
     uint16_t keep_alive_time);
 ```
+
 Connects to the remote endpoint. The parameters here are set in the MQTT CONNECT packet directly. `client_id` must persist until the `on_connack` connection callback is called.
 
 ```c
 int aws_mqtt_client_connection_disconnect(struct aws_mqtt_client_connection *connection);
 ```
+
 Closes an open connection. Does not clean up any resources, that's to be done by `aws_mqtt_client_connection_destroy`,
 probably from the `on_disconnected` connection callback.
 
@@ -173,6 +184,7 @@ uint16_t aws_mqtt_client_connection_subscribe_single(
     aws_mqtt_suback_single_fn *on_suback,
     void *on_suback_ud);
 ```
+
 Subscribes to the topic filter given with the given QoS. `on_publish` will be called whenever a packet matching
 `topic_filter` arrives. `on_suback` will be called when the SUBACK packet has been received. `topic_filter` must persist until `on_suback` is called. The packet_id of the SUBSCRIBE packet will be returned, or 0 on error.
 
@@ -183,6 +195,7 @@ uint16_t aws_mqtt_client_connection_unsubscribe(
     aws_mqtt_op_complete_fn *on_unsuback,
     void *on_unsuback_ud);
 ```
+
 Unsubscribes from the topic filter given. `topic_filter` must persist until `on_unsuback` is called. The packet_id of
 the UNSUBSCRIBE packet will be returned, or 0 on error.
 
@@ -196,6 +209,7 @@ uint16_t aws_mqtt_client_connection_publish(
     aws_mqtt_op_complete_fn *on_complete,
     void *userdata);
 ```
+
 Publish a payload to the topic specified. For QoS 0, `on_complete` will be called as soon as the packet is sent over
 the wire. For QoS 1, as soon as PUBACK comes back. For QoS 2, PUBCOMP. `topic` and `payload` must persist until
 `on_complete`.
@@ -203,6 +217,7 @@ the wire. For QoS 1, as soon as PUBACK comes back. For QoS 2, PUBCOMP. `topic` a
 ```c
 int aws_mqtt_client_connection_ping(struct aws_mqtt_client_connection *connection);
 ```
+
 Sends a PINGREQ packet to the server.
 
 [aws-c-io]: https://github.com/awslabs/aws-c-io

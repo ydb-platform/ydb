@@ -2,7 +2,7 @@
 
 ![](https://img.shields.io/badge/release-v1.1.0-blue.png)
 
-## A fast JSON parser/generator for C++ with both SAX/DOM style API 
+## A fast JSON parser/generator for C++ with both SAX/DOM style API
 
 Tencent is pleased to support the open source community by making RapidJSON available.
 
@@ -44,6 +44,7 @@ RapidJSON is a JSON parser and generator for C++. It was inspired by [RapidXml](
 More features can be read [here](doc/features.md).
 
 JSON(JavaScript Object Notation) is a light-weight data exchange format. RapidJSON should be in fully compliance with RFC7159/ECMA-404, with optional support of relaxed syntax. More information about JSON can be obtained at
+
 * [Introducing JSON](http://json.org/)
 * [RFC7159: The JavaScript Object Notation (JSON) Data Interchange Format](http://www.ietf.org/rfc/rfc7159.txt)
 * [Standard ECMA-404: The JSON Data Interchange Format](http://www.ecma-international.org/publications/standards/Ecma-404.htm)
@@ -61,6 +62,7 @@ For other changes please refer to [change log](CHANGELOG.md).
 ## Compatibility
 
 RapidJSON is cross-platform. Some platform/compiler combinations which have been tested are shown as follows.
+
 * Visual C++ 2008/2010/2013 on Windows (32/64-bit)
 * GNU C++ 3.8.x on Cygwin
 * Clang 3.4 on Mac OS X (32/64-bit) and iOS
@@ -73,6 +75,7 @@ Users can build and run the unit tests on their platform/compiler.
 RapidJSON is a header-only C++ library. Just copy the `include/rapidjson` folder to system or project's include path.
 
 RapidJSON uses following software as its dependencies:
+
 * [CMake](https://cmake.org/) as a general build tool
 * (optional)[Doxygen](http://www.doxygen.org) to build documentation
 * (optional)[googletest](https://github.com/google/googletest) for unit and performance testing
@@ -139,22 +142,22 @@ The following diagram shows the process.
 More [examples](https://github.com/miloyip/rapidjson/tree/master/example) are available:
 
 * DOM API
- * [tutorial](https://github.com/miloyip/rapidjson/blob/master/example/tutorial/tutorial.cpp): Basic usage of DOM API.
+* [tutorial](https://github.com/miloyip/rapidjson/blob/master/example/tutorial/tutorial.cpp): Basic usage of DOM API.
 
 * SAX API
- * [simplereader](https://github.com/miloyip/rapidjson/blob/master/example/simplereader/simplereader.cpp): Dumps all SAX events while parsing a JSON by `Reader`.
- * [condense](https://github.com/miloyip/rapidjson/blob/master/example/condense/condense.cpp): A command line tool to rewrite a JSON, with all whitespaces removed.
- * [pretty](https://github.com/miloyip/rapidjson/blob/master/example/pretty/pretty.cpp): A command line tool to rewrite a JSON with indents and newlines by `PrettyWriter`.
- * [capitalize](https://github.com/miloyip/rapidjson/blob/master/example/capitalize/capitalize.cpp): A command line tool to capitalize strings in JSON.
- * [messagereader](https://github.com/miloyip/rapidjson/blob/master/example/messagereader/messagereader.cpp): Parse a JSON message with SAX API.
- * [serialize](https://github.com/miloyip/rapidjson/blob/master/example/serialize/serialize.cpp): Serialize a C++ object into JSON with SAX API.
- * [jsonx](https://github.com/miloyip/rapidjson/blob/master/example/jsonx/jsonx.cpp): Implements a `JsonxWriter` which stringify SAX events into [JSONx](https://www-01.ibm.com/support/knowledgecenter/SS9H2Y_7.1.0/com.ibm.dp.doc/json_jsonx.html) (a kind of XML) format. The example is a command line tool which converts input JSON into JSONx format.
+* [simplereader](https://github.com/miloyip/rapidjson/blob/master/example/simplereader/simplereader.cpp): Dumps all SAX events while parsing a JSON by `Reader`.
+* [condense](https://github.com/miloyip/rapidjson/blob/master/example/condense/condense.cpp): A command line tool to rewrite a JSON, with all whitespaces removed.
+* [pretty](https://github.com/miloyip/rapidjson/blob/master/example/pretty/pretty.cpp): A command line tool to rewrite a JSON with indents and newlines by `PrettyWriter`.
+* [capitalize](https://github.com/miloyip/rapidjson/blob/master/example/capitalize/capitalize.cpp): A command line tool to capitalize strings in JSON.
+* [messagereader](https://github.com/miloyip/rapidjson/blob/master/example/messagereader/messagereader.cpp): Parse a JSON message with SAX API.
+* [serialize](https://github.com/miloyip/rapidjson/blob/master/example/serialize/serialize.cpp): Serialize a C++ object into JSON with SAX API.
+* [jsonx](https://github.com/miloyip/rapidjson/blob/master/example/jsonx/jsonx.cpp): Implements a `JsonxWriter` which stringify SAX events into [JSONx](https://www-01.ibm.com/support/knowledgecenter/SS9H2Y_7.1.0/com.ibm.dp.doc/json_jsonx.html) (a kind of XML) format. The example is a command line tool which converts input JSON into JSONx format.
 
 * Schema
- * [schemavalidator](https://github.com/miloyip/rapidjson/blob/master/example/schemavalidator/schemavalidator.cpp) : A command line tool to validate a JSON with a JSON schema.
- 
+* [schemavalidator](https://github.com/miloyip/rapidjson/blob/master/example/schemavalidator/schemavalidator.cpp) : A command line tool to validate a JSON with a JSON schema.
+
 * Advanced
- * [prettyauto](https://github.com/miloyip/rapidjson/blob/master/example/prettyauto/prettyauto.cpp): A modified version of [pretty](https://github.com/miloyip/rapidjson/blob/master/example/pretty/pretty.cpp) to automatically handle JSON with any UTF encodings.
- * [parsebyparts](https://github.com/miloyip/rapidjson/blob/master/example/parsebyparts/parsebyparts.cpp): Implements an `AsyncDocumentParser` which can parse JSON in parts, using C++11 thread.
- * [filterkey](https://github.com/miloyip/rapidjson/blob/master/example/filterkey/filterkey.cpp): A command line tool to remove all values with user-specified key.
- * [filterkeydom](https://github.com/miloyip/rapidjson/blob/master/example/filterkeydom/filterkeydom.cpp): Same tool as above, but it demonstrates how to use a generator to populate a `Document`.
+* [prettyauto](https://github.com/miloyip/rapidjson/blob/master/example/prettyauto/prettyauto.cpp): A modified version of [pretty](https://github.com/miloyip/rapidjson/blob/master/example/pretty/pretty.cpp) to automatically handle JSON with any UTF encodings.
+* [parsebyparts](https://github.com/miloyip/rapidjson/blob/master/example/parsebyparts/parsebyparts.cpp): Implements an `AsyncDocumentParser` which can parse JSON in parts, using C++11 thread.
+* [filterkey](https://github.com/miloyip/rapidjson/blob/master/example/filterkey/filterkey.cpp): A command line tool to remove all values with user-specified key.
+* [filterkeydom](https://github.com/miloyip/rapidjson/blob/master/example/filterkeydom/filterkeydom.cpp): Same tool as above, but it demonstrates how to use a generator to populate a `Document`.

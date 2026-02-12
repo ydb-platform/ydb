@@ -10,5 +10,3 @@
 ```yql
 DROP TABLE my_table;
 ```
-
-

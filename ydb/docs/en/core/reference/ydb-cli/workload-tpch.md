@@ -73,7 +73,6 @@ During the test, load statistics are displayed for each request.
 
 See the command description:
 
-
 ```bash
 {{ ydb-cli }} workload tpch run --help
 ```

@@ -140,7 +140,6 @@ YSON-данные бывают трех типов:
   2. **ListFragment** (значения, разделенные `;`, в примере — `<list-fragment>`)
   3. **MapFragment** (пары ключ-значение, разделенные `;`, в примере — `<map-fragment>`)
 
-
 Грамматика (определяется с точностью до пробельных символов, которые могут быть в произвольном количестве добавлены и удалены между токенами):
 
 ```antlr
@@ -162,7 +161,7 @@ YSON-данные бывают трех типов:
 
 Символ `;` после последнего элемента внутри `<list-fragment>`  и `<map-fragment>`  может быть опущен. Следующие конструкции следует считать валидными при чтении:
 
-#|
+# |
 || C `;` на конце | Сокращенная запись ||
 ||
 
@@ -183,7 +182,6 @@ YSON-данные бывают трех типов:
  ||
 |#
 
-
 ## Примеры {#examples}
 
 - Map (Node)
@@ -198,13 +196,11 @@ YSON-данные бывают трех типов:
 { cv-precision = [ 0.85 ; 0.24 ; 0.71 ; 0.70 ] }
 ```
 
-
 - List (Node)
 
 ```yson
 [ 1; 2; 3; 4; 5 ]
 ```
-
 
 - String (Node)
 
@@ -284,7 +280,7 @@ SELECT Yson::SerializeJson($data), Yson::SerializeJson(Yson::YPath($data, "/0-25
 
 Результат:
 
-#|
+# |
 || column0 | column1 ||
 ||
 
@@ -304,7 +300,6 @@ SELECT Yson::SerializeJson($data), Yson::SerializeJson(Yson::YPath($data, "/0-25
 
 | `"I can just do it"` ||
 |#
-
 
 ```yql
 $data = Yson(@@{
@@ -330,7 +325,7 @@ Yson::SerializeJson($data) AS whole_data;
 
 Результат:
 
-#|
+# |
 || attrs_root | attrs_b_str | attr_exact | array_index0 | array_last | entity | entity1 | whole_a | whole_data ||
 ||
 
@@ -449,9 +444,3 @@ null
 
 ||
 |#
-
-
-
-
-
-

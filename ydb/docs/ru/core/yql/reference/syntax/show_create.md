@@ -21,19 +21,19 @@ SHOW CREATE [TABLE|VIEW] <name>;
 |-----------------|------------|------------------------------------|
 | Путь            | Table/View | DDL-выражения для создания объекта |
 
-- **Path** — путь к объекту (например, `MyTable` или `MyView`).
-- **PathType** — тип объекта: `Table` или `View`.
-- **CreateQuery** — полный набор DDL-выражений, необходимых для создания объекта:
-    - Для таблиц: основной оператор [CREATE TABLE](create_table/index.md) (с путем относительно базы), а также дополнительные команды, необходимые для описания текущего состояния и настроек:
-        - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index)— для задания настроек партицирования вторичных индексов.
+* **Path** — путь к объекту (например, `MyTable` или `MyView`).
+* **PathType** — тип объекта: `Table` или `View`.
+* **CreateQuery** — полный набор DDL-выражений, необходимых для создания объекта:
+  * Для таблиц: основной оператор [CREATE TABLE](create_table/index.md) (с путем относительно базы), а также дополнительные команды, необходимые для описания текущего состояния и настроек:
+    * [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index)— для задания настроек партицирования вторичных индексов.
         {% if feature_changefeed and backend_name == "YDB" %}
-        - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.
+    * [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.
         {% endif %}
         {% if feature_serial %}
-        - `ALTER SEQUENCE` — для восстановления состояния `Sequence` у колонок типа [Serial](../../../yql/reference/types/serial.md).
+    * `ALTER SEQUENCE` — для восстановления состояния `Sequence` у колонок типа [Serial](../../../yql/reference/types/serial.md).
         {% endif %}
     {% if feature_view %}
-    - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, выражения, которые были зафиксированы представлением из контекста создания, например, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
+  * Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, выражения, которые были зафиксированы представлением из контекста создания, например, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
     {% endif %}
 
 ## Примеры
@@ -130,4 +130,3 @@ FROM
     test_table
 ;
 ```
-

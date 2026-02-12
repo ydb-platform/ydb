@@ -314,10 +314,10 @@ PARTITION BY device_id, zone_id
 
 Our support for the `MATCH_RECOGNIZE` expression will eventually comply with [SQL-2016](https://en.wikipedia.org/wiki/SQL:2016); currently, however, the following limitations apply:
 
-- [`MEASURES`](#measures). Functions `PREV`/`NEXT` are not supported.
-- [`AFTER MATCH SKIP`](#after_match_skip). Only the `AFTER MATCH SKIP TO NEXT ROW` and `AFTER MATCH SKIP PAST LAST ROW` modes are supported.
-- [`PATTERN`](#pattern). Union pattern variables are not implemented.
-- [`DEFINE`](#define). Aggregation functions are not supported.
+* [`MEASURES`](#measures). Functions `PREV`/`NEXT` are not supported.
+* [`AFTER MATCH SKIP`](#after_match_skip). Only the `AFTER MATCH SKIP TO NEXT ROW` and `AFTER MATCH SKIP PAST LAST ROW` modes are supported.
+* [`PATTERN`](#pattern). Union pattern variables are not implemented.
+* [`DEFINE`](#define). Aggregation functions are not supported.
 
 ## Example of usage {#example}
 

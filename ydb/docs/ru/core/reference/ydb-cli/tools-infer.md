@@ -200,4 +200,3 @@ WITH (
 
 Query executed successfully.
 ```
-

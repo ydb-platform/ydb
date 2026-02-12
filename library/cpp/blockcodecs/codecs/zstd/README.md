@@ -1,13 +1,13 @@
 Zstd codecs
 =============
 
-This library registers zstd compression codecs as `zstd_1`, ..., `zstd_22`. 
+This library registers zstd compression codecs as `zstd_1`, ..., `zstd_22`.
 Fast levels are also registered as `zstd_fast_1`, ..., `zstd_fast_7`.
 
 Measured codec performance on every level. Values below are provided just for reference, exact numbers may vary depending on CPU model and type of data being compressed.
 
 | Codec        | Comp. Ratio | Comp. Speed  (MBps) | Decomp. Speed (MBps) |
-|--------------|-------------|---------------------|----------------------| 
+|--------------|-------------|---------------------|----------------------|
 | lz4          | 0.5876      | 913                 | 4100                 |
 | zstd_fast_7  | 0.5783      | 1066                | 2887                 |
 | zstd_fast_6  | 0.5733      | 1050                | 2870                 |

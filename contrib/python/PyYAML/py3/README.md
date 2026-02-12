@@ -37,7 +37,7 @@ To run the tests, type `python setup.py test`.
 * [PyYAML tutorial and reference](http://pyyaml.org/wiki/PyYAMLDocumentation).
 
 * Discuss PyYAML with the maintainers on
-  Matrix at https://matrix.to/#/#pyyaml:yaml.io or
+  Matrix at <https://matrix.to/#/#pyyaml:yaml.io> or
   IRC #pyyaml irc.libera.chat
 
 * Submit bug reports and feature requests to the

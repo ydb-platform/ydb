@@ -20,18 +20,18 @@
 
 `Resource<TM>` и `Resource<TM64>` содержат следующие компоненты дат:
 
-* Year (для `Resource<TM>` 12 бит, беззнаковый; для `Resource<TM64>` 19 бит, знаковый);
-* Month (4 бита);
-* Day (5 бит);
-* Hour (5 бит);
-* Minute (6 бит);
-* Second (6 бит);
-* Microsecond (20 бит);
-* TimezoneId (16 бит);
-* DayOfYear (9 бит) — день от начала года;
-* WeekOfYear (6 бит) — неделя от начала года, 1 января всегда относится к первой неделе;
-* WeekOfYearIso8601 (6 бит) — неделя года согласно ISO 8601 (первой неделей считается та, в которой 4 января);
-* DayOfWeek (3 бита) — день недели.
+- Year (для `Resource<TM>` 12 бит, беззнаковый; для `Resource<TM64>` 19 бит, знаковый);
+- Month (4 бита);
+- Day (5 бит);
+- Hour (5 бит);
+- Minute (6 бит);
+- Second (6 бит);
+- Microsecond (20 бит);
+- TimezoneId (16 бит);
+- DayOfYear (9 бит) — день от начала года;
+- WeekOfYear (6 бит) — неделя от начала года, 1 января всегда относится к первой неделе;
+- WeekOfYearIso8601 (6 бит) — неделя года согласно ISO 8601 (первой неделей считается та, в которой 4 января);
+- DayOfWeek (3 бита) — день недели.
 
 Если таймзона не GMT, то в компонентах хранится локальное время в соответствующей таймзоне.
 
@@ -41,8 +41,8 @@
 
 ### Список функций
 
-* `DateTime::Split(Date/TzDate/Datetime/TzDatetime/Timestamp/TzTimestamp{Flags:AutoMap}) -> Resource<TM>`;
-* `DateTime::Split(Date32/TzDate32/Datetime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap}) -> Resource<TM64>`.
+- `DateTime::Split(Date/TzDate/Datetime/TzDatetime/Timestamp/TzTimestamp{Flags:AutoMap}) -> Resource<TM>`;
+- `DateTime::Split(Date32/TzDate32/Datetime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap}) -> Resource<TM64>`.
 
 Функции, принимающие на вход `Resource<TM>` или `Resource<TM64>`, могут быть вызваны непосредственно от простого типа даты/времени. В этом случае будет сделано неявное преобразование через вызов соответствующей функции `Split`.
 
@@ -52,17 +52,17 @@
 
 ### Список функций
 
-* `DateTime::MakeDate(Resource<TM>{Flags:AutoMap}) -> Date`
-* `DateTime::MakeDate32(Resource<TM64>{Flags:AutoMap}) -> Date32`;
-* `DateTime::MakeTzDate32(Resource<TM64>{Flags:AutoMap}) -> TzDate32`;
-* `DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime`;
-* `DateTime::MakeTzDatetime(Resource<TM>{Flags:AutoMap}) -> TzDatetime`;
-* `DateTime::MakeDatetime64(Resource<TM64>{Flags:AutoMap}) -> Datetime64`;
-* `DateTime::MakeTzDatetime64(Resource<TM64>{Flags:AutoMap}) -> TzDatetime64`;
-* `DateTime::MakeTimestamp(Resource<TM>{Flags:AutoMap}) -> Timestamp`;
-* `DateTime::MakeTzTimestamp(Resource<TM>{Flags:AutoMap}) -> TzTimestamp`;
-* `DateTime::MakeTimestamp64(Resource<TM64>{Flags:AutoMap}) -> Timestamp64`;
-* `DateTime::MakeTzTimestamp64(Resource<TM64>{Flags:AutoMap}) -> TzTimestamp64`.
+- `DateTime::MakeDate(Resource<TM>{Flags:AutoMap}) -> Date`
+- `DateTime::MakeDate32(Resource<TM64>{Flags:AutoMap}) -> Date32`;
+- `DateTime::MakeTzDate32(Resource<TM64>{Flags:AutoMap}) -> TzDate32`;
+- `DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime`;
+- `DateTime::MakeTzDatetime(Resource<TM>{Flags:AutoMap}) -> TzDatetime`;
+- `DateTime::MakeDatetime64(Resource<TM64>{Flags:AutoMap}) -> Datetime64`;
+- `DateTime::MakeTzDatetime64(Resource<TM64>{Flags:AutoMap}) -> TzDatetime64`;
+- `DateTime::MakeTimestamp(Resource<TM>{Flags:AutoMap}) -> Timestamp`;
+- `DateTime::MakeTzTimestamp(Resource<TM>{Flags:AutoMap}) -> TzTimestamp`;
+- `DateTime::MakeTimestamp64(Resource<TM64>{Flags:AutoMap}) -> Timestamp64`;
+- `DateTime::MakeTzTimestamp64(Resource<TM64>{Flags:AutoMap}) -> TzTimestamp64`.
 
 ### Примеры
 
@@ -84,23 +84,23 @@ SELECT
 
 ### Список функций
 
-* `DateTime::GetYear(Resource<TM>{Flags:AutoMap}) -> Uint16`;
-* `DateTime::GetYear(Resource<TM64>{Flags:AutoMap}) -> Int32`;
-* `DateTime::GetDayOfYear(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint16`;
-* `DateTime::GetMonth(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
-* `DateTime::GetMonthName(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> String`;
-* `DateTime::GetWeekOfYear(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
-* `DateTime::GetWeekOfYearIso8601(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
-* `DateTime::GetDayOfMonth(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
-* `DateTime::GetDayOfWeek(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
-* `DateTime::GetDayOfWeekName(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> String`;
-* `DateTime::GetHour(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
-* `DateTime::GetMinute(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
-* `DateTime::GetSecond(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
-* `DateTime::GetMillisecondOfSecond(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint32`;
-* `DateTime::GetMicrosecondOfSecond(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint32`;
-* `DateTime::GetTimezoneId(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint16`;
-* `DateTime::GetTimezoneName(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> String`.
+- `DateTime::GetYear(Resource<TM>{Flags:AutoMap}) -> Uint16`;
+- `DateTime::GetYear(Resource<TM64>{Flags:AutoMap}) -> Int32`;
+- `DateTime::GetDayOfYear(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint16`;
+- `DateTime::GetMonth(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
+- `DateTime::GetMonthName(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> String`;
+- `DateTime::GetWeekOfYear(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
+- `DateTime::GetWeekOfYearIso8601(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
+- `DateTime::GetDayOfMonth(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
+- `DateTime::GetDayOfWeek(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
+- `DateTime::GetDayOfWeekName(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> String`;
+- `DateTime::GetHour(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
+- `DateTime::GetMinute(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
+- `DateTime::GetSecond(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint8`;
+- `DateTime::GetMillisecondOfSecond(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint32`;
+- `DateTime::GetMicrosecondOfSecond(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint32`;
+- `DateTime::GetTimezoneId(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> Uint16`;
+- `DateTime::GetTimezoneName(Resource<TM>/Resource<TM64>{Flags:AutoMap}) -> String`.
 
 ### Примеры
 
@@ -148,12 +148,12 @@ SELECT
 
 ### Список функций
 
-* `DateTime::FromSeconds(Uint32{Flags:AutoMap}) -> Timestamp`;
-* `DateTime::FromSeconds64(Int64{Flags:AutoMap}) -> Timestamp64`;
-* `DateTime::FromMilliseconds(Uint64{Flags:AutoMap}) -> Timestamp`;
-* `DateTime::FromMilliseconds64(Int64{Flags:AutoMap}) -> Timestamp64`;
-* `DateTime::FromMicroseconds(Uint64{Flags:AutoMap}) -> Timestamp`;
-* `DateTime::FromMicroseconds64(Int64{Flags:AutoMap}) -> Timestamp64`.
+- `DateTime::FromSeconds(Uint32{Flags:AutoMap}) -> Timestamp`;
+- `DateTime::FromSeconds64(Int64{Flags:AutoMap}) -> Timestamp64`;
+- `DateTime::FromMilliseconds(Uint64{Flags:AutoMap}) -> Timestamp`;
+- `DateTime::FromMilliseconds64(Int64{Flags:AutoMap}) -> Timestamp64`;
+- `DateTime::FromMicroseconds(Uint64{Flags:AutoMap}) -> Timestamp`;
+- `DateTime::FromMicroseconds64(Int64{Flags:AutoMap}) -> Timestamp64`.
 
 ## To... {#to}
 
@@ -161,12 +161,12 @@ SELECT
 
 ### Список функций
 
-* `DateTime::ToSeconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`;
-* `DateTime::ToSeconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToMilliseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`;
-* `DateTime::ToMilliseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToMicroseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`;
-* `DateTime::ToMicroseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`.
+- `DateTime::ToSeconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`;
+- `DateTime::ToSeconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`;
+- `DateTime::ToMilliseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`;
+- `DateTime::ToMilliseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`;
+- `DateTime::ToMicroseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`;
+- `DateTime::ToMicroseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`.
 
 ### Примеры
 
@@ -182,30 +182,30 @@ SELECT
 
 ### Список функций
 
-* `DateTime::ToDays(Interval{Flags:AutoMap}) -> Int32`;
-* `DateTime::ToDays(Interval64{Flags:AutoMap}) -> Int32`;
-* `DateTime::ToHours(Interval{Flags:AutoMap}) -> Int32`;
-* `DateTime::ToHours(Interval64{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32`;
-* `DateTime::ToMinutes(Interval64{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToSeconds(Interval64{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToMilliseconds(Interval64{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToMicroseconds(Interval{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToMicroseconds(Interval64{Flags:AutoMap}) -> Int64`;
-* `DateTime::IntervalFromDays(Int32{Flags:AutoMap}) -> Interval`;
-* `DateTime::Interval64FromDays(Int32{Flags:AutoMap}) -> Interval64`;
-* `DateTime::IntervalFromHours(Int32{Flags:AutoMap}) -> Interval`;
-* `DateTime::Interval64FromHours(Int64{Flags:AutoMap}) -> Interval64`;
-* `DateTime::IntervalFromMinutes(Int32{Flags:AutoMap}) -> Interval`;
-* `DateTime::Interval64FromMinutes(Int64{Flags:AutoMap}) -> Interval64`;
-* `DateTime::IntervalFromSeconds(Int64{Flags:AutoMap}) -> Interval`;
-* `DateTime::Interval64FromSeconds(Int64{Flags:AutoMap}) -> Interval64`;
-* `DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval`;
-* `DateTime::Interval64FromMilliseconds(Int64{Flags:AutoMap}) -> Interval64`;
-* `DateTime::IntervalFromMicroseconds(Int64{Flags:AutoMap}) -> Interval`;
-* `DateTime::Interval64FromMicroseconds(Int64{Flags:AutoMap}) -> Interval64`.
+- `DateTime::ToDays(Interval{Flags:AutoMap}) -> Int32`;
+- `DateTime::ToDays(Interval64{Flags:AutoMap}) -> Int32`;
+- `DateTime::ToHours(Interval{Flags:AutoMap}) -> Int32`;
+- `DateTime::ToHours(Interval64{Flags:AutoMap}) -> Int64`;
+- `DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32`;
+- `DateTime::ToMinutes(Interval64{Flags:AutoMap}) -> Int64`;
+- `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int64`;
+- `DateTime::ToSeconds(Interval64{Flags:AutoMap}) -> Int64`;
+- `DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64`;
+- `DateTime::ToMilliseconds(Interval64{Flags:AutoMap}) -> Int64`;
+- `DateTime::ToMicroseconds(Interval{Flags:AutoMap}) -> Int64`;
+- `DateTime::ToMicroseconds(Interval64{Flags:AutoMap}) -> Int64`;
+- `DateTime::IntervalFromDays(Int32{Flags:AutoMap}) -> Interval`;
+- `DateTime::Interval64FromDays(Int32{Flags:AutoMap}) -> Interval64`;
+- `DateTime::IntervalFromHours(Int32{Flags:AutoMap}) -> Interval`;
+- `DateTime::Interval64FromHours(Int64{Flags:AutoMap}) -> Interval64`;
+- `DateTime::IntervalFromMinutes(Int32{Flags:AutoMap}) -> Interval`;
+- `DateTime::Interval64FromMinutes(Int64{Flags:AutoMap}) -> Interval64`;
+- `DateTime::IntervalFromSeconds(Int64{Flags:AutoMap}) -> Interval`;
+- `DateTime::Interval64FromSeconds(Int64{Flags:AutoMap}) -> Interval64`;
+- `DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval`;
+- `DateTime::Interval64FromMilliseconds(Int64{Flags:AutoMap}) -> Interval64`;
+- `DateTime::IntervalFromMicroseconds(Int64{Flags:AutoMap}) -> Interval`;
+- `DateTime::Interval64FromMicroseconds(Int64{Flags:AutoMap}) -> Interval64`.
 
 `AddTimezone` никак не влияет на вывод `ToSeconds()`, поскольку `ToSeconds()` всегда возвращают время в таймзоне GMT.
 
@@ -232,30 +232,30 @@ SELECT
 
 ### Список функций
 
-* `DateTime::StartOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::StartOfYear(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::EndOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::EndOfYear(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::StartOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::StartOfQuarter(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::EndOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::EndOfQuarter(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::StartOfMonth(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::StartOfMonth(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::EndOfMonth(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::EndOfMonth(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::StartOfWeek(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::StartOfWeek(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::EndOfWeek(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::EndOfWeek(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::StartOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::StartOfDay(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::EndOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::EndOfDay(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::StartOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::StartOf(Resource<TM64>{Flags:AutoMap}, Interval64{Flags:AutoMap}) -> Resource<TM64>?`;
-* `DateTime::EndOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::EndOf(Resource<TM64>{Flags:AutoMap}, Interval64{Flags:AutoMap}) -> Resource<TM64>?`.
+- `DateTime::StartOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::StartOfYear(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::EndOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::EndOfYear(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::StartOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::StartOfQuarter(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::EndOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::EndOfQuarter(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::StartOfMonth(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::StartOfMonth(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::EndOfMonth(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::EndOfMonth(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::StartOfWeek(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::StartOfWeek(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::EndOfWeek(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::EndOfWeek(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::StartOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::StartOfDay(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::EndOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::EndOfDay(Resource<TM64>{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::StartOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::StartOf(Resource<TM64>{Flags:AutoMap}, Interval64{Flags:AutoMap}) -> Resource<TM64>?`;
+- `DateTime::EndOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::EndOf(Resource<TM64>{Flags:AutoMap}, Interval64{Flags:AutoMap}) -> Resource<TM64>?`.
 
 Функции `StartOf`/`EndOf` предназначены для группировки в пределах суток по произвольному периоду. Результат отличается от входного значения только компонентами времени. Период более суток трактуется как сутки (эквивалентно `StartOfDay`/`EndOfDay`). Если в сутках не содержится целого числа периодов, производится округление к ближайшему времени от начала суток, кратному указанному периоду. При нулевом интервале выход совпадает со входом. Отрицательный интервал трактуется как положительный.
 
@@ -263,8 +263,8 @@ SELECT
 
 Поведение функций с периодами больше дня отличается от поведения одноимённых функций в старой библиотеке. Компоненты времени всегда обнуляются (это логично, поскольку эти функции в основном используются для группировки по периоду). Отдельно существует возможность выделить время в пределах суток:
 
-* `DateTime::TimeOfDay(Resource<TM>{Flags:AutoMap}) -> Interval`;
-* `DateTime::TimeOfDay(Resource<TM64>{Flags:AutoMap}) -> Interval64`.
+- `DateTime::TimeOfDay(Resource<TM>{Flags:AutoMap}) -> Interval`;
+- `DateTime::TimeOfDay(Resource<TM64>{Flags:AutoMap}) -> Interval64`.
 
 ### Примеры
 
@@ -301,12 +301,12 @@ SELECT
 
 ### Список функций
 
-* `DateTime::ShiftYears(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?`;
-* `DateTime::ShiftYears(Resource<TM64>{Flags:AutoMap}, Int32) -> Resource<TM64>?`;
-* `DateTime::ShiftQuarters(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?`;
-* `DateTime::ShiftQuarters(Resource<TM64>{Flags:AutoMap}, Int32) -> Resource<TM64>?`;
-* `DateTime::ShiftMonths(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?`;
-* `DateTime::ShiftMonths(Resource<TM64>{Flags:AutoMap}, Int32) -> Resource<TM64>?`.
+- `DateTime::ShiftYears(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?`;
+- `DateTime::ShiftYears(Resource<TM64>{Flags:AutoMap}, Int32) -> Resource<TM64>?`;
+- `DateTime::ShiftQuarters(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?`;
+- `DateTime::ShiftQuarters(Resource<TM64>{Flags:AutoMap}, Int32) -> Resource<TM64>?`;
+- `DateTime::ShiftMonths(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?`;
+- `DateTime::ShiftMonths(Resource<TM64>{Flags:AutoMap}, Int32) -> Resource<TM64>?`.
 
 Если в результате номер дня в месяце превышает максимально возможный, то в поле `Day` будет записан последний день месяца,
 время при этом не изменится (см. примеры).
@@ -332,21 +332,21 @@ SELECT
 
 ### Список функций
 
-* `DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?) -> (Resource<TM64>{Flags:AutoMap}) -> String`
+- `DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?) -> (Resource<TM64>{Flags:AutoMap}) -> String`
 
 Поддерживается множество спецификаторов для строки форматирования:
 
-* `%%` - символ %;
-* `%Y` — год, 1–6 цифр и знак для дат до н.э.;
-* `%m` — месяц, 2 цифры;
-* `%d` — день, 2 цифры;
-* `%H` - час 2 цифры;
-* `%M` - минуты 2 цифры;
-* `%S` — секунды, 2 цифры или `XX.XXXXXX`, если есть микросекунды (и только если флаг `alwaysWriteFractionalSeconds` не установлен в `True`);
-* `%z` — `+hhmm` или `-hhmm`;
-* `%Z` - IANA имя таймзоны;
-* `%b` - короткое трехбуквенное английское название месяца (Jan);
-* `%B` - полное английское название месяца (January).
+- `%%` - символ %;
+- `%Y` — год, 1–6 цифр и знак для дат до н.э.;
+- `%m` — месяц, 2 цифры;
+- `%d` — день, 2 цифры;
+- `%H` - час 2 цифры;
+- `%M` - минуты 2 цифры;
+- `%S` — секунды, 2 цифры или `XX.XXXXXX`, если есть микросекунды (и только если флаг `alwaysWriteFractionalSeconds` не установлен в `True`);
+- `%z` — `+hhmm` или `-hhmm`;
+- `%Z` - IANA имя таймзоны;
+- `%b` - короткое трехбуквенное английское название месяца (Jan);
+- `%B` - полное английское название месяца (January).
 
 Все остальные символы строки форматирования переносятся без изменений.
 
@@ -366,21 +366,21 @@ SELECT
 
 ### Список функций
 
-* `DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::Parse64(String) -> (String{Flags:AutoMap}) -> Resource<TM64>?`.
+- `DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::Parse64(String) -> (String{Flags:AutoMap}) -> Resource<TM64>?`.
 
 Реализованные спецификаторы:
 
-* `%%` - символ %;
-* `%Y` — год, 4 цифры — при использовании `Parse`, или 1–6 цифр и знак для дат до н.э. — при использовании `Parse64`;
-* `%m` — месяц, 2 цифры;
-* `%d` — день, 2 цифры;
-* `%H` — час, 2 цифры;
-* `%M` — минуты, 2 цифры;
-* `%S` — секунды, могут включать микросекунды в форматах от `XX` до `XX.XXXXXX`;
-* `%Z` — имя таймзоны в формате IANA (например, GMT);
-* `%b` — короткое трёхбуквенное регистронезависимое английское название месяца (например, Jan).
-* `%B` - полное регистронезависимое английское название месяца (January).
+- `%%` - символ %;
+- `%Y` — год, 4 цифры — при использовании `Parse`, или 1–6 цифр и знак для дат до н.э. — при использовании `Parse64`;
+- `%m` — месяц, 2 цифры;
+- `%d` — день, 2 цифры;
+- `%H` — час, 2 цифры;
+- `%M` — минуты, 2 цифры;
+- `%S` — секунды, могут включать микросекунды в форматах от `XX` до `XX.XXXXXX`;
+- `%Z` — имя таймзоны в формате IANA (например, GMT);
+- `%b` — короткое трёхбуквенное регистронезависимое английское название месяца (например, Jan).
+- `%B` - полное регистронезависимое английское название месяца (January).
 
 ### Примеры
 
@@ -405,10 +405,10 @@ SELECT
 
 ### Список функций
 
-* `DateTime::ParseRfc822(String{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::ParseIso8601(String{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::ParseHttp(String{Flags:AutoMap}) -> Resource<TM>?`;
-* `DateTime::ParseX509(String{Flags:AutoMap}) -> Resource<TM>?`.
+- `DateTime::ParseRfc822(String{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::ParseIso8601(String{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::ParseHttp(String{Flags:AutoMap}) -> Resource<TM>?`;
+- `DateTime::ParseX509(String{Flags:AutoMap}) -> Resource<TM>?`.
 
 ### Примеры
 

@@ -233,7 +233,6 @@ for res, _ in results:
 * LangGraph is the best framework for building stateful, agentic applications! [{'source': 'tweet'}]
 ```
 
-
 ### Запрос через трансформацию в ретривер {#query_by_turning_into_retriever}
 
 Векторное хранилище можно трансформировать в поисковик (retriever) для упрощённого использования в цепочках.

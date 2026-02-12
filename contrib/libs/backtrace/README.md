@@ -1,4 +1,5 @@
 # libbacktrace
+
 A C library that may be linked into a C/C++ program to produce symbolic backtraces
 
 Initially written by Ian Lance Taylor <iant@golang.org>.
@@ -42,5 +43,5 @@ The library is written to make it straightforward to add support for
 other object file and debugging formats.
 
 The library relies on the C++ unwind API defined at
-https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html
+<https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html>
 This API is provided by GCC and clang.

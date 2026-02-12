@@ -1,5 +1,4 @@
 
-
 # Лексическая структура
 
 <!-- markdownlint-disable blanks-around-fences -->

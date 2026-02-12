@@ -140,4 +140,3 @@ and without `ANY` it would result in:
 | "2" | "v121" | "v222" |
 | "2" | "v122" | "v221" |
 | "2" | "v122" | "v222" |
-

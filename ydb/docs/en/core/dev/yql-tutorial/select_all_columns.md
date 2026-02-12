@@ -13,4 +13,3 @@ FROM episodes; -- The table to select the data from.
 
 COMMIT;
 ```
-

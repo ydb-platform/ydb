@@ -100,7 +100,7 @@ Identify positions with the highest number of moves analyzed by the Stockfish en
 
 This query performs the following actions:
 
-* Finds positions (represented in FEN format) with the maximum analysis depth.
-* Sums the number of analyzed nodes (knodes) for each position.
-* Sorts results by maximum analysis depth in descending order.
-* Outputs the top 10 positions with the highest analysis depth.
+- Finds positions (represented in FEN format) with the maximum analysis depth.
+- Sums the number of analyzed nodes (knodes) for each position.
+- Sorts results by maximum analysis depth in descending order.
+- Outputs the top 10 positions with the highest analysis depth.

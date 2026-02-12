@@ -51,8 +51,8 @@ Any functionality change should have a GitHub issue opened. For minor changes th
 affect documentation, you do not need to open up a GitHub issue. Instead you can
 prefix the title of your PR with "MINOR: " if meets one of the following:
 
-*  Grammar, usage and spelling fixes that affect no more than 2 files
-*  Documentation updates affecting no more than 2 files and not more
+* Grammar, usage and spelling fixes that affect no more than 2 files
+* Documentation updates affecting no more than 2 files and not more
    than 500 words.
 
 ## Do you want to propose a significant new feature or an important refactoring?

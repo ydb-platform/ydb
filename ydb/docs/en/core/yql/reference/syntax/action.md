@@ -51,8 +51,6 @@ DO $hello_world("John");
 DO $hello_world(NULL, "Earth");
 ```
 
-
-
 ## BEGIN .. END DO {#begin}
 
 Performing an action without declaring it (anonymous action).
@@ -74,11 +72,9 @@ DO BEGIN
 END DO
 ```
 
-
-
 {% if feature_mapreduce %}
 
-  ## EVALUATE IF {#evaluate-if}
+## EVALUATE IF {#evaluate-if}
 
 `EVALUATE IF`: Executing an action depending on the condition. It's followed by:
 
@@ -153,7 +149,5 @@ ELSE
 Note that `EVALUATE` is run before the operation starts. Please also note that in `EVALUATE` you can't use [anonymous tables](select.md#temporary-tables).
 
 {% endnote %}
-
-
 
 {% endif %}

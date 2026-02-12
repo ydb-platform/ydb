@@ -80,4 +80,3 @@ echo 2 | {{ ydb-cli }} config profile activate
 ```
 
 The efficiency of this method is not guaranteed in any way.
-

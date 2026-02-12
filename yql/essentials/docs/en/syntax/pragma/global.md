@@ -1,6 +1,5 @@
 # Global
 
-
 ## Scope {#pragmascope}
 
 Unless otherwise specified, a pragma affects all the subsequent expressions up to the end of the module where it's used. If necessary and logically possible, you can change the value of this setting several times within a given query to make it different at different execution steps.

@@ -3,14 +3,15 @@ Command Line Interface for Zstandard library
 
 Command Line Interface (CLI) can be created using the `make` command without any additional parameters.
 There are however other Makefile targets that create different variations of CLI:
+
 - `zstd` : default CLI supporting gzip-like arguments; includes dictionary builder, benchmark, and supports decompression of legacy zstd formats
 - `zstd_nolegacy` : Same as `zstd` but without support for legacy zstd formats
 - `zstd-small` : CLI optimized for minimal size; no dictionary builder, no benchmark, and no support for legacy zstd formats
 - `zstd-compress` : version of CLI which can only compress into zstd format
 - `zstd-decompress` : version of CLI which can only decompress zstd format
 
-
 ### Compilation variables
+
 `zstd` scope can be altered by modifying the following `make` variables :
 
 - __HAVE_THREAD__ : multithreading is automatically enabled when `pthread` is detected.
@@ -86,14 +87,15 @@ There are however other Makefile targets that create different variations of CLI
   more context to determine the location of the fault.
   Example : `make zstd BACKTRACE=1`
 
-
 ### Aggregation of parameters
+
 CLI supports aggregation of parameters i.e. `-b1`, `-e18`, and `-i1` can be joined into `-b1e18i1`.
 
-
 ### Symlink shortcuts
+
 It's possible to invoke `zstd` through a symlink.
 When the name of the symlink has a specific value, it triggers an associated behavior.
+
 - `zstdmt` : compress using all cores available on local system.
 - `zcat` : will decompress and output target file using any of the supported formats. `gzcat` and `zstdcat` are also equivalent.
 - `gzip` : if zlib support is enabled, will mimic `gzip` by compressing file using `.gz` format, removing source file by default (use `--keep` to preserve). If zlib is not supported, triggers an error.
@@ -103,8 +105,8 @@ When the name of the symlink has a specific value, it triggers an associated beh
 - `unzstd` and `unlz4` will decompress any of the supported format.
 - `ungz`, `unxz` and `unlzma` will do the same, and will also remove source file by default (use `--keep` to preserve).
 
-
 ### Dictionary builder in Command Line Interface
+
 Zstd offers a training mode, which can be used to tune the algorithm for a selected
 type of data, by providing it with a few samples. The result of the training is stored
 in a file selected with the `-o` option (default name is `dictionary`),
@@ -123,8 +125,8 @@ Usage of the dictionary builder and created dictionaries with CLI:
 2. Compress with the dictionary: `zstd FILE -D dictionaryName`
 3. Decompress with the dictionary: `zstd --decompress FILE.zst -D dictionaryName`
 
-
 ### Benchmark in Command Line Interface
+
 CLI includes in-memory compression benchmark module for zstd.
 The benchmark is conducted using given filenames. The files are read into memory and joined together.
 It makes benchmark more precise as it eliminates I/O overhead.
@@ -140,9 +142,10 @@ The benchmark can also be used to test specific parameters,
 such as number of threads (`-T#`), or advanced parameters (`--zstd=#`), or dictionary compression (`-D DICTIONARY`),
 and many others available on command for regular compression and decompression.
 
-
 ### Usage of Command Line Interface
+
 The full list of options can be obtained with `-h` or `-H` parameter:
+
 ```
 *** Zstandard CLI (64-bit) v1.5.6, by Yann Collet ***
 
@@ -257,6 +260,7 @@ Benchmark options:
 ```
 
 ### Passing parameters through Environment Variables
+
 There is no "generic" way to pass "any kind of parameter" to `zstd` in a pass-through manner.
 Using environment variables for this purpose has security implications.
 Therefore, this avenue is intentionally restricted and only supports `ZSTD_CLEVEL` and `ZSTD_NBTHREADS`.
@@ -277,8 +281,8 @@ As `ZSTD_CLEVEL` and `ZSTD_NBTHREADS` only replace the default compression level
 and number of threads respectively, they can both be overridden by corresponding command line arguments:
 `-#` for compression level and `-T#` for number of threads.
 
-
 ### Long distance matching mode
+
 The long distance matching mode, enabled with `--long`, is designed to improve
 the compression ratio for files with long matches at a large distance (up to the
 maximum window size, `128 MiB`) while still maintaining compression speed.
@@ -328,7 +332,6 @@ The below table illustrates this on the [Silesia compression corpus].
 | `zstd -5 --long` | `3.319` | `51.7 MB/s`       | `371.9 MB/s`   |
 | `zstd -10`       | `3.523` | `16.4 MB/s`       | `489.2 MB/s`   |
 | `zstd -10 --long`| `3.566` | `16.2 MB/s`       | `415.7 MB/s`   |
-
 
 ### zstdgrep
 

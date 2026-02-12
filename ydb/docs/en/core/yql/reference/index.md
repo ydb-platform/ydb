@@ -4,8 +4,6 @@
 
 {{ ydb-short-name }} tools support interfaces for sending YQL queries and receiving their execution results:
 
-
-
 - [YDB CLI](../../reference/ydb-cli/index.md)
 - [YDB SDK](../../reference/ydb-sdk/index.md)
 
@@ -16,5 +14,3 @@ This documentation section contains the YQL reference that includes the sections
 - [Built-in functions](builtins/index.md) with a description of the available built-in functions
 
 You can also take a tutorial to get familiar with the basic YQL commands, in the [YQL tutorial](../../dev/yql-tutorial/index.md) section.
-
-

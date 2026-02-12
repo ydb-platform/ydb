@@ -12,7 +12,7 @@ Thus, we do not think about whether a change is formally a breaking change, but 
 
 Some changes, such as internal cleanups or bug-fixes, are low risk and do not need special measures. Any problems can be handled when the affected consumer updates BoringSSL and notices.
 
-Other changes, such as removing an API, forbidding some edge case, or adjusting some behavior, are more likely to break things. To help the consumer triage any resulting failures, include some text in the commit message, prefixed by `Update-Note: `. This can include what this change may break and instructions on how to fix the issue.
+Other changes, such as removing an API, forbidding some edge case, or adjusting some behavior, are more likely to break things. To help the consumer triage any resulting failures, include some text in the commit message, prefixed by `Update-Note:`. This can include what this change may break and instructions on how to fix the issue.
 
 ## Code Search
 

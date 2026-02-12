@@ -17,8 +17,8 @@ that cannot be merged.
 To make a contribution you should submit a pull request. There will probably be discussion about the pull request and,
 if any changes are needed, we would love to work with you to get your pull request merged.
 
-Follow this link to have more information about the YDB build and test system: https://ydb.tech/docs/development/build-ya.
+Follow this link to have more information about the YDB build and test system: <https://ydb.tech/docs/development/build-ya>.
 
 ## Other questions
 
-If you have any questions, please mail us at info@ydb.tech.
+If you have any questions, please mail us at <info@ydb.tech>.

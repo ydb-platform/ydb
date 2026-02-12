@@ -8,10 +8,11 @@ passing the full YAML testsuite.
 It is designed to be very efficient, avoiding copies of data, and
 has no artificial limits like the 1024 character limit for implicit keys.
 
-libfyaml is using https://github.com/yaml/yaml-test-suite as a core part
+libfyaml is using <https://github.com/yaml/yaml-test-suite> as a core part
 of it's testsuite.
 
 ## Features
+
 * Fully supports YAML version 1.2.
 * Attempts to adhere to features coming with YAML version 1.3 so that it
   will be ready.
@@ -26,20 +27,20 @@ of it's testsuite.
 * Extensive testsuite for the API, the full YAML test-suite and correct
   emitter operation.
 * Easy printf/scanf based YAML creation and data extraction API.
-* Accurate and descriptive error messages, in standard compiler format that 
+* Accurate and descriptive error messages, in standard compiler format that
   can be parsed by editors and developer GUIs.
 * Testsuite supports running under valgrind and checking for memory leaks. No
   leaks should be possible under normal operation, so it is usable for long-
   running applications.
 
 ## Contents
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-- [Building](#building)
-- [Usage and examples](#usage-and-examples)
-- [API documentation](#api-documentation)
-- [fy-tool reference](#fy-tool-reference)
-- [Missing Features](#missing-features)
+* [Features](#features)
+* [Prerequisites](#prerequisites)
+* [Building](#building)
+* [Usage and examples](#usage-and-examples)
+* [API documentation](#api-documentation)
+* [fy-tool reference](#fy-tool-reference)
+* [Missing Features](#missing-features)
 
 ## Prerequisites
 
@@ -128,11 +129,12 @@ LDFLAGS+= `pkg-config --libs libfyaml`
 ```
 
 For use in an automake based project you may use the following fragment
+
 ```bash
 PKG_CHECK_MODULES(LIBFYAML, [ libfyaml ], HAVE_LIBFYAML=1, HAVE_LIBFYAML=0)
 
 if test "x$HAVE_LIBFYAML" != "x1" ; then
-	AC_MSG_ERROR([failed to find libfyaml])
+ AC_MSG_ERROR([failed to find libfyaml])
 fi
 
 AC_SUBST(HAVE_LIBFYAML)
@@ -168,8 +170,8 @@ This is the minimal example that checks that you've compiled against the correct
 
 int main(int argc, char *argv[])
 {
-	printf("%s\n", fy_library_version());
-	return EXIT_SUCCESS;
+ printf("%s\n", fy_library_version());
+ return EXIT_SUCCESS;
 }
 ```
 
@@ -201,101 +203,101 @@ The standard header plus variables definition.
 
 int main(int argc, char *argv[])
 {
-	static const char *yaml = 
-		"invoice: 34843\n"
-		"date   : !!str 2001-01-23\n"
-		"bill-to: &id001\n"
-		"    given  : Chris\n"
-		"    family : Dumars\n"
-		"    address:\n"
-		"        lines: |\n"
-		"            458 Walkman Dr.\n"
-		"            Suite #292\n";
-	struct fy_document *fyd = NULL;
-	int rc, count, ret = EXIT_FAILURE;
-	unsigned int invoice_nr;
-	char given[256 + 1];
+ static const char *yaml = 
+  "invoice: 34843\n"
+  "date   : !!str 2001-01-23\n"
+  "bill-to: &id001\n"
+  "    given  : Chris\n"
+  "    family : Dumars\n"
+  "    address:\n"
+  "        lines: |\n"
+  "            458 Walkman Dr.\n"
+  "            Suite #292\n";
+ struct fy_document *fyd = NULL;
+ int rc, count, ret = EXIT_FAILURE;
+ unsigned int invoice_nr;
+ char given[256 + 1];
 ```
 
 Parsing and creating a YAML document from either the built-in
 YAML, or an invoice file given on the command line:
 
 ```c
-	if (argc == 1)
-		fyd = fy_document_build_from_string(NULL, yaml, FY_NT);
-	else
-		fyd = fy_document_build_from_file(NULL, argv[1]);
-	if (!fyd) {
-		fprintf(stderr, "failed to build document");
-		goto fail;
-	}
+ if (argc == 1)
+  fyd = fy_document_build_from_string(NULL, yaml, FY_NT);
+ else
+  fyd = fy_document_build_from_file(NULL, argv[1]);
+ if (!fyd) {
+  fprintf(stderr, "failed to build document");
+  goto fail;
+ }
 ```
 
 Get the invoice number and the given name using a single call.
 
 ```c
-	/* get the invoice number and the given name */
-	count = fy_document_scanf(fyd,
-			"/invoice %u "
-			"/bill-to/given %256s",
-			&invoice_nr, given);
-	if (count != 2) {
-		fprintf(stderr, "Failed to retreive the two items\n");
-		goto fail;
-	}
+ /* get the invoice number and the given name */
+ count = fy_document_scanf(fyd,
+   "/invoice %u "
+   "/bill-to/given %256s",
+   &invoice_nr, given);
+ if (count != 2) {
+  fprintf(stderr, "Failed to retreive the two items\n");
+  goto fail;
+ }
 
-	/* print them as comments in the emitted YAML */
-	printf("# invoice number was %u\n", invoice_nr);
-	printf("# given name is %s\n", given);
+ /* print them as comments in the emitted YAML */
+ printf("# invoice number was %u\n", invoice_nr);
+ printf("# given name is %s\n", given);
 ```
 
 In sequence, increase the invoice number, add a spouse and a secondary
 address.
 
 ```c
-	rc =
-		/* set increased invoice number (modify existing node) */
-		fy_document_insert_at(fyd, "/invoice", FY_NT,
-			fy_node_buildf(fyd, "%u", invoice_nr + 1)) ||
-		/* add spouse (create new mapping pair) */
-		fy_document_insert_at(fyd, "/bill-to", FY_NT,
-			fy_node_buildf(fyd, "spouse: %s", "Doris")) ||
-		/* add a second address */
-		fy_document_insert_at(fyd, "/bill-to", FY_NT,
-			fy_node_buildf(fyd, "delivery-address:\n"
-				            "  lines: |\n"
-					    "    1226 Windward Ave.\n"));
-	if (rc) {
-		fprintf(stderr, "failed to insert to document\n");
-		goto fail;
-	}
+ rc =
+  /* set increased invoice number (modify existing node) */
+  fy_document_insert_at(fyd, "/invoice", FY_NT,
+   fy_node_buildf(fyd, "%u", invoice_nr + 1)) ||
+  /* add spouse (create new mapping pair) */
+  fy_document_insert_at(fyd, "/bill-to", FY_NT,
+   fy_node_buildf(fyd, "spouse: %s", "Doris")) ||
+  /* add a second address */
+  fy_document_insert_at(fyd, "/bill-to", FY_NT,
+   fy_node_buildf(fyd, "delivery-address:\n"
+                "  lines: |\n"
+         "    1226 Windward Ave.\n"));
+ if (rc) {
+  fprintf(stderr, "failed to insert to document\n");
+  goto fail;
+ }
 ```
 
 Emit the document to standard output (while sorting the keys)
 
 ```c
-	/* emit the document to stdout (but sorted) */
-	rc = fy_emit_document_to_fp(fyd, FYECF_DEFAULT | FYECF_SORT_KEYS, stdout);
-	if (rc) {
-		fprintf(stderr, "failed to emit document to stdout");
-		goto fail;
-	}
+ /* emit the document to stdout (but sorted) */
+ rc = fy_emit_document_to_fp(fyd, FYECF_DEFAULT | FYECF_SORT_KEYS, stdout);
+ if (rc) {
+  fprintf(stderr, "failed to emit document to stdout");
+  goto fail;
+ }
 ```
 
 Finally exit and report condition.
 
 ```c
-	ret = EXIT_SUCCESS;
+ ret = EXIT_SUCCESS;
 fail:
-	fy_document_destroy(fyd);	/* NULL is OK */
+ fy_document_destroy(fyd); /* NULL is OK */
 
-	return ret;
+ return ret;
 }
 ```
 
 ## API documentation
 
-For complete documentation of libfyaml API, visit https://pantoniou.github.io/libfyaml/
+For complete documentation of libfyaml API, visit <https://pantoniou.github.io/libfyaml/>
 
 ## fy-tool reference
 
@@ -320,42 +322,42 @@ Usage : fy-tool [options] [args]
 
 Options:
 
-	--include, -I <path>     : Add directory to include path (default path "")
-	--debug-level, -d <lvl>  : Set debug level to <lvl>(default level 3)
-	--indent, -i <indent>    : Set dump indent to <indent> (default indent 2)
-	--width, -w <width>      : Set dump width to <width> (default width 80)
-	--resolve, -r            : Perform anchor and merge key resolution (default false)
-	--color, -C <mode>       : Color output can be one of on, off, auto (default auto)
-	--visible, -V            : Make all whitespace and linebreaks visible (default false)
-	--follow, -l             : Follow aliases when using paths (default false)
-	--strip-labels           : Strip labels when emitting (default false)
-	--strip-tags             : Strip tags when emitting (default false)
-	--strip-doc              : Strip document headers and indicators when emitting (default false)
-	--quiet, -q              : Quiet operation, do not output messages (default false)
-	--version, -v            : Display libfyaml version
-	--help, -h               : Display  help message
+ --include, -I <path>     : Add directory to include path (default path "")
+ --debug-level, -d <lvl>  : Set debug level to <lvl>(default level 3)
+ --indent, -i <indent>    : Set dump indent to <indent> (default indent 2)
+ --width, -w <width>      : Set dump width to <width> (default width 80)
+ --resolve, -r            : Perform anchor and merge key resolution (default false)
+ --color, -C <mode>       : Color output can be one of on, off, auto (default auto)
+ --visible, -V            : Make all whitespace and linebreaks visible (default false)
+ --follow, -l             : Follow aliases when using paths (default false)
+ --strip-labels           : Strip labels when emitting (default false)
+ --strip-tags             : Strip tags when emitting (default false)
+ --strip-doc              : Strip document headers and indicators when emitting (default false)
+ --quiet, -q              : Quiet operation, do not output messages (default false)
+ --version, -v            : Display libfyaml version
+ --help, -h               : Display  help message
 
 ```
 
 ```
 Usage: fy-testsuite [options] [args]
 
-	[common options]
+ [common options]
 
-	Parse and dump test-suite event format
-	$ fy-testsuite input.yaml
-	...
+ Parse and dump test-suite event format
+ $ fy-testsuite input.yaml
+ ...
 
-	Parse and dump of event example
-	$ echo "foo: bar" | fy-testsuite -
-	+STR
-	+DOC
-	+MAP
-	=VAL :foo
-	=VAL :bar
-	-MAP
-	-DOC
-	-STR
+ Parse and dump of event example
+ $ echo "foo: bar" | fy-testsuite -
+ +STR
+ +DOC
+ +MAP
+ =VAL :foo
+ =VAL :bar
+ -MAP
+ -DOC
+ -STR
 ```
 
 ### fy-dump usage
@@ -365,34 +367,34 @@ Usage: fy-dump [options] [args]
 
 Options:
 
-	[common options]
+ [common options]
 
-	--sort, -s               : Perform mapping key sort (valid for dump) (default false)
-	--comment, -c            : Output comments (experimental) (default false)
-	--mode, -m <mode>        : Output mode can be one of original, block, flow, flow-oneline, json, json-tp, json-oneline (default original)
-	--streaming              : Use streaming output mode (default false)
+ --sort, -s               : Perform mapping key sort (valid for dump) (default false)
+ --comment, -c            : Output comments (experimental) (default false)
+ --mode, -m <mode>        : Output mode can be one of original, block, flow, flow-oneline, json, json-tp, json-oneline (default original)
+ --streaming              : Use streaming output mode (default false)
 
-	[common options]
+ [common options]
 
-	Parse and dump generated YAML document tree in the original YAML form
-	$ fy-dump input.yaml
-	...
+ Parse and dump generated YAML document tree in the original YAML form
+ $ fy-dump input.yaml
+ ...
 
-	Parse and dump generated YAML document tree in block YAML form (and make whitespace visible)
-	$ fy-dump -V -mblock input.yaml
-	...
+ Parse and dump generated YAML document tree in block YAML form (and make whitespace visible)
+ $ fy-dump -V -mblock input.yaml
+ ...
 
-	Parse and dump generated YAML document from the input string
-	$ fy-dump -mjson ">foo: bar"
-	{
-	  "foo": "bar"
-	}
+ Parse and dump generated YAML document from the input string
+ $ fy-dump -mjson ">foo: bar"
+ {
+   "foo": "bar"
+ }
 
-	Parse and dump generated YAML document from the input string (using streaming mode)
-	$ fy-dump --streaming ">foo: bar"
-	foo: bar
+ Parse and dump generated YAML document from the input string (using streaming mode)
+ $ fy-dump --streaming ">foo: bar"
+ foo: bar
 
-	Note that streaming mode can not perform document validity checks, like duplicate keys nor
+ Note that streaming mode can not perform document validity checks, like duplicate keys nor
         support the sort keys option.
 ```
 
@@ -403,29 +405,29 @@ Usage: fy-filter [options] [args]
 
 Options:
 
-	[common options]
+ [common options]
 
-	--sort, -s               : Perform mapping key sort (valid for dump) (default false)
-	--comment, -c            : Output comments (experimental) (default false)
-	--mode, -m <mode>        : Output mode can be one of original, block, flow, flow-oneline, json, json-tp, json-oneline (default original)
-	--file, -f <file>        : Use given file instead of <stdin>
-	                           Note that using a string with a leading '>' is equivalent to a file with the trailing content
-	                           --file ">foo: bar" is as --file file.yaml with file.yaml "foo: bar"
+ --sort, -s               : Perform mapping key sort (valid for dump) (default false)
+ --comment, -c            : Output comments (experimental) (default false)
+ --mode, -m <mode>        : Output mode can be one of original, block, flow, flow-oneline, json, json-tp, json-oneline (default original)
+ --file, -f <file>        : Use given file instead of <stdin>
+                            Note that using a string with a leading '>' is equivalent to a file with the trailing content
+                            --file ">foo: bar" is as --file file.yaml with file.yaml "foo: bar"
 
-	Parse and filter YAML document tree starting from the '/foo' path followed by the '/bar' path
-	$ fy-filter --file input.yaml /foo /bar
-	...
+ Parse and filter YAML document tree starting from the '/foo' path followed by the '/bar' path
+ $ fy-filter --file input.yaml /foo /bar
+ ...
 
-	Parse and filter for two paths (note how a multi-document stream is produced)
-	$ fy-filter --file -mblock --filter --file ">{ foo: bar, baz: [ frooz, whee ] }" /foo /baz
-	bar
-	---
-	- frooz
-	- whee
+ Parse and filter for two paths (note how a multi-document stream is produced)
+ $ fy-filter --file -mblock --filter --file ">{ foo: bar, baz: [ frooz, whee ] }" /foo /baz
+ bar
+ ---
+ - frooz
+ - whee
 
-	Parse and filter YAML document in stdin (note how the key may be complex)
-	$ echo "{ foo: bar }: baz" | fy-filter "/{foo: bar}/"
-	baz
+ Parse and filter YAML document in stdin (note how the key may be complex)
+ $ echo "{ foo: bar }: baz" | fy-filter "/{foo: bar}/"
+ baz
 ```
 
 ### fy-join usage
@@ -435,26 +437,26 @@ Usage: fy-join [options] [args]
 
 Options:
 
-	[common options]
+ [common options]
 
-	--sort, -s               : Perform mapping key sort (valid for dump) (default false)
-	--comment, -c            : Output comments (experimental) (default false)
-	--mode, -m <mode>        : Output mode can be one of original, block, flow, flow-oneline, json, json-tp, json-oneline (default original)
-	--file, -f <file>        : Use given file instead of <stdin>
-	                           Note that using a string with a leading '>' is equivalent to a file with the trailing content
-	                           --file ">foo: bar" is as --file file.yaml with file.yaml "foo: bar"
-	--to, -T <path>          : Join to <path> (default /)
-	--from, -F <path>        : Join from <path> (default /)
-	--trim, -t <path>        : Output given path (default /)
+ --sort, -s               : Perform mapping key sort (valid for dump) (default false)
+ --comment, -c            : Output comments (experimental) (default false)
+ --mode, -m <mode>        : Output mode can be one of original, block, flow, flow-oneline, json, json-tp, json-oneline (default original)
+ --file, -f <file>        : Use given file instead of <stdin>
+                            Note that using a string with a leading '>' is equivalent to a file with the trailing content
+                            --file ">foo: bar" is as --file file.yaml with file.yaml "foo: bar"
+ --to, -T <path>          : Join to <path> (default /)
+ --from, -F <path>        : Join from <path> (default /)
+ --trim, -t <path>        : Output given path (default /)
 
-	Parse and join two YAML files
-	$ fy-join file1.yaml file2.yaml
-	...
+ Parse and join two YAML files
+ $ fy-join file1.yaml file2.yaml
+ ...
 
-	Parse and join two YAML maps
-	$ fy-join ">foo: bar" ">baz: frooz"
-	foo: bar
-	baz: frooz
+ Parse and join two YAML maps
+ $ fy-join ">foo: bar" ">baz: frooz"
+ foo: bar
+ baz: frooz
 ```
 
 ## Missing features and omissions
@@ -463,4 +465,5 @@ Options:
 2. Unicode - libfyaml only supports UTF8 and has no support for wide character input.
 
 ## Development and contributing
+
 Feel free to send pull requests and raise issues.

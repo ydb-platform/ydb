@@ -55,5 +55,3 @@ class TTableClient {
 ```
 
 {% endif %}
-
-

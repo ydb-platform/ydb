@@ -66,7 +66,6 @@ In Managed installations of {{ ydb-name }} login and password authentication is 
 
 {% endnote %}
 
-
 1. Click **Test Connection...** to verify the settings.
 
     If all settings are correct, a message indicating successful connection testing will appear:
@@ -74,7 +73,6 @@ In Managed installations of {{ ydb-name }} login and password authentication is 
     ![connection test](./_assets/dbeaver-connection-test.png =400x)
 
 2. Click **Finish** to save the connection.
-
 
 ## Working with {{ ydb-name }} {#dbeaver_ydb_connection}
 

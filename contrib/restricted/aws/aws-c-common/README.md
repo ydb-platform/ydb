@@ -1,6 +1,5 @@
 ## AWS C Common
 
-
 [![GitHub](https://img.shields.io/github/license/awslabs/aws-c-common.svg)](https://github.com/awslabs/aws-c-common/blob/main/LICENSE)
 
 Core c99 package for AWS SDK for C. Includes cross-platform primitives, configuration, data structures, and error handling.
@@ -10,7 +9,9 @@ Core c99 package for AWS SDK for C. Includes cross-platform primitives, configur
 This library is licensed under the Apache 2.0 License.
 
 ## Usage
+
 ### Building
+
 aws-c-common uses CMake for setting up build environments. This library has no non-kernel dependencies so the build is quite
 simple.
 
@@ -38,6 +39,7 @@ Or on windows,
     msbuild.exe ALL_BUILD.vcproj
 
 ### CMake Options
+
 * -DCMAKE_CLANG_TIDY=/path/to/clang-tidy (or just clang-tidy or clang-tidy-7.0 if it is in your PATH) - Runs clang-tidy as part of your build.
 * -DENABLE_SANITIZERS=ON - Enables gcc/clang sanitizers, by default this adds -fsanitizer=address,undefined to the compile flags for projects that call aws_add_sanitizers.
 * -DENABLE_FUZZ_TESTS=ON - Includes fuzz tests in the unit test suite. Off by default, because fuzz tests can take a long time. Set -DFUZZ_TESTS_MAX_TIME=N to determine how long to run each fuzz test (default 60s).
@@ -45,10 +47,12 @@ Or on windows,
 * -DAWS_STATIC_MSVC_RUNTIME_LIBRARY=ON - Windows-only. Turn ON to use the statically-linked MSVC runtime lib, instead of the DLL.
 
 ### API style and conventions
+
 Every API has a specific set of styles and conventions. We'll outline them here. These conventions are followed in every
 library in the AWS C SDK ecosystem.
 
 #### Error handling
+
 Every function that returns an `int` type, returns `AWS_OP_SUCCESS` ( 0 ) or `AWS_OP_ERR` (-1) on failure. To retrieve
 the error code, use the function `aws_last_error()`. Each error code also has a corresponding error string that can be
 accessed via the `aws_error_str()` function.
@@ -59,6 +63,7 @@ and `aws_set_thread_local_error_handler_fn()` functions.
 All error functions are in the `include/aws/common/error.h` header file.
 
 #### Naming
+
 Any function that allocates and initializes an object will be suffixed with `new` (e.g. `aws_myobj_new()`). Similarly, these objects will always
 have a corresponding function with a `destroy` suffix. The `new` functions will return the allocated object
 on success and `NULL` on failure. To respond to the error, call `aws_last_error()`. If several `new` or `destroy`
@@ -76,9 +81,11 @@ If you are contributing to this code-base, first off, THANK YOU!. There are a fe
 pull request turn around time.
 
 ### Coding "guidelines"
+
 These "guidelines" are followed in every library in the AWS C SDK ecosystem.
 
 #### Memory Management
+
 * All APIs that need to be able to allocate memory, must take an instance of `aws_allocator` and use that. No `malloc()` or
 `free()` calls should be made directly.
 * If an API does not allocate the memory, it does not free it. All allocations and deallocations should take place at the same level.
@@ -88,12 +95,14 @@ rule, but they will need significant justification to make it through the code-r
 it should return NULL. If it is an `init()` function, it should return `AWS_OP_ERR`.
 
 #### Threading
+
 * Occasionally a thread is necessary. In those cases, prefer for memory not to be shared between threads. If memory must cross
 a thread barrier it should be a complete ownership hand-off. Bias towards, "if I need a mutex, I'm doing it wrong".
 * Do not sleep or block .... ever .... under any circumstances, in non-test-code.
 * Do not expose blocking APIs.
 
 ### Error Handling
+
 * For APIs returning an `int` error code. The only acceptable return types are `AWS_OP_SUCCESS` and `AWS_OP_ERR`. Before
 returning control to the caller, if you have an error to raise, use the `aws_raise_error()` function.
 * For APIs returning an allocated instance of an object, return the memory on success, and `NULL` on failure. Before
@@ -102,6 +111,7 @@ returning control to the caller, if you have an error to raise, use the `aws_rai
 See [error-handling.md](docs/error-handling.md) for a longer tutorial.
 
 #### Log Subjects & Error Codes
+
 The logging & error handling infrastructure is designed to support multiple libraries. For this to work, AWS maintained libraries
 have pre-slotted log subjects & error codes for each library. The currently allocated ranges are:
 
@@ -131,10 +141,12 @@ Each library should begin its error and log subject values at the beginning of i
 adding an AWS maintained library, a new enum range must be approved and added to the above table.
 
 ### Testing
+
 We have a high bar for test coverage, and PRs fixing bugs or introducing new functionality need to have tests before
 they will be accepted. A couple of tips:
 
 #### Aws Test Harness
+
 We provide a test harness for writing unit tests. This includes an allocator that will fail your test if you have any
 memory leaks, as well as some `ASSERT` macros. To write a test:
 
@@ -145,6 +157,7 @@ memory leaks, as well as some `ASSERT` macros. To write a test:
 * Include your test in the `tests/CMakeLists.txt` file.
 
 ### Coding Style
+
 * No Tabs.
 * Indent is 4 spaces.
 * K & R style for braces.
@@ -158,6 +171,7 @@ Example:
     } else {
         do_something_else();
     }
+
 * Avoid C99 features in header files. For some types such as bool, uint32_t etc..., these are defined if not available for the language
 standard being used in `aws/common/common.h`, so feel free to use them.
 * For C++ compatibility, don't put const members in structs.
@@ -170,7 +184,6 @@ standard being used in `aws/common/common.h`, so feel free to use them.
 
 Example:
 
-
     #ifdef FOO
         do_something();
 
@@ -178,7 +191,6 @@ Example:
         do_something_else();
     #   endif
     #endif
-
 
 * For all error code names with the exception of aws-c-common, use `AWS_ERROR_<lib name>_<error name>`.
 * All error strings should be written using correct English grammar.
@@ -225,17 +237,17 @@ Example:
     AWS_COMMON_API
  int aws_module_init(aws_module_t *module);
     AWS_COMMON_API
- void aws_module_clean_up(aws_module_t *module);
+ void aws_module_clean_up(aws_module_t*module);
     AWS_COMMON_API
- aws_module_t *aws_module_new(aws_allocator_t *allocator);
+ aws_module_t *aws_module_new(aws_allocator_t*allocator);
     AWS_COMMON_API
  void aws_module_destroy(aws_module_t *module);
 
 * Avoid c-strings, and don't write code that depends on `NULL` terminators.
-    * Pass strings via `struct aws_byte_cursor`. This is a non-owning view type. Pass it by value. Strings passed this way do not need a `NULL` terminator.
-    * Only pass `const char *` when thinly wrapping an OS function that *requires* a `NULL` terminator.
-    * Store const strings as `struct aws_string *`
-    * Store mutable string buffers as `struct aws_byte_buf`
+  * Pass strings via `struct aws_byte_cursor`. This is a non-owning view type. Pass it by value. Strings passed this way do not need a `NULL` terminator.
+  * Only pass `const char *` when thinly wrapping an OS function that *requires* a `NULL` terminator.
+  * Store const strings as `struct aws_string *`
+  * Store mutable string buffers as `struct aws_byte_buf`
 
 * There is only one valid character encoding-- UTF-8. Try not to ever need to care about character encodings, but
 where you do, the working assumption should always be UTF-8 unless it's something we don't get a choice in (e.g. a protocol

@@ -1,6 +1,7 @@
 
 ASN.1 modules for Python
 ------------------------
+
 [![PyPI](https://img.shields.io/pypi/v/pyasn1-modules.svg?maxAge=2592000)](https://pypi.org/project/pyasn1-modules)
 [![Python Versions](https://img.shields.io/pypi/pyversions/pyasn1-modules.svg)](https://pypi.org/project/pyasn1-modules/)
 [![Build status](https://github.com/pyasn1/pyasn1-modules/actions/workflows/main.yml/badge.svg)](https://github.com/pyasn1/pyasn1-modules/actions/workflows/main.yml)
@@ -17,15 +18,15 @@ If ASN.1 module you need is not present in this collection, try using
 into pyasn1 code.
 
 **NOTE:** The package is now maintained by *Christian Heimes* and
-*Simon Pichugin* in project https://github.com/pyasn1/pyasn1-modules.
+*Simon Pichugin* in project <https://github.com/pyasn1/pyasn1-modules>.
 
 Feedback
 --------
 
-If something does not work as expected, 
+If something does not work as expected,
 [open an issue](https://github.com/pyasn1/pyasn1-modules/issues) at GitHub
 or post your question [on Stack Overflow](https://stackoverflow.com/questions/ask)
- 
+
 New modules contributions are welcome via GitHub pull requests.
 
 Copyright (c) 2005-2020, [Ilya Etingof](mailto:etingof@gmail.com).

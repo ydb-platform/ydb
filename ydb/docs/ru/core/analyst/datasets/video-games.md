@@ -65,7 +65,7 @@
 
 {% endlist %}
 
-3. Выполните команду импорта:
+1. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path vgsales vgsales.csv

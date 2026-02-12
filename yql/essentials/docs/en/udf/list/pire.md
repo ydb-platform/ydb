@@ -112,4 +112,3 @@ If the above limitations and features are unacceptable for some reason, we recom
 Pire doesn't support replace based on a regular expression. `Pire::Replace` implemented in YQL is a simplified emulation using `Capture`. It may run correctly, if the substring occurs more than once in the source string.
 
 As a rule, it's better to use [Re2::Replace](re2.md#replace) instead.
-

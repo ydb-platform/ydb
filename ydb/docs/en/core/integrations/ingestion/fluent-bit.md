@@ -2,7 +2,6 @@
 
 This section describes the integration between {{ ydb-short-name }} and the log capture tool [FluentBit](https://fluentbit.io) to save and analyze the log records in {{ ydb-short-name }}.
 
-
 ## Overview
 
 FluentBit is a tool that can collect text data, manipulate it (modify, transform, combine), and send it to various repositories for further processing. A custom plugin library for FluentBit has been developed to support saving the log records into {{ ydb-short-name }}. The library's source code is available in the [fluent-bit-ydb repository](https://github.com/ydb-platform/fluent-bit-ydb).
@@ -13,7 +12,6 @@ Deploying a log delivery scheme using FluentBit and {{ ydb-short-name }} as the 
 2. Deploy FluentBit and {{ ydb-short-name }} plugin for FluentBit
 3. Configure FluentBit to collect and process the logs
 4. Configure FluentBit to send the logs to {{ ydb-short-name }} tables
-
 
 ## Creating tables for log data
 
@@ -71,7 +69,6 @@ The command that creates the columnar table differs in the following details:
 
 [TTL configuration](../../concepts/ttl.md) can be optionally applied to the table, limiting the data storage period and enabling the automatic removal of obsolete data. Enabling TTL requires an extra setting in the `WITH` section of the table creation command. For example, `TTL = Interval("P14D") ON timestamp` sets the storage period to 14 days, based on the `timestamp` field's value.
 
-
 ## FluentBit deployment and configuration
 
 FluentBit deployment should be performed according to [its documentation](https://docs.fluentbit.io/manual/installation/getting-started-with-fluent-bit).
@@ -79,7 +76,6 @@ FluentBit deployment should be performed according to [its documentation](https:
 {{ ydb-short-name }} plugin for FluentBit is available in the source code form in the [repository](https://github.com/ydb-platform/fluent-bit-ydb), along with the build instructions. A docker image is provided for container-based deployments: `ghcr.io/ydb-platform/fluent-bit-ydb`.
 
 General logic, configuration syntax and procedures to set up the receiving, processing, and delivering logs in the FluentBit environment are defined in the corresponding [FluentBit documentation](https://docs.fluentbit.io/manual/concepts/key-concepts).
-
 
 ## Writing logs to {{ ydb-short-name }} tables
 

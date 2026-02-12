@@ -18,7 +18,6 @@
 [![Travis-CI Build Status (Swift-Linux)](https://img.shields.io/travis/antlr/antlr4.svg?label=Linux-Swift&branch=master)](https://travis-ci.com/github/antlr/antlr4)
 -->
 
-
 ## Versioning
 
 ANTLR 4 supports 10 target languages
@@ -43,14 +42,15 @@ The default branch for this repo is [`master`](https://github.com/antlr/antlr4/t
 The Go target now has its own dedicated repo:
 
 ```bash
-$ go get github.com/antlr4-go/antlr
+go get github.com/antlr4-go/antlr
 ```
+
 **Note**
-The dedicated Go repo is for `go get` and `import` only. Go runtime development is still performed in the main `antlr/antlr4` repo. 
+The dedicated Go repo is for `go get` and `import` only. Go runtime development is still performed in the main `antlr/antlr4` repo.
 
 ## Authors and major contributors
 
-* [Terence Parr](http://www.cs.usfca.edu/~parrt/), parrt@cs.usfca.edu
+* [Terence Parr](http://www.cs.usfca.edu/~parrt/), <parrt@cs.usfca.edu>
 ANTLR project lead and supreme dictator for life
 [University of San Francisco](http://www.usfca.edu/)
 * [Sam Harwell](http://tunnelvisionlabs.com/) (Tool co-author, Java and original C# target)
@@ -68,7 +68,6 @@ ANTLR project lead and supreme dictator for life
 * [Justin King](https://github.com/jcking) has done a huge amount of work across multiple targets, but especially for C++.
 * [Ken Domino](https://github.com/kaby76) has a knack for finding bugs/issues and analysis; also a major contributor on the [grammars-v4 repo](https://github.com/antlr/grammars-v4).
 * [Jim Idle](https://github.com/jimidle) has contributed to previous versions of ANTLR and recently jumped back in to solve a major problem with the Go target.
-
 
 ## Useful information
 
@@ -88,7 +87,7 @@ Long live Python 3!_
 * [v3 to v4 Migration, differences](https://github.com/antlr/antlr4/blob/master/doc/faq/general.md)
 
 You might also find the following pages useful, particularly if you want to mess around with the various target languages.
- 
+
 * [How to build ANTLR itself](https://github.com/antlr/antlr4/blob/master/doc/building-antlr.md)
 * [How we create and deploy an ANTLR release](https://github.com/antlr/antlr4/blob/master/doc/releasing-antlr.md)
 
@@ -101,6 +100,7 @@ You can buy the book [The Definitive ANTLR 4 Reference](http://amzn.com/dp/19343
 You will find the [Book source code](http://pragprog.com/titles/tpantlr2/source_code) useful.
 
 ## Additional grammars
+
 [This repository](https://github.com/antlr/grammars-v4) is a collection of grammars without actions where the
 root directory name is the all-lowercase name of the language parsed
 by the grammar. For example, java, cpp, csharp, c, etc...

@@ -65,19 +65,19 @@ Interval("<literal1>") action1, Interval("<literal1>") action2, ..., Interval("<
 ```
 
 * `action` — действие, которое выполняется при срабатывании TTL-выражения. Допустимые значения:
-    * `DELETE` — удалить строку;
-    * `TO EXTERNAL DATA SOURCE <path>` — вытеснить строку во внешнее хранилище, заданное [внешним источником данных](../../../../concepts/datamodel/external_data_source.md) по пути `<path>`.
+  * `DELETE` — удалить строку;
+  * `TO EXTERNAL DATA SOURCE <path>` — вытеснить строку во внешнее хранилище, заданное [внешним источником данных](../../../../concepts/datamodel/external_data_source.md) по пути `<path>`.
 * `<unit>` — единица измерения, указывается только для колонок с [числовым типом](../../../../concepts/ttl.md#restrictions):
-    * `SECONDS`;
-    * `MILLISECONDS`;
-    * `MICROSECONDS`;
-    * `NANOSECONDS`.
+  * `SECONDS`;
+  * `MILLISECONDS`;
+  * `MICROSECONDS`;
+  * `NANOSECONDS`.
 
 Пример создания строковой и колоночной таблицы с TTL:
 
 {% list tabs %}
 
-- Создание строковой таблицы с TTL
+* Создание строковой таблицы с TTL
 
     ```yql
     CREATE TABLE my_table (
@@ -91,7 +91,7 @@ Interval("<literal1>") action1, Interval("<literal1>") action2, ..., Interval("<
     );
     ```
 
-- Создание колоночной таблицы с TTL
+* Создание колоночной таблицы с TTL
 
     ```yql
     CREATE TABLE table_name (

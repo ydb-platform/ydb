@@ -23,4 +23,3 @@
   FROM my_table1;
   COMMIT;
   ```
-

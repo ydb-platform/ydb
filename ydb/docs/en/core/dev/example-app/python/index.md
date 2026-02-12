@@ -88,19 +88,19 @@ App code snippet for session pool initialization:
 {{ ydb-short-name }} Python SDK supports queries described by YQL syntax.
 There are two primary methods for executing queries, each with different properties and use cases:
 
-* `pool.execute_with_retries`:
+- `pool.execute_with_retries`:
 
-  * Buffers the entire result set in client memory.
-  * Automatically retries execution in case of retriable issues.
-  * Does not allow specifying a transaction execution mode.
-  * Recommended for one-off queries that are expected to produce small result sets.
+  - Buffers the entire result set in client memory.
+  - Automatically retries execution in case of retriable issues.
+  - Does not allow specifying a transaction execution mode.
+  - Recommended for one-off queries that are expected to produce small result sets.
 
-* `tx.execute`:
+- `tx.execute`:
 
-  * Returns an iterator over the query results, allowing processing of results that may not fit into client memory.
-  * Retries must be handled manually via `pool.retry_operation_sync`.
-  * Allows specifying a transaction execution mode.
-  * Recommended for scenarios where `pool.execute_with_retries` is insufficient.
+  - Returns an iterator over the query results, allowing processing of results that may not fit into client memory.
+  - Retries must be handled manually via `pool.retry_operation_sync`.
+  - Allows specifying a transaction execution mode.
+  - Recommended for scenarios where `pool.execute_with_retries` is insufficient.
 
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
@@ -412,10 +412,10 @@ The `session.transaction().execute()` method can also be used to execute YQL que
 
 Available transaction modes:
 
-* `ydb.QuerySerializableReadWrite()` (default);
-* `ydb.QueryOnlineReadOnly(allow_inconsistent_reads=False)`;
-* `ydb.QuerySnapshotReadOnly()`;
-* `ydb.QueryStaleReadOnly()`.
+- `ydb.QuerySerializableReadWrite()` (default);
+- `ydb.QueryOnlineReadOnly(allow_inconsistent_reads=False)`;
+- `ydb.QuerySnapshotReadOnly()`;
+- `ydb.QueryStaleReadOnly()`.
 
 For more information about transaction modes, see [{#T}](../../../concepts/transactions.md#modes).
 

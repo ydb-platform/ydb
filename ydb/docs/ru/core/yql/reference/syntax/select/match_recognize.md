@@ -314,10 +314,10 @@ PARTITION BY device_id, zone_id
 
 Степень поддержки выражения `MATCH_RECOGNIZE` со временем будет соответствовать стандарту [SQL-2016](https://ru.wikipedia.org/wiki/SQL:2016), однако сейчас действует следующий набор ограничений:
 
-- [`MEASURES`](#measures). Не поддерживаются функции `PREV`/`NEXT`.
-- [`AFTER MATCH SKIP`](#after_match_skip). Поддерживаются только режимы `AFTER MATCH SKIP TO NEXT ROW` и `AFTER MATCH SKIP PAST LAST ROW`.
-- [`PATTERN`](#pattern). Не реализованы Union pattern variables.
-- [`DEFINE`](#define). Не поддерживаются агрегатные функции.
+* [`MEASURES`](#measures). Не поддерживаются функции `PREV`/`NEXT`.
+* [`AFTER MATCH SKIP`](#after_match_skip). Поддерживаются только режимы `AFTER MATCH SKIP TO NEXT ROW` и `AFTER MATCH SKIP PAST LAST ROW`.
+* [`PATTERN`](#pattern). Не реализованы Union pattern variables.
+* [`DEFINE`](#define). Не поддерживаются агрегатные функции.
 
 ## Пример использования {#example}
 

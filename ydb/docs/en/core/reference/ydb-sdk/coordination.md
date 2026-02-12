@@ -28,18 +28,18 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
    When creating a node, you can optionally specify `TNodeSettings` with the following settings:
 
-   - `ReadConsistencyMode` - defaults to `RELAXED`, allowing the reading of potentially outdated values during leader transitions. You can optionally enable the `STRICT` mode, where all reads are processed through the consensus algorithm, ensuring the most recent value is returned, albeit at a higher cost.
-   - `AttachConsistencyMode` - defaults to `STRICT`, requiring the consensus algorithm for session recovery. Optionally, the `RELAXED` mode can be enabled for session recovery during failures, bypassing this requirement. This mode may be necessary for a large number of clients, facilitating session recovery without consensus, which maintains overall correctness but may lead to outdated reads during leader transitions and session expiration in problematic scenarios.
-   - `SelfCheckPeriod` (default 1 second) - the interval at which the service performs self-liveness checks. It is not recommended to change this setting except under special circumstances.
+  - `ReadConsistencyMode` - defaults to `RELAXED`, allowing the reading of potentially outdated values during leader transitions. You can optionally enable the `STRICT` mode, where all reads are processed through the consensus algorithm, ensuring the most recent value is returned, albeit at a higher cost.
+  - `AttachConsistencyMode` - defaults to `STRICT`, requiring the consensus algorithm for session recovery. Optionally, the `RELAXED` mode can be enabled for session recovery during failures, bypassing this requirement. This mode may be necessary for a large number of clients, facilitating session recovery without consensus, which maintains overall correctness but may lead to outdated reads during leader transitions and session expiration in problematic scenarios.
+  - `SelfCheckPeriod` (default 1 second) - the interval at which the service performs self-liveness checks. It is not recommended to change this setting except under special circumstances.
 
-     - A larger value reduces server load but increases the delay in detecting leader changes and informing the service.
-     - A smaller value increases server load and improves problem detection speed, but may result in false positives when the service incorrectly identifies issues.
+    - A larger value reduces server load but increases the delay in detecting leader changes and informing the service.
+    - A smaller value increases server load and improves problem detection speed, but may result in false positives when the service incorrectly identifies issues.
 
-   - `SessionGracePeriod` (default 10 seconds) - the duration during which a new leader refrains from closing existing open sessions, prolonging their validity.
+  - `SessionGracePeriod` (default 10 seconds) - the duration during which a new leader refrains from closing existing open sessions, prolonging their validity.
 
-     - A smaller value reduces the window during which sessions from non-existent clients, which failed to report their absence during leader changes, hold semaphores and block other clients.
-     - A smaller value also increases the likelihood of false positives, where a living leader might terminate itself as a precaution, uncertain if this period has concluded on a potential new leader.
-     - This value must be strictly greater than `SelfCheckPeriod`.
+    - A smaller value reduces the window during which sessions from non-existent clients, which failed to report their absence during leader changes, hold semaphores and block other clients.
+    - A smaller value also increases the likelihood of false positives, where a living leader might terminate itself as a precaution, uncertain if this period has concluded on a potential new leader.
+    - This value must be strictly greater than `SelfCheckPeriod`.
 
 {% endlist %}
 
@@ -71,15 +71,15 @@ To start working with coordination nodes, a client must establish a session with
 
    When establishing a session, you can optionally pass a `TSessionSettings` structure with the following settings:
 
-   - `Description` - a text description of the session, displayed in internal interfaces and can be useful for problem diagnosis.
-   - `OnStateChanged` - called on significant changes during the session's life, passing the corresponding state:
+  - `Description` - a text description of the session, displayed in internal interfaces and can be useful for problem diagnosis.
+  - `OnStateChanged` - called on significant changes during the session's life, passing the corresponding state:
 
-     - `ATTACHED` - the session is connected and operating in normal mode.
-     - `DETACHED` - the session temporarily lost connection with the service but can still be restored.
-     - `EXPIRED` - the session lost connection with the service and cannot be restored.
+    - `ATTACHED` - the session is connected and operating in normal mode.
+    - `DETACHED` - the session temporarily lost connection with the service but can still be restored.
+    - `EXPIRED` - the session lost connection with the service and cannot be restored.
 
-   - `OnStopped` - called when the session stops attempting to restore the connection with the service, which can be useful for establishing a new connection.
-   - `Timeout` - the maximum timeout during which the session can be restored after losing connection with the service.
+  - `OnStopped` - called when the session stops attempting to restore the connection with the service, which can be useful for establishing a new connection.
+  - `Timeout` - the maximum timeout during which the session can be restored after losing connection with the service.
 
 {% endlist %}
 
@@ -176,21 +176,21 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
     When acquiring, you can optionally pass a `TAcquireSemaphoreSettings` structure with the following settings:
 
-    - `Count` - value by which the semaphore is increased upon acquisition.
-    - `Data` - additional data that can be put into the semaphore.
-    - `OnAccepted` - called when the operation is queued. For example, if the semaphore couldn't be acquired immediately.
+  - `Count` - value by which the semaphore is increased upon acquisition.
+  - `Data` - additional data that can be put into the semaphore.
+  - `OnAccepted` - called when the operation is queued. For example, if the semaphore couldn't be acquired immediately.
 
-      - Won't be called if the semaphore is acquired immediately.
-      - It's important to consider that the call can happen in parallel with the `TFuture` result.
+    - Won't be called if the semaphore is acquired immediately.
+    - It's important to consider that the call can happen in parallel with the `TFuture` result.
 
-    - `Timeout` - maximum time during which the operation can stay in the queue on the server.
+  - `Timeout` - maximum time during which the operation can stay in the queue on the server.
 
-      - Operation will return `false` if the semaphore couldn't be acquired within `Timeout` after being added to the queue.
-      - With `Timeout` set to 0, the operation works like `TryAcquire`, i.e., the semaphore will either be acquired atomically and the operation will return `true`, or the operation will return `false` without using queues.
+    - Operation will return `false` if the semaphore couldn't be acquired within `Timeout` after being added to the queue.
+    - With `Timeout` set to 0, the operation works like `TryAcquire`, i.e., the semaphore will either be acquired atomically and the operation will return `true`, or the operation will return `false` without using queues.
 
-    - `Ephemeral` - if `true`, then the name is an ephemeral semaphore. Such semaphores are automatically created at first `Acquire` and automatically deleted with the last `Release`.
-    - `Shared()` - alias for setting `Count = 1`, acquiring semaphore in shared mode.
-    - `Exclusive()` - alias for setting `Count = max`, acquiring semaphore in exclusive mode. (For semaphores created with limit `Max<ui64>()`.)
+  - `Ephemeral` - if `true`, then the name is an ephemeral semaphore. Such semaphores are automatically created at first `Acquire` and automatically deleted with the last `Release`.
+  - `Shared()` - alias for setting `Count = 1`, acquiring semaphore in shared mode.
+  - `Exclusive()` - alias for setting `Count = max`, acquiring semaphore in exclusive mode. (For semaphores created with limit `Max<ui64>()`.)
 
 {% endlist %}
 
@@ -254,29 +254,29 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
     When getting information about a semaphore, you can optionally pass a `TDescribeSemaphoreSettings` structure with the following settings:
 
-    - `OnChanged` - called once after data changes on the server (with a `bool` parameter, if `true` - the call occurred due to some changes, if `false` - it's a false call and you need to repeat `DescribeSemaphore` to restore the subscription).
-    - `WatchData` - call `OnChanged` when semaphore data changes.
-    - `WatchOwners` - call `OnChanged` when semaphore owners change.
-    - `IncludeOwners` - return the list of owners in the results.
-    - `IncludeWaiters` - return the list of waiters in the results.
+  - `OnChanged` - called once after data changes on the server (with a `bool` parameter, if `true` - the call occurred due to some changes, if `false` - it's a false call and you need to repeat `DescribeSemaphore` to restore the subscription).
+  - `WatchData` - call `OnChanged` when semaphore data changes.
+  - `WatchOwners` - call `OnChanged` when semaphore owners change.
+  - `IncludeOwners` - return the list of owners in the results.
+  - `IncludeWaiters` - return the list of waiters in the results.
 
     The call result is a structure with the following fields:
 
-    - `Name` - semaphore name.
-    - `Data` - semaphore data.
-    - `Count` - the current value of the semaphore.
-    - `Limit` - the limit specified when creating the semaphore.
-    - `Owners` - list of semaphore owners.
-    - `Waiters` - list of clients waiting in the semaphore queue.
-    - `Ephemeral` - whether the semaphore is ephemeral.
+  - `Name` - semaphore name.
+  - `Data` - semaphore data.
+  - `Count` - the current value of the semaphore.
+  - `Limit` - the limit specified when creating the semaphore.
+  - `Owners` - list of semaphore owners.
+  - `Waiters` - list of clients waiting in the semaphore queue.
+  - `Ephemeral` - whether the semaphore is ephemeral.
 
     The `Owners` and `Waiters` fields in the result contain a list of structures with the following fields:
 
-    - `OrderId` - sequence number of the acquire operation on the semaphore (can be used for identification, for example if `OrderId` changed, it means the session called `ReleaseSemaphore` and a new `AcquireSemaphore`).
-    - `SessionId` - identifier of the session that made this `AcquireSemaphore` call.
-    - `Timeout` - timeout value used in the `AcquireSemaphore` call for queued operations.
-    - `Count` - value requested in `AcquireSemaphore`.
-    - `Data` - data specified in `AcquireSemaphore`.
+  - `OrderId` - sequence number of the acquire operation on the semaphore (can be used for identification, for example if `OrderId` changed, it means the session called `ReleaseSemaphore` and a new `AcquireSemaphore`).
+  - `SessionId` - identifier of the session that made this `AcquireSemaphore` call.
+  - `Timeout` - timeout value used in the `AcquireSemaphore` call for queued operations.
+  - `Count` - value requested in `AcquireSemaphore`.
+  - `Data` - data specified in `AcquireSemaphore`.
 
 {% endlist %}
 
@@ -319,7 +319,7 @@ The `OnChanged(false)` call might occur not only due to cancellation by a new `D
 
 ## Examples
 
-* [Distributed lock](../../recipes/ydb-sdk/distributed-lock.md)
-* [Leader election](../../recipes/ydb-sdk/leader-election.md)
-* [Service discovery](../../recipes/ydb-sdk/service-discovery.md)
-* [Configuration publication](../../recipes/ydb-sdk/config-publication.md)
+- [Distributed lock](../../recipes/ydb-sdk/distributed-lock.md)
+- [Leader election](../../recipes/ydb-sdk/leader-election.md)
+- [Service discovery](../../recipes/ydb-sdk/service-discovery.md)
+- [Configuration publication](../../recipes/ydb-sdk/config-publication.md)

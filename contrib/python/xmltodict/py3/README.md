@@ -116,7 +116,7 @@ Autism
 Or just cache the dicts so you don't have to parse that big XML file again. You do this only once:
 
 ```sh
-$ bunzip2 enwiki-pages-articles.xml.bz2 | xmltodict.py 2 | gzip > enwiki.dicts.gz
+bunzip2 enwiki-pages-articles.xml.bz2 | xmltodict.py 2 | gzip > enwiki.dicts.gz
 ```
 
 And you reuse the dicts with every script that needs them:
@@ -141,8 +141,8 @@ You can also convert in the other direction, using the `unparse()` method:
 >>> print(unparse(mydict, pretty=True))
 <?xml version="1.0" encoding="utf-8"?>
 <response>
-	<status>good</status>
-	<last_updated>2014-02-16T23:10:12Z</last_updated>
+ <status>good</status>
+ <last_updated>2014-02-16T23:10:12Z</last_updated>
 </response>
 ```
 
@@ -201,7 +201,7 @@ Lists that are specified under a key in a dictionary use the key as a tag for ea
 You just need to
 
 ```sh
-$ pip install xmltodict
+pip install xmltodict
 ```
 
 ### Using conda
@@ -212,7 +212,7 @@ For installing `xmltodict` using Anaconda/Miniconda (*conda*) from the
 [#xmltodict-conda]: https://anaconda.org/conda-forge/xmltodict
 
 ```sh
-$ conda install -c conda-forge xmltodict
+conda install -c conda-forge xmltodict
 ```
 
 ### RPM-based distro (Fedora, RHEL, …)
@@ -220,7 +220,7 @@ $ conda install -c conda-forge xmltodict
 There is an [official Fedora package for xmltodict](https://apps.fedoraproject.org/packages/python-xmltodict).
 
 ```sh
-$ sudo yum install python-xmltodict
+sudo yum install python-xmltodict
 ```
 
 ### Arch Linux
@@ -228,7 +228,7 @@ $ sudo yum install python-xmltodict
 There is an [official Arch Linux package for xmltodict](https://www.archlinux.org/packages/community/any/python-xmltodict/).
 
 ```sh
-$ sudo pacman -S python-xmltodict
+sudo pacman -S python-xmltodict
 ```
 
 ### Debian-based distro (Debian, Ubuntu, …)
@@ -236,7 +236,7 @@ $ sudo pacman -S python-xmltodict
 There is an [official Debian package for xmltodict](https://tracker.debian.org/pkg/python-xmltodict).
 
 ```sh
-$ sudo apt install python-xmltodict
+sudo apt install python-xmltodict
 ```
 
 ### FreeBSD
@@ -244,7 +244,7 @@ $ sudo apt install python-xmltodict
 There is an [official FreeBSD port for xmltodict](https://svnweb.freebsd.org/ports/head/devel/py-xmltodict/).
 
 ```sh
-$ pkg install py36-xmltodict
+pkg install py36-xmltodict
 ```
 
 ### openSUSE/SLE (SLE 15, Leap 15, Tumbleweed)

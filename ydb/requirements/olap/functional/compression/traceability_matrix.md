@@ -1,7 +1,9 @@
 # Traceability Matrix
 
 ### Compression
+
 #### [ISSUE-13626](https://github.com/ydb-platform/ydb/issues/13626): Test Suite: cs/compression
+
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F11:18%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13626-test-suite-cscompression)
 
 **Description**: Сжатие (в широком смысле, напр., dictionary encoding), sparse, column_family
@@ -19,4 +21,3 @@
 | #13648 | Test cs column family. Column family with data types: text, string, json, jsondocument | Проверяем, что поддерживаются типы данных максимальной длины (text, string, json, jsondocument), условная запись 1 MB данных в ячейку | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13648)](https://github.com/ydb-platform/ydb/issues/13648) | Pending |
 | #13650 | Test cs column family. Zip-bomba | Выполняем запись в колонку 1 млн строк одной длинной, но одинаковой строки (в пределе из одного символа) (zip-бомба), проверяем, что запись и чтение выполняется | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13650)](https://github.com/ydb-platform/ydb/issues/13650) | Pending |
 | #13651 | Test cs column family. Write highly randomized data | Выполняем запись сильнорандомизированных данных (после сжатия размер должен вырасти), проверяем, что запись и чтение выполняется  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13651)](https://github.com/ydb-platform/ydb/issues/13651) | Pending |
-

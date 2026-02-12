@@ -16,4 +16,3 @@ Set of auxiliary functions for the [HISTOGRAM aggregate function](../../builtins
 * `Histogram::CalcLowerBoundSafe(HistogramStruct{Flags:AutoMap}, Double) -> Double`
 
 `Histogram::Print` has an optional numeric argument that sets the maximum length of the histogram columns (the length is in characters, since the histogram is rendered in ASCII art). Default: 25. This function is primarily intended for viewing histograms in the console.
-

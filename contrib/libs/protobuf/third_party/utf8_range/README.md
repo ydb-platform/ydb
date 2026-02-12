@@ -31,11 +31,13 @@ Four UTF-8 validation methods are compared on both x86 and Arm platforms. Benchm
 ## Benchmark result (MB/s)
 
 ### Method
+
 1. Generate UTF-8 test buffer per [test file](https://raw.githubusercontent.com/cyb70289/utf8/master/UTF-8-demo.txt) or buffer size.
 1. Call validation sub-routines in a loop until 1G bytes are checked.
 1. Calculate speed(MB/s) of validating UTF-8 strings.
 
 ### NEON(armv8a)
+
 Test case | naive | lookup | lemire | range | range2
 :-------- | :---- | :----- | :----- | :---- | :-----
 [UTF-demo.txt](https://raw.githubusercontent.com/cyb70289/utf8/master/UTF-8-demo.txt) | 562.25 | 412.84 | 1198.50 | 1411.72 | **1579.85**
@@ -48,6 +50,7 @@ Test case | naive | lookup | lemire | range | range2
 1M bytes | 815.70  | 411.93 | 1200.93 | 1415.65 | **1585.40**
 
 ### SSE4(E5-2650)
+
 Test case | naive | lookup | lemire | range | range2
 :-------- | :---- | :----- | :----- | :---- | :-----
 [UTF-demo.txt](https://raw.githubusercontent.com/cyb70289/utf8/master/UTF-8-demo.txt) | 753.70 | 310.41 | 3954.74 | 3945.60 | **3986.13**
@@ -62,13 +65,14 @@ Test case | naive | lookup | lemire | range | range2
 ## Range algorithm analysis
 
 Basic idea:
+
 * Load 16 bytes
 * Leverage SIMD to calculate value range for each byte efficiently
 * Validate 16 bytes at once
 
 ### UTF-8 coding format
 
-http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf, page 94
+<http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf>, page 94
 
 Table 3-7. Well-Formed UTF-8 Byte Sequences
 
@@ -85,6 +89,7 @@ U+40000..U+FFFFF   | F1..F3     | 80..BF      | 80..BF     | 80..BF      |
 U+100000..U+10FFFF | F4         | 80..***8F***| 80..BF     | 80..BF      |
 
 To summarise UTF-8 encoding:
+
 * Depending on First Byte, one legal character can be 1, 2, 3, 4 bytes
   * For First Byte within C0..DF, character length = 2
   * For First Byte within E0..EF, character length = 3
@@ -116,10 +121,11 @@ Ignoring the four special cases(E0,ED,F0,F4), how should we set range index for 
 * Set range index to 0(00..7F) for all bytes by default
 * Find non-ASCII First Byte (C0..FF), set their range index to 8(C2..F4)
 * For First Byte within C0..DF, set next byte's range index to 1(80..BF)
-* For First Byte within E0..EF, set next two byte's range index to 2,1(80..BF) in sequence 
+* For First Byte within E0..EF, set next two byte's range index to 2,1(80..BF) in sequence
 * For First Byte within F0..FF, set next three byte's range index to 3,2,1(80..BF) in sequence
 
 To implement above operations efficiently with SIMD:
+
 * For 16 input bytes, use lookup table to map C0..DF to 1, E0..EF to 2, F0..FF to 3, others to 0. Save to first_len.
 * Map C0..FF to 8, we get range indices for First Byte.
 * Shift first_len one byte, we get range indices for Second Byte.
@@ -175,6 +181,7 @@ Range index adjustment can be reduced to below problem:
 ***Given 16 bytes, replace E0 with 2, ED with 3, F0 with 3, F4 with 4, others with 0.***
 
 A naive SIMD approach:
+
 1. Compare 16 bytes with E0, get the mask for eacy byte (FF if equal, 00 otherwise)
 1. And the mask with 2 to get adjustment for E0
 1. Repeat step 1,2 for ED,F0,F4
@@ -186,10 +193,12 @@ Observing special bytes(E0,ED,F0,F4) are close to each other, we can do much bet
 #### NEON
 
 NEON ```tbl``` instruction is very convenient for table lookup:
+
 * Table can be up to 16x4 bytes in size
 * Return zero if index is out of range
 
 Leverage these features, we can solve the problem with as few as **two** operations:
+
 * Precreate a 16x2 lookup table, where table[0]=2, table[13]=3, table[16]=3, table[20]=4, table[others]=0.
 * Substract input bytes with E0 (E0 -> 0, ED -> 13, F0 -> 16, F4 -> 20).
 * Use the substracted byte as index of lookup table and get range adjustment directly.
@@ -199,12 +208,14 @@ Leverage these features, we can solve the problem with as few as **two** operati
 #### SSE
 
 SSE ```pshufb``` instruction is not as friendly as NEON ```tbl``` in this case:
+
 * Table can only be 16 bytes in size
 * Out of bound indices are handled this way:
   * If 7-th bit of index is 0, least four bits are used as index (E.g, index 0x73 returns 3rd element)
   * If 7-th bit of index is 1, return 0 (E.g, index 0x83 returns 0)
 
 We can still leverage these features to solve the problem in **five** operations:
+
 * Precreate two tables:
   * table_df[1] = 2, table_df[14] = 3, table_df[others] = 0
   * table_ef[1] = 3, table_ef[5] = 4, table_ef[others] = 0
@@ -223,6 +234,7 @@ We can still leverage these features to solve the problem in **five** operations
 ### Handling remaining bytes
 
 For remaining input less than 16 bytes, we will fallback to naive byte by byte approach to validate them, which is actually faster than SIMD processing.
+
 * Look back last 16 bytes buffer to find First Byte. At most three bytes need to look back. Otherwise we either happen to be at character boundray, or there are some errors we already detected.
 * Validate string byte by byte starting from the First Byte.
 

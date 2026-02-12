@@ -21,15 +21,14 @@ The command always returns **exactly one row** with three columns:
 |-----------------|------------|----------------------------------|
 | Path            | Table/View | DDL statements for creation      |
 
-- **Path** — The path to the object (for example, `MyTable` or `MyView`).
-- **PathType** — The type of object: `Table` or `View`.
-- **CreateQuery** — The complete set of DDL statements needed to create the object:
-    - For tables: the main [CREATE TABLE](create_table/index.md) statement (with the path relative to the database root), plus any additional statements describing the current configuration, such as:
-        - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index) — for index partitioning settings.
-        - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md) — for adding a changefeed.
-        - `ALTER SEQUENCE` — for restoring a `Sequence` state for `Serial` columns.
-    - For views: the definition via [CREATE VIEW](create-view.md), and, if necessary, the statements the view has captured from the creation context, for example, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
-
+* **Path** — The path to the object (for example, `MyTable` or `MyView`).
+* **PathType** — The type of object: `Table` or `View`.
+* **CreateQuery** — The complete set of DDL statements needed to create the object:
+  * For tables: the main [CREATE TABLE](create_table/index.md) statement (with the path relative to the database root), plus any additional statements describing the current configuration, such as:
+    * [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index) — for index partitioning settings.
+    * [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md) — for adding a changefeed.
+    * `ALTER SEQUENCE` — for restoring a `Sequence` state for `Serial` columns.
+  * For views: the definition via [CREATE VIEW](create-view.md), and, if necessary, the statements the view has captured from the creation context, for example, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
 
 ## Examples
 

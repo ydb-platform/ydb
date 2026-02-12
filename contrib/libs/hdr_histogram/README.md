@@ -2,6 +2,7 @@ HdrHistogram_c: 'C' port of High Dynamic Range (HDR) Histogram
 
 HdrHistogram
 ----------------------------------------------
+
 [![Gitter](https://badges.gitter.im/Join Chat.svg)](https://gitter.im/HdrHistogram/HdrHistogram?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 Windows Build: ![AppVeyor](https://ci.appveyor.com/api/projects/status/github/HdrHistogram/HdrHistogram_c)
@@ -75,5 +76,5 @@ examples.  You can run hiccup and decoder
 and pipe the results of one into the other.
 
 ```
-$ ./examples/hiccup | ./examples/hdr_decoder
+./examples/hiccup | ./examples/hdr_decoder
 ```

@@ -11,7 +11,7 @@ of just their references.
 Standard `go get`:
 
 ```
-$ go get github.com/mitchellh/copystructure
+go get github.com/mitchellh/copystructure
 ```
 
 ## Usage & Example

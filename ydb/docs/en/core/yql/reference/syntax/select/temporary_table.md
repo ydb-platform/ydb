@@ -31,4 +31,3 @@ COMMIT;
 
 SELECT * FROM @$tmp_name;
 ```
-

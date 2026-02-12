@@ -51,8 +51,6 @@ DO $hello_world("John");
 DO $hello_world(NULL, "Earth");
 ```
 
-
-
 ## BEGIN .. END DO {#begin}
 
 Выполнение действия без его объявления (анонимное действие).
@@ -151,6 +149,5 @@ ELSE
 Стоит учитывать, что `EVALUATE` выполняется до начала работы основного запроса. Также в рамках вычисления предиката в `EVALUATE IF` или списка в `EVALUATE FOR` невозможно использование {% if feature_temp_table %}[анонимных таблиц](select/temporary_table.md){% else %} анонимных таблиц{% endif %}.
 
 {% endnote %}
-
 
 {% endif %}

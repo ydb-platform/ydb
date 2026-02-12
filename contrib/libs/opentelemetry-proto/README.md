@@ -52,32 +52,32 @@ for definition of maturity levels).
 
 Components marked `Stable` provide the following guarantees:
 
-- Field types, numbers and names will not change.
-- Service names and `service` package names will not change.
-- Service method names will not change. [from 1.0.0]
-- Service method parameter names will not change. [from 1.0.0]
-- Service method parameter types and return types will not change. [from 1.0.0]
-- Service method kind (unary vs streaming) will not change.
-- Names of `message`s and `enum`s will not change. [from 1.0.0]
-- Numbers assigned to `enum` choices will not change.
-- Names of `enum` choices will not change. [from 1.0.0]
-- The location of `message`s and `enum`s, i.e. whether they are declared at the top lexical
+* Field types, numbers and names will not change.
+* Service names and `service` package names will not change.
+* Service method names will not change. [from 1.0.0]
+* Service method parameter names will not change. [from 1.0.0]
+* Service method parameter types and return types will not change. [from 1.0.0]
+* Service method kind (unary vs streaming) will not change.
+* Names of `message`s and `enum`s will not change. [from 1.0.0]
+* Numbers assigned to `enum` choices will not change.
+* Names of `enum` choices will not change. [from 1.0.0]
+* The location of `message`s and `enum`s, i.e. whether they are declared at the top lexical
   scope or nested inside another `message` will not change. [from 1.0.0]
-- Package names and directory structure will not change. [from 1.0.0]
-- `optional` and `repeated` declarators of existing fields will not change. [from 1.0.0]
-- No existing symbol will be deleted.  [from 1.0.0]
+* Package names and directory structure will not change. [from 1.0.0]
+* `optional` and `repeated` declarators of existing fields will not change. [from 1.0.0]
+* No existing symbol will be deleted.  [from 1.0.0]
 
 Note: guarantees marked [from 1.0.0] will go into effect when this repository is tagged
 with version number 1.0.0.
 
 The following additive changes are allowed:
 
-- Adding new fields to existing `message`s.
-- Adding new `message`s or `enum`s.
-- Adding new choices to existing `enum`s.
-- Adding new choices to existing `oneof` fields.
-- Adding new `service`s.
-- Adding new `method`s to existing `service`s.
+* Adding new fields to existing `message`s.
+* Adding new `message`s or `enum`s.
+* Adding new choices to existing `enum`s.
+* Adding new choices to existing `oneof` fields.
+* Adding new `service`s.
+* Adding new `method`s to existing `service`s.
 
 All the additive changes above must be accompanied by an explanation about how
 new and old senders and receivers that implement the version of the protocol

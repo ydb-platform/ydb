@@ -110,7 +110,7 @@ In the table below, `creds_json` means a JSON with parameters for exchanging the
 
 Fields not described in this table are ignored.
 
-#|
+# |
 || Field
 | Type
 | Description
@@ -223,9 +223,9 @@ The behavior of the {{ ydb-short-name }} Python SDK v2 (deprecated version) diff
 
 {% endnote %}
 
-* The algorithm of the `construct_credentials_from_environ()` function from the {{ ydb-short-name }} Python SDK v2:
+- The algorithm of the `construct_credentials_from_environ()` function from the {{ ydb-short-name }} Python SDK v2:
   - If the value of the `USE_METADATA_CREDENTIALS` environment variable is set to 1, the **Metadata** authentication mode is used.
   - Otherwise, if the value of the `YDB_TOKEN` environment variable is set, the **Access Token** authentication mode is used, where this variable value is passed.
   - Otherwise, if the value of the `SA_KEY_FILE` environment variable is set, the **System Account Key** authentication mode is used and the key is taken from the file whose name is specified in this variable.
   - Or else, no authentication information is added to requests.
-* If no object responsible for generating tokens is passed when initializing the driver, the [general procedure](#env) for reading environment variables applies.
+- If no object responsible for generating tokens is passed when initializing the driver, the [general procedure](#env) for reading environment variables applies.

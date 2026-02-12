@@ -27,4 +27,3 @@ Strict mode control in all Yson UDF calls, including implicit calls. If the valu
 | Flag | false |
 
 An inverted version of `yson.Strict`. If the value is omitted or is `"true"`, it disables the strict mode. If the value is `"false"`, it enables the strict mode.
-

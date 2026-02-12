@@ -6,7 +6,7 @@
 
 ## Описание параметров
 
-#|
+# |
 || **Параметр** | **Значение по умолчанию** | **Описание**  ||
 || `generic.connector.endpoint.host`
 | `localhost`
@@ -90,4 +90,4 @@ query_service_config:
 
 ## См. также
 
-- [{#T}](../../devops/deployment-options/manual/federated-queries/index.md)
+* [{#T}](../../devops/deployment-options/manual/federated-queries/index.md)

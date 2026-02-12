@@ -15,21 +15,22 @@ copies or substantial portions of the Software.
 # Utilities for supporting date time functions
 
 Sources for datetime are adapted from Howard Hinnant's date library
-(https://github.com/HowardHinnant/date).
+(<https://github.com/HowardHinnant/date>).
 
 Sources are taken from changeset 5bdb7e6f31fac909c090a46dbd9fea27b6e609a4
 of the above project.
 
 The following changes are made:
+
 - fix internal inclusion paths (from "date/xxx.h" to simply "xxx.h")
 - enclose the `date` namespace inside the `arrow_vendored` namespace
 - fix 4 declarations like `CONSTCD11 date::day  operator "" _d(unsigned long long d) NOEXCEPT;`
   to not have offending whitespace for modern clang:
-  `CONSTCD11 date::day  operator ""_d(unsigned long long d) NOEXCEPT;` 
+  `CONSTCD11 date::day  operator ""_d(unsigned long long d) NOEXCEPT;`
 
 ## How to update
 
 ```console
-$ cd cpp/src/arrow/vendored/datetime
-$ ./update.sh 3.0.3
+cd cpp/src/arrow/vendored/datetime
+./update.sh 3.0.3
 ```

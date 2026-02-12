@@ -22,4 +22,3 @@ User SID: aje5kkjdgs0puc18976co@as
 
 User has no groups
 ```
-

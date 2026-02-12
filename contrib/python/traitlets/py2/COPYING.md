@@ -41,7 +41,7 @@ The IPython Development Team is the set of all contributors to the IPython proje
 This includes all of the IPython subprojects.
 
 The core team that coordinates development on GitHub can be found here:
-https://github.com/jupyter/.
+<https://github.com/jupyter/>.
 
 ## Our Copyright Policy
 

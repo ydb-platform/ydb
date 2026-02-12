@@ -24,7 +24,7 @@ Forwarding the audit log to the standard error stream (`stderr`) is recommended 
 
 The information about each operation is saved to the audit log as a separate event. Each event includes a set of attributes. Some attributes are common across events, while other attributes are determined by the specific {{ ydb-short-name }} component that generated the event.
 
-#|
+# |
 || Attribute | Description ||
 || **Common attributes** | > ||
 || `subject` | Event source SID (`<login>@<subsystem>` format). Unless mandatory authentication is enabled, the attribute will be set to `{none}`.<br/>Required. ||

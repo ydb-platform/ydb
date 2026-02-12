@@ -10,8 +10,8 @@ The JDBC driver for {{ ydb-short-name }} supports the following configuration pr
 
 * `useMetadata` — indicates whether to use metadata authentication. Valid values are: {#useMetadata}
 
-    - `true` — use metadata authentication.
-    - `false` — do not use metadata authentication.
+  * `true` — use metadata authentication.
+  * `false` — do not use metadata authentication.
 
     Default value: `false`.
 
@@ -21,8 +21,8 @@ The JDBC driver for {{ ydb-short-name }} supports the following configuration pr
 
 * `secureConnection` — indicates whether to use TLS. Valid values are:
 
-    - `true` — enforce TLS.
-    - `false` — do not enforce TLS.
+  * `true` — enforce TLS.
+  * `false` — do not enforce TLS.
 
     The primary way to indicate whether a connection is secure or not is by using the `grpcs://` scheme for secure connections and `grpc://` for insecure connections in the JDBC URL. This property allows overriding it.
 

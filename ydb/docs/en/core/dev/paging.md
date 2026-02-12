@@ -4,8 +4,6 @@ This section provides recommendations for organizing paginated data output.
 
 To organize paginated output, we recommend selecting data sorted by primary key sequentially, limiting the number of rows with the LIMIT keyword.
 
-
-
 {% note info %}
 
 `$lastCity, $lastNumber`: Primary key values obtained from the previous query.
@@ -49,6 +47,7 @@ In {{ ydb-short-name }}, all columns, including key ones, may have a NULL value.
 * [C++](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/pagination)
 
 {% endif %}
+
 * [Java](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/pagination)
 * [Python](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/pagination)
 * [Go](https://github.com/ydb-platform/ydb-go-examples/tree/master/pagination)

@@ -1,6 +1,7 @@
 # Requirements for YDB Analytics System
 
 ## Introduction
+
 This document outlines the detailed functional and non-functional requirements for the YDB analytics system, including associated test cases for verification.
 
 ## Non-functional Requirements
@@ -15,6 +16,7 @@ This document outlines the detailed functional and non-functional requirements f
     - Case 7.3: [TTL Deletion Speed](path/to/test/36) - Measure and confirm deletion speed exceeds insertion speed.
 
 ### Disk Space Management
+
 - **REQ-DISK-001**: Effectively manage disk space to avoid system failures.
   - **Description**: Utilize efficient disk space management strategies, particularly under scenarios with constrained disk resources.
   - **Cases**:
@@ -22,6 +24,7 @@ This document outlines the detailed functional and non-functional requirements f
     - Case 8.2: [Resilience to Disk Saturation](path/to/test/38) - Ensure database resilience and behavior expectations under full disk conditions.
 
 ### Documentation
+
 - **REQ-DOC-001**: Maintain and update comprehensive documentation.
   - **Description**: Ensure all functionalities are clearly documented, aiding user orientation and system understanding.
   - **Cases**:
@@ -31,8 +34,8 @@ This document outlines the detailed functional and non-functional requirements f
 
 - **REQ-LOAD-001**: Validate system performance under workload log scenarios.
   - **Description**: Ensure the system can handle select queries and bulk upsert operations efficiently, with specified data rates.
-   **Issues**: 
-    - ISSUE: Nodes crush under write+select: https://github.com/ydb-platform/ydb/issues/14493
+   **Issues**:
+    - ISSUE: Nodes crush under write+select: <https://github.com/ydb-platform/ydb/issues/14493>
 
   - **Cases**:
     - Case 1.1: [Bulk Upsert - 25MB/s](path/to/test/bulk_upsert_25mbs) - Measure bulk upsert performance at 25MB/s.

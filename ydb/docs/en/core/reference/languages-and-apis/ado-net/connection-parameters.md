@@ -23,7 +23,6 @@ Below are the connection string parameters that `Ydb.Sdk.Ado` supports.
 | UseTls          | Determines whether to establish a secure connection using TLS (`grpcs`); when false, TLS is not used (`grpc`).      | false             |
 | RootCertificate | Path to a trusted root/intermediate server certificate file (PEM). When set, `UseTls` is automatically set to true. | Not defined       |
 
-
 ## Pooling
 
 | **Parameter**      | **Description**                                                                                                          | **Default value** |

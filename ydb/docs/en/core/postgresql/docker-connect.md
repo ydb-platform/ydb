@@ -115,7 +115,6 @@ Output:
 (1 row)
 ```
 
-
 ## Stopping the Container
 
 This command will stop the running container and delete all data stored within it.

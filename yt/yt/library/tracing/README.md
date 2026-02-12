@@ -3,5 +3,3 @@
 ## Adaptive Sampling
 
 ## Coordinated Sampling
-
-

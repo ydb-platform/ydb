@@ -15,4 +15,3 @@ Many application functions that on the one hand are too specific to become part 
 * [Unicode](unicode.md)
 * [Url](url.md)
 * [Yson](yson.md)
-

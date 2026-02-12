@@ -3,6 +3,7 @@
 ## Высокоуровневый интерфейс
 
 Функции `dumps`, `loads` для преобразования строк:
+
 ```python
 >>> from cyson import dumps, loads
 
@@ -36,6 +37,7 @@
 
 Функции `list_fragments`, `map_fragments` для удобного чтения из входного
 потока.
+
 ```python
 import cyson
 
@@ -95,5 +97,5 @@ output = cyson.OutputStream.from_file(stringio_file)
 
 ### UnicodeReader
 
-Декодирует все строки в юникод. Удобен при работе с `python3`, но может 
+Декодирует все строки в юникод. Удобен при работе с `python3`, но может
 ухудшить производительность.

@@ -35,16 +35,16 @@ package from the standard library. For example,
 ```go
     raw := []string{"1.2.3", "1.0", "1.3", "2", "0.4.2",}
     vs := make([]*semver.Version, len(raw))
-	for i, r := range raw {
-		v, err := semver.NewVersion(r)
-		if err != nil {
-			t.Errorf("Error parsing version: %s", err)
-		}
+ for i, r := range raw {
+  v, err := semver.NewVersion(r)
+  if err != nil {
+   t.Errorf("Error parsing version: %s", err)
+  }
 
-		vs[i] = v
-	}
+  vs[i] = v
+ }
 
-	sort.Sort(semver.Collection(vs))
+ sort.Sort(semver.Collection(vs))
 ```
 
 ## Checking Version Constraints

@@ -15,4 +15,3 @@ The tutorial consists of 15 steps:
 1. [{#T}](../../delete.md)
 1. [{#T}](../../alter_table.md)
 1. [{#T}](../../delete_table.md)
-

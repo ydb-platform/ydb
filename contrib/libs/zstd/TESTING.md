@@ -6,8 +6,10 @@ short, medium, and long tests.
 
 Short Tests
 -----------
+
 Short tests run on CircleCI for new commits on every branch and pull request.
 They consist of the following tests:
+
 - Compilation on all supported targets (x86, x86_64, ARM, AArch64, PowerPC, and PowerPC64)
 - Compilation on various versions of gcc, clang, and g++
 - `tests/playTests.sh` on x86_64, without the tests on long data (CLI tests)
@@ -15,8 +17,10 @@ They consist of the following tests:
 
 Medium Tests
 ------------
+
 Medium tests run on every commit and pull request to `dev` branch, on TravisCI.
 They consist of the following tests:
+
 - The following tests run with UBsan and Asan on x86_64 and x86, as well as with
   Msan on x86_64
   - `tests/playTests.sh --test-large-data`
@@ -27,10 +31,12 @@ They consist of the following tests:
 
 Long Tests
 ----------
+
 Long tests run on all commits to `release` branch,
 and once a day on the current version of `dev` branch,
 on TravisCI.
 They consist of the following tests:
+
 - Entire test suite (including fuzzers and some other specialized tests) on:
   - x86_64 and x86 with UBsan and Asan
   - x86_64 with Msan

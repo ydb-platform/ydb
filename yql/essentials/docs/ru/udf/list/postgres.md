@@ -109,7 +109,6 @@ SELECT
 ;
 ```
 
-
 ## Операторы {#operators}
 
 Операторы PostgreSQL (унарные и бинарные) доступны через встроенную функцию `PgOp(<оператор>, <операнды>)`:
@@ -193,7 +192,6 @@ SELECT
 | `TzTimestamp64` | `text` |  |`pgtext` |
 | `Decimal` | `numeric` |`pgnumeric` |
 | `DyNumber` | `numeric` |`pgnumeric` |
-
 
 ### Таблица соответствия типов `ToPg` {#topg}
 

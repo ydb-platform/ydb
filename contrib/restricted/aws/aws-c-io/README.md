@@ -146,6 +146,7 @@ Simply call the `aws_client_bootstrap_new_socket_channel` `aws_server_bootstrap_
 ## Concepts
 
 ### Event Loop
+
 Core to Async-IO is the event-loop. We provide an implementation for most platforms out of the box:
 
 Platform | Implementation
@@ -166,6 +167,7 @@ The threading model for a channel (see below) is pinned to the thread of the eve
 provides an API to move a cross-thread call into the event-loop thread if necessary.
 
 ### Channels and Slots
+
 A channel is simply a container that drives the slots. It is responsible for providing an interface
 between slots and the underlying event-loop as well as invoking the slots to pass messages. As a channel
 runs. It also provides utilities for making sure slots and their handlers run in the correct thread and moving execution
@@ -181,6 +183,7 @@ direction, it will call shutdown_direction on the first slot. Conversely, in the
 on the last slot in the channel. When all slots have successfully shutdown, the channel can be safely cleaned up and de-allocated.
 
 ### Slots
+
 ![Slots Diagram](docs/images/slots.png)
 
 Slots maintain their links to adjacent slots in the channel. So as the channel
@@ -193,14 +196,16 @@ utilities for manipulating the connections of the slots themselves.
 Slots can also be added, removed, or replaced dynamically from a channel.
 
 ### Channel Handlers
+
 The channel handler is the fundamental unit that protocol developers will implement. It contains all of your
 state machinery, framing, and optionally end-user APIs.
 
 ![Handler Diagram](docs/images/handler.png)
 
-
 #### Special, pre-defined handlers
+
 Out of the box you get a few handlers pre-implemented.
+
 1. Sockets. We've done the heavy lifting of implementing a consistent sockets interface for each platform.
 Sockets interact directly with the underlying io and are invoked directly by the event-loop for io events.
 2. Pipes (or something like them depending on platform), these are particularly useful for testing.
@@ -208,10 +213,10 @@ Sockets interact directly with the underlying io and are invoked directly by the
 
 Platform | Implementation
 --- | ---
-Linux | Signal-to-noise (s2n) see: https://github.com/aws/s2n-tls
+Linux | Signal-to-noise (s2n) see: <https://github.com/aws/s2n-tls>
 BSD Variants | s2n
-Apple Devices | Security Framework/ Secure Transport. See https://developer.apple.com/documentation/security/secure_transport
-Windows | Secure Channel. See https://msdn.microsoft.com/en-us/library/windows/desktop/aa380123(v=vs.85).aspx
+Apple Devices | Security Framework/ Secure Transport. See <https://developer.apple.com/documentation/security/secure_transport>
+Windows | Secure Channel. See <https://msdn.microsoft.com/en-us/library/windows/desktop/aa380123(v=vs.85).aspx>
 
 In addition, you can always write your own handler around your favorite implementation and use that. To provide your own
 TLS implementation, you must build this library with the cmake argument `-DBYO_CRYPTO=ON`. You will no longer need s2n or
@@ -219,6 +224,7 @@ libcrypto once you do this. Instead, your application provides an implementation
 At startup time, you must invoke the functions: `aws_tls_byo_crypto_set_client_setup_options()` and `aws_tls_byo_crypto_set_server_setup_options()`.
 
 ### Typical Channel
+
 ![Typical Channel Diagram](docs/images/typical_channel.png)
 
 A typical channel will contain a socket handler, which receives io events from the event-loop.
@@ -311,10 +317,12 @@ The functions we specify as thread-safe, we do so because those functions are ne
 For example, since scheduling a task is the main function for addressing cross-threaded operations, it has to be thread-safe.
 
 ## Terminology
+
 We use a few terms in the following sections that are not necessarily "C concepts". We assume you know C, but here are some
 definitions that may be helpful.
 
 ### Run-time Polymorphic
+
 This means that the API is driven by a virtual-table. This is simply a struct of function pointers. They are invoked via
 a c extern style API, but ultimately those public functions simply invoke the corresponding function in the v-table.
 
@@ -323,6 +331,7 @@ a.) Need to be configurable, changable at runtime
 b.) Do not have immediate performance concerns caused by an indirect function call.
 
 ### Compile-time Polymorphic
+
 This means that the API is not necessarily driven by a virtual-table. It is exposed as a c extern style API, but the
 build system makes a decision about which symbols to compile based on factors such as platform and compile-time flags.
 
@@ -335,6 +344,7 @@ will be used to denote that we are using a custom implementation for x feature. 
 that indirectly invokes from a v-table and provides hooks for the application to plug into at runtime.
 
 ### Promise, Promise Context
+
 There are many phrases for this, callback, baton, event-handler etc... The key idea is that APIs that need to notify a
 caller when an asynchronous action is completed, should take a callback function and a pointer to an opaque object
 and invoke it upon completion. This term doesn't refer to the layout of the data. A promise in some instances may be a
@@ -347,7 +357,6 @@ collection of functions in a structure. It's simply the language we use for the 
 * no functions in this API are allowed to block.
 * nothing is thread-safe unless explicitly stated.
 
-
 ### Event Loop
 
 Event Loops are run-time polymorphic. We provide some implementations out of the box and a way to get an implementation
@@ -358,6 +367,7 @@ From a design perspective, the event-loop is not aware of channels or any of its
 only via its API.
 
 #### Layout
+
     struct aws_event_loop {
         struct aws_event_loop_vtable vtable;
         aws_clock clock;
@@ -474,11 +484,13 @@ It is the removers responsibility to free the memory pointed to by item. If it i
 Gets the current tick count/timestamp for the event loop's clock. This function is thread-safe.
 
 #### V-Table Shims
+
 The remaining exported functions on event loop simply invoke the v-table functions and return. See the v-table section for more details.
 
 ### Channels and Slots
 
 #### Layout
+
     struct aws_channel {
         struct aws_allocator *alloc;
         struct aws_event_loop *loop;
@@ -534,7 +546,6 @@ Usually called by a handler, this function calls the left-adjacent slot.
 
 Usually called by a handler, this function calls the adjacent slot's shutdown based on the `dir` argument.
 
-
 ### API (Channel specific)
 
     int aws_channel_init (struct aws_channel *channel, struct aws_allocator *alloc, struct aws_event_loop *el);
@@ -571,9 +582,11 @@ Schedules a task to run on the event loop. This function is thread-safe.
 Checks if the caller is on the event loop's thread. This function is thread-safe.
 
 ### Channel Handlers
+
 Channel Handlers are runtime polymorphic. Here's some details on the virtual table (v-table):
 
 #### Layout
+
     struct aws_channel_handler {
         struct aws_channel_handler_vtable *vtable;
         struct aws_allocator *alloc;
@@ -581,6 +594,7 @@ Channel Handlers are runtime polymorphic. Here's some details on the virtual tab
     };
 
 #### V-Table
+
     struct aws_channel_handler_vtable {
         int (*data_in) ( struct aws_channel_handler *handler, struct aws_channel_slot *slot,
             struct aws_io_message *message );
@@ -594,7 +608,6 @@ Channel Handlers are runtime polymorphic. Here's some details on the virtual tab
         size_t (*initial_window_size) (struct aws_channel_handler *handler);
         void (*destroy)(struct aws_channel_handler *handler);
     };
-
 
 `int data_in ( struct aws_channel_handler *handler, struct aws_channel_slot *slot,
                            struct aws_io_message *message)`
@@ -652,6 +665,7 @@ will not be attached to any event loops. It is your responsibility to register i
 notifications.
 
 #### API
+
     typedef enum aws_socket_domain {
         AWS_SOCKET_IPV4,
         AWS_SOCKET_IPV6,

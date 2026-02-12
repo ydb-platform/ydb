@@ -30,7 +30,6 @@ Low uptime value of a {{ ydb-short-name }} node might also indicate other proble
 
 {% endnote %}
 
-
 ## Recommendations
 
 ### For rolling restart {#rolling-restart}

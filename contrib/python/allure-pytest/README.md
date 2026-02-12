@@ -19,9 +19,9 @@
 ## Quick start
 
 ```shell
-$ pip install allure-pytest
-$ pytest --alluredir=%allure_result_folder% ./tests
-$ allure serve %allure_result_folder%
+pip install allure-pytest
+pytest --alluredir=%allure_result_folder% ./tests
+allure serve %allure_result_folder%
 ```
 
 ## Further readings

@@ -14,4 +14,3 @@ JOIN b_table AS b
 USING (key)
 SELECT *;
 ```
-

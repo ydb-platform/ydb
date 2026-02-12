@@ -9,7 +9,7 @@ Each configuration section serves a specific purpose in defining how the {{ ydb-
 
 The following top-level configuration sections are available, listed in alphabetical order:
 
-#|
+# |
 || **Section** | **Required** | **Description** ||
 || [{#T}](actor_system_config.md) | Yes | CPU resource allocation across actor system pools ||
 || [{#T}](auth_config.md) | No | Authentication and authorization settings ||
@@ -37,9 +37,9 @@ While this documentation section focuses on complete reference documentation for
 
 - As part of the initial {{ ydb-short-name }} cluster deployment:
 
-    - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
-    - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
-    - [Manual](../../devops/deployment-options/manual/initial-deployment.md)
+  - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
+  - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
+  - [Manual](../../devops/deployment-options/manual/initial-deployment.md)
 
 - As part of [troubleshooting](../../troubleshooting/index.md)
 - As part of [security hardening](../../security/index.md)
@@ -47,4 +47,3 @@ While this documentation section focuses on complete reference documentation for
 ## Sample Cluster Configurations
 
 You can find model cluster configurations for deployment in the [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Check them out before deploying a cluster.
-

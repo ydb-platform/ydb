@@ -22,4 +22,4 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 -->
 
 Assorted utility functions are adapted from the musl libc project
-(https://musl.libc.org/).
+(<https://musl.libc.org/>).

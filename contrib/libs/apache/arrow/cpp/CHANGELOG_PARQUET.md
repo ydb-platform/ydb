@@ -1,6 +1,8 @@
 Parquet C++ 1.5.0
 --------------------------------------------------------------------------------
+
 ## Bug
+
     * [PARQUET-979] - [C++] Limit size of min, max or disable stats for long binary types
     * [PARQUET-1071] - [C++] parquet::arrow::FileWriter::Close is not idempotent
     * [PARQUET-1349] - [C++] PARQUET_RPATH_ORIGIN is not picked by the build
@@ -24,6 +26,7 @@ Parquet C++ 1.5.0
     * [PARQUET-1384] - [C++] Clang compiler warnings in bloom_filter-test.cc
 
 ## Improvement
+
     * [PARQUET-1348] - [C++] Allow Arrow FileWriter To Write FileMetaData
     * [PARQUET-1346] - [C++] Protect against null values data in empty Arrow array
     * [PARQUET-1340] - [C++] Fix Travis Ci valgrind errors related to std::random_device
@@ -38,23 +41,27 @@ Parquet C++ 1.5.0
     * [PARQUET-1276] - [C++] Reduce the amount of memory used for writing null decimal values
 
 ## New Feature
+
     * [PARQUET-1392] - [C++] Supply row group indices to parquet::arrow::FileReader::ReadTable
 
 ## Sub-task
+
     * [PARQUET-1227] - Thrift crypto metadata structures
     * [PARQUET-1332] - [C++] Add bloom filter utility class
 
 ## Task
+
     * [PARQUET-1350] - [C++] Use abstract ResizableBuffer instead of concrete PoolBuffer
     * [PARQUET-1366] - [C++] Streamline use of Arrow bit-util.h
     * [PARQUET-1308] - [C++] parquet::arrow should use thread pool, not ParallelFor
     * [PARQUET-1382] - [C++] Prepare for arrow::test namespace removal
     * [PARQUET-1372] - [C++] Add an API to allow writing RowGroups based on their size rather than num_rows
 
-
 Parquet C++ 1.4.0
 --------------------------------------------------------------------------------
+
 ## Bug
+
     * [PARQUET-1193] - [CPP] Implement ColumnOrder to support min_value and max_value
     * [PARQUET-1180] - C++: Fix behaviour of num_children element of primitive nodes
     * [PARQUET-1146] - C++: Add macOS-compatible sha512sum call to release verify script
@@ -70,6 +77,7 @@ Parquet C++ 1.4.0
     * [PARQUET-1210] - [C++] Boost 1.66 compilation fails on Windows on linkage stage
 
 ## Improvement
+
     * [PARQUET-1092] - [C++] Write Arrow tables with chunked columns
     * [PARQUET-1086] - [C++] Remove usage of arrow/util/compiler-util.h after 1.3.0 release
     * [PARQUET-1097] - [C++] Account for Arrow API deprecation in ARROW-1511
@@ -88,17 +96,20 @@ Parquet C++ 1.4.0
     * [PARQUET-1200] - [C++] Support reading a single Arrow column from a Parquet file
 
 ## New Feature
+
     * [PARQUET-1095] - [C++] Read and write Arrow decimal values
     * [PARQUET-970] - Add Add Lz4 and Zstd compression codecs
 
 ## Task
+
     * [PARQUET-1221] - [C++] Extend release README
     * [PARQUET-1225] - NaN values may lead to incorrect filtering under certain circumstances
 
-
 Parquet C++ 1.3.1
 --------------------------------------------------------------------------------
+
 ## Bug
+
     * [PARQUET-1105] - [CPP] Remove libboost_system dependency
     * [PARQUET-1138] - [C++] Fix compilation with Arrow 0.7.1
     * [PARQUET-1123] - [C++] Update parquet-cpp to use Arrow's AssertArraysEqual
@@ -106,13 +117,15 @@ Parquet C++ 1.3.1
     * [PARQUET-1139] - Add license to cmake_modules/parquet-cppConfig.cmake.in
 
 ## Improvement
+
     * [PARQUET-1140] - [C++] Fail on RAT errors in CI
     * [PARQUET-1070] - Add CPack support to the build
 
-
 Parquet C++ 1.3.0
 --------------------------------------------------------------------------------
+
 ## Bug
+
     * [PARQUET-1098] - [C++] Install new header in parquet/util
     * [PARQUET-1085] - [C++] Backwards compatibility from macro cleanup in transitive dependencies in ARROW-1452
     * [PARQUET-1074] - [C++] Switch to long key ids in KEYs file
@@ -124,6 +137,7 @@ Parquet C++ 1.3.0
     * [PARQUET-1108] - [C++] Fix Int96 comparators
 
 ## Improvement
+
     * [PARQUET-1104] - [C++] Upgrade to Apache Arrow 0.7.0 RC0
     * [PARQUET-1072] - [C++] Add ARROW_NO_DEPRECATED_API to CI to check for deprecated API use
     * [PARQUET-1096] - C++: Update sha{1, 256, 512} checksums per latest ASF release policy
@@ -135,13 +149,15 @@ Parquet C++ 1.3.0
     * [PARQUET-1037] - Allow final RowGroup to be unfilled
 
 ## New Feature
+
     * [PARQUET-1078] - [C++] Add Arrow writer option to coerce timestamps to milliseconds or microseconds
     * [PARQUET-929] - [C++] Handle arrow::DictionaryArray when writing Arrow data
 
-
 Parquet C++ 1.2.0
 --------------------------------------------------------------------------------
+
 ## Bug
+
     * [PARQUET-1029] - [C++] TypedColumnReader/TypeColumnWriter symbols are no longer being exported
     * [PARQUET-997] - Fix override compiler warnings
     * [PARQUET-1033] - Mismatched Read and Write
@@ -163,6 +179,7 @@ Parquet C++ 1.2.0
     * [PARQUET-1069] - C++: ./dev/release/verify-release-candidate is broken due to missing Arrow dependencies
 
 ## Improvement
+
     * [PARQUET-996] - Improve MSVC build - ThirdpartyToolchain - Arrow
     * [PARQUET-911] - C++: Support nested structs in parquet_arrow
     * [PARQUET-986] - Improve MSVC build - ThirdpartyToolchain - Thrift
@@ -183,19 +200,23 @@ Parquet C++ 1.2.0
     * [PARQUET-1045] - [C++] Refactor to account for computational utility code migration in ARROW-1154
 
 ## New Feature
+
     * [PARQUET-1035] - Write Int96 from Arrow Timestamp(ns)
 
 ## Task
+
     * [PARQUET-994] - C++: release-candidate script should not push to master
     * [PARQUET-902] - [C++] Move compressor interfaces into Apache Arrow
 
 ## Test
-    * [PARQUET-706] - [C++] Create test case that uses libparquet as a 3rd party library
 
+    * [PARQUET-706] - [C++] Create test case that uses libparquet as a 3rd party library
 
 Parquet C++ 1.1.0
 --------------------------------------------------------------------------------
+
 ## Bug
+
     * [PARQUET-898] - [C++] Change Travis CI OS X image to Xcode 6.4 and fix our thirdparty build
     * [PARQUET-976] - [C++] Pass unit test suite with MSVC, build in Appveyor
     * [PARQUET-963] - [C++] Disallow reading struct types in Arrow reader for now
@@ -226,6 +247,7 @@ Parquet C++ 1.1.0
     * [PARQUET-995] - [C++] Int96 reader in parquet_arrow uses size of Int96Type instead of Int96
 
 ## Improvement
+
     * [PARQUET-508] - Add ParquetFilePrinter
     * [PARQUET-595] - Add API for key-value metadata
     * [PARQUET-897] - [C++] Only use designated public headers from libarrow
@@ -255,14 +277,16 @@ Parquet C++ 1.1.0
     * [PARQUET-909] - [CPP]: Reduce buffer allocations (mallocs) on critical path
 
 ## New Feature
+
     * [PARQUET-853] - [C++] Add option to link with shared boost libraries when building Arrow in the thirdparty toolchain
     * [PARQUET-946] - [C++] Refactoring in parquet::arrow::FileReader to be able to read a single row group
     * [PARQUET-930] - [C++] Account for all Arrow date/time types
 
-
 Parquet C++ 1.0.0
 --------------------------------------------------------------------------------
+
 ## Bug
+
     * [PARQUET-455] - Fix compiler warnings on OS X / Clang
     * [PARQUET-558] - Support ZSH in build scripts
     * [PARQUET-720] - Parquet-cpp fails to link when included in multiple TUs
@@ -353,6 +377,7 @@ Parquet C++ 1.0.0
     * [PARQUET-887] - C++: Fix issues in release scripts arise in RC1
 
 ## Improvement
+
     * [PARQUET-277] - Remove boost dependency
     * [PARQUET-500] - Enable coveralls.io for apache/parquet-cpp
     * [PARQUET-497] - Decouple Parquet physical file structure from FileReader class
@@ -433,6 +458,7 @@ Parquet C++ 1.0.0
     * [PARQUET-681] - Add tool to scan a parquet file
 
 ## New Feature
+
     * [PARQUET-499] - Complete PlainEncoder implementation for all primitive types and test end to end
     * [PARQUET-439] - Conform all copyright headers to ASF requirements
     * [PARQUET-436] - Implement ParquetFileWriter class entry point for generating new Parquet files
@@ -485,6 +511,7 @@ Parquet C++ 1.0.0
     * [PARQUET-573] - C++: Create a public API for reading and writing file metadata
 
 ## Task
+
     * [PARQUET-814] - C++: Remove Conda recipes
     * [PARQUET-503] - Re-enable parquet 2.0 encodings
     * [PARQUET-169] - Parquet-cpp: Implement support for bulk reading and writing repetition/definition levels.
@@ -494,6 +521,7 @@ Parquet C++ 1.0.0
     * [PARQUET-901] - C++: Publish RCs in apache-parquet-VERSION in SVN
 
 ## Test
+
     * [PARQUET-525] - Test coverage for malformed file failure modes on the read path
     * [PARQUET-703] - [C++] Validate num_values metadata for columns with nulls
     * [PARQUET-507] - Improve runtime of rle-test.cc

@@ -11,11 +11,13 @@ The series of experiments is described in a configuration file (default cfg.txt)
 ## Configuration File
 
 The following types of test loads are supported:
+
 - `AioTestList` - submitting read/write requests using libaio.
 - `TrimTestList` - submitting trim (blkdiscard) requests in specified block sizes, preceded by data writing.
 - `PDiksTestList` - applying load through YDB storage layer code (PDisk).
 
 ### Parameters for `AioTestList`
+
 These describe read/write requests using libaio.
 
 - `DurationSeconds` - the duration of the load application in seconds.
@@ -24,21 +26,25 @@ These describe read/write requests using libaio.
 - `ReadProportion` - the proportion of read requests, with the proportion of write requests defined as (1.0 - ReadProportion). For instance, to submit an equal number of read and write requests, use a ReadProportion value of 0.5.
 
 ### Parameters for `TrimTestList`
+
 These describe trim (blkdiscard) requests in specified block sizes, preceded by data writing.
 
 - `DurationSeconds` - the duration of the load application in seconds.
 - `RequestSize` - the size of the requests in bytes.
 
 ### Parameters for `PDiksTestList`
+
 These describe the load applied through the YDB storage layer code (PDisk).
 
 Multiple load sources can be running simultaneously.
+
 - `PDiskReadLoad` - description of the read load source.
 - `PDiskWriteLoad` - description of the write load source.
 
 During normal operation, PDisk sends Trim requests to SSDs. This behavior can be enabled/disabled in the test using the EnableTrim parameter.
 
 #### Parameters for `PDiskReadLoad`
+
 These describe the read load source.
 
 - `Tag` - a unique numeric identifier for the load source.
@@ -54,6 +60,7 @@ These describe the read load source.
 - `IsWardenlessTest` - a reserved parameter for future use, must be set to true.
 
 #### Parameters for `PDiskWriteLoad`
+
 These describe the write load source.
 It has the same settings as PDiskReadLoad, with an additional parameter `LogMode`.
 
@@ -61,4 +68,3 @@ It has the same settings as PDiskReadLoad, with an additional parameter `LogMode
   - `LOG_PARALLEL` - logging is performed concurrently with the write to the chunk; the operation is considered complete after both the logging and the write to the chunk are finished.
   - `LOG_SEQUENTIAL` - logging is performed after the successful completion of the write to the chunk; the entire operation is considered complete after the logging is finished, similar to what the current version of VDisk does.
   - `LOG_NONE` - logging is not performed; the operation is considered complete after the write to the chunk is finished.
-

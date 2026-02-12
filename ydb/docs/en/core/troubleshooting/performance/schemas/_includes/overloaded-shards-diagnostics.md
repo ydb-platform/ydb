@@ -12,7 +12,6 @@
 
         {% endnote %}
 
-
     - In the [Embedded UI](../../../../reference/embedded-ui/index.md):
 
         1. Go to the **Databases** tab and click on the database.
@@ -56,7 +55,6 @@
         You can also find this information on the **Diagnostics > Info** tab.
 
         {% endnote %}
-
 
     - In the [{{ ydb-short-name }} CLI](../../../../reference/ydb-cli/index.md):
 

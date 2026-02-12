@@ -27,7 +27,7 @@ For details on [markdown-it] itself, see:
 - The __[Live demo](https://markdown-it.github.io)__
 - [The markdown-it README][markdown-it-readme]
 
-**See also:** [markdown-it-pyrs](https://github.com/chrisjsewell/markdown-it-pyrs) for an experimental Rust binding,
+__See also:__ [markdown-it-pyrs](https://github.com/chrisjsewell/markdown-it-pyrs) for an experimental Rust binding,
 for even more speed!
 
 ## Installation
@@ -151,7 +151,6 @@ Also [John MacFarlane](https://github.com/jgm) for his work on the CommonMark sp
 [install-badge]: https://img.shields.io/pypi/dw/markdown-it-py?label=pypi%20installs
 [install-link]: https://pypistats.org/packages/markdown-it-py
 
-[CommonMark spec]: http://spec.commonmark.org/
 [markdown-it]: https://github.com/markdown-it/markdown-it
 [markdown-it-readme]: https://github.com/markdown-it/markdown-it/blob/master/README.md
 [md-security]: https://markdown-it-py.readthedocs.io/en/latest/security.html

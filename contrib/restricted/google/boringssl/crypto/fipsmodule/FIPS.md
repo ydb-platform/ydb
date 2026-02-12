@@ -43,7 +43,7 @@ In FIPS mode, each of those entropy sources is subject to a 10× overread. That 
 
 In the case that the seed is taken from RDRAND, getrandom will also be queried with `GRND_NONBLOCK` to attempt to obtain additional entropy from the operating system. If available, that extra entropy will be XORed into the whitened seed.
 
-On Android, only `getrandom` is supported and, when seeding for the first time, the system property `ro.boringcrypto.hwrand` is queried. If set to `true` then `getrandom` will be called with the `GRND_RANDOM` flag. Only entropy draws destined for DRBG seeds are affected by this. We are not suggesting that there is any security advantage at all to doing this, and thus recommend that Android vendors do _not_ set this flag.
+On Android, only `getrandom` is supported and, when seeding for the first time, the system property `ro.boringcrypto.hwrand` is queried. If set to `true` then `getrandom` will be called with the `GRND_RANDOM` flag. Only entropy draws destined for DRBG seeds are affected by this. We are not suggesting that there is any security advantage at all to doing this, and thus recommend that Android vendors do *not* set this flag.
 
 The CTR-DRBG is reseeded every 4096 calls to `RAND_bytes`. Thus the process will randomly crash about every 2¹³⁵ calls.
 
@@ -109,11 +109,11 @@ In order to allow this we use a similar design to the redirector functions: the 
 
 The script performs a number of other transformations which are worth noting but do not warrant their own discussions:
 
-1.  It duplicates each global symbol with a local symbol that has `_local_target` appended to the name. References to the global symbols are rewritten to use these duplicates instead. Otherwise, although the generated code uses IP-relative references, relocations are emitted for global symbols in case they are overridden by a different object file during the link.
-1.  Various sections, notably `.rodata`, are moved to the `.text` section, inside the module, so module code may reference it without relocations.
-1.  For each BSS symbol, it generates a function named after that symbol but with `_bss_get` appended, which returns its address.
-1.  It inserts the labels that delimit the module's code and data (called `module_start` and `module_end` in the diagram above).
-1.  It adds a 64-byte, read-only array outside of the module to contain the known-good HMAC value.
+1. It duplicates each global symbol with a local symbol that has `_local_target` appended to the name. References to the global symbols are rewritten to use these duplicates instead. Otherwise, although the generated code uses IP-relative references, relocations are emitted for global symbols in case they are overridden by a different object file during the link.
+1. Various sections, notably `.rodata`, are moved to the `.text` section, inside the module, so module code may reference it without relocations.
+1. For each BSS symbol, it generates a function named after that symbol but with `_bss_get` appended, which returns its address.
+1. It inserts the labels that delimit the module's code and data (called `module_start` and `module_end` in the diagram above).
+1. It adds a 64-byte, read-only array outside of the module to contain the known-good HMAC value.
 
 ##### Integrity testing
 
@@ -129,16 +129,16 @@ Initially the known-good value will be incorrect. Another script (`inject_hash.g
 
 OpenSSL's solution to this problem is very similar to our shared build, with just a few differences:
 
-1.  OpenSSL deals with run-time relocations by not hashing parts of the module's data.
-1.  OpenSSL uses `ld -r` (the partial linking mode) to merge a number of object files into their `fipscanister.o`. For BoringCrypto's static build, we merge all the C source files by building a single C file that #includes all the others, and we merge the assembly sources by appending them to the assembly output from the C compiler.
-1.  OpenSSL depends on the link order and inserts two object files, `fips_start.o` and `fips_end.o`, in order to establish the `module_start` and `module_end` values. BoringCrypto adds labels at the correct places in the assembly for the static build, or uses a linker script for the shared build.
-1.  OpenSSL calculates the hash after the final link and either injects it into the binary or recompiles with the value of the hash passed in as a #define. BoringCrypto calculates it prior to the final link and injects it into the object file.
-1.  OpenSSL references read-write data directly, since it can know the offsets to it. BoringCrypto indirects these loads and stores.
-1.  OpenSSL doesn't run the power-on test until `FIPS_module_mode_set` is called. BoringCrypto does it in a constructor function. Failure of the test is non-fatal in OpenSSL, BoringCrypto will crash.
-1.  Since the contents of OpenSSL's module change between compilation and use, OpenSSL generates `fipscanister.o.sha1` to check that the compiled object doesn't change before linking. Since BoringCrypto's module is fixed after compilation (in the static case), the final integrity check is unbroken through the linking process.
+1. OpenSSL deals with run-time relocations by not hashing parts of the module's data.
+1. OpenSSL uses `ld -r` (the partial linking mode) to merge a number of object files into their `fipscanister.o`. For BoringCrypto's static build, we merge all the C source files by building a single C file that #includes all the others, and we merge the assembly sources by appending them to the assembly output from the C compiler.
+1. OpenSSL depends on the link order and inserts two object files, `fips_start.o` and `fips_end.o`, in order to establish the `module_start` and `module_end` values. BoringCrypto adds labels at the correct places in the assembly for the static build, or uses a linker script for the shared build.
+1. OpenSSL calculates the hash after the final link and either injects it into the binary or recompiles with the value of the hash passed in as a #define. BoringCrypto calculates it prior to the final link and injects it into the object file.
+1. OpenSSL references read-write data directly, since it can know the offsets to it. BoringCrypto indirects these loads and stores.
+1. OpenSSL doesn't run the power-on test until `FIPS_module_mode_set` is called. BoringCrypto does it in a constructor function. Failure of the test is non-fatal in OpenSSL, BoringCrypto will crash.
+1. Since the contents of OpenSSL's module change between compilation and use, OpenSSL generates `fipscanister.o.sha1` to check that the compiled object doesn't change before linking. Since BoringCrypto's module is fixed after compilation (in the static case), the final integrity check is unbroken through the linking process.
 
 Some of the similarities are worth noting:
 
-1.  OpenSSL has all out-calls from the module indirecting via the PLT, which is equivalent to the redirector functions described above.
+1. OpenSSL has all out-calls from the module indirecting via the PLT, which is equivalent to the redirector functions described above.
 
 ![OpenSSL build process](./intcheck3.png)

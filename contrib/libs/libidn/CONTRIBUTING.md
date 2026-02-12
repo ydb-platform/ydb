@@ -5,9 +5,10 @@ This file contains instructions for developers and advanced users.
 ## Obtaining sources
 
 Download the version controlled sources:
+
 ```
-$ git clone https://git.savannah.gnu.org/git/libidn.git
-$ cd libidn
+git clone https://git.savannah.gnu.org/git/libidn.git
+cd libidn
 ```
 
 ## Dependencies
@@ -45,6 +46,7 @@ The software is typically distributed with your operating system, and
 the instructions for installing them differ.  Here are some hints:
 
 APT/DPKG-based distributions:
+
 ```
 apt-get install make git autoconf automake libtool gettext autopoint cvs
 apt-get install texinfo texlive texlive-plain-generic texlive-extra-utils
@@ -53,6 +55,7 @@ apt-get install graphviz ghostscript mono-mcs gperf default-jdk-headless
 ```
 
 DNF/RPM-based distributions:
+
 ```
 dnf install -y make git autoconf automake libtool gettext-devel cvs
 dnf install -y texinfo texinfo-tex texlive
@@ -61,6 +64,7 @@ dnf install -y gperf java-latest-openjdk-devel
 ```
 
 On macOS with Xcode and Homebrew:
+
 ```
 brew install autoconf automake libtool gengetopt help2man texinfo graphviz
 ```
@@ -110,6 +114,7 @@ To prepare releases you need some additional tools:
 - ncftpput (to upload source tarballs)
 
 APT/DPKG-based distributions:
+
 ```
 apt-get install mingw-w64 wine binfmt-support lcov zip
 apt-get install clang doxygen pmccabe ncftp

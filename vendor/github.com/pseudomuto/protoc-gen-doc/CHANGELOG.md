@@ -127,7 +127,6 @@ This is the tenth official release. (However, it's the first 1.x release!!)
 * Dropped direct support for PDF generation (still possible with FOP)
 * `doc_out` flag removed in favor of `doc_opt`
 
-
 # v0.9 - February 26, 2017
 
 This is the ninth official release.

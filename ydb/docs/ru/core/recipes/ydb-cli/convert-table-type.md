@@ -20,7 +20,7 @@
 Запустите этот запрос (предполагается, что он сохранён в файле с именем `create_column_oriented_table.yql`):
 
 ```bash
-$ ydb -p quickstart yql -f create_column_oriented_table.yql
+ydb -p quickstart yql -f create_column_oriented_table.yql
 ```
 
 {% cut "Примеры схем тестовых таблиц и заполнения их данными" %}
@@ -80,13 +80,13 @@ FROM (
 1. Экспорт данных в локальную файловую систему:
 
     ```bash
-    $ ydb -p quickstart dump -p row_oriented_table -o tmp_backup/
+    ydb -p quickstart dump -p row_oriented_table -o tmp_backup/
     ```
 
 2. Импорт этих данных в другую таблицу {{ ydb-short-name }}:
 
     ```bash
-    $ ydb -p quickstart import file csv -p column_oriented_table tmp_backup/row_oriented_table/*.csv
+    ydb -p quickstart import file csv -p column_oriented_table tmp_backup/row_oriented_table/*.csv
     ```
 
 Убедитесь, что у вас достаточно свободного места в файловой системе для хранения всех данных.

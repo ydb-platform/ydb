@@ -123,8 +123,8 @@ To work on the {{ ydb-short-name }} code changes, you need to create a fork repo
 
 After your fork is set up, create a local git repository with two remotes:
 
-- `official`: official {{ ydb-short-name }} repository, for main and stable branches
-- `fork`: your {{ ydb-short-name }} repository fork, for your development branches
+* `official`: official {{ ydb-short-name }} repository, for main and stable branches
+* `fork`: your {{ ydb-short-name }} repository fork, for your development branches
 
 ```bash
 mkdir -p ~/ydbwork
@@ -222,7 +222,7 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
 
 {% list tabs %}
 
-- GitHub UI
+* GitHub UI
 
   Visit your branch's page on GitHub.com (`https://github.com/{your_github_user_name}/ydb/tree/{branch_name}`), press `Contribute` and then `Open Pull Request`.
   You can also use the link in the `git push` output to open a Pull Request:
@@ -236,7 +236,7 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
   ...
   ```
 
-- GitHub CLI
+* GitHub CLI
 
   Install and configure [GitHub CLI](https://cli.github.com/).
 

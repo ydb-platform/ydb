@@ -42,13 +42,13 @@ email, preferably with some information on how you use the package (or a
 link to the repository) and I'll keep you informed when the status of
 the API is stable enough to make the transition.
 
--   [Overview](http://yaml.readthedocs.io/en/latest/overview/)
--   [Installing](http://yaml.readthedocs.io/en/latest/install/)
--   [Basic Usage](http://yaml.readthedocs.io/en/latest/basicuse/)
--   [Details](http://yaml.readthedocs.io/en/latest/detail/)
--   [Examples](http://yaml.readthedocs.io/en/latest/example/)
--   [API](http://yaml.readthedocs.io/en/latest/api/)
--   [Differences with
+- [Overview](http://yaml.readthedocs.io/en/latest/overview/)
+- [Installing](http://yaml.readthedocs.io/en/latest/install/)
+- [Basic Usage](http://yaml.readthedocs.io/en/latest/basicuse/)
+- [Details](http://yaml.readthedocs.io/en/latest/detail/)
+- [Examples](http://yaml.readthedocs.io/en/latest/example/)
+- [API](http://yaml.readthedocs.io/en/latest/api/)
+- [Differences with
     PyYAML](http://yaml.readthedocs.io/en/latest/pyyaml/)
 
 [![image](https://readthedocs.org/projects/yaml/badge/?version=latest)](https://yaml.readthedocs.org/en/latest?badge=latest)[![image](https://bestpractices.coreinfrastructure.org/projects/1128/badge)](https://bestpractices.coreinfrastructure.org/projects/1128)
@@ -65,7 +65,7 @@ the API is stable enough to make the transition.
 - potential workaround for issue 484: the long_description_content_type including the variant specification `CommonMark`
 can result in problems on Azure. If you can install from `.tar.gz` using
 `RUAMEL_NO_LONG_DESCRIPTION=1 pip install ruamel.yaml --no-binary :all:` then the long description, and its
-offending type, are nog included (in the METADATA). 
+offending type, are nog included (in the METADATA).
 (Reported by [Coury Ditch](https://sourceforge.net/u/cmditch/profile/))
 
 - links in documentation update (reported by [David Hoese](https://sourceforge.net/u/daveydave400/profile/))

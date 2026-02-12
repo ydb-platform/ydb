@@ -27,7 +27,7 @@ This module is certainly not ZODB, but can be used for low-load
 (non-mission-critical) situations where tiny code size trumps the
 advanced features of a "real" object database.
 
-Installation guide: 
+Installation guide:
 
 ```sh
 pip install pickleshare
@@ -38,5 +38,3 @@ Or, if installing from source
 ```sh
 pip install .
 ```
-
-

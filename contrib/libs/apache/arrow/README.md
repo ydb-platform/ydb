@@ -30,28 +30,28 @@ set of technologies that enable big data systems to process and move data fast.
 
 Major components of the project include:
 
- - [The Arrow Columnar In-Memory Format](https://github.com/apache/arrow/blob/master/docs/source/format/Columnar.rst):
+- [The Arrow Columnar In-Memory Format](https://github.com/apache/arrow/blob/master/docs/source/format/Columnar.rst):
    a standard and efficient in-memory representation of various datatypes, plain or nested
- - [The Arrow IPC Format](https://github.com/apache/arrow/blob/master/docs/source/format/Columnar.rst#serialization-and-interprocess-communication-ipc):
+- [The Arrow IPC Format](https://github.com/apache/arrow/blob/master/docs/source/format/Columnar.rst#serialization-and-interprocess-communication-ipc):
    an efficient serialization of the Arrow format and associated metadata,
    for communication between processes and heterogeneous environments
- - [The Arrow Flight RPC protocol](https://github.com/apache/arrow/tree/master/format/Flight.proto):
+- [The Arrow Flight RPC protocol](https://github.com/apache/arrow/tree/master/format/Flight.proto):
    based on the Arrow IPC format, a building block for remote services exchanging
    Arrow data with application-defined semantics (for example a storage server or a database)
- - [C++ libraries](https://github.com/apache/arrow/tree/master/cpp)
- - [C bindings using GLib](https://github.com/apache/arrow/tree/master/c_glib)
- - [C# .NET libraries](https://github.com/apache/arrow/tree/master/csharp)
- - [Gandiva](https://github.com/apache/arrow/tree/master/cpp/src/gandiva):
+- [C++ libraries](https://github.com/apache/arrow/tree/master/cpp)
+- [C bindings using GLib](https://github.com/apache/arrow/tree/master/c_glib)
+- [C# .NET libraries](https://github.com/apache/arrow/tree/master/csharp)
+- [Gandiva](https://github.com/apache/arrow/tree/master/cpp/src/gandiva):
    an [LLVM](https://llvm.org)-based Arrow expression compiler, part of the C++ codebase
- - [Go libraries](https://github.com/apache/arrow/tree/master/go)
- - [Java libraries](https://github.com/apache/arrow/tree/master/java)
- - [JavaScript libraries](https://github.com/apache/arrow/tree/master/js)
- - [Plasma Object Store](https://github.com/apache/arrow/tree/master/cpp/src/plasma):
+- [Go libraries](https://github.com/apache/arrow/tree/master/go)
+- [Java libraries](https://github.com/apache/arrow/tree/master/java)
+- [JavaScript libraries](https://github.com/apache/arrow/tree/master/js)
+- [Plasma Object Store](https://github.com/apache/arrow/tree/master/cpp/src/plasma):
    a shared-memory blob store, part of the C++ codebase
- - [Python libraries](https://github.com/apache/arrow/tree/master/python)
- - [R libraries](https://github.com/apache/arrow/tree/master/r)
- - [Ruby libraries](https://github.com/apache/arrow/tree/master/ruby)
- - [Rust libraries](https://github.com/apache/arrow-rs)
+- [Python libraries](https://github.com/apache/arrow/tree/master/python)
+- [R libraries](https://github.com/apache/arrow/tree/master/r)
+- [Ruby libraries](https://github.com/apache/arrow/tree/master/ruby)
+- [Rust libraries](https://github.com/apache/arrow-rs)
 
 Arrow is an [Apache Software Foundation](https://www.apache.org) project. Learn more at
 [arrow.apache.org](https://arrow.apache.org).
@@ -100,5 +100,4 @@ integrations in other projects, we'd be happy to have you involved:
 [1]: mailto:dev-subscribe@arrow.apache.org
 [2]: https://github.com/apache/arrow/tree/master/format
 [3]: https://issues.apache.org/jira/browse/ARROW
-[4]: https://github.com/apache/arrow
 [5]: https://github.com/apache/arrow/blob/master/docs/source/developers/contributing.rst

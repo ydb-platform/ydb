@@ -37,8 +37,6 @@ YSON — разработанный в Яндексе формат данных,
 * `Yson::Parse*** -> Yson::Lookup -> Yson::Serialize***` — извлечение значения указанного поддерева в исходном дереве YSON;
 * `Yson::Parse*** -> Yson::ConvertToList -> ListMap -> Yson::Lookup***` — извлечение элементов по ключу из YSON списка.
 
-
-
 ## Примеры
 
 ```yql
@@ -213,7 +211,6 @@ Yson::Contains(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Bool?
 Проверяет наличие ключа в словаре. Если тип объекта map, то ищем среди ключей.
 Если тип объекта список, то ключ должен быть десятичным числом - индексом в списке.
 
-
 ## Yson::Lookup... {#ysonlookup}
 
 ```yql
@@ -243,8 +240,6 @@ Yson::YPathList(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> List<Resource<
 ```
 
 Позволяет по входному ресурсу и пути на языке YPath получить ресурс, указывающий на соответствующую пути часть исходного ресурса.
-
-
 
 ## Yson::Attributes {#ysonattributes}
 

@@ -34,7 +34,6 @@ ALTER TABLE series_with_families
 
 Using the `ALTER FAMILY` command, you can change the parameters of the column group.
 
-
 ### Changing storage type
 
 {% if oss == true and backend_name == "YDB" %}

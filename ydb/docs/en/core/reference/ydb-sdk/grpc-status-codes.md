@@ -2,7 +2,7 @@
 
 {{ ydb-short-name }}  provides the gRPC API, which you can use to manage your database resources and data. The following table describes the gRPC status codes:
 
-#|
+# |
 ||
 Code
 |

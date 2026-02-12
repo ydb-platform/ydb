@@ -62,11 +62,11 @@ Functions for Unicode strings.
 
   Parameters:
 
-  - `Language` is set according to the same rules as in `Unicode::Translit()`.
-  - `DoLowerCase` converts a string to lowercase letters, defaults to `true`.
-  - `DoRenyxa` converts diacritical characters to similar Latin characters, defaults to `true`.
-  - `DoSimpleCyr` converts diacritical Cyrillic characters to similar Latin characters, defaults to `true`.
-  - `FillOffset` parameter is not used.
+  * `Language` is set according to the same rules as in `Unicode::Translit()`.
+  * `DoLowerCase` converts a string to lowercase letters, defaults to `true`.
+  * `DoRenyxa` converts diacritical characters to similar Latin characters, defaults to `true`.
+  * `DoSimpleCyr` converts diacritical Cyrillic characters to similar Latin characters, defaults to `true`.
+  * `FillOffset` parameter is not used.
 
   ```yql
   SELECT Unicode::Fold("Kongreßstraße", false AS DoSimpleCyr, false AS DoRenyxa); -- "kongressstrasse"
@@ -125,9 +125,9 @@ Functions for Unicode strings.
   Splits a string into substrings by separator.
 `string` -- Source string. `separator` -- Separator. Parameters:
 
-  - DelimeterString:Bool? — treating a delimiter as a string (true, by default) or a set of characters "any of" (false)
-  - SkipEmpty:Bool? - whether to skip empty strings in the result, is false by default
-  - Limit:Uint64? - Limits the number of fetched components (unlimited by default); if the limit is exceeded, the raw suffix of the source string is returned in the last item
+  * DelimeterString:Bool? — treating a delimiter as a string (true, by default) or a set of characters "any of" (false)
+  * SkipEmpty:Bool? - whether to skip empty strings in the result, is false by default
+  * Limit:Uint64? - Limits the number of fetched components (unlimited by default); if the limit is exceeded, the raw suffix of the source string is returned in the last item
 
 * `Unicode::JoinFromList(List<Utf8>{Flags:AutoMap}, separator:Utf8) -> Utf8`
 
@@ -156,4 +156,3 @@ Functions for Unicode strings.
   SELECT Unicode::ToUint64("-77741"); -- 18446744073709473875
   SELECT Unicode::TryToUint64("asdh831"); -- Null
   ```
-

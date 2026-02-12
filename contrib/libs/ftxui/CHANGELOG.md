@@ -5,6 +5,7 @@ Changelog
 -----
 
 ### Component
+
 - BugFix: Fix major crash on Windows affecting all components. See #1020
 - BugFix: Fix focusRelative.
 
@@ -23,6 +24,7 @@ See #1017 and #1019.
 -----
 
 ### Component
+
 - Feature: Add support for raw input. Allowing more keys to be detected.
 - Feature: Add `ScreenInteractive::ForceHandleCtrlC(false)` to allow component
   to fully override the default `Ctrl+C` handler.
@@ -44,8 +46,8 @@ See #1017 and #1019.
     multiple checkboxes.
   - A couple of components are now activated when the mouse is pressed,
   as opposed to being released.
-  This fixes: https://github.com/ArthurSonzogni/FTXUI/issues/773
-  This fixes: https://github.com/ArthurSonzogni/FTXUI/issues/792
+  This fixes: <https://github.com/ArthurSonzogni/FTXUI/issues/773>
+  This fixes: <https://github.com/ArthurSonzogni/FTXUI/issues/792>
 - Bugfix: mouse.control is now reported correctly.
 - Feature: Add `ScreenInteractive::FullscreenPrimaryScreen()`. This allows
   displaying a fullscreen component on the primary screen, as opposed to the
@@ -67,13 +69,17 @@ See #1017 and #1019.
           mistake. See #998.
 
 ### Dom
+
 - Feature: Add `italic` decorator. For instance:
+
   ```cpp
   auto italic_text = text("Italic text") | italic;
   ```
+
   ```cpp
   auto italic_text = italic(text("Italic text"));
   ```
+
   Proposed by @kenReneris in #1009.
 - Feature: Add `hscroll_indicator`. It display an horizontal indicator
   reflecting the current scroll position. Proposed by @ibrahimnasson in
@@ -95,23 +101,27 @@ See #1017 and #1019.
   couple of issues around focus handling.
 
 ### Screen
+
 - Feature: Add `Box::IsEmpty()`.
 - Feature: Color transparency
-    - Add `Color::RGBA(r,g,b,a)`.
-    - Add `Color::HSVA(r,g,b,a)`.
-    - Add `Color::Blend(Color)`.
-    - Add `Color::IsOpaque()`
+  - Add `Color::RGBA(r,g,b,a)`.
+  - Add `Color::HSVA(r,g,b,a)`.
+  - Add `Color::Blend(Color)`.
+  - Add `Color::IsOpaque()`
 
 ### Util
+
 - Feature: Support arbitrary `Adapter` for `ConstStringListRef`. See #843.
 
 ### Build
+
 - Support for cmake's "unity/jumbo" builds. Fixed by @ClausKlein.
 
 5.0.0
 -----
 
 ### Component
+
 - Breaking: MenuDirection enum is renamed Direction
 - Breaking: GaugeDirection enum is renamed Direction
 - Breaking: Direction enum is renamed WidthOrHeight
@@ -123,6 +133,7 @@ See #1017 and #1019.
 - Feature: `input` style is now customizeable.
 - Bugfix: Support F1-F5 from OS terminal.
 - Feature: Add struct based constructor:
+
   ```cpp
   Component Button(ButtonOption options);
   Component Checkbox(CheckboxOption options);
@@ -133,24 +144,29 @@ See #1017 and #1019.
   Component Slider(SliderOption<T> options);
   Component ResizableSplit(ResizableSplitOption options);
   ```
+
 - Feature: Add `ScreenInteractive::TrackMouse(false)` disable mouse support.
 
 ### Dom
+
 - Feature: Add `hyperlink` decorator. For instance:
+
   ```cpp
   auto link = text("Click here") | hyperlink("https://github.com/FTXUI")
   ```
+
   See the [OSC 8 page](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda).
   FTXUI support proposed by @aaleino in [#662](https://github.com/ArthurSonzogni/FTXUI/issues/662).
 
 ### Screen
+
 - Breaking: `WordBreakProperty` becomes a uint8_t enum. This yields a 0.8%
   performance improvement.
 - Breaking: Remove user defined Pixel constructor and equality operator.
 - Performance: 19% faster on benchmarks.
 
-
 ### Build
+
 - Check version compatibility when using cmake find_package()
 - Add `FTXUI_DEV_WARNING` options to turn on warnings when building FTXUI
 - Turn OFF by default `FTXUI_BUILD_DOCS`
@@ -160,10 +176,12 @@ See #1017 and #1019.
 -----
 
 ### Component
+
 - Fix: Support arrow keys in application mode
 - Fix: Remove useless new line when using an alternative screen.
 
 ### Dom
+
 - Feature: Add the dashed style for border and separator:
   - See `DASHED` enum, and  `separatorDashed()`, `borderDashed()` functions.
 - Feature: Add colored borders.
@@ -173,18 +191,21 @@ See #1017 and #1019.
 - Fix: Check the `graph` area is positive.
 
 ### Build/Install
+
 - Use globally set CMAKE_CXX_STANDARD if it is set.
 - Expose the pkg-config file
 - Check version compatibility when using cmake find_package()
 
 4.1.0  (Abandonned)
 -----
+
 This version is abandonned and must not be used. It introduced a breaking change in the API.
 
 4.0.0
 -----
 
 ### DOM
+
 - Feature: more styles:
   - `strikethrough`
   - `underlinedDouble`
@@ -204,13 +225,14 @@ This version is abandonned and must not be used. It introduced a breaking change
 - Bugfix: Support `vscroll_indicator` with a zero inner size.
 - Bugfix: Fix `vscroll_indicator` hidding the last column.
 
-### Component:
+### Component
+
 - Feature: Add the `Modal` component.
 - Feature: `Slider` supports taking references for all its arguments.
 - Feature: `Slider` supports `SliderOption`. It supports:
-    - multiple directions.
-    - multiple colors.
-    - various values (value, min, max, increment).
+  - multiple directions.
+  - multiple colors.
+  - various values (value, min, max, increment).
 - Feature: Define `ScreenInteractive::Exit()`.
 - Feature: Add `Loop` to give developers a better control on the main loop. This
   can be used to integrate FTXUI into another main loop, without taking the full
@@ -224,6 +246,7 @@ This version is abandonned and must not be used. It introduced a breaking change
 - Feature: Add the `Hoverable` component decorators.
 
 ### Screen
+
 - Feature: add `Box::Union(a,b) -> Box`
 - Bugfix: Fix resetting `dim` clashing with resetting of `bold`.
 - Feature: Add emscripten screen resize support.
@@ -231,16 +254,19 @@ This version is abandonned and must not be used. It introduced a breaking change
 - Bugfix: Fix MSVC treating codecvt C++17 deprecated function as an error.
 
 ### Build
+
 - Support using the google test version provided by the package manager.
 
 3.0.0
 -----
 
 ### Build
+
 - **breaking**: The library prefix is now back to "lib" (the default). This
     means non-cmake users should not link against "libftxui-dom" for instance.
 
 ### Component
+
 - **Animations** module! Components can implement the `OnAnimation` method and
   the animation::Animator to define some animated properties.
   - `Menu` now support animations.
@@ -258,7 +284,7 @@ This version is abandonned and must not be used. It introduced a breaking change
   `ActiveChild()` methods.
 - **bugfix** Automatically convert '\r' keys into '\n' for Linux programs that
   do not send the correct code for the return key, like the 'bind'.
-  https://github.com/ArthurSonzogni/FTXUI/issues/337
+  <https://github.com/ArthurSonzogni/FTXUI/issues/337>
 - Add decorator for components:
   - `operator|(Component, ComponentDecorator)`
   - `operator|(Component, ElementDecorator)`
@@ -270,9 +296,11 @@ This version is abandonned and must not be used. It introduced a breaking change
 - **breaking** remove the "deprectated.hpp" header and Input support for wide
     string.
 
-### DOM:
+### DOM
+
 - **breaking**: The `inverted` decorator now toggle in the inverted attribute.
 - Add `gauge` for the 4 directions. Expose the following API:
+
 ```cpp
 Element gauge(float ratio);
 Element gaugeLeft(float ratio);
@@ -281,6 +309,7 @@ Element gaugeUp(float ratio);
 Element gaugeDown(float ratio);
 Element gaugeDirection(float ratio, GaugeDirection);
 ```
+
 - Add `separatorHSelector` and `separatorVSelector` elements. This can be used
   to highlight an area.
 - Add the `automerge` decorator. This makes separator characters to be merged
@@ -290,19 +319,22 @@ Element gaugeDirection(float ratio, GaugeDirection);
   correctly.
 - Add the `operator|=(Element, Decorator)`
 
-### Screen:
+### Screen
+
 - Add: `Color::Interpolate(lambda, color_a, color_b)`.
 
 2.0.0
 -----
 
-### Features:
+### Features
 
 #### Screen
+
 - Add the `automerge` to the Pixel bit field. This now controls which pixels are
   automatically merged.
 
-#### DOM:
+#### DOM
+
 - Add the `Canvas` class and `ElementFrom('canvas')` function. Together users of
   the library can draw using braille and block characters.
 - Support `flexbox` dom elements. This is build symmetrically to the HTML one.
@@ -318,7 +350,8 @@ Element gaugeDirection(float ratio, GaugeDirection);
 - Add: `focusPositionRelative` and `focusPosition`
 - Add `Table` constructor from 2D vector of Element, instead of string.
 
-#### Component 
+#### Component
+
 - Add the `collapsible` component.
 - Add the `ScreenInteractive::WithRestoredIO`. This decorates a callback. This
   runs it with the terminal hooks temporarilly uninstalled. This is useful if
@@ -327,13 +360,16 @@ Element gaugeDirection(float ratio, GaugeDirection);
 ### Bug
 
 #### Table
+
 - The `table` horizontal and vertical separator are now correctly expanded.
 
-#### Component 
+#### Component
+
 - `Input` shouldn't take focus when hovered by the mouse.
 - Modifying `Input`'s during on_enter/on_change event is now working correctly.
 
-### Breaking changes:
+### Breaking changes
+
 - The behavior of `paragraph` has been modified. It now returns en Element,
   instead of a list of elements.
 
@@ -341,23 +377,28 @@ Element gaugeDirection(float ratio, GaugeDirection);
 ------
 
 # Component
+
 - Feature: Support for PageUp/PageDown/Home/End buttons.
 - Bugfix: Check the selected element are within bounds for Dropdown.
 
 # Build
+
 - Bugfix: Package library using the "Release config". Not debug.
 
 0.11
 ----
 
 ## github workflow
+
 - Add Windows ad MacOS artefacts.
 - Merge all the workflows.
 
 ## Bug
+
 - On Unix system, fallback to {80,25} screen dimension on failure.
 
 ## CMake
+
 - Support for shared library, via `BUILD_SHARED_LIBS` option.
 - Add library version and symlinks.
 
@@ -365,16 +406,19 @@ Element gaugeDirection(float ratio, GaugeDirection);
 --------------------
 
 ## Bug
+
 - Fix the automated merge of borders.
 
 ### Dom
+
 - `Table()` class to build stylised table.
-   See https://github.com/ArthurSonzogni/FTXUI/discussions/228
+   See <https://github.com/ArthurSonzogni/FTXUI/discussions/228>
 - `vscroll_indicator`. Show a scrollbar indicator on the right.
 - `separatorEmpty`. A separator drawing nothing.
 - `separatorFixed`. A separator drawing the provided character.
 
 ### Component
+
 - `Maybe`: Display an component conditionnally based on a boolean.
 - `Dropdown`: A dropdown select list.
 
@@ -386,6 +430,7 @@ The initial release where changelog where written.
 This version includes:
 
 ### screen
+
 - Style:
   - Bold.
   - Blink.

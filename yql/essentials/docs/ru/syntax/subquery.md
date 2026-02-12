@@ -189,5 +189,3 @@ $sub2 = SubqueryOrderBy($sub, [('x',false), ('y',true)]);
 
 PROCESS $sub2();
 ```
-
-

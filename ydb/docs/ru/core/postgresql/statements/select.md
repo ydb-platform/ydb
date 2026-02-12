@@ -128,7 +128,7 @@ GROUP BY sex, age;
 
 ### Примеры использования HAVING
 
-#|
+# |
 || `HAVING` + `GROUP BY` | `HAVING` + `WHERE` + `GROUP BY` ||
 ||
 
@@ -151,7 +151,6 @@ HAVING sex = 'Female';
 
 ||
 |#
-
 
 ## Объединение таблиц с помощью оператора JOIN {#select_from_join_on}
 

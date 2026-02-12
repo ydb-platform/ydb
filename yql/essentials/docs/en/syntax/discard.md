@@ -4,7 +4,6 @@ Calculates [`SELECT`](select/index.md), [`REDUCE`](reduce.md), or [`PROCESS`](pr
 
 It's good to combine it with [`Ensure`](../builtins/basic.md#ensure) to check the final calculation result against the user's criteria.
 
-
 ## Examples
 
 ```yql
@@ -25,5 +24,3 @@ DISCARD SELECT Ensure(
     "Too small result table, got only " || CAST(COUNT(*) AS String) || " rows"
 ) FROM result_table;
 ```
-
-

@@ -543,7 +543,7 @@ print(table.get_string(border=False))
 print(table)
 ```
 
-### Changing the appearance of your table - with _colors_!
+### Changing the appearance of your table - with _colors_
 
 PrettyTable has the functionality of printing your table with ANSI color codes. This
 includes support for most Windows versions through

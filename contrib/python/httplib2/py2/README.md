@@ -10,13 +10,13 @@ If you want to help this project by bug report or code change, [contribution gui
 
 HTTPS support is only available if the socket module was
 compiled with SSL support.
-    
+
 ### Keep-Alive
 
 Supports HTTP 1.1 Keep-Alive, keeping the socket open and
 performing multiple requests over the same connection if
 possible.
-    
+
 ### Authentication
 
 The following three types of HTTP Authentication are
@@ -31,37 +31,34 @@ supported. These can be used over both HTTP and HTTPS.
 The module can optionally operate with a private cache that
 understands the Cache-Control: header and uses both the ETag
 and Last-Modified cache validators.
-    
+
 ### All Methods
 
 The module can handle any HTTP request method, not just GET
 and POST.
-    
+
 ### Redirects
 
 Automatically follows 3XX redirects on GETs.
-    
+
 ### Compression
 
 Handles both 'deflate' and 'gzip' types of compression.
-    
+
 ### Lost update support
 
 Automatically adds back ETags into PUT requests to resources
 we have already cached. This implements Section 3.2 of
 Detecting the Lost Update Problem Using Unreserved Checkout.
-    
+
 ### Unit Tested
 
 A large and growing set of unit tests.
 
-
 Installation
 ============
 
-
-    $ pip install httplib2
-
+    pip install httplib2
 
 Usage
 =====
@@ -111,5 +108,5 @@ that the cached copy must not be used when handling this request.
 
 More example usage can be found at:
 
- * https://github.com/httplib2/httplib2/wiki/Examples
- * https://github.com/httplib2/httplib2/wiki/Examples-Python3
+* <https://github.com/httplib2/httplib2/wiki/Examples>
+* <https://github.com/httplib2/httplib2/wiki/Examples-Python3>

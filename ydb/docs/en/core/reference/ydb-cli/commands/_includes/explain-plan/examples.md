@@ -9,4 +9,3 @@ Adjust the query so that you get only the first seasons of all the series:
   INNER JOIN series AS sr ON sa.series_id = sr.series_id
   WHERE sa.season_id = 1"
 ```
-

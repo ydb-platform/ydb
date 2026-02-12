@@ -20,7 +20,6 @@ goal is to be the core runtime for a higher-level API.
 - Aims to never invoke undefined behavior (tests with ASAN, UBSAN, etc)
 - No global state, fully re-entrant
 
-
 ## Overall Structure
 
 The upb library is divided into two main parts:
@@ -47,6 +46,7 @@ The upb library is divided into two main parts:
 ## Core Message Representation
 
 The representation for each message consists of:
+
 - One pointer (`upb_msg_internaldata*`) for unknown fields and extensions. This
   pointer is `NULL` when no unknown fields or extensions are present.
 - Hasbits for any optional/required fields.
@@ -67,6 +67,7 @@ typedef struct {
 ```
 
 Note in particular that messages do *not* have:
+
 - A pointer to reflection or a parse table (upb messages are not self-describing).
 - A pointer to an arena (the arena must be explicitly passed into any function that
   allocates).

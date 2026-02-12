@@ -19,4 +19,3 @@ Inside Hyperscan, there are several implementations that use different sets of p
 Hyperscan and Pire are best-suited for Grep and Match.
 
 The Re2 module uses [google::RE2](https://github.com/google/re2) that offers a wide range of features ([see the official documentation](https://github.com/google/re2/wiki/Syntax)). The main benefit of the Re2 is its advanced Capture and Replace functionality. Use this library, if you need those functions.
-

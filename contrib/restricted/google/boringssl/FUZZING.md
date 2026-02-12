@@ -11,7 +11,6 @@ CC=clang CXX=clang++ cmake -GNinja -DFUZZ=1 -B build
 ninja -C build
 ```
 
-
 From the `build/` directory, you can then run the fuzzers. For example:
 
 ```

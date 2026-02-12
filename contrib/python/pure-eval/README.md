@@ -163,6 +163,7 @@ True
 ```
 
 In general `is_expression_interesting` returns False for the following values:
+
 - Literals (e.g. `123`, `'abc'`, `[1, 2, 3]`, `{'a': (), 'b': ([1, 2], [3])}`)
 - Variables or attributes whose name is equal to the value's `__name__`, such as `foo` above or `self.foo` if it was a method.
 - Builtins (e.g. `len`) referred to by their usual name.

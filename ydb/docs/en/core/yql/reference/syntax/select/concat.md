@@ -111,4 +111,3 @@ SELECT * FROM FILTER(
   $callable
 );
 ```
-

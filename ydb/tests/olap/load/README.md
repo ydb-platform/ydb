@@ -98,8 +98,6 @@ from .lib.workload_my_workload import TestMyWorkload
 
 Добавить новые файлы с тестами и путь до ворклоада в `ydb/tests/olap/load/ya.make` и в `ydb/tests/olap/load/lib/ya.make`
 
-
-
 ---
 
 ## Setup и Teardown
@@ -107,17 +105,20 @@ from .lib.workload_my_workload import TestMyWorkload
 ### Автоматические действия
 
 **Setup (setup_class):**
+
 - Подготовка workload бинарных файлов
 - Копирование файлов на ноды кластера
 - Инициализация окружения
 
 **Подготовка к каждому тесту (_prepare_workload_execution):**
+
 - **Остановка nemesis** - останавливает nemesis сервис на всех нодах для чистого старта каждого теста
 - Сохранение состояния нод для диагностики
 - Деплой workload бинарных файлов на ноды
 - Создание плана выполнения
 
 **Teardown (teardown_class):**
+
 - Остановка nemesis (если был запущен)
 - Остановка процессов workload на всех нодах
 - Очистка временных файлов
@@ -126,6 +127,7 @@ from .lib.workload_my_workload import TestMyWorkload
 ### Когда nemesis включается
 
 Nemesis автоматически включается при:
+
 - Передаче параметра `nemesis=True` в `execute_workload_test()`
 - Наличии файла конфигурации nemesis в `cluster_path`
 
@@ -159,6 +161,7 @@ Nemesis автоматически включается при:
 ### **Решение: Подстановка переменных в command_args_template**
 
 Система поддерживает подстановку переменных в `command_args_template`, что позволяет:
+
 - Генерировать уникальные пути для каждого инстанса workload
 - Использовать нодо-специфичные endpoint'ы вместо глобального
 - Создавать изолированные соединения для каждого потока
@@ -571,6 +574,7 @@ additional_stats = {
 ### Автоматически собираемые поля
 
 Система автоматически добавляет:
+
 - `total_runs` - общее количество запусков
 - `successful_runs` - успешные запуски
 - `failed_runs` - неуспешные запуски
@@ -1204,6 +1208,7 @@ class TestCustomMetricsWorkload(CustomMetricsWorkloadBase):
 ## Запуск тестов
 
 ### Структура файлов
+
 ```
 ydb/tests/olap/load/
 ├── lib/
@@ -1220,6 +1225,7 @@ ydb/tests/olap/load/
 ### **Примеры запуска теста**
 
 #### **Вариант 1: Без выгрузки результатов в YDB**
+
 ```bash
 ./ya make -ttt \
   --test-param workload_duration=500 \
@@ -1234,6 +1240,7 @@ ydb/tests/olap/load/
 ```
 
 #### **Вариант 2: С выгрузкой результатов в YDB**
+
 ```bash
 # Установите переменную окружения для аутентификации
 export RESULT_IAM_FILE_0=iam.json
@@ -1255,6 +1262,7 @@ export RESULT_IAM_FILE_0=iam.json
 ```
 
 **Параметры запуска:**
+
 - `workload_duration=500` - длительность теста в секундах
 - `ydb-db=/Root/db1` - база данных для тестирования
 - `ydb-endpoint=grpc://localhost:2135` - endpoint YDB кластера
@@ -1264,12 +1272,12 @@ export RESULT_IAM_FILE_0=iam.json
 - `yaml-config=databases.yaml` - **конфигурация баз данных для nemesis (копируется в databases.yaml)**
 
 **Параметры выгрузки в YDB (только для Варианта 2):**
+
 - `send-results=true` - включить выгрузку результатов в YDB
 - `results-endpoint=grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135` - endpoint для выгрузки результатов
 - `results-db=/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8` - база данных для результатов
 - `results-table=nemesis/tests_results` - таблица для результатов. Должна быть создана заранее
 
- 
     Требуется `export RESULT_IAM_FILE_0=iam.json` - **переменная окружения с IAM файлом для аутентификации**
 
 ### **Параметры execute_workload_test()**

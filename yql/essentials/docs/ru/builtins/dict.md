@@ -241,7 +241,6 @@ DictAggregate(Dict<K,List<V>>?, List<V>->T)->Dict<K,T>?
 1. Словарь;
 2. [Фабрика агрегационных функций](basic.md#aggregationfactory).
 
-
 #### Примеры
 
 ```yql
@@ -442,4 +441,3 @@ SELECT SetSymmetricDifference(
     ($k, $a, $b) -> { RETURN AsTuple($a, $b) });
 -- { 2 : (null, "qwe"), 3 : ("bar", null) }
 ```
-

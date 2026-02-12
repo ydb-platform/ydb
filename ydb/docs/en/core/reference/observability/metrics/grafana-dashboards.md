@@ -8,7 +8,6 @@ General database dashboard.
 
 Download the [dbstatus.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dbstatus.json) file with the **DB status** dashboard.
 
-
 ## DB overview {#dboverview}
 
 General database dashboard by categories:
@@ -116,9 +115,9 @@ Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb
 
 The dashboard includes the following filters:
 
-* database – selects the database for which metrics are displayed;
-* ds – selects the Prometheus data source the dashboard will use;
-* Tx type – determines the transaction type for which "`{Tx type}` average time" panel is displayed.
+- database – selects the database for which metrics are displayed;
+- ds – selects the Prometheus data source the dashboard will use;
+- Tx type – determines the transaction type for which "`{Tx type}` average time" panel is displayed.
 
 | Name | Description |
 |---|---|

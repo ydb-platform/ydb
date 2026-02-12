@@ -12,23 +12,22 @@ stream (in a web server that is per connection).
 
 Features:
 
-  * No dependencies
-  * Handles persistent streams (keep-alive).
-  * Decodes chunked encoding.
-  * Upgrade support
-  * Defends against buffer overflow attacks.
+* No dependencies
+* Handles persistent streams (keep-alive).
+* Decodes chunked encoding.
+* Upgrade support
+* Defends against buffer overflow attacks.
 
 The parser extracts the following information from HTTP messages:
 
-  * Header fields and values
-  * Content-Length
-  * Request method
-  * Response status code
-  * Transfer-Encoding
-  * HTTP version
-  * Request URL
-  * Message body
-
+* Header fields and values
+* Content-Length
+* Request method
+* Response status code
+* Transfer-Encoding
+* HTTP version
+* Request URL
+* Message body
 
 Usage
 -----
@@ -36,6 +35,7 @@ Usage
 One `http_parser` object is used per TCP connection. Initialize the struct
 using `http_parser_init()` and set the callbacks. That might look something
 like this for a request parser:
+
 ```c
 http_parser_settings settings;
 settings.on_url = my_url_callback;
@@ -89,7 +89,6 @@ The parser decodes the transfer-encoding for both requests and responses
 transparently. That is, a chunked encoding is decoded before being sent to
 the on_body callback.
 
-
 The Special Problem of Upgrade
 ------------------------------
 
@@ -116,7 +115,6 @@ http_parser_execute() will stop parsing at the end of the headers and return.
 The user is expected to check if `parser->upgrade` has been set to 1 after
 `http_parser_execute()` returns. Non-HTTP data begins at the buffer supplied
 offset by the return value of `http_parser_execute()`.
-
 
 Callbacks
 ---------
@@ -148,6 +146,7 @@ callback in a threadsafe manner. This allows `http_parser` to be used in
 multi-threaded contexts.
 
 Example:
+
 ```c
  typedef struct {
   socket_t sock;
@@ -230,7 +229,6 @@ and apply the following logic:
     | value                  | on_h_value | Value continues. Reallocate value buffer   |
     |                        |            | and append callback data to it             |
      ------------------------ ------------ --------------------------------------------
-
 
 Parsing URLs
 ------------

@@ -25,29 +25,29 @@ To create a connection to {{ ydb-short-name }}:
 
    - Anonymous {#anonymous}
 
-     * **Host name**. Specify the hostname for {{ ydb-short-name }} connection.
-     * **Port**. Specify the connection port for {{ ydb-short-name }}. The default port is 2135.
-     * **Database path**. Specify the name of the database to connect to.
+     - **Host name**. Specify the hostname for {{ ydb-short-name }} connection.
+     - **Port**. Specify the connection port for {{ ydb-short-name }}. The default port is 2135.
+     - **Database path**. Specify the name of the database to connect to.
 
    - Password {#password}
 
-     * **Host name**. Specify the hostname for {{ ydb-short-name }} connection.
-     * **Port**. Specify the connection port for {{ ydb-short-name }}. The default port is 2135.
-     * **Database path**. Specify the name of the database to connect to.
-     * **Username**. Enter the username to connect to {{ ydb-short-name }}.
-     * **Password**. Enter the user password.
+     - **Host name**. Specify the hostname for {{ ydb-short-name }} connection.
+     - **Port**. Specify the connection port for {{ ydb-short-name }}. The default port is 2135.
+     - **Database path**. Specify the name of the database to connect to.
+     - **Username**. Enter the username to connect to {{ ydb-short-name }}.
+     - **Password**. Enter the user password.
 
    - OAuth {#oauth}
 
-     * **OAuth token**. Provide the OAuth token to access {{ ydb-short-name }}.
-     * **Host name**. Specify the hostname for {{ ydb-short-name }} connection.
-     * **Port**. Specify the connection port for {{ ydb-short-name }}. The default port is 2135.
-     * **Database path**. Specify the name of the database to connect to.
+     - **OAuth token**. Provide the OAuth token to access {{ ydb-short-name }}.
+     - **Host name**. Specify the hostname for {{ ydb-short-name }} connection.
+     - **Port**. Specify the connection port for {{ ydb-short-name }}. The default port is 2135.
+     - **Database path**. Specify the name of the database to connect to.
 
    {% endlist %}
 
-   * **Cache lifetime in seconds**. Set the cache lifetime or leave the default value. The recommended value is 300 seconds (5 minutes).
-   * **SQL query access level**. Allows the use of custom SQL queries to create a dataset.
+   - **Cache lifetime in seconds**. Set the cache lifetime or leave the default value. The recommended value is 300 seconds (5 minutes).
+   - **SQL query access level**. Allows the use of custom SQL queries to create a dataset.
 
 5. Click **Create connection**.
 6. Specify a connection name and click **Create**.

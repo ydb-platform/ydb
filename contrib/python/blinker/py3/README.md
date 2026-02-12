@@ -3,7 +3,6 @@
 Blinker provides a fast dispatching system that allows any number of
 interested parties to subscribe to events, or "signals".
 
-
 ## Pallets Community Ecosystem
 
 > [!IMPORTANT]\
@@ -13,7 +12,6 @@ interested parties to subscribe to events, or "signals".
 > this project, please reach out on [the Pallets Discord server][discord].
 >
 > [discord]: https://discord.gg/pallets
-
 
 ## Example
 

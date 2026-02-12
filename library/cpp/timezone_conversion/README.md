@@ -8,8 +8,9 @@ in Arcadia and is compiled with the library (which means your executable will en
 
 See [contrib/libs/cctz/README][update] if you think zone database is outdated.
 
-Quick start:
+Quick start
 ============
+
 ```
 #include <library/cpp/timezone_conversion/convert.h>
 

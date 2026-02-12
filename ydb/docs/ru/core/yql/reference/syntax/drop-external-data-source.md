@@ -9,4 +9,3 @@
 ```yql
 DROP EXTERNAL DATA SOURCE my_external_data_source;
 ```
-

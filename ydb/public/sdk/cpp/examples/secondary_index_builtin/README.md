@@ -15,6 +15,7 @@ CREATE TABLE TableName (
 );
 COMMIT;
 ```
+
 Пример создания таблицы series c полями series_id, title, info, release_date, views, uploaded_user_id, с первичным ключом series_id, и вторичными индексами views_index по полю views и users_index по полю uploaded_user_id.
 
 ```cl
@@ -33,7 +34,8 @@ CREATE TABLE series (
 );
 COMMIT;
 ```
-## Select 
+
+## Select
 
 ```cl
 SELECT * 
@@ -41,7 +43,7 @@ FROM TableName VIEW IndexName
 WHERE …
 ```
 
-Пример SELECT запроса полей series_id, title, views, ... из таблицы series по индексу views_index 
+Пример SELECT запроса полей series_id, title, views, ... из таблицы series по индексу views_index
 с условием views >= someValue
 
 ```cl

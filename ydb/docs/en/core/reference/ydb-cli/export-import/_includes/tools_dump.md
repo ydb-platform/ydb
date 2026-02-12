@@ -110,5 +110,3 @@ To a specific directory:
 ```bash
 {{ ydb-cli }} --profile quickstart tools dump -p dir1 --scheme-only
 ```
-
-

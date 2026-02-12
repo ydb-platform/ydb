@@ -23,4 +23,3 @@
 
 - [Для работы с JSON](json.md)
 - [Библиотеки C++](../udf/list/index.md)
-

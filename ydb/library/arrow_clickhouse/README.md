@@ -1,8 +1,8 @@
 ClickHouse aggregate functions over Apache Arrow primitives
 --------
 
-This library is a modified ClickHouse (https://github.com/ClickHouse/ClickHouse/) code that uses Apache Arrow
-(https://arrow.apache.org/) primitives instead of ClickHouse native ones. I.e. it uses arrow::RecordBatch
+This library is a modified ClickHouse (<https://github.com/ClickHouse/ClickHouse/>) code that uses Apache Arrow
+(<https://arrow.apache.org/>) primitives instead of ClickHouse native ones. I.e. it uses arrow::RecordBatch
 instead of DB::Block, arrow::Array and arrow::Builder instead of DB::IColumn and so on.
 The redefinition of types is in arrow_clickhouse_types.h header.
 

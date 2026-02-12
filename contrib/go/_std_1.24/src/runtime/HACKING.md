@@ -200,11 +200,11 @@ documented to explain how that access is protected.
 
 Some common patterns that mix atomic and non-atomic access are:
 
-* Read-mostly variables where updates are protected by a lock. Within
+- Read-mostly variables where updates are protected by a lock. Within
   the locked region, reads do not need to be atomic, but the write
   does. Outside the locked region, reads need to be atomic.
 
-* Reads that only happen during STW, where no writes can happen during
+- Reads that only happen during STW, where no writes can happen during
   STW, do not need to be atomic.
 
 That said, the advice from the Go memory model stands: "Don't be
@@ -222,14 +222,14 @@ allocated in situations where the caller may not have a P.
 
 There are three mechanisms for allocating unmanaged memory:
 
-* sysAlloc obtains memory directly from the OS. This comes in whole
+- sysAlloc obtains memory directly from the OS. This comes in whole
   multiples of the system page size, but it can be freed with sysFree.
 
-* persistentalloc combines multiple smaller allocations into a single
+- persistentalloc combines multiple smaller allocations into a single
   sysAlloc to avoid fragmentation. However, there is no way to free
   persistentalloced objects (hence the name).
 
-* fixalloc is a SLAB-style allocator that allocates objects of a fixed
+- fixalloc is a SLAB-style allocator that allocates objects of a fixed
   size. fixalloced objects can be freed, but this memory can only be
   reused by the same fixalloc pool, so it can only be reused for
   objects of the same type.

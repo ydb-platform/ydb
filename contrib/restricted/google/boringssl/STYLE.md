@@ -5,7 +5,6 @@ BoringSSL usually follows the
 The rest of this document describes differences and clarifications on
 top of the base guide.
 
-
 ## Legacy code
 
 As a derivative of OpenSSL, BoringSSL contains a lot of legacy code that
@@ -18,7 +17,6 @@ Modules from OpenSSL's legacy ASN.1 and X.509 stack are retained for
 compatibility and left largely unmodified. To ease importing patches from
 upstream, they match OpenSSL's new indentation style. For Emacs,
 `doc/openssl-c-indent.el` from OpenSSL may be helpful in this.
-
 
 ## Language
 
@@ -59,7 +57,6 @@ For new constants, prefer enums when the values are sequential and typed
 constants for flags. If adding values to an existing set of `#define`s,
 continue with `#define`.
 
-
 ## libssl
 
 libssl was originally written in C but is being incrementally rewritten in
@@ -71,7 +68,6 @@ used with a shared library build to check if a new construct is okay.
 
 If unsure, match surrounding code. Discrepancies between it and Google C++ style
 will be fixed over time.
-
 
 ## Formatting
 
@@ -86,7 +82,6 @@ not
 
     if (foo)
       do_something();
-
 
 ## Integers
 
@@ -109,7 +104,6 @@ When doing arithmetic, account for overflow conditions.
 
 Except with platform APIs, do not use `ssize_t`. MSVC lacks it, and
 prefer out-of-band error signaling for `size_t` (see Return values).
-
 
 ## Naming
 
@@ -152,7 +146,6 @@ Name enums like `enum unix_hacker_t`. For instance:
       dont_free_handshake_buffer,
     };
 
-
 ## Return values
 
 As even `malloc` may fail in BoringSSL, the vast majority of functions
@@ -168,7 +161,6 @@ rather than arbitrarily assigning meaning to int values.
 If a function outputs a pointer to an object on success and there are no
 other outputs, return the pointer directly and `NULL` on error.
 
-
 ## Parameters
 
 Where not constrained by legacy code, parameter order should be:
@@ -183,7 +175,6 @@ For example,
      * ASN.1 object can be written. The |tag| argument will be used as the tag for
      * the object. It returns one on success or zero on error. */
     OPENSSL_EXPORT int CBB_add_asn1(CBB *cbb, CBB *out_contents, unsigned tag);
-
 
 ## Documentation
 
@@ -220,7 +211,6 @@ return value patterns in legacy functions.
 
 Document private functions in their `internal.h` header or, if static,
 where defined.
-
 
 ## Build logic
 

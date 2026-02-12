@@ -75,10 +75,10 @@ No API/ABI break compared to v2.3.0
 
 No API/ABI break compared to v2.2.0 but additional symbols for subset of components decoding (hence the MINOR version bump).
 
-* Sub-tile decoding: when setting a window of interest through the API function opj_set_decode_area(), only codeblocks that intersect this window are now decoded (i.e. MCT, IDWT, and entropy decoding are only done on the window of interest). Moreover, memory allocation now depends on the size of the window of interest (instead of the full tile size). 
+* Sub-tile decoding: when setting a window of interest through the API function opj_set_decode_area(), only codeblocks that intersect this window are now decoded (i.e. MCT, IDWT, and entropy decoding are only done on the window of interest). Moreover, memory allocation now depends on the size of the window of interest (instead of the full tile size).
 [\#990](https://github.com/uclouvain/openjpeg/pull/990) [\#1001](https://github.com/uclouvain/openjpeg/pull/1001) [\#1010](https://github.com/uclouvain/openjpeg/pull/1010)
-* Ability to decode only a subset of components. This adds the following function `opj_set_decoded_components(opj_codec_t p_codec, OPJ_UINT32 numcomps, const OPJ_UINT32 comps_indices, OPJ_BOOL apply_color_transforms)` and equivalent `opj_decompress -c compno[,compno]*` 
-option. 
+* Ability to decode only a subset of components. This adds the following function `opj_set_decoded_components(opj_codec_t p_codec, OPJ_UINT32 numcomps, const OPJ_UINT32 comps_indices, OPJ_BOOL apply_color_transforms)` and equivalent `opj_decompress -c compno[,compno]*`
+option.
 [\#1022](https://github.com/uclouvain/openjpeg/pull/1022)
 * Many bug fixes (including security fixes)
 
@@ -120,19 +120,20 @@ No API/ABI break compared to v2.1.2 but additional symbols for multithreading su
 ### New Features
 
     * Digital Cinema profiles have been fixed and updated
-	* New option to disable MCT if needed
+ * New option to disable MCT if needed
     * extended RAW support: it is now possible to input raw images
-	  with subsampled color components (422, 420, etc)
+   with subsampled color components (422, 420, etc)
     * New way to deal with profiles
-	  
+   
 ### API/ABI modifications
+
 (see [here](http://www.openjpeg.org/abi-check/timeline/openjpeg/) for details)
 
     * Removed deprecated functions 
-	    * opj_stream_create_default_file_stream(FILE*,...)
+     * opj_stream_create_default_file_stream(FILE*,...)
         * opj_stream_create_file_stream(FILE*,...)
         * opj_stream_set_user_data (opj_stream_t* p_stream, void * p_data)
-	* Added 
+ * Added 
         * opj_stream_create_default_file_stream(char*,...)
         * opj_stream_create_file_stream(char*,...)
         * opj_stream_destroy(opj_stream_t*)
@@ -150,10 +151,9 @@ No API/ABI break compared to v2.1.2 but additional symbols for multithreading su
 ### Misc
 
     * OpenJPEG is now officially conformant with JPEG 2000 Part-1
-	  and will soon become official reference software at the 
-	  JPEG committee.
-	* Huge amount of bug fixes. See CHANGES for details.
-
+   and will soon become official reference software at the 
+   JPEG committee.
+ * Huge amount of bug fixes. See CHANGES for details.
 
 ## OpenJPEG 2.0.0
 
@@ -163,6 +163,7 @@ No API/ABI break compared to v2.1.2 but additional symbols for multithreading su
     * merge JP3D
 
 ### API modifications
+
 (see [here](http://www.openjpeg.org/abi-check/timeline/openjpeg/) for details)
 
     * Use a 64bits capable API

@@ -9,4 +9,3 @@
 ```yql
 DROP EXTERNAL TABLE my_table;
 ```
-

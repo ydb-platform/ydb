@@ -30,7 +30,7 @@ Currently, there are no other ways to adding C++ port as a dependency other than
 
 ## Build & Run
 
-Actual build steps are available at [CMake GitHub Workflow](../../.github/workflows/cmake.yml). 
+Actual build steps are available at [CMake GitHub Workflow](../../.github/workflows/cmake.yml).
 
 `ANTLRv4` Runtime and Tool as well as other dependecnies will be downloaded during `CMake` configiration stage.
 

@@ -6,8 +6,8 @@ Efficient data storage is the foundation of any analytical warehouse. {{ ydb-sho
 
 Data in [columnar tables](../../../concepts/datamodel/table.md#column-oriented-tables) is stored by columns instead of rows. This approach is the standard for OLAP systems and offers two key advantages:
 
-1.  Reduced read volume: when a query (e.g., `SELECT column_a, column_b FROM...`) is executed, only the data from the columns involved in the query is read from the disk.
-2.  Data compression: data of the same type within a column compresses better than heterogeneous data in a row. {{ ydb-short-name }} uses the `LZ4` compression algorithm.
+1. Reduced read volume: when a query (e.g., `SELECT column_a, column_b FROM...`) is executed, only the data from the columns involved in the query is read from the disk.
+2. Data compression: data of the same type within a column compresses better than heterogeneous data in a row. {{ ydb-short-name }} uses the `LZ4` compression algorithm.
 
 ## Architecture with storage and compute disaggregation {#disaggregation}
 

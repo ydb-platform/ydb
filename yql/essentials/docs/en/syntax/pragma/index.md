@@ -41,4 +41,3 @@ For the full list of available settings, [see below](#pragmas).
 * [Yson](yson.md)
 * [Working with files](file.md)
 * [Debug and service](debug.md)
-

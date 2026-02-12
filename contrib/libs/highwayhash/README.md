@@ -1,8 +1,8 @@
 Strong (well-distributed and unpredictable) hashes:
 
-*   Portable implementation of
+* Portable implementation of
     [SipHash](https://www.131002.net/siphash/siphash.pdf)
-*   HighwayHash, a 5x faster SIMD hash with [security
+* HighwayHash, a 5x faster SIMD hash with [security
     claims](https://arxiv.org/abs/1612.06257)
 
 ## Quick Start
@@ -63,7 +63,7 @@ cryptographically strong hashes. Large inputs are processed at a rate of 0.24
 cycles per byte, and latency remains low even for small inputs. HighwayHash is
 faster than SipHash for all input sizes, with 5 times higher throughput at 1
 KiB. We discuss design choices and provide statistical analysis and preliminary
-cryptanalysis in https://arxiv.org/abs/1612.06257.
+cryptanalysis in <https://arxiv.org/abs/1612.06257>.
 
 ## Applications
 
@@ -96,7 +96,7 @@ the reference C code. Outputs are identical for the given test cases (messages
 between 0 and 63 bytes).
 
 Interestingly, it is about twice as fast as a SIMD implementation using SSE4.1
-(https://goo.gl/80GBSD). This is presumably due to the lack of SIMD bit rotate
+(<https://goo.gl/80GBSD>). This is presumably due to the lack of SIMD bit rotate
 instructions.
 
 SipHash13 is a faster but weaker variant with one mixing round per update and
@@ -124,7 +124,7 @@ For older CPUs, we also provide an SSE4.1 version (80% as fast for large inputs
 and 95% as fast for short inputs) and a portable version (10% as fast).
 
 Statistical analyses and preliminary cryptanalysis are given in
-https://arxiv.org/abs/1612.06257.
+<https://arxiv.org/abs/1612.06257>.
 
 ## Versioning and stability
 
@@ -242,7 +242,7 @@ the hash table size `p`. It is common to choose `p = 2^i` to enable an efficient
 easier for attackers to compute partial collisions where only the lower `i` bits
 match. This can be prevented by choosing a prime `p` so that `R(h) := h % p`
 incorporates all hash bits. The costly modulo operation can be avoided by
-multiplying with the inverse (https://goo.gl/l7ASm8). An interesting alternative
+multiplying with the inverse (<https://goo.gl/l7ASm8>). An interesting alternative
 suggested by Kyoung Jae Seo chooses a random subset of the `h` bits. Such an `R`
 function can be computed in just 3 cycles using PEXT from the BMI2 instruction
 set. This is expected to defend against SAT-solver attacks on the hash bits at a
@@ -288,7 +288,7 @@ the worst-case operation cost. For the AVL variant, the constant factors are
 slightly lower than for red-black trees.
 
 The second proposed approach uses augmented/de-amortized cuckoo hash tables
-(https://goo.gl/PFwwkx). These guarantee worst-case `log n` bounds for all
+(<https://goo.gl/PFwwkx>). These guarantee worst-case `log n` bounds for all
 operations, but only if the hash function is 'indistinguishable from random'
 (uniformly distributed regardless of the input distribution), which is claimed
 for SipHash and HighwayHash but certainly not for weak hashes.
@@ -313,36 +313,36 @@ raise an issue and we'll add yours as well.
 
 By | Language | URL
 --- | --- | ---
-Damian Gryski | Go and SSE | https://github.com/dgryski/go-highway/
-Lovell Fuller | node.js bindings | https://github.com/lovell/highwayhash
-Vinzent Steinberg | Rust bindings | https://github.com/vks/highwayhash-rs
+Damian Gryski | Go and SSE | <https://github.com/dgryski/go-highway/>
+Lovell Fuller | node.js bindings | <https://github.com/lovell/highwayhash>
+Vinzent Steinberg | Rust bindings | <https://github.com/vks/highwayhash-rs>
 
 ## Modules
 
 ### Hashes
 
-*   c_bindings.h declares C-callable versions of SipHash/HighwayHash.
-*   sip_hash.cc is the compatible implementation of SipHash, and also provides
+* c_bindings.h declares C-callable versions of SipHash/HighwayHash.
+* sip_hash.cc is the compatible implementation of SipHash, and also provides
     the final reduction for sip_tree_hash.
-*   sip_tree_hash.cc is the faster but incompatible SIMD j-lanes tree hash.
-*   scalar_sip_tree_hash.cc is a non-SIMD version.
-*   state_helpers.h simplifies the implementation of the SipHash variants.
-*   highwayhash.h is our new, fast hash function.
-*   hh_avx2.h, hh_sse41.h and hh_portable.h are its various implementations.
-*   highwayhash_target.h chooses the best available implementation at runtime.
+* sip_tree_hash.cc is the faster but incompatible SIMD j-lanes tree hash.
+* scalar_sip_tree_hash.cc is a non-SIMD version.
+* state_helpers.h simplifies the implementation of the SipHash variants.
+* highwayhash.h is our new, fast hash function.
+* hh_avx2.h, hh_sse41.h and hh_portable.h are its various implementations.
+* highwayhash_target.h chooses the best available implementation at runtime.
 
 ### Infrastructure
 
-*   arch_specific.h offers byte swapping and CPUID detection.
-*   compiler_specific.h defines some compiler-dependent language extensions.
-*   data_parallel.h provides a C++11 ThreadPool and PerThread (similar to
+* arch_specific.h offers byte swapping and CPUID detection.
+* compiler_specific.h defines some compiler-dependent language extensions.
+* data_parallel.h provides a C++11 ThreadPool and PerThread (similar to
     OpenMP).
-*   instruction_sets.h and targets.h enable efficient CPU-specific dispatching.
-*   nanobenchmark.h measures elapsed times with < 1 cycle variability.
-*   os_specific.h sets thread affinity and priority for benchmarking.
-*   profiler.h is a low-overhead, deterministic hierarchical profiler.
-*   tsc_timer.h obtains high-resolution timestamps without CPU reordering.
-*   vector256.h and vector128.h contain wrapper classes for AVX2 and SSE4.1.
+* instruction_sets.h and targets.h enable efficient CPU-specific dispatching.
+* nanobenchmark.h measures elapsed times with < 1 cycle variability.
+* os_specific.h sets thread affinity and priority for benchmarking.
+* profiler.h is a low-overhead, deterministic hierarchical profiler.
+* tsc_timer.h obtains high-resolution timestamps without CPU reordering.
+* vector256.h and vector128.h contain wrapper classes for AVX2 and SSE4.1.
 
 By Jan Wassenberg <jan.wassenberg@gmail.com> and Jyrki Alakuijala
 <jyrki.alakuijala@gmail.com>, updated 2017-02-07

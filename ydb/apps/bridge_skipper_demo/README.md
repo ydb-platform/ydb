@@ -5,16 +5,19 @@
 YDB supports operating in [Bridge](https://ydb.tech/docs/en/concepts/bridge?version=main) mode. The CLI utility `skipper.py` implements a demo version of a `Bridge keeper`: it monitors the cluster state, manages parts of the cluster called [pile](https://ydb.tech/docs/en/concepts/glossary?version=main#pile), and displays the cluster state in a TUI.
 
 By default, the utility automatically performs failover for failed parts of the cluster:
+
 - switches them to `DISCONNECTED`
 - assigns a healthy pile as `PRIMARY` if needed
 
 Demo version limitations:
+
 - only two piles are supported
 - the state of the compute part of the cluster is not taken into account
 
 ## Installation
 
 Install dependencies:
+
 ```
 pip3 install textual requests pyyaml
 ```
@@ -24,11 +27,13 @@ YDB CLI is required for `skipper` to work. By default, it is automatically locat
 ## Usage
 
 Example:
+
 ```
 ./skipper.py -e <EXAMPLE.COM> -s ~/ydb-test-bridge-state.json --cluster ydb-test-bridge --tui
 ```
 
 Example with additional authentication parameters:
+
 ```
 ./skipper.py --ydb-auth-opts "--user suser --password-file password.txt" -e <EXAMPLE.COM> -s ~/ydb-test-bridge-state.json --cluster ydb-test-bridge --tui
 ```

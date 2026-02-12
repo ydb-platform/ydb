@@ -233,4 +233,3 @@ The current TTL settings can be obtained from the table description:
   ```
 
 {% endlist %}
-

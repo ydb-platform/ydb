@@ -25,4 +25,4 @@
 -->
 
 The files in this directory are vendored from utfcpp git tag v3.1.1
-(https://github.com/nemtrif/utfcpp).
+(<https://github.com/nemtrif/utfcpp>).

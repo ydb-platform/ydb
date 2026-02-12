@@ -2,11 +2,9 @@
 
 ## [1.6.0](https://github.com/google/uuid/compare/v1.5.0...v1.6.0) (2024-01-16)
 
-
 ### Features
 
 * add Max UUID constant ([#149](https://github.com/google/uuid/issues/149)) ([c58770e](https://github.com/google/uuid/commit/c58770eb495f55fe2ced6284f93c5158a62e53e3))
-
 
 ### Bug Fixes
 
@@ -15,13 +13,11 @@
 
 ## [1.5.0](https://github.com/google/uuid/compare/v1.4.0...v1.5.0) (2023-12-12)
 
-
 ### Features
 
 * Validate UUID without creating new UUID ([#141](https://github.com/google/uuid/issues/141)) ([9ee7366](https://github.com/google/uuid/commit/9ee7366e66c9ad96bab89139418a713dc584ae29))
 
 ## [1.4.0](https://github.com/google/uuid/compare/v1.3.1...v1.4.0) (2023-10-26)
-
 
 ### Features
 
@@ -32,7 +28,6 @@
 * Clarify that Parse's job is to parse but not necessarily validate strings. (Documents current behavior)
 
 ## [1.3.1](https://github.com/google/uuid/compare/v1.3.0...v1.3.1) (2023-08-18)
-
 
 ### Bug Fixes
 

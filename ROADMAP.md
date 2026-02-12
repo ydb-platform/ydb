@@ -1,7 +1,11 @@
 # YDB Roadmap
+
 ## Intro
+
 The document contains high-level roadmap for YDB. Take a look at [👑 Epics Project](https://github.com/orgs/ydb-platform/projects/46/) also.
+
 ## Legend
+
 We use the following symbols as abbreviations:
 
 1. ㉓ - feature appeared in the Roadmap for 2023;
@@ -50,6 +54,7 @@ We use the following symbols as abbreviations:
 1. ✅ ㉓ **DDL for column-oriented tables**
 
 ## Database Core (Tablets, etc)
+
 1. ✅ ㉔ **Exact Nearest Neighbor Vector Search**
 1. ㉔ **Approximate Nearest Neighbor Vector Search**. [Global vector index](https://github.com/ydb-platform/ydb/issues/8967)
 1. ㉔ **Volatile transactions**. YDB Distributed transactions 2.0, minimize network round trips in happy path
@@ -83,6 +88,7 @@ We use the following symbols as abbreviations:
 1. ✅ ㉓ Support for **Kafka API compatible protocol** to YDB Topics
 
 ### Hardcore or system wide
+
 1. ㉔ **Tracing** capabilities
 1. ㉔ Automatically **balance tablet channels** via BlobStorage groups
 1. ✅ ㉓ **Datashard iterator reads via MVCC**
@@ -91,12 +97,14 @@ We use the following symbols as abbreviations:
 1. ㉓ **Subscriptions in SchemeBoard** (optimize interaction with SchemeBoard via subsription to updates)
 
 ## Security
+
 1. ✅ ㉓ Basic LDAP Support
 1. ㉔ Support for OpenID Connect
 1. ㉔ Authentication via KeyCloack
 1. ㉔ Support for SASL framework
 
 ## BlobStorage
+
 1. ㉔ BlobStorage **latency optimization** (p999), less CPU consumption
 1. ㉔ **ActorSystem performance optimizations**
 1. ㉔ Optimize **ActorSystem for ARM processors**
@@ -114,6 +122,7 @@ We use the following symbols as abbreviations:
 1. ✅ ㉓ **Storage nodes decommission** (Add ability to remove storage nodes)
 
 ## Analytical Capabilities
+
 1. ㉔ **Backup** for column tables
 1. ㉔ Column tables **autosharding**
 1. ㉓ 🚧 **Log Store** (log friendly column-oriented storage which allows to create 1+ million tables for logs storing)
@@ -121,19 +130,24 @@ We use the following symbols as abbreviations:
 1. ㉓ **Tiered Storage for Column-oriented Tables** (with the ability to store the data in S3)
 
 ## Federated Query
+
 1. ✅ ㉓ **Run the first version**
 
 ## Embedded UI
+
 Detailed roadmap could be found at [YDB Embedded UI repo](https://github.com/ydb-platform/ydb-embedded-ui/blob/main/ROADMAP.md).
 
 ## Command Line Interface
+
 1. ✅ ㉔ Use a **single `ydb sql` command** instead of `ydb yql`, `ydb table query` or `ydb scripting` to execute any query
 1. ✅ ㉓ Interactive CLI
 
 ## Tests and Benchmarks
+
 1. ㉓ **Built-in load test for DataShards** in YCSB manner
 1. ✅ ㉓ **`ydb workload` for topics**
 1. ✅ ㉔ **Jepsen tests support** [Blog post](https://blog.ydb.tech/hardening-ydb-with-jepsen-lessons-learned-e3238a7ef4f2)
 
 ## Experiments
+
 1. ❌ *(refused)* Try **RTMR-tablet** for key-value workload

@@ -3,7 +3,6 @@
 
 Синтаксис вызова оконных функций подробно описан в [отдельной статье](../syntax/select/window.md).
 
-
 ## Агрегатные функции {#aggregate-functions}
 
 Все [агрегатные функции](aggregation.md) также могут использоваться в роли оконных.
@@ -20,7 +19,6 @@ WINDOW
     w1 AS (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
     w2 AS ();
 ```
-
 
 ## ROW_NUMBER {#row_number}
 
@@ -40,7 +38,6 @@ SELECT
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
-
 
 ## LAG / LEAD {#lag-lead}
 
@@ -86,7 +83,6 @@ item  odd  lag1
 7  1  5
 */
 ```
-
 
 ## FIRST_VALUE / LAST_VALUE
 
@@ -145,7 +141,6 @@ FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
 
-
 ## RANK / DENSE_RANK / PERCENT_RANK {#rank}
 
 Пронумеровать группы соседних строк [раздела](../syntax/select/window.md#partition) с одинаковым значением выражения в аргументе. `DENSE_RANK` нумерует группы подряд, а `RANK` — пропускает `(N - 1)` значений, где `N` — число строк в предыдущей группе. `PERCENT_RANK` выдает относительный ранг текущей строки: `(RANK - 1)/(число строк в разделе - 1)`.
@@ -190,7 +185,6 @@ FROM my_table
 WINDOW w AS (ORDER BY my_column);
 ```
 
-
 ## NTILE
 
 Распределяет строки упорядоченного [раздела](../syntax/select/window.md#partition) в заданное количество групп. Группы нумеруются, начиная с единицы. Для каждой строки функция NTILE возвращает номер группы,которой принадлежит строка.
@@ -209,7 +203,6 @@ SELECT
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
-
 
 ## CUME_DIST
 
@@ -230,11 +223,8 @@ FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
 
-
-
 ## SessionState() {#session-state}
 
 Нестандартная оконная функция `SessionState()` (без аргументов) позволяет получить состояние расчета сессий из [SessionWindow](../syntax/select/group-by.md#session-window) для текущей строки.
 
 Допускается только при наличии `SessionWindow()` в секции `PARTITION BY` определения окна.
-

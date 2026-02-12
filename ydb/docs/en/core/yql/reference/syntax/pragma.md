@@ -39,8 +39,6 @@ Unless otherwise specified, a pragma affects all the subsequent expressions up t
 
 There are also special scoped pragmas with the scope defined by the same rules as the scope of [named expressions](expressions.md#named-nodes). Unlike scoped pragmas, regular pragmas can only be used in the global scope (not inside lambda functions, `ACTION`{% if feature_subquery %}, `SUBQUERY`{% endif %}, etc.).
 
-
-
 ## Global {#pragmas}
 
 ### AutoCommit {#autocommit}
@@ -93,8 +91,6 @@ The warning code is returned with the text itself (it's displayed on the right s
 `PRAGMA Warning("default", "4503");`
 
 In this case, all the warnings are treated as errors, except for the warning `1101` (that will be disabled) and `4503` (that will be processed by default, that is, remain a warning). Since warnings may be added in new YQL releases, use `PRAGMA Warning("error", "*");` with caution (at least cover such queries with autotests).
-
-
 
 {% if feature_mapreduce %}
 
@@ -288,7 +284,6 @@ Use this option with care, because the computational complexity of the query gro
 
 {% endif %}
 
-
 ## Yson
 
 Managing the default behavior of Yson UDF, for more information, see the [documentation](../udf/list/yson.md) and, in particular, [Yson::Options](../udf/list/yson.md#ysonoptions).
@@ -316,8 +311,6 @@ Strict mode control in all Yson UDF calls, including implicit calls. If the valu
 | Flag | false |
 
 An inverted version of `yson.Strict`. If the value is omitted or is `"true"`, it disables the strict mode. If the value is `"false"`, it enables the strict mode.
-
-
 
 {% if feature_mapreduce %}
 
@@ -428,7 +421,6 @@ SELECT $foo;
 
 {% endif %}
 
-
 {% if tech %}
 
 ## YDB
@@ -471,8 +463,6 @@ An experimental pragma that allows you to reduce the isolation level of the curr
 
 {% endif %}
 
-
-
 {% if tech %}
 
 ## Debugging and auxiliary settings {#debug}
@@ -513,5 +503,3 @@ Selecting a cluster for calculations that don't access tables.
 Getting diagnostic information from YQL as an additional result of a query.
 
 {% endif %}
-
-

@@ -13,4 +13,3 @@ If there is a new project that suffers from leaked inputs:
 `tsc --showConfig` fills `files` field - list of all discovered files.
 
 The test ensures that with the same config our logic matches all these files. Yes, our logic can match more files, but here we only check that we don't leak required inputs.
-

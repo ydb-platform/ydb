@@ -27,14 +27,14 @@ pip install ydb apache-airflow-providers-ydb
 
 Обязательные аргументы:
 
-* `task_id` — название задания {{ airflow-name }}.
-* `sql` — текст SQL-запроса, который необходимо выполнить в {{ ydb-full-name }}.
+- `task_id` — название задания {{ airflow-name }}.
+- `sql` — текст SQL-запроса, который необходимо выполнить в {{ ydb-full-name }}.
 
 Опциональные аргументы:
 
-* `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем [`ydb_default`](#ydb_default). Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
-* `is_ddl` — признак, что выполняется [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) запрос. Если аргумент не указан, или установлен в `False`, то будет выполняться [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) запрос.
-* `params` — словарь [параметров запроса](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/params.html).
+- `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем [`ydb_default`](#ydb_default). Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
+- `is_ddl` — признак, что выполняется [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) запрос. Если аргумент не указан, или установлен в `False`, то будет выполняться [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) запрос.
+- `params` — словарь [параметров запроса](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/params.html).
 
 Пример:
 
@@ -44,15 +44,14 @@ ydb_operator = YDBExecuteQueryOperator(task_id="ydb_operator", sql="SELECT 'Hell
 
 В данном примере создается задание {{ airflow-name }} с идентификатором `ydb_operator`, которое выполняет запрос `SELECT 'Hello, world!'`.
 
-
 ### YDBHook {#ydb_hook}
 
 Для выполнения низкоуровневых команд в {{ ydb-full-name }} используется {{ airflow-name }} класс `YDBHook`.
 
 Опциональные аргументы:
 
-* `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем [`ydb_default`](#ydb_default). Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
-* `is_ddl` — признак, что выполняется [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) запрос. Если аргумент не указан, или установлен в `False`, то будет выполняться [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) запрос.
+- `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем [`ydb_default`](#ydb_default). Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
+- `is_ddl` — признак, что выполняется [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) запрос. Если аргумент не указан, или установлен в `False`, то будет выполняться [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) запрос.
 
 `YDBHook` поддерживает следующие методы:
 
@@ -65,10 +64,9 @@ ydb_operator = YDBExecuteQueryOperator(task_id="ydb_operator", sql="SELECT 'Hell
 
 Обязательные аргументы:
 
-* `table_name` — название таблицы {{ ydb-full-name }}, куда будет выполняться вставка данных.
-* `rows` — массив строк для вставки.
-* `column_types` — описание типов колонок.
-
+- `table_name` — название таблицы {{ ydb-full-name }}, куда будет выполняться вставка данных.
+- `rows` — массив строк для вставки.
+- `column_types` — описание типов колонок.
 
 Пример:
 

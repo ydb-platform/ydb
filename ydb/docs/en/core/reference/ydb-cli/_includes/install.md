@@ -77,4 +77,3 @@
   {% endnote %}
 
 {% endlist %}
-

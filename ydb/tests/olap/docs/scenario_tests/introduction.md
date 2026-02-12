@@ -73,4 +73,3 @@ class TestSchenarioSimple(BaseTestSet):
 ```
 
 {% endcut %}
-

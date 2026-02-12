@@ -52,7 +52,6 @@ SELECT STREAM * FROM rtmr_cluster.`my_stream_source`;
 
 {% endif %}
 
-
 {% if feature_insert_with_truncate %}
 
 Запись может выполняться с одним или несколькими модификаторами. Модификатор указывается после ключевого слова `WITH` после имени таблицы: `INSERT INTO ... WITH SOME_HINT`.
@@ -80,7 +79,6 @@ SELECT key FROM my_table_source;
 * `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
 * `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
 * `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../concepts/federated_query/s3/partition_projection.md).
-
 
 ## Пример
 
@@ -124,4 +122,3 @@ VALUES
     (1102, 'green', 300)
 RETURNING id, price;
 ```
-

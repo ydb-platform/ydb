@@ -13,7 +13,7 @@
 
 {% list tabs %}
 
-- Go (native)
+* Go (native)
 
   ```go
   package main
@@ -41,7 +41,7 @@
   }
   ```
 
-- Go (database/sql)
+* Go (database/sql)
 
   ```go
   package main
@@ -76,7 +76,7 @@
   }
   ```
 
-- Java
+* Java
 
   ```java
   public void work(String connectionString) {
@@ -95,7 +95,7 @@
   }
   ```
 
-- Node.js
+* Node.js
 
   ```typescript
     import { Driver, getCredentialsFromEnv } from 'ydb-sdk';
@@ -113,8 +113,7 @@
     }
   ```
 
-
-- Python
+* Python
 
   ```python
     import os
@@ -128,7 +127,7 @@
         ...
   ```
 
-- Python (asyncio)
+* Python (asyncio)
 
   ```python
     import os
@@ -147,7 +146,7 @@
     asyncio.run(ydb_init())
   ```
 
-- PHP
+* PHP
 
   ```php
   <?php

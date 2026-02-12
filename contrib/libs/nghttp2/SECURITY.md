@@ -2,7 +2,7 @@
 
 If you find a vulnerability in our software, please report it via
 GitHub "Private vulnerability reporting" feature at
-https://github.com/nghttp2/nghttp2/security instead of submitting
+<https://github.com/nghttp2/nghttp2/security> instead of submitting
 issues on github issue page.  It is a standard practice not to
 disclose vulnerability information publicly until a fixed version is
 released, or mitigation is worked out.

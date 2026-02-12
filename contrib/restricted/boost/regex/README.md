@@ -27,21 +27,20 @@ You can submit your changes through a [pull request](https://github.com/boostorg
 
 There is no mailing-list specific to Boost Regex, although you can use the general-purpose Boost [mailing-list](http://lists.boost.org/mailman/listinfo.cgi/boost-users) using the tag [regex].
 
-
 ## Development ##
 
-Clone the whole boost project, which includes the individual Boost projects as submodules ([see boost+git doc](https://github.com/boostorg/boost/wiki/Getting-Started)): 
+Clone the whole boost project, which includes the individual Boost projects as submodules ([see boost+git doc](https://github.com/boostorg/boost/wiki/Getting-Started)):
 
     git clone https://github.com/boostorg/boost
     cd boost
     git submodule update --init
 
-The Boost Regex Library is located in `libs/regex/`. 
+The Boost Regex Library is located in `libs/regex/`.
 
 ### Running tests ###
-First, make sure you are in `libs/regex/test`. 
+
+First, make sure you are in `libs/regex/test`.
 You can either run all the tests listed in `Jamfile.v2` or run a single test:
 
     ../../../b2                        <- run all tests
     ../../../b2 regex_regress          <- single test
-

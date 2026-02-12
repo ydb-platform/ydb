@@ -13,88 +13,88 @@ assistance.
 ### Builtins Library
 
 Saleem Abdulrasool \
-compnerd@compnerd.org (email), [compnerd](https://github.com/compnerd) (GitHub)
+<compnerd@compnerd.org> (email), [compnerd](https://github.com/compnerd) (GitHub)
 
 ### CFI
 
 Peter Collingbourne \
-peter@pcc.me.uk (email), [pcc](https://github.com/pcc) (GitHub)
+<peter@pcc.me.uk> (email), [pcc](https://github.com/pcc) (GitHub)
 
 ### CMake build
 
 Petr Hosek \
-phosek@google.com (email), [petrhosek](https://github.com/petrhosek) (GitHub)
+<phosek@google.com> (email), [petrhosek](https://github.com/petrhosek) (GitHub)
 
 ### CRT
 
 Petr Hosek \
-phosek@google.com (email), [petrhosek](https://github.com/petrhosek) (GitHub)
+<phosek@google.com> (email), [petrhosek](https://github.com/petrhosek) (GitHub)
 
 ### GWP ASAN
 
 Christopher Ferris \
-cferris@google.com (email), [cferris1000](https://github.com/cferris1000) (GitHub)
+<cferris@google.com> (email), [cferris1000](https://github.com/cferris1000) (GitHub)
 
 ### MemProfiling
 
 Teresa Johnson \
-tejohnson@google.com (email), [teresajohnson](https://github.com/teresajohnson) (GitHub)
+<tejohnson@google.com> (email), [teresajohnson](https://github.com/teresajohnson) (GitHub)
 
 ### SafeStack
 
 Peter Collingbourne \
-peter@pcc.me.uk (email), [pcc](https://github.com/pcc) (GitHub)
+<peter@pcc.me.uk> (email), [pcc](https://github.com/pcc) (GitHub)
 
 ### Sanitizers
 
 #### Sanitizers not covered by someone else
 
 Vitaly Buka \
-vitalybuka@google.com (email), [vitalybuka](https://github.com/vitalybuka) (GitHub) \
+<vitalybuka@google.com> (email), [vitalybuka](https://github.com/vitalybuka) (GitHub) \
 Alexander Potapenko \
-glider@google.com (email), [ramosian-glider](https://github.com/ramosian-glider) (GitHub)
+<glider@google.com> (email), [ramosian-glider](https://github.com/ramosian-glider) (GitHub)
 
 #### Data Flow Sanitizer
 
 Andrew Browne \
-browneee@google.com (email), [browneee](https://github.com/browneee) (GitHub)
+<browneee@google.com> (email), [browneee](https://github.com/browneee) (GitHub)
 
 #### Numerical Sanitizer (NSAN)
 
 Alexander Shaposhnikov \
-alexander.v.shaposhnikov@gmail.com (email), [alexander-shaposhnikov](https://github.com/alexander-shaposhnikov) (GitHub)
+<alexander.v.shaposhnikov@gmail.com> (email), [alexander-shaposhnikov](https://github.com/alexander-shaposhnikov) (GitHub)
 
 #### Realtime Sanitizer (RTSan)
 
 Christopher Apple \
-cja-private@pm.me (email), [cjappl](https://github.com/cjappl) (GitHub) \
+<cja-private@pm.me> (email), [cjappl](https://github.com/cjappl) (GitHub) \
 David Trevelyan \
-david.trevelyan@gmail.com (email), [davidtrevelyan](https://github.com/davidtrevelyan) (GitHub)
+<david.trevelyan@gmail.com> (email), [davidtrevelyan](https://github.com/davidtrevelyan) (GitHub)
 
 #### Thread Sanitizer
 
 Dmitry Vyukov \
-dvyukov@google.com (email), [dvyukov](https://github.com/dvyukov) (GitHub)
+<dvyukov@google.com> (email), [dvyukov](https://github.com/dvyukov) (GitHub)
 
 #### Undefined Behavior Sanitizer
 
 Richard Smith \
-richard-llvm@metafoo.co.uk (email), [zygoloid](https://github.com/zygoloid) (GitHub)
+<richard-llvm@metafoo.co.uk> (email), [zygoloid](https://github.com/zygoloid) (GitHub)
 
 ### ORC
 
 Lang Hames \
-lhames@gmail.com (email), [lhames](https://github.com/lhames) (GitHub)
+<lhames@gmail.com> (email), [lhames](https://github.com/lhames) (GitHub)
 
 ### Profile runtime library
 
 Bill Wendling \
-isanbard@gmail.com (email), [isanbard](https://github.com/isanbard) (GitHub)
+<isanbard@gmail.com> (email), [isanbard](https://github.com/isanbard) (GitHub)
 
 ### SCUDO
 
 Christopher Ferris \
-cferris@google.com (email), [cferris1000](https://github.com/cferris1000) (GitHub)
+<cferris@google.com> (email), [cferris1000](https://github.com/cferris1000) (GitHub)
 
 ## Inactive Maintainers
 

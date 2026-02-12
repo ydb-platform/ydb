@@ -88,7 +88,6 @@ The Open Watcom C compiler on Linux requires configuring with the variables:
     ./configure CC=owcc AR="$WATCOM/binl/wlib" AR_FLAGS=-q \
         RANLIB=/bin/true STRIP="$WATCOM/binl/wstrip" CFLAGS=-Wextra
 
-
 ### CROSS COMPILE
 
 (This section was graciously brought to us by Jim Duey, with additions by
@@ -134,7 +133,6 @@ little as:
 
     ./configure --host=ARCH-OS
 
-
 ### Cygwin (Windows)
 
 Almost identical to the unix installation. Run the configure script in the
@@ -142,7 +140,6 @@ c-ares root with `sh configure`. Make sure you have the sh executable in
 `/bin/` or you'll see the configure fail toward the end.
 
 Run `make`
-
 
 ### QNX
 
@@ -159,7 +156,6 @@ c-ares, by overriding `CFLAGS` during configure, example:
 
     # configure CFLAGS='-DFD_SETSIZE=64 -g -O2'
 
-
 ### RISC OS
 
 The library can be cross-compiled using gccsdk as follows:
@@ -171,12 +167,11 @@ The library can be cross-compiled using gccsdk as follows:
 where `riscos-gcc` and `riscos-ar` are links to the gccsdk tools.
 You can then link your program with `c-ares/lib/.libs/libcares.a`.
 
-
 ### Android
 
 Method using a configure cross-compile (tested with Android NDK r7b):
 
-  - prepare the toolchain of the Android NDK for standalone use; this can
+- prepare the toolchain of the Android NDK for standalone use; this can
     be done by invoking the script:
 
         ./tools/make-standalone-toolchain.sh
@@ -190,7 +185,8 @@ Method using a configure cross-compile (tested with Android NDK r7b):
        ./configure --host=arm-linux-androideabi [more configure options]
         make
     ```
-  - if you want to compile directly from our GIT repo you might run into
+
+- if you want to compile directly from our GIT repo you might run into
     this issue with older automake stuff:
 
     ```
@@ -199,13 +195,13 @@ Method using a configure cross-compile (tested with Android NDK r7b):
         system `androideabi' not recognized
         configure: error: /bin/sh ./config.sub arm-linux-androideabi failed
     ```
+
     this issue can be fixed with using more recent versions of `config.sub`
     and `config.guess` which can be obtained here:
-    http://git.savannah.gnu.org/gitweb/?p=config.git;a=tree
+    <http://git.savannah.gnu.org/gitweb/?p=config.git;a=tree>
     you need to replace your system-own versions which usually can be
     found in your automake folder:
     `find /usr -name config.sub`
-
 
 CMake builds
 ============
@@ -272,6 +268,7 @@ nmake install
 
 Windows MinGW-w64 Command Line via MSYS
 ---------------------------------------
+
 ```
 cd \path\to\cmake\source
 mkdir build
@@ -280,7 +277,6 @@ cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=C:\cares -G "MSYS Makefi
 make
 make install
 ```
-
 
 Platform-specific build systems
 ===============================
@@ -299,13 +295,12 @@ is a must for any Windows developer. Especially
 important is full understanding if you are not going to follow the
 advice given above.
 
- - [Use the C Run-Time](https://learn.microsoft.com/en-us/troubleshoot/developer/visualstudio/cpp/libraries/use-c-run-time)
+- [Use the C Run-Time](https://learn.microsoft.com/en-us/troubleshoot/developer/visualstudio/cpp/libraries/use-c-run-time)
 
 If your app is misbehaving in some strange way, or it is suffering
 from memory corruption, before asking for further help, please try
 first to rebuild every single library your app uses as well as your
 app using the debug multithreaded dynamic C runtime.
-
 
 ### MSYS
 
@@ -325,12 +320,10 @@ Make sure that MinGW32's bin dir is in the search path, for example:
 
 then run 'make -f Makefile.m32' in the root dir.
 
-
 ### MSVC 6 caveats
 
 If you use MSVC 6 it is required that you use the February 2003 edition PSDK:
-http://www.microsoft.com/msdownload/platformsdk/sdkupdate/psdk-full.htm
-
+<http://www.microsoft.com/msdownload/platformsdk/sdkupdate/psdk-full.htm>
 
 ### MSVC from command line
 
@@ -341,13 +334,11 @@ provided that you installed Visual C/C++ 6 in the default directory.
 
 Further details in [README.msvc](README.msvc)
 
-
 ### Important static c-ares usage note
 
 When building an application that uses the static c-ares library, you must
 add `-DCARES_STATICLIB` to your `CFLAGS`.  Otherwise the linker will look for
 dynamic import symbols.
-
 
 DOS
 ---
@@ -368,21 +359,20 @@ Please refer to our CI
 [GitHub Actions Workflow](https://github.com/c-ares/c-ares/blob/main/.github/workflows/djgpp.yml)
 for a full build example, including building the latest Watt-32 release.
 
-
 IBM OS/2
 --------
 
 Building under OS/2 is not much different from building under unix.
 You need:
 
-  - emx 0.9d
-  - GNU make
-  - GNU patch
-  - ksh
-  - GNU bison
-  - GNU file utilities
-  - GNU sed
-  - autoconf 2.13
+- emx 0.9d
+- GNU make
+- GNU patch
+- ksh
+- GNU bison
+- GNU file utilities
+- GNU sed
+- autoconf 2.13
 
 If during the linking you get an error about `_errno` being an undefined
 symbol referenced from the text segment, you need to add `-D__ST_MT_ERRNO__`
@@ -391,20 +381,19 @@ in your definitions.
 If you're getting huge binaries, probably your makefiles have the `-g` in
 `CFLAGS`.
 
-
 NetWare
 -------
 
 To compile `libcares.a` / `libcares.lib` you need:
 
- - either any gcc / nlmconv, or CodeWarrior 7 PDK 4 or later.
- - gnu make and awk running on the platform you compile on;
+- either any gcc / nlmconv, or CodeWarrior 7 PDK 4 or later.
+- gnu make and awk running on the platform you compile on;
    native Win32 versions can be downloaded from:
-   http://www.gknw.net/development/prgtools/
- - recent Novell LibC SDK available from:
-   http://developer.novell.com/ndk/libc.htm
- - or recent Novell CLib SDK available from:
-   http://developer.novell.com/ndk/clib.htm
+   <http://www.gknw.net/development/prgtools/>
+- recent Novell LibC SDK available from:
+   <http://developer.novell.com/ndk/libc.htm>
+- or recent Novell CLib SDK available from:
+   <http://developer.novell.com/ndk/clib.htm>
 
 Set a search path to your compiler, linker and tools; on Linux make
 sure that the var `OSTYPE` contains the string 'linux'; set the var
@@ -462,11 +451,10 @@ runs on, that isn't listed, please let us know!
      - IRIX (MIPS)
      - Novell NetWare (i386)
 
-
 Useful URLs
 ===========
 
- - c-ares: https://c-ares.org/
- - MinGW-w64: http://mingw-w64.sourceforge.net/
- - MSYS2: https://msys2.org
- - OpenWatcom: http://www.openwatcom.org/
+- c-ares: <https://c-ares.org/>
+- MinGW-w64: <http://mingw-w64.sourceforge.net/>
+- MSYS2: <https://msys2.org>
+- OpenWatcom: <http://www.openwatcom.org/>

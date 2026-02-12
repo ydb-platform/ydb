@@ -24,7 +24,6 @@
 
 {% endnote %}
 
-
 ## Пример
 
 my_lib.sql:

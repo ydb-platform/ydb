@@ -5,8 +5,6 @@
 
 [![Doxygen Documentation](https://img.shields.io/badge/docs-doxygen-green.svg)](http://roaringbitmap.github.io/CRoaring/)
 
-
-
 Portable Roaring bitmaps in C (and C++) with full support for your favorite compiler (GNU GCC, LLVM's clang, Visual Studio, Apple Xcode, Intel oneAPI). Included in the [Awesome C](https://github.com/kozross/awesome-c) list of open source C software.
 
 # Table of Contents
@@ -72,7 +70,6 @@ Roaring bitmaps are found to work well in many important applications:
 
 > Use Roaring for bitmap compression whenever possible. Do not use other bitmap compression methods ([Wang et al., SIGMOD 2017](http://db.ucsd.edu/wp-content/uploads/2017/03/sidm338-wangA.pdf))
 
-
 [There is a serialized format specification for interoperability between implementations](https://github.com/RoaringBitmap/RoaringFormatSpec/). Hence, it is possible to serialize a Roaring Bitmap from C++, read it in Java, modify it, serialize it back and read it in Go and Python.
 
 # Objective
@@ -80,10 +77,7 @@ Roaring bitmaps are found to work well in many important applications:
 The primary goal of the CRoaring is to provide a high performance low-level implementation that fully take advantage
 of the latest hardware. Roaring bitmaps are already available on a variety of platform through Java, Go, Rust... implementations. CRoaring is a library that seeks to achieve superior performance by staying close to the latest hardware.
 
-
 (c) 2016-... The CRoaring authors.
-
-
 
 # Requirements
 
@@ -98,7 +92,6 @@ Hardly anyone has access to an actual big-endian system. Nevertheless,
 We support big-endian systems such as IBM s390x through emulators---except for
 IO serialization which is only supported on little-endian systems (see [issue 423](https://github.com/RoaringBitmap/CRoaring/issues/423)).
 
-
 # Quick Start
 
 The CRoaring library can be amalgamated into a single source file that makes it easier
@@ -112,14 +105,16 @@ We offer amalgamated files as part of each release.
 
 Linux or macOS users might follow the following instructions if they have a recent C or C++ compiler installed and a standard utility (`wget`).
 
-
  1. Pull the library in a directory
+
     ```
     wget https://github.com/RoaringBitmap/CRoaring/releases/download/v2.1.0/roaring.c
     wget https://github.com/RoaringBitmap/CRoaring/releases/download/v2.1.0/roaring.h
     wget https://github.com/RoaringBitmap/CRoaring/releases/download/v2.1.0/roaring.hh
     ```
+
  2. Create a new file named `demo.c` with this content:
+
     ```C
     #include <stdio.h>
     #include <stdlib.h>
@@ -139,7 +134,9 @@ Linux or macOS users might follow the following instructions if they have a rece
         return EXIT_SUCCESS;
     }
     ```
- 2. Create a new file named `demo.cpp` with this content:
+
+ 3. Create a new file named `demo.cpp` with this content:
+
     ```C++
     #include <iostream>
     #include "roaring.hh" // the amalgamated roaring.hh includes roaring64map.hh
@@ -159,23 +156,27 @@ Linux or macOS users might follow the following instructions if they have a rece
         return 0;
     }
     ```
- 2. Compile
+
+ 4. Compile
+
     ```
     cc -o demo demo.c
     c++ -std=c++11 -o demopp demo.cpp
     ```
- 3. `./demo`
+
+ 5. `./demo`
+
     ```
     cardinality = 900
     1000
     ```
- 4. `./demopp`
+
+ 6. `./demopp`
+
     ```
     cardinality = 900
     cardinality = 900
     ```
-
-
 
 Packages
 ------
@@ -184,10 +185,7 @@ Packages
 
 # Using Roaring as a CPM dependency
 
-
 If you like CMake and CPM, you can add just a few lines in your `CMakeLists.txt` file to grab a `CRoaring` release. [See our CPM demonstration for further details](https://github.com/RoaringBitmap/CPMdemo).
-
-
 
 ```CMake
 cmake_minimum_required(VERSION 3.10)
@@ -211,7 +209,6 @@ CPMAddPackage(
 
 target_link_libraries(hello roaring::roaring)
 ```
-
 
 # Using as a CMake dependency with FetchContent
 
@@ -249,7 +246,6 @@ add_executable(repro main.cpp)
 target_link_libraries(repro PUBLIC roaring::roaring)
 ```
 
-
 # Amalgamating
 
 To generate the amalgamated files yourself, you can invoke a bash script...
@@ -263,7 +259,6 @@ If you prefer a silent output, you can use the following command to redirect ``s
 ```bash
 ./amalgamation.sh > /dev/null
 ```
-
 
 (Bash shells are standard under Linux and macOS. Bash shells are available under Windows as part of the  [GitHub Desktop](https://desktop.github.com/) under the name ``Git Shell``. So if you have cloned the ``CRoaring`` GitHub repository from within the GitHub Desktop, you can right-click on ``CRoaring``, select ``Git Shell`` and then enter the above commands.)
 
@@ -284,12 +279,12 @@ We also have a C++ interface:
 - [roaring.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring/roaring.hh),
 - [roaring64map.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring/roaring64map.hh).
 
-
 # Main API functions
 
 Below is an overview of the main functions provided by CRoaring in C, covering both 32-bit (`roaring.h`) and 64-bit (`roaring64.h`) bitmaps. For more details, see the header files in `include/roaring/` or the Doxygen documentation.
 
 ## Creation and Destruction
+
 - `roaring_bitmap_t *roaring_bitmap_create(void);`  
   Create a new empty 32-bit bitmap.
 - `roaring64_bitmap_t *roaring64_bitmap_create(void);`  
@@ -300,6 +295,7 @@ Below is an overview of the main functions provided by CRoaring in C, covering b
   Free a 64-bit bitmap.
 
 ## Adding and Removing Values
+
 - `void roaring_bitmap_add(roaring_bitmap_t *r, uint32_t x);`  
   Add value `x` to a 32-bit bitmap.
 - `void roaring64_bitmap_add(roaring64_bitmap_t *r, uint64_t x);`  
@@ -310,6 +306,7 @@ Below is an overview of the main functions provided by CRoaring in C, covering b
   Remove value `x` from a 64-bit bitmap.
 
 ## Queries and Cardinality
+
 - `bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t x);`  
   Check if `x` is present in a 32-bit bitmap.
 - `bool roaring64_bitmap_contains(const roaring64_bitmap_t *r, uint64_t x);`  
@@ -320,12 +317,14 @@ Below is an overview of the main functions provided by CRoaring in C, covering b
   Get the number of elements in a 64-bit bitmap.
 
 ## Iteration
+
 - `bool roaring_iterate(const roaring_bitmap_t *r, roaring_iterator iterator, void *param);`  
   Iterate over all values in a 32-bit bitmap, calling `iterator` for each value.
 - `bool roaring64_iterate(const roaring64_bitmap_t *r, roaring_iterator64 iterator, void *param);`  
   Iterate over all values in a 64-bit bitmap.
 
 ## Set Operations
+
 - `roaring_bitmap_t *roaring_bitmap_and(const roaring_bitmap_t *r1, const roaring_bitmap_t *r2);`  
   Intersection (AND) of two 32-bit bitmaps.
 - `roaring64_bitmap_t *roaring64_bitmap_and(const roaring64_bitmap_t *r1, const roaring64_bitmap_t *r2);`  
@@ -344,6 +343,7 @@ Below is an overview of the main functions provided by CRoaring in C, covering b
   Difference (r1 \ r2) for 64-bit bitmaps.
 
 ## Serialization and Deserialization
+
 - `size_t roaring_bitmap_portable_size_in_bytes(const roaring_bitmap_t *r);`  
   Get the number of bytes required to serialize a 32-bit bitmap.
 - `size_t roaring64_bitmap_portable_size_in_bytes(const roaring64_bitmap_t *r);`  
@@ -366,27 +366,29 @@ Below is an overview of the main functions provided by CRoaring in C, covering b
   Get the size of a serialized 64-bit bitmap (returns 0 if invalid).
 
 ## Validation
+
 - `bool roaring_bitmap_internal_validate(const roaring_bitmap_t *r, const char **reason);`  
   Validate the internal structure of a 32-bit bitmap. Returns `true` if valid, `false` otherwise. If invalid, `reason` points to a string describing the problem.
 - `bool roaring64_bitmap_internal_validate(const roaring64_bitmap_t *r, const char **reason);`  
   Validate the internal structure of a 64-bit bitmap.
 
 ## Notes
+
 - All memory allocated by the library must be freed using the corresponding `free` function.
 - The portable serialization format is cross-platform and can be shared between different languages and architectures.
 - Always validate bitmaps deserialized from untrusted sources before using them.
-
-
 
 # C++ API functions
 
 The C++ interface is provided via the `roaring.hh` (32-bit) and `roaring64map.hh` (64-bit) headers. These offer a modern, type-safe, and convenient API for manipulating Roaring bitmaps in C++.
 
 ## Main Classes
+
 - `roaring::Roaring` — 32-bit Roaring bitmap
 - `roaring::Roaring64Map` — 64-bit Roaring bitmap
 
 ## Common Methods (32-bit and 64-bit)
+
 - `Roaring()` / `Roaring64Map()`
   - Construct an empty bitmap.
 - `Roaring(std::initializer_list<uint32_t> values)`
@@ -413,6 +415,7 @@ The C++ interface is provided via the `roaring.hh` (32-bit) and `roaring64map.hh
   - Swap contents with another bitmap.
 
 ## Set Operations
+
 - `Roaring operator|(const Roaring&) const` / `Roaring64Map operator|(const Roaring64Map&) const`
   - Union (OR)
 - `Roaring operator&(const Roaring&) const` / `Roaring64Map operator&(const Roaring64Map&) const`
@@ -424,12 +427,14 @@ The C++ interface is provided via the `roaring.hh` (32-bit) and `roaring64map.hh
 - In-place versions: `operator|=`, `operator&=`, `operator^=`, `operator-=`
 
 ## Iteration
+
 - `Roaring::const_iterator` / `Roaring64Map::const_iterator`
   - Standard C++ iterator support: `begin()`, `end()`
 - `void iterate(function, void* param)`
   - Call a function for each value (C-style callback).
 
 ## Serialization and Deserialization
+
 - `size_t getSizeInBytes() const`
   - Get the size in bytes for serialization.
 - `void write(char* buf) const`
@@ -440,12 +445,14 @@ The C++ interface is provided via the `roaring.hh` (32-bit) and `roaring64map.hh
   - Safe deserialization (will not read past `maxbytes`).
 
 ## Bulk Operations
+
 - `void addMany(size_t n, const uint32_t* values)` / `void addMany(size_t n, const uint64_t* values)`
   - Add many values at once.
 - `void toUint32Array(uint32_t* out) const` / `void toUint64Array(uint64_t* out) const`
   - Export all values to an array.
 
 ## Example Usage
+
 ```cpp
 #include "roaring/roaring.hh"
 using namespace roaring;
@@ -464,11 +471,9 @@ for (auto v : r3) {
 
 For 64-bit values, use `#include "roaring64map.hh"` and the `Roaring64Map` class, which has a similar API.
 
-
 # Dealing with large volumes of data
 
 Some users have to deal with large volumes of data. It  may be important for these users to be aware of the `addMany` (C++) `roaring_bitmap_or_many` (C) functions as it is much faster and economical to add values in batches when possible. Furthermore, calling periodically the `runOptimize` (C++) or `roaring_bitmap_run_optimize` (C) functions may help.
-
 
 # Running microbenchmarks
 
@@ -507,7 +512,9 @@ cmake --build buildnoavx
 ```
 
 # Custom memory allocators
+
 For general users, CRoaring would apply default allocator without extra codes. But global memory hook is also provided for those who want a custom memory allocator. Here is an example:
+
 ```C
 #include <roaring.h>
 
@@ -522,6 +529,7 @@ int main(){
 ```
 
 By default we use:
+
 ```C
 static roaring_memory_t global_memory_hook = {
     .malloc = malloc,
@@ -536,9 +544,7 @@ static roaring_memory_t global_memory_hook = {
 We require that the `free`/`aligned_free` functions follow the C
 convention where `free(NULL)`/`aligned_free(NULL)` have no effect.
 
-
 # Example (C)
-
 
 This example assumes that CRoaring has been build and that you are linking against the corresponding library. By default, CRoaring will install its header files in a `roaring` directory. If you are working from the amalgamation script, you may add the line `#include "roaring.c"` if you are not linking against a prebuilt CRoaring library and replace `#include <roaring/roaring.h>` by `#include "roaring.h"`.
 
@@ -721,7 +727,6 @@ int main() {
 
 # Compressed 64-bit Roaring bitmaps (C)
 
-
 We also support efficient 64-bit compressed bitmaps in C:
 
 ```c++
@@ -806,7 +811,6 @@ memory than a Roaring bitmap in some cases. You should run benchmarks to determi
 whether the conversion to a bitset has performance benefits in your case.
 
 # Example (C++)
-
 
 This example assumes that CRoaring has been build and that you are linking against the corresponding library. By default, CRoaring will install its header files in a `roaring` directory so you may need to replace `#include "roaring.hh"` by `#include <roaring/roaring.hh>`. If you are working from the amalgamation script, you may add the line `#include "roaring.c"` if you are not linking against a CRoaring prebuilt library.
 
@@ -919,8 +923,6 @@ int main() {
 
 ```
 
-
-
 # Building with cmake (Linux and macOS, Visual Studio or OpenHarmony users should see below)
 
 CRoaring follows the standard cmake workflow. Starting from the root directory of
@@ -936,6 +938,7 @@ cmake --build .
 # C header files typically get installed to /usr/local/include/roaring
 # whereas C++ header files get installed to /usr/local/include/roaring
 ```
+
 (You can replace the ``build`` directory with any other directory name.)
 By default all tests are built on all platforms, to skip building and running tests add `` -DENABLE_ROARING_TESTS=OFF `` to the command line.
 
@@ -959,7 +962,6 @@ cmake -DCMAKE_BUILD_TYPE=Debug -DROARING_SANITIZE=ON ..
 ctest
 ```
 
-
 To check that your code abides by the style convention (make sure that ``clang-format`` is installed):
 
 ```
@@ -977,6 +979,7 @@ To reformat your code according to the style convention (make sure that ``clang-
 We are assuming that you have a common Windows PC with at least Visual Studio 2015, and an x64 processor.
 
 To build with at least Visual Studio 2015 from the command line:
+
 - Grab the CRoaring code from GitHub, e.g., by cloning it using [GitHub Desktop](https://desktop.github.com/).
 - Install [CMake](https://cmake.org/download/). When you install it, make sure to ask that ``cmake`` be made available from the command line.
 - Create a subdirectory within CRoaring, such as ``VisualStudio``.
@@ -985,15 +988,14 @@ To build with at least Visual Studio 2015 from the command line:
 - This last command created a Visual Studio solution file in the newly created directory (e.g., ``RoaringBitmap.sln``). Open this file in Visual Studio. You should now be able to build the project and run the tests. For example, in the ``Solution Explorer`` window (available from the ``View`` menu), right-click ``ALL_BUILD`` and select ``Build``. To test the code, still in the ``Solution Explorer`` window, select ``RUN_TESTS`` and select ``Build``.
 
 To build with at least Visual Studio 2017 directly in the IDE:
+
 - Grab the CRoaring code from GitHub, e.g., by cloning it using [GitHub Desktop](https://desktop.github.com/).
 - Select the ``Visual C++ tools for CMake`` optional component when installing the C++ Development Workload within Visual Studio.
 - Within Visual Studio use ``File > Open > Folder...`` to open the CRoaring folder.
 - Right click on ``CMakeLists.txt`` in the parent directory within ``Solution Explorer`` and select ``Build`` to build the project.
 - For testing, in the Standard toolbar, drop the ``Select Startup Item...`` menu and choose one of the tests. Run the test by pressing the button to the left of the dropdown.
 
-
 We have optimizations specific to AVX2 and AVX-512 in the code, and they are turned dynamically based on the detected hardware at runtime.
-
 
 ## Usage (Using `conan`)
 
@@ -1008,7 +1010,6 @@ For detailed instructions on how to use Conan, please refer to the [Conan docume
 The `roaring` Conan recipe is kept up to date by Conan maintainers and community contributors.
 If the version is out of date, please [create an issue or pull request](https://github.com/conan-io/conan-center-index) on the ConanCenterIndex repository.
 
-
 ## Usage (Using `vcpkg` on Windows, Linux and macOS)
 
 [vcpkg](https://github.com/Microsoft/vcpkg) users on Windows, Linux and macOS can download and install `roaring` with one single command from their favorite shell.
@@ -1016,7 +1017,7 @@ If the version is out of date, please [create an issue or pull request](https://
 On Linux and macOS:
 
 ```
-$ ./vcpkg install roaring
+./vcpkg install roaring
 ```
 
 will build and install `roaring` as a static library.
@@ -1039,10 +1040,9 @@ These commands will also print out instructions on how to use the library from M
 
 If you find the version of `roaring` shipped with `vcpkg` is out-of-date, feel free to report it to `vcpkg` community either by submiting an issue or by creating a PR.
 
-
 # Building (OpenHarmony)
 
-To build with OpenHarmony SDK please see the [OpenHarmony Cross Compile Guide](https://gitcode.com/openharmony-sig/tpc_c_cplusplus/blob/master/Cross-Compilation Guide for Open-Source Third-Party Libraries in OpenHarmony_en.md)
+To build with OpenHarmony SDK please see the [OpenHarmony Cross Compile Guide](<https://gitcode.com/openharmony-sig/tpc_c_cplusplus/blob/master/Cross-Compilation> Guide for Open-Source Third-Party Libraries in OpenHarmony_en.md)
 
 # SIMD-related throttling
 
@@ -1056,9 +1056,8 @@ Like, for example, STL containers, the CRoaring library has no built-in thread s
 
 If you use  "copy-on-write" (default to disabled), then you should pass copies to the different threads. They will create shared containers, and for shared containers, we use reference counting with an atomic counter.
 
-
-
 To summarize:
+
 - If you do not use copy-on-write, you can access concurrent the same bitmap safely as long as you do not modify it. If you plan on modifying it, you should pass different copies to the different threads.
 - If you use copy-on-write, you should always pass copies to the different threads. The copies and then lightweight (shared containers).
 
@@ -1166,10 +1165,9 @@ Antonio Guilherme Ferreira Viggiano wrote a Redis Module integrating Roaring Bit
 
 Justin Whear contributed a Zig wrapper, located at [https://github.com/jwhear/roaring-zig](https://github.com/jwhear/roaring-zig).
 
-
 # Mailing list/discussion group
 
-https://groups.google.com/forum/#!forum/roaring-bitmaps
+<https://groups.google.com/forum/#!forum/roaring-bitmaps>
 
 # Contributing
 
@@ -1178,8 +1176,8 @@ When contributing a change to the project, please run `tools/run-clangcldocker.s
 # References about Roaring
 
 - Daniel Lemire, Owen Kaser, Nathan Kurz, Luca Deri, Chris O'Hara, François Saint-Jacques, Gregory Ssi-Yan-Kai, Roaring Bitmaps: Implementation of an Optimized Software Library, Software: Practice and Experience Volume 48, Issue 4 April 2018 Pages 867-895 [arXiv:1709.07821](https://arxiv.org/abs/1709.07821)
--  Samy Chambi, Daniel Lemire, Owen Kaser, Robert Godin,
+- Samy Chambi, Daniel Lemire, Owen Kaser, Robert Godin,
 Better bitmap performance with Roaring bitmaps,
 Software: Practice and Experience Volume 46, Issue 5, pages 709–719, May 2016  [arXiv:1402.6407](http://arxiv.org/abs/1402.6407)
 - Daniel Lemire, Gregory Ssi-Yan-Kai, Owen Kaser, Consistently faster and smaller compressed bitmaps with Roaring, Software: Practice and Experience Volume 46, Issue 11, pages 1547-1569, November 2016 [arXiv:1603.06549](http://arxiv.org/abs/1603.06549)
-- Samy Chambi, Daniel Lemire, Robert Godin, Kamel Boukhalfa, Charles Allen, Fangjin Yang, Optimizing Druid with Roaring bitmaps, IDEAS 2016, 2016. http://r-libre.teluq.ca/950/
+- Samy Chambi, Daniel Lemire, Robert Godin, Kamel Boukhalfa, Charles Allen, Fangjin Yang, Optimizing Druid with Roaring bitmaps, IDEAS 2016, 2016. <http://r-libre.teluq.ca/950/>

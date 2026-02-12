@@ -1,7 +1,6 @@
 [![Build and test](https://github.com/uriparser/uriparser/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/uriparser/uriparser/actions/workflows/build-and-test.yml)
 [![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/github/uriparseradmin/uriparser?svg=true)](https://ci.appveyor.com/project/uriparseradmin/uriparser)
 
-
 # uriparser
 
 uriparser is a
@@ -15,7 +14,6 @@ is licensed under the [New BSD license](https://github.com/uriparser/uriparser/b
 
 To learn more about uriparser,
 please check out [https://uriparser.github.io/](https://uriparser.github.io/).
-
 
 # Example use from an existing CMake project
 
@@ -33,10 +31,10 @@ add_executable(hello
 target_link_libraries(hello PUBLIC uriparser::uriparser)
 ```
 
-
 # Compilation
 
 ## Compilation (standalone, GNU make, Linux)
+
 ```console
 # mkdir build
 # cd build
@@ -47,6 +45,7 @@ target_link_libraries(hello PUBLIC uriparser::uriparser)
 ```
 
 ## Available CMake options (and defaults)
+
 ```console
 # rm -f CMakeCache.txt ; cmake -LH . | grep -B1 ':.*=' | sed 's,--,,'
 // Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel ...

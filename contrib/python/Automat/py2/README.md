@@ -4,7 +4,7 @@
 [![Build Status](https://travis-ci.org/glyph/automat.svg?branch=master)](https://travis-ci.org/glyph/automat)
 [![Coverage Status](https://coveralls.io/repos/glyph/automat/badge.png)](https://coveralls.io/r/glyph/automat)
 
-## Self-service finite-state machines for the programmer on the go. ##
+## Self-service finite-state machines for the programmer on the go ##
 
 Automat is a library for concise, idiomatic Python expression of finite-state
 automata (particularly deterministic finite-state transducers).

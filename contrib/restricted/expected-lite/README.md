@@ -5,6 +5,7 @@
 *expected lite* is a single-file header-only library for objects that either represent a valid value or an error that you can pass by value. It is intended for use with C++11 and later. The library is based on the [std:&#58;expected](http://wg21.link/p0323) proposal [1] .
 
 **Contents**  
+
 - [Example usage](#example-usage)
 - [In a nutshell](#in-a-nutshell)
 - [License](#license)
@@ -86,6 +87,7 @@ For more examples, see [1].
 ## Synopsis
 
 **Contents**  
+
 - [Configuration](#configuration)
 - [Types in namespace nonstd](#types-in-namespace-nonstd)  
 - [Interface of expected](#interface-of-expected)  
@@ -230,32 +232,32 @@ You can use the R3 revision of P2505, which lacks `error_or`, and uses `remove_c
 
 | Kind                            | Function |
 |---------------------------------|----------|
-| Comparison with expected        | &nbsp;   | 
+| Comparison with expected        | &nbsp;   |
 | ==&ensp;!=                      | template&lt;typename T1, typename E1, typename T2, typename E2><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T1,E1> const & x,<br>&emsp;expected&lt;T2,E2> const & y ) |
-| Comparison with expected        | nsel_P0323R <= 2 | 
+| Comparison with expected        | nsel_P0323R <= 2 |
 | <&ensp;>&ensp;<=&ensp;>=        | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T,E> const & x,<br>&emsp;expected&lt;T,E> const & y ) |
-| Comparison with unexpected_type | &nbsp; | 
-| ==&ensp;!=                      | template&lt;typename T1, typename E1, typename E2><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T1,E1> const & x,<br>&emsp;unexpected_type&lt;E2> const & u ) | 
-| &nbsp;                          | template&lt;typename T1, typename E1, typename E2><br>constexpr bool operator ***op***(<br>&emsp;unexpected_type&lt;E2> const & u,<br>&emsp;expected&lt;T1,E1> const & x ) | 
-| Comparison with unexpected_type | nsel_P0323R <= 2 | 
-| <&ensp;>&ensp;<=&ensp;>=        | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T,E> const & x,<br>&emsp;unexpected_type&lt;E> const & u ) | 
-| &nbsp;                          | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;unexpected_type&lt;E> const & u,<br>&emsp;expected&lt;T,E> const & x ) | 
-| Comparison with T               | &nbsp;   | 
-| ==&ensp;!=                      | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T,E> const & x,<br>&emsp;T const & v ) | 
-| &nbsp;                          | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;T const & v,<br>&emsp;expected&lt;T,E> const & x ) | 
-| Comparison with T               | nsel_P0323R <= 2 | 
-| <&ensp;>&ensp;<=&ensp;>=        | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T,E> const & x,<br>&emsp;T const & v ) | 
-| &nbsp;                          | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;T const & v,<br>&emsp;expected&lt;T,E> const & x ) | 
-| Specialized algorithms          | &nbsp;   | 
-| Swap                            | template&lt;typename T, typename E><br>void **swap**(<br>&emsp;expected&lt;T,E> & x,<br>&emsp;expected&lt;T,E> & y )&emsp;noexcept( noexcept( x.swap(y) ) ) | 
-| Make expected from              | nsel_P0323R <= 3 | 
-| &emsp;Value                     | template&lt;typename T><br>constexpr auto **make_expected**( T && v ) -><br>&emsp;expected< typename std::decay&lt;T>::type> | 
-| &emsp;Nothing                   | auto **make_expected**() -> expected&lt;void> | 
-| &emsp;Current exception         | template&lt;typename T><br>constexpr auto **make_expected_from_current_exception**() -> expected&lt;T> | 
-| &emsp;Exception                 | template&lt;typename T><br>auto **make_expected_from_exception**( std::exception_ptr v ) -> expected&lt;T>| 
-| &emsp;Error                     | template&lt;typename T, typename E><br>constexpr auto **make_expected_from_error**( E e ) -><br>&emsp;expected&lt;T, typename std::decay&lt;E>::type> | 
-| &emsp;Call                      | template&lt;typename F><br>auto **make_expected_from_call**( F f ) -><br>&emsp;expected< typename std::result_of&lt;F()>::type>| 
-| &emsp;Call, void specialization | template&lt;typename F><br>auto **make_expected_from_call**( F f ) -> expected&lt;void> | 
+| Comparison with unexpected_type | &nbsp; |
+| ==&ensp;!=                      | template&lt;typename T1, typename E1, typename E2><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T1,E1> const & x,<br>&emsp;unexpected_type&lt;E2> const & u ) |
+| &nbsp;                          | template&lt;typename T1, typename E1, typename E2><br>constexpr bool operator ***op***(<br>&emsp;unexpected_type&lt;E2> const & u,<br>&emsp;expected&lt;T1,E1> const & x ) |
+| Comparison with unexpected_type | nsel_P0323R <= 2 |
+| <&ensp;>&ensp;<=&ensp;>=        | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T,E> const & x,<br>&emsp;unexpected_type&lt;E> const & u ) |
+| &nbsp;                          | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;unexpected_type&lt;E> const & u,<br>&emsp;expected&lt;T,E> const & x ) |
+| Comparison with T               | &nbsp;   |
+| ==&ensp;!=                      | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T,E> const & x,<br>&emsp;T const & v ) |
+| &nbsp;                          | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;T const & v,<br>&emsp;expected&lt;T,E> const & x ) |
+| Comparison with T               | nsel_P0323R <= 2 |
+| <&ensp;>&ensp;<=&ensp;>=        | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;expected&lt;T,E> const & x,<br>&emsp;T const & v ) |
+| &nbsp;                          | template&lt;typename T, typename E><br>constexpr bool operator ***op***(<br>&emsp;T const & v,<br>&emsp;expected&lt;T,E> const & x ) |
+| Specialized algorithms          | &nbsp;   |
+| Swap                            | template&lt;typename T, typename E><br>void **swap**(<br>&emsp;expected&lt;T,E> & x,<br>&emsp;expected&lt;T,E> & y )&emsp;noexcept( noexcept( x.swap(y) ) ) |
+| Make expected from              | nsel_P0323R <= 3 |
+| &emsp;Value                     | template&lt;typename T><br>constexpr auto **make_expected**( T && v ) -><br>&emsp;expected< typename std::decay&lt;T>::type> |
+| &emsp;Nothing                   | auto **make_expected**() -> expected&lt;void> |
+| &emsp;Current exception         | template&lt;typename T><br>constexpr auto **make_expected_from_current_exception**() -> expected&lt;T> |
+| &emsp;Exception                 | template&lt;typename T><br>auto **make_expected_from_exception**( std::exception_ptr v ) -> expected&lt;T>|
+| &emsp;Error                     | template&lt;typename T, typename E><br>constexpr auto **make_expected_from_error**( E e ) -><br>&emsp;expected&lt;T, typename std::decay&lt;E>::type> |
+| &emsp;Call                      | template&lt;typename F><br>auto **make_expected_from_call**( F f ) -><br>&emsp;expected< typename std::result_of&lt;F()>::type>|
+| &emsp;Call, void specialization | template&lt;typename F><br>auto **make_expected_from_call**( F f ) -> expected&lt;void> |
 
 ### Interface of unexpected_type
 
@@ -273,22 +275,23 @@ You can use the R3 revision of P2505, which lacks `error_or`, and uses `remove_c
 
 | Kind                          | Function |
 |-------------------------------|----------|
-| Comparison with unexpected    | &nbsp;   | 
+| Comparison with unexpected    | &nbsp;   |
 | ==&ensp;!=                    | template&lt;typename E><br>constexpr bool operator ***op***(<br>&emsp;unexpected_type&lt;E> const & x,<br>&emsp;unexpected_type&lt;E> const & y ) |
-| Comparison with unexpected    | nsel_P0323R <= 2 | 
+| Comparison with unexpected    | nsel_P0323R <= 2 |
 | <&ensp;>&ensp;<=&ensp;>=      | template&lt;typename E><br>constexpr bool operator ***op***(<br>&emsp;unexpected_type&lt;E> const & x,<br>&emsp;unexpected_type&lt;E> const & y ) |
-| Comparison with exception_ptr | &nbsp;   | 
+| Comparison with exception_ptr | &nbsp;   |
 | ==&ensp;!=                    | constexpr bool operator ***op***(<br>&emsp;unexpected_type&lt;std::exception_ptr> const & x,<br>&emsp;unexpected_type&lt;std::exception_ptr> const & y ) |
-| Comparison with exception_ptr | nsel_P0323R <= 2 | 
+| Comparison with exception_ptr | nsel_P0323R <= 2 |
 | <&ensp;>&ensp;<=&ensp;>=      | constexpr bool operator ***op***(<br>&emsp;unexpected_type&lt;std::exception_ptr> const & x,<br>&emsp;unexpected_type&lt;std::exception_ptr> const & y ) |
-| Specialized algorithms        | &nbsp;   | 
-| Make unexpected from          | &nbsp;   | 
-| &emsp;Error                   | template&lt;typename E><br>[constexpr] auto **make_unexpected**(E && v) -><br>&emsp;unexpected_type< typename std::decay&lt;E>::type>| 
-| &emsp;Arguments (in-place)    | template&lt;typename E, typename... Args><br>[constexpr] auto **make_unexpected**(in_place_t, Args &&... args) -><br>&emsp;unexpected_type< typename std::decay&lt;E>::type>| 
-| Make unexpected from          | nsel_P0323R <= 3 | 
-| &emsp;Current exception       | [constexpr] auto **make_unexpected_from_current_exception**() -><br>&emsp;unexpected_type< std::exception_ptr>| 
+| Specialized algorithms        | &nbsp;   |
+| Make unexpected from          | &nbsp;   |
+| &emsp;Error                   | template&lt;typename E><br>[constexpr] auto **make_unexpected**(E && v) -><br>&emsp;unexpected_type< typename std::decay&lt;E>::type>|
+| &emsp;Arguments (in-place)    | template&lt;typename E, typename... Args><br>[constexpr] auto **make_unexpected**(in_place_t, Args &&... args) -><br>&emsp;unexpected_type< typename std::decay&lt;E>::type>|
+| Make unexpected from          | nsel_P0323R <= 3 |
+| &emsp;Current exception       | [constexpr] auto **make_unexpected_from_current_exception**() -><br>&emsp;unexpected_type< std::exception_ptr>|
 
 <a id="comparison"></a>
+
 ## Comparison with like types
 
 |Feature               |<br>std::pair|std:: optional |std:: expected |nonstd:: expected |Boost. Expected |Nonco expected |Andrei Expected |Hagan required |
@@ -330,7 +333,7 @@ TBD
 - Simon Brand. [C++11/14/17 std::expected with functional-style extensions](https://github.com/TartanLlama/expected). Single-header.
 - Isabella Muerte. [MNMLSTC Core](https://github.com/mnmlstc/core) (C++11).
 - Vicente J. Botet Escriba. [stdmake's expected](https://github.com/viboes/std-make/tree/master/include/experimental/fundamental/v3/expected) (C++17).
-- Facebook. [ Folly's Expected.h](https://github.com/facebook/folly/blob/master/folly/Expected.h) (C++14).
+- Facebook. [Folly's Expected.h](https://github.com/facebook/folly/blob/master/folly/Expected.h) (C++14).
 
 ## Notes and references
 
@@ -362,7 +365,7 @@ TBD
 
 [14] [std::pair](http://en.cppreference.com/w/cpp/utility/pair). cppreference.com
 
-[15] Niall Douglas. [Outcome](https://ned14.github.io/outcome/). Very lightweight outcome&lt;T> and result&lt;T> (non-Boost edition). 
+[15] Niall Douglas. [Outcome](https://ned14.github.io/outcome/). Very lightweight outcome&lt;T> and result&lt;T> (non-Boost edition).
 
 [16] Niall Douglas. [p0762 - Concerns about expected&lt;T, E> from the Boost.Outcome peer review](http://wg21.link/p0762). 15 October 2017.
 

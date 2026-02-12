@@ -13,13 +13,13 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 * `name` — a name of the asynchronous replication instance.
 * `SET (option = value [, ...])` — asynchronous replication parameters:
 
-    * `STATE` — the state of asynchronous replication. This parameter can only be used in combination with the `FAILOVER_MODE` parameter (see below). Valid values are:
+  * `STATE` — the state of asynchronous replication. This parameter can only be used in combination with the `FAILOVER_MODE` parameter (see below). Valid values are:
 
-        * `DONE` — [completion of the asynchronous replication process](../../../concepts/async-replication.md#done).
+    * `DONE` — [completion of the asynchronous replication process](../../../concepts/async-replication.md#done).
 
-    * `FAILOVER_MODE` — the mode for changing the replication state. This parameter can only be used in combination with the `STATE` parameter. Valid values are:
+  * `FAILOVER_MODE` — the mode for changing the replication state. This parameter can only be used in combination with the `STATE` parameter. Valid values are:
 
-        * `FORCE` — forced failover.
+    * `FORCE` — forced failover.
 
 ## Examples {#examples}
 

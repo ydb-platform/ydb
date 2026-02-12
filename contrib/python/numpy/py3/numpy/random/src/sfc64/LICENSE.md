@@ -4,7 +4,7 @@
 
 Adapted from a C++ implementation of Chris Doty-Humphrey's SFC PRNG.
 
-https://gist.github.com/imneme/f1f7821f07cf76504a97f6537c818083
+<https://gist.github.com/imneme/f1f7821f07cf76504a97f6537c818083>
 
 Copyright (c) 2018 Melissa E. O'Neill
 

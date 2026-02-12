@@ -203,7 +203,6 @@ Also now you can load test YDB topics, using wide transactions that span over al
   * The `--path` option was moved to a specific workload level. For example: `ydb workload tpch --path some/tables/path init ...`.
   * The `--store=s3` option was changed to `--store=external-s3` in the `init` subcommand.
 
-
 ### Bug fixes
 
 * Fixed colors in the `PrettyTable` format

@@ -21,7 +21,6 @@ For example:
   |c|1|
   |d|2|
 
-
 #### Example
 
 ```yql
@@ -65,8 +64,6 @@ This conversion can be convenient in the following cases:
 
 {% endnote %}
 
-
-
 ### Specifying the container type {#flatten-by-specific-type}
 
 To specify the type of container to convert to, you can use:
@@ -82,7 +79,7 @@ To specify the type of container to convert to, you can use:
 * `FLATTEN OPTIONAL BY`
 
    To filter the `NULL` values without serialization, specify the operation by using `FLATTEN OPTIONAL BY`.
-   
+
    Since YQL [2025.03](../changelog/2025.03.md), this expression also accepts any non-Optional type (in particular, application on the `NullType` returns `EmptyList`, Postgres types are filtered by non-`NULL`, and other data types are mapped as is).
 
 #### Examples
@@ -113,8 +110,6 @@ SELECT * FROM (
 ) FLATTEN LIST BY (String::SplitToList(a, ";") as a, b);
 ```
 
-
-
 ### Analogues of FLATTEN BY in other DBMS {#flatten-other-dmb}
 
 * PostgreSQL: `unnest`
@@ -123,17 +118,13 @@ SELECT * FROM (
 * Google BigQuery: `FLATTEN`
 * ClickHouse: `ARRAY JOIN / arrayJoin`
 
-
-
 ## FLATTEN COLUMNS {#flatten-columns}
-
-
 
 Transforms each column of type `Struct` into individual columns, one for each field within the struct. The names of the new columns are the names of the fields from the original struct columns. Columns that are not structs remain unchanged.
   
-- Only one level of the struct is flattened.
-- The original struct columns are not included in the result; their names are not used anywhere.
-- All column names in the resulting table (including names from struct fields in the original columns and names of non-struct columns) must be unique; name conflicts result in an error.
+* Only one level of the struct is flattened.
+* The original struct columns are not included in the result; their names are not used anywhere.
+* All column names in the resulting table (including names from struct fields in the original columns and names of non-struct columns) must be unique; name conflicts result in an error.
 
 #### Example
 

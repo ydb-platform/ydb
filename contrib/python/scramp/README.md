@@ -13,13 +13,11 @@ Scramp supports the following mechanisms:
 - SCRAM-SHA3-512
 - SCRAM-SHA3-512-PLUS
 
-
 ## Installation
 
 - Create a virtual environment: `python3 -m venv venv`
 - Activate the virtual environment: `source venv/bin/activate`
 - Install: `pip install scramp`
-
 
 ## Examples
 
@@ -75,7 +73,6 @@ you'd be using either the client or server on its own.
 >>> # has succeeded
 ```
 
-
 ### Client only
 
 Here's an example using just the client. The client nonce is specified in order to give
@@ -116,7 +113,6 @@ c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,p=dHzbZapWIk4jUhN+Ut
 >>> # If it all runs through without raising an exception, the authentication
 >>> # has succeeded
 ```
-
 
 ### Server only
 
@@ -171,7 +167,6 @@ v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=
 >>> # If it all runs through without raising an exception, the authentication
 >>> # has succeeded
 ```
-
 
 ### Server only with passlib
 
@@ -231,7 +226,6 @@ v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=
 >>> # has succeeded
 ```
 
-
 ### Server Error
 
 Here's an example of when setting a message from the client causes an error. The server
@@ -277,7 +271,6 @@ e=channel-binding-not-supported
 
 ```
 
-
 ### Standards
 
 - [RFC 5802](https://tools.ietf.org/html/rfc5802>) Describes SCRAM.
@@ -287,14 +280,11 @@ e=channel-binding-not-supported
 - [RFC 5929](https://datatracker.ietf.org/doc/html/rfc5929) Channel Bindings for TLS.
 - [draft-ietf-kitten-tls-channel-bindings-for-tls13](https://datatracker.ietf.org/doc/html/draft-ietf-kitten-tls-channel-bindings-for-tls13>) Defines the `tls-exporter` channel binding, which is [not yet supported by Scramp](https://github.com/tlocke/scramp/issues/9).
 
-
 ## API Docs
-
 
 ### scramp.MECHANISMS
 
 A tuple of the supported mechanism names.
-
 
 ### scramp.ScramClient
 
@@ -315,7 +305,6 @@ The `ScramClient` object has the following methods and properties:
 - `get_client_final()` - Get the final client message.
 - `set_server_final(message)` - Set the final message from the server.
 - `mechanism_name` - The mechanism chosen from the list given in the constructor.
-
 
 ### scramp.ScramMechanism
 
@@ -339,7 +328,6 @@ The `ScramMechanism` object has the following methods and properties:
   - `salted_password` - A binary object representing the hashed password.
 - `iteration_count` - The minimum iteration count recommended for this mechanism.
 
-
 ### scramp.ScramServer
 
 The `ScramServer` object has the following methods:
@@ -349,13 +337,12 @@ The `ScramServer` object has the following methods:
 - `set_client_final(message)` - Set the final client message.
 - `get_server_final()` - Get the server final message.
 
-
 ### scramp.make\_channel\_binding(name, ssl\_socket)
 
 A helper function that makes a `channel_binding` tuple when given a channel binding name and an SSL socket. The parameters are:
+
 - `name` - A channel binding name such as 'tls-unique' or 'tls-server-end-point'.
 - `ssl_socket` - An instance of [ssl.SSLSocket](https://docs.python.org/3/library/ssl.html#ssl.SSLSocket).
-
 
 ## Testing
 
@@ -363,13 +350,11 @@ A helper function that makes a `channel_binding` tuple when given a channel bind
 - Install `tox`: `pip install tox`
 - Run `tox`: `tox`
 
-
 ## OpenSSF Scorecard
 
 It might be worth running the [OpenSSF Scorecard](https://securityscorecards.dev/):
 
 `sudo docker run -e GITHUB_AUTH_TOKEN=<auth_token> gcr.io/openssf/scorecard:stable --repo=github.com/tlocke/scramp`
-
 
 ## Doing A Release Of Scramp
 
@@ -380,82 +365,67 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 - `python -m build`
 - `twine upload dist/*`
 
-
 ## Release Notes
 
 ### Version 1.4.6, 2025-07-05
 
 - Drop support for Python 3.8, and add support for 3.13
 
-
 ### Version 1.4.5, 2024-04-13
 
 - Drop support for Python 3.7, which means we're not dependent on `importlib-metadata` anymore.
 - Various changes to build system, docs and automated testing.
 
-
 ### Version 1.4.4, 2022-11-01
 
 - Tighten up parsing of messages to make sure that a `ScramException` is raised if a message is malformed.
-
 
 ### Version 1.4.3, 2022-10-26
 
 - The client now sends a gs2-cbind-flag of 'y' if the client supports channel binding, but thinks the server does not.
 
-
 ### Version 1.4.2, 2022-10-22
 
-- Switch to using the MIT-0 licence https://choosealicense.com/licenses/mit-0/
+- Switch to using the MIT-0 licence <https://choosealicense.com/licenses/mit-0/>
 - When creating a ScramClient, allow non ``-PLUS`` variants, even if a `channel_binding` parameter is provided. Previously this would raise and exception.
-
 
 ### Version 1.4.1, 2021-08-25
 
 - When using `make_channel_binding()` to create a tls-server-end-point channel binding, support certificates with hash algorithm of sha512.
 
-
 ### Version 1.4.0, 2021-03-28
 
 - Raise an exception if the client receives an error from the server.
-
 
 ### Version 1.3.0, 2021-03-28
 
 - As the specification allows, server errors are now sent to the client in the `server_final` message, an exception is still thrown as before.
 
-
 ### Version 1.2.2, 2021-02-13
 
 - Fix bug in generating the AuthMessage. It was incorrect when channel binding was used. So now Scramp supports channel binding.
-
 
 ### Version 1.2.1, 2021-02-07
 
 - Add support for channel binding.
 - Add support for SCRAM-SHA-512 and SCRAM-SHA3-512 and their channel binding variants.
 
-
 ### Version 1.2.0, 2020-05-30
 
 - This is a backwardly incompatible change on the server side, the client side will work as before. The idea of this change is to make it possible to have an authentication database. That is, the authentication information can be stored, and then retrieved when needed to authenticate the user.
 - In addition, it's now possible on the server side to use a third party hashing library such as passlib as the hashing implementation.
 
-
 ### Version 1.1.1, 2020-03-28
 
 - Add the README and LICENCE to the distribution.
-
 
 ### Version 1.1.0, 2019-02-24
 
 - Add support for the SCRAM-SHA-1 mechanism.
 
-
 ### Version 1.0.0, 2019-02-17
 
 - Implement the server side as well as the client side.
-
 
 ### Version 0.0.0, 2019-02-10
 

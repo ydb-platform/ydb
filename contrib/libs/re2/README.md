@@ -106,6 +106,7 @@ The examples above all recompile the regular expression on each call.
 Instead, you can compile it once to an RE2 object and reuse that object for each call.
 
 Example:
+
 ```cpp
 RE2 re("(\\w+):(\\d+)");
 assert(re.ok());  // compiled; if not, see re.error();
@@ -155,11 +156,11 @@ see [re2.h](https://github.com/google/re2/blob/main/re2/re2.h).
 RE2 can be built and installed using GNU make, CMake, or Bazel.
 The simplest installation instructions are:
 
-	make
-	make test
-	make benchmark
-	make install
-	make testinstall
+ make
+ make test
+ make benchmark
+ make install
+ make testinstall
 
 Building RE2 requires a C++17 compiler and the [Abseil](https://github.com/abseil/abseil-cpp) library.
 Building the tests and benchmarks requires
@@ -167,20 +168,20 @@ Building the tests and benchmarks requires
 and [Benchmark](https://github.com/google/benchmark).
 To obtain those:
 
-- Linux: `apt install libabsl-dev libgtest-dev libbenchmark-dev`
-- macOS: `brew install abseil googletest google-benchmark pkg-config-wrapper`
-- Windows: `vcpkg install abseil gtest benchmark` \
+* Linux: `apt install libabsl-dev libgtest-dev libbenchmark-dev`
+* macOS: `brew install abseil googletest google-benchmark pkg-config-wrapper`
+* Windows: `vcpkg install abseil gtest benchmark` \
   or `vcpkg add port abseil gtest benchmark`
 
 Once those are installed, the build has to be able to find them.
 If the standard Makefile has trouble, then switching to CMake can help:
 
-	rm -rf build
-	cmake -DRE2_TEST=ON -DRE2_BENCHMARK=ON -S . -B build
-	cd build
-	make
-	make test
-	make install
+ rm -rf build
+ cmake -DRE2_TEST=ON -DRE2_BENCHMARK=ON -S . -B build
+ cd build
+ make
+ make test
+ make install
 
 When using CMake, with benchmarks enabled, `make test` builds and runs test binaries
 and builds a `regexp_benchmark` binary but does not run it.
@@ -193,8 +194,8 @@ ICU Unicode library but also extends the list of property names available in the
 CMake can also be used to generate Visual Studio and Xcode projects, as well as
 Cygwin, MinGW, and MSYS makefiles.
 
- - Visual Studio users: You need Visual Studio 2019 or later.
- - Cygwin users: You must run CMake from the Cygwin command line, not the Windows command line.
+* Visual Studio users: You need Visual Studio 2019 or later.
+* Cygwin users: You must run CMake from the Cygwin command line, not the Windows command line.
 
 If you are adding RE2 to your own CMake project,
 CMake has two ways to use a dependency: `add_subdirectory()`,
@@ -210,11 +211,11 @@ If you are using [Bazel](https://bazel.io), it will handle the dependencies for 
 although you still need to download Bazel,
 which you can do with [Bazelisk](https://github.com/bazelbuild/bazelisk).
 
-	go install github.com/bazelbuild/bazelisk@latest
-	# or on mac: brew install bazelisk
+ go install github.com/bazelbuild/bazelisk@latest
+ # or on mac: brew install bazelisk
 
-	bazelisk build :all
-	bazelisk test :all
+ bazelisk build :all
+ bazelisk test :all
 
 If you are using RE2 from another project, you need to make sure you are
 using at least C++17.
@@ -230,16 +231,16 @@ Note that there is also a PyPI `re2` but it is not by the RE2 authors and is unm
 
 There are also other unofficial wrappers:
 
-- A C wrapper is at <https://github.com/marcomaggi/cre2/>.
-- A D wrapper is at <https://github.com/ShigekiKarita/re2d/> and [on DUB](https://code.dlang.org/packages/re2d).
-- An Erlang wrapper is at <https://github.com/dukesoferl/re2/> and [on Hex](https://hex.pm/packages/re2).
-- An Inferno wrapper is at <https://github.com/powerman/inferno-re2/>.
-- A Node.js wrapper is at <https://github.com/uhop/node-re2/> and [on NPM](https://www.npmjs.com/package/re2).
-- An OCaml wrapper is at <https://github.com/janestreet/re2/> and [on OPAM](https://opam.ocaml.org/packages/re2/).
-- A Perl wrapper is at <https://github.com/dgl/re-engine-RE2/> and [on CPAN](https://metacpan.org/pod/re::engine::RE2).
-- An R wrapper is at <https://github.com/girishji/re2/> and [on CRAN](https://cran.r-project.org/web/packages/re2/index.html).
-- A Ruby wrapper is at <https://github.com/mudge/re2/> and on RubyGems (rubygems.org).
-- A WebAssembly wrapper is at <https://github.com/google/re2-wasm/> and on NPM (npmjs.com).
+* A C wrapper is at <https://github.com/marcomaggi/cre2/>.
+* A D wrapper is at <https://github.com/ShigekiKarita/re2d/> and [on DUB](https://code.dlang.org/packages/re2d).
+* An Erlang wrapper is at <https://github.com/dukesoferl/re2/> and [on Hex](https://hex.pm/packages/re2).
+* An Inferno wrapper is at <https://github.com/powerman/inferno-re2/>.
+* A Node.js wrapper is at <https://github.com/uhop/node-re2/> and [on NPM](https://www.npmjs.com/package/re2).
+* An OCaml wrapper is at <https://github.com/janestreet/re2/> and [on OPAM](https://opam.ocaml.org/packages/re2/).
+* A Perl wrapper is at <https://github.com/dgl/re-engine-RE2/> and [on CPAN](https://metacpan.org/pod/re::engine::RE2).
+* An R wrapper is at <https://github.com/girishji/re2/> and [on CRAN](https://cran.r-project.org/web/packages/re2/index.html).
+* A Ruby wrapper is at <https://github.com/mudge/re2/> and on RubyGems (rubygems.org).
+* A WebAssembly wrapper is at <https://github.com/google/re2-wasm/> and on NPM (npmjs.com).
 
 [RE2J](https://github.com/google/re2j) is a port of the RE2 C++ code to pure Java,
 and [RE2JS](https://github.com/le0pard/re2js) is a port of RE2J to JavaScript.

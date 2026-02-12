@@ -1,4 +1,5 @@
 # utf8proc
+
 [![CI](https://github.com/NanoComp/meep/actions/workflows/build-ci.yml/badge.svg)](https://github.com/JuliaStrings/utf8proc/actions/workflows/build-ci.yml)
 [![AppVeyor status](https://ci.appveyor.com/api/projects/status/ivaa0v6ikxrmm5r6?svg=true)](https://ci.appveyor.com/project/StevenGJohnson/utf8proc)
 
@@ -36,6 +37,7 @@ Typical users should download a [utf8proc release](http://juliastrings.github.io
 For compilation of the C library, run `make`.  You can also install the library and header file with `make install` (by default into `/usr/local/lib` and `/usr/local/bin`, but this can be changed by `make prefix=/some/dir`).  `make check` runs some tests, and `make clean` deletes all of the generated files.
 
 Alternatively, you can compile with `cmake`, e.g. by
+
 ```sh
 mkdir build
 cmake -S . -B build
@@ -43,14 +45,17 @@ cmake --build build
 ```
 
 ### Using other compilers
+
 The included `Makefile` supports GNU/Linux flavors and MacOS with `gcc`-like compilers; Windows users will typically use `cmake`.
 
 For other Unix-like systems and other compilers, you may need to pass modified settings to `make` in order to use the correct compilation flags for building shared libraries on your system.
 
 For HP-UX with HP's `aCC` compiler and GNU Make (installed as `gmake`), you can compile with
+
 ```
 gmake CC=/opt/aCC/bin/aCC CFLAGS="+O2" PICFLAG="+z" C99FLAG="-Ae" WCFLAGS="+w" LDFLAG_SHARED="-b" SOFLAG="-Wl,+h"
 ```
+
 To run `gmake install` you will need GNU coreutils for the `install` command, and you may want to pass `prefix=/opt libdir=/opt/lib/hpux32` or similar to change the installation location.
 
 ## General Information
@@ -90,6 +95,7 @@ An independent Lua translation of this library, [lua-mojibake](https://github.co
 ## Examples
 
 ### Convert codepoint to string
+
 ```c
 // Convert codepoint `a` to utf8 string `str`
 utf8proc_int32_t a = 223;
@@ -100,6 +106,7 @@ printf("%s\n", str);
 ```
 
 ### Convert string to codepoint
+
 ```c
 // Convert string `str` to pointer to codepoint `a`
 utf8proc_uint8_t str[] = "ß";
@@ -122,6 +129,7 @@ free(fold_str);
 ```
 
 ### Normalization Form C/D (NFC/NFD)
+
 ```c
 // Decompose "\u00e4\u00f6\u00fc" = "äöü" into "a\u0308o\u0308u\u0308" (= "äöü" via combining char U+0308)
 utf8proc_uint8_t input[] = {0xc3, 0xa4, 0xc3, 0xb6, 0xc3, 0xbc}; // "\u00e4\u00f6\u00fc" = "äöü" in UTF-8

@@ -40,7 +40,7 @@ To connect to {{ ydb-short-name }} from Apache Superset **version 5.0.0 and high
 
     {% list tabs group=auth-type %}
 
-    - Password {#static-credentials}
+    * Password {#static-credentials}
 
         ```json
         {
@@ -51,7 +51,7 @@ To connect to {{ ydb-short-name }} from Apache Superset **version 5.0.0 and high
         }
         ```
 
-    - Access Token {#access-token-credentials}
+    * Access Token {#access-token-credentials}
 
         ```json
         {
@@ -61,9 +61,7 @@ To connect to {{ ydb-short-name }} from Apache Superset **version 5.0.0 and high
         }
         ```
 
-
-
-    - Service Account {#service-account-credentials}
+    * Service Account {#service-account-credentials}
 
         ```json
         {

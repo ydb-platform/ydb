@@ -176,7 +176,7 @@ The diagram shows that transactions are now grouped into six buckets. Approximat
 
 The latencies are almost as low as they were before the workload increased. We did not increase the system costs by introducing additional hardware resources. We've only enabled automatic partitioning by the load, which allowed us to use the existing resources more efficiently.
 
-#|
+# |
 || Bucket name
 | Latencies, ms
 |
@@ -270,9 +270,8 @@ The servers are virtual machines with the following computing resources:
 - vCPU: 28
 - RAM: 32 GB
 - Storage:
-    - 3 x 93 GB SSD per storage node
-    - 20 GB HDD for the operating system
-
+  - 3 x 93 GB SSD per storage node
+  - 20 GB HDD for the operating system
 
 ### Test
 
@@ -298,7 +297,7 @@ To reproduce the load, follow these steps:
 
     The `-t 100` parameter is used to run the test in 100 threads.
 
-3. Overload the {{ ydb-short-name }} cluster:
+1. Overload the {{ ydb-short-name }} cluster:
 
     ```shell
     ydb workload kv run select -s 1200 -t 250

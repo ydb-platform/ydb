@@ -69,4 +69,3 @@ Click **Reassign Groups** to open the window with parameters for balancing:
 
 After specifying all the parameters, click "Query" to get the number of channels moved and unlock the "Reassign" button.
 Clicking this button starts reassigning.
-

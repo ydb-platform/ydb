@@ -70,8 +70,6 @@ This conversion can be convenient in the following cases:
 
 {% endnote %}
 
-
-
 ### Specifying the container type {#flatten-by-specific-type}
 
 To specify the type of container to convert to, you can use:
@@ -116,8 +114,6 @@ SELECT * FROM (
 ) FLATTEN LIST BY (String::SplitToList(a, ";") as a, b);
 ```
 
-
-
 ### Analogues of FLATTEN BY in other DBMS {#flatten-other-dmb}
 
 * PostgreSQL: `unnest`
@@ -125,8 +121,6 @@ SELECT * FROM (
 * MongoDB: `unwind`
 * Google BigQuery: `FLATTEN`
 * ClickHouse: `ARRAY JOIN / arrayJoin`
-
-
 
 ## FLATTEN COLUMNS {#flatten-columns}
 
@@ -147,4 +141,3 @@ FROM (
         false AS z)
 ) FLATTEN COLUMNS;
 ```
-

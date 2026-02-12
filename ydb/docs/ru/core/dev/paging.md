@@ -4,8 +4,6 @@
 
 Для организации постраничного вывода рекомендуется последовательно выбирать данные, отсортированные по первичному ключу, ограничивая количество строк ключевым словом LIMIT.
 
-
-
 {% note info %}
 
 `$lastCity, $lastNumber` - значения первичного ключа, полученные в результате предыдущего запроса.
@@ -49,6 +47,7 @@ LIMIT $limit;
 * [C++](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/pagination)
 
 {% endif %}
+
 * [Java](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/pagination)
 * [Python](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/pagination)
 * [Go](https://github.com/ydb-platform/ydb-go-examples/tree/master/pagination)

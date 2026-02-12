@@ -35,4 +35,3 @@ SELECT *
 FROM my_table
 SAMPLE 1.0 / 3; -- one-third of the table
 ```
-

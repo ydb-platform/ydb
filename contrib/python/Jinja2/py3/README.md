@@ -6,24 +6,23 @@ syntax. Then the template is passed data to render the final document.
 
 It includes:
 
--   Template inheritance and inclusion.
--   Define and import macros within templates.
--   HTML templates can use autoescaping to prevent XSS from untrusted
+- Template inheritance and inclusion.
+- Define and import macros within templates.
+- HTML templates can use autoescaping to prevent XSS from untrusted
     user input.
--   A sandboxed environment can safely render untrusted templates.
--   AsyncIO support for generating templates and calling async
+- A sandboxed environment can safely render untrusted templates.
+- AsyncIO support for generating templates and calling async
     functions.
--   I18N support with Babel.
--   Templates are compiled to optimized Python code just-in-time and
+- I18N support with Babel.
+- Templates are compiled to optimized Python code just-in-time and
     cached, or can be compiled ahead-of-time.
--   Exceptions point to the correct line in templates to make debugging
+- Exceptions point to the correct line in templates to make debugging
     easier.
--   Extensible filters, tests, functions, and even syntax.
+- Extensible filters, tests, functions, and even syntax.
 
 Jinja's philosophy is that while application logic belongs in Python if
 possible, it shouldn't make the template designer's job difficult by
 restricting functionality too much.
-
 
 ## In A Nutshell
 
@@ -38,7 +37,6 @@ restricting functionality too much.
       {% endfor %}
       </ul>
     {% endblock %}
-
 
 ## Donate
 

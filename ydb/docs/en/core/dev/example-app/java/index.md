@@ -133,7 +133,6 @@ private void selectSimple() {
 
 As a result of the query, an object of the `QueryReader` class is generated. It may contain several sets obtained using the `getResultSet( <index> )` method. Since there was only one `SELECT` statement in the query, the result contains only one selection indexed as `0`. The given code snippet prints the following text to the console at startup:
 
-
 ```bash
 12:06:36.548 INFO  App - --[ SelectSimple ]--
 12:06:36.559 INFO  App - read series with id 1, title IT Crowd and release_date 2006-02-03
@@ -333,5 +332,3 @@ private void tclTransaction() {
     }).join().getStatus().expectSuccess("tcl transaction problem");
 }
 ```
-
-

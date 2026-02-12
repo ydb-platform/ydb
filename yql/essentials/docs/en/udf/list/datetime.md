@@ -3,6 +3,7 @@
 In the DateTime module, there are two internal representation formats: `Resource<TM>` for basic types and `Resource<TM64>` for extended ones.
 
 `Resource<TM>` and `Resource<TM64>` store the following date components:
+
 * Year (12 bits, unsigned for `Resource<TM>`; 19 bits, signed for `Resource<TM64>`).
 * Month (4 bits).
 * Day (5 bits).
@@ -242,7 +243,6 @@ Get the start (end) of the period including the date/time. If the result is inva
 * `DateTime::StartOf(Resource<TM64>{Flags:AutoMap}, Interval64{Flags:AutoMap}) -> Resource<TM64>?`
 * `DateTime::EndOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`
 * `DateTime::EndOf(Resource<TM64>{Flags:AutoMap}, Interval64{Flags:AutoMap}) -> Resource<TM64>?`
-
 
 The `StartOf`/`EndOf` functions are intended for grouping by an arbitrary period within a day. The result differs from the input value only by time components. A period exceeding one day is treated as a day (an equivalent of `StartOfDay`/`EndOfDay`). If a day doesn't include an integer number of periods, the number is rounded to the nearest time from the beginning of the day that is a multiple of the specified period. When the interval is zero, the output is same as the input. A negative interval is treated as a positive one.
 

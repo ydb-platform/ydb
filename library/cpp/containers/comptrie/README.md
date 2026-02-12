@@ -3,8 +3,8 @@ Compact trie
 
 The comptrie library is a fast and very tightly packed
 implementation of a prefix tree (Sedgewick's T-trie, that is a ternary tree,
-see https://www.cs.princeton.edu/~rs/strings/paper.pdf,
-https://www.cs.upc.edu/~ps/downloads/tst/tst.html). It contains tools for creating, optimizing, and serializing trees, accessing by key, and performing 
+see <https://www.cs.princeton.edu/~rs/strings/paper.pdf>,
+<https://www.cs.upc.edu/~ps/downloads/tst/tst.html>). It contains tools for creating, optimizing, and serializing trees, accessing by key, and performing
 various searches. Because it is template-based and performance-oriented, a significant
 part of the library consists of inline functions, so if you don't need all the
 features of the library, consider including a more specific header file instead of the top-level
@@ -30,6 +30,7 @@ the tree becomes a DAG (Directed Acyclic Graph –
 an oriented graph without oriented cycles).
 
 The main class TCompactTrie is defined in comptrie_trie.h and is templatized:
+
 - The first parameter of the template is the character type. It should be an
 integer type, which means that arithmetical operations must be defined for it.
 - The second parameter of the template is the value type.
@@ -65,8 +66,9 @@ Optimizing trees
 ----------------
 
 After a tree is created, there are two optimizing operations that can be applied:
- - Minimization to a DAG by merging equal subtrees.
- - Fast memory layout.
+
+- Minimization to a DAG by merging equal subtrees.
+- Fast memory layout.
 The functions that implement these operations are declared in the comptrie_builder.h file. The first
 optimization is implemented by the CompactTrieMinimize function, and the second is implemented by
 CompactTrieMakeFastLayout. You can perform both at once by calling the
@@ -103,6 +105,7 @@ Accessing trees
 ---------------
 
 As a rule, all methods that accept a key as input have two variants:
+
 - One takes the key in the format: pointer to the beginning of the key, length.
 - The other takes a high-level type like TStringBuf.
 
@@ -111,7 +114,7 @@ false if there is no key, and TCompactTrie::Get throws an exception. You can use
 You can also use a single FindPhrases request to get values for all the beginnings of
 a phrase with a given word delimiter.
 
-An important operation that distinguishes a tree from a simple map is implemented in the FindTails method, 
+An important operation that distinguishes a tree from a simple map is implemented in the FindTails method,
 which allows you to obtain a subtree consisting of all possible extensions of the
 given prefix.
 
@@ -154,6 +157,7 @@ tree.
 
 The structure of a node, as can be understood from thoughtfully reading the
 LeapByte function in Comptrie_impl.h, is the following:
+
 - The first byte is for service flags.
 - The second byte is a character (unless it is the ε-link type of node
   described below, which has from 1 to 7 bytes of offset distance from the
@@ -169,7 +173,7 @@ recall that the packer allows you to quickly determine this size using a pointer
 to the beginning of the packed value. Then, if the service flags indicate
 that the tree has children, there is a root node of the subtree of children.
 
-The packed offset is restricted to 7 bytes, and this gives us a limit on the largest 
+The packed offset is restricted to 7 bytes, and this gives us a limit on the largest
 possible size of a tree. You need to study the packer code to understand
 the exact limit.
 
@@ -183,6 +187,7 @@ effectively stack the comptrie from right to left.
 
 The byte of service flags contains (as shown by the constants at the beginning of
 the comptrie_impl.h file):
+
 - 1 bit of MT_NEXT, indicating whether this node has children.
 - 1 bit of MT_FINAL, indicating if there is a value in this node.
 - 3 bits of MT_SIZEMASK, indicating the size of the packed offset to a subtree

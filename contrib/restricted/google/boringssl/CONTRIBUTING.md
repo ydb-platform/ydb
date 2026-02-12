@@ -1,6 +1,7 @@
 Want to contribute? Great! First, read this page (including the small print at the end).
 
 ### Before you contribute
+
 Before we can use your code, you must sign the
 [Google Individual Contributor License Agreement](https://cla.developers.google.com/about/google-individual)
 (CLA), which you can do online. The CLA is necessary mainly because you own the
@@ -15,10 +16,12 @@ us first via email with your idea so that we can help out and possibly guide
 you. Coordinating up front makes it much easier to avoid frustration later on.
 
 ### Code reviews
+
 All submissions, including submissions by project members, require review. We
 use [Gerrit](https://boringssl-review.googlesource.com) for this purpose.
 
 #### Setup
+
 If you have not done so on this machine, you will need to set up a password for
 Gerrit. Sign in with a Google account, visit
 [this link](https://boringssl.googlesource.com/), and click the "Generate
@@ -33,6 +36,7 @@ on commit. Run:
     chmod u+x .git/hooks/commit-msg
 
 #### Uploading changes
+
 To upload a change, push it to the special `refs/for/master` target:
 
     git push origin HEAD:refs/for/master
@@ -47,6 +51,7 @@ For more detailed instructions, see the
 [Gerrit User Guide](https://gerrit-review.googlesource.com/Documentation/intro-user.html).
 
 ### The small print
+
 Contributions made by corporations are covered by a different agreement than
 the one above, the
 [Software Grant and Corporate Contributor License Agreement](https://cla.developers.google.com/about/google-corporate).

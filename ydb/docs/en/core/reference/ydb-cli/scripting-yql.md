@@ -22,7 +22,7 @@ View the description of the YQL script command:
 
 ## Parameters of the subcommand {#options}
 
-#|
+# |
 || Name | Description ||
 || `--timeout` | The time within which the operation should be completed on the server. ||
 || `--stats` | Statistics mode.
@@ -89,4 +89,3 @@ Command output:
 ```
 
 You can find examples of passing parameters to scripts in the [article on how to pass parameters to YQL execution commands](parameterized-queries-cli.md).
-

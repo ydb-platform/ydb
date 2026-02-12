@@ -27,9 +27,10 @@ SELECT * FROM (VALUES (1, 2)) AS t(x, y)
 UNION
 SELECT * FROM (VALUES (1, 2)) AS t(x, y);
 ```
+
 ```
-x	y
-1	2
+x y
+1 2
 ```
 
 ## Объединение c дубликатами (UNION ALL) {#union-all}
@@ -49,10 +50,11 @@ SELECT * FROM (VALUES (1, 2)) AS t(x, y)
 UNION ALL
 SELECT * FROM (VALUES (1, 2)) AS t(x, y);
 ```
+
 ```
-x	y
-1	2
-1	2
+x y
+1 2
+1 2
 ```
 
 ## Пересечение (INTERSECT) {#intersect}
@@ -82,6 +84,7 @@ SELECT * FROM (VALUES (1), (1), (1), (2)) AS t(x)
 INTERSECT
 SELECT * FROM (VALUES (1), (1)) AS t(x);
 ```
+
 ```
 x
 1
@@ -107,6 +110,7 @@ SELECT * FROM (VALUES (1), (1), (1), (2)) AS t(x)
 INTERSECT ALL
 SELECT * FROM (VALUES (1), (1)) AS t(x);
 ```
+
 ```
 x
 1
@@ -140,6 +144,7 @@ SELECT * FROM (VALUES (1), (1), (1), (2)) AS t(x)
 EXCEPT
 SELECT * FROM (VALUES (1)) AS t(x);
 ```
+
 ```
 x
 2
@@ -165,6 +170,7 @@ SELECT * FROM (VALUES (1), (1), (1), (2)) AS t(x)
 EXCEPT ALL
 SELECT * FROM (VALUES (1)) AS t(x);
 ```
+
 ```
 x
 2
@@ -191,6 +197,7 @@ x
 #### Пример
 
 В результате выполнения данного запроса по умолчанию, в режиме "по именам", будет сформирована выборка с тремя колонками `x`, `y`, и `z`:
+
 ```yql
 SELECT 1 AS x
 UNION ALL
@@ -198,11 +205,12 @@ SELECT 2 AS y
 UNION ALL
 SELECT 3 AS z;
 ```
+
 ```
-x	y	z
-1		
-	2	
-		3
+x y z
+1  
+ 2 
+  3
 ```
 
 ### По позициям колонок
@@ -219,6 +227,7 @@ x	y	z
 #### Пример
 
 При включенной `PRAGMA PositionalUnionAll;` в следующем запросе результатом будет одна колонка `x`:
+
 ```yql
 PRAGMA PositionalUnionAll;
 
@@ -228,6 +237,7 @@ SELECT 2 AS y
 UNION ALL
 SELECT 3 AS z;
 ```
+
 ```
 x
 1
@@ -236,6 +246,7 @@ x
 ```
 
 Если порядок колонок не определён (например, при использовании `AS_TABLE`), запрос завершается с ошибкой:
+
 ```yql
 PRAGMA PositionalUnionAll;
 
@@ -243,6 +254,7 @@ SELECT 1 AS x, 2 as y
 UNION ALL
 SELECT * FROM AS_TABLE([<|x:3, y:4|>]);
 ```
+
 ```
 Input #1 does not have ordered columns...
 ```

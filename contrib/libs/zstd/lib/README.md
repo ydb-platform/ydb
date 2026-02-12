@@ -4,11 +4,11 @@ Zstandard library files
 The __lib__ directory is split into several sub-directories,
 in order to make it easier to select or exclude features.
 
-
 #### Building
 
 `Makefile` script is provided, supporting [Makefile conventions](https://www.gnu.org/prep/standards/html_node/Makefile-Conventions.html#Makefile-Conventions),
 including commands variables, staged install, directory variables and standard targets.
+
 - `make` : generates both static and dynamic libraries
 - `make install` : install libraries and headers in target system directories
 
@@ -16,16 +16,17 @@ including commands variables, staged install, directory variables and standard t
 and support for decoding legacy formats >= v0.5.0.
 The scope can be reduced on demand (see paragraph _modular build_).
 
-
 #### Multithreading support
 
 When building with `make`, by default the dynamic library is multithreaded and static library is single-threaded (for compatibility reasons).
 
 Enabling multithreading requires 2 conditions :
+
 - set build macro `ZSTD_MULTITHREAD` (`-DZSTD_MULTITHREAD` for `gcc`)
 - for POSIX systems : compile with pthread (`-pthread` compilation flag for `gcc`)
 
 For convenience, we provide a build target to generate multi and single threaded libraries:
+
 - Force enable multithreading on both dynamic and static libraries by appending `-mt` to the target, e.g. `make lib-mt`.
   Note that the `.pc` generated on calling `make lib-mt` will already include the require Libs and Cflags.
 - Force disable multithreading on both dynamic and static libraries by appending `-nomt` to the target, e.g. `make lib-nomt`.
@@ -40,11 +41,9 @@ is compiled. To correctly generate a `.pc` for the multi-threaded static library
 Multithreading capabilities are exposed
 via the [advanced API defined in `lib/zstd.h`](https://github.com/facebook/zstd/blob/v1.4.3/lib/zstd.h#L351).
 
-
 #### API
 
 Zstandard's stable API is exposed within [lib/zstd.h](zstd.h).
-
 
 #### Advanced API
 
@@ -60,7 +59,6 @@ Optional advanced features are exposed via :
                           they may still change in the future, or even be removed.
                           As a consequence, experimental definitions shall ___never be used with dynamic library___ !
                           Only static linking is allowed.
-
 
 #### Modular build
 
@@ -203,11 +201,12 @@ compile a project using gcc/MinGW.
 The dynamic library has to be added to linking options.
 It means that if a project that uses ZSTD consists of a single `test-dll.c`
 file it should be linked with `dll\libzstd.dll`. For example:
+
 ```
     gcc $(CFLAGS) -Iinclude/ test-dll.c -o test-dll dll\libzstd.dll
 ```
-The compiled executable will require ZSTD DLL which is available at `dll\libzstd.dll`.
 
+The compiled executable will require ZSTD DLL which is available at `dll\libzstd.dll`.
 
 #### Advanced Build options
 
@@ -228,7 +227,6 @@ can also be manually controlled using variable `BUILD_DIR`,
 for example `make BUILD_DIR=objectDir/v1`.
 In which case, the hash function doesn't matter.
 
-
 #### Deprecated API
 
 Obsolete API on their way out are stored in directory `lib/deprecated`.
@@ -236,13 +234,12 @@ At this stage, it contains older streaming prototypes, in `lib/deprecated/zbuff.
 These prototypes will be removed in some future version.
 Consider migrating code towards supported streaming API exposed in `zstd.h`.
 
-
 #### Miscellaneous
 
 The other files are not source code. There are :
 
- - `BUCK` : support for `buck` build system (https://buckbuild.com/)
- - `Makefile` : `make` script to build and install zstd library (static and dynamic)
- - `README.md` : this file
- - `dll/` : resources directory for Windows compilation
- - `libzstd.pc.in` : script for `pkg-config` (used in `make install`)
+- `BUCK` : support for `buck` build system (<https://buckbuild.com/>)
+- `Makefile` : `make` script to build and install zstd library (static and dynamic)
+- `README.md` : this file
+- `dll/` : resources directory for Windows compilation
+- `libzstd.pc.in` : script for `pkg-config` (used in `make install`)

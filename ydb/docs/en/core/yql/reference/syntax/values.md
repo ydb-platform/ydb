@@ -42,4 +42,3 @@ SELECT * FROM (VALUES (1,2), (3,4)) as t(x,y);
 ```
 
 In this case, the columns will get the names `x`, `y`.
-

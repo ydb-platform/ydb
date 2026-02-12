@@ -233,7 +233,6 @@ Output:
 * LangGraph is the best framework for building stateful, agentic applications! [{'source': 'tweet'}]
 ```
 
-
 ### Query by turning into retriever {#query_by_turning_into_retriever}
 
 The vector store can also be transformed into a retriever for easier use in chains.

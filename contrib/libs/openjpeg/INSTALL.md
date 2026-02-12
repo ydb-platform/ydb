@@ -6,15 +6,18 @@ The build method maintained by OpenJPEG is [CMake](https://cmake.org/).
 ## UNIX/LINUX - MacOS (terminal) - WINDOWS (cygwin, MinGW)
 
 To build the library, type from source tree directory:
+
 ```
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make
 ```
+
 Binaries are then located in the 'bin' directory.
 
 To install the library, type with root privileges:
+
 ```
 make install
 make clean
@@ -22,38 +25,46 @@ make clean
 
 To build the html documentation, you need doxygen to be installed on your system.
 It will create an "html" directory in TOP\_LEVEL/build/doc)
+
 ```
 make doc
 ```
 
 Main available cmake flags:
-  * To specify the install path: '-DCMAKE\_INSTALL\_PREFIX=/path'
-  * To build the shared libraries and links the executables against it: '-DBUILD\_SHARED\_LIBS:bool=on' (default: 'ON')
+
+* To specify the install path: '-DCMAKE\_INSTALL\_PREFIX=/path'
+* To build the shared libraries and links the executables against it: '-DBUILD\_SHARED\_LIBS:bool=on' (default: 'ON')
+
 > Note: when using this option, static libraries are not built and executables are dynamically linked.
-  * To build the CODEC executables: '-DBUILD\_CODEC:bool=on' (default: 'ON')
-  * To build opjstyle (internal version of astyle) for OpenJPEG development: '-DWITH_ASTYLE=ON'
-  * [OBSOLETE] To build the MJ2 executables: '-DBUILD\_MJ2:bool=on' (default: 'OFF')
-  * [OBSOLETE] To build the JPWL executables and JPWL library: '-DBUILD\_JPWL:bool=on' (default: 'OFF')
-  * [OBSOLETE] To build the JPIP client (java compiler recommended) library and executables: '-DBUILD\_JPIP:bool=on' (default: 'OFF')
-  * [OBSOLETE] To build the JPIP server (need fcgi) library and executables: '-DBUILD\_JPIP\_SERVER:bool=on' (default: 'OFF')
-  * To enable testing (and automatic result upload to http://my.cdash.org/index.php?project=OPENJPEG):
+
+* To build the CODEC executables: '-DBUILD\_CODEC:bool=on' (default: 'ON')
+* To build opjstyle (internal version of astyle) for OpenJPEG development: '-DWITH_ASTYLE=ON'
+* [OBSOLETE] To build the MJ2 executables: '-DBUILD\_MJ2:bool=on' (default: 'OFF')
+* [OBSOLETE] To build the JPWL executables and JPWL library: '-DBUILD\_JPWL:bool=on' (default: 'OFF')
+* [OBSOLETE] To build the JPIP client (java compiler recommended) library and executables: '-DBUILD\_JPIP:bool=on' (default: 'OFF')
+* [OBSOLETE] To build the JPIP server (need fcgi) library and executables: '-DBUILD\_JPIP\_SERVER:bool=on' (default: 'OFF')
+* To enable testing (and automatic result upload to <http://my.cdash.org/index.php?project=OPENJPEG>):
+
 ```
 cmake . -DBUILD_TESTING:BOOL=ON -DOPJ_DATA_ROOT:PATH='path/to/the/data/directory' -DBUILDNAME:STRING='name_of_the_build'
 make
 make Experimental
 ```
-Note : test data is available on the following github repo: https://github.com/uclouvain/openjpeg-data
+
+Note : test data is available on the following github repo: <https://github.com/uclouvain/openjpeg-data>
 
 If '-DOPJ\_DATA\_ROOT:PATH' option is omitted, test files will be automatically searched in '${CMAKE\_SOURCE\_DIR}/../data'.
 
-Note 2 : to execute the encoding test suite, kakadu binaries are needed to decode encoded image and compare it to the baseline. Kakadu binaries are freely available for non-commercial purposes at http://www.kakadusoftware.com. kdu\_expand will need to be in your PATH for cmake to find it.
+Note 2 : to execute the encoding test suite, kakadu binaries are needed to decode encoded image and compare it to the baseline. Kakadu binaries are freely available for non-commercial purposes at <http://www.kakadusoftware.com>. kdu\_expand will need to be in your PATH for cmake to find it.
 
 Note 3 : OpenJPEG encoder and decoder (not the library itself !) depends on several libraries: png, tiff, lcms, z. If these libraries are not found on the system, they are automatically built from the versions available in the source tree. You can force the use of these embedded version with BUILD\_THIRDPARTY:BOOL=ON. On a Debian-like system you can also simply install these libraries with:
+
 ```
 sudo apt-get install liblcms2-dev  libtiff-dev libpng-dev libz-dev
 ```
 
 Note 4 : On MacOS, if it does not work, try adding the following flag to the cmake command :
+
 ```
 -DCMAKE_OSX_ARCHITECTURES:STRING=i386
 ```
@@ -73,7 +84,6 @@ cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE:string="Release" -DBUILD_SHARED_LI
 
 To compile a 64-bit application, open 64-Bit Visual C\+\+ toolset on the command line and run cmake. For further information, please refer to: [How to: Enable a 64-Bit Visual C\+\+ Toolset on the Command Line](https://msdn.microsoft.com/en-us/library/x4d2c09s.aspx).
 
-
 If you do not want directly use the cl compiler, you could use:
 
 ```
@@ -81,15 +91,16 @@ cmake -DCMAKE_BUILD_TYPE:string="Release" -DBUILD_SHARED_LIBS:bool=on -DCMAKE_IN
 ```
 
 To create Visual Studio solution (.sln) and project files (.vcproj / .vcxproj):
+
 ```
 cmake -G "Visual Studio 14 2015" -DCMAKE_BUILD_TYPE:string="Release" -DBUILD_SHARED_LIBS:bool=on -DCMAKE_INSTALL_PREFIX:path="%USERPROFILE%" -DCMAKE_LIBRARY_PATH:path="%USERPROFILE%" -DCMAKE_INCLUDE_PATH:path="%USERPROFILE%\include" ..
 ```
 
 64-bit application:
+
 ```
 cmake -G "Visual Studio 14 2015 Win64" -DCMAKE_BUILD_TYPE:string="Release" -DBUILD_SHARED_LIBS:bool=on -DCMAKE_INSTALL_PREFIX:path="%USERPROFILE%" -DCMAKE_LIBRARY_PATH:path="%USERPROFILE%" -DCMAKE_INCLUDE_PATH:path="%USERPROFILE%\include" ..
 ```
-
 
 # Enabling CPU specific optimizations
 

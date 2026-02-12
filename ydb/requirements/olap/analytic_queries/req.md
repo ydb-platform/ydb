@@ -1,6 +1,7 @@
 # Requirements for YDB Analytics System
 
 ## Introduction
+
 This document outlines the detailed functional and non-functional requirements for the YDB analytics system, including associated test cases for verification, focusing on aggregate functions and complex analytical queries.
 
 ## Non-functional Requirements

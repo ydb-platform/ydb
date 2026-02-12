@@ -1197,8 +1197,7 @@ SELECT
 
 ## Смотрите также
 
-* [{#T}](../recipes/accessing-json.md)
-* [{#T}](../recipes/modifying-json.md)
+- [{#T}](../recipes/accessing-json.md)
+- [{#T}](../recipes/modifying-json.md)
 
 {% endif %}
-

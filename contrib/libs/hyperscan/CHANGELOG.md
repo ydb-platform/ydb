@@ -3,6 +3,7 @@
 This is a list of notable changes to Hyperscan, in reverse chronological order.
 
 ## [5.4.2] 2023-04-19
+
 - Roll back bugfix for github issue #350: Besides using scratch for
   corresponding database, Hyperscan also allows user to use larger scratch
   allocated for another database. Users can leverage this property to achieve
@@ -11,6 +12,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Fix hsdump issue due to invalid nfa type.
 
 ## [5.4.1] 2023-02-20
+
 - The Intel Hyperscan team is pleased to provide a bug fix release to our open source library.
   Intel also maintains an upgraded version available through your Intel sales representative.
 - Bugfix for issue #184: fix random char value of UTF-8.
@@ -28,6 +30,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Fix other compile issues.
 
 ## [5.4.0] 2020-12-31
+
 - Improvement on literal matcher "Fat Teddy" performance, including
   support for Intel(R) AVX-512 Vector Byte Manipulation Instructions (Intel(R)
   AVX-512 VBMI).
@@ -52,6 +55,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Some typo fixing. (#242, #259)
 
 ## [5.3.0] 2020-05-15
+
 - Improvement on literal matcher "Teddy" performance, including support for
   Intel(R) AVX-512 Vector Byte Manipulation Instructions (Intel(R) AVX-512
   VBMI).
@@ -75,11 +79,13 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Add Hyperscan version marcro in `hs.h`. (#222)
 
 ## [5.2.1] 2019-10-13
+
 - Bugfix for issue #186: fix compile issue when `BUILD_SHARED_LIBS` is on in
   release mode.
 - Disable redundant move check for older compiler versions.
 
 ## [5.2.0] 2019-07-12
+
 - Literal API: add new API `hs_compile_lit()` and `hs_compile_lit_multi()` to
   process pure literal rule sets. The 2 literal APIs treat each expression text
   in a literal sense without recognizing any regular grammers.
@@ -95,6 +101,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Bugfix for issue #174: fix scratch free issue when memory allocation fails.
 
 ## [5.1.1] 2019-04-03
+
 - Add extra detection and handling when invalid rose programs are triggered.
 - Bugfix for issue #136: fix CMake parsing of CPU architecure for GCC-9.
 - Bugfix for issue #137: avoid file path impact on fat runtime build.
@@ -103,6 +110,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Bugfix for issue #144: fix library install path in pkg-config files.
 
 ## [5.1.0] 2019-01-17
+
 - Improve DFA state compression by wide-state optimization to reduce bytecode
   size.
 - Create specific interpreter runtime handling to boost the performance of pure
@@ -121,6 +129,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Fix github repo address in doc.
 
 ## [5.0.0] 2018-07-09
+
 - Introduce chimera hybrid engine of Hyperscan and PCRE, to fully support
   PCRE syntax as well as to take advantage of the high performance nature of
   Hyperscan.
@@ -133,6 +142,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Bugfix for issue #86: enable hscollider for installed PCRE package.
 
 ## [4.7.0] 2018-01-24
+
 - Introduced hscollider pattern testing tool, for validating Hyperscan match
   behaviour against PCRE.
 - Introduced hscheck pattern compilation tool.
@@ -145,6 +155,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
   shared library.
 
 ## [4.6.0] 2017-09-22
+
 - New API feature: stream state compression. This allows the user to compress
   and restore state for streams to reduce memory usage.
 - Many improvements to literal matching performance, including more support
@@ -156,6 +167,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Small updates to fix warnings identified by Coverity.
 
 ## [4.5.2] 2017-07-26
+
 - Bugfix for issue #57: Treat characters between `\Q.\E` as codepoints in
   UTF8 mode.
 - Bugfix for issue #60: Use a portable flag for mktemp for fat runtime builds.
@@ -163,6 +175,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
   AVX-512 support disabled.
 
 ## [4.5.1] 2017-06-16
+
 - Bugfix for issue #56: workaround for gcc-4.8 C++11 defect.
 - Bugfix for literal matching table generation, reversing a regression in
   performance for some literal matching cases.
@@ -172,6 +185,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
   of CMake to fail.
 
 ## [4.5.0] 2017-06-09
+
 - New API feature: approximate matching using the "edit distance" extended
   parameter. This allows the user to request all matches that are a given edit
   distance from an exact match for a pattern.
@@ -215,12 +229,14 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
   be used. Thanks to @EaseTheWorld for the PR.
 
 ## [4.4.1] 2017-02-28
+
 - Bugfixes to fix issues where stale data was being referenced in scratch
   memory. In particular this may have resulted in `hs_close_stream()`
   referencing data from other previously scanned streams. This may result in
   incorrect matches being been reported.
 
 ## [4.4.0] 2017-01-20
+
 - Introduce the "fat runtime" build. This will build several variants of the
   Hyperscan scanning engine specialised for different processor feature sets,
   and use the appropriate one for the host at runtime. This uses the "ifunc"
@@ -254,16 +270,19 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Bugfix for issue #41, handle Windows line endings in pattern files.
 
 ## [4.3.2] 2016-11-15
+
 - Bugfix for issue #39. This small change is a workaround for an issue in
   Boost 1.62. The fix has been submitted to Boost for inclusion in a future
   release.
 
 ## [4.3.1] 2016-08-29
+
 - Bugfix for issue #30. In recent versions of Clang, a write to a variable was
   being elided, resulting in corrupted stream state after calling
   `hs_reset_stream()`.
 
 ## [4.3.0] 2016-08-24
+
 - Introduce a new analysis pass ("Violet") used for decomposition of patterns
   into literals and smaller engines.
 - Introduce a new container engine ("Tamarama") for infix and suffix engines
@@ -294,6 +313,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
   compile path and return an appropriate error if detected.
 
 ## [4.2.0] 2016-05-31
+
 - Introduce an interpreter for many complex actions to replace the use of
   internal reports within the core of Hyperscan (the "Rose" engine). This
   improves scanning performance and reduces database size for many pattern
@@ -328,6 +348,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
   API function.
 
 ## [4.1.0] 2015-12-18
+
 - Update version of PCRE used by testing tools as a syntax and semantic
   reference to PCRE 8.38.
 - Small updates to fix warnings identified by Coverity.
@@ -348,6 +369,7 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
   of similar bounded repeat constructs. (github issue #9)
 
 ## [4.0.1] 2015-10-30
+
 - Minor cleanups to test code.
 - CMake and other build system improvements.
 - API update: allow `hs_reset_stream()` and `hs_reset_and_copy_stream()` to be
@@ -358,4 +380,5 @@ This is a list of notable changes to Hyperscan, in reverse chronological order.
 - Reduce compile memory usage in literal set explansion for some large cases.
 
 ## [4.0.0] 2015-10-20
+
 - Original release of Hyperscan as open-source software.

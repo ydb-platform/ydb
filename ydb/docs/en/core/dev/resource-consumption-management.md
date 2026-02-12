@@ -186,19 +186,19 @@ In the example above, two resource pools are created: `olap` for the analyst tea
 
 - **Resource pool 'olap'**:
 
-    - Has a weight of 20.
-    - The limit on queries that can be run when the database is overloaded is 80% of available resources.
+  - Has a weight of 20.
+  - The limit on queries that can be run when the database is overloaded is 80% of available resources.
 
 - **Resource pool 'the_ceo'**:
 
-    - Has more weight - 80.
-    - Has no restrictions on queries that can be launched when overloaded.
+  - Has more weight - 80.
+  - Has no restrictions on queries that can be launched when overloaded.
 
 ## Diagnostics
 
 ### Query plan
 
-Detailed information about query plans can be found on the page [ structure of query plans ]( ../yql/query_plans.md ). To get information about the resource pool used, you need to run a command to obtain statistics in the `json-unicode` format . Example command:
+Detailed information about query plans can be found on the page [structure of query plans]( ../yql/query_plans.md ). To get information about the resource pool used, you need to run a command to obtain statistics in the `json-unicode` format . Example command:
 
 ```bash
 ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode
@@ -238,9 +238,9 @@ Information about system views related to resource pools and resource pool quali
 
 ### See also
 
-* (create-resource-pool.md)
-* (alter-resource-pool.md)
-* (drop-resource-pool.md)
-* (create-resource-pool-classifier.md)
-* (alter-resource-pool-classifier.md)
-* (drop-resource-pool-classifier.md)
+- (create-resource-pool.md)
+- (alter-resource-pool.md)
+- (drop-resource-pool.md)
+- (create-resource-pool-classifier.md)
+- (alter-resource-pool-classifier.md)
+- (drop-resource-pool-classifier.md)

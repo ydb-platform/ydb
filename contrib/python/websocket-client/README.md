@@ -31,6 +31,7 @@ to install from a local copy of the code. This module is tested on Python 3.8+.
 
 There are several optional dependencies that can be installed to enable
 specific websocket-client features.
+
 - To install `python-socks` for proxy usage and `wsaccel` for a minor performance boost, use:
  `pip install websocket-client[optional]`
 - To install `websockets` to run unit tests using the local echo server, use:

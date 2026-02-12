@@ -7,4 +7,3 @@ If you previously reviewed the articles of the "Getting started" section, you mu
 ```
 
 {% endnote %}
-

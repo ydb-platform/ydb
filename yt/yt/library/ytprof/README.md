@@ -155,10 +155,13 @@ To use the memory profiler, your allocator must support it. Currently, this supp
 To enable the memory profiler:
 
 1. Link with a tcmalloc configuration by adding in your program's ya.make:
+
    ```
    ALLOCATOR(TCMALLOC)
    ```
+
 2. At the application's initialization stage, before large user objects allocated, write the profiler configuration:
+
    ```cpp
    #include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
    #include <tcmalloc/malloc_extension.h>
@@ -172,6 +175,7 @@ To enable the memory profiler:
    ```
 
 TCMalloc supports four profile types:
+
 - `heap` — snapshot of current memory usage. This is the main profile you're interested in.
 - `peak` — snapshot of memory usage at the peak. Useful when looking for a sudden spike that's already passed.
 - `allocations` — profile of allocations by given time interval. Helpful for optimizing performance. Code that frequently allocates and frees a vector in a hot loop will not be visible in the `heap` profile but will appear here.
@@ -182,6 +186,7 @@ Memory profiler works in all build types except those with sanitizers.
 ## Spinlock Profiler
 
 ytprof supports profiling two types of spinlocks:
+
 - `lock` — profile of absl spinlocks. These are used inside tcmalloc.
 - `block` — profile of spinlocks from `library/cpp/yt/threading`.
 
@@ -229,4 +234,3 @@ Entering interactive mode (type "help" for commands, "o" for options)
 # Show raw samples
 (pprof) traces
 ```
-

@@ -21,4 +21,3 @@ USE some_cluster;
 SELECT *
 FROM my_table VIEW my_view;
 ```
-

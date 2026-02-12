@@ -19,6 +19,7 @@ that you set this option consistently at the global level for your entire
 project. If, for example, you want to set the C++ dialect to C++17, with
 [Bazel](https://bazel/build/) as the build system and `gcc` or `clang` as the
 compiler, there several ways to do this:
+
 * Pass `--cxxopt=-std=c++17` on the command line (for example, `bazel build
   --cxxopt=-std=c++17 ...`)
 * Set the environment variable `BAZEL_CXXOPTS` (for example,

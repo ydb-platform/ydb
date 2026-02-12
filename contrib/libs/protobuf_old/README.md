@@ -3,7 +3,7 @@ Protocol Buffers - Google's data interchange format
 
 Copyright 2008 Google Inc.
 
-https://developers.google.com/protocol-buffers/
+<https://developers.google.com/protocol-buffers/>
 
 Overview
 --------
@@ -71,7 +71,7 @@ Quick Start
 The best way to learn how to use protobuf is to follow the tutorials in our
 developer guide:
 
-https://developers.google.com/protocol-buffers/docs/tutorials
+<https://developers.google.com/protocol-buffers/docs/tutorials>
 
 If you want to learn from code examples, take a look at the examples in the
 [examples](examples) directory.
@@ -82,4 +82,4 @@ Documentation
 The complete documentation for Protocol Buffers is available via the
 web at:
 
-https://developers.google.com/protocol-buffers/
+<https://developers.google.com/protocol-buffers/>

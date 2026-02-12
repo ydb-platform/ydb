@@ -27,7 +27,6 @@ reference implementation of the JPEG standard.
 More information about libjpeg-turbo can be found at
 <https://libjpeg-turbo.org>.
 
-
 Funding
 =======
 
@@ -42,19 +41,16 @@ strategically important features.
 
 [![Sponsor libjpeg-turbo](https://img.shields.io/github/sponsors/libjpeg-turbo?label=Sponsor&logo=GitHub)](https://github.com/sponsors/libjpeg-turbo)
 
-
 License
 =======
 
 libjpeg-turbo is covered by three compatible BSD-style open source licenses.
 Refer to [LICENSE.md](LICENSE.md) for a roll-up of license terms.
 
-
 Building libjpeg-turbo
 ======================
 
 Refer to [BUILDING.md](BUILDING.md) for complete instructions.
-
 
 Using libjpeg-turbo
 ===================
@@ -197,7 +193,6 @@ supported and which aren't.
 
 - **rdjpgcom: Locale awareness**
 
-
 #### Not supported
 
 NOTE:  As of this writing, extensive research has been conducted into the
@@ -282,7 +277,6 @@ Both cjpeg and djpeg have been extended to allow testing the in-memory
 source/destination manager functions.  See their respective man pages for more
 details.
 
-
 Mathematical Compatibility
 ==========================
 
@@ -336,7 +330,6 @@ libjpeg v8:
   "non-smooth") chrominance upsampling, because libjpeg v8 does not support
   merged upsampling with scaling factors > 1.
 
-
 Performance Pitfalls
 ====================
 
@@ -361,7 +354,6 @@ quality of 98-100.  Thus, libjpeg-turbo must use the non-SIMD quantization
 function in those cases.  This causes performance to drop by as much as 40%.
 It is therefore strongly advised that you use the accurate integer forward DCT
 whenever encoding images with a JPEG quality of 98 or higher.
-
 
 Memory Debugger Pitfalls
 ========================

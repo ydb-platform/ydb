@@ -26,7 +26,6 @@ The second approach requires a prepared [Docker](https://en.wikipedia.org/wiki/D
 
 [Install Go](https://go.dev/doc/install). The recommended version is 1.22.
 
-
 #### Compiling
 
 Invoke `go build` in the repository root folder:
@@ -68,7 +67,6 @@ The `ydbops` executables will be available in the `bin` folder. Binary files are
 | ydbops_darwin_amd64   | macOS (amd64) |
 | ydbops_darwin_arm64   | macOS (arm64) |
 
-
 #### Installing
 
 To install the binary file, execute the command `make`.
@@ -88,4 +86,3 @@ Sample command to install into `install_folder` from the current folder:
 ```bash
 make install INSTALL_DIR=install_folder BUILD_DIR=.
 ```
-

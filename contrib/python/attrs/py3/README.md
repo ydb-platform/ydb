@@ -23,7 +23,6 @@
 
 Its main goal is to help you to write **concise** and **correct** software without slowing down your code.
 
-
 ## Sponsors
 
 *attrs* would not be possible without our [amazing sponsors](https://github.com/sponsors/hynek).
@@ -103,7 +102,6 @@ The classic APIs (`@attr.s`, `attr.ib`, plus their serious-business aliases) and
 
 Please check out [*On The Core API Names*](https://www.attrs.org/en/latest/names.html) for a more in-depth explanation.
 
-
 ## Data Classes
 
 On the tin, *attrs* might remind you of `dataclasses` (and indeed, `dataclasses` [are a descendant](https://hynek.me/articles/import-attrs/) of *attrs*).
@@ -111,7 +109,6 @@ In practice it does a lot more and is more flexible.
 For instance it allows you to define [special handling of NumPy arrays for equality checks](https://www.attrs.org/en/stable/comparison.html#customization), allows more ways to [plug into the initialization process](https://www.attrs.org/en/stable/init.html#hooking-yourself-into-initialization), and allows for stepping through the generated methods using a debugger.
 
 For more details, please refer to our [comparison page](https://www.attrs.org/en/stable/why.html#data-classes).
-
 
 ## Project Information
 
@@ -122,7 +119,6 @@ For more details, please refer to our [comparison page](https://www.attrs.org/en
 - [**Contributing**](https://github.com/python-attrs/attrs/blob/main/.github/CONTRIBUTING.md)
 - [**Third-party Extensions**](https://github.com/python-attrs/attrs/wiki/Extensions-to-attrs)
 - **Get Help**: please use the `python-attrs` tag on [StackOverflow](https://stackoverflow.com/questions/tagged/python-attrs)
-
 
 ### *attrs* for Enterprise
 

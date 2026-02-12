@@ -4,4 +4,4 @@
 
 Please use the following contact information for reporting a vulnerability:
 
-- [Daniel Lemire](https://github.com/lemire) - daniel@lemire.me
+- [Daniel Lemire](https://github.com/lemire) - <daniel@lemire.me>

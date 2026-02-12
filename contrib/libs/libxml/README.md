@@ -9,7 +9,7 @@ Full documentation is available at
 Bugs should be reported at
 <https://gitlab.gnome.org/GNOME/libxml2/-/issues>.
 
-A mailing list xml@gnome.org is available. You can subscribe at
+A mailing list <xml@gnome.org> is available. You can subscribe at
 <https://mail.gnome.org/mailman/listinfo/xml>. The list archive is at
 <https://mail.gnome.org/archives/xml/>.
 
@@ -100,7 +100,7 @@ the following libraries:
 
 ## Contributing
 
-The current version of the code can be found in GNOME's GitLab at 
+The current version of the code can be found in GNOME's GitLab at
 at <https://gitlab.gnome.org/GNOME/libxml2>. The best way to get involved
 is by creating issues and merge requests on GitLab. Alternatively, you can
 start discussions and send patches to the mailing list. If you want to
@@ -118,4 +118,3 @@ tests if possible.
 - Igor Zlatkovic for the Windows port
 - Aleksey Sanin
 - Nick Wellnhofer
-

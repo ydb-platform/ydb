@@ -4,8 +4,8 @@ This section provides instructions for downloading various {{ ydb-short-name }} 
 
 * {{ ydb-short-name }} server (`ydbd`):
 
-    * [YDB Open-Source Database](ydb-open-source-database.md)
-    * [Yandex Enterprise Database](yandex-enterprise-database.md)
+  * [YDB Open-Source Database](ydb-open-source-database.md)
+  * [Yandex Enterprise Database](yandex-enterprise-database.md)
 
 * [Command-line client utility](ydb-cli.md) (`ydb`)
 * [Disk substem management utility](ydb-dstool.md) (`ydb-dstool`)

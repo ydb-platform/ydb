@@ -20,7 +20,7 @@ Take a copy of the original `CREATE TABLE` statement used for the source table. 
 Run this query (assuming it is saved in a file named `create_column_oriented_table.yql`):
 
 ```bash
-$ ydb -p quickstart yql -f create_column_oriented_table.yql
+ydb -p quickstart yql -f create_column_oriented_table.yql
 ```
 
 {% cut "Example test data and table schemas" %}
@@ -57,7 +57,6 @@ Refer to the documentation for application developers to learn more about [parti
 
 {% endnote %}
 
-
 Fill the source row-oriented table with random data:
 
 ```yql
@@ -81,10 +80,10 @@ Currently, the recommended way to copy data between {{ ydb-short-name }} tables 
 1. Export data to the local filesystem:
 
 ```bash
-$ ydb -p quickstart dump -p row_oriented_table -o tmp_backup/
+ydb -p quickstart dump -p row_oriented_table -o tmp_backup/
 ```
 
-2. Import it back into another {{ ydb-short-name }} table:
+1. Import it back into another {{ ydb-short-name }} table:
 
 ```bash
 ydb -p quickstart import file csv -p column_oriented_table tmp_backup/row_oriented_table/*.csv

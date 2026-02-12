@@ -41,9 +41,7 @@ Consider the following solutions to address shard overload:
 
     {% endnote %}
 
-
 Both operations can be performed by executing an [`ALTER TABLE ... SET`](../../../yql/reference/syntax/alter_table/set.md) query.
-
 
 ### For the imbalanced primary key {#pk-recommendations}
 
@@ -58,4 +56,3 @@ Also, consider changing your application logic for generating primary key values
 ## Example
 
 For a practical demonstration of how to follow these instructions, see [{#T}](../../examples/schemas/overloaded-shard-simple-case.md).
-

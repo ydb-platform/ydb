@@ -15,7 +15,6 @@ CMake 3.0+ is required to build.
 
 `<install-path>` must be an absolute path in the following instructions.
 
-
 #### Building aws-c-sdkutils
 
 ```

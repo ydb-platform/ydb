@@ -6,7 +6,6 @@ replaced so that they display as the actual characters. This mitigates
 injection attacks, meaning untrusted user input can safely be displayed
 on a page.
 
-
 ## Examples
 
 ```pycon

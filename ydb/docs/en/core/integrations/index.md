@@ -8,7 +8,6 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 
 {% endnote %}
 
-
 ## Graphical user interfaces {#gui}
 
 {% include notitle [Table of contents](gui/_includes/toc-table.md) %}

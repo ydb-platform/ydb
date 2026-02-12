@@ -23,4 +23,3 @@ To view a recursive listing of all subdirectories and their objects at the speci
 ```bash
 {{ ydb-cli }} scheme ls my-directory -lR
 ```
-

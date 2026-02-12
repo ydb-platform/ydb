@@ -11,15 +11,13 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Financial Contributors](https://opencollective.com/moto/tiers/badge.svg)](https://opencollective.com/moto)
 
-
 ## Install
 
 ```console
-$ pip install 'moto[ec2,s3,all]'
+pip install 'moto[ec2,s3,all]'
 ```
 
 ## In a nutshell
-
 
 Moto is a library that allows your tests to easily mock out AWS Services.
 
@@ -64,20 +62,20 @@ With the decorator wrapping the test, all the calls to s3 are automatically mock
 
 For a full list of which services and features are covered, please see our [implementation coverage](https://github.com/getmoto/moto/blob/master/IMPLEMENTATION_COVERAGE.md).
 
-
 ### Documentation
+
 The full documentation can be found here:
 
 [http://docs.getmoto.org/en/latest/](http://docs.getmoto.org/en/latest/)
 
-
 ### Financial Contributions
+
 Support this project and its continued development, by sponsoring us!
 
 Click the `Sponsor`-button at the top of the page for more information.
 
 Our finances are managed by OpenCollective, which means you have full visibility into all our contributions and expenses:
-https://opencollective.com/moto
+<https://opencollective.com/moto>
 
 ### Security contact information
 

@@ -1736,7 +1736,7 @@ I deeply appreciate the help of the following people.
 374. [Michael Valladolid](https://github.com/codenut) added support for BSON uint64 serialization/deserialization.
 375. [Nikhil](https://github.com/nikhilreddydev) updated the documentation.
 376. [Nebojša Cvetković](https://github.com/nebkat) added support for BJDATA optimized binary array type.
-377. [Sushrut Shringarputale](https://github.com/sushshring) added support for diagnostic positions. 
+377. [Sushrut Shringarputale](https://github.com/sushshring) added support for diagnostic positions.
 378. [kimci86](https://github.com/kimci86) templated to `NLOHMANN_DEFINE_TYPE` macros to also support `ordered_json`.
 379. [Richard Topchii](https://github.com/richardtop) added support for VisionOS in the Swift Package Manager.
 380. [Robert Chisholm](https://github.com/Robadob) fixed a typo.

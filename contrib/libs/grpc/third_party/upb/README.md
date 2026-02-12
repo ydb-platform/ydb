@@ -48,13 +48,13 @@ However there are a few features it does not support:
 For Ruby, use [RubyGems](https://rubygems.org/gems/google-protobuf):
 
 ```
-$ gem install google-protobuf
+gem install google-protobuf
 ```
 
 For PHP, use [PECL](https://pecl.php.net/package/protobuf):
 
 ```
-$ sudo pecl install protobuf
+sudo pecl install protobuf
 ```
 
 Alternatively, you can build and install upb using

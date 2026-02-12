@@ -43,7 +43,6 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 {% if oss == true and backend_name == "YDB" %}
 
-
 {% if feature_olap_tables %}
 
 {{ ydb-short-name }} supports two types of tables:
@@ -77,7 +76,7 @@ When choosing a name for the table, consider the common [schema object naming ru
 
 {% list tabs %}
 
-- Creating a row-oriented table
+* Creating a row-oriented table
 
   {% if feature_column_container_type %}
 
@@ -155,8 +154,7 @@ When choosing a name for the table, consider the common [schema object naming ru
 
   Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of row-oriented table partitioning options can be found in the [{#T}](../../../../concepts/datamodel/table.md#partitioning) section.
 
-
-- Creating a column-oriented table
+* Creating a column-oriented table
 
   ```yql
   CREATE TABLE table_name (

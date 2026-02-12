@@ -5,14 +5,14 @@
 
 Traitlets is a pure Python library enabling:
 
- - the enforcement of strong typing for attributes of Python objects
+- the enforcement of strong typing for attributes of Python objects
    (typed attributes are called "traits"),
- - notifications on changes of trait attributes,
- - automatic validation and coercion of trait attributes when attempting a
+- notifications on changes of trait attributes,
+- automatic validation and coercion of trait attributes when attempting a
    change.
 
 Its implementation relies on the [descriptor](https://docs.python.org/howto/descriptor.html)
-pattern. 
+pattern.
 
 Traitlets powers the configuration system of IPython and Jupyter
 and the declarative API of IPython interactive widgets.
@@ -71,10 +71,10 @@ class Identity(HasTraits):
 ### Callbacks when a trait attribute changes
 
 When a trait changes, an application can follow this trait change with
-additional actions. 
+additional actions.
 
 To do something when a trait attribute is changed, decorate a method with
-[`traitlets.observe()`](https://traitlets.readthedocs.io/en/latest/api.html?highlight=observe#traitlets.observe). 
+[`traitlets.observe()`](https://traitlets.readthedocs.io/en/latest/api.html?highlight=observe#traitlets.observe).
 The method will be called with a single argument, a dictionary which contains
 an owner, new value, old value, name of the changed trait, and the event type.
 

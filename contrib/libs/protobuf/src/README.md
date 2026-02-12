@@ -3,7 +3,7 @@ Protocol Buffers - Google's data interchange format
 
 Copyright 2008 Google Inc.
 
-https://developers.google.com/protocol-buffers/
+<https://developers.google.com/protocol-buffers/>
 
 CMake Installation
 -----------------------
@@ -16,16 +16,16 @@ C++ Protobuf - Unix
 
 To build protobuf from source, the following tools are needed:
 
-  * bazel
-  * git
-  * g++
+* bazel
+* git
+* g++
 
 On Ubuntu/Debian, for example, you can install them with:
 
     sudo apt-get install g++ git bazel
 
 On other platforms, please use the corresponding package managing tool to
-install them before proceeding.  See https://bazel.build/install for further
+install them before proceeding.  See <https://bazel.build/install> for further
 instructions on installing Bazel, or to build from source using CMake, see
 [cmake/README.md](../cmake/README.md).
 
@@ -56,7 +56,7 @@ The compiler can then be installed, for example on Linux:
 
     cp bazel-bin/protoc /usr/local/bin
 
-For more usage information on Bazel, please refer to http://bazel.build.
+For more usage information on Bazel, please refer to <http://bazel.build>.
 
 **Compiling dependent packages**
 
@@ -73,7 +73,7 @@ a terminal:
     sudo xcode-select --install
 
 To install Unix tools, you can install "port" following the instructions at
-https://www.macports.org . This will reside in /opt/local/bin/port for most
+<https://www.macports.org> . This will reside in /opt/local/bin/port for most
 Mac installations.
 
     sudo /opt/local/bin/port install bazel
@@ -83,7 +83,6 @@ Alternative for Homebrew users:
     brew install bazel
 
 Then follow the Unix instructions above.
-
 
 C++ Protobuf - Windows
 --------------------------
@@ -105,7 +104,7 @@ If zlib support is desired, you'll also need to install the zlib feature:
 
     >vcpkg install protobuf[zlib] protobuf[zlib]:x64-windows
 
-See https://github.com/Microsoft/vcpkg for more information.
+See <https://github.com/Microsoft/vcpkg> for more information.
 
 To build from source using Microsoft Visual C++, see [cmake/README.md](../cmake/README.md).
 
@@ -132,4 +131,4 @@ Usage
 The complete documentation for Protocol Buffers is available via the
 web at:
 
-https://protobuf.dev/
+<https://protobuf.dev/>

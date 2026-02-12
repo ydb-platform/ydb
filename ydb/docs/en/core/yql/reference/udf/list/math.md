@@ -137,4 +137,3 @@ Functions return null if the divisor is zero.
 SELECT Math::Mod(-1, 7);        -- 6
 SELECT Math::Rem(-1, 7);        -- -1
 ```
-

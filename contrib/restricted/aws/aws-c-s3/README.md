@@ -2,7 +2,8 @@
 
 The AWS-C-S3 library is an asynchronous AWS S3 client focused on maximizing throughput and network utilization.
 
-### Key features:
+### Key features
+
 - **Automatic Request Splitting**: Improves throughput by automatically splitting the request into part-sized chunks and performing parallel uploads/downloads of these chunks over multiple connections. There's a cap on the throughput of single S3 connection, the only way to go faster is multiple parallel connections.
 - **Automatic Retries**: Increases resilience by retrying individual failed chunks of a file transfer, eliminating the need to restart transfers from scratch after an intermittent error.
 - **DNS Load Balancing**: DNS resolver continuously harvests Amazon S3 IP addresses. When load is spread across the S3 fleet, overall throughput more reliable than if all connections are going to a single IP.
@@ -86,14 +87,19 @@ cmake --build aws-c-s3/build --target install
 After installing all the dependencies, and building aws-c-s3, you can run the sample directly from the s3 build directory.
 
 To download:
+
 ```
 aws-c-s3/build/samples/s3/s3 cp s3://<bucket-name>/<object-name> <download-path> --region <region>
 ```
+
 To upload:
+
 ```
 aws-c-s3/build/samples/s3/s3 cp <upload-path> s3://<bucket-name>/<object-name> --region <region>
 ```
+
 To list objects:
+
 ```
 aws-c-s3/build/samples/s3/s3 ls s3://<bucket-name> --region <region>
 ```

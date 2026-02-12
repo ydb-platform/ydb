@@ -15,5 +15,3 @@ my_table
 WHERE value % 2 == 0
 INTO RESULT `Название результата`;
 ```
-
-

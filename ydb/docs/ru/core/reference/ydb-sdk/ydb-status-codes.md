@@ -2,7 +2,7 @@
 
 [//]: # (Information from https://GitHub.com/ydb-platform/ydb-go-sdk/blob/master/retry/errors_data_test.go)
 
-#|
+# |
 ||
 Код
 |
@@ -494,7 +494,6 @@
 ## Смотрите также
 
 [{#T}](../../faq/errors.md)
-
 
 [*instant]: {% include [instant](./_includes/tooltips/instant.md) %}
 

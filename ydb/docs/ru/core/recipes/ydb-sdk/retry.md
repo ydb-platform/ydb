@@ -21,8 +21,8 @@
   Подробности выполнения повторных запросов максимально скрыты.
   Пользователь может влиять на логику работы функции `retry.Retry` двумя способами:
 
-  * через контекст (можно устанавливать deadline и cancel);
-  * через флаг идемпотентности операции `retry.WithIdempotent()`. По умолчанию операция считается неидемпотентной.
+  - через контекст (можно устанавливать deadline и cancel);
+  - через флаг идемпотентности операции `retry.WithIdempotent()`. По умолчанию операция считается неидемпотентной.
 
   Пользователь передает свою функцию в `retry.Retry`, которая по своей сигнатуре должна возвращать ошибку.
   В случае, если из пользовательской функции вернулся `nil`, то повторные запросы прекращаются.
@@ -259,19 +259,19 @@
 
   Дополнительно пользователь может задавать некоторые другие опции:
 
-  * `maxRetries(int maxRetries)` - максимальное количество повторов операции, не включает в себя первое выполение. Значение по умолчанию `10`
-  * `retryNotFound(boolean retryNotFound)` - опция повтора операций, вернувших статус `NOT_FOUND`. По умолчанию включено.
-  * `idempotent(boolean idempotent)` - признак идемпотентности операций. Идемпотентные операции будут повторяться для более широкого списка ошибок. По умолчанию отключено.
+  - `maxRetries(int maxRetries)` - максимальное количество повторов операции, не включает в себя первое выполение. Значение по умолчанию `10`
+  - `retryNotFound(boolean retryNotFound)` - опция повтора операций, вернувших статус `NOT_FOUND`. По умолчанию включено.
+  - `idempotent(boolean idempotent)` - признак идемпотентности операций. Идемпотентные операции будут повторяться для более широкого списка ошибок. По умолчанию отключено.
 
   Для запуска операций с ретраями класс `SessionRetryContext` предоставляет два метода:
 
-  * `CompletableFuture<Status> supplyStatus` - выполнение операции, возвращающей статус. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Status>> fn`
-  * `CompletableFuture<Result<T>> supplyResult` - выполнение операции, возвращающей данные. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Result<T>>> fn`
+  - `CompletableFuture<Status> supplyStatus` - выполнение операции, возвращающей статус. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Status>> fn`
+  - `CompletableFuture<Result<T>> supplyResult` - выполнение операции, возвращающей данные. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Result<T>>> fn`
 
   При использовании класса `SessionRetryContext` нужно учитывать, что повторное исполнение операции будет выполняться в следующих случаях:
 
-  * Лямбда вернула [retryable](../../reference/ydb-sdk/error_handling.md) код ошибки
-  * В рамках исполнения лямбды была вызвано `UnexpectedResultException` c [retryable](../../reference/ydb-sdk/error_handling.md) кодом ошибки
+  - Лямбда вернула [retryable](../../reference/ydb-sdk/error_handling.md) код ошибки
+  - В рамках исполнения лямбды была вызвано `UnexpectedResultException` c [retryable](../../reference/ydb-sdk/error_handling.md) кодом ошибки
 
     {% cut "Пример кода, использующего SessionRetryContext.supplyStatus:" %}
 

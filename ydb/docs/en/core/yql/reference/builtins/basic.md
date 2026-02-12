@@ -2,8 +2,6 @@
 
 Below are the general-purpose functions. For specialized functions, there are separate articles: [aggregate functions](aggregation.md){% if feature_window_functions %}, [window functions](window.md){% endif %}, and functions for [lists](list.md), [dictionaries](dict.md), [structures](struct.md), [data types](types.md){% if feature_codegen %}, and [code generation](codegen.md){% endif %}.
 
-
-
 ## COALESCE {#coalesce}
 
 Iterates through the arguments from left to right and returns the first non-empty argument found. To be sure that the result is non-empty (not of an [optional type](../types/optional.md)), the rightmost argument must be of this type (often a literal is used for this). With a single argument, returns this argument unchanged.
@@ -36,8 +34,6 @@ SELECT NVL(
 
 All three examples above are equivalent.
 
-
-
 ## LENGTH {#length}
 
 Returns the length of the string in bytes. This function is also available under the `LEN` name .
@@ -57,7 +53,6 @@ SELECT LEN("bar");
 To calculate the length of a string in Unicode characters, you can use the function [Unicode::GetLength](../udf/list/unicode.md).<br/><br/>To get the number of elements in the list, use the function [ListLength](list.md#listlength).
 
 {% endnote %}
-
 
 ## SUBSTRING {#substring}
 
@@ -88,8 +83,6 @@ SELECT SUBSTRING("abcdefg", 3); -- defg
 ```yql
 SELECT SUBSTRING("abcdefg", NULL, 3); -- abc
 ```
-
-
 
 ## FIND {#find}
 
@@ -149,8 +142,6 @@ SELECT RFIND("abcdefg_abcdefg", "bcd", 8); -- 1
 SELECT RFIND("abcdefg_abcdefg", "bcd", 0); -- null
 ```
 
-
-
 ## StartsWith, EndsWith {#starts_ends_with}
 
 Checking for a prefix or suffix in a string.
@@ -180,8 +171,6 @@ SELECT StartsWith("abcd", NULL); -- null
 SELECT EndsWith(NULL, Utf8("")); -- null
 ```
 
-
-
 ## IF {#if}
 
 Checks the condition: `IF(condition_expression, then_expression, else_expression)`.
@@ -198,8 +187,6 @@ SELECT
   IF(foo > 0, foo) AS only_positive_foo
 FROM my_table;
 ```
-
-
 
 ## NANVL {#nanvl}
 
@@ -219,8 +206,6 @@ SELECT
   NANVL(double_column, 0.0)
 FROM my_table;
 ```
-
-
 
 ## Random... {#random}
 
@@ -296,7 +281,6 @@ SELECT
 FROM my_table;
 ```
 
-
 ## CurrentUtc... {#current-utc}
 
 `CurrentUtcDate()`, `CurrentUtcDatetime()` and `CurrentUtcTimestamp()`: Getting the current date and/or time in UTC. The result data type is specified at the end of the function name.
@@ -312,8 +296,6 @@ SELECT CurrentUtcDate();
 ```yql
 SELECT CurrentUtcTimestamp(TableRow()) FROM my_table;
 ```
-
-
 
 ## CurrentTz... {#current-tz}
 
@@ -364,8 +346,6 @@ Result type: `Date`/`Datetime`/`Timestamp`, depending on the input data type.
 SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 ```
 
-
-
 ## Version {#version}
 
 `Version()` returns a string describing the current version of the node processing the request. In some cases, such as during rolling upgrades, it might return different strings depending on which node processes the request. It does not accept any arguments.
@@ -375,8 +355,6 @@ SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 ```yql
 SELECT Version();
 ```
-
-
 
 ## MAX_OF, MIN_OF, GREATEST, and LEAST {#max-min}
 
@@ -391,8 +369,6 @@ The argument types must be mutually castable and accept `NULL`.
 ```yql
 SELECT MIN_OF(1, 2, 3);
 ```
-
-
 
 ## AsTuple, AsStruct, AsList, AsDict, AsSet, AsListStrict, AsDictStrict and AsSetStrict {#as-container}
 
@@ -432,8 +408,6 @@ SELECT
   AsSet(1, 2, 3) AS `set`
 ```
 
-
-
 ## Container literals {#containerliteral}
 
 Some containers support operator notation for their literal values:
@@ -469,8 +443,6 @@ SELECT
   } AS `dict`,
   {1, 2, 3} AS `set`
 ```
-
-
 
 ## Variant {#variant}
 
@@ -647,8 +619,6 @@ SELECT
    AsEnum("Foo");
 ```
 
-
-
 ## AsTagged, Untag {#as-tagged}
 
 Wraps the value in the [Tagged data type](../types/special.md) with the specified tag, preserving the physical data type. `Untag`: The reverse operation.
@@ -665,8 +635,6 @@ Examples of use cases:
 * Returns to the client's web interface the media files from BASE64-encoded strings{% if feature_webui %}. Tag support in the YQL Web UI [is described here](../interfaces/web_tagged.md){% endif %}.
 {% if feature_mapreduce %}* Prevent passing of invalid values at the boundaries of UDF calls.{% endif %}
 * Additional refinements at the level of returned columns types.
-
-
 
 {% if feature_bulk_tables %}
 
@@ -727,8 +695,6 @@ No arguments. When used in combination with [CONCAT](../syntax/select/concat.md#
 SELECT TableRecordIndex() FROM my_table;
 ```
 
-
-
 {% endif %}
 
 ## TableRow{% if feature_join %}, JoinTableRow{% endif %} {#tablerow}
@@ -740,8 +706,6 @@ Getting the entire table row as a structure. No arguments{% if feature_join %}. 
 ```yql
 SELECT TableRow() FROM my_table;
 ```
-
-
 
 {% if feature_mapreduce %}
 
@@ -807,8 +771,6 @@ SELECT * FROM my_table
 WHERE int_column IN ParseFile("Int64", "my_file.txt");
 ```
 
-
-
 ## WeakField {#weakfield}
 
 Fetches a table column from a strong schema, if it is in a strong schema, or from the `_other` and `_rest` fields. If the value is missing, it returns `NULL`.
@@ -825,8 +787,6 @@ SELECT
     WeakField(my_table.other_column, Int64)
 FROM my_table;
 ```
-
-
 
 {% endif %}
 
@@ -878,8 +838,6 @@ SELECT EnsureConvertibleTo(
 ) AS value FROM my_table;
 ```
 
-
-
 {% if feature_codegen %}
 
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
@@ -914,8 +872,6 @@ SELECT EvaluateExpr(
 );
 ```
 
-
-
 {% endif %}
 
 ## Literals of primitive types {#data-type-literals}
@@ -944,8 +900,6 @@ For the data types `TzDate`, `TzDatetime`, `TzTimestamp`, literals are also set 
 
 {% include [x](../_includes/type_literals_examples.md) %}
 
-
-
 {% if feature_webui %}
 
 ## Access to the metadata of the current operation {#metadata}
@@ -969,8 +923,6 @@ SELECT
     CurrentAuthenticatedUser();
 ```
 
-
-
 {% endif %}
 
 ## ToBytes and FromBytes {#to-from-bytes}
@@ -989,8 +941,6 @@ SELECT
     ); -- 1234567890ul
 ```
 
-
-
 ## ByteAt {#byteat}
 
 Getting the byte value inside a string at an index counted from the beginning of the string. If an invalid index is specified, `NULL` is returned.
@@ -1008,8 +958,6 @@ SELECT
     ByteAt("foo", 1), -- 111
     ByteAt("foo", 9); -- NULL
 ```
-
-
 
 ## ...Bit {#bitops}
 
@@ -1030,8 +978,6 @@ SELECT
     SetBit(8u, 0); -- 9
 ```
 
-
-
 ## Abs {#abs}
 
 The absolute value of the number.
@@ -1041,8 +987,6 @@ The absolute value of the number.
 ```yql
 SELECT Abs(-123); -- 123
 ```
-
-
 
 ## Just {#optional-ops}
 
@@ -1091,8 +1035,6 @@ SELECT
 
 [Learn more about ParseType and other functions for data types](types.md).
 
-
-
 ## Callable {#callable}
 
 Create a callable value with the specified signature from a lambda function. It's usually used to put callable values into containers.
@@ -1117,8 +1059,6 @@ $callables = AsTuple(
 SELECT $callables.0(10), $callables.1(true);
 ```
 
-
-
 ## Pickle, Unpickle {#pickle}
 
 `Pickle()` and `StablePickle()` serialize an arbitrary object into a sequence of bytes, if possible. Typical non-serializable objects are Callable and Resource. The serialization format is not versioned and can be used within a single query. For the Dict type, the StablePickle function pre-sorts the keys, and for Pickle, the order of dictionary elements in the serialized representation isn't defined.
@@ -1137,8 +1077,6 @@ WHERE Digest::MurMurHash32(
 $buf = Pickle(123);
 SELECT Unpickle(Int32, $buf);
 ```
-
-
 
 ## StaticMap
 
@@ -1164,8 +1102,6 @@ FROM (
 ) FLATTEN COLUMNS; -- converting all columns to rows
 ```
 
-
-
 ## StaticZip
 
 Merges structures or tuples element-by-element. All arguments (one or more) must be either structures with the same set of fields or tuples of the same length.
@@ -1182,8 +1118,6 @@ $two = <|k1:3.0, k2:4|>;
 SELECT StaticMap(StaticZip($one, $two), ($tuple)->($tuple.0 + $tuple.1)) AS sum;
 ```
 
-
-
 ## StaticFold, StaticFold1 {#staticfold}
 
 ```yql
@@ -1194,11 +1128,10 @@ StaticFold1(obj:Struct/Tuple, initLambda, updateLambda)
 Left fold over struct/tuple elements.
 The folding of tuples is done in order from the element with the lower index to the element with the larger one; for structures, the order is not guaranteed.
 
-- `obj` - object to fold
-- `initVal` - _(for StaticFold)_ initial fold state
-- `initLambda` - _(for StaticFold1)_ lambda that produces initial fold state from the first element
-- `updateLambda` - lambda that produces the new state (arguments are the next element and the previous state)
-
+* `obj` - object to fold
+* `initVal` - _(for StaticFold)_ initial fold state
+* `initLambda` - _(for StaticFold1)_ lambda that produces initial fold state from the first element
+* `updateLambda` - lambda that produces the new state (arguments are the next element and the previous state)
 
 `StaticFold(<|key_1:$el_1, key_2:$el_2, ..., key_n:$el_n|>, $init, $f)` transforms into:
 
@@ -1215,7 +1148,6 @@ $f($el_n, ...$f($el_2, $f($f0($init), el_1))...)
 `StaticFold1(<||>, $f0, $f)` returns `NULL`.
 
 Works with tuples in the same way.
-
 
 ## AggregationFactory {#aggregationfactory}
 
@@ -1296,8 +1228,6 @@ SELECT AggregateBy(x, $j) from (
 ); -- [1, 2, 3]
 ```
 
-
-
 {% if tech %}
 
 ## YQL::, s-expressions {#s-expressions}
@@ -1305,7 +1235,5 @@ SELECT AggregateBy(x, $j) from (
 For the full list of internal YQL functions, see the [documentation for s-expressions](/docs/s_expressions/functions), an alternative low-level YQL syntax. Any of the functions listed there can also be called from the SQL syntax by adding the `YQL::` prefix to its name. However, we don't recommend doing this, because this mechanism is primarily intended to temporarily bypass possible issues and for internal testing purposes.
 
 If the function is available in SQL syntax without the `YQL::` prefix, then its behavior may differ from the same-name function from the s-expressions documentation, if any.
-
-
 
 {% endif %}

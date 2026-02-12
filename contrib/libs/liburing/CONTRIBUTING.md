@@ -105,19 +105,19 @@ dependencies between commits. Adding the following to your .gitconfig:
 
 ```
 [pretty]
-	fixes = Fixes: %h (\"%s\")
+ fixes = Fixes: %h (\"%s\")
 ```
 
 and running ```git fixes <sha>``` will then generate the correctly
 formatted Fixes line for the commit. Likewise, other meta data can be:
 
-Link: https://somesite/somewhere
+Link: <https://somesite/somewhere>
 
 can be useful to link to a discussion around the issue that led to this
 commit, perhaps a bug report. This can be a GitHub issue as well. If a
 commit closes/solves a GitHub issue, than:
 
-Closes: https://github.com/axboe/liburing/issues/XXXX
+Closes: <https://github.com/axboe/liburing/issues/XXXX>
 
 can also be used.
 
@@ -139,7 +139,7 @@ the PR message similar to the cover letter for a series of patches.
 
 Most contributors seem to use GH for sending patches, which is fine. If
 you prefer using email, then patches can also be sent to the io_uring
-mailing list: io-uring@vger.kernel.org.
+mailing list: <io-uring@vger.kernel.org>.
 
 liburing doesn't squash/rebase-on-merge, or other heinous practices
 sometimes seen elsewhere. Whatever sha your commit has in your tree is

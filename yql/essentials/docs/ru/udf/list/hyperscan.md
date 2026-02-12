@@ -73,7 +73,6 @@ SELECT
 * [Re2::Capture](re2.md#capture);
 * [Re2::Replace](re2.md#replace).
 
-
 ## Пример использования
 
 ```yql

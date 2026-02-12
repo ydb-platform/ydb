@@ -104,11 +104,11 @@ This section contains commands for managing [temporary configurations](../../mai
 
 ## Parameters
 
-* `-f, --filename <filename.yaml>` — read input from a file, `-` for STDIN. For commands that accept multiple files (e.g., resolve), you can specify it multiple times, the file type will be determined by the metadata field
-* `--output-directory <dir>` — dump/resolve files to a directory
-* `--strip-metadata` — remove the metadata field from the output
-* `--all` — extends the output of commands to the entire configuration (see advanced configuration)
-* `--allow-unknown-fields` — allows ignoring unknown fields in the configuration
+- `-f, --filename <filename.yaml>` — read input from a file, `-` for STDIN. For commands that accept multiple files (e.g., resolve), you can specify it multiple times, the file type will be determined by the metadata field
+- `--output-directory <dir>` — dump/resolve files to a directory
+- `--strip-metadata` — remove the metadata field from the output
+- `--all` — extends the output of commands to the entire configuration (see advanced configuration)
+- `--allow-unknown-fields` — allows ignoring unknown fields in the configuration
 
 ## Scenarios
 

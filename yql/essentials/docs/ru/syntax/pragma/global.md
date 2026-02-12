@@ -8,7 +8,6 @@
 
 В отличие от scoped прагм, обычные прагмы могут использоваться только в глобальной области видимости (не внутри [DEFINE ACTION](../action.md#define-action) и [DEFINE SUBQUERY](../subquery.md#define-subquery)).
 
-
 ## AutoCommit {#autocommit}
 
 | Тип значения | По умолчанию |

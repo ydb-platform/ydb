@@ -16,8 +16,6 @@ Don't confuse this operator with a logical "or": in SQL, it's denoted by the `OR
 SELECT "fo" || "o";
 ```
 
-
-
 ## Matching a string by pattern {#check-match}
 
 `REGEXP` and `RLIKE` are aliases used to call [Re2::Grep](../udf/list/re2.md#match). `MATCH`: Same for [Re2::Match](../udf/list/re2.md#match).
@@ -65,8 +63,6 @@ WHERE key LIKE 'foo%bar';
 -- starting with "foo", and then, among them,
 -- will leave only those that end in "bar"
 ```
-
-
 
 ## Operators
 
@@ -155,8 +151,6 @@ The operators in the table are listed in descending order of precedence.
 | 11 | `a AND b` | Logical AND | Left |
 | 12 | `a OR b` | Logical OR | Left |
 
-
-
 ## IS \[NOT\] NULL {#is-null}
 
 Matching an empty value (`NULL`). Since `NULL` is a special value [equal to nothing](../types/optional.md#null_expr), the ordinary [comparison operators](#comparison-operators) can't be used to match it.
@@ -167,8 +161,6 @@ Matching an empty value (`NULL`). Since `NULL` is a special value [equal to noth
 SELECT key FROM my_table
 WHERE value IS NOT NULL;
 ```
-
-
 
 ## IS \[NOT\] DISTINCT FROM {#is-distinct-from}
 
@@ -183,7 +175,6 @@ More precisely, the comparison is carried out according to the following rules:
 
 For values of composite types, these rules are used recursively.
 
-
 ## BETWEEN {#between}
 
 Checking whether a value is in a range. It's equivalent to two conditions with `>=` and `<=` (range boundaries are included). Can be used with the `NOT` prefix to support inversion.
@@ -194,8 +185,6 @@ Checking whether a value is in a range. It's equivalent to two conditions with `
 SELECT * FROM my_table
 WHERE key BETWEEN 10 AND 20;
 ```
-
-
 
 ## IN {#in}
 
@@ -243,8 +232,6 @@ SELECT * FROM my_table WHERE
     column2 NOT IN (SELECT other_column FROM other_table);
 ```
 
-
-
 ## AS {#as}
 
 Can be used in the following scenarios:
@@ -289,8 +276,6 @@ FROM my_stream;
 
 {% endif %}
 
-
-
 ## CAST {#cast}
 
 <!-- markdownlint-disable blanks-around-fences -->
@@ -308,7 +293,6 @@ For more information about casting rules, see [here](../types/cast.md).
 
 {% include [cast_examples](../_includes/cast_examples.md) %}
 
-
 ## BITCAST {#bitcast}
 
 Performs a bitwise conversion of an integer value to the specified integer type. The conversion is always successful, but may lose precision or high-order bits.
@@ -323,8 +307,6 @@ SELECT
     BITCAST(-1 AS Int16),            -- -1
     BITCAST(-1 AS Uint16);           -- 65535
 ```
-
-
 
 ## CASE {#case}
 
@@ -355,8 +337,6 @@ SELECT
   END
 FROM my_table;
 ```
-
-
 
 ## Named expressions {#named-nodes}
 
@@ -450,8 +430,6 @@ SELECT $a, $c;
 $x, $y = AsTuple($y, $x); -- swap expression values
 ```
 
-
-
 ## Table expressions {#table-contexts}
 
 A table expression is an expression that returns a table. Table expressions in YQL are as follows:
@@ -521,8 +499,6 @@ SELECT * FROM $merge_dict("Input", $dict); -- $dict - is a subquery template (ra
 
 {% endif %}
 
-
-
 ## Lambda functions {#lambda}
 
 Let you combine multiple expressions into a single callable value.
@@ -556,8 +532,6 @@ $f = ($x, $_) -> ($x || "suffix"); -- the second argument is not used
 SELECT $f("prefix_", "whatever");
 ```
 
-
-
 ## Accessing containers {#items-access}
 
 For accessing the values inside containers:
@@ -584,6 +558,3 @@ FROM my_table AS t;
 SELECT
   Sample::ReturnsStruct().member;
 ```
-
-
-

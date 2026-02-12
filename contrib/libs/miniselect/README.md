@@ -94,7 +94,6 @@ Documentation
 There are several selection algorithms available, further ![\large n](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+n) is the number
 of elements in the array, ![\large k](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+k) is the selection element that is needed to be found (all algorithms are deterministic and not stable unless otherwise is specified):
 
-
 | Name                      | Average                                                                                                   | Best Case                                                                                                 | Worst Case                                                                                                                | Comparisons                                                                                                                                                                                                                                                                                                                               | Memory                                                                                                                            |
 |-------------------------  |---------------------------------------------------------------------------------------------------------  |---------------------------------------------------------------------------------------------------------  |-----------------------------------------------------------------------------------------------------------------------    |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------   |---------------------------------------------------------------------------------------------------------------------------------  |
 | [pdqselect](./include/miniselect/pdqselect.h)                 | ![\large O(n)](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+O%28n%29)   | ![\large O(n)](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+O%28n%29)   | ![\large O(n\log n)](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+O%28n%5Clog+n%29)     | At least ![\large 2n](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+2n). Random data ![\large 2.5n](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+2.5n)                                                                                                          | ![\large O(1)](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+O%281%29)                           |
@@ -124,19 +123,19 @@ also does not specify the behavior in that matter.
 because of some floating point math in several algorithms.
 * All functions are in the `miniselect` namespace. See the example for that.
 
-- pdqselect
-  - This algorithm is based on [`pdqsort`](https://github.com/orlp/pdqsort) which is acknowledged as one of the fastest generic sort algorithms.
-  - **Location:** [`miniselect/pdqselect.h`](./include/miniselect/pdqselect.h).
-  - **Functions:** `pdqselect`, `pdqselect_branchless`, `pdqpartial_sort`, `pdqpartial_sort_branchless`. Branchless version uses branchless partition algorithm provided by [`pdqsort`](https://github.com/orlp/pdqsort). Use it if your comparison function is branchless, it might give performance for very big ranges.
-  - **Performance advice:** Use it when you need to sort a big chunk so that ![\large k](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+k) is close to ![\large n](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+n).
+* pdqselect
+  * This algorithm is based on [`pdqsort`](https://github.com/orlp/pdqsort) which is acknowledged as one of the fastest generic sort algorithms.
+  * **Location:** [`miniselect/pdqselect.h`](./include/miniselect/pdqselect.h).
+  * **Functions:** `pdqselect`, `pdqselect_branchless`, `pdqpartial_sort`, `pdqpartial_sort_branchless`. Branchless version uses branchless partition algorithm provided by [`pdqsort`](https://github.com/orlp/pdqsort). Use it if your comparison function is branchless, it might give performance for very big ranges.
+  * **Performance advice:** Use it when you need to sort a big chunk so that ![\large k](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+k) is close to ![\large n](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+n).
 
 <p align="center"><img src="https://media.giphy.com/media/TXIm9rTmbmox5ceSyP/giphy.gif" /></p>
 
-- Floyd-Rivest
-  - This algorithm is based on [Floyd-Rivest algorithm](https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm).
-  - **Location:** [`miniselect/floyd_rivest_select.h`](./include/miniselect/floyd_rivest_select.h).
-  - **Functions:** `floyd_rivest_select`, `floyd_rivest_partial_sort`.
-  - **Performance advice:** Given that this algorithm performs as one of the best on average case in terms of comparisons and speed, we highly advise to
+* Floyd-Rivest
+  * This algorithm is based on [Floyd-Rivest algorithm](https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm).
+  * **Location:** [`miniselect/floyd_rivest_select.h`](./include/miniselect/floyd_rivest_select.h).
+  * **Functions:** `floyd_rivest_select`, `floyd_rivest_partial_sort`.
+  * **Performance advice:** Given that this algorithm performs as one of the best on average case in terms of comparisons and speed, we highly advise to
   at least try this in your project. Especially it is good for small ![\large k](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+k) or types that are expensive to compare (for example, strings). But even for median the benchmarks show it outperforms others. It is not easy for this algorithm to build a reasonable worst case but one of examples when this algorithm does not perform well is when there are lots of similar values of linear size (random01 dataset showed some moderate penalties).
 
 We present here two gifs, for median and for ![\large k = n / 10](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+k+%3D+n+%2F+10) order statistic.
@@ -146,51 +145,51 @@ We present here two gifs, for median and for ![\large k = n / 10](https://render
   <img src="https://media.giphy.com/media/Gpk4c9pHMJLbjugDmZ/giphy.gif" width="48%" />
 </p>
 
-- Median Of Medians
-  - This algorithm is based on [Median of Medians](https://en.wikipedia.org/wiki/Median_of_medians) algorithm, one of the first deterministic linear time worst case median algorithm.
-  - **Location:** [`miniselect/median_of_medians.h`](./include/miniselect/median_of_medians.h).
-  - **Functions:** `median_of_medians_select`, `median_of_medians_partial_sort`.
-  - **Performance advice:** This algorithm does not show advantages over others, implemented for historical reasons and for bechmarking.
+* Median Of Medians
+  * This algorithm is based on [Median of Medians](https://en.wikipedia.org/wiki/Median_of_medians) algorithm, one of the first deterministic linear time worst case median algorithm.
+  * **Location:** [`miniselect/median_of_medians.h`](./include/miniselect/median_of_medians.h).
+  * **Functions:** `median_of_medians_select`, `median_of_medians_partial_sort`.
+  * **Performance advice:** This algorithm does not show advantages over others, implemented for historical reasons and for bechmarking.
 
 <p align="center"><img src="https://media.giphy.com/media/C0txh78ngyEGqmrX7c/giphy.gif" /></p>
 
-- Median Of Ninthers
-  - This algorithm is based on [Fast Deterministic Selection](https://erdani.com/research/sea2017.pdf) paper by Andrei Alexandrescu, one of the latest and fastest deterministic linear time worst case median algorithms.
-  - **Location:** [`miniselect/median_of_ninthers.h`](./include/miniselect/median_of_ninthers.h).
-  - **Functions:** `median_of_ninthers_select`, `median_of_ninthers_partial_sort`.
-  - **Performance advice:** Use this algorithm if you absolutely need linear time worst case scenario for selection algorithm. This algorithm shows some strengths over other deterministic [`PICK`](https://en.wikipedia.org/wiki/Median_of_medians) algorithms and has lower constanst than MedianOfMedians.
+* Median Of Ninthers
+  * This algorithm is based on [Fast Deterministic Selection](https://erdani.com/research/sea2017.pdf) paper by Andrei Alexandrescu, one of the latest and fastest deterministic linear time worst case median algorithms.
+  * **Location:** [`miniselect/median_of_ninthers.h`](./include/miniselect/median_of_ninthers.h).
+  * **Functions:** `median_of_ninthers_select`, `median_of_ninthers_partial_sort`.
+  * **Performance advice:** Use this algorithm if you absolutely need linear time worst case scenario for selection algorithm. This algorithm shows some strengths over other deterministic [`PICK`](https://en.wikipedia.org/wiki/Median_of_medians) algorithms and has lower constanst than MedianOfMedians.
 
 <p align="center"><img src="https://media.giphy.com/media/usKlqJoh1WVLWLU9Dt/giphy.gif" /></p>
 
-- Median Of 3 Random
-  - This algorithm is based on QuickSelect with the random median of 3 pivot choice algorithm (it chooses random 3 elements in the range and takes the middle value). It is a randomized algorithm.
-  - **Location:** [`miniselect/median_of_3_random.h`](./include/miniselect/median_of_3_random.h).
-  - **Functions:** `median_of_3_random_select`, `median_of_3_random_partial_sort`.
-  - **Performance advice:** This is a randomized algorithm and also it did not show any strengths against Median Of Ninthers.
+* Median Of 3 Random
+  * This algorithm is based on QuickSelect with the random median of 3 pivot choice algorithm (it chooses random 3 elements in the range and takes the middle value). It is a randomized algorithm.
+  * **Location:** [`miniselect/median_of_3_random.h`](./include/miniselect/median_of_3_random.h).
+  * **Functions:** `median_of_3_random_select`, `median_of_3_random_partial_sort`.
+  * **Performance advice:** This is a randomized algorithm and also it did not show any strengths against Median Of Ninthers.
 
 <p align="center"><img src="https://media.giphy.com/media/GrbIu6PvrMuvoowp3U/giphy.gif" /></p>
 
-- Introselect
-  - This algorithm is based on [Introselect](https://en.wikipedia.org/wiki/Introselect) algorithm, it is used in libstdc++ in `std::nth_element`, however instead of falling back to MedianOfMedians it is using HeapSelect which adds logarithm to its worst complexity.
-  - **Location:** `<algorithm>`.
-  - **Functions:** `std::nth_element`.
-  - **Performance advice:** This algorithm is used in standard library and is not recommended to use if you are looking for performance.
+* Introselect
+  * This algorithm is based on [Introselect](https://en.wikipedia.org/wiki/Introselect) algorithm, it is used in libstdc++ in `std::nth_element`, however instead of falling back to MedianOfMedians it is using HeapSelect which adds logarithm to its worst complexity.
+  * **Location:** `<algorithm>`.
+  * **Functions:** `std::nth_element`.
+  * **Performance advice:** This algorithm is used in standard library and is not recommended to use if you are looking for performance.
 
 <p align="center"><img src="https://media.giphy.com/media/VOBM4MVBpiTgkbA6CH/giphy.gif" /></p>
 
-- Median Of 3
-  - This algorithm is based on QuickSelect with median of 3 pivot choice algorithm (the middle value between begin, mid and end values), it is used in libc++ in `std::nth_element`.
-  - **Location:** `<algorithm>`.
-  - **Functions:** `std::nth_element`.
-  - **Performance advice:** This algorithm is used in standard library and is not recommended to use if you are looking for performance.
+* Median Of 3
+  * This algorithm is based on QuickSelect with median of 3 pivot choice algorithm (the middle value between begin, mid and end values), it is used in libc++ in `std::nth_element`.
+  * **Location:** `<algorithm>`.
+  * **Functions:** `std::nth_element`.
+  * **Performance advice:** This algorithm is used in standard library and is not recommended to use if you are looking for performance.
 
 <p align="center"><img src="https://media.giphy.com/media/03eJ0S7H79Jdtrv49F/giphy.gif" /></p>
 
-- `std::partial_sort` or `HeapSelect`
-  - This algorithm has [heap-based solutions](https://en.wikipedia.org/wiki/Partial_sorting) both in libc++ and libstdc++, from the first ![\large k](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+k) elements the max heap is built, then one by one the elements are trying to be pushed to that heap with HeapSort in the end.
-  - **Location:** `<algorithm>`, [`miniselect/heap_select.h`](./include/miniselect/heap_select.h).
-  - **Functions:** `std::partial_sort`, `heap_select`, `heap_partial_sort`.
-  - **Performance advice:** This algorithm is very good for random data and small ![\large k](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+k) and might outperform all selection+sort algorithms. However, for descending data it starts to significantly degrade and is not recommended for use if you have such patterns in real data.
+* `std::partial_sort` or `HeapSelect`
+  * This algorithm has [heap-based solutions](https://en.wikipedia.org/wiki/Partial_sorting) both in libc++ and libstdc++, from the first ![\large k](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+k) elements the max heap is built, then one by one the elements are trying to be pushed to that heap with HeapSort in the end.
+  * **Location:** `<algorithm>`, [`miniselect/heap_select.h`](./include/miniselect/heap_select.h).
+  * **Functions:** `std::partial_sort`, `heap_select`, `heap_partial_sort`.
+  * **Performance advice:** This algorithm is very good for random data and small ![\large k](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Clarge+k) and might outperform all selection+sort algorithms. However, for descending data it starts to significantly degrade and is not recommended for use if you have such patterns in real data.
 
 <p align="center"><img src="https://media.giphy.com/media/MAw3Tk2TDxrnv6vLlu/giphy.gif" /></p>
 
@@ -223,11 +222,10 @@ for example, 1000, the results are the following
 
 Other benchmarks can be found [here](https://drive.google.com/drive/folders/1DHEaeXgZuX6AJ9eByeZ8iQVQv0ueP8XM).
 
-
 Real-world usage
 ----------------
 
-- [Yandex ClickHouse](https://github.com/yandex/ClickHouse)
+* [Yandex ClickHouse](https://github.com/yandex/ClickHouse)
 
 If you are planning to use miniselect in your product, please work from one of
 our releases and if you wish, you can write the acknowledgment in this section
@@ -271,4 +269,3 @@ Third-Party Libraries Used and Adjusted
 |---------------------|--------------------------------------------------------------------------------------------------|
 | pdqsort             | [MIT](https://github.com/orlp/pdqsort/blob/47a46767d76fc852284eaa083e4b7034ee6e2559/license.txt) |
 | MedianOfNinthers    | [Boost License 1.0](https://github.com/andralex/MedianOfNinthers/blob/master/LICENSE_1_0.txt)    |
-

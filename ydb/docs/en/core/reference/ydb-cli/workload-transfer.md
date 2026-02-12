@@ -24,6 +24,7 @@ View the command description:
 ```
 
 Parameters of the subcommand:
+
 Parameter name | Parameter description | Default value
 ---|---|---
 `--topic` | Topic name | `transfer-topic`
@@ -67,6 +68,7 @@ View the command description:
 ```
 
 Parameters of the subcommand:
+
 Parameter name | Parameter Description | Default value
 ---|---|---
 `--seconds`, `-s` | Duration of the test in seconds | `60`

@@ -5,16 +5,19 @@
 YDB поддерживает работу в режиме [Bridge](https://ydb.tech/docs/ru/concepts/bridge?version=main). CLI утилита `skipper.py` реализует демо-версию `Bridge keeper'a`: выполняет мониторинг состояния кластера, управляет частями кластера, называемыми [pile](https://ydb.tech/docs/ru/concepts/glossary?version=main#pile), и отображает состояние кластера в TUI.
 
 По умолчанию утилита автоматически выполняет failover отказавших частей кластера:
+
 * переводит в режим `DISCONNECTED`
 * при необходимости назначает здоровый pile `PRIMARY`
 
 Ограничения demo-версии:
+
 * поддержано только два пайла;
 * состояние compute-части кластера не учитывается.
 
 ## Установка
 
 Установка зависимостей:
+
 ```
 pip3 install textual requests pyyaml
 ```
@@ -24,11 +27,13 @@ pip3 install textual requests pyyaml
 ## Использование
 
 Пример использования:
+
 ```
 ./skipper.py -e <EXAMPLE.COM> -s ~/ydb-test-bridge-state.json --cluster ydb-test-bridge --tui
 ```
 
 Пример с дополнительными параметрами аутентификации:
+
 ```
 ./skipper.py --ydb-auth-opts "--user suser --password-file password.txt" -e <EXAMPLE.COM> -s ~/ydb-test-bridge-state.json --cluster ydb-test-bridge --tui
 ```

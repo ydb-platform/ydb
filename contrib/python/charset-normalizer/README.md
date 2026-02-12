@@ -55,7 +55,7 @@ This project offers you an alternative to **Universal Charset Encoding Detector*
 <img src="https://i.imgflip.com/373iay.gif" alt="Reading Normalized Text" width="226"/><img src="https://media.tenor.com/images/c0180f70732a18b4965448d33adba3d0/tenor.gif" alt="Cat Reading Text" width="200"/>
 </p>
 
-*\*\* : They are clearly using specific code for a specific encoding even if covering most of used one*<br> 
+_\*\* : They are clearly using specific code for a specific encoding even if covering most of used one_<br>
 Did you got there because of the logs? See [https://charset-normalizer.readthedocs.io/en/latest/user/miscellaneous.html](https://charset-normalizer.readthedocs.io/en/latest/user/miscellaneous.html)
 
 ## ⚡ Performance
@@ -91,6 +91,7 @@ pip install charset-normalizer -U
 ## 🚀 Basic Usage
 
 ### CLI
+
 This package comes with a CLI.
 
 ```
@@ -170,7 +171,9 @@ python -m charset_normalizer ./data/sample.1.fr.srt
 ```
 
 ### Python
-*Just print out normalized text*
+
+*Just print out normalized text_
+
 ```python
 from charset_normalizer import from_path
 
@@ -179,7 +182,8 @@ results = from_path('./my_subtitle.srt')
 print(str(results.best()))
 ```
 
-*Upgrade your code without effort*
+_Upgrade your code without effort_
+
 ```python
 from charset_normalizer import detect
 ```
@@ -195,7 +199,7 @@ reliable alternative using a completely different method. Also! I never back dow
 
 I **don't care** about the **originating charset** encoding, because **two different tables** can
 produce **two identical rendered string.**
-What I want is to get readable text, the best I can. 
+What I want is to get readable text, the best I can.
 
 In a way, **I'm brute forcing text decoding.** How cool is that ? 😎
 
@@ -203,25 +207,25 @@ Don't confuse package **ftfy** with charset-normalizer or chardet. ftfy goal is 
 
 ## 🍰 How
 
-  - Discard all charset encoding table that could not fit the binary content.
-  - Measure noise, or the mess once opened (by chunks) with a corresponding charset encoding.
-  - Extract matches with the lowest mess detected.
-  - Additionally, we measure coherence / probe for a language.
+- Discard all charset encoding table that could not fit the binary content.
+- Measure noise, or the mess once opened (by chunks) with a corresponding charset encoding.
+- Extract matches with the lowest mess detected.
+- Additionally, we measure coherence / probe for a language.
 
 **Wait a minute**, what is noise/mess and coherence according to **YOU ?**
 
-*Noise :* I opened hundred of text files, **written by humans**, with the wrong encoding table. **I observed**, then
+_Noise :_ I opened hundred of text files, **written by humans**, with the wrong encoding table. **I observed**, then
 **I established** some ground rules about **what is obvious** when **it seems like** a mess.
  I know that my interpretation of what is noise is probably incomplete, feel free to contribute in order to
  improve or rewrite it.
 
-*Coherence :* For each language there is on earth, we have computed ranked letter appearance occurrences (the best we can). So I thought
+_Coherence :_ For each language there is on earth, we have computed ranked letter appearance occurrences (the best we can). So I thought
 that intel is worth something here. So I use those records against decoded text to check if I can detect intelligent design.
 
 ## ⚡ Known limitations
 
-  - Language detection is unreliable when text contains two or more languages sharing identical letters. (eg. HTML (english tags) + Turkish content (Sharing Latin characters))
-  - Every charset detector heavily depends on sufficient content. In common cases, do not bother run detection on very tiny content.
+- Language detection is unreliable when text contains two or more languages sharing identical letters. (eg. HTML (english tags) + Turkish content (Sharing Latin characters))
+- Every charset detector heavily depends on sufficient content. In common cases, do not bother run detection on very tiny content.
 
 ## ⚠️ About Python EOLs
 

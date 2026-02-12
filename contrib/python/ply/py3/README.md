@@ -12,12 +12,12 @@ met:
 
 * Redistributions of source code must retain the above copyright notice,
   this list of conditions and the following disclaimer.  
-* Redistributions in binary form must reproduce the above copyright notice, 
+* Redistributions in binary form must reproduce the above copyright notice,
   this list of conditions and the following disclaimer in the documentation
   and/or other materials provided with the distribution.  
 * Neither the name of the David Beazley or Dabeaz LLC may be used to
   endorse or promote products derived from this software without
-  specific prior written permission. 
+  specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -37,34 +37,34 @@ Introduction
 PLY is a 100% Python implementation of the common parsing tools lex
 and yacc. Here are a few highlights:
 
- -  PLY is very closely modeled after traditional lex/yacc.
+* PLY is very closely modeled after traditional lex/yacc.
     If you know how to use these tools in C, you will find PLY
     to be similar.
 
- -  PLY provides *very* extensive error reporting and diagnostic 
+* PLY provides *very* extensive error reporting and diagnostic
     information to assist in parser construction.  The original
     implementation was developed for instructional purposes.  As
     a result, the system tries to identify the most common types
     of errors made by novice users.  
 
- -  PLY provides full support for empty productions, error recovery,
+* PLY provides full support for empty productions, error recovery,
     precedence specifiers, and moderately ambiguous grammars.
 
- -  Parsing is based on LR-parsing which is fast, memory efficient, 
+* Parsing is based on LR-parsing which is fast, memory efficient,
     better suited to large grammars, and which has a number of nice
     properties when dealing with syntax errors and other parsing problems.
     Currently, PLY builds its parsing tables using the LALR(1)
     algorithm used in yacc.
 
- -  PLY uses Python introspection features to build lexers and parsers.  
-    This greatly simplifies the task of parser construction since it reduces 
-    the number of files and eliminates the need to run a separate lex/yacc 
+* PLY uses Python introspection features to build lexers and parsers.  
+    This greatly simplifies the task of parser construction since it reduces
+    the number of files and eliminates the need to run a separate lex/yacc
     tool before running your program.
 
- -  PLY can be used to build parsers for "real" programming languages.
+* PLY can be used to build parsers for "real" programming languages.
     Although it is not ultra-fast due to its Python implementation,
     PLY can be used to parse grammars consisting of several hundred
-    rules (as might be found for a language like C).  The lexer and LR 
+    rules (as might be found for a language like C).  The lexer and LR
     parser are also reasonably efficient when parsing typically
     sized programs.  People have used PLY to build parsers for
     C, C++, ADA, and other real programming languages.
@@ -92,12 +92,13 @@ The file doc/ply.html contains complete documentation on how to use
 the system.
 
 The example directory contains several different examples including a
-PLY specification for ANSI C as given in K&R 2nd Ed.   
+PLY specification for ANSI C as given in K&R 2nd Ed.
 
 A simple example is found at the end of this document
 
 Requirements
 ============
+
 PLY requires the use of Python 2.6 or greater.  However, you should
 use the latest Python release if possible.  It should work on just
 about any platform.  PLY has been tested with both CPython and Jython.
@@ -105,6 +106,7 @@ It also seems to work with IronPython.
 
 Resources
 =========
+
 More information about PLY can be obtained on the PLY webpage at:
 
      http://www.dabeaz.com/ply
@@ -124,17 +126,19 @@ An old and relatively inactive discussion group for PLY is found at:
 
 Acknowledgments
 ===============
+
 A special thanks is in order for all of the students in CS326 who
 suffered through about 25 different versions of these tools :-).
 
 The CHANGES file acknowledges those who have contributed patches.
 
-Elias Ioup did the first implementation of LALR(1) parsing in PLY-1.x. 
+Elias Ioup did the first implementation of LALR(1) parsing in PLY-1.x.
 Andrew Waters and Markus Schoepflin were instrumental in reporting bugs
 and testing a revised LALR(1) implementation for PLY-2.0.
 
 Special Note for PLY-3.0
 ========================
+
 PLY-3.0 the first PLY release to support Python 3. However, backwards
 compatibility with Python 2.6 is still preserved. PLY provides dual
 Python 2/3 compatibility by restricting its implementation to a common
@@ -251,25 +255,16 @@ with variables.
             break
         yacc.parse(s)
 
-
 Bug Reports and Patches
 =======================
+
 My goal with PLY is to simply have a decent lex/yacc implementation
 for Python.  As a general rule, I don't spend huge amounts of time
 working on it unless I receive very specific bug reports and/or
 patches to fix problems. I also try to incorporate submitted feature
 requests and enhancements into each new version.  Please visit the PLY
-github page at https://github.com/dabeaz/ply to submit issues and pull
+github page at <https://github.com/dabeaz/ply> to submit issues and pull
 requests.  To contact me about bugs and/or new features, please send
-email to dave@dabeaz.com.
- 
+email to <dave@dabeaz.com>.
+
 -- Dave
-
-
-
-
-
-
-
-
-

@@ -31,7 +31,6 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 ## Julia
 
 The ziggurat methods were derived from Julia.
@@ -39,7 +38,7 @@ The ziggurat methods were derived from Julia.
 Copyright (c) 2009-2019: Jeff Bezanson, Stefan Karpinski, Viral B. Shah,
 and other contributors:
 
-https://github.com/JuliaLang/julia/contributors
+<https://github.com/JuliaLang/julia/contributors>
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the

@@ -26,7 +26,6 @@ project that's then already better than how I left this one.
 Cheers,
 Sybren
 
-
 ---------------------------------------------
 
 # Pure Python RSA implementation
@@ -55,7 +54,7 @@ licensed under the [Apache License, version 2.0](https://www.apache.org/licenses
 
 ## Security
 
-Because of how Python internally stores numbers, it is very hard (if not impossible) to make a pure-Python program secure against timing attacks. This library is no exception, so use it with care. See https://securitypitfalls.wordpress.com/2018/08/03/constant-time-compare-in-python/ for more info.
+Because of how Python internally stores numbers, it is very hard (if not impossible) to make a pure-Python program secure against timing attacks. This library is no exception, so use it with care. See <https://securitypitfalls.wordpress.com/2018/08/03/constant-time-compare-in-python/> for more info.
 
 ## Setup of Development Environment
 
@@ -72,13 +71,13 @@ Since this project is considered critical on the Python Package Index,
 two-factor authentication is required. For uploading packages to PyPi, an API
 key is required; username+password will not work.
 
-First, generate an API token at https://pypi.org/manage/account/token/. Then,
+First, generate an API token at <https://pypi.org/manage/account/token/>. Then,
 use this token when publishing instead of your username and password.
 
 As username, use `__token__`.
 As password, use the token itself, including the `pypi-` prefix.
 
-See https://pypi.org/help/#apitoken for help using API tokens to publish. This
+See <https://pypi.org/help/#apitoken> for help using API tokens to publish. This
 is what I have in `~/.pypirc`:
 
 ```

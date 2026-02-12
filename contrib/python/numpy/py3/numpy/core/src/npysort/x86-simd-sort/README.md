@@ -78,6 +78,7 @@ gcc >= 8.x
 ### Build using Make
 
 `make` command builds two executables:
+
 - `testexe`: runs a bunch of tests written in ./tests directory.
 - `benchexe`: measures performance of these algorithms for various data types
   and compares them to std::sort.
@@ -105,13 +106,12 @@ instruction set. The test suite is written using the Google test framework.
 
 ## References
 
-* [1] Fast and Robust Vectorized In-Place Sorting of Primitive Types
-    https://drops.dagstuhl.de/opus/volltexte/2021/13775/
+- [1] Fast and Robust Vectorized In-Place Sorting of Primitive Types
+    <https://drops.dagstuhl.de/opus/volltexte/2021/13775/>
 
-* [2] A Novel Hybrid Quicksort Algorithm Vectorized using AVX-512 on Intel
-Skylake https://arxiv.org/pdf/1704.08579.pdf
+- [2] A Novel Hybrid Quicksort Algorithm Vectorized using AVX-512 on Intel
+Skylake <https://arxiv.org/pdf/1704.08579.pdf>
 
-* [3] https://github.com/simd-sorting/fast-and-robust: SPDX-License-Identifier: MIT
+- [3] <https://github.com/simd-sorting/fast-and-robust>: SPDX-License-Identifier: MIT
 
-* [4] http://mitp-content-server.mit.edu:18180/books/content/sectbyfn?collid=books_pres_0&fn=Chapter%2027.pdf&id=8030
-
+- [4] <http://mitp-content-server.mit.edu:18180/books/content/sectbyfn?collid=books_pres_0&fn=Chapter%2027.pdf&id=8030>

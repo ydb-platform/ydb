@@ -6,6 +6,7 @@
 * [Tables](table.md)
 
 {% if feature_view %}
+
 * [Views](view.md)
 {% endif %}
 * [Topics](topic.md)
@@ -18,5 +19,5 @@ Schema objects are placed within the [cluster namespace](cluster-namespace.md) a
 
 ## See Also {#see-also}
 
-- [{#T}](../index.md)
-- [{#T}](../topology.md)
+* [{#T}](../index.md)
+* [{#T}](../topology.md)

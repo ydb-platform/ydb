@@ -16,6 +16,7 @@ standard library.
 - [Links](#links)
 
 <a name="about"></a>
+
 ## About Abseil
 
 Abseil is an open-source collection of C++ library code designed to augment
@@ -34,6 +35,7 @@ base, and we now want to provide those resources to the C++ community as
 a whole.
 
 <a name="quickstart"></a>
+
 ## Quickstart
 
 If you want to just get started, make sure you at least run through the
@@ -42,6 +44,7 @@ contains information about setting up your development environment, downloading
 the Abseil code, running tests, and getting a simple binary working.
 
 <a name="build"></a>
+
 ## Building Abseil
 
 [Bazel](https://bazel.build) and [CMake](https://cmake.org/) are the official
@@ -53,6 +56,7 @@ instructions](CMake/README.md) and [CMake
 Quickstart](https://abseil.io/docs/cpp/quickstart-cmake).
 
 <a name="support"></a>
+
 ## Support
 
 Abseil follows Google's [Foundational C++ Support
@@ -63,73 +67,75 @@ for a list of currently supported versions compilers, platforms, and build
 tools.
 
 <a name="codemap"></a>
+
 ## Codemap
 
 Abseil contains the following C++ library components:
 
-* [`base`](absl/base/)
+- [`base`](absl/base/)
   <br /> The `base` library contains initialization code and other code which
   all other Abseil code depends on. Code within `base` may not depend on any
   other code (other than the C++ standard library).
-* [`algorithm`](absl/algorithm/)
+- [`algorithm`](absl/algorithm/)
   <br /> The `algorithm` library contains additions to the C++ `<algorithm>`
   library and container-based versions of such algorithms.
-* [`cleanup`](absl/cleanup/)
+- [`cleanup`](absl/cleanup/)
   <br /> The `cleanup` library contains the control-flow-construct-like type
   `absl::Cleanup` which is used for executing a callback on scope exit.
-* [`container`](absl/container/)
+- [`container`](absl/container/)
   <br /> The `container` library contains additional STL-style containers,
   including Abseil's unordered "Swiss table" containers.
-* [`crc`](absl/crc/) The `crc` library contains code for
+- [`crc`](absl/crc/) The `crc` library contains code for
   computing error-detecting cyclic redundancy checks on data.
-* [`debugging`](absl/debugging/)
+- [`debugging`](absl/debugging/)
   <br /> The `debugging` library contains code useful for enabling leak
   checks, and stacktrace and symbolization utilities.
-* [`flags`](absl/flags/)
+- [`flags`](absl/flags/)
   <br /> The `flags` library contains code for handling command line flags for
   libraries and binaries built with Abseil.
-* [`hash`](absl/hash/)
+- [`hash`](absl/hash/)
   <br /> The `hash` library contains the hashing framework and default hash
   functor implementations for hashable types in Abseil.
-* [`log`](absl/log/)
+- [`log`](absl/log/)
   <br /> The `log` library contains `LOG` and `CHECK` macros and facilities
   for writing logged messages out to disk, `stderr`, or user-extensible
   destinations.
-* [`memory`](absl/memory/)
+- [`memory`](absl/memory/)
   <br /> The `memory` library contains memory management facilities that augment
   C++'s `<memory>` library.
-* [`meta`](absl/meta/)
+- [`meta`](absl/meta/)
   <br /> The `meta` library contains type checks
   similar to those available in the C++ `<type_traits>` library.
-* [`numeric`](absl/numeric/)
+- [`numeric`](absl/numeric/)
   <br /> The `numeric` library contains 128-bit integer types as well as
   implementations of C++20's bitwise math functions.
-* [`profiling`](absl/profiling/)
+- [`profiling`](absl/profiling/)
   <br /> The `profiling` library contains utility code for profiling C++
   entities.  It is currently a private dependency of other Abseil libraries.
-* [`random`](absl/random/)
+- [`random`](absl/random/)
   <br /> The `random` library contains functions for generating pseudorandom
   values.
-* [`status`](absl/status/)
+- [`status`](absl/status/)
   <br /> The `status` library contains abstractions for error handling,
   specifically `absl::Status` and `absl::StatusOr<T>`.
-* [`strings`](absl/strings/)
+- [`strings`](absl/strings/)
   <br /> The `strings` library contains a variety of strings routines and
   utilities.
-* [`synchronization`](absl/synchronization/)
+- [`synchronization`](absl/synchronization/)
   <br /> The `synchronization` library contains concurrency primitives (Abseil's
   `absl::Mutex` class, an alternative to `std::mutex`) and a variety of
   synchronization abstractions.
-* [`time`](absl/time/)
+- [`time`](absl/time/)
   <br /> The `time` library contains abstractions for computing with absolute
   points in time, durations of time, and formatting and parsing time within
   time zones.
-* [`types`](absl/types/)
+- [`types`](absl/types/)
   <br /> The `types` library contains non-container utility types.
-* [`utility`](absl/utility/)
+- [`utility`](absl/utility/)
   <br /> The `utility` library contains utility and helper code.
 
 <a name="releases"></a>
+
 ## Releases
 
 Abseil recommends users "live-at-head" (update to the latest commit from the
@@ -140,19 +146,21 @@ fixes for severe bugs. See our [release
 management](https://abseil.io/about/releases) document for more details.
 
 <a name="license"></a>
+
 ## License
 
 The Abseil C++ library is licensed under the terms of the Apache
 license. See [LICENSE](LICENSE) for more information.
 
 <a name="links"></a>
+
 ## Links
 
 For more information about Abseil:
 
-* Consult our [Abseil Introduction](https://abseil.io/about/intro)
-* Read [Why Adopt Abseil](https://abseil.io/about/philosophy) to understand our
+- Consult our [Abseil Introduction](https://abseil.io/about/intro)
+- Read [Why Adopt Abseil](https://abseil.io/about/philosophy) to understand our
   design philosophy.
-* Peruse our
+- Peruse our
   [Abseil Compatibility Guarantees](https://abseil.io/about/compatibility) to
   understand both what we promise to you, and what we expect of you in return.

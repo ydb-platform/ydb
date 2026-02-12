@@ -21,7 +21,6 @@ You can submit your changes through a [pull request](https://github.com/boostorg
 
 There is no mailing-list specific to Boost Graph, although you can use the general-purpose Boost [mailing-list](http://lists.boost.org/mailman/listinfo.cgi/boost-users) using the tag [graph].
 
-
 ### Build Status
 
 |                  |  Master  |   Develop   |
@@ -48,6 +47,7 @@ Boost Graph Library is mostly made of headers but also contains some compiled co
 **Note:** The Boost Graph Library cannot currently be built outside of Boost itself.
 
 ### Running tests
+
 First, make sure you are in `libs/graph/test`.
 You can either run all the 300+ tests listed in `Jamfile.v2` or run a single test:
 

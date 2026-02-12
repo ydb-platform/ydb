@@ -1,6 +1,6 @@
 # Maintainer
 
-This library is currently maintained by [Richard Hodges](mailto:hodges.r@gmail.com) with generous support 
+This library is currently maintained by [Richard Hodges](mailto:hodges.r@gmail.com) with generous support
 from the C++ Alliance.
 
 # Build Status
@@ -16,7 +16,7 @@ This software is distributed under the [Boost Software License, Version 1.0](htt
 
 # Original Work
 
-This library is the work of Marcin Kalicinski and Sebastian Redl<br/> 
+This library is the work of Marcin Kalicinski and Sebastian Redl<br/>
 
 Copyright (C) 2002-2006 Marcin Kalicinski<br/>
 Copyright (C) 2009 Sebastian Redl

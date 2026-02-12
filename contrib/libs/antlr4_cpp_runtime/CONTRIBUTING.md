@@ -10,13 +10,13 @@
 
 <img src="doc/images/PR-on-dev.png" width="600">
 
-**Note:** Each commit requires a "signature", which is simple as using `-s` (not 
+**Note:** Each commit requires a "signature", which is simple as using `-s` (not
 `-S`) to the git commit command:
 
 ```
 git commit -s -m 'This is my commit message'
 ```
 
-Github's pull request process enforces the sig and gives instructions on how to 
-fix any commits that lack the sig. See [Github DCO app](https://github.com/apps/dco) 
+Github's pull request process enforces the sig and gives instructions on how to
+fix any commits that lack the sig. See [Github DCO app](https://github.com/apps/dco)
 for more info.

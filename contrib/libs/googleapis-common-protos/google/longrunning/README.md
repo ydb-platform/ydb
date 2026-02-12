@@ -13,11 +13,11 @@ for querying the state of any given operation.
 APIs that implement a concept of long-running operations are encouraged
 to follow this pattern: When a caller invokes an API backend to start a job...
 
-  * The API backend starts asychronous work to fulfill the caller's
+* The API backend starts asychronous work to fulfill the caller's
     request, and generates a unique name (the `Operation` name) to refer
     to the ongoing asychronous work.
-  * The API backend immediately returns the `Operation` back to the caller.
-  * The caller can invoke the API methods defined in the `Operations` service
+* The API backend immediately returns the `Operation` back to the caller.
+* The caller can invoke the API methods defined in the `Operations` service
     to get the current status of the asychronous work, and also to
     discover the final result (success or error).
 

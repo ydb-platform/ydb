@@ -16,6 +16,7 @@ Master:         | [![CI](https://github.com/boostorg/pfr/actions/workflows/ci.ym
 [Latest developer documentation](https://www.boost.org/doc/libs/develop/doc/html/boost_pfr.html)
 
 ### Motivating Example #0
+
 ```c++
 #include <iostream>
 #include <fstream>
@@ -40,15 +41,17 @@ int main(int argc, const char* argv[]) {
   }
 }
 ```
+
 Outputs:
+
 ```
 Edgar Allan Poe was born in 1809
 ```
 
 [Run the above sample](https://godbolt.org/z/PfYsWKb7v)
 
-
 ### Motivating Example #1
+
 ```c++
 #include <iostream>
 #include "pfr.hpp"
@@ -68,6 +71,7 @@ int main() {
 ```
 
 Outputs:
+
 ```
 my_struct has 3 fields: {100, H, 3.14159}
 ```
@@ -92,6 +96,7 @@ int main() {
 ```
 
 Outputs:
+
 ```
 my_struct has 2 fields: {"Das ist fantastisch!", 100}
 ```
@@ -143,11 +148,12 @@ int main() {
 }
 
 ```
+
 Outputs:
+
 ```
 (34 Chip Douglas 2500)
 ```
-
 
 ### Requirements and Limitations
 

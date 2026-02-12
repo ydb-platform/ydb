@@ -27,7 +27,7 @@ Yandex Enterprise Database distributions are available for download via the link
 
 {{ ydb-short-name }} Enterprise Server (`ydbd`) is an executable file for running a Yandex Enterprise Database node.
 
-#|
+# |
 || **Version** | **Release date** | **Download** | **Checksums** | **Changelog** ||
 || **v25.1** |  |  |  |  ||
 || v.25.1.4.ent.3 | 25.11.2025 |
@@ -130,7 +130,7 @@ Yandex Enterprise Database distributions are available for download via the link
 
 ### Docker
 
-#|
+# |
 || **Version** | **Release date** | **Download** | **Changelog** ||
 || **v25.1** |  |  |  |  ||
 || v.25.1.4.ent.3 | 25.11.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.1.4.ent.3` | [See list](../changelog-enterprise.md#25-1-4-ent-3) ||

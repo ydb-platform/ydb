@@ -16,7 +16,6 @@
 
 ![Monitoring_storage_state](../../../reference/embedded-ui/_assets/monitoring_storage_state.png)
 
-
 ## Проверка результата обновления {#upgrade_check}
 
 Проверить версии узлов после обновления можно на странице `Nodes` мониторинга.

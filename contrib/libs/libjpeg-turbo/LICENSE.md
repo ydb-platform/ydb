@@ -21,7 +21,6 @@ libjpeg-turbo is covered by two compatible BSD-style open source licenses:
   both the terms of the IJG License and the terms of the Modified (3-clause)
   BSD License apply.
 
-
 Complying with the libjpeg-turbo Licenses
 =========================================
 
@@ -29,10 +28,10 @@ This section provides a roll-up of the libjpeg-turbo licensing terms, to the
 best of our understanding.  This is not a license in and of itself.  It is
 intended solely for clarification.
 
-1.  If you are distributing a modified version of the libjpeg-turbo source,
+1. If you are distributing a modified version of the libjpeg-turbo source,
     then:
 
-    1.  You cannot alter or remove any existing copyright or license notices
+    1. You cannot alter or remove any existing copyright or license notices
         from the source.
 
         **Origin**
@@ -40,7 +39,7 @@ intended solely for clarification.
         - Clause 1 of the Modified BSD License
         - Clauses 1 and 3 of the zlib License
 
-    2.  You must add your own copyright notice to the header of each source
+    2. You must add your own copyright notice to the header of each source
         file you modified, so others can tell that you modified that file.  (If
         there is not an existing copyright header in that file, then you can
         simply add a notice stating that you modified the file.)
@@ -49,17 +48,17 @@ intended solely for clarification.
         - Clause 1 of the IJG License
         - Clause 2 of the zlib License
 
-    3.  You must include the IJG README file, and you must not alter any of the
+    3. You must include the IJG README file, and you must not alter any of the
         copyright or license text in that file.
 
         **Origin**
         - Clause 1 of the IJG License
 
-2.  If you are distributing only libjpeg-turbo binaries without the source, or
+2. If you are distributing only libjpeg-turbo binaries without the source, or
     if you are distributing an application that statically links with
     libjpeg-turbo, then:
 
-    1.  Your product documentation must include a message stating:
+    1. Your product documentation must include a message stating:
 
         This software is based in part on the work of the Independent JPEG
         Group.
@@ -67,21 +66,21 @@ intended solely for clarification.
         **Origin**
         - Clause 2 of the IJG license
 
-    2.  If your binary distribution includes or uses the TurboJPEG API, then
+    2. If your binary distribution includes or uses the TurboJPEG API, then
         your product documentation must include the text of the Modified BSD
         License (see below.)
 
         **Origin**
         - Clause 2 of the Modified BSD License
 
-3.  You cannot use the name of the IJG or The libjpeg-turbo Project or the
+3. You cannot use the name of the IJG or The libjpeg-turbo Project or the
     contributors thereof in advertising, publicity, etc.
 
     **Origin**
     - IJG License
     - Clause 3 of the Modified BSD License
 
-4.  The IJG and The libjpeg-turbo Project do not warrant libjpeg-turbo to be
+4. The IJG and The libjpeg-turbo Project do not warrant libjpeg-turbo to be
     free of defects, nor do we accept any liability for undesirable
     consequences resulting from your use of the software.
 
@@ -89,7 +88,6 @@ intended solely for clarification.
     - IJG License
     - Modified BSD License
     - zlib License
-
 
 The Modified (3-clause) BSD License
 ===================================
@@ -120,7 +118,6 @@ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
 CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
-
 
 Why Two Licenses?
 =================

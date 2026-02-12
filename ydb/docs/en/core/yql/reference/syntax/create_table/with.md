@@ -65,19 +65,19 @@ Interval("<literal1>") action1, ..., Interval("<literalN>") actionN ON column [A
 ```
 
 * `action` — the action performed when the TTL expression triggers. Allowed values:
-    * `DELETE` — delete the row;
-    * `TO EXTERNAL DATA SOURCE <path>` — evict the row to external storage specified by the [external data source](../../../../concepts/datamodel/external_data_source.md) at the path `<path>`.
+  * `DELETE` — delete the row;
+  * `TO EXTERNAL DATA SOURCE <path>` — evict the row to external storage specified by the [external data source](../../../../concepts/datamodel/external_data_source.md) at the path `<path>`.
 * `<unit>` — the unit of measurement, specified only for columns with a [numeric type](../../../../concepts/ttl.md#restrictions):
-    * `SECONDS`;
-    * `MILLISECONDS`;
-    * `MICROSECONDS`;
-    * `NANOSECONDS`.
+  * `SECONDS`;
+  * `MILLISECONDS`;
+  * `MICROSECONDS`;
+  * `NANOSECONDS`.
 
 Example of creating a row-oriented and column-oriented tables with TTL:
 
 {% list tabs %}
 
-- Creating row-oriented table with TTL
+* Creating row-oriented table with TTL
 
     ```sql
     CREATE TABLE my_table (
@@ -91,7 +91,7 @@ Example of creating a row-oriented and column-oriented tables with TTL:
     );
     ```
 
-- Creating column-oriented table with TTL
+* Creating column-oriented table with TTL
 
     ```sql
     CREATE TABLE table_name (

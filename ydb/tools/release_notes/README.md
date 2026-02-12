@@ -1,9 +1,11 @@
 ## How To Generate Changelog
 
 Generate github token:
-* https://github.com/settings/tokens?type=beta - generate new token and keep all checkboxes unchecked, no scopes need to be enabled.
+
+* <https://github.com/settings/tokens?type=beta> - generate new token and keep all checkboxes unchecked, no scopes need to be enabled.
 
 Dependencies:
+
 ```
 sudo apt-get update
 sudo apt-get install git python3 python3-fuzzywuzzy python3-github

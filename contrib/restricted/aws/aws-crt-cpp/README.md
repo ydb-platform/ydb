@@ -4,9 +4,9 @@ C++ wrapper around the aws-c-* libraries. Provides Cross-Platform Transport Prot
 
 ### Documentation
 
-https://awslabs.github.io/aws-crt-cpp/
+<https://awslabs.github.io/aws-crt-cpp/>
 
-### Currently Included:
+### Currently Included
 
 * aws-c-common: Cross-platform primitives and data structures.
 * aws-c-io: Cross-platform event-loops, non-blocking I/O, and TLS implementations.
@@ -28,6 +28,7 @@ If you want to manage these dependencies manually (e.g. you're using them in oth
 `-DBUILD_DEPS=OFF` and `-DCMAKE_PREFIX_PATH=<install>` pointing to the absolute path where you have them installed.
 
 ### MSVC
+
 If you want to use a statically linked MSVCRT (/MT, /MTd), you can add `-DSTATIC_CRT=ON` to your cmake configuration.
 
 ### Apple Silicon (aka M1) and Universal Binaries
@@ -83,11 +84,13 @@ error string for each error code.
 ````
     Aws::Crt::ApiHandle apiHandle;
 ````
+
 This performs one-time static initialization of the library. You'll need it to do anything, so don't forget to create one.
 
 ````
     Aws::Crt::Io::EventLoopGroup eventLoopGroup(<number of threads you want>);
 ````
+
 To use any of our APIs that perform IO you'll need at least one event-loop. An event-loop group is a collection of event-loops that
 protocol implementations will load balance across. If you won't have very many connections (say, more than 100 or so), then you
 most likely only want 1 thread. In this case, you want to pass a single instance of this to every client or server implementation of a protocol

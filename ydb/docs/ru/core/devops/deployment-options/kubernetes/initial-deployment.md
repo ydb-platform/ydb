@@ -40,7 +40,6 @@
 
       Создание {{ k8s }} кластера занимает в среднем от 10 до 15 минут. Дождитесь завершения процесса перед переходом к следующим шагам развертывания {{ ydb-short-name }}. Конфигурация `kubectl` будет автоматически обновлена для работы с кластером после его создания.
 
-
 - {{ managed-k8s-full-name }}
 
   1. Создайте кластер {{ k8s }}.
@@ -61,16 +60,16 @@ Helm-чарт устанавливает [{{ ydb-short-name }} Kubernetes Operat
 
 Кластер {{ ydb-short-name }} состоит из двух видов узлов:
 
-* **Storage nodes** (ресурс [Storage](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/storage-block-4-2.yaml)) — обеспечивают слой хранения данных;
-* **Dynamic nodes** (ресурс [Database](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/database.yaml)) — реализуют доступ к данным и их обработку.
+- **Storage nodes** (ресурс [Storage](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/storage-block-4-2.yaml)) — обеспечивают слой хранения данных;
+- **Dynamic nodes** (ресурс [Database](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/database.yaml)) — реализуют доступ к данным и их обработку.
 
 Для развертывания кластера {{ ydb-short-name }} в {{ k8s }} необходимо создать оба эти ресурса. Этот процесс будет рассмотрен подробнее ниже. Схема этих ресурсов [располагается на GitHub](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy/ydb-operator/crds).
 
 После обработки чарта контроллером будут созданы следующие ресурсы:
 
-* [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/) — контроллер рабочей нагрузки, который предоставляет предсказуемые сетевые имена и дисковые ресурсы для каждого контейнера.
-* [Service](https://kubernetes.io/docs/concepts/services-networking/service/) для доступа к созданным базам данных из приложений.
-* [ConfigMap](https://kubernetes.io/docs/concepts/configuration/configmap/) для хранения конфигурации кластера.
+- [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/) — контроллер рабочей нагрузки, который предоставляет предсказуемые сетевые имена и дисковые ресурсы для каждого контейнера.
+- [Service](https://kubernetes.io/docs/concepts/services-networking/service/) для доступа к созданным базам данных из приложений.
+- [ConfigMap](https://kubernetes.io/docs/concepts/configuration/configmap/) для хранения конфигурации кластера.
 
 Ознакомиться с исходным кодом оператора можно [на GitHub](https://github.com/ydb-platform/ydb-kubernetes-operator), Helm-чарт расположен в папке [deploy](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy).
 При разворачивании контейнеров {{ ydb-short-name }} используются образы `cr.yandex/yc/ydb`, на данный момент доступные только как предсобранные артефакты.
@@ -85,8 +84,8 @@ Helm-чарт устанавливает [{{ ydb-short-name }} Kubernetes Operat
     helm repo add ydb https://charts.ydb.tech/
     ```
 
-    * `ydb` — алиас репозитория;
-    * `https://charts.ydb.tech/` — URL репозитория {{ ydb-short-name }}.
+    - `ydb` — алиас репозитория;
+    - `https://charts.ydb.tech/` — URL репозитория {{ ydb-short-name }}.
 
     Результат выполнения:
 
@@ -110,7 +109,6 @@ Helm-чарт устанавливает [{{ ydb-short-name }} Kubernetes Operat
     Update Complete. ⎈Happy Helming!⎈
     ```
 
-
 ## Развертывание кластера {{ ydb-short-name }}
 
 ### Установите {{ ydb-short-name }} {{ k8s }} оператор
@@ -121,8 +119,8 @@ Helm-чарт устанавливает [{{ ydb-short-name }} Kubernetes Operat
 helm install ydb-operator ydb/ydb-operator
 ```
 
-* `ydb-operator` — имя установки;
-* `ydb/ydb-operator` — название чарта в добавленном ранее репозитории.
+- `ydb-operator` — имя установки;
+- `ydb/ydb-operator` — название чарта в добавленном ранее репозитории.
 
 Результат выполнения:
 
@@ -134,7 +132,6 @@ STATUS: deployed
 REVISION: 1
 TEST SUITE: None
 ```
-
 
 ### Разверните узлы хранения
 
@@ -219,7 +216,6 @@ Events:
 
 `State: Ready` означает, что база данных готова к работе.
 
-
 ### Проверьте работу кластера
 
 Проверьте работоспособность {{ ydb-short-name }}:
@@ -266,9 +262,9 @@ Events:
       sql -s 'SELECT 2 + 2;'
     ```
 
-    * `--endpoint` — эндпоинт базы данных;
-    * `--database` — имя созданной базы данных;
-    * `--query` — текст запроса.
+    - `--endpoint` — эндпоинт базы данных;
+    - `--database` — имя созданной базы данных;
+    - `--query` — текст запроса.
 
     Результат:
 
@@ -279,7 +275,6 @@ Events:
     | 4       |
     └─────────┘
     ```
-
 
 ## Дальнейшие шаги
 

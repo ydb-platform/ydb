@@ -59,6 +59,7 @@ SELECT
     (2, NULL) == (1, 3), -- Just(False) (expression is equivalent to 2 == 1 AND NULL == 3)
 
 ```
+
 {% if has_create_table_link == true %}
 
 ## Data types that do not allow NULL values {#notnull}

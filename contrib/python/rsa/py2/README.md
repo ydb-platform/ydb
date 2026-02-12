@@ -32,7 +32,6 @@ Version 4.3 is a re-tagged release of version 4.0. It is the last to support Pyt
 
 Version 4.4 will be a re-tagged release of version 4.2, and explicitly require Python 3.5 or newer.
 
-
 Major changes in 4.0
 --------------------
 

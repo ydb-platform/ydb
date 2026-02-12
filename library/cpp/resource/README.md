@@ -1,9 +1,10 @@
-This library provides implementation to access a resource (data, file, image, etc.) by a key.
+This library provides implementation to access a resource (data, file, image, etc.) by a key
 =============================================================================================
 
 See ya make documentation, resources section for more details.
 
-### Example - adding a resource file into build:
+### Example - adding a resource file into build
+
 ```
 LIBRARY()
 OWNER(user1)
@@ -14,7 +15,8 @@ RESOURCE(
 END()
 ```
 
-### Example - access to a file content by a key:
+### Example - access to a file content by a key
+
 ```cpp
 #include <library/cpp/resource/resource.h>
 int main() {

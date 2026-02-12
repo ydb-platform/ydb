@@ -14,7 +14,6 @@ UNION
 SELECT key FROM T2 -- returns the set of distinct keys in the tables
 ```
 
-
 ## UNION ALL {#union-all}
 
 Concatenating results of multiple `SELECT` statements (or subqueries).
@@ -27,8 +26,6 @@ In the "by name" mode, the output of the resulting data schema uses the followin
 * If a column wasn't present in all the input tables, then it's automatically assigned the [optional data type](../../types/optional.md) (that can accept `NULL`).
 * If a column in different input tables had different types, then the shared type (the broadest one) is output.
 * If a column in different input tables had a heterogeneous type, for example, string and numeric, an error is raised.
-
-
 
 The order of output columns in this mode is equal to the largest common prefix of the order of inputs, followed by all other columns in the alphabetic order.
 If the largest common prefix is empty (for example, if the order isn't specified for one of the inputs), then the output order is undefined.
@@ -61,4 +58,3 @@ SELECT 1 AS x, 2 as y
 UNION ALL
 SELECT * FROM AS_TABLE([<|x:3, y:4|>]); -- error: the order of columns in AS_TABLE is undefined
 ```
-

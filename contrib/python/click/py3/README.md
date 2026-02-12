@@ -11,10 +11,9 @@ implement an intended CLI API.
 
 Click in three points:
 
--   Arbitrary nesting of commands
--   Automatic help page generation
--   Supports lazy loading of subcommands at runtime
-
+- Arbitrary nesting of commands
+- Automatic help page generation
+- Supports lazy loading of subcommands at runtime
 
 ## A Simple Example
 
@@ -40,7 +39,6 @@ Hello, Click!
 Hello, Click!
 Hello, Click!
 ```
-
 
 ## Donate
 

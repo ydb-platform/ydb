@@ -70,7 +70,6 @@ $b = Roaring::Or($b, Roaring::FromUint32List(AsList(56)));
 SELECT Roaring::Uint32List($b) AS `Or`; -- [42, 56]
 ```
 
-
 ```yql
 $b1 = Roaring::FromUint32List(AsList(10, 567, 42));
 $b2 = Roaring::FromUint32List(AsList(42));

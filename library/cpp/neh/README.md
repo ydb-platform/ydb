@@ -6,10 +6,11 @@
 
 Документация
 ============
-https://wiki.yandex-team.ru/development/poisk/arcadia/library/neh/
+<https://wiki.yandex-team.ru/development/poisk/arcadia/library/neh/>
 
 FAQ
 ===
+
 Q: А давайте прикрутим SSL (поддержку https)!
-A: ~~Этого не будет. neh - низкоуровневая шина, там не место ssl. Подробнее тут: https://clubs.at.yandex-team.ru/stackoverflow/5634~~
+A: ~~Этого не будет. neh - низкоуровневая шина, там не место ssl. Подробнее тут: <https://clubs.at.yandex-team.ru/stackoverflow/5634>~~
 A: Сделали

@@ -3,6 +3,7 @@
 В данном разделе разбирается код однотипного тестового приложения, реализованного с использованием {{ ydb-short-name }} SDK на разных языках программирования:
 
 {% if oss %}
+
 - [C++](../example-cpp.md)
 {% endif %}
 - [С# (.NET)](../example-dotnet.md)
@@ -48,4 +49,3 @@
 {% if oss %}[C++](../example-cpp.md#tcl) |  {% endif %} C# (.NET) | Go | [Java](../java/index.md#tcl) | JavaScript | PHP | [Python](../python/index.md#tcl)
 
 {% include [error_handling.md](steps/50_error_handling.md) %}
-

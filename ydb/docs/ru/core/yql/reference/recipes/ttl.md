@@ -86,4 +86,3 @@ CREATE TABLE `mytable` (
 ```yql
 ALTER TABLE `mytable` RESET (TTL);
 ```
-

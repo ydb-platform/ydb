@@ -1,6 +1,6 @@
 ## Memory tracker
 
-https://a.yandex-team.ru/arc/trunk/arcadia/ydb/library/actors/util/memory_track.h
+<https://a.yandex-team.ru/arc/trunk/arcadia/ydb/library/actors/util/memory_track.h>
 
 Использование:
 
@@ -92,8 +92,7 @@ NActors::NMemory::TLabel<ManualLabel>::Sub(size);
 
 Сервис **utils**, пользовательская метка **label**, сенсоры:
 
-- MT/Count: количество аллокаций в моменте
-- MT/Memory: аллоцированная память в моменте
-- MT/PeakCount: пиковое значение количества аллокаций (сэмплится с фиксированной частотой)
-- MT/PeakMemory: пиковое значение аллоцированной памяти
-
+* MT/Count: количество аллокаций в моменте
+* MT/Memory: аллоцированная память в моменте
+* MT/PeakCount: пиковое значение количества аллокаций (сэмплится с фиксированной частотой)
+* MT/PeakMemory: пиковое значение аллоцированной памяти

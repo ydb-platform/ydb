@@ -236,8 +236,8 @@ The {{ ydb-short-name }} CLI supports automatic conversion of multiple consecuti
 
 Two batch modes are supported:
 
-- Full
-- Adaptive
+* Full
+* Adaptive
 
 ### Full batch mode {#batch-full}
 

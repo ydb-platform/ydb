@@ -75,8 +75,6 @@ Specifying a name for a column or expression in `GROUP BY .. AS foo` it is an ex
 
 {% endnote %}
 
-
-
 ## GROUP BY ... SessionWindow() {#session-window}
 
 YQL supports grouping by session. To standard expressions in `GROUP BY`, you can add a special `SessionWindow` function:
@@ -146,8 +144,6 @@ GROUP BY user, SessionWindow(ts, $init, $update, $calculate) AS session_start
 ```
 
 You can use `SessionWindow` in `GROUP BY` only once.
-
-
 
 {% if feature_group_by_rollup_cube %}
 
@@ -250,8 +246,6 @@ LIMIT 3;
 ```
 
 You can also use `DISTINCT` to fetch distinct rows using [`SELECT DISTINCT`](distinct.md).
-
-
 
 ## GROUP COMPACT BY
 

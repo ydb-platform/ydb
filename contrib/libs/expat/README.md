@@ -11,7 +11,6 @@
 > There is a [call for help with details](https://github.com/libexpat/libexpat/blob/master/expat/Changes)
 > at the top of the `Changes` file.
 
-
 # Expat, Release 2.7.1
 
 This is Expat, a C99 library for parsing
@@ -40,7 +39,6 @@ contained in the file
 [`COPYING`](https://github.com/libexpat/libexpat/blob/master/expat/COPYING)
 distributed with this package.
 This license is the same as the MIT/X Consortium license.
-
 
 ## Using libexpat in your CMake-Based Project
 
@@ -101,6 +99,7 @@ This approach — as demonstrated below — requires CMake >=3.18 for both the
 and its support for the `SOURCE_SUBDIR` option to be available.
 
 Please note that:
+
 - Use of the `FetchContent` module with *non-release* SHA1s or `master`
   of libexpat is neither advised nor considered officially supported.
 - Pinning to a specific commit is great for robust CI.
@@ -133,7 +132,6 @@ add_executable(hello
 target_link_libraries(hello PUBLIC expat)
 ```
 
-
 ## Building from a Git Clone
 
 If you are building Expat from a check-out from the
@@ -148,7 +146,6 @@ autoconf 2.58 or newer. Run the script like this:
 
 Once this has been done, follow the same instructions as for building
 from a source distribution.
-
 
 ## Building from a Source Distribution
 
@@ -242,12 +239,10 @@ information.
 A reference manual is available in the file `doc/reference.html` in this
 distribution.
 
-
 ### b) Building with CMake
 
 The CMake build system is still *experimental* and may replace the primary
 build system based on GNU Autotools at some point when it is ready.
-
 
 #### Available Options
 

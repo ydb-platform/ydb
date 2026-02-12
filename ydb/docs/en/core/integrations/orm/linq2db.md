@@ -702,7 +702,6 @@ The provider emits parameters (?) because values and types are bound via the dri
 
 {% endnote %}
 
-
 - Delete by primary key
 
   ```yql

@@ -31,26 +31,26 @@ enable data systems to efficiently store, process, and move data.
 
 Major components of the project include:
 
- - [The Arrow Columnar In-Memory Format](https://arrow.apache.org/docs/dev/format/Columnar.html):
+- [The Arrow Columnar In-Memory Format](https://arrow.apache.org/docs/dev/format/Columnar.html):
    a standard and efficient in-memory representation of various datatypes, plain or nested
- - [The Arrow IPC Format](https://arrow.apache.org/docs/dev/format/Columnar.html#serialization-and-interprocess-communication-ipc):
+- [The Arrow IPC Format](https://arrow.apache.org/docs/dev/format/Columnar.html#serialization-and-interprocess-communication-ipc):
    an efficient serialization of the Arrow format and associated metadata,
    for communication between processes and heterogeneous environments
- - [The Arrow Flight RPC protocol](https://github.com/apache/arrow/tree/main/format/Flight.proto):
+- [The Arrow Flight RPC protocol](https://github.com/apache/arrow/tree/main/format/Flight.proto):
    based on the Arrow IPC format, a building block for remote services exchanging
    Arrow data with application-defined semantics (for example a storage server or a database)
- - [C++ libraries](https://github.com/apache/arrow/tree/main/cpp)
- - [C bindings using GLib](https://github.com/apache/arrow/tree/main/c_glib)
- - [C# .NET libraries](https://github.com/apache/arrow/tree/main/csharp)
- - [Gandiva](https://github.com/apache/arrow/tree/main/cpp/src/gandiva):
+- [C++ libraries](https://github.com/apache/arrow/tree/main/cpp)
+- [C bindings using GLib](https://github.com/apache/arrow/tree/main/c_glib)
+- [C# .NET libraries](https://github.com/apache/arrow/tree/main/csharp)
+- [Gandiva](https://github.com/apache/arrow/tree/main/cpp/src/gandiva):
    an [LLVM](https://llvm.org)-based Arrow expression compiler, part of the C++ codebase
- - [Go libraries](https://github.com/apache/arrow-go)
- - [Java libraries](https://github.com/apache/arrow-java)
- - [JavaScript libraries](https://github.com/apache/arrow/tree/main/js)
- - [Python libraries](https://github.com/apache/arrow/tree/main/python)
- - [R libraries](https://github.com/apache/arrow/tree/main/r)
- - [Ruby libraries](https://github.com/apache/arrow/tree/main/ruby)
- - [Rust libraries](https://github.com/apache/arrow-rs)
+- [Go libraries](https://github.com/apache/arrow-go)
+- [Java libraries](https://github.com/apache/arrow-java)
+- [JavaScript libraries](https://github.com/apache/arrow/tree/main/js)
+- [Python libraries](https://github.com/apache/arrow/tree/main/python)
+- [R libraries](https://github.com/apache/arrow/tree/main/r)
+- [Ruby libraries](https://github.com/apache/arrow/tree/main/ruby)
+- [Rust libraries](https://github.com/apache/arrow-rs)
 
 Arrow is an [Apache Software Foundation](https://www.apache.org) project. Learn more at
 [arrow.apache.org](https://arrow.apache.org).
@@ -99,5 +99,4 @@ integrations in other projects, we'd be happy to have you involved:
 [1]: mailto:dev-subscribe@arrow.apache.org
 [2]: https://github.com/apache/arrow/tree/main/format
 [3]: https://github.com/apache/arrow/issues
-[4]: https://github.com/apache/arrow
 [5]: https://arrow.apache.org/docs/dev/developers/index.html

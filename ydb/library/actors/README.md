@@ -19,7 +19,7 @@
 
 ## IActor
 
-https://github.com/ydb-platform/ydb/blob/9b7aebe722a327de2e05a0ad2cc6063e54ea557e/ydb/library/actors/core/actor.h#L367
+<https://github.com/ydb-platform/ydb/blob/9b7aebe722a327de2e05a0ad2cc6063e54ea557e/ydb/library/actors/core/actor.h#L367>
 
 Базовый класс всех агентов, напрямую обычно не используется. Инстанцируется либо `TActor`, либо `TActorBootstrapped`. Фактически весь полезный код программы размещается в акторах.
 

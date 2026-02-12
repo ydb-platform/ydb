@@ -1,6 +1,6 @@
 # MT19937
 
-Copyright (c) 2003-2005, Jean-Sebastien Roy (js@jeannot.org)
+Copyright (c) 2003-2005, Jean-Sebastien Roy (<js@jeannot.org>)
 
 The rk_random and rk_seed functions algorithms and the original design of
 the Mersenne Twister RNG:

@@ -14,7 +14,7 @@ Use it like this:
 
 For compatibility with legacy formats where object keys
 are not quoted, use CompatWriteKeyWithoutQuotes:
-    
+
     NJsonWriter::TBuf json;
     json.BeginObject()
         .CompatWriteKeyWithoutQuotes("r").WriteInt(1)

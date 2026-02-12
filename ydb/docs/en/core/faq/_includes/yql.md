@@ -130,4 +130,3 @@ When multiple queries are run sequentially, the total transaction latency may be
 ### Is a separate query atomic? {#atomic-query}
 
 In general, YQL queries can be executed in multiple consecutive phases. For example, a Join query can be executed in two phases: reading data from the left and right table, respectively. This aspect is important when you run a query in a transaction with a low isolation level (`online_read_only`), as in this case, data between execution phases can be updated by other transactions.
-

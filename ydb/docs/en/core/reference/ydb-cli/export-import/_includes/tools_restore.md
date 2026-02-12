@@ -92,8 +92,8 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 - `--dry-run`: Matching the data schemas in the database and file system without updating the database, 1 (yes) or 0 (no), defaults to 0. When enabled, the system checks that:
 
-    - All tables in the file system are present in the database
-    - These items are based on the same schema, both in the file system and in the database
+  - All tables in the file system are present in the database
+  - These items are based on the same schema, both in the file system and in the database
 
 - `--save-partial-result`: Save the partial import result. If disabled, an import error results in reverting to the database state before the import.
 

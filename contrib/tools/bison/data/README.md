@@ -1,7 +1,9 @@
 This directory contains data needed by Bison.
 
 # Directory Content
+
 ## Skeletons
+
 Bison skeletons: the general shapes of the different parser kinds, that are
 specialized for specific grammars by the bison program.
 
@@ -29,10 +31,12 @@ not bound to it*.  In particular, Bison is not mature enough for us to
 consider that "foreign skeletons" are supported.
 
 ## m4sugar
+
 This directory contains M4sugar, sort of an extended library for M4, which
 is used by Bison to instantiate the skeletons.
 
 ## xslt
+
 This directory contains XSLT programs that transform Bison's XML output into
 various formats.
 
@@ -76,6 +80,7 @@ skeletons.
 ## Symbols
 
 ### `b4_symbol(NUM, FIELD)`
+
 In order to unify the handling of the various aspects of symbols (tag, type
 name, whether terminal, etc.), bison.exe defines one macro per (token,
 field), where field can `has_id`, `id`, etc.: see
@@ -164,9 +169,11 @@ The macro `b4_symbol(NUM, FIELD)` gives access to the following FIELDS:
   Likewise.
 
 ### `b4_symbol_value(VAL, [SYMBOL-NUM], [TYPE-TAG])`
+
 Expansion of $$, $1, $<TYPE-TAG>3, etc.
 
 The semantic value from a given VAL.
+
 - `VAL`: some semantic value storage (typically a union).  e.g., `yylval`
 - `SYMBOL-NUM`: the symbol number from which we extract the type tag.
 - `TYPE-TAG`, the user forced the `<TYPE-TAG>`.
@@ -175,13 +182,16 @@ The result can be used safely, it is put in parens to avoid nasty precedence
 issues.
 
 ### `b4_lhs_value(SYMBOL-NUM, [TYPE])`
+
 Expansion of `$$` or `$<TYPE>$`, for symbol `SYMBOL-NUM`.
 
 ### `b4_rhs_data(RULE-LENGTH, POS)`
+
 The data corresponding to the symbol `#POS`, where the current rule has
 `RULE-LENGTH` symbols on RHS.
 
 ### `b4_rhs_value(RULE-LENGTH, POS, SYMBOL-NUM, [TYPE])`
+
 Expansion of `$<TYPE>POS`, where the current rule has `RULE-LENGTH` symbols
 on RHS.
 

@@ -26,7 +26,6 @@
  • [Türkçe readme](https://github.com/textualize/rich/blob/master/README.tr.md)
  • [Polskie readme](https://github.com/textualize/rich/blob/master/README.pl.md)
 
-
 Rich is a Python library for _rich_ text and beautiful formatting in the terminal.
 
 The [Rich API](https://rich.readthedocs.io/en/latest/) makes it easy to add color and style to terminal output. Rich can also render pretty tables, progress bars, markdown, syntax highlighted source code, tracebacks, and more — out of the box.
@@ -426,9 +425,7 @@ All Rich renderables make use of the [Console Protocol](https://rich.readthedocs
 
 # Rich CLI
 
-
 See also [Rich CLI](https://github.com/textualize/rich-cli) for a command line application powered by Rich. Syntax highlight code, render markdown, display CSVs in tables, and more, directly from the command prompt.
-
 
 ![Rich CLI](https://raw.githubusercontent.com/Textualize/rich-cli/main/imgs/rich-cli-splash.jpg)
 

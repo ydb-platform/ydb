@@ -44,7 +44,6 @@ ydb_operator = YDBExecuteQueryOperator(task_id="ydb_operator", sql="SELECT 'Hell
 
 In this example, a {{ airflow-name }} task is created with the ID `ydb_operator`, which executes the query `SELECT 'Hello, world!'`.
 
-
 ### YDBHook {#ydb_hook}
 
 The {{ airflow-name }} class `YDBHook` is used to execute low-level commands in {{ ydb-full-name }}.

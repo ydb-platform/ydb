@@ -17,9 +17,9 @@ The **Spilling Service** is an [actor service](../concepts/glossary.md#actor-ser
 
 Data is saved in files on the local file system. The Spilling Service ensures:
 
-* distribution of records across files
-* file deletion
-* data lifecycle management
+- distribution of records across files
+- file deletion
+- data lifecycle management
 
 In case of an unexpected restart, obsolete files are automatically deleted.
 

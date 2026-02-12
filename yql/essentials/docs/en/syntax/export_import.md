@@ -24,7 +24,6 @@ The file linked by the [PRAGMA Library](pragma/file.md#library) must be attached
 
 {% endnote %}
 
-
 ## Example
 
 my_lib.sql:
@@ -59,4 +58,3 @@ FROM (
   SELECT 3 AS x
 )
 ```
-

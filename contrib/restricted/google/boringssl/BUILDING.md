@@ -14,18 +14,18 @@ Unless otherwise noted, build tools must at most five years old, matching
 [Abseil guidelines](https://abseil.io/about/compatibility). If in doubt, use the
 most recent stable version of each tool.
 
-  * [CMake](https://cmake.org/download/) 3.12 or later is required.
+* [CMake](https://cmake.org/download/) 3.12 or later is required.
 
-  * Building with [Ninja](https://ninja-build.org/) instead of Make is
+* Building with [Ninja](https://ninja-build.org/) instead of Make is
     recommended, because it makes builds faster. On Windows, CMake's Visual
     Studio generator may also work, but it not tested regularly and requires
     recent versions of CMake for assembly support.
 
-  * On Windows only, [NASM](https://www.nasm.us/) is required. If not found
+* On Windows only, [NASM](https://www.nasm.us/) is required. If not found
     by CMake, it may be configured explicitly by setting
     `CMAKE_ASM_NASM_COMPILER`.
 
-  * Compilers for C11 and C++14, or later, are required. On Windows, MSVC from
+* Compilers for C11 and C++14, or later, are required. On Windows, MSVC from
     Visual Studio 2019 or later with Windows 10 SDK 2104 or later are
     supported, but using the latest versions is recommended. Recent versions of
     GCC (6.1+) and Clang should work on non-Windows platforms, and maybe on
@@ -144,7 +144,7 @@ BoringSSL maintainers if making use of it.
 
 ## Known Limitations on Windows
 
-  * CMake can generate Visual Studio projects, but the generated project files
+* CMake can generate Visual Studio projects, but the generated project files
     don't have steps for assembling the assembly language source files, so they
     currently cannot be used to build BoringSSL.
 
@@ -162,11 +162,11 @@ These values are usually controlled by the `-march` flag. You can also define
 any of the following to enable the corresponding ARM feature, but using the ACLE
 symbols via `-march` is recommended.
 
-  * `OPENSSL_STATIC_ARMCAP_NEON`
-  * `OPENSSL_STATIC_ARMCAP_AES`
-  * `OPENSSL_STATIC_ARMCAP_SHA1`
-  * `OPENSSL_STATIC_ARMCAP_SHA256`
-  * `OPENSSL_STATIC_ARMCAP_PMULL`
+* `OPENSSL_STATIC_ARMCAP_NEON`
+* `OPENSSL_STATIC_ARMCAP_AES`
+* `OPENSSL_STATIC_ARMCAP_SHA1`
+* `OPENSSL_STATIC_ARMCAP_SHA256`
+* `OPENSSL_STATIC_ARMCAP_PMULL`
 
 The resulting binary will assume all such features are always present. This can
 reduce code size, by allowing the compiler to omit fallbacks. However, if the
@@ -190,11 +190,11 @@ and performance. For instance, BoringSSL's fastest P-256 implementation uses a
 
 There are two additional dependencies for running tests:
 
-  * The most recent stable version of [Go](https://go.dev/) is required.
+* The most recent stable version of [Go](https://go.dev/) is required.
     Note Go is exempt from the five year support window. If not found by CMake,
     the go executable may be configured explicitly by setting `GO_EXECUTABLE`.
 
-  * On x86_64 Linux, the tests have an optional
+* On x86_64 Linux, the tests have an optional
     [libunwind](https://www.nongnu.org/libunwind/) dependency to test the
     assembly more thoroughly.
 
@@ -218,4 +218,4 @@ reported to work, as has MSYS Perl.
 to `PATH`, which can confuse some build tools when identifying the compiler
 (removing `C:\Strawberry\c\bin` from `PATH` should resolve any problems).
 
-See (gen/README.md)[./gen/README.md] for more details.
+See [gen/README.md](./gen/README.md) for more details.

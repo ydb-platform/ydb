@@ -3,6 +3,7 @@
 `yt/yt/library/profiling` is a monitoring library.
 
 Main features:
+
 - Local calculation of aggregates makes it easy to work with multidimensional counters.
 - Lock-free registration of counters allows new counters to be created during process execution without worrying about unnecessary locks.
 - Internal buffer of points allows saving high-resolution values. YTsaurus uses a grid step of 5 seconds, and the metric collection interval is usually 30 seconds.

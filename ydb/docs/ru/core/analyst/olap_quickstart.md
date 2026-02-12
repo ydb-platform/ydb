@@ -13,7 +13,6 @@
 - Загрузку данных из {{ objstorage-name }} в таблицы {{ ydb-short-name }} с помощью [`UPSERT INTO... SELECT FROM`](../yql/reference/syntax/upsert_into).
 - Выполнение тестового запроса (TPC-H Q0) для проверки.
 
-
 ### Предварительные требования
 
 - Наличие созданной базы данных {{ ydb-short-name }}.
@@ -402,7 +401,6 @@ ORDER BY
     l_returnflag,
     l_linestatus;
 ```
-
 
 ### Дальнейшие шаги
 

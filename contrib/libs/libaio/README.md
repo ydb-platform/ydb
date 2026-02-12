@@ -9,4 +9,4 @@ require the Linux-native async I/O API.
 
 ## Contributing
 
-Patches should be submitted to linux-aio@kvack.org.
+Patches should be submitted to <linux-aio@kvack.org>.

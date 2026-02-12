@@ -122,7 +122,7 @@ that all callers of BoringSSL APIs live in the same shared object as BoringSSL.
 If you require that BoringSSL APIs be used across shared object boundaries,
 continue to build with `-fvisibility=hidden` but define
 `BORINGSSL_SHARED_LIBRARY` in both BoringSSL and consumers. BoringSSL's own
-source files (but *not* consumers' source files) must also build with
+source files (but _not_ consumers' source files) must also build with
 `BORINGSSL_IMPLEMENTATION` defined. This will export BoringSSL's public symbols
 in the resulting shared object while hiding private symbols. However note that,
 as with a static link, this precludes dynamically linking with another version

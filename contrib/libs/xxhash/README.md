@@ -5,6 +5,7 @@ xxHash - Extremely fast hash algorithm
 xxHash is an Extremely fast Hash algorithm, processing at RAM speed limits.
 Code is highly portable, and produces hashes identical across all platforms (little / big endian).
 The library includes the following algorithms :
+
 - XXH32 : generates 32-bit hashes, using 32-bit arithmetic
 - XXH64 : generates 64-bit hashes, using 64-bit arithmetic
 - XXH3 (since `v0.8.0`): generates 64 or 128-bit hashes, using vectorized arithmetic.
@@ -18,7 +19,6 @@ Additional tests, which evaluate more thoroughly speed and collision properties 
 |------------|---------|
 |release     | [![Build Status](https://github.com/Cyan4973/xxHash/actions/workflows/ci.yml/badge.svg?branch=release)](https://github.com/Cyan4973/xxHash/actions?query=branch%3Arelease+) |
 |dev         | [![Build Status](https://github.com/Cyan4973/xxHash/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/Cyan4973/xxHash/actions?query=branch%3Adev+) |
-
 
 Benchmarks
 -------------------------
@@ -68,7 +68,7 @@ which can be observed in the following graph:
 ![XXH3, latency, random size](https://user-images.githubusercontent.com/750081/61976089-aedeab00-af9f-11e9-9239-e5375d6c080f.png)
 
 For a more detailed analysis, please visit the wiki :
-https://github.com/Cyan4973/xxHash/wiki/Performance-comparison#benchmarks-concentrating-on-small-data-
+<https://github.com/Cyan4973/xxHash/wiki/Performance-comparison#benchmarks-concentrating-on-small-data->
 
 Quality
 -------------------------
@@ -89,7 +89,6 @@ A more detailed analysis is documented [in the wiki](https://github.com/Cyan4973
 
 [birthday paradox]: https://en.wikipedia.org/wiki/Birthday_problem
 [newer forks of SMHasher]: https://github.com/rurban/smhasher
-
 
 ### Build modifiers
 
@@ -145,6 +144,7 @@ The following macros can be set at compilation time to modify `libxxhash`'s beha
                      This (slightly) slows down execution, but may help finding bugs during debugging sessions.
 
 #### Binary size control
+
 - `XXH_NO_XXH3` : removes symbols related to `XXH3` (both 64 & 128 bits) from generated binary.
                   `XXH3` is by far the largest contributor to `libxxhash` size,
                   so it's useful to reduce binary size for applications which do not employ `XXH3`.
@@ -163,12 +163,15 @@ The following macros can be set at compilation time to modify `libxxhash`'s beha
                   `2`: makes code as small as possible, performance may cry
 
 #### Build modifiers specific for XXH3
+
 - `XXH_VECTOR` : manually select a vector instruction set (default: auto-selected at compilation time). Available instruction sets are `XXH_SCALAR`, `XXH_SSE2`, `XXH_AVX2`, `XXH_AVX512`, `XXH_NEON` and `XXH_VSX`. Compiler may require additional flags to ensure proper support (for example, `gcc` on x86_64 requires `-mavx2` for `AVX2`, or `-mavx512f` for `AVX512`).
 - `XXH_PREFETCH_DIST` : select prefetching distance. For close-to-metal adaptation to specific hardware platforms. XXH3 only.
 - `XXH_NO_PREFETCH` : disable prefetching. Some platforms or situations may perform better without prefetching. XXH3 only.
 
 #### Makefile variables
+
 When compiling the Command Line Interface `xxhsum` using `make`, the following environment variables can also be set :
+
 - `DISPATCH=1` : use `xxh_x86dispatch.c`, select at runtime between `scalar`, `sse2`, `avx2` or `avx512` instruction set. This option is only valid for `x86`/`x64` systems. It is enabled by default when target `x86`/`x64` is detected. It can be forcefully turned off using `DISPATCH=0`.
 - `LIBXXH_DISPATCH=1` : same idea, implemented a runtime vector extension detector, but within `libxxhash`. This parameter is disabled by default. When enabled (only valid for `x86`/`x64` systems), new symbols published in `xxh_x86dispatch.h` become accessible. At the time of this writing, it's required to include `xxh_x86dispatch.h` in order to access the symbols with runtime vector extension detection.
 - `XXH_1ST_SPEED_TARGET` : select an initial speed target, expressed in MB/s, for the first speed test in benchmark mode. Benchmark will adjust the target at subsequent iterations, but the first test is made "blindly" by targeting this speed. Currently conservatively set to 10 MB/s, to support very slow (emulated) platforms.
@@ -240,12 +243,10 @@ XXH64_hash_t calcul_hash_streaming(FileHandler fh)
 }
 ```
 
-
 ### License
 
 The library files `xxhash.c` and `xxhash.h` are BSD licensed.
 The utility `xxhsum` is GPL licensed.
-
 
 ### Other programming languages
 
@@ -254,7 +255,6 @@ xxHash is also available from many different programming languages,
 thanks to great contributors.
 They are [listed here](http://www.xxhash.com/#other-languages).
 
-
 ### Packaging status
 
 Many distributions bundle a package manager
@@ -262,7 +262,6 @@ which allows easy xxhash installation as both a `libxxhash` library
 and `xxhsum` command line interface.
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/xxhash.svg)](https://repology.org/project/xxhash/versions)
-
 
 ### Special Thanks
 

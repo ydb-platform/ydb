@@ -90,7 +90,7 @@ For example, to generate HTML documentation for all `.proto` files in the `proto
 
     protoc --doc_out=./doc --doc_opt=html,index.html proto/*.proto
 
-The plugin executable must be in `PATH` for this to work. 
+The plugin executable must be in `PATH` for this to work.
 
 ### Using a precompiled binary
 
@@ -147,7 +147,7 @@ enum MyEnum {
 **Excluding comments**
 
 If you want to have some comment in your proto files, but don't want them to be part of the docs, you can simply prefix
-the comment with `@exclude`. 
+the comment with `@exclude`.
 
 Example: include only the comment for the `id` field
 

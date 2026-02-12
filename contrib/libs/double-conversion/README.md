@@ -1,6 +1,6 @@
 Double Conversion
 ========
-https://github.com/google/double-conversion
+<https://github.com/google/double-conversion>
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/google/double-conversion/badge)](https://securityscorecards.dev/viewer/?uri=github.com/google/double-conversion)
 
@@ -14,7 +14,6 @@ it can be used more easily in other projects.
 There is extensive documentation in `double-conversion/string-to-double.h` and
 `double-conversion/double-to-string.h`. Other examples can be found in
 `test/cctest/test-conversions.cc`.
-
 
 Building
 ========

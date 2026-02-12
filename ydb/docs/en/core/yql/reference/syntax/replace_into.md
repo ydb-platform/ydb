@@ -29,4 +29,3 @@ Unlike [`INSERT INTO`](insert_into.md) and [`UPDATE`](update.md), the queries [`
   FROM my_table1;
   COMMIT;
   ```
-

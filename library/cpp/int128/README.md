@@ -1,4 +1,4 @@
-https://st.yandex-team.ru/IGNIETFERRO-697
+<https://st.yandex-team.ru/IGNIETFERRO-697>
 
 (Объединение разрозненных по Аркадии библиотек для поддержки 128-битного целого)
 

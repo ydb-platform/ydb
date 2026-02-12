@@ -21,4 +21,3 @@ USE my_cluster;
 `USE` **doesn't** guarantee that the query will be executed against the specified cluster. The query might be executed against other cluster if it doesn't use any input data (for example, `USE foo; SELECT 2 + 2;` ) or if the full path to the table on other cluster has been specified (for example, `USE foo; SELECT * FROM bar.``path/to/table``;`).
 
 {% endnote %}
-

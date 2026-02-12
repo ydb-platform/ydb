@@ -66,4 +66,3 @@ t1.eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 TOKEN=$({{ ydb-cli }} -p quickstart auth get-token --force)
 echo "Token: $TOKEN"
 ```
-

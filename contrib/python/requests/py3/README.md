@@ -30,7 +30,7 @@ Requests is one of the most downloaded Python packages today, pulling in around 
 Requests is available on PyPI:
 
 ```console
-$ python -m pip install requests
+python -m pip install requests
 ```
 
 Requests officially supports Python 3.9+.

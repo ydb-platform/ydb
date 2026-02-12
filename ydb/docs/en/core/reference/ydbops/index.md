@@ -16,4 +16,4 @@ See the list of currently supported scenarios [here](rolling-restart-scenario.md
 
 ## Scenarios in development
 
-- Requesting permission to take out a set of {{ ydb-short-name }} nodes for maintenance without breaking {{ ydb-short-name }} fault model invariants.
+* Requesting permission to take out a set of {{ ydb-short-name }} nodes for maintenance without breaking {{ ydb-short-name }} fault model invariants.

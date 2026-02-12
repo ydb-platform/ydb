@@ -9,4 +9,3 @@ This section contains articles on YQL data types:
 - [Type casting](cast.md)
 - [Text representation of data types](type_string.md)
 - [Data representation in JSON format](json.md)
-

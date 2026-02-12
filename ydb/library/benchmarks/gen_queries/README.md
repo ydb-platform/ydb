@@ -20,34 +20,40 @@ options:
 ```
 
 ## Generate for dqrun
+
 pg syntax:
+
 ```
 ./gen_queries --variant h --syntax pg
 ./gen_queries --variant ds --syntax pg
 ```
 
 yql syntax:
+
 ```
 ./gen_queries --variant h --syntax yql
 ./gen_queries --variant ds --syntax yql
 ```
 
 ## Generate for PostgreSQL/Greenplum
+
 ```
 ./gen_queries --variant h --profile postgres --syntax pg
 ./gen_queries --variant ds --profile postgres --syntax pg
 ```
 
 ## Generate for YtSaurus
+
 yql syntax
+
 ```
 ./gen_queries --variant h --syntax yql --profile ytsaurus
 ./gen_queries --variant ds --syntax yql --profile ytsaurus
 ```
 
 pg syntax
+
 ```
 ./gen_queries --variant h --syntax pg --profile ytsaurus
 ./gen_queries --variant ds --syntax pg --profile ytsaurus
 ```
-

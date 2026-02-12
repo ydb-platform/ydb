@@ -10,7 +10,6 @@
 
 * {% include [conditionally-retryable](./_includes/tooltips/condretryable.md) %}
 
-
 ## Обработка временных сбоев (retryable errors) {#handling-retryable-errors}
 
 {{ ydb-short-name }} SDK предоставляет [встроенный механизм обработки временных сбоев](../../recipes/ydb-sdk/retry.md). По умолчанию в SDK используется рекомендованная политика повторов, которую можно изменить в соответствии с требованиями клиентского приложения. {{ ydb-short-name }} возвращает коды завершения, позволяющие определить, уместна ли повторная попытка и какой выбрать интервал.
@@ -61,6 +60,6 @@
 
 ## Смотрите также
 
-- [{#T}](./grpc-status-codes.md)
-- [{#T}](./ydb-status-codes.md)
-- [{#T}](../../faq/errors.md)
+* [{#T}](./grpc-status-codes.md)
+* [{#T}](./ydb-status-codes.md)
+* [{#T}](../../faq/errors.md)

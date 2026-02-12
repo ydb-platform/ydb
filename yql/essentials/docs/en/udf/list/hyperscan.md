@@ -105,4 +105,3 @@ SELECT
     $replace($value, "b") AS replace                -- "babaXaa"
 ;
 ```
-

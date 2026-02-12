@@ -5,12 +5,13 @@ A tool used to visualize Clang's compilation profiles.
 ![screenshot](screenshot.png)
 
 It helps to answer the following questions:
+
 - Which directories/files have the longest impact on build time?
 - Which headers have the longest impact on build time?
 
 ## How to use
 
-You have to generate compilation profiles using `-ftime-trace` as a compilation flag. 
+You have to generate compilation profiles using `-ftime-trace` as a compilation flag.
 
 With the `ya` tool, it can be done with the following command:
 

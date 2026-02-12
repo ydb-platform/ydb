@@ -64,8 +64,6 @@ Specifying a name for a column or expression in `GROUP BY .. AS foo` it is an ex
 
 {% endnote %}
 
-
-
 ## GROUP BY ... SessionWindow() {#session-window}
 
 YQL supports grouping by session. To standard expressions in `GROUP BY`, you can add a special `SessionWindow` function:

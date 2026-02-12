@@ -52,4 +52,3 @@ GROUP BY
 
 COMMIT;
 ```
-

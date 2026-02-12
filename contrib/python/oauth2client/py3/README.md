@@ -14,7 +14,7 @@ Installation
 To install, simply run the following command in your terminal:
 
 ```bash
-$ pip install --upgrade oauth2client
+pip install --upgrade oauth2client
 ```
 
 Contributing

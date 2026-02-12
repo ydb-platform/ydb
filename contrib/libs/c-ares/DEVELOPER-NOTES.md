@@ -9,7 +9,7 @@ Developer Notes
 * If you check out from git on a non-`configure` or `CMake` platform, you must run
   the appropriate `buildconf*` script to set up `ares_build.h` and other local
   files before being able to compile the library.  There are pre-made makefiles
-  for a subset of such systems such as Watcom, NMake, and MinGW Makefiles. 
+  for a subset of such systems such as Watcom, NMake, and MinGW Makefiles.
 
 * On systems capable of running the `configure` or `CMake` scripts, the process
   will overwrite the distributed `ares_build.h` file with one that is suitable

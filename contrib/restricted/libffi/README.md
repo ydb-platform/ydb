@@ -3,7 +3,6 @@ Status
 
 libffi-3.5.2 was released on August 2, 2025.
 
-
 What is libffi?
 ===============
 
@@ -33,7 +32,6 @@ libffi library really only provides the lowest, machine dependent
 layer of a fully featured foreign function interface. A layer must
 exist above libffi that handles type conversions for values passed
 between the two languages.
-
 
 Supported Platforms
 ===================
@@ -126,7 +124,7 @@ tested:
 | Xtensa          | Linux            | GCC                     |
 
 Please send additional platform test results to
-libffi-discuss@sourceware.org.
+<libffi-discuss@sourceware.org>.
 
 Installing libffi
 =================
@@ -181,7 +179,6 @@ To build static library for ARM64 with MSVC using visual studio solution, msvc_b
    aarch64/Ffi_staticLib.sln
    required header files in aarch64/aarch64_include/
 
-
 SPARC Solaris builds require the use of the GNU assembler and linker.
 Point ``AS`` and ``LD`` environment variables at those tool prior to
 configuration.
@@ -198,11 +195,10 @@ This will require that you have DejaGNU installed.
 
 To install the library and header files, type ``make install``.
 
-
 History
 =======
 
-See the git log for details at http://github.com/libffi/libffi.
+See the git log for details at <http://github.com/libffi/libffi>.
 
     3.5.2 Aug-2-2025
         Add wasm64 support.
@@ -558,10 +554,10 @@ The list above is almost certainly incomplete and inaccurate.  I'm
 happy to make corrections or additions upon request.
 
 If you have a problem, or have found a bug, please file an issue on
-our issue tracker at https://github.com/libffi/libffi/issues.
+our issue tracker at <https://github.com/libffi/libffi/issues>.
 
-The author can be reached at green@moxielogic.com.
+The author can be reached at <green@moxielogic.com>.
 
 To subscribe/unsubscribe to our mailing lists, visit:
-https://sourceware.org/mailman/listinfo/libffi-announce
-https://sourceware.org/mailman/listinfo/libffi-discuss
+<https://sourceware.org/mailman/listinfo/libffi-announce>
+<https://sourceware.org/mailman/listinfo/libffi-discuss>

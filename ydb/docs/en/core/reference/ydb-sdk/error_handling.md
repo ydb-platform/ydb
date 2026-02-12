@@ -10,7 +10,6 @@ Errors can be divided into three categories:
 
 * {% include [conditionally-retryable](./_includes/tooltips/condretryable.md) %}
 
-
 ## Handling retryable errors {#handling-retryable-errors}
 
 The {{ ydb-short-name }} SDK provides [a built-in mechanism for handling temporary failures](../../recipes/ydb-sdk/retry.md). By default, the SDK uses the recommended retry policy, which can be changed to meet the requirements of the client application. {{ ydb-short-name }} returns status codes that let you determine whether a retry is appropriate and which interval to select.
@@ -61,6 +60,6 @@ When using the SDK, we recommend logging all errors and exceptions:
 
 ## See also
 
-- [gRPC status codes](./grpc-status-codes.md)
-- [{{ ydb-short-name }} server status codes](./ydb-status-codes.md)
-- [Questions and answers: Errors](../../faq/errors.md)
+* [gRPC status codes](./grpc-status-codes.md)
+* [{{ ydb-short-name }} server status codes](./ydb-status-codes.md)
+* [Questions and answers: Errors](../../faq/errors.md)

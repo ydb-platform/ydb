@@ -1,6 +1,5 @@
 # Configuration V1 Overview
 
-
 To start a {{ ydb-short-name }} node, configuration is required. There are two types of configuration:
 
 * **Static** — a YAML format file stored on the node's local disk.

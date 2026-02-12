@@ -41,8 +41,8 @@ When woimporting data to {{ ydb-short-name }}, consider the following points:
 1. **Column Names**: Column names should not contain spaces or special characters.
 
 2. **Data Types**:
-   - Date/time strings with timezone (e.g., "2019-11-01 00:00:00 UTC") will be imported as Text type.
-   - The Bool type is not supported as a column type; use Text or Int64 instead.
+   * Date/time strings with timezone (e.g., "2019-11-01 00:00:00 UTC") will be imported as Text type.
+   * The Bool type is not supported as a column type; use Text or Int64 instead.
 
 ## Available Datasets
 

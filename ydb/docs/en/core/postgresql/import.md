@@ -16,7 +16,6 @@ To do this, you need to:
 2. Convert the dump to a format supported by {{ ydb-short-name }} using the `ydb tools pg-convert` command from [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md).
 3. Load the result into YDB in PostgreSQL compatibility mode.
 
-
 ## pg-convert command {#pg-convert}
 
 The `ydb tools pg-convert` command reads a dump file or standard input created by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility, performs transformations, and outputs to standard output a dump that can be sent to {{ ydb-short-name }}'s PostgreSQL-compatible middleware.
@@ -28,8 +27,8 @@ The `ydb tools pg-convert` command reads a dump file or standard input created b
 * Deleting the `WITH (...)` section in `CREATE TABLE`.
 * Commenting out unsupported constructs (optionally):
 
-    * `SELECT pg_catalog.set_config.*`
-    * `ALTER TABLE`
+  * `SELECT pg_catalog.set_config.*`
+  * `ALTER TABLE`
 
 If the CLI cannot find a table's primary key, it will automatically create a [BIGSERIAL](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-SERIAL) column named `__ydb_stub_id` as the primary key.
 
@@ -48,7 +47,6 @@ The general form of the command:
 |-----------------------|-------------|
 | `-i`                  | The name of the file containing the original dump. If the option is not specified, the dump is read from standard input. |
 | `--ignore-unsupported`| When this option is specified, unsupported constructs will be commented out in the resulting dump and duplicated in standard error. By default, if unsupported constructs are detected, the command returns an error. This does not apply to `ALTER TABLE` expressions that define a table's primary key, as they are commented out in any case. |
-
 
 {% note warning %}
 

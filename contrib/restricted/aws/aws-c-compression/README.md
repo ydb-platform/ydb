@@ -28,6 +28,7 @@ cmake --build aws-c-compression/build --target install
 The Huffman implemention in this library is designed around the concept of a
 generic "symbol coder" object, which defines how each symbol (value between 0
 and 255) is encoded and decoded. This object looks like this:
+
 ```c
 typedef struct aws_huffman_code (*aws_huffman_symbol_encoder)(uint8_t symbol, void *userdata);
 typedef uint8_t (*aws_huffman_symbol_decoder)(uint32_t bits, uint8_t *symbol, void *userdata);
@@ -38,29 +39,36 @@ struct aws_huffman_symbol_coder {
     void *userdata;
 };
 ```
+
 These callbacks may be implemented manually, or you may use the included
 Huffman coder generator to generate one from a table definition file. The
 generator expects to be called with the following arguments:
+
 ```shell
-$ aws-c-compression-huffman-generator path/to/table.def path/to/generated.c coder_name
+aws-c-compression-huffman-generator path/to/table.def path/to/generated.c coder_name
 ```
 
 The table definition file should be in the following format:
+
 ```c
 /*           sym               bits   code len */
 HUFFMAN_CODE(  0,      "1100101110", 0x32e, 10)
 HUFFMAN_CODE(  1,      "1100101111", 0x32f, 10)
 /* ... */
 ```
+
 The HUFFMAN_CODE macro expects 4 arguments:
+
 * sym: the symbol value [0-255]
 * bits: the bits representing the symbol in string form
 * code: the bits representing the symbol in numeric form
 * len: the number of bits used to represent the symbol
 
 > #### Note
+>
 > This file may also be `#include`d in the following way to generate a static
 > list of codes:
+>
 > ```c
 > /* Provides the HUFFMAN_CODE macro */
 > #include <aws/testing/compression/huffman.h>
@@ -71,19 +79,20 @@ The HUFFMAN_CODE macro expects 4 arguments:
 > ```
 
 This will emit a c file which exports a function with the following signiture:
+
 ```c
 struct aws_huffman_symbol_coder *{coder_name}_get_coder();
 ```
+
 Note that this function does not allocate, but maintains a static instance of
 the coder.
-
 
 An example implementation of this file is provided in
 `tests/test_huffman_static_table.def`.
 
-
 To use the coder, forward declare that function, and pass the result as the
 second argument to `aws_huffman_encoder_init` and `aws_huffman_decoder_init`.
+
 ```c
 struct aws_huffman_encoder encoder;
 aws_huffman_encoder_init(&encoder, {coder_name}_get_coder());
@@ -93,6 +102,7 @@ aws_huffman_decoder_init(&decoder, {coder_name}_get_coder())
 ```
 
 #### Encoding
+
 ```c
 /**
  * Encode a symbol buffer into the output buffer.
@@ -107,11 +117,13 @@ aws_huffman_decoder_init(&decoder, {coder_name}_get_coder())
  */
 int aws_huffman_encode(struct aws_huffman_encoder *encoder, const char *to_encode, size_t *length, uint8_t *output, size_t *output_size);
 ```
+
 The encoder is built to support partial encoding. This means that if there
 isn't enough space in `output`, the encoder will encode as much as possible,
 update `length` to indicate how much was consumed, `output_size` won't change,
 and `AWS_ERROR_SHORT_BUFFER` will be raised. `aws_huffman_encode` may then be
 called again like the following pseudo-code:
+
 ```c
 void encode_and_send(const char *to_encode, size_t size) {
     while (size > 0) {
@@ -136,6 +148,7 @@ significant bits will used. For example, if the last byte contains only 3 bits
 and `eos_padding` is `0b01010101`, `01010` will be appended to the byte.
 
 #### Decoding
+
 ```c
 /**
  * Decodes a byte buffer into the provided symbol array.
@@ -150,11 +163,13 @@ and `eos_padding` is `0b01010101`, `01010` will be appended to the byte.
  */
 int aws_huffman_decode(struct aws_huffman_decoder *decoder, const uint8_t *to_decode, size_t *length, char *output, size_t *output_size);
 ```
+
 The decoder is built to support partial encoding. This means that if there
 isn't enough space in `output`, the decoder will decode as much as possible,
 update `length` to indicate how much was consumed, `output_size` won't change,
 and `AWS_ERROR_SHORT_BUFFER` will be raised. `aws_huffman_decode` may then be
 called again like the following pseudo-code:
+
 ```c
 void decode_and_send(const char *to_decode, size_t size) {
     while (size > 0) {
@@ -178,6 +193,7 @@ Upon completion of a decode, the most significant bits of
 not match a symbol. This is useful for verifying the padding bits of a stream.
 For example, to validate that a stream ends in all 1's (like HPACK requires),
 you could do the following:
+
 ```c
 AWS_ASSERT(decoder->working_bits == UINT64_MAX << (64 - decoder->num_bits));
 ```

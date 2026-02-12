@@ -26,5 +26,4 @@
   - [{#T}](../postgresql/intro.md)
   - [{#T}](../reference/kafka-api/index.md)
 
-
 Если же вам интересная разработка ядра {{ ydb-short-name }} или сопутствующих проектов, обратитесь к [документации для контрибьюторов](../contributor/index.md).

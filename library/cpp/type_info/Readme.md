@@ -6,4 +6,4 @@ The Type Info library provides classes that represent types from Common Yandex T
 
 For those familiar with Protobuf, Type Info implements the concept of message descriptors for Yandex type system.
 
-Here you can find open issues: https://st.yandex-team.ru/YT/order:updated:false/filter?tags=type_info&resolution=empty()
+Here you can find open issues: <https://st.yandex-team.ru/YT/order:updated:false/filter?tags=type_info&resolution=empty()>

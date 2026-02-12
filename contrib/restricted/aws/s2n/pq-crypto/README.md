@@ -1,8 +1,10 @@
 # Post-quantum cryptography for s2n
+
 This directory contains code for new post-quantum key exchange mechanisms. There are no known computationally feasible
 attacks (classical or quantum) against these algorithms when used with the recommended key lengths.
 
 ## Quantum computers
+
 Quantum computers use the properties of quantum mechanics to evaluate quantum algorithms. These algorithms can solve some
 classically hard (exponential time) problems quickly (polynomial time). Shor's algorithm is one such algorithm which can
 factor large integers, thus breaking RSA encryption and digital signature, and another quantum algorithm can solve the
@@ -10,6 +12,7 @@ discrete logarithm problem over arbitrary groups thus breaking Diffie–Hellman 
 exchange.
 
 ## Post-quantum cryptography
+
 Post-quantum public-key cryptographic algorithms run on a classical computer and are conjectured secure against both
 classical and quantum attacks. NIST is in the process of reviewing submissions and standardizing them,
 see more info on the [NIST website](https://csrc.nist.gov/Projects/Post-Quantum-Cryptography/Post-Quantum-Cryptography-Standardization).
@@ -18,6 +21,7 @@ establishment by themselves. Instead they should only be used as part of a hybri
 post-quantum key exchange scheme and a classical key exchange scheme.
 
 ## Hybrid key exchange
+
 A hybrid key exchange combines both the high assurance of classical key exchange with the conjectured quantum-resistance
 of newly proposed key exchanges. For hybrid TLS 1.2, s2n implements the hybrid specification from [this RFC](https://tools.ietf.org/html/draft-campagna-tls-bike-sike-hybrid-01).
 See [this s2n issue](https://github.com/awslabs/s2n/issues/904) for more up-to-date information. For hybrid TLS 1.3, s2n
@@ -26,16 +30,19 @@ See also [this doc](https://docs.google.com/spreadsheets/d/12YarzaNv3XQNLnvDsWLl
 defines hybrid group values for interoperability.
 
 ## How to disable optimized assembly code for PQ Crypto
+
 Certain post-quantum KEM algorithms included in s2n use optimized assembly code for efficient computation. When compiling s2n on compatible toolchains,
 the optimized assembly code will significantly improve performance of the post-quantum cryptographic operations. s2n attempts to detect whether or not
 the architecture is compatible with the assembly code, and falls back to the portable C implementation if it detects incompatibility. However, some users
 may wish to manually force s2n to use the portable C implementation. To do so, simply `export S2N_NO_PQ_ASM=1` as an environment variable before compiling.
 
 ## How to disable all PQ Crypto
+
 Users may have need to compile s2n without any PQ crypto support whatsoever. To so do, `export S2N_NO_PQ=1` as an environment
 variable before compiling.
 
 ## How to add a new PQ KEM family for use in hybrid TLS 1.2
+
 1. Add the code to `pq-crypto/KEM_NAME/`
     1. Update `pq-crypto/Makefile` to build that directory
     1. Update `lib/Makefile` to also include that directory
@@ -53,6 +60,7 @@ variable before compiling.
     1. Once this change is made, the KEM will be available for use in TLS handshakes; ensure that all testing/verification has been completed
 
 ## How to add a new variant to an existing PQ KEM family for use in hybrid TLS 1.2
+
 1. Add the code to `pq-crypto/KEM_NAME/`
     1. Update `pq-crypto/Makefile` to build that directory
     1. Update `lib/Makefile` to also include that directory
@@ -67,9 +75,11 @@ variable before compiling.
     1. Once this change is made, the KEM extension will be available for use in TLS handshakes; ensure that all testing/verification has been completed
 
 ## How to use PQ cipher suites for hybrid TLS 1.2
+
 1. Checkout s2n `git clone https://github.com/awslabs/s2n.git`
 1. Following the docs/USAGE-GUIDE.md build s2n
 1. Use the sample server and client in the bin directory:
+
 ```bash
 # Terminal 1
 # Use the s2nd CLI tool to start a TLS daemon with the KMS-PQ-TLS-1-0-2019-06 cipher preferences listening on port 8888

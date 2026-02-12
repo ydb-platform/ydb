@@ -3,8 +3,6 @@
 
 The syntax for calling window functions is detailed in a [separate article](../syntax/select/window.md).
 
-
-
 ## Aggregate functions {#aggregate-functions}
 
 All [aggregate functions](aggregation.md) can also be used as window functions.
@@ -21,8 +19,6 @@ WINDOW
     w1 AS (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
     w2 AS ();
 ```
-
-
 
 ## ROW_NUMBER {#row_number}
 
@@ -42,8 +38,6 @@ SELECT
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
-
-
 
 ## LAG / LEAD {#lag-lead}
 
@@ -90,7 +84,6 @@ item  odd  lag1
 */
 ```
 
-
 ## FIRST_VALUE / LAST_VALUE
 
 Access values from the first and last rows (using the `ORDER BY` clause for the window) of the [window frame](../syntax/select/window.md#frame). The only argument is the expression that you need to access.
@@ -120,8 +113,6 @@ FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
 
-
-
 ## NTH_VALUE
 
 Access a value from a row specified by position in the window's `ORDER BY` order within [window frame](../syntax/select/window.md#frame). Arguments - the expression to access and the row number, starting with 1.
@@ -149,9 +140,6 @@ SELECT
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
-
-
-
 
 ## RANK / DENSE_RANK / PERCENT_RANK {#rank}
 
@@ -197,8 +185,6 @@ FROM my_table
 WINDOW w AS (ORDER BY my_column);
 ```
 
-
-
 ## NTILE
 
 Distributes the rows of an ordered [partition](../syntax/select/window.md#partition) into a specified number of groups. The groups are numbered starting with one. For each row, the `NTILE` function returns the number of the group to which the row belongs.
@@ -217,8 +203,6 @@ SELECT
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
-
-
 
 ## CUME_DIST
 
@@ -239,9 +223,7 @@ FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
 
-
 ## SessionState() {#session-state}
 
 A non-standard window function `SessionState()` (without arguments) lets you get the session calculation status from [SessionWindow](../syntax/select/group-by.md#session-window) for the current row.
 It's allowed only if `SessionWindow()` is present in the `PARTITION BY` section in the window definition.
-

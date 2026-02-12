@@ -54,7 +54,6 @@ The `ydb.Open` method takes two mandatory arguments:
 
 There are also many connection options available that let you override the default settings.
 
-
 By default, anonymous authentication is used. To connect to the {{ ydb-short-name }} cluster using a token, use the following syntax:
 
 ```go
@@ -147,7 +146,7 @@ You can extract row data (`query.Row`) using the following methods:
 
 {% list tabs %}
 
-- ScanStruct
+* ScanStruct
 
   ```go
   var info struct {
@@ -161,7 +160,7 @@ You can extract row data (`query.Row`) using the following methods:
   }
   ```
 
-- ScanNamed
+* ScanNamed
 
   ```go
   var seriesID, title string
@@ -172,7 +171,7 @@ You can extract row data (`query.Row`) using the following methods:
   }
   ```
 
-- Scan
+* Scan
 
   ```go
   var seriesID, title string
@@ -194,7 +193,6 @@ If the expected query result is very large, avoid loading all data into memory u
 Instead, use the `query.TxActor.Query` or `query.TxActor.QueryResultSet` methods on a transaction or session. These methods return iterators over results without fully materializing them upfront. The `query.Session` object is accessible via the `query.Client.Do` method, which handles automatic retries. Keep in mind that the read operation can be interrupted at any time, restarting the entire query process. Therefore, the user function passed to `Do` may run multiple times.
 
 {% endnote %}
-
 
 ```go
 err = db.Query().Do(ctx,

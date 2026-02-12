@@ -1,8 +1,10 @@
 # Contributing to Zstandard
+
 We want to make contributing to this project as easy and transparent as
 possible.
 
 ## Our Development Process
+
 New versions are being developed in the "dev" branch,
 or in their own feature branch.
 When they are deemed ready for a release, they are merged into "release".
@@ -11,6 +13,7 @@ As a consequence, all contributions must stage first through "dev"
 or their own feature branch.
 
 ## Pull Requests
+
 We actively welcome your pull requests.
 
 1. Fork the repo and create your branch from `dev`.
@@ -21,51 +24,66 @@ We actively welcome your pull requests.
 6. If you haven't already, complete the Contributor License Agreement ("CLA").
 
 ## Contributor License Agreement ("CLA")
+
 In order to accept your pull request, we need you to submit a CLA. You only need
 to do this once to work on any of Facebook's open source projects.
 
 Complete your CLA here: <https://code.facebook.com/cla>
 
 ## Workflow
+
 Zstd uses a branch-based workflow for making changes to the codebase. Typically, zstd
 will use a new branch per sizable topic. For smaller changes, it is okay to lump multiple
 related changes into a branch.
 
 Our contribution process works in three main stages:
+
 1. Local development
     * Update:
         * Checkout your fork of zstd if you have not already
+
         ```
         git checkout https://github.com/<username>/zstd
         cd zstd
         ```
+
         * Update your local dev branch
+
         ```
         git pull https://github.com/facebook/zstd dev
         git push origin dev
         ```
+
     * Topic and development:
         * Make a new branch on your fork about the topic you're developing for
+
         ```
         # branch names should be concise but sufficiently informative
         git checkout -b <branch-name>
         git push origin <branch-name>
         ```
+
         * Make commits and push
+
         ```
         # make some changes =
         git add -u && git commit -m <message>
         git push origin <branch-name>
         ```
+
         * Note: run local tests to ensure that your changes didn't break existing functionality
             * Quick check
+
             ```
             make check
             ```
+
             * Longer check
+
             ```
             make test
             ```
+
 2. Code Review and CI tests
     * Ensure CI tests pass:
         * Before sharing anything to the community, create a pull request in your own fork against the dev branch
@@ -109,12 +127,14 @@ Our contribution process works in three main stages:
         suggest ways to refine and improve your initial changes even after the pull request is merged.
 
 ## Static Analysis
+
 Static analysis is a process for examining the correctness or validity of a program without actually
 executing it. It usually helps us find many simple bugs. Zstd uses clang's `scan-build` tool for
-static analysis. You can install it by following the instructions for your OS on https://clang-analyzer.llvm.org/scan-build.
+static analysis. You can install it by following the instructions for your OS on <https://clang-analyzer.llvm.org/scan-build>.
 
 Once installed, you can ensure that our static analysis tests pass on your local development machine
 by running:
+
 ```
 make staticAnalyze
 ```
@@ -127,20 +147,22 @@ scan-build make -C contrib/largeNbDicts largeNbDicts
 ```
 
 ### Pitfalls of static analysis
+
 `scan-build` is part of our regular CI suite. Other static analyzers are not.
 
 It can be useful to look at additional static analyzers once in a while (and we do), but it's not a good idea to multiply the nb of analyzers run continuously at each commit and PR. The reasons are :
 
-- Static analyzers are full of false positive. The signal to noise ratio is actually pretty low.
-- A good CI policy is "zero-warning tolerance". That means that all issues must be solved, including false positives. This quickly becomes a tedious workload.
-- Multiple static analyzers will feature multiple kind of false positives, sometimes applying to the same code but in different ways leading to :
-   + tortuous code, trying to please multiple constraints, hurting readability and therefore maintenance. Sometimes, such complexity introduce other more subtle bugs, that are just out of scope of the analyzers.
-   + sometimes, these constraints are mutually exclusive : if one try to solve one, the other static analyzer will complain, they can't be both happy at the same time.
-- As if that was not enough, the list of false positives change with each version. It's hard enough to follow one static analyzer, but multiple ones with their own update agenda, this quickly becomes a massive velocity reducer.
+* Static analyzers are full of false positive. The signal to noise ratio is actually pretty low.
+* A good CI policy is "zero-warning tolerance". That means that all issues must be solved, including false positives. This quickly becomes a tedious workload.
+* Multiple static analyzers will feature multiple kind of false positives, sometimes applying to the same code but in different ways leading to :
+  * tortuous code, trying to please multiple constraints, hurting readability and therefore maintenance. Sometimes, such complexity introduce other more subtle bugs, that are just out of scope of the analyzers.
+  * sometimes, these constraints are mutually exclusive : if one try to solve one, the other static analyzer will complain, they can't be both happy at the same time.
+* As if that was not enough, the list of false positives change with each version. It's hard enough to follow one static analyzer, but multiple ones with their own update agenda, this quickly becomes a massive velocity reducer.
 
 This is different from running a static analyzer once in a while, looking at the output, and __cherry picking__ a few warnings that seem helpful, either because they detected a genuine risk of bug, or because it helps expressing the code in a way which is more readable or more difficult to misuse. These kinds of reports can be useful, and are accepted.
 
 ## Continuous Integration
+
 CI tests run every time a pull request (PR) is created or updated. The exact tests
 that get run will depend on the destination branch you specify. Some tests take
 longer to run than others. Currently, our CI is set up to run a short
@@ -159,6 +181,7 @@ Therefore, if the PR on your local fork passes GitHub Actions, feel free to subm
 against the main repo.
 
 ### Third-party CI
+
 A small number of tests cannot run on GitHub Actions, or have yet to be migrated.
 For these, we use a variety of third-party services (listed below). It is not necessary to set
 these up on your fork in order to contribute to zstd; however, we do link to instructions for those
@@ -166,10 +189,10 @@ who want earlier signal.
 
 | Service   | Purpose                                                                                                    | Setup Links                                                                                                                                            | Config Path            |
 |-----------|------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------|
-| Travis CI | Used for testing on non-x86 architectures such as PowerPC                                                  | https://docs.travis-ci.com/user/tutorial/#to-get-started-with-travis-ci-using-github <br> https://github.com/marketplace/travis-ci                     | `.travis.yml`          |
-| AppVeyor  | Used for some Windows testing (e.g. cygwin, mingw)                                                         | https://www.appveyor.com/blog/2018/10/02/github-apps-integration/ <br> https://github.com/marketplace/appveyor                                         | `appveyor.yml`         |
-| Cirrus CI | Used for testing on FreeBSD                                                                                | https://github.com/marketplace/cirrus-ci/                                                                                                              | `.cirrus.yml`          |
-| Circle CI | Historically was used to provide faster signal,<br/> but we may be able to migrate these to Github Actions | https://circleci.com/docs/2.0/getting-started/#setting-up-circleci <br> https://youtu.be/Js3hMUsSZ2c <br> https://circleci.com/docs/2.0/enable-checks/ | `.circleci/config.yml` |
+| Travis CI | Used for testing on non-x86 architectures such as PowerPC                                                  | <https://docs.travis-ci.com/user/tutorial/#to-get-started-with-travis-ci-using-github> <br> <https://github.com/marketplace/travis-ci>                     | `.travis.yml`          |
+| AppVeyor  | Used for some Windows testing (e.g. cygwin, mingw)                                                         | <https://www.appveyor.com/blog/2018/10/02/github-apps-integration/> <br> <https://github.com/marketplace/appveyor>                                         | `appveyor.yml`         |
+| Cirrus CI | Used for testing on FreeBSD                                                                                | <https://github.com/marketplace/cirrus-ci/>                                                                                                              | `.cirrus.yml`          |
+| Circle CI | Historically was used to provide faster signal,<br/> but we may be able to migrate these to Github Actions | <https://circleci.com/docs/2.0/getting-started/#setting-up-circleci> <br> <https://youtu.be/Js3hMUsSZ2c> <br> <https://circleci.com/docs/2.0/enable-checks/> | `.circleci/config.yml` |
 
 Note: the instructions linked above mostly cover how to set up a repository with CI from scratch.
 The general idea should be the same for setting up CI on your fork of zstd, but you may have to
@@ -177,6 +200,7 @@ follow slightly different steps. In particular, please ignore any instructions r
 config files (since zstd already has configs for each of these services).
 
 ## Performance
+
 Performance is extremely important for zstd and we only merge pull requests whose performance
 landscape and corresponding trade-offs have been adequately analyzed, reproduced, and presented.
 This high bar for performance means that every PR which has the potential to
@@ -205,11 +229,13 @@ This is a hard balance to strike but please keep in mind other aspects of Zstd w
 submitting changes that are clang-specific, windows-specific, etc.
 
 ## Benchmarking Performance
+
 Performance microbenchmarking is a tricky subject but also essential for Zstd. We value empirical
 testing over theoretical speculation. This guide it not perfect but for most scenarios, it
 is a good place to start.
 
 ### Stability
+
 Unfortunately, the most important aspect in being able to benchmark reliably is to have a stable
 benchmarking machine. A virtual machine, a machine with shared resources, or your laptop
 will typically not be stable enough to obtain reliable benchmark results. If you can get your
@@ -250,9 +276,9 @@ on Windows. You will get more stable benchmark results of you end those processe
     * If you have multiple cores, you can even run your benchmark on a reserved core to prevent
     pollution from other OS and user processes. There are a number of ways to do this depending
     on your OS:
-        * On linux boxes, you have use https://github.com/lpechacek/cpuset.
-        * On Windows, you can "Set Processor Affinity" using https://www.thewindowsclub.com/processor-affinity-windows
-        * On Mac, you can try to use their dedicated affinity API https://developer.apple.com/library/archive/releasenotes/Performance/RN-AffinityAPI/#//apple_ref/doc/uid/TP40006635-CH1-DontLinkElementID_2
+        * On linux boxes, you have use <https://github.com/lpechacek/cpuset>.
+        * On Windows, you can "Set Processor Affinity" using <https://www.thewindowsclub.com/processor-affinity-windows>
+        * On Mac, you can try to use their dedicated affinity API <https://developer.apple.com/library/archive/releasenotes/Performance/RN-AffinityAPI/#//apple_ref/doc/uid/TP40006635-CH1-DontLinkElementID_2>
 3. To benchmark, you will likely end up writing a separate c/c++ program that will link libzstd.
 Dynamically linking your library will introduce some added variation (not a large amount but
 definitely some). Statically linking libzstd will be more stable. Static libraries should
@@ -263,9 +289,10 @@ details on this.
 6. Try to avoid storage. On some systems you can use tmpfs. Putting the program, inputs and outputs on
 tmpfs avoids touching a real storage system, which can have a pretty big variability.
 
-Also check our LLVM's guide on benchmarking here: https://llvm.org/docs/Benchmarking.html
+Also check our LLVM's guide on benchmarking here: <https://llvm.org/docs/Benchmarking.html>
 
 ### Zstd benchmark
+
 The fastest signal you can get regarding your performance changes is via the in-build zstd cli
 bench option. You can run Zstd as you typically would for your scenario using some set of options
 and then additionally also specify the `-b#` option. Doing this will run our benchmarking pipeline
@@ -297,6 +324,7 @@ obscured. So unless you see a large performance win (10-15% consistently) using 
 this method of evaluation will not be sufficient.
 
 ### Profiling
+
 There are a number of great profilers out there. We're going to briefly mention how you can
 profile your code using `instruments` on mac, `perf` on linux and `visual studio profiler`
 on Windows.
@@ -319,6 +347,7 @@ and then inspect the time spent inside of it. You might also want to look at the
 assembly which most profilers will provide you with.
 
 #### Instruments
+
 We will once again consider the scenario where you think you've identified a piece of code
 whose performance can be improved upon. Follow these steps to profile your code using
 Instruments.
@@ -331,25 +360,26 @@ Instruments.
     usually be long enough). This way the profiler will have something to work with
     and you will have ample time to attach your profiler to this process:)
     * I will just use benchzstd as my benchmarmking script for this example:
+
 ```
-$ zstd -b1 -i5 <my-data> # this will run for 5 seconds
+zstd -b1 -i5 <my-data> # this will run for 5 seconds
 ```
-5. Once you run your benchmarking script, switch back over to instruments and attach your
+1. Once you run your benchmarking script, switch back over to instruments and attach your
 process to the time profiler. You can do this by:
     * Clicking on the `All Processes` drop down in the top left of the toolbar.
     * Selecting your process from the dropdown. In my case, it is just going to be labeled
     `zstd`
     * Hitting the bright red record circle button on the top left of the toolbar
-6. You profiler will now start collecting metrics from your benchmarking script. Once
+2. You profiler will now start collecting metrics from your benchmarking script. Once
 you think you have collected enough samples (usually this is the case after 3 seconds of
 recording), stop your profiler.
-7. Make sure that in toolbar of the bottom window, `profile` is selected.
-8. You should be able to see your call graph.
+3. Make sure that in toolbar of the bottom window, `profile` is selected.
+4. You should be able to see your call graph.
     * If you don't see the call graph or an incomplete call graph, make sure you have compiled
     zstd and your benchmarking script using debug flags. On mac and linux, this just means
     you will have to supply the `-g` flag alone with your build script. You might also
     have to provide the `-fno-omit-frame-pointer` flag
-9. Dig down the graph to find your function call and then inspect it by double clicking
+5. Dig down the graph to find your function call and then inspect it by double clicking
 the list item. You will be able to see the annotated source code and the assembly side by
 side.
 
@@ -358,9 +388,10 @@ side.
 This wiki has a pretty detailed tutorial on getting started working with perf so we'll
 leave you to check that out of you're getting started:
 
-https://perf.wiki.kernel.org/index.php/Tutorial
+<https://perf.wiki.kernel.org/index.php/Tutorial>
 
 Some general notes on perf:
+
 * Use `perf stat -r # <bench-program>` to quickly get some relevant timing and
 counter statistics. Perf uses a high resolution timer and this is likely one
 of the first things your team will run when assessing your PR.
@@ -376,6 +407,7 @@ counter `L1-dcache-load-misses`
 TODO
 
 ## Issues
+
 We use GitHub issues to track public bugs. Please ensure your description is
 clear and has sufficient instructions to be able to reproduce the issue.
 
@@ -384,62 +416,69 @@ disclosure of security bugs. In those cases, please go through the process
 outlined on that page and do not file a public issue.
 
 ## Coding Style
+
 It's a pretty long topic, which is difficult to summarize in a single paragraph.
 As a rule of thumbs, try to imitate the coding style of
 similar lines of codes around your contribution.
 The following is a non-exhaustive list of rules employed in zstd code base:
 
 ### C90
+
 This code base is following strict C90 standard,
 with 2 extensions : 64-bit `long long` types, and variadic macros.
 This rule is applied strictly to code within `lib/` and `programs/`.
 Sub-project in `contrib/` are allowed to use other conventions.
 
 ### C++ direct compatibility : symbol mangling
+
 All public symbol declarations must be wrapped in `extern “C” { … }`,
 so that this project can be compiled as C++98 code,
 and linked into C++ applications.
 
 ### Minimal Frugal
+
 This design requirement is fundamental to preserve the portability of the code base.
+
 #### Dependencies
-- Reduce dependencies to the minimum possible level.
+* Reduce dependencies to the minimum possible level.
   Any dependency should be considered “bad” by default,
   and only tolerated because it provides a service in a better way than can be achieved locally.
   The only external dependencies this repository tolerates are
   standard C libraries, and in rare cases, system level headers.
-- Within `lib/`, this policy is even more drastic.
+* Within `lib/`, this policy is even more drastic.
   The only external dependencies allowed are `<assert.h>`, `<stdlib.h>`, `<string.h>`,
   and even then, not directly.
   In particular, no function shall ever allocate on heap directly,
   and must use instead `ZSTD_malloc()` and equivalent.
   Other accepted non-symbol headers are `<stddef.h>` and `<limits.h>`.
-- Within the project, there is a strict hierarchy of dependencies that must be respected.
+* Within the project, there is a strict hierarchy of dependencies that must be respected.
   `programs/` is allowed to depend on `lib/`, but only its public API.
   Within `lib/`, `lib/common` doesn't depend on any other directory.
   `lib/compress` and `lib/decompress` shall not depend on each other.
   `lib/dictBuilder` can depend on `lib/common` and `lib/compress`, but not `lib/decompress`.
+
 #### Resources
-- Functions in `lib/` must use very little stack space,
+* Functions in `lib/` must use very little stack space,
   several dozens of bytes max.
   Everything larger must use the heap allocator,
   or require a scratch buffer to be emplaced manually.
 
 ### Naming
+
 * All public symbols are prefixed with `ZSTD_`
-  + private symbols, with a scope limited to their own unit, are free of this restriction.
+  * private symbols, with a scope limited to their own unit, are free of this restriction.
     However, since `libzstd` source code can be amalgamated,
     each symbol name must attempt to be (and remain) unique.
     Avoid too generic names that could become ground for future collisions.
     This generally implies usage of some form of prefix.
 * For symbols (functions and variables), naming convention is `PREFIX_camelCase`.
-  + In some advanced cases, one can also find :
-    - `PREFIX_prefix2_camelCase`
-    - `PREFIX_camelCase_extendedQualifier`
+  * In some advanced cases, one can also find :
+    * `PREFIX_prefix2_camelCase`
+    * `PREFIX_camelCase_extendedQualifier`
 * Multi-words names generally consist of an action followed by object:
-  - for example : `ZSTD_createCCtx()`
+  * for example : `ZSTD_createCCtx()`
 * Prefer positive actions
-  - `goBackward` rather than `notGoForward`
+  * `goBackward` rather than `notGoForward`
 * Type names (`struct`, etc.) follow similar convention,
   except that they are allowed and even invited to start by an Uppercase letter.
   Example : `ZSTD_CCtx`, `ZSTD_CDict`
@@ -447,12 +486,13 @@ This design requirement is fundamental to preserve the portability of the code b
   The same composition rules (`PREFIX_NAME_QUALIFIER`) apply.
 * File names are all lowercase letters.
   The convention is `snake_case`.
-  File names **must** be unique across the entire code base,
+  File names __must__ be unique across the entire code base,
   even when they stand in clearly separated directories.
 
 ### Qualifiers
+
 * This code base is `const` friendly, if not `const` fanatical.
-  Any variable that can be `const` (aka. read-only) **must** be `const`.
+  Any variable that can be `const` (aka. read-only) __must__ be `const`.
   Any pointer which content will not be modified must be `const`.
   This property is then controlled at compiler level.
   `const` variables are an important signal to readers that this variable isn't modified.
@@ -462,13 +502,15 @@ This design requirement is fundamental to preserve the portability of the code b
   defined in `lib/common/compiler.h`.
 
 ### Debugging
-* **Assertions** are welcome, and should be used very liberally,
+
+* __Assertions__ are welcome, and should be used very liberally,
   to control any condition the code expects for its correct execution.
   These assertion checks will be run in debug builds, and disabled in production.
 * For traces, this project provides its own debug macros,
   in particular `DEBUGLOG(level, ...)`, defined in `lib/common/debug.h`.
 
 ### Code documentation
+
 * Avoid code documentation that merely repeats what the code is already stating.
   Whenever applicable, prefer employing the code as the primary way to convey explanations.
   Example 1 : `int nbTokens = n;` instead of `int i = n; /* i is a nb of tokens *./`.
@@ -479,11 +521,12 @@ This design requirement is fundamental to preserve the portability of the code b
   and when applicable why this specific choice was preferred.
 
 ### General layout
+
 * 4 spaces for indentation rather than tabs
 * Code documentation shall directly precede function declaration or implementation
 * Function implementations and its code documentation should be preceded and followed by an empty line
 
-
 ## License
+
 By contributing to Zstandard, you agree that your contributions will be licensed
 under both the [LICENSE](LICENSE) file and the [COPYING](COPYING) file in the root directory of this source tree.

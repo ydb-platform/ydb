@@ -17,5 +17,4 @@
 
 {% endnote %}
 
-
 {% include [../_includes/alert_locks.md](../_includes/alert_locks.md) %}

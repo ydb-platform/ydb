@@ -2,7 +2,7 @@
 
 [//]: # (Information from https://GitHub.com/ydb-platform/ydb-go-sdk/blob/master/retry/errors_data_test.go)
 
-#|
+# |
 ||
 Code
 |
@@ -490,11 +490,9 @@ An error occurred in an external system, for example, when processing a federate
 
 See the detailed error message. If necessary, file a [GitHub issue](https://github.com/ydb-platform/ydb/issues/new) or contact {{ ydb-short-name }} technical support.
 
-
 ## See also
 
 [Questions and answers: Errors](../../faq/errors.md)
-
 
 [*instant]: {% include [instant](./_includes/tooltips/instant.md) %}
 

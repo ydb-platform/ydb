@@ -5,12 +5,12 @@ targeting real-time compression scenarios at zlib-level and better compression r
 It's backed by a very fast entropy stage, provided by [Huff0 and FSE library](https://github.com/Cyan4973/FiniteStateEntropy).
 
 Zstandard's format is stable and documented in [RFC8878](https://datatracker.ietf.org/doc/html/rfc8878). Multiple independent implementations are already available.
-This repository represents the reference implementation, provided as an open-source dual [BSD](LICENSE) OR [GPLv2](COPYING) licensed **C** library,
+This repository represents the reference implementation, provided as an open-source dual [BSD](LICENSE) OR [GPLv2](COPYING) licensed __C__ library,
 and a command line utility producing and decoding `.zst`, `.gz`, `.xz` and `.lz4` files.
 Should your project require another programming language,
 a list of known ports and bindings is provided on [Zstandard homepage](https://facebook.github.io/zstd/#other-languages).
 
-**Development branch status:**
+__Development branch status:__
 
 [![Build Status][travisDevBadge]][travisLink]
 [![Build status][CircleDevBadge]][CircleLink]
@@ -41,11 +41,11 @@ on the [Silesia compression corpus].
 
 | Compressor name         | Ratio | Compression| Decompress.|
 | ---------------         | ------| -----------| ---------- |
-| **zstd 1.5.6 -1**       | 2.887 |   510 MB/s |  1580 MB/s |
+| __zstd 1.5.6 -1__       | 2.887 |   510 MB/s |  1580 MB/s |
 | [zlib] 1.2.11 -1        | 2.743 |    95 MB/s |   400 MB/s |
 | brotli 1.0.9 -0         | 2.702 |   395 MB/s |   430 MB/s |
-| **zstd 1.5.6 --fast=1** | 2.437 |   545 MB/s |  1890 MB/s |
-| **zstd 1.5.6 --fast=3** | 2.239 |   650 MB/s |  2000 MB/s |
+| __zstd 1.5.6 --fast=1__ | 2.437 |   545 MB/s |  1890 MB/s |
+| __zstd 1.5.6 --fast=3__ | 2.239 |   650 MB/s |  2000 MB/s |
 | quicklz 1.5.0 -1        | 2.238 |   525 MB/s |   750 MB/s |
 | lzo1x 2.10 -1           | 2.106 |   650 MB/s |   825 MB/s |
 | [lz4] 1.9.4             | 2.101 |   700 MB/s |  4000 MB/s |
@@ -78,7 +78,6 @@ Compression Speed vs Ratio | Decompression Speed
 A few other algorithms can produce higher compression ratios at slower speeds, falling outside of the graph.
 For a larger picture including slow modes, [click on this link](doc/images/DCspeed5.png).
 
-
 ## The case for Small Data compression
 
 Previous charts provide results applicable to typical file and stream scenarios (several MB). Small data comes with different perspectives.
@@ -96,14 +95,13 @@ Compression Ratio | Compression Speed | Decompression Speed
 ------------------|-------------------|--------------------
 ![Compression Ratio](doc/images/dict-cr.png "Compression Ratio") | ![Compression Speed](doc/images/dict-cs.png "Compression Speed") | ![Decompression Speed](doc/images/dict-ds.png "Decompression Speed")
 
-
 These compression gains are achieved while simultaneously providing _faster_ compression and decompression speeds.
 
 Training works if there is some correlation in a family of small data samples. The more data-specific a dictionary is, the more efficient it is (there is no _universal dictionary_).
 Hence, deploying one dictionary per type of data will provide the greatest benefits.
 Dictionary gains are mostly effective in the first few KB. Then, the compression algorithm will gradually use previously decoded content to better compress the rest of the file.
 
-### Dictionary compression How To:
+### Dictionary compression How To
 
 1. Create the dictionary
 
@@ -116,7 +114,6 @@ Dictionary gains are mostly effective in the first few KB. Then, the compression
 3. Decompress with dictionary
 
    `zstd -D dictionaryName --decompress FILE.zst`
-
 
 ## Build instructions
 
@@ -132,6 +129,7 @@ invoking `make` in root directory will generate `zstd` cli in root directory.
 It will also create `libzstd` into `lib/`.
 
 Other available options include:
+
 - `make install` : create and install zstd cli, library and man pages
 - `make check` : create and run `zstd`, test its behavior on local platform
 
@@ -170,9 +168,10 @@ build instructions in that directory.
 You can also take a look at [`.travis.yml`](.travis.yml) file for an
 example about how Meson is used to build this project.
 
-Note that default build type is **release**.
+Note that default build type is __release__.
 
 ### VCPKG
+
 You can build and install zstd [vcpkg](https://github.com/Microsoft/vcpkg/) dependency manager:
 
     git clone https://github.com/Microsoft/vcpkg.git
@@ -198,8 +197,9 @@ If the version is out of date, please [create an issue or pull request](https://
 ### Visual Studio (Windows)
 
 Going into `build` directory, you will find additional possibilities:
+
 - Projects for Visual Studio 2005, 2008 and 2010.
-  + VS2010 project is compatible with VS2012, VS2013, VS2015 and VS2017.
+  - VS2010 project is compatible with VS2012, VS2013, VS2015 and VS2017.
 - Automated build scripts for Visual compiler by [@KrzysFR](https://github.com/KrzysFR), in `build/VS_scripts`,
   which will build `zstd` cli and `libzstd` library without any need to open Visual Studio solution.
 

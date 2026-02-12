@@ -4,7 +4,7 @@
 
 ## Documentation
 
-https://boostorg.github.io/exception
+<https://boostorg.github.io/exception>
 
 ## Support
 

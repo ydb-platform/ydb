@@ -44,6 +44,7 @@ int main(){
 > Using Range-based for loop (C++11 or later)
 
  <a target="_blank" href="https://melpon.org/wandbox/permlink/z94YLs8PdYSh7rXz">![Try it online][badge.wandbox]</a>
+
 ```c++
 #include <iostream>
 #include <boost/tokenizer.hpp>
@@ -63,6 +64,7 @@ int main(){
 [Boost.Tokenizer](https://theboostcpplibraries.com/boost.tokenizer) Chapter 10 at theboostcpplibraries.com, contains several examples including **escaped_list_separator**.
 
 ## Acknowledgements
+>
 >From the author:
 >
 I wish to thank the members of the boost mailing list, whose comments, compliments, and criticisms during both the development and formal review helped make the Tokenizer library what it is. I especially wish to thank Aleksey Gurtovoy for the idea of using a pair of iterators to specify the input, instead of a string. I also wish to thank Jeremy Siek for his idea of providing a container interface for the token iterators and for simplifying the template parameters for the TokenizerFunctions. He and Daryle Walker also emphasized the need to separate interface and implementation. Gary Powell sparked the idea of using the isspace and ispunct as the defaults for char_delimiters_separator. Jeff Garland provided ideas on how to change to order of the template parameters in order to make tokenizer easier to declare. Thanks to Douglas Gregor who served as review manager and provided many insights both on the boost list and in e-mail on how to polish up the implementation and presentation of Tokenizer. Finally, thanks to Beman Dawes who integrated the final version into the boost distribution.

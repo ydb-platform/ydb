@@ -14,7 +14,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
    To set a custom attribute when creating the `series` table, pass the `scheme_version` key and the attribute value `1` in the `options.WithAttribute` option of the `CreateTable` method:
 
@@ -37,7 +37,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
    To set a custom attribute for the existing `series` table, pass the `scheme_version` key and the attribute value `1` in the `options.WithAddAttribute` option of the `AlterTable` method:
 
@@ -51,7 +51,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
    )
    ```
 
-- CLI
+* CLI
 
    To set a custom attribute for the existing `series` table, pass the `scheme_version` key and the attribute value `1` in the `--attribute` option of the [ydb table attribute add](../reference/ydb-cli/table-attribute-add.md) command:
 
@@ -65,7 +65,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
    To update the custom attribute when changing the table scheme, pass the `scheme_version` key and the new attribute value of `2` in the `WithAlterAttribute` option of the `AlterTable` method:
 
@@ -80,7 +80,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
    )
    ```
 
-- CLI
+* CLI
 
    To edit the custom attribute for the existing `series` table, pass the `scheme_version` key and the attribute value `2` in the `--attribute` option of the [ydb table attribute add](../reference/ydb-cli/table-attribute-add.md) command:
 
@@ -94,7 +94,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
    To retrieve the `series` table scheme, including the custom attributes, use the method `table.Session.DescribeTable()`:
 
@@ -113,7 +113,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
    )
    ```
 
-- CLI
+* CLI
 
    To get the data about the `series` table scheme, including the custom attributes, use the command [ydb scheme describe](../reference/ydb-cli/commands/scheme-describe.md):
 
@@ -140,7 +140,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
    To drop the custom attribute, pass the `scheme_version` key in the option `WithDropAttribute` of the `AlterTable` method:
 
@@ -154,7 +154,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
    )
    ```
 
-- CLI
+* CLI
 
    To drop the custom attribute, use the `scheme_version` key in the `--attributes` option of the [ydb table attribute drop](../reference/ydb-cli/table-attribute-drop.md) command:
 

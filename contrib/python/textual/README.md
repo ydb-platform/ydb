@@ -1,10 +1,7 @@
 
-
-
 ![Textual splash image](https://raw.githubusercontent.com/Textualize/textual/main/imgs/textual.png)
 
 [![Discord](https://img.shields.io/discord/1026214085173461072)](https://discord.gg/Enf6Z3qhVr)
-
 
 # Textual
 
@@ -12,21 +9,15 @@ Textual is a *Rapid Application Development* framework for Python.
 
 Build sophisticated user interfaces with a simple Python API. Run your apps in the terminal and a [web browser](https://github.com/Textualize/textual-web)!
 
-
 <details>
   <summary> 🎬 Demonstration </summary>
   <hr>
 
 A quick run through of some Textual features.
 
-
-
-https://user-images.githubusercontent.com/554369/197355913-65d3c125-493d-4c05-a590-5311f16c40ff.mov
-
-
+<https://user-images.githubusercontent.com/554369/197355913-65d3c125-493d-4c05-a590-5311f16c40ff.mov>
 
  </details>
-
 
 ## About
 
@@ -76,17 +67,15 @@ Join the Textual developers and community on our [Discord Server](https://discor
 
 The Textual repository comes with a number of examples you can experiment with or use as a template for your own projects.
 
-
 <details>
   <summary> 🎬 Code browser </summary>
   <hr>
 
   This is the [code_browser.py](https://github.com/Textualize/textual/blob/main/examples/code_browser.py) example which clocks in at 61 lines (*including* docstrings and blank lines).
 
-https://user-images.githubusercontent.com/554369/197188237-88d3f7e4-4e5f-40b5-b996-c47b19ee2f49.mov
+<https://user-images.githubusercontent.com/554369/197188237-88d3f7e4-4e5f-40b5-b996-c47b19ee2f49.mov>
 
  </details>
-
 
 <details>
   <summary> 📷 Calculator </summary>
@@ -97,22 +86,15 @@ This is [calculator.py](https://github.com/Textualize/textual/blob/main/examples
 ![calculator screenshot](https://raw.githubusercontent.com/Textualize/textual/main/imgs/calculator.png)
 </details>
 
-
 <details>
   <summary> 🎬 Stopwatch </summary>
   <hr>
 
   This is the Stopwatch example from the [tutorial](https://textual.textualize.io/tutorial/).
 
-
-
-https://user-images.githubusercontent.com/554369/197360718-0c834ef5-6285-4d37-85cf-23eed4aa56c5.mov
-
-
+<https://user-images.githubusercontent.com/554369/197360718-0c834ef5-6285-4d37-85cf-23eed4aa56c5.mov>
 
 </details>
-
-
 
 ## Reference commands
 
@@ -128,9 +110,7 @@ This is the *easing* reference which demonstrates the easing parameter on animat
 textual easing
 ```
 
-
-https://user-images.githubusercontent.com/554369/196157100-352852a6-2b09-4dc8-a888-55b53570aff9.mov
-
+<https://user-images.githubusercontent.com/554369/196157100-352852a6-2b09-4dc8-a888-55b53570aff9.mov>
 
  </details>
 
@@ -144,12 +124,9 @@ This is the borders reference which demonstrates some of the borders styles in T
 textual borders
 ```
 
-
-https://user-images.githubusercontent.com/554369/196158235-4b45fb78-053d-4fd5-b285-e09b4f1c67a8.mov
-
+<https://user-images.githubusercontent.com/554369/196158235-4b45fb78-053d-4fd5-b285-e09b4f1c67a8.mov>
 
 </details>
-
 
 <details>
   <summary> 🎬 Colors reference </summary>
@@ -161,11 +138,6 @@ This is a reference for Textual's color design system.
 textual colors
 ```
 
-
-
-https://user-images.githubusercontent.com/554369/197357417-2d407aac-8969-44d3-8250-eea45df79d57.mov
-
-
-
+<https://user-images.githubusercontent.com/554369/197357417-2d407aac-8969-44d3-8250-eea45df79d57.mov>
 
 </details>

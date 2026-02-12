@@ -16,8 +16,6 @@ SELECT "Hello, world!";
 SELECT 2 + 2;
 ```
 
-
-
 ## SELECT execution procedure {#selectexec}
 
 The `SELECT` query result is calculated as follows:
@@ -51,8 +49,6 @@ The `SELECT` query result is calculated as follows:
 * Perform sorting with [ORDER BY](order_by.md).
 * Apply [OFFSET and LIMIT](limit_offset.md) to the result.
 
-
-
 ## Column order in YQL {#orderedcolumns}
 
 The standard SQL is sensitive to the order of columns in projections (that is, in `SELECT`). While the order of columns must be preserved in the query results or when writing data to a new table, some SQL constructs use this order.
@@ -84,8 +80,6 @@ When `PRAGMA OrderedColumns;` is enabled, non-key columns preserve their output 
 
 {% endnote %}
 
-
-
 ### Combining queries {#combining-queries}
 
 Results of several SELECT statements (or subqueries) can be combined using `UNION` and `UNION ALL` keywords.
@@ -112,7 +106,6 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 * `DISCARD` is only allowed before the first query
 * the operators apply to the `UNION [ALL]` as a whole, instead of referring to one of the queries
 * to apply the operator to one of the queries, enclose the query in parantheses
-
 
 ## Clauses supported in SELECT
 

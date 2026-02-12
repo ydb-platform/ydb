@@ -1,15 +1,14 @@
 # Installation from Sources
 
+## Prerequisites
 
-## Prerequisites 
-   
-   - Make sure you have installed CMake version 3.1 (or newer) on your system. oneTBB uses CMake build configuration.
-   - Configure and build oneTBB. To work with build configurations, see [Build System Description](cmake/README.md). 
-
+- Make sure you have installed CMake version 3.1 (or newer) on your system. oneTBB uses CMake build configuration.
+- Configure and build oneTBB. To work with build configurations, see [Build System Description](cmake/README.md).
 
 ## Configure oneTBB
 
 At the command prompt, type:
+
 ```
 cmake <options> <repo_root>
 ```
@@ -23,23 +22,24 @@ You may want to use some additional options for configuration:
 | `-DTBB_VERIFY_DEPENDENCY_SIGNATURE=ON\|OFF` | Controls signature verification of dynamic dependencies loaded during runtime | If set to ON, only the signed dynamic dependencies are loaded. This is the recommended behavior. By default, the value is unspecified. Therefore, the warning is printed. To suppress the warning, set the value explicitly. |
 
 ## Build oneTBB
- 
+
 To build the system, run:
+
 ```
 cmake --build . <options>
 ```
 
 Some useful build options:
-- `--target <target>` - specific target, "all" is default.
--	`--config <Release|Debug>` - build configuration, applicable only for multi-config generators such as Visual Studio generator.
 
+- `--target <target>` - specific target, "all" is default.
+- `--config <Release|Debug>` - build configuration, applicable only for multi-config generators such as Visual Studio generator.
 
 ## Install and Pack oneTBB
 
 ---
 **NOTE**
 
-Be careful about installing prefix. It defaults to `/usr/local` on UNIX* and `c:/Program Files/${PROJECT_NAME}` on Windows* OS.
+Be careful about installing prefix. It defaults to `/usr/local` on UNIX*and `c:/Program Files/${PROJECT_NAME}` on Windows* OS.
 You can define custom `CMAKE_INSTALL_PREFIX` during configuration:
 
 ```
@@ -59,6 +59,7 @@ Special ``--install`` target can alternatively be used for installation, e.g. ``
 You can use the ``install`` components for partial installation.
 
 The following install components are supported:
+
 - `runtime` - oneTBB runtime package (core shared libraries and `.dll` files on Windows* OS).
 - `devel` - oneTBB development package (header files, CMake integration files, library symbolic links, and `.lib` files on Windows* OS).
 - `tbb4py` - [oneTBB Module for Python](https://github.com/uxlfoundation/oneTBB/blob/master/python/README.md).
@@ -80,6 +81,7 @@ cpack
 ## Installation from vcpkg
 
 You can download and install oneTBB using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
+
 ```sh
   git clone https://github.com/Microsoft/vcpkg.git
   cd vcpkg
@@ -95,6 +97,7 @@ The oneTBB port in vcpkg is kept up to date by Microsoft* team members and commu
 ### Single-configuration generators
 
 The following example demonstrates how to install oneTBB for single-configuration generators (e.g. GNU Make, Ninja, etc.).
+
 ```bash
 # Do our experiments in /tmp
 cd /tmp
@@ -114,9 +117,10 @@ cmake --install .
 
 ### Multi-configuration generators
 
-The following example demonstrates how to install oneTBB for multi-configuration generators such as Visual Studio*. 
+The following example demonstrates how to install oneTBB for multi-configuration generators such as Visual Studio*.
 
 Choose the configuration during the build and install steps:
+
 ```batch
 REM Do our experiments in %TMP%
 cd %TMP%

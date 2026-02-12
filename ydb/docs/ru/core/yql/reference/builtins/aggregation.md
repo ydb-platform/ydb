@@ -23,11 +23,13 @@ SELECT COUNT(*) FROM my_table;
 ```yql
 SELECT key, COUNT(value) FROM my_table GROUP BY key;
 ```
+
 {% if select_statement != "SELECT STREAM" %}
 
 ```yql
 SELECT COUNT(DISTINCT value) FROM my_table;
 ```
+
 {% endif %}
 
 ## MIN и MAX {#min-max}
@@ -231,8 +233,6 @@ SELECT
 FROM my_table;
 ```
 
-
-
 ## AGGREGATE_LIST {#agg-list}
 
 ### Сигнатура
@@ -280,7 +280,6 @@ FROM users
 Выполняется **НЕ** ленивым образом, поэтому при использовании нужно быть уверенным, что список получится разумных размеров, примерно в пределах тысячи элементов. Чтобы подстраховаться, можно воспользоваться вторым опциональным числовым аргументом, который включает ограничение на число элементов в списке.
 
 {% endnote %}
-
 
 ## MAX_BY и MIN_BY {#max-min-by}
 
@@ -333,7 +332,6 @@ SELECT
     AGGREGATE_BY(AsTuple(value, key), $max_by_factory)
 FROM my_table;
 ```
-
 
 ## TOP и BOTTOM {#top-bottom}
 
@@ -399,7 +397,6 @@ SELECT
 FROM my_table;
 ```
 
-
 ## TOPFREQ и MODE {#topfreq-mode}
 
 ### Сигнатура
@@ -429,7 +426,6 @@ SELECT
     TOPFREQ(my_column, 5, 1000)
 FROM my_table;
 ```
-
 
 ## STDDEV и VARIANCE {#stddev-variance}
 
@@ -468,7 +464,6 @@ SELECT
   VARIANCE(numeric_column)
 FROM my_table;
 ```
-
 
 ## CORRELATION и COVARIANCE {#correlation-covariance}
 
@@ -542,8 +537,6 @@ SELECT
     PERCENTILE(numeric_column, ListFromRange(0.00, 1.05, 0.05)),                   -- подсчет множества перцентилей (от 0.0 до 1.0 включительно с шагом 0.05)
 FROM my_table;
 ```
-
-
 
 ## HISTOGRAM {#histogram}
 
@@ -726,22 +719,22 @@ BOOL_XOR(Bool?)->Bool?
 
 В отличие от большинства агрегатных функций, эти функции **не пропускают** `NULL` значение при агрегации и действуют по правилу:
 
-- `true AND null == null`
-- `false OR null == null`
+* `true AND null == null`
+* `false OR null == null`
 
 Для `BOOL_AND`:
 
-- Для любого количества значений `true` и хотя бы одного `NULL` значения, результатом будет `NULL`.
-- В случае хотя бы одного `false` значения, результатом будет `false`, независимо от наличия `NULL`.
+* Для любого количества значений `true` и хотя бы одного `NULL` значения, результатом будет `NULL`.
+* В случае хотя бы одного `false` значения, результатом будет `false`, независимо от наличия `NULL`.
 
 Для `BOOL_OR`:
 
-- Для любого количества значений `false` и хотя бы одного `NULL` значения, результатом будет `NULL`.
-- В случае хотя бы одного `true` значения, результатом будет `true`, независимо от наличия `NULL`.
+* Для любого количества значений `false` и хотя бы одного `NULL` значения, результатом будет `NULL`.
+* В случае хотя бы одного `true` значения, результатом будет `true`, независимо от наличия `NULL`.
 
 Для `BOOL_XOR`:
 
-- В случае хотя бы одного `NULL` значения, результатом будет `NULL`.
+* В случае хотя бы одного `NULL` значения, результатом будет `NULL`.
 
 Примеры описанного поведения приведены ниже.
 
@@ -784,19 +777,16 @@ SELECT
 FROM my_table;
 ```
 
-
 {% if feature_window_functions %}
 
-  ## SessionStart {#session-start}
+## SessionStart {#session-start}
 
 Без аргументов. Допускается только при наличии [SessionWindow](../syntax/select/group-by.md#session-window) в
 [GROUP BY](../syntax/select/group-by.md) / [PARTITION BY](../syntax/select/window.md#partition).
 Возвращает значение ключевой колонки `SessionWindow`. В случае `SessionWindow` с двумя аргументами – минимальное значение первого аргумента внутри группы/раздела.
 В случае расширенного варианта `SessionWindow` – значение второго элемента кортежа, возвращаемого `<calculate_lambda>`, при котором первый элемент кортежа равен `True`.
 
-
 {% endif %}
-
 
 ## AGGREGATE_BY и MULTI_AGGREGATE_BY {#aggregate-by}
 
@@ -828,4 +818,3 @@ SELECT
     MULTI_AGGREGATE_BY(nums, AggregationFactory("percentile", 0.9)) as p90
 FROM my_table;
 ```
-

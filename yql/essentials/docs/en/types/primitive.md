@@ -22,7 +22,6 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 | `Decimal` | A real number with the specified precision, up to 35 decimal digits | |
 |`DyNumber` | A binary representation of a real number with an accuracy of up to 38 digits.<br/>Acceptable values: positive numbers from 1×10<sup>-130</sup> up to 1×10<sup>126</sup>–1, negative numbers from -1×10<sup>126</sup>–1 to -1×10<sup>-130</sup>, and 0.<br/>Compatible with the `Number` type in AWS DynamoDB. | |
 
-
 ## String types {#string}
 
 | Type | Description | Notes |
@@ -33,7 +32,6 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 | `JsonDocument` | [JSON](https://en.wikipedia.org/wiki/JSON) in an indexed binary representation | Doesn't support matching |
 | `Yson` | [YSON](../udf/list/yson.md) in a textual or binary representation. | Doesn't support matching |
 | `Uuid` | Universally unique identifier [UUID](https://tools.ietf.org/html/rfc4122) |
-
 
 Unlike the `JSON` data type that stores the original text representation passed by the user, `JsonDocument` uses an indexed binary representation. An important difference from the point of view of semantics is that `JsonDocument` doesn't preserve formatting, the order of keys in objects, or their duplicates.
 
@@ -46,8 +44,6 @@ Due to the added redundancy, `JsonDocument` is less effective in storage. The ad
 To store numbers (JSON Number) in `JsonDocument`, as well as for arithmetic operations on them in the [JSON API](../builtins/json.md), the [Double](https://en.wikipedia.org/wiki/Double-precision_floating-point_format) type is used. Precision might be lost when non-standard representations of numbers are used in the source JSON document.
 
 {% endnote %}
-
-
 
 ## Date and time {#datetime}
 
@@ -101,7 +97,6 @@ SELECT -- these expressions are always true for any timezones: the timezone does
     AddTimezone(CurrentUtcDatetime(), "Europe/Moscow") ==
         AddTimezone(CurrentUtcDatetime(), "America/New_York");
 ```
-
 
 ## Casting between data types {#cast}
 

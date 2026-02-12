@@ -40,6 +40,7 @@ as some of the structural aspects of the APIs are similar.
 [Discussion group](https://groups.google.com/d/forum/benchmark-discuss)
 
 IRC channels:
+
 * [libera](https://libera.chat) #benchmark
 
 [Additional Tooling Documentation](docs/tools.md)
@@ -82,6 +83,7 @@ $ cmake -E chdir "build" cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=on -DCMAKE_BUIL
 # Build the library.
 $ cmake --build "build" --config Release
 ```
+
 This builds the `benchmark` and `benchmark_main` libraries and tests.
 On a unix system, the build directory should now look something like this:
 
@@ -98,7 +100,7 @@ On a unix system, the build directory should now look something like this:
 Next, you can run the tests to check the build.
 
 ```bash
-$ cmake -E chdir "build" ctest --build-config Release
+cmake -E chdir "build" ctest --build-config Release
 ```
 
 If you want to install the library globally, also run:
@@ -137,6 +139,7 @@ If you are using clang, you may need to set `LLVMAR_EXECUTABLE`,
 `LLVMNM_EXECUTABLE` and `LLVMRANLIB_EXECUTABLE` cmake cache variables.
 
 To enable sanitizer checks (eg., `asan` and `tsan`), add:
+
 ```
  -DCMAKE_C_FLAGS="-g -O2 -fno-omit-frame-pointer -fsanitize=address -fsanitize=thread -fno-sanitize-recover=all"
  -DCMAKE_CXX_FLAGS="-g -O2 -fno-omit-frame-pointer -fsanitize=address -fsanitize=thread -fno-sanitize-recover=all "  
@@ -184,7 +187,7 @@ BENCHMARK_MAIN();
 ```
 
 To run the benchmark, compile and link against the `benchmark` library
-(libbenchmark.a/.so). If you followed the build steps above, this library will 
+(libbenchmark.a/.so). If you followed the build steps above, this library will
 be under the build directory you created.
 
 ```bash
@@ -207,15 +210,20 @@ If using CMake, it is recommended to link against the project-provided
 `target_link_libraries`.
 It is possible to use ```find_package``` to import an installed version of the
 library.
+
 ```cmake
 find_package(benchmark REQUIRED)
 ```
+
 Alternatively, ```add_subdirectory``` will incorporate the library directly in
 to one's CMake project.
+
 ```cmake
 add_subdirectory(benchmark)
 ```
+
 Either way, link to the library as follows.
+
 ```cmake
 target_link_libraries(MyTarget benchmark::benchmark)
 ```

@@ -50,9 +50,9 @@ ALTER TABLE `source_customers` ADD CHANGEFEED `updates` WITH (
 
   Особенности обработки CDC данных в формате Debezium:
 
-  * При создании записи (`op = "c"`) данные берутся из поля `after`, в поле `valid_from` сохраняется значение момента времени изменения записи из поля `changed_at`.
-  * При обновлении записи (`op = "u"`) данные также берутся из поля `after`, в поле `valid_from` сохраняется значение момента времени изменения записи из поля `changed_at`.
-  * При удалении записи (`op = "d"`) данные берутся из поля `before`, а в поле `deleted_at` устанавливается системный момент времени получения информации про удаление записи.
+* При создании записи (`op = "c"`) данные берутся из поля `after`, в поле `valid_from` сохраняется значение момента времени изменения записи из поля `changed_at`.
+* При обновлении записи (`op = "u"`) данные также берутся из поля `after`, в поле `valid_from` сохраняется значение момента времени изменения записи из поля `changed_at`.
+* При удалении записи (`op = "d"`) данные берутся из поля `before`, а в поле `deleted_at` устанавливается системный момент времени получения информации про удаление записи.
 
   ```sql
   $transformation_lambda = ($msg) -> {
@@ -91,11 +91,11 @@ ALTER TABLE `source_customers` ADD CHANGEFEED `updates` WITH (
 
   {% endnote %}
 
-  ## Демонстрация работы
+## Демонстрация работы
 
   Для демонстрации работы с данными CDC запишем данные в таблицу-источник в {{ ydb-short-name }}, которая будет генерировать CDC-события:
 
-  ### Вставка новой записи
+### Вставка новой записи
 
   ```sql
   INSERT INTO source_customers (id, attribute1, attribute2, change_time)
@@ -132,7 +132,7 @@ ALTER TABLE `source_customers` ADD CHANGEFEED `updates` WITH (
   | -------------- | ---------- | ------------- | --------------------------- | --------------------------- |
   | CUSTOMER\_1001 | John Doe   | New York      | NULL                        | 2025-08-22T17:28:03.648313Z |
 
-  ### Обновление новой записи
+### Обновление новой записи
 
   ```sql
   UPSERT INTO source_customers (id, attribute1, attribute2, change_time)
@@ -176,7 +176,7 @@ ALTER TABLE `source_customers` ADD CHANGEFEED `updates` WITH (
   | CUSTOMER\_1001 | John Doe   | New York      | NULL                        | 2025-08-22T17:28:03.648313Z |
   | CUSTOMER\_1001 | John Doe 2 | New York 2    | NULL                        | 2025-08-22T17:31:18.357503Z |
 
-  ### Удаление записи
+### Удаление записи
 
   ```sql
   DELETE FROM source_customers WHERE id = 'CUSTOMER_1001';
@@ -214,7 +214,7 @@ ALTER TABLE `source_customers` ADD CHANGEFEED `updates` WITH (
   | CUSTOMER\_1001 | John Doe 2 | New York 2    | NULL                        | 2025-08-22T17:31:18.357503Z |
   | CUSTOMER\_1001 | John Doe 2 | New York 2    | 2025-08-22T17:38:03.648313Z | 2025-08-22T17:38:03.648313Z |
 
-  ### Пример запроса для получения актуальных данных
+### Пример запроса для получения актуальных данных
 
   Для получения данных из SCD2 append only таблиц можно использовать следующий запрос, который получает данные на момент времени `2025-08-22 19:11:30`:
 

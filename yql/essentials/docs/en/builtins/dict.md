@@ -60,7 +60,6 @@ SELECT DictHasItems(AsDict(AsTuple(1, AsList("foo", "bar")))) FROM my_table;
 SELECT DictHasItems(dict_column) FROM my_table;
 ```
 
-
 ## DictItems {#dictitems}
 
 Get dictionary contents as a list of tuples including key-value pairs (`List<Tuplekey_type,value_type>`).
@@ -72,12 +71,10 @@ SELECT DictItems(AsDict(AsTuple(1, AsList("foo", "bar"))));
 -- [ ( 1, [ "foo", "bar" ] ) ]
 ```
 
-
 ```yql
 SELECT DictItems(dict_column)
 FROM my_table;
 ```
-
 
 ## DictKeys {#dictkeys}
 
@@ -90,12 +87,10 @@ SELECT DictKeys(AsDict(AsTuple(1, AsList("foo", "bar"))));
 -- [ 1 ]
 ```
 
-
 ```yql
 SELECT DictKeys(dict_column)
 FROM my_table;
 ```
-
 
 ## DictPayloads {#dictpayloads}
 
@@ -150,7 +145,6 @@ SELECT DictContains(AsDict(
 SELECT DictContains(dict_column, "foo")
 FROM my_table;
 ```
-
 
 ## DictAggregate {#dictaggregate}
 
@@ -279,4 +273,3 @@ SELECT SetSymmetricDifference(
     ($k, $a, $b) -> { RETURN AsTuple($a, $b) });
 -- { 2 : (null, "qwe"), 3 : ("bar", null) }
 ```
-

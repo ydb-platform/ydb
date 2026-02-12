@@ -30,7 +30,7 @@ security_config:
 
 ## Configuring Authentication Mode {#security-auth}
 
-#|
+# |
 || Parameter | Description ||
 || `enforce_user_token_requirement` | Selects user [authentication](../../security/authentication.md) mode.
 
@@ -116,7 +116,7 @@ The `default_users`, `default_groups`, and `default_access` parameters affect th
 
 See [{#T}](../../security/builtin-security.md) and the related [`domains_config`](domains_config.md) parameters.
 
-#|
+# |
 || Parameter | Description ||
 || `default_users` | The list of [users](../../concepts/glossary.md#access-user) to be created when the {{ ydb-short-name }} cluster starts for the first time.
 
@@ -201,7 +201,7 @@ Access levels are defined by the `viewer_allowed_sids`, `monitoring_allowed_sids
 
 [//]: # (TODO: add a link to the viewer api reference and the required privileges, when available)
 
-#|
+# |
 || Parameter | Description ||
 || `viewer_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the viewer access level.
 
@@ -256,7 +256,7 @@ For example:
 
 The `disable_builtin_security`, `disable_builtin_groups`, and `disable_builtin_access` flags affect the built-in security configuration that occurs when {{ ydb-short-name }} starts for the first time.
 
-#|
+# |
 || Parameter | Description ||
 || `disable_builtin_security` | Disable the [built-in security configuration](../../security/builtin-security.md).
 Built-in security configuration automatically creates a `root` superuser, a set of built-in user groups, and grants access rights to these groups at the root of the cluster.

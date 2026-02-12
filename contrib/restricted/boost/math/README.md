@@ -3,13 +3,11 @@ Boost Math Library
 
 >ANNOUNCEMENT: This library requires a compliant C++14 compiler.
 
-
 |                  |  Master  |   Develop   |
 |------------------|----------|-------------|
 | Drone            | [![Build Status](https://drone.cpp.al/api/badges/boostorg/math/status.svg?ref=refs/heads/master)](https://drone.cpp.al/boostorg/math)                                | [![Build Status](https://drone.cpp.al/api/badges/boostorg/math/status.svg)](https://drone.cpp.al/boostorg/math) |
 | Github Actions   | [![Build Status](https://github.com/boostorg/math/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/boostorg/math/actions?query=branch%3Amaster) | [![Build Status](https://github.com/boostorg/math/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/boostorg/math/actions?query=branch%3Adevelop) |
 | Codecov          | [![codecov](https://codecov.io/gh/boostorg/math/branch/master/graph/badge.svg)](https://codecov.io/gh/boostorg/math/branch/master)                                   | [![codecov](https://codecov.io/gh/boostorg/math/branch/develop/graph/badge.svg)](https://codecov.io/gh/boostorg/math/branch/develop) |
-
 
 The Math library provides numerous advanced mathematical functions
 implemented in modern C++. The library strives to deliver the utmost
@@ -103,7 +101,7 @@ The full documentation is available on [boost.org](http://www.boost.org/doc/libs
 
 Defining `BOOST_MATH_STANDALONE` allows Boost.Math to be used without any Boost dependencies.
 Some functionality is reduced in this mode. A static_assert message will alert you
-if a particular feature has been disabled by standalone mode. Standalone mode is not designed to 
+if a particular feature has been disabled by standalone mode. Standalone mode is not designed to
 be used with the rest of boost, and may result in compiler errors.
 
 ## Supported Compilers
@@ -125,14 +123,13 @@ You can submit your changes through a [pull request](https://github.com/boostorg
 
 There is no mailing-list specific to Boost Math, although you can use the general-purpose Boost [mailing-list](http://lists.boost.org/mailman/listinfo.cgi/boost-users) using the tag [math].
 
-
 ## Development
 
 Clone the whole boost project, which includes the individual Boost projects as submodules ([see boost+git doc](https://github.com/boostorg/boost/wiki/Getting-Started)):
 
-    $ git clone https://github.com/boostorg/boost
-    $ cd boost
-    $ git submodule update --init
+    git clone https://github.com/boostorg/boost
+    cd boost
+    git submodule update --init
 
 The Boost Math Library is located in `libs/math/`.
 

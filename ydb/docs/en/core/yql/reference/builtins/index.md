@@ -22,4 +22,3 @@
 
 - [For JSON](json.md)
 - [C++ libraries](../udf/list/index.md)
-

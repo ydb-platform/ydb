@@ -7,7 +7,6 @@ suboptimal, even for many common workloads.  When jemalloc is properly tuned for
 a specific application / workload, it is common to improve system level metrics
 by a few percent, or make favorable trade-offs.
 
-
 ## Notable runtime options for performance tuning
 
 Runtime options can be set via
@@ -62,7 +61,7 @@ Runtime options can be set via
     Enable dynamic thread to arena association based on running CPU.  This has
     the potential to improve locality, e.g. when thread to CPU affinity is
     present.
-    
+
     Suggested: try `percpu_arena:percpu` or `percpu_arena:phycpu` if
     thread migration between processors is expected to be infrequent.
 

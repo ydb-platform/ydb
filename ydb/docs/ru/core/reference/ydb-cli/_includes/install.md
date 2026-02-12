@@ -40,7 +40,7 @@
 
   {{ ydb-short-name }} CLI можно установить с помощью:
 
-  * PowerShell. Для этого выполните команду:
+  - PowerShell. Для этого выполните команду:
 
     ```powershell
     iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/cli-windows')
@@ -52,7 +52,7 @@
     Add ydb installation dir to your PATH? [Y/n]
     ```
 
-  * cmd. Для этого выполните команду:
+  - cmd. Для этого выполните команду:
 
     ```cmd
     @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/cli-windows'))"

@@ -121,9 +121,6 @@ SELECT * FROM (
 * Google BigQuery: `FLATTEN`;
 * ClickHouse: `ARRAY JOIN / arrayJoin`;
 
-
-
-
 ## FLATTEN COLUMNS {#flatten-columns}
 
 Преобразует таблицу, в которой все столбцы должны являться структурами, в таблицу со столбцами, соответствующими каждому элементу каждой структуры из исходных столбцов.

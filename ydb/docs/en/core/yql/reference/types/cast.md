@@ -71,4 +71,3 @@ SELECT -- One field was removed and one field was added: ("three":null, "two": "
 ### Nested containers
 
 * All of the above rules are applied recursively for nested containers.
-

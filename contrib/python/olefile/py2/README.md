@@ -15,7 +15,6 @@ such as Microsoft Office 97-2003 documents, vbaProject.bin in MS Office 2007+ fi
 and FlashPix files, Outlook messages, StickyNotes, several Microscopy file formats, McAfee antivirus quarantine files,
 etc.
 
-
 **Quick links:** [Home page](https://www.decalage.info/olefile) -
 [Download/Install](http://olefile.readthedocs.io/en/latest/Install.html) -
 [Documentation](http://olefile.readthedocs.io/en/latest) -
@@ -23,7 +22,6 @@ etc.
 [Contact the author](https://www.decalage.info/contact) -
 [Repository](https://github.com/decalage2/olefile) -
 [Updates on Twitter](https://twitter.com/decalage2)
-
 
 News
 ----
@@ -57,7 +55,7 @@ or **easy_install olefile** for the first installation.
 
 To update olefile, run **pip install -U olefile**.
 
-Otherwise, see http://olefile.readthedocs.io/en/latest/Install.html
+Otherwise, see <http://olefile.readthedocs.io/en/latest/Install.html>
 
 Features
 --------
@@ -76,19 +74,16 @@ olefile is mostly meant for developers. If you are looking for tools to analyze 
 for security purposes such as malware analysis and forensics), then please also check my
 [python-oletools](https://www.decalage.info/python/oletools), which are built upon olefile and provide a higher-level interface.
 
-
 Documentation
 -------------
 
 Please see the [online documentation](http://olefile.readthedocs.io/en/latest) for more information.
-
 
 ## Real-life examples ##
 
 A real-life example: [using OleFileIO_PL for malware analysis and forensics](http://blog.gregback.net/2011/03/using-remnux-for-forensic-puzzle-6/).
 
 See also [this paper](https://computer-forensics.sans.org/community/papers/gcfa/grow-forensic-tools-taxonomy-python-libraries-helpful-forensic-analysis_6879) about python tools for forensics, which features olefile.
-
 
 License
 -------
@@ -101,9 +96,9 @@ All rights reserved.
 Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
 
- * Redistributions of source code must retain the above copyright notice, this
+- Redistributions of source code must retain the above copyright notice, this
    list of conditions and the following disclaimer.
- * Redistributions in binary form must reproduce the above copyright notice,
+- Redistributions in binary form must reproduce the above copyright notice,
    this list of conditions and the following disclaimer in the documentation
    and/or other materials provided with the distribution.
 
@@ -117,7 +112,6 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 
 ----------
 

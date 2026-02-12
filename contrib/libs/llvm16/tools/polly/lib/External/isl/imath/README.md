@@ -26,7 +26,6 @@ IMath is copyright &copy; 2002-2009 Michael J. Fromberger.
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
 
-
 About IMath
 -----------
 

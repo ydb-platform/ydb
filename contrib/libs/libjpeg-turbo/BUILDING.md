@@ -1,10 +1,8 @@
 Building libjpeg-turbo
 ======================
 
-
 Build Requirements
 ------------------
-
 
 ### All Systems
 
@@ -12,22 +10,22 @@ Build Requirements
 
 - [NASM](https://nasm.us) or [Yasm](https://yasm.tortall.net)
   (if building x86 or x86-64 SIMD extensions)
-  * If using NASM, 2.13 or later is required.
-  * If using Yasm, 1.2.0 or later is required.
-  * NASM 2.15 or later is required if building libjpeg-turbo with Intel
+  - If using NASM, 2.13 or later is required.
+  - If using Yasm, 1.2.0 or later is required.
+  - NASM 2.15 or later is required if building libjpeg-turbo with Intel
     Control-flow Enforcement Technology (CET) support.
-  * If building on macOS, NASM or Yasm can be obtained from
+  - If building on macOS, NASM or Yasm can be obtained from
     [MacPorts](https://macports.org) or [Homebrew](https://brew.sh).
-     - NOTE: Currently, if it is desirable to hide the SIMD function symbols in
+    - NOTE: Currently, if it is desirable to hide the SIMD function symbols in
        Mac executables or shared libraries that statically link with
        libjpeg-turbo, then NASM 2.14 or later or Yasm must be used when
        building libjpeg-turbo.
-  * If NASM or Yasm is not in your `PATH`, then you can specify the full path
+  - If NASM or Yasm is not in your `PATH`, then you can specify the full path
     to the assembler by using either the `CMAKE_ASM_NASM_COMPILER` CMake
     variable or the `ASM_NASM` environment variable.  On Windows, use forward
     slashes rather than backslashes in the path (for example,
     **c:/nasm/nasm.exe**).
-  * NASM and Yasm are located in the CRB (Code Ready Builder) or PowerTools
+  - NASM and Yasm are located in the CRB (Code Ready Builder) or PowerTools
     repository on Red Hat Enterprise Linux 8+ and derivatives, which is not
     enabled by default.
 
@@ -41,7 +39,7 @@ Build Requirements
   Development Kit from
   <https://oracle.com/java/technologies/downloads>.
 
-  * If using JDK 11 or later, CMake 3.10.x or later must also be used.
+  - If using JDK 11 or later, CMake 3.10.x or later must also be used.
 
 ### Windows
 
@@ -52,17 +50,17 @@ Build Requirements
   [Visual Studio Community Edition](https://visualstudio.microsoft.com),
   which includes everything necessary to build libjpeg-turbo.
 
-  * You can also download and install the standalone Windows SDK (for Windows 7
+  - You can also download and install the standalone Windows SDK (for Windows 7
     or later), which includes command-line versions of the 32-bit and 64-bit
     Visual C++ compilers.
-  * If you intend to build libjpeg-turbo from the command line, then add the
+  - If you intend to build libjpeg-turbo from the command line, then add the
     appropriate compiler and SDK directories to the `INCLUDE`, `LIB`, and
     `PATH` environment variables.  This is generally accomplished by
     executing `vcvars32.bat` or `vcvars64.bat`, which are located in the same
     directory as the compiler.
-  * If built with Visual C++ 2015 or later, the libjpeg-turbo static libraries
+  - If built with Visual C++ 2015 or later, the libjpeg-turbo static libraries
     cannot be used with earlier versions of Visual C++, and vice versa.
-  * The libjpeg API DLL (**jpeg{version}.dll**) will depend on the C run-time
+  - The libjpeg API DLL (**jpeg{version}.dll**) will depend on the C run-time
     DLLs corresponding to the version of Visual C++ that was used to build it.
 
    ... OR ...
@@ -78,8 +76,7 @@ Build Requirements
   can be downloaded from
   <https://oracle.com/java/technologies/downloads>.
 
-  * If using JDK 11 or later, CMake 3.10.x or later must also be used.
-
+  - If using JDK 11 or later, CMake 3.10.x or later must also be used.
 
 Sub-Project Builds
 ------------------
@@ -87,7 +84,6 @@ Sub-Project Builds
 The libjpeg-turbo build system does not support being included as a sub-project
 using the CMake `add_subdirectory()` function.  Use the CMake
 `ExternalProject_Add()` function instead.
-
 
 Out-of-Tree Builds
 ------------------
@@ -101,7 +97,6 @@ or settings.  In the sections below, *{build_directory}* refers to the binary
 directory, whereas *{source_directory}* refers to the libjpeg-turbo source
 directory.  For in-tree builds, these directories are the same.
 
-
 Ninja
 -----
 
@@ -109,14 +104,12 @@ If using Ninja, then replace `make` or `nmake` with `ninja`, and replace the
 CMake generator (specified with the `-G` option) with `Ninja`, in all of the
 procedures and recipes below.
 
-
 Build Procedure
 ---------------
 
 NOTE: The build procedures below assume that CMake is invoked from the command
 line, but all of these procedures can be adapted to the CMake GUI as
 well.
-
 
 ### Un*x
 
@@ -164,7 +157,6 @@ Development symlink for the TurboJPEG API
 **libturbojpeg.dll.a** (Cygwin)<br>
 Import library for the TurboJPEG API
 
-
 ### Visual C++ (Command Line)
 
     cd {build_directory}
@@ -196,7 +188,6 @@ Import library for the TurboJPEG API
 
 *{version}* is 62, 7, or 8, depending on whether libjpeg v6b (default), v7, or
 v8 emulation is enabled.
-
 
 ### Visual C++ (IDE)
 
@@ -239,7 +230,6 @@ Import library for the TurboJPEG API
 on the configuration you built in the IDE, and *{version}* is 62, 7, or 8,
 depending on whether libjpeg v6b (default), v7, or v8 emulation is enabled.
 
-
 ### MinGW
 
 NOTE: This assumes that you are building on a Windows machine using the MSYS
@@ -273,13 +263,11 @@ Import library for the TurboJPEG API
 *{version}* is 62, 7, or 8, depending on whether libjpeg v6b (default), v7, or
 v8 emulation is enabled.
 
-
 ### Debug Build
 
 Add `-DCMAKE_BUILD_TYPE=Debug` to the CMake command line.  Or, if building
 with NMake, remove `-DCMAKE_BUILD_TYPE=Release` (Debug builds are the default
 with NMake.)
-
 
 ### libjpeg v7 or v8 API/ABI Emulation
 
@@ -288,7 +276,6 @@ libjpeg-turbo that is API/ABI-compatible with libjpeg v7.  Add `-DWITH_JPEG8=1`
 to the CMake command line to build a version of libjpeg-turbo that is
 API/ABI-compatible with libjpeg v8.  See [README.md](README.md) for more
 information about libjpeg v7 and v8 emulation.
-
 
 ### Arithmetic Coding Support
 
@@ -299,7 +286,6 @@ v7 or v6b as well.  The default is to enable both arithmetic encoding and
 decoding, but those who have philosophical objections to arithmetic coding can
 add `-DWITH_ARITH_ENC=0` or `-DWITH_ARITH_DEC=0` to the CMake command line to
 disable encoding or decoding (respectively.)
-
 
 ### TurboJPEG Java Wrapper
 
@@ -321,10 +307,8 @@ building the TurboJPEG classes, and the `JAVAARGS` CMake variable to specify
 arguments that should be passed to the JRE when running the TurboJPEG Java unit
 tests.
 
-
 Build Recipes
 -------------
-
 
 ### 32-bit Build on 64-bit Linux/Unix
 
@@ -334,7 +318,6 @@ CMake:
     CFLAGS=-m32
     LDFLAGS=-m32
 
-
 ### 64-bit Build on Solaris
 
 Use export/setenv to set the following environment variables before running
@@ -343,12 +326,10 @@ CMake:
     CFLAGS=-m64
     LDFLAGS=-m64
 
-
 ### Other Compilers
 
 On Un*x systems, prior to running CMake, you can set the `CC` environment
 variable to the command used to invoke the C compiler.
-
 
 ### 32-bit MinGW Build on Un*x (including Mac and Cygwin)
 
@@ -372,7 +353,6 @@ located (usually **/usr/bin**.)  Next, execute the following commands:
 *{install\_path}* is the path under which the libjpeg-turbo binaries should be
 installed.
 
-
 ### 64-bit MinGW Build on Un*x (including Mac and Cygwin)
 
 Create a file called **toolchain.cmake** under *{build_directory}*, with the
@@ -395,7 +375,6 @@ located (usually **/usr/bin**.)  Next, execute the following commands:
 *{install\_path}* is the path under which the libjpeg-turbo binaries should be
 installed.
 
-
 Building libjpeg-turbo for iOS
 ------------------------------
 
@@ -404,7 +383,6 @@ currently supported models include Neon instructions.  Thus, they can take
 advantage of libjpeg-turbo's SIMD extensions to significantly accelerate JPEG
 compression/decompression.  This section describes how to build libjpeg-turbo
 for these platforms.
-
 
 ### Armv8 (64-bit)
 
@@ -430,13 +408,11 @@ Replace `iPhoneOS` with `iPhoneSimulator` and `-miphoneos-version-min` with
 `-miphonesimulator-version-min` to build libjpeg-turbo for the iOS simulator on
 Macs with Apple silicon CPUs.
 
-
 Building libjpeg-turbo for Android
 ----------------------------------
 
 Building libjpeg-turbo for Android platforms requires v13b or later of the
 [Android NDK](https://developer.android.com/ndk).
-
 
 ### Armv7 (32-bit)
 
@@ -464,7 +440,6 @@ needs.
       [additional CMake flags] {source_directory}
     make
 
-
 ### Armv8 (64-bit)
 
 **Clang recommended**
@@ -491,7 +466,6 @@ needs.
       [additional CMake flags] {source_directory}
     make
 
-
 ### x86 (32-bit)
 
 The following is a general recipe script that can be modified for your specific
@@ -513,7 +487,6 @@ needs.
       -DCMAKE_TOOLCHAIN_FILE=${NDK_PATH}/build/cmake/android.toolchain.cmake \
       [additional CMake flags] {source_directory}
     make
-
 
 ### x86-64 (64-bit)
 
@@ -537,7 +510,6 @@ needs.
       [additional CMake flags] {source_directory}
     make
 
-
 Advanced CMake Options
 ----------------------
 
@@ -554,7 +526,6 @@ from the build directory after initially configuring the build.  CCMake is a
 text-based interactive version of CMake, and CMake-GUI is a GUI version.  Both
 will display all variables that are relevant to the libjpeg-turbo build, their
 current values, and a help string describing what they do.
-
 
 Installing libjpeg-turbo
 ========================
@@ -603,13 +574,11 @@ brackets, then its final value will depend on the final value of that other
 variable.  For instance, the default value of `CMAKE_INSTALL_MANDIR` is
 **\<CMAKE\_INSTALL\_DATAROOTDIR\>/man**.
 
-
 Creating Distribution Packages
 ==============================
 
 The following commands can be used to create various types of distribution
 packages:
-
 
 Linux
 -----
@@ -627,7 +596,6 @@ Red Hat-style source RPM package from the tarball.  Requires RPM v4 or later.
 
 Create Debian-style binary package.  Requires dpkg.
 
-
 Mac
 ---
 
@@ -639,7 +607,7 @@ are installed by default on OS X/macOS 10.7 and later.
 In order to create a Mac package/disk image that contains universal
 x86-64/Arm binaries, set the following CMake variable:
 
-* `SECONDARY_BUILD`: Directory containing a cross-compiled x86-64 or Armv8
+- `SECONDARY_BUILD`: Directory containing a cross-compiled x86-64 or Armv8
   (64-bit) iOS or macOS build of libjpeg-turbo to include in the universal
   binaries
 
@@ -652,7 +620,6 @@ variable, and build it.  Once the primary build has been built, run `make dmg`
 from the build directory.  The packaging system will build the secondary build,
 use lipo to combine it with the primary build into a single set of universal
 binaries, then package the universal binaries.
-
 
 Windows
 -------
@@ -678,7 +645,6 @@ as the configuration you built (such as *{build_directory}*\Debug\ or
 Building a Windows installer requires the
 [Nullsoft Install System](https://nsis.sourceforge.io).  makensis.exe should
 be in your `PATH`.
-
 
 Regression testing
 ==================

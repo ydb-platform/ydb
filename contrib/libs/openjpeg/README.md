@@ -1,22 +1,25 @@
 
 # OPENJPEG Library and Applications
 
-## What is OpenJPEG ? 
+## What is OpenJPEG ?
 
 OpenJPEG is an open-source JPEG 2000 codec written in C language. It has been developed in order to promote the use of [JPEG 2000](http://www.jpeg.org/jpeg2000), a still-image compression standard from the Joint Photographic Experts Group ([JPEG](http://www.jpeg.org)).  Since April 2015, it is officially recognized by ISO/IEC and ITU-T as a [JPEG 2000 Reference Software](http://www.itu.int/rec/T-REC-T.804-201504-I!Amd2).
 
 ## Who can use the code ?
+
 [![badge-license]][link-license]
 
 Anyone. As the OpenJPEG code is released under the [BSD 2-clause "Simplified" License][link-license], anyone can use or modify the code, even for commercial applications. The only restriction is to retain the copyright in the sources or in the binaries documentation. Of course, if you modified the code in a way that might be of interest for other users, you are encouraged to share it (through a [github pull request](https://github.com/uclouvain/openjpeg/pulls) or by filling an [issue](https://github.com/uclouvain/openjpeg/issues)) but this is not a requirement.
 
 ## How to install and use OpenJPEG ?
+
 API Documentation needs a major refactoring. Meanwhile, you can check [installation](https://github.com/uclouvain/openjpeg/wiki/Installation) instructions and [codec documentation](https://github.com/uclouvain/openjpeg/wiki/DocJ2KCodec).
-    
+
 ## Current Status
+
 [![badge-build]][link-build]
 
-[![badge-msvc-build]][link-msvc-build] 
+[![badge-msvc-build]][link-msvc-build]
 
 [![badge-coverity]][link-coverity]
 
@@ -66,12 +69,11 @@ only exposes a limited subset of its functions.  It uses a mechanism of
 exporting/hiding functions. If you are unsure which functions you can use in
 your applications, you should compile OpenJPEG using something similar to gcc:
 `-fvisibility=hidden` compilation flag.
-See also: http://gcc.gnu.org/wiki/Visibility
+See also: <http://gcc.gnu.org/wiki/Visibility>
 
 On windows, MSVC directly supports export/hiding function and as such the only
 API available is the one supported by OpenJPEG.
 
-[comment-license]: https://img.shields.io/github/license/uclouvain/openjpeg.svg "https://img.shields.io/badge/license-BSD--2--Clause-blue.svg"
 [badge-license]: https://img.shields.io/badge/license-BSD--2--Clause-blue.svg "BSD 2-clause \"Simplified\" License"
 [link-license]: https://github.com/uclouvain/openjpeg/blob/master/LICENSE "BSD 2-clause \"Simplified\" License"
 [badge-build]: https://github.com/uclouvain/openjpeg/actions/workflows/build.yml/badge.svg "Build Status"

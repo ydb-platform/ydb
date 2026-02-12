@@ -221,7 +221,6 @@ Further documentation:
 > [!IMPORTANT]
 > The folder name `LICENSES` is predetermined by REUSE.
 
-
 ## Package Managers
 
 ### `BUILD.bazel`

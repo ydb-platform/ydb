@@ -1,5 +1,6 @@
 YDB Python SDK
 ---
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb/blob/main/LICENSE)
 [![PyPI version](https://badge.fury.io/py/ydb.svg)](https://badge.fury.io/py/ydb)
 [![API Reference](https://img.shields.io/badge/API-Reference-lightgreen.svg)](https://ydb-platform.github.io/ydb-python-sdk)
@@ -24,23 +25,23 @@ Officially supported Python client for YDB.
 If necessary, upgrade your version of `pip`:
 
 ```sh
-$ python -m pip install --upgrade pip
+python -m pip install --upgrade pip
 ```
 
 If you cannot upgrade `pip` due to a system-owned installation, you can
 run the example in a virtualenv:
 
 ```sh
-$ python -m pip install virtualenv
-$ virtualenv venv
-$ source venv/bin/activate
-$ python -m pip install --upgrade pip
+python -m pip install virtualenv
+virtualenv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
 ```
 
 Install YDB python sdk:
 
 ```sh
-$ python -m pip install ydb
+python -m pip install ydb
 ```
 
 ## Development

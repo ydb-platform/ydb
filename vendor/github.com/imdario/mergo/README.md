@@ -144,27 +144,27 @@ Here is a nice example:
 package main
 
 import (
-	"fmt"
-	"github.com/imdario/mergo"
+ "fmt"
+ "github.com/imdario/mergo"
 )
 
 type Foo struct {
-	A string
-	B int64
+ A string
+ B int64
 }
 
 func main() {
-	src := Foo{
-		A: "one",
-		B: 2,
-	}
-	dest := Foo{
-		A: "two",
-	}
-	mergo.Merge(&dest, src)
-	fmt.Println(dest)
-	// Will print
-	// {two 2}
+ src := Foo{
+  A: "one",
+  B: 2,
+ }
+ dest := Foo{
+  A: "two",
+ }
+ mergo.Merge(&dest, src)
+ fmt.Println(dest)
+ // Will print
+ // {two 2}
 }
 ```
 
@@ -180,8 +180,8 @@ Transformers allow to merge specific types differently than in the default behav
 package main
 
 import (
-	"fmt"
-	"github.com/imdario/mergo"
+ "fmt"
+ "github.com/imdario/mergo"
         "reflect"
         "time"
 )
@@ -190,33 +190,33 @@ type timeTransformer struct {
 }
 
 func (t timeTransformer) Transformer(typ reflect.Type) func(dst, src reflect.Value) error {
-	if typ == reflect.TypeOf(time.Time{}) {
-		return func(dst, src reflect.Value) error {
-			if dst.CanSet() {
-				isZero := dst.MethodByName("IsZero")
-				result := isZero.Call([]reflect.Value{})
-				if result[0].Bool() {
-					dst.Set(src)
-				}
-			}
-			return nil
-		}
-	}
-	return nil
+ if typ == reflect.TypeOf(time.Time{}) {
+  return func(dst, src reflect.Value) error {
+   if dst.CanSet() {
+    isZero := dst.MethodByName("IsZero")
+    result := isZero.Call([]reflect.Value{})
+    if result[0].Bool() {
+     dst.Set(src)
+    }
+   }
+   return nil
+  }
+ }
+ return nil
 }
 
 type Snapshot struct {
-	Time time.Time
-	// ...
+ Time time.Time
+ // ...
 }
 
 func main() {
-	src := Snapshot{time.Now()}
-	dest := Snapshot{}
-	mergo.Merge(&dest, src, mergo.WithTransformers(timeTransformer{}))
-	fmt.Println(dest)
-	// Will print
-	// { 2018-01-12 01:15:00 +0000 UTC m=+0.000000001 }
+ src := Snapshot{time.Now()}
+ dest := Snapshot{}
+ mergo.Merge(&dest, src, mergo.WithTransformers(timeTransformer{}))
+ fmt.Println(dest)
+ // Will print
+ // { 2018-01-12 01:15:00 +0000 UTC m=+0.000000001 }
 }
 ```
 
@@ -231,6 +231,5 @@ Written by [Dario Castañé](http://dario.im).
 ## License
 
 [BSD 3-Clause](http://opensource.org/licenses/BSD-3-Clause) license, as [Go language](http://golang.org/LICENSE).
-
 
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fimdario%2Fmergo.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fimdario%2Fmergo?ref=badge_large)

@@ -228,5 +228,3 @@ SELECT
   456s AS `Int16`,
   1.2345f AS `Float`;
 ```
-
-

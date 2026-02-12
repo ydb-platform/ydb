@@ -35,7 +35,6 @@ BoringSSL it was built against. Likewise, Android's system-internal copy of
 BoringSSL is not exposed by the NDK and must not be used by third-party
 applications.
 
-
 ## Major API changes
 
 ### Integer types
@@ -226,7 +225,6 @@ guarantees it.
 BoringSSL is in the process of deprecating OpenSSL's `d2i` and `i2d` in favor of
 new functions using the much less error-prone `CBS` and `CBB` types.
 BoringSSL-only code should use those functions where available.
-
 
 ## Replacements for `CTRL` values
 

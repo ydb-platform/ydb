@@ -70,10 +70,10 @@
 
 Вторичный индекс может быть:
 
-- Создан при создании таблицы командой YQL [CREATE TABLE](../../yql/reference/syntax/create_table/index.md).
-- Добавлен к существующей таблице командой YQL [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md) или командой {{ ydb-short-name }} CLI [table index add](../../reference/ydb-cli/commands/secondary_index.md#add)
-- Удален у существующей таблицы командой YQL [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md) или командой {{ ydb-short-name }} CLI [table index drop](../../reference/ydb-cli/commands/secondary_index.md#drop).
-- Удален вместе с таблицей командой YQL [DROP TABLE](../../yql/reference/syntax/drop_table.md) или командой {{ ydb-short-name }} CLI `table drop`.
+* Создан при создании таблицы командой YQL [CREATE TABLE](../../yql/reference/syntax/create_table/index.md).
+* Добавлен к существующей таблице командой YQL [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md) или командой {{ ydb-short-name }} CLI [table index add](../../reference/ydb-cli/commands/secondary_index.md#add)
+* Удален у существующей таблицы командой YQL [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md) или командой {{ ydb-short-name }} CLI [table index drop](../../reference/ydb-cli/commands/secondary_index.md#drop).
+* Удален вместе с таблицей командой YQL [DROP TABLE](../../yql/reference/syntax/drop_table.md) или командой {{ ydb-short-name }} CLI `table drop`.
 
 ## Применение вторичных индексов {#use}
 

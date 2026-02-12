@@ -6,4 +6,3 @@ Table of contents:
 
 * [{#T}](accessing-json.md)
 * [{#T}](modifying-json.md)
-

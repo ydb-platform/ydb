@@ -131,7 +131,6 @@
 - Fix windows arm builds [\#1423](https://github.com/uclouvain/openjpeg/pull/1423) ([Neumann-A](https://github.com/Neumann-A))
 - pkgconfig: Define OPJ\_STATIC for static linking with pkgconf [\#1421](https://github.com/uclouvain/openjpeg/pull/1421) ([Biswa96](https://github.com/Biswa96))
 
-
 ## [v2.5.0](https://github.com/uclouvain/openjpeg/releases/v2.5.0) (2022-05-13)
 
 [Full Changelog](https://github.com/uclouvain/openjpeg/compare/v2.4.0...v2.5.0)
@@ -142,7 +141,7 @@
 - Java Support 1.8 now... [\#1418](https://github.com/uclouvain/openjpeg/pull/1418) ([jiapei100](https://github.com/jiapei100))
 - Separate fuzz targets to increase coverage [\#1416](https://github.com/uclouvain/openjpeg/pull/1416) ([Navidem](https://github.com/Navidem))
 - CMakeLists.txt: do not set INSTALL\_NAME\_DIR for MacOS builds for CMake \>= 3.0 \(fixes \#1404\) [\#1410](https://github.com/uclouvain/openjpeg/pull/1410) ([rouault](https://github.com/rouault))
-- Avoid integer overflows in DWT. Fixes https://bugs.chromium.org/p/oss-fuzz/issues/detail?id=44544 [\#1408](https://github.com/uclouvain/openjpeg/pull/1408) ([rouault](https://github.com/rouault))
+- Avoid integer overflows in DWT. Fixes <https://bugs.chromium.org/p/oss-fuzz/issues/detail?id=44544> [\#1408](https://github.com/uclouvain/openjpeg/pull/1408) ([rouault](https://github.com/rouault))
 - Updated "added support for partial bitstream decoding" [\#1407](https://github.com/uclouvain/openjpeg/pull/1407) ([Neopallium](https://github.com/Neopallium))
 - opj\_encoder\_set\_extra\_options\(\): add a GUARD\_BITS=value option [\#1403](https://github.com/uclouvain/openjpeg/pull/1403) ([rouault](https://github.com/rouault))
 - More overflow related bug fixes [\#1402](https://github.com/uclouvain/openjpeg/pull/1402) ([Eharve14](https://github.com/Eharve14))
@@ -181,7 +180,6 @@
 - Fix year in NEWS [\#1312](https://github.com/uclouvain/openjpeg/pull/1312) ([stweil](https://github.com/stweil))
 - Fix lcms2 static linking using pgk config [\#867](https://github.com/uclouvain/openjpeg/pull/867) ([pseiderer](https://github.com/pseiderer))
 - fix static build only against tiff and its indirect dependencies [\#866](https://github.com/uclouvain/openjpeg/pull/866) ([tSed](https://github.com/tSed))
-
 
 **Closed issues:**
 
@@ -250,7 +248,6 @@
 - openmj2\mj2.c: Out of bounds [\#646](https://github.com/uclouvain/openjpeg/issues/646)
 - bin\mj2\opj\_mj2\_decompress.c 101 wrong check / leak [\#608](https://github.com/uclouvain/openjpeg/issues/608)
 
-
 ## [v2.4.0](https://github.com/uclouvain/openjpeg/releases/v2.4.0) (2020-12-28)
 
 [Full Changelog](https://github.com/uclouvain/openjpeg/compare/v2.3.1...v2.4.0)
@@ -303,7 +300,7 @@
 - pi.c: avoid out of bounds access with POC \(fixes \#1302\) [\#1304](https://github.com/uclouvain/openjpeg/pull/1304) ([rouault](https://github.com/rouault))
 - Encoder: grow again buffer size [\#1303](https://github.com/uclouvain/openjpeg/pull/1303) ([zodf0055980](https://github.com/zodf0055980))
 - opj\_j2k\_write\_sod\(\): avoid potential heap buffer overflow \(fixes \#1299\) \(probably master only\) [\#1301](https://github.com/uclouvain/openjpeg/pull/1301) ([rouault](https://github.com/rouault))
-- pi.c: avoid out of bounds access with POC \(refs https://github.com/uclouvain/openjpeg/issues/1293\#issuecomment-737122836\) [\#1300](https://github.com/uclouvain/openjpeg/pull/1300) ([rouault](https://github.com/rouault))
+- pi.c: avoid out of bounds access with POC \(refs <https://github.com/uclouvain/openjpeg/issues/1293\#issuecomment-737122836\>) [\#1300](https://github.com/uclouvain/openjpeg/pull/1300) ([rouault](https://github.com/rouault))
 - opj\_t2\_encode\_packet\(\): avoid out of bound access of \#1297, but likely not the proper fix [\#1298](https://github.com/uclouvain/openjpeg/pull/1298) ([rouault](https://github.com/rouault))
 - opj\_t2\_encode\_packet\(\): avoid out of bound access of \#1294, but likely not the proper fix [\#1296](https://github.com/uclouvain/openjpeg/pull/1296) ([rouault](https://github.com/rouault))
 - opj\_j2k\_setup\_encoder\(\): validate POC compno0 and compno1 \(fixes \#1293\) [\#1295](https://github.com/uclouvain/openjpeg/pull/1295) ([rouault](https://github.com/rouault))
@@ -339,6 +336,7 @@
 - openjp2/j2k: Report error if all wanted components are not decoded. [\#1164](https://github.com/uclouvain/openjpeg/pull/1164) ([sebras](https://github.com/sebras))
 
 ## [v2.3.1](https://github.com/uclouvain/openjpeg/releases/v2.3.1) (2019-04-02)
+
 [Full Changelog](https://github.com/uclouvain/openjpeg/compare/v2.3.0...v2.3.1)
 
 **Closed issues:**
@@ -417,6 +415,7 @@
 - Add missing fclose\(\) statement in error condition. [\#1037](https://github.com/uclouvain/openjpeg/pull/1037) ([gfiumara](https://github.com/gfiumara))
 
 ## [v2.3.0](https://github.com/uclouvain/openjpeg/releases/v2.3.0) (2017-10-04)
+
 [Full Changelog](https://github.com/uclouvain/openjpeg/compare/v2.2.0...v2.3.0)
 
 **Implemented enhancements:**
@@ -481,6 +480,7 @@
 - Changes in converttif.c for PPC64 [\#980](https://github.com/uclouvain/openjpeg/pull/980) ([szukw000](https://github.com/szukw000))
 
 ## [v2.2.0](https://github.com/uclouvain/openjpeg/releases/v2.2.0) (2017-08-10)
+
 [Full Changelog](https://github.com/uclouvain/openjpeg/compare/v2.1.2...v2.2.0)
 
 **Implemented enhancements:**
@@ -577,6 +577,7 @@
 - Fix retrieval of jpylyzer in AppVeyor [\#915](https://github.com/uclouvain/openjpeg/pull/915) ([rouault](https://github.com/rouault))
 
 ## [v2.1.2](https://github.com/uclouvain/openjpeg/releases/v2.1.2) (2016-09-28)
+
 [Full Changelog](https://github.com/uclouvain/openjpeg/compare/v2.1.1...v2.1.2)
 
 **Closed issues:**
@@ -631,6 +632,7 @@
 - Add .gitignore [\#787](https://github.com/uclouvain/openjpeg/pull/787) ([stweil](https://github.com/stweil))
 
 ## [v2.1.1](https://github.com/uclouvain/openjpeg/releases/tag/v2.1.1) (2016-07-05)
+
 [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.2.1...v2.1.1)
 
 **Implemented enhancements:**
@@ -793,7 +795,7 @@
 - patch for openjpeg-trunk-r2347 and BIG\_ENDIAN [\#242](https://github.com/uclouvain/openjpeg/issues/242)
 - CMAP: MTYP == 0 \(direct use\) not handled properly [\#235](https://github.com/uclouvain/openjpeg/issues/235)
 - Black Pixel [\#233](https://github.com/uclouvain/openjpeg/issues/233)
--  opj\_compress runtime error after fresh Linux install due to apparent failure to execute ldconfig [\#219](https://github.com/uclouvain/openjpeg/issues/219)
+- opj\_compress runtime error after fresh Linux install due to apparent failure to execute ldconfig [\#219](https://github.com/uclouvain/openjpeg/issues/219)
 - openjp2 debug works, release build does not [\#217](https://github.com/uclouvain/openjpeg/issues/217)
 - openjpeg-branch15-r2299 and openjpeg-trunk-r2299 fail to decode a JP2 file [\#212](https://github.com/uclouvain/openjpeg/issues/212)
 - openjpeg-trunk issue with Win7 [\#201](https://github.com/uclouvain/openjpeg/issues/201)
@@ -804,7 +806,7 @@
 - Migration guide v2 [\#160](https://github.com/uclouvain/openjpeg/issues/160)
 - Cannot decompress JPEG2000Aware3.18.7.3Win32\_kdutranscode6.3.1.j2k [\#158](https://github.com/uclouvain/openjpeg/issues/158)
 - Cannot decompress JPEG2000Aware3.18.7.3Win32.j2k [\#157](https://github.com/uclouvain/openjpeg/issues/157)
-- openjpeg@googlegroups.com has disappeared [\#153](https://github.com/uclouvain/openjpeg/issues/153)
+- <openjpeg@googlegroups.com> has disappeared [\#153](https://github.com/uclouvain/openjpeg/issues/153)
 - OpenJPEG 1.5.0 crashes on a ridiculously big file... [\#151](https://github.com/uclouvain/openjpeg/issues/151)
 - opj\_image vs free [\#146](https://github.com/uclouvain/openjpeg/issues/146)
 - Windows .dll file invalid [\#140](https://github.com/uclouvain/openjpeg/issues/140)
@@ -841,7 +843,7 @@
 - image\_to\_j2k not outputting to win32 console properly [\#18](https://github.com/uclouvain/openjpeg/issues/18)
 - \[OpenJPEG\] OpenJPEG\_v13: tiled image part 2 [\#17](https://github.com/uclouvain/openjpeg/issues/17)
 - JP2 Color Space modification by Matteo Italia [\#13](https://github.com/uclouvain/openjpeg/issues/13)
--  Patch submission \( exotic video formats, and a few things \)  [\#12](https://github.com/uclouvain/openjpeg/issues/12)
+- Patch submission \( exotic video formats, and a few things \)  [\#12](https://github.com/uclouvain/openjpeg/issues/12)
 - 16 bits lossy compression [\#10](https://github.com/uclouvain/openjpeg/issues/10)
 - pnm file formats not accepting bitdepth greater than 8 bpp [\#8](https://github.com/uclouvain/openjpeg/issues/8)
 - Heap corruption in j2k encoder [\#5](https://github.com/uclouvain/openjpeg/issues/5)
@@ -987,35 +989,43 @@
 - Formatted the readme file [\#507](https://github.com/uclouvain/openjpeg/pull/507) ([htmfilho](https://github.com/htmfilho))
 
 ## [version.2.1](https://github.com/uclouvain/openjpeg/releases/tag/version.2.1) (2014-04-29)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.2.0.1...version.2.1)
 
 ## [version.2.0.1](https://github.com/uclouvain/openjpeg/releases/tag/version.2.0.1) (2014-04-22)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.1.5.2...version.2.0.1)
 
 ## [version.1.5.2](https://github.com/uclouvain/openjpeg/releases/tag/version.1.5.2) (2014-03-28)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.2.0...version.1.5.2)
 
 ## [version.2.0](https://github.com/uclouvain/openjpeg/releases/tag/version.2.0) (2014-03-28)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.1.5.1...version.2.0)
 
 ## [version.1.5.1](https://github.com/uclouvain/openjpeg/releases/tag/version.1.5.1) (2012-09-13)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.1.5...version.1.5.1)
 
 ## [version.1.5](https://github.com/uclouvain/openjpeg/releases/tag/version.1.5) (2012-02-07)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.1.3...version.1.5)
 
 ## [version.1.3](https://github.com/uclouvain/openjpeg/releases/tag/version.1.3) (2011-07-03)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.1.4...version.1.3)
 
 ## [version.1.4](https://github.com/uclouvain/openjpeg/releases/tag/version.1.4) (2011-07-03)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.1.2...version.1.4)
 
 ## [version.1.2](https://github.com/uclouvain/openjpeg/releases/tag/version.1.2) (2007-06-04)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.1.1...version.1.2)
 
 ## [version.1.1](https://github.com/uclouvain/openjpeg/releases/tag/version.1.1) (2007-01-31)
+
 List of fixed issues and enhancements unavailable, see [NEWS](https://github.com/uclouvain/openjpeg/blob/master/NEWS.md) or [Full Changelog](https://github.com/uclouvain/openjpeg/compare/version.1.0...version.1.1)
-
-
 
 \* *This Change Log was automatically generated by [github_changelog_generator](https://github.com/skywinder/Github-Changelog-Generator)*

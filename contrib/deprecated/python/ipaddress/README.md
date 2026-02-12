@@ -12,12 +12,16 @@ Note that just like in Python 3.3+ you must use character strings and not byte s
 >>> ipaddress.ip_address('1.2.3.4')
 IPv4Address(u'1.2.3.4')
 ```
+
 or
+
 ```python
 >>> ipaddress.ip_address(u'1.2.3.4')
 IPv4Address(u'1.2.3.4')
 ```
+
 but not:
+
 ```python
 >>> ipaddress.ip_address(b'1.2.3.4')
 Traceback (most recent call last):

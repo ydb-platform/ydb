@@ -7,7 +7,7 @@ There are several types of "versioning" used by the oneTBB project.
 3. The *library interface version*
 4. *API versioning* used to maintain backwards compatibility
 
-The oneTBB project uses semantic versioning (https://semver.org/) and as a oneAPI Library,
+The oneTBB project uses semantic versioning (<https://semver.org/>) and as a oneAPI Library,
 the oneTBB project makes commitments around compatibility as described
 [here](https://www.intel.com/content/www/us/en/docs/oneapi/programming-guide/2024-1/oneapi-library-compatibility.html).
 With semantic versioning, a MAJOR version increment generally means an incompatible API change,
@@ -26,7 +26,7 @@ supported by the implementation.
 ## The oneTBB Library Version
 
 The oneTBB library version can be thought of as the name of the release. If you want to find a specific
-release in the repository (https://github.com/uxlfoundation/oneTBB), the tag you would look for corresponds
+release in the repository (<https://github.com/uxlfoundation/oneTBB>), the tag you would look for corresponds
 to the oneTBB library version.
 
 [As described in the specification](https://oneapi-spec.uxlfoundation.org/specifications/oneapi/latest/elements/onetbb/source/configuration/version_information),
@@ -61,12 +61,12 @@ libtbb.so -> libtbb.so.X.  Therefore, whether you build against libtbb.so, libtb
 application will have a dependency on libtbb.so.X.
 
 A common development process is to compile and link against a library version X.Y. This creates
-a dependency on libtbb.so.X. The packaged project then redistributes a TBB shared library that 
+a dependency on libtbb.so.X. The packaged project then redistributes a TBB shared library that
 is X.Z, where X.Z >= X.Y.
 
-In the (unusual) case where the package does not redistribute a TBB library and instead depends on a version already 
+In the (unusual) case where the package does not redistribute a TBB library and instead depends on a version already
 available on the install platform, it is safest to build against the oldest version you expect to encounter; in the
-extreme this would be X.1. Of course, building against X.1 means no additional functionalility added in any later minor 
+extreme this would be X.1. Of course, building against X.1 means no additional functionalility added in any later minor
 release can be used during the development of the application.
 
 ### Shared Library Practices for Windows
@@ -78,10 +78,10 @@ On Windows, the TBB binary library has only the major version number, tbb12.dll.
 This section is targeted at oneTBB contributors and will likely not be of interest to users of the
 oneTBB library.
 
-As mentioned previously, minor release may add new functionality, including modified definitions of classes 
-in the headers or new entry points into the binary library.  To safely add this new functionality in a way 
-that avoids conflicts, oneTBB has namespaces for class definitions in the headers (that start with the 
-letter "d") and namespaces for symbols exported by the binary runtime library (that start with the 
+As mentioned previously, minor release may add new functionality, including modified definitions of classes
+in the headers or new entry points into the binary library.  To safely add this new functionality in a way
+that avoids conflicts, oneTBB has namespaces for class definitions in the headers (that start with the
+letter "d") and namespaces for symbols exported by the binary runtime library (that start with the
 letter "r").
 
 Below is an example of
@@ -98,12 +98,12 @@ by the oneTBB runtime library:
     }
     }
 
-This function is in the runtime namespace `r1` and takes `d1` versions of `task_group_context` and 
-`filter_node` classes as arguments. Backward incompatible changes added to the library can be added 
+This function is in the runtime namespace `r1` and takes `d1` versions of `task_group_context` and
+`filter_node` classes as arguments. Backward incompatible changes added to the library can be added
 to namespaces with incremented version numbers.
 
 Rules for the `d` namespace include:
 
 - If the layout of public class X is changed incompatibly, the “d” namespace number should be incremented.
-- If there are existing entry points using the current version of class X, the old version of X should 
+- If there are existing entry points using the current version of class X, the old version of X should
 be kept in the previous “d” namespace.

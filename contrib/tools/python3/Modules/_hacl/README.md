@@ -1,4 +1,4 @@
-# Algorithm implementations used by the `hashlib` module.
+# Algorithm implementations used by the `hashlib` module
 
 This code comes from the
 [HACL\*](https://github.com/hacl-star/hacl-star/) project.

@@ -1,4 +1,5 @@
 # Change Log
+
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
@@ -7,6 +8,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## 1.1.0 - 2016-08-25
 
 ### Added
+
 * Add GenericDocument ctor overload to specify JSON type (#369)
 * Add FAQ (#372, #373, #374, #376)
 * Add forward declaration header `fwd.h`
@@ -17,7 +19,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 * documenttest.cpp: EXPECT_THROW when checking empty allocator (470)
 * GenericDocument: add implicit conversion to ParseResult (#480)
 * Use <wchar.h> with C++ linkage on Windows ARM (#485)
-* Detect little endian for Microsoft ARM targets 
+* Detect little endian for Microsoft ARM targets
 * Check Nan/Inf when writing a double (#510)
 * Add JSON Schema Implementation (#522)
 * Add iostream wrapper (#530)
@@ -43,6 +45,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 * Add std::string overload to PrettyWriter::Key() when RAPIDJSON_HAS_STDSTRING is defined (#698)
 
 ### Fixed
+
 * Fix gcc/clang/vc warnings (#350, #394, #397, #444, #447, #473, #515, #582, #589, #595, #667)
 * Fix documentation (#482, #511, #550, #557, #614, #635, #660)
 * Fix emscripten alignment issue (#535)
@@ -72,6 +75,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 * Fix builds on x32 platform. #703
 
 ### Changed
+
 * Clarify problematic JSON license (#392)
 * Move Travis to container based infrastructure (#504, #558)
 * Make whitespace array more compact (#513)
@@ -84,9 +88,11 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## [1.0.2] - 2015-05-14
 
 ### Added
+
 * Add Value::XXXMember(...) overloads for std::string (#335)
 
 ### Fixed
+
 * Include rapidjson.h for all internal/error headers.
 * Parsing some numbers incorrectly in full-precision mode (`kFullPrecisionParseFlag`) (#342)
 * Fix some numbers parsed incorrectly (#336)
@@ -94,36 +100,43 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 * Fix MemoryPoolAllocator::Clear() to clear user-buffer (0691502573f1afd3341073dd24b12c3db20fbde4)
 
 ### Changed
+
 * CMakeLists for include as a thirdparty in projects (#334, #337)
-* Change Document::ParseStream() to use stack allocator for Reader (ffbe38614732af8e0b3abdc8b50071f386a4a685) 
+* Change Document::ParseStream() to use stack allocator for Reader (ffbe38614732af8e0b3abdc8b50071f386a4a685)
 
 ## [1.0.1] - 2015-04-25
 
 ### Added
+
 * Changelog following [Keep a CHANGELOG](https://github.com/olivierlacan/keep-a-changelog) suggestions.
 
 ### Fixed
+
 * Parsing of some numbers (e.g. "1e-00011111111111") causing assertion (#314).
 * Visual C++ 32-bit compilation error in `diyfp.h` (#317).
 
 ## [1.0.0] - 2015-04-22
 
 ### Added
+
 * 100% [Coverall](https://coveralls.io/r/miloyip/rapidjson?branch=master) coverage.
 * Version macros (#311)
 
 ### Fixed
+
 * A bug in trimming long number sequence (4824f12efbf01af72b8cb6fc96fae7b097b73015).
 * Double quote in unicode escape (#288).
 * Negative zero roundtrip (double only) (#289).
 * Standardize behavior of `memcpy()` and `malloc()` (0c5c1538dcfc7f160e5a4aa208ddf092c787be5a, #305, 0e8bbe5e3ef375e7f052f556878be0bd79e9062d).
 
 ### Removed
+
 * Remove an invalid `Document::ParseInsitu()` API (e7f1c6dd08b522cfcf9aed58a333bd9a0c0ccbeb).
 
 ## 1.0-beta - 2015-04-8
 
 ### Added
+
 * RFC 7159 (#101)
 * Optional Iterative Parser (#76)
 * Deep-copy values (#20)
@@ -140,11 +153,13 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 * Redo all documentation (English, Simplified Chinese)
 
 ### Changed
+
 * Copyright ownership transfered to THL A29 Limited (a Tencent company).
 * Migrating from Premake to CMAKE (#192)
 * Resolve all warning reports
 
 ### Removed
+
 * Remove other JSON libraries for performance comparison (#180)
 
 ## 0.11 - 2012-11-16
@@ -152,7 +167,6 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## 0.1 - 2011-11-18
 
 [Unreleased]: https://github.com/miloyip/rapidjson/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/miloyip/rapidjson/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/miloyip/rapidjson/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/miloyip/rapidjson/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/miloyip/rapidjson/compare/v1.0-beta...v1.0.0

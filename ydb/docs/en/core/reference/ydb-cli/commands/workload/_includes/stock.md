@@ -94,7 +94,6 @@ See the description of the command to run the data load:
 | `--cancel-after` | - | [Timeout for canceling an operation in milliseconds](../../../../../dev/timeouts.md). |
 | `--window` | - | Statistics collection window in seconds. Default: 1. |
 
-
 ## The user-hist workload {#get-customer-history}
 
 This type of load reads the specified number of orders for the customer with id = 10000.

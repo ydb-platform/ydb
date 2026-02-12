@@ -57,10 +57,12 @@ cmake --build aws-c-event-stream/build --target install
 Event stream encoding provides bidirectional communication between a client and a server.
 
 Each message consists of two sections: the prelude and the data. The prelude consists of:
+
 1. The total byte length of the message
 2. The combined byte length of all headers
 
 The data section consists of:
+
 1. Headers
 2. Payload
 

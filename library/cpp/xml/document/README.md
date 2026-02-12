@@ -38,5 +38,4 @@ The standard way to use it is as follows:
     // save whole document with optional encoding
     TString modifiedDoc  = xml2.ToString("ISO-8559-1");
 
-
 See xml-document_ut.cpp for more examples.

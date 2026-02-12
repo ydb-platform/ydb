@@ -83,7 +83,7 @@ Returns the number of non-overlapping substrings of the input string that have m
 
 Notes on Re2::Options from the official [repository](https://github.com/google/re2/blob/main/re2/re2.h#L595-L617)
 
-#|
+# |
 || Parameter | Default | Comments ||
 || CaseSensitive:Bool? | true | match is case-sensitive (regexp can override with (?i) unless in posix_syntax mode) ||
 || DotNl:Bool? | false | let `.` match `\n` (default ) ||
@@ -120,4 +120,3 @@ SELECT
 ```
 
 In both cases, the word FOO will be found. Using the raw string @@regexp@@ lets you avoid double slashes.
-

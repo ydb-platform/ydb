@@ -223,17 +223,17 @@ The last two options potentially create a lot of output which can significantly 
 
 ### 3.4.0
 
-- Switched to a new major version of the antlr4ng runtime (3.0.0).
-- Fixed issue #96 Add .cjs output to package
+* Switched to a new major version of the antlr4ng runtime (3.0.0).
+* Fixed issue #96 Add .cjs output to package
 
 ### 3.3.7
 
-- Stop bundling 3rd party libraries in the own lib bundle. This is not only unnecessary (these deps are installed with all the other dependencies in a target project), but can cause trouble if a dependent project uses 2 different versions of such a bundled 3rd party lib.
+* Stop bundling 3rd party libraries in the own lib bundle. This is not only unnecessary (these deps are installed with all the other dependencies in a target project), but can cause trouble if a dependent project uses 2 different versions of such a bundled 3rd party lib.
 
 ### 3.3.6
 
-- Fixed bug #93 Add command to esbuild (stop including 3rd party libs in bundle).
-- Updated dependencies.
+* Fixed bug #93 Add command to esbuild (stop including 3rd party libs in bundle).
+* Updated dependencies.
 
 ### 3.3.5
 
@@ -248,95 +248,97 @@ Updated dependencies.
 Now using esbuild for building the package.
 
 ### 3.2.4 - 3.2.5
-- Last changes for the dependency switch (antlr-ts -> antlr4ng).
-- Updated Jest settings to run ESM + TS tests.
+* Last changes for the dependency switch (antlr-ts -> antlr4ng).
+* Updated Jest settings to run ESM + TS tests.
 
 ### 3.2.3
-- Completed switch away from antlr4ts.
+* Completed switch away from antlr4ts.
 
 ### 3.2.0
 
-- A new [TypeScript runtime](https://github.com/mike-lischke/antlr4ng) powers this package now (antlr4ng).
-- The package is now published as ES module, which is supported by all modern browsers and Node.js.
-- The contributors list has been moved to a separate file, because now contributions are tracked via git's signed-off commits.
+* A new [TypeScript runtime](https://github.com/mike-lischke/antlr4ng) powers this package now (antlr4ng).
+* The package is now published as ES module, which is supported by all modern browsers and Node.js.
+* The contributors list has been moved to a separate file, because now contributions are tracked via git's signed-off commits.
 
 ### 3.1.1
 
-- Renamed a few interfaces to follow the interface naming rules (a leading I).
-- Merged PR #81 from Aaron Braunstein.
-- Upgraded all dependencies to their latest version.
--
+* Renamed a few interfaces to follow the interface naming rules (a leading I).
+* Merged PR #81 from Aaron Braunstein.
+* Upgraded all dependencies to their latest version.
+*
+
 ### 3.0.0
 
 BREAKING CHANGES: With this major version release the API has been changed to make it more consistent and easier to use. The most important changes are:
 
-- All the classes in the SymbolTable.ts file have been split into separate files.
-- The main Symbol class has been renamed to `BaseSymbol` to avoid confusion and trouble with the Javascript `Symbol` class.
-- The package works now with Typescript 5.0 and above.
-- The tests have been organized into a separate sub project, which is no longer built with the main project. Instead tests files are transpiled on-the-fly (using `ts-jest`) when running the tests. These transpiled files are never written to disk.
-- Symbol creation functions (like `SymbolTable.addNewSymbolOfType`) now allow Typescript to check the given parameters for the class type. You will now have to provide the correct parameter list for the symbol type you want to create. This is a breaking change, because the old version allowed you to pass any parameter list to any symbol creation function.
+* All the classes in the SymbolTable.ts file have been split into separate files.
+* The main Symbol class has been renamed to `BaseSymbol` to avoid confusion and trouble with the Javascript `Symbol` class.
+* The package works now with Typescript 5.0 and above.
+* The tests have been organized into a separate sub project, which is no longer built with the main project. Instead tests files are transpiled on-the-fly (using `ts-jest`) when running the tests. These transpiled files are never written to disk.
+* Symbol creation functions (like `SymbolTable.addNewSymbolOfType`) now allow Typescript to check the given parameters for the class type. You will now have to provide the correct parameter list for the symbol type you want to create. This is a breaking change, because the old version allowed you to pass any parameter list to any symbol creation function.
 
 ### 2.2.3
 
 Upgraded dependencies, which includes a new major version of Typescript (5.0). With this version the `main` field in `package.json` apparently became necessary, because of the package organization, and has been set in this release.
 
 ### 2.2.2
-- Some improvements in the symbol table implementation.
-- Updated dependencies.
-- PR #76 (fixes bug #23) Account for empty and fully-optional-body rules when collecting tokens, thanks to Aaron Braunstein.
+* Some improvements in the symbol table implementation.
+* Updated dependencies.
+* PR #76 (fixes bug #23) Account for empty and fully-optional-body rules when collecting tokens, thanks to Aaron Braunstein.
 
 ### 2.2.1
+
 Reverted changes from `any` to `unknown` for `SymbolTable.addNewSymbolOfType`. It works in the tests, but is not accepted by consumers of the node module.
 
 ### 2.2.0
-- Added `InterfaceSymbol` to SymbolTable and enhanced `ClassSymbol` for interface implementations.
-- Added a modifier and a visibility field to Symbol, so that's available for all symbols now. Removed the obsolete visibility field from method and field symbols.
+* Added `InterfaceSymbol` to SymbolTable and enhanced `ClassSymbol` for interface implementations.
+* Added a modifier and a visibility field to Symbol, so that's available for all symbols now. Removed the obsolete visibility field from method and field symbols.
 
 ### 2.1.0
-- It turned out that synchronous symbol retrieval methods have their value, so I brought them back by adding `...Sync()` variants of all methods with an async behavior.
-- Brought back and extended project tests on Github.
-- Upgraded module dependencies.
-- Cleaned up the code again, now with latest eslint settings.
+* It turned out that synchronous symbol retrieval methods have their value, so I brought them back by adding `...Sync()` variants of all methods with an async behavior.
+* Brought back and extended project tests on Github.
+* Upgraded module dependencies.
+* Cleaned up the code again, now with latest eslint settings.
 
 ### 2.0.2
-- `getAllSymbols<T>` now returns symbols of type T (instead of `Symbol`), like all other enumeration methods.
+* `getAllSymbols<T>` now returns symbols of type T (instead of `Symbol`), like all other enumeration methods.
 
 ### 2.0.1
-- Breaking change: some of the methods in the symbol table implementation, which may require extra work return now promises (symbol collections and resolver methods). This allows also to override them and return asynchronous results which are constructed from external resources (like database symbols).
+* Breaking change: some of the methods in the symbol table implementation, which may require extra work return now promises (symbol collections and resolver methods). This allows also to override them and return asynchronous results which are constructed from external resources (like database symbols).
 
 ### 1.1.16
-- Fixed an issue where wrong tokens were collected for code completion.
+* Fixed an issue where wrong tokens were collected for code completion.
 
 ### 1.1.15
-- Fixed a problem with seen states in the follow set determination.
+* Fixed a problem with seen states in the follow set determination.
 
 ### 1.1.13
-- Added a C# port of the library (thanks to Jonathan Philipps)
-- Optionally allow to walk the rule stack on matching a preferred rule either top-down or bottom-up (which changes how preference is given to multiple preferred rules in a single stack).
-- Rule candidates now include the start token index of where they matched.
+* Added a C# port of the library (thanks to Jonathan Philipps)
+* Optionally allow to walk the rule stack on matching a preferred rule either top-down or bottom-up (which changes how preference is given to multiple preferred rules in a single stack).
+* Rule candidates now include the start token index of where they matched.
 
 ### 1.1.12
-- Updated modules with known vulnerabilities.
-- Better handling of recursive rules in code completion (via precedence).
-- Updated to latest antlr4ts.
+* Updated modules with known vulnerabilities.
+* Better handling of recursive rules in code completion (via precedence).
+* Updated to latest antlr4ts.
 
 ### 1.1.8
-- Renamed a number of methods for improved consistency (`next` -> `nextSibling` etc.) and updated some tests.
-- Also simple symbols can be used to resolve other symbols (by delegating this call to their parents, if there's one).
-- Added a method to find a symbol by it's associated context + added a test for that.
+* Renamed a number of methods for improved consistency (`next` -> `nextSibling` etc.) and updated some tests.
+* Also simple symbols can be used to resolve other symbols (by delegating this call to their parents, if there's one).
+* Added a method to find a symbol by it's associated context + added a test for that.
 
 ### 1.1.6
-- Added Java port from Nick Stephen.
-- Added contributors.txt file.
-- A symbol can now store a `ParseTree` reference (which allows for terminal symbols in addition to parser rules).
-- Added navigation functions to `Symbol` and `ScopedSymbol` (first/last child, next/previous sibling) and added tests for that.
-- Fixed formatting and spelling in tests + `SymbolTable`.
-- Updated readme.
+* Added Java port from Nick Stephen.
+* Added contributors.txt file.
+* A symbol can now store a `ParseTree` reference (which allows for terminal symbols in addition to parser rules).
+* Added navigation functions to `Symbol` and `ScopedSymbol` (first/last child, next/previous sibling) and added tests for that.
+* Fixed formatting and spelling in tests + `SymbolTable`.
+* Updated readme.
 
 ### 1.1.1
-- Travis-CI integration
-- Implemented completion optimizations
+* Travis-CI integration
+* Implemented completion optimizations
 
 ### 1.0.4
-- First public release
-- Added initial tests, `SymbolTable` and `CodeCompletionCore` classes
+* First public release
+* Added initial tests, `SymbolTable` and `CodeCompletionCore` classes

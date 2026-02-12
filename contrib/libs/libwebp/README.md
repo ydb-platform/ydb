@@ -15,13 +15,13 @@ contains the library that can be used in other programs to add WebP support, as
 well as the command line tools 'cwebp' and 'dwebp' to compress and decompress
 images respectively.
 
-See https://developers.google.com/speed/webp for details on the image format.
+See <https://developers.google.com/speed/webp> for details on the image format.
 
 The latest source tree is available at
-https://chromium.googlesource.com/webm/libwebp
+<https://chromium.googlesource.com/webm/libwebp>
 
 It is released under the same license as the WebM project. See
-https://www.webmproject.org/license/software/ or the "COPYING" file for details.
+<https://www.webmproject.org/license/software/> or the "COPYING" file for details.
 An additional intellectual property rights grant can be found in the file
 PATENTS.
 
@@ -49,6 +49,6 @@ Patches welcome! See [how to contribute](CONTRIBUTING.md).
 
 ## Discuss
 
-Email: webp-discuss@webmproject.org
+Email: <webp-discuss@webmproject.org>
 
-Web: https://groups.google.com/a/webmproject.org/group/webp-discuss
+Web: <https://groups.google.com/a/webmproject.org/group/webp-discuss>

@@ -1,6 +1,7 @@
 # YDB C++ SDK Metrics
 
 You can plug in YDB C++ SDK extension to monitor how your application interacts with YDB. In particular you can monitor:
+
 - Transport errors;
 - Per host messages in fligh;
 - How database nodes discover works;
@@ -16,10 +17,12 @@ You can get these metrics via http server provided by YDB C++ SDK or implement y
 > This is Yandex specific section for setting up internal monitoring called Solomon
 
 ### Setup Solomon Environment
+
 TSolomonStatPullExtension class allows you to quickly setup you application monitoring. You need to prepare a Solomon project that can accept your metrics beforehand.
 [Create project, cluster and service, and connect them.](https://wiki.yandex-team.ru/solomon/howtostart/).
 Add hostnames which run your application to **Cluster hosts** (use hostnames without "http://"). Solomon's fetcher will use **Port** field for all added hosts.
 Fill in the following params:
+
 - **Monitoring model** : **PULL**;
 - **URL Path** : **/stats**;
 - **Interval** : **10**;
@@ -64,6 +67,7 @@ Implementing NMonitoring::IMetricRegistry provides more flexibility. You can del
 > **Important**: you must plug in monitoring before driver creation.
 
 Select a method which is right for you:
+
 ```cl
 #include <ydb-cpp-sdk/client/extensions/solomon_stats/pull_connector.h>
 
@@ -89,4 +93,3 @@ The most valuable metrics are the following:
 - Sessions/InPool - Number of sessions in a pool
 - Sessions/SessionsLimitExceeded - Rate of events for exceeding the limit on the number of sessions on the client side
 - SessionsByYdbHost - Number of sessions per YDB hosts
-

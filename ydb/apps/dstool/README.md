@@ -457,7 +457,7 @@ The above command shows:
 
 Box is a collection of pdisks.
 
-###  List boxes
+### List boxes
 
 ```bash
 user@host:~$ ydb-dstool -e ydbd.endpoint box list

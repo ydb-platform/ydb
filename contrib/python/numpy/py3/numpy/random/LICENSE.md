@@ -2,6 +2,7 @@
 Open Source License (NCSA) and The 3-Clause BSD License**
 
 # NCSA Open Source License
+
 **Copyright (c) 2019 Kevin Sheppard. All rights reserved.**
 
 Developed by: Kevin Sheppard (<kevin.sheppard@economics.ox.ac.uk>,
@@ -34,8 +35,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH
 THE SOFTWARE.**
 
-
 # 3-Clause BSD License
+
 **Copyright (c) 2019 Kevin Sheppard. All rights reserved.**
 
 Redistribution and use in source and binary forms, with or without
@@ -66,6 +67,6 @@ THE POSSIBILITY OF SUCH DAMAGE.**
 
 # Components
 
-Many parts of this module have been derived from original sources, 
-often the algorithm's designer. Component licenses are located with 
+Many parts of this module have been derived from original sources,
+often the algorithm's designer. Component licenses are located with
 the component code.

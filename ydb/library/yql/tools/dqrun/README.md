@@ -129,4 +129,3 @@ S3 {
 In the `Dq` section, parameters for the distributed engine are specified. The complete list of parameters can be found [here](../../providers/dq/common/yql_dq_settings.h).
 
 In the `S3` section, either S3 clusters or directories pretending to be S3 clusters are specified. In this example, the "cluster" `yq-tpc-local` points to the `tpc` directory located locally.
-

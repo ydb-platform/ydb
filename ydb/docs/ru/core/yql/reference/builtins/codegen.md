@@ -179,4 +179,3 @@ $makeClosure = ($y) -> {
 $closure = $makeClosure(2);
 SELECT $closure(1); -- 3
 ```
-

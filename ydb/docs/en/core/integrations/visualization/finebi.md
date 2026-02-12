@@ -19,7 +19,6 @@ Before you begin, make sure that the following software is installed:
 
     {% endnote %}
 
-
 ## Adding a database connection to {{ ydb-short-name }} {#add-database-connection}
 
 To connect to {{ ydb-short-name }} from FineBI using the PostgreSQL wire protocol, follow these steps:

@@ -17,6 +17,7 @@
   - [RFCs and Proposals](#supported-rfcs-and-proposals)
 
 ## Overview
+
 [c-ares](https://c-ares.org) is a modern DNS (stub) resolver library, written in
 C. It provides interfaces for asynchronous queries while trying to abstract the
 intricacies of the underlying DNS protocol.  It was originally intended for
@@ -49,7 +50,6 @@ The full source code and revision history is available in our
 [GitHub  repository](https://github.com/c-ares/c-ares).  Our signed releases
 are available in the [release archives](https://c-ares.org/download/).
 
-
 See the [INSTALL.md](INSTALL.md) file for build information.
 
 ## Communication
@@ -67,14 +67,13 @@ Please, do not mail volunteers privately about c-ares.
 [Security Procedure](SECURITY.md), please email c-ares-security at
  haxx.se if you suspect one.
 
-
 ## Release keys
 
 Primary GPG keys for c-ares Releasers (some Releasers sign with subkeys):
 
-* **Daniel Stenberg** <<daniel@haxx.se>>
+- **Daniel Stenberg** <<daniel@haxx.se>>
   `27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2`
-* **Brad House** <<brad@brad-house.com>>
+- **Brad House** <<brad@brad-house.com>>
   `DA7D64E4C82C6294CB73A20E22E3D13B5411B7CA`
 
 To import the full set of trusted release keys (including subkeys possibly used
@@ -113,6 +112,7 @@ gpg: binary signature, digest algorithm SHA512, key algorithm rsa2048
 See [Features](FEATURES.md)
 
 ### Supported RFCs and Proposals
+
 - [RFC1035](https://datatracker.ietf.org/doc/html/rfc1035).
   Initial/Base DNS RFC
 - [RFC2671](https://datatracker.ietf.org/doc/html/rfc2671),

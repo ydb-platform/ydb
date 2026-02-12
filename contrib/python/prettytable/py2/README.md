@@ -110,12 +110,12 @@ mytable = from_cursor(cursor)
 There are three ways to get data out of a PrettyTable, in increasing order of
 completeness:
 
-  * The `del_row` method takes an integer index of a single row to delete.
-  * The `del_column` method takes a field name of a single column to delete.
-  * The `clear_rows` method takes no arguments and deletes all the rows in the
+* The `del_row` method takes an integer index of a single row to delete.
+* The `del_column` method takes a field name of a single column to delete.
+* The `clear_rows` method takes no arguments and deletes all the rows in the
 table - but keeps the field names as they were so you that you can repopulate
 it with the same kind of data.
-  * The `clear` method takes no arguments and deletes all rows and all field
+* The `clear` method takes no arguments and deletes all rows and all field
 names.  It's not quite the same as creating a fresh table instance, though -
 style related settings, discussed later, are maintained.
 
@@ -374,12 +374,12 @@ print(x)
 In addition to `MSWORD_FRIENDLY` there are currently two other in-built styles
 you can use for your tables:
 
-  * `DEFAULT` - The default look, used to undo any style changes you may have
+* `DEFAULT` - The default look, used to undo any style changes you may have
 made
-  * `PLAIN_COLUMNS` - A borderless style that works well with command line
+* `PLAIN_COLUMNS` - A borderless style that works well with command line
 programs for columnar data
-  * `MARKDOWN` - A style that follows Markdown syntax
-  * `ORGMODE` - A table style that fits [Org mode](https://orgmode.org/) syntax
+* `MARKDOWN` - A style that follows Markdown syntax
+* `ORGMODE` - A table style that fits [Org mode](https://orgmode.org/) syntax
 
 Other styles are likely to appear in future releases.
 
@@ -399,30 +399,30 @@ automatically for you.
 
 The options are these:
 
-  * `border` - A boolean option (must be `True` or `False`).  Controls whether
+* `border` - A boolean option (must be `True` or `False`).  Controls whether
     or not a border is drawn around the table.
-  * `header` - A boolean option (must be `True` or `False`).  Controls whether
+* `header` - A boolean option (must be `True` or `False`).  Controls whether
     or not the first row of the table is a header showing the names of all the
     fields.
-  * `hrules` - Controls printing of horizontal rules after rows.  Allowed
+* `hrules` - Controls printing of horizontal rules after rows.  Allowed
     values: FRAME, HEADER, ALL, NONE - note that these are variables defined
     inside the `prettytable` module so make sure you import them or use
     `prettytable.FRAME` etc.
-  * `vrules` - Controls printing of vertical rules between columns.  Allowed
+* `vrules` - Controls printing of vertical rules between columns.  Allowed
     values: FRAME, ALL, NONE.
-  * `int_format` - A string which controls the way integer data is printed.
+* `int_format` - A string which controls the way integer data is printed.
     This works like: `print("%<int_format>d" % data)`
-  * `float_format` - A string which controls the way floating point data is
+* `float_format` - A string which controls the way floating point data is
      printed.  This works like: `print("%<float_format>f" % data)`
-  * `padding_width` - Number of spaces on either side of column data (only used
+* `padding_width` - Number of spaces on either side of column data (only used
     if left and right paddings are None).
-  * `left_padding_width` - Number of spaces on left hand side of column data.
-  * `right_padding_width` - Number of spaces on right hand side of column data.
-  * `vertical_char` - Single character string used to draw vertical lines.
+* `left_padding_width` - Number of spaces on left hand side of column data.
+* `right_padding_width` - Number of spaces on right hand side of column data.
+* `vertical_char` - Single character string used to draw vertical lines.
      Default is `|`.
-  * `horizontal_char` - Single character string used to draw horizontal lines.
+* `horizontal_char` - Single character string used to draw horizontal lines.
      Default is `-`.
-  * `junction_char` - Single character string used to draw line junctions.
+* `junction_char` - Single character string used to draw line junctions.
      Default is `+`.
 
 You can set the style options to your own settings in two ways:

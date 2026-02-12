@@ -45,13 +45,13 @@ some recent version of CMake.
 mkdir -p build && cd build
 ```
 
-2. Build the library
+1. Build the library
 
 ```bash
 cmake -DCMAKE_BUILD_TYPE=Release .. && make
 ```
 
-3. Install the library at the default target location
+1. Install the library at the default target location
 
 ```bash
 sudo make install
@@ -73,33 +73,35 @@ md build
 cd build
 ```
 
-2. Generate Visual Studio solution file with cmake
+1. Generate Visual Studio solution file with cmake
 
-* 32 bit: 
+* 32 bit:
+
 ```bash
 cmake -G "Visual Studio 12 2013" -DCMAKE_BUILD_TYPE=Release ..
 ```
+
 * 64 bit:
+
 ```bash
 cmake -G "Visual Studio 12 2013 Win64" -DCMAKE_BUILD_TYPE=Release ..
 ```
 
-3. Open the generated file `replxx.sln` in the `build` subdirectory with Visual Studio.
+1. Open the generated file `replxx.sln` in the `build` subdirectory with Visual Studio.
 
-## Tested with...
+## Tested with
 
- * Linux text only console ($TERM = linux)
- * Linux KDE terminal application ($TERM = xterm)
- * Linux xterm ($TERM = xterm)
- * Linux Buildroot ($TERM = vt100)
- * Mac OS X iTerm ($TERM = xterm)
- * Mac OS X default Terminal.app ($TERM = xterm)
- * OpenBSD 4.5 through an OSX Terminal.app ($TERM = screen)
- * IBM AIX 6.1
- * FreeBSD xterm ($TERM = xterm)
- * ANSI.SYS
- * Emacs comint mode ($TERM = dumb)
- * Windows
+* Linux text only console ($TERM = linux)
+* Linux KDE terminal application ($TERM = xterm)
+* Linux xterm ($TERM = xterm)
+* Linux Buildroot ($TERM = vt100)
+* Mac OS X iTerm ($TERM = xterm)
+* Mac OS X default Terminal.app ($TERM = xterm)
+* OpenBSD 4.5 through an OSX Terminal.app ($TERM = screen)
+* IBM AIX 6.1
+* FreeBSD xterm ($TERM = xterm)
+* ANSI.SYS
+* Emacs comint mode ($TERM = dumb)
+* Windows
 
 Please test it everywhere you can and report back!
-

@@ -2256,9 +2256,17 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
+        TDuration warmupDeadline;
+        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig()
+            && Config.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
+            auto warmupProto = Config.GetTableServiceConfig().GetCompileCacheWarmupConfig();
+            warmupDeadline = TDuration::Seconds(std::max(
+                warmupProto.GetHardDeadlineSeconds(), warmupProto.GetDeadlineSeconds()));
+        }
+
         // Create resource manager
         auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr,
-            {}, kqpProxySharedResources, NodeId);
+            {}, kqpProxySharedResources, NodeId, warmupDeadline);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpRmServiceID(NodeId),
             TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));
@@ -2298,8 +2306,11 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             TString database = appData->TenantName;
             TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
 
-            auto grpcManagerId = MakeGRpcServersManagerId(NodeId);
-            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, grpcManagerId);
+            TVector<NActors::TActorId> notifyActorIds = {
+                MakeGRpcServersManagerId(NodeId),
+                NKqp::MakeKqpRmServiceID(NodeId),
+            };
+            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, std::move(notifyActorIds));
             setup->LocalServices.push_back(std::make_pair(
                 NKqp::MakeKqpWarmupActorId(NodeId),
                 TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));

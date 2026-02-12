@@ -5,6 +5,7 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>

@@ -61,6 +61,6 @@ NActors::IActor* CreateKqpWarmupActor(
     const TKqpWarmupConfig& config,
     const TString& database = {},
     const TString& cluster = {},
-    NActors::TActorId notifyActorId = {});
+    TVector<NActors::TActorId> notifyActorIds = {});
 
 } // namespace NKikimr::NKqp

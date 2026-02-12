@@ -262,11 +262,11 @@ public:
     }
 
     TKqpCompileCacheWarmupActor(const TKqpWarmupConfig& config, const TString& database,
-                           const TString& cluster, NActors::TActorId notifyActorId)
+                           const TString& cluster, TVector<NActors::TActorId> notifyActorIds)
         : Config(config)
         , Database(database)
         , Cluster(cluster)
-        , NotifyActorId(notifyActorId)
+        , NotifyActorIds(std::move(notifyActorIds))
     {}
 
     void Bootstrap() {
@@ -563,8 +563,8 @@ private:
 
         LOG_I("Warmup " << (success ? "completed" : "finished") << ": " << message);
 
-        if (NotifyActorId) {
-            Send(NotifyActorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded));
+        for (const auto& actorId : NotifyActorIds) {
+            Send(actorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded));
         }
 
         PassAway();
@@ -576,7 +576,7 @@ private:
     const TString Database;
     const TString Cluster;
 
-    const NActors::TActorId NotifyActorId;
+    const TVector<NActors::TActorId> NotifyActorIds;
 
     TIntrusivePtr<TKqpCounters> Counters;
 
@@ -596,9 +596,9 @@ NActors::IActor* CreateKqpWarmupActor(
     const TKqpWarmupConfig& config,
     const TString& database,
     const TString& cluster,
-    NActors::TActorId notifyActorId)
+    TVector<NActors::TActorId> notifyActorIds)
 {
-    return new TKqpCompileCacheWarmupActor(config, database, cluster, notifyActorId);
+    return new TKqpCompileCacheWarmupActor(config, database, cluster, std::move(notifyActorIds));
 }
 
 } // namespace NKikimr::NKqp

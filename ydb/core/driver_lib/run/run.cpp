@@ -2169,6 +2169,10 @@ void TKikimrRunner::KikimrStart() {
     if (ActorSystem) {
         ActorSystem->Start();
         LOG_NOTICE_S(*ActorSystem, NActorsServices::GLOBAL, GetProgramSvnVersion());
+        if (!PendingUdfLogMessage.empty()) {
+            LOG_NOTICE_S(*ActorSystem, NActorsServices::GLOBAL, PendingUdfLogMessage);
+            PendingUdfLogMessage.clear();
+        }
     }
 
     if (!!Monitoring) {
@@ -2369,19 +2373,22 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
         if (NFs::Exists(udfsDir) && IsDir(udfsDir)) {
             NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
             if (udfsPaths.empty()) {
-                Cout << "UDF directory " << udfsDir << " contains no dynamic UDFs. " << Endl;
+                PendingUdfLogMessage = TStringBuilder() << "UDF directory " << udfsDir
+                    << " contains no dynamic UDFs.";
             } else {
-                Cout << "UDF directory " << udfsDir << " contains " << udfsPaths.size() << " dynamic UDFs. " << Endl;
+                PendingUdfLogMessage = TStringBuilder() << "UDF directory " << udfsDir
+                    << " contains " << udfsPaths.size() << " dynamic UDFs.";
             }
             NMiniKQL::TUdfModuleRemappings remappings;
             for (const auto& udfPath : udfsPaths) {
                 FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
             }
         } else {
-            Cout << "UDF directory " << udfsDir << " doesn't exist, no dynamic UDFs will be loaded. " << Endl;
+            PendingUdfLogMessage = TStringBuilder() << "UDF directory " << udfsDir
+                << " doesn't exist, no dynamic UDFs will be loaded.";
         }
     } else {
-        Cout << "UDFsDir is not specified, no dynamic UDFs will be loaded. " << Endl;
+        PendingUdfLogMessage = "UDFsDir is not specified, no dynamic UDFs will be loaded.";
     }
 
     NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);

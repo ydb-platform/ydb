@@ -780,6 +780,7 @@ public:
     void PersistAdoptedShardMapping(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTabletId tabletId, ui64 prevOwner, TLocalShardIdx prevShardIdx);
     void PersistShardPathId(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId);
     void PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
+    void PersistShardCountReferences(NIceDb::TNiceDb& db, TShardIdx shardIdx, ui64 countReferences);
 
     void PersistSnapshotTable(NIceDb::TNiceDb& db, const TTxId snapshotId, const TPathId tableId);
     void PersistSnapshotStepId(NIceDb::TNiceDb& db, const TTxId snapshotId, const TStepId stepId);

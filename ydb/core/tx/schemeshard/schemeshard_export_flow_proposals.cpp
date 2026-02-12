@@ -54,7 +54,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
 
     for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
         const auto& item = exportInfo.Items.at(itemIdx);
-        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable && item.SourcePathType != NKikimrSchemeOp::EPathTypeColumnTable) {
             continue;
         }
 
@@ -432,7 +432,7 @@ void PrepareDropping(
         item.WaitTxId = InvalidTxId;
         item.State = TExportInfo::EState::Dropped;
         const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && itemPath.IsResolved() && !itemPath.IsDeleted()) {
+        if ((item.SourcePathType == NKikimrSchemeOp::EPathTypeTable || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) && itemPath.IsResolved() && !itemPath.IsDeleted()) {
             item.State = TExportInfo::EState::Dropping;
             if (exportInfo.State == TExportInfo::EState::AutoDropping) {
                 func(itemIdx);

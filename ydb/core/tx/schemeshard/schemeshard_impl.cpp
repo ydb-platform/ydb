@@ -3724,6 +3724,16 @@ void TSchemeShard::PersistShardPathId(NIceDb::TNiceDb& db, TShardIdx shardIdx, T
     }
 }
 
+void TSchemeShard::PersistShardCountReferences(NIceDb::TNiceDb& db, TShardIdx shardIdx, ui64 countReferences) {
+    if (IsLocalId(shardIdx)) {
+        db.Table<Schema::Shards>().Key(shardIdx.GetLocalId()).Update(
+                NIceDb::TUpdate<Schema::Shards::CountReferences>(countReferences));
+    } else {
+        db.Table<Schema::MigratedShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
+            NIceDb::TUpdate<Schema::MigratedShards::CountReferences>(countReferences));
+    }
+}
+
 void TSchemeShard::PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx) {
     Y_ABORT_UNLESS(IsLocalId(shardIdx));
     db.Table<Schema::AdoptedShards>().Key(shardIdx.GetLocalId()).Delete();

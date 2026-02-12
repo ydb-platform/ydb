@@ -455,13 +455,18 @@ public:
         std::unique_ptr<TEvKeyValue::TEvReadRangeResponse> response = CreateReadRangeResponse(status, msgBuilder);
         NKikimrKeyValue::ReadRangeResult &readRangeResult = response->Record;
 
-        for (auto &interRead : interRange.Reads) {
+        for (ui32 idx = 0; idx < interRange.Reads.size(); ++idx) {
+            auto &interRead = interRange.Reads[idx];
             auto *kvp = readRangeResult.add_pair();
             kvp->set_key(interRead.Key);
 
             TRope value = interRead.BuildRope();
-            const TContiguousSpan span = value.GetContiguousSpan();
-            kvp->set_value(span.data(), span.size());
+            if (IntermediateResult->UsePayloadInResponse) {
+                response->SetBuffer(std::move(value), idx);
+            } else {
+                const TContiguousSpan span = value.GetContiguousSpan();
+                kvp->set_value(span.data(), span.size());
+            }
 
             kvp->set_value_size(interRead.ValueSize);
             kvp->set_creation_unix_time(interRead.CreationUnixTime);

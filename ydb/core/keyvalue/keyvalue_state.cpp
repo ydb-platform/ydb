@@ -2718,12 +2718,16 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::CopyRange &request,
 }
 
 TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate,
-        const TTabletStorageInfo *info)
+        const TTabletStorageInfo *info, const TEvKeyValue::TEvExecuteTransaction& ev)
 {
     intermediate->Commands.emplace_back(TIntermediate::TWrite());
     auto &cmd = std::get<TIntermediate::TWrite>(intermediate->Commands.back());
     cmd.Key = request.key();
-    cmd.Data = TRope(request.value());
+    if (request.has_payload_id()) {
+        cmd.Data = ev.GetPayload(request.payload_id());
+    } else {
+        cmd.Data = TRope(request.value());
+    }
     switch (request.tactic()) {
     case TCommand::Write::TACTIC_MIN_LATENCY:
         cmd.Tactic = TEvBlobStorage::TEvPut::TacticMinLatency;
@@ -2792,7 +2796,7 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::DeleteRange &reques
 }
 
 TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand &request, THolder<TIntermediate> &intermediate,
-        const TTabletStorageInfo *info, const TActorContext &ctx)
+        const TTabletStorageInfo *info, const TActorContext &ctx, const TEvKeyValue::TEvExecuteTransaction& ev)
 {
     switch (request.action_case()) {
     case NKikimrKeyValue::ExecuteTransactionRequest::Command::ACTION_NOT_SET:
@@ -2806,16 +2810,17 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand &request, THolder<TI
     case NKikimrKeyValue::ExecuteTransactionRequest::Command::kConcat:
         return PrepareOneCmd(request.concat(), intermediate);
     case NKikimrKeyValue::ExecuteTransactionRequest::Command::kWrite:
-        return PrepareOneCmd(request.write(), intermediate, info);
+        return PrepareOneCmd(request.write(), intermediate, info, ev);
     }
 }
 
 TPrepareResult TKeyValueState::PrepareCommands(NKikimrKeyValue::ExecuteTransactionRequest &kvRequest,
-    THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx)
+    THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx,
+    const TEvKeyValue::TEvExecuteTransaction& ev)
 {
     for (i32 idx = 0; idx < kvRequest.commands_size(); ++idx) {
         auto &cmd = kvRequest.commands(idx);
-        TPrepareResult result = PrepareOneCmd(cmd, intermediate, info, ctx);
+        TPrepareResult result = PrepareOneCmd(cmd, intermediate, info, ctx, ev);
         if (cmd.has_write()) {
             intermediate->WriteIndices.push_back(idx);
         }
@@ -2951,6 +2956,7 @@ bool TKeyValueState::PrepareReadRangeRequest(const TActorContext &ctx, TEvKeyVal
     ++NextRequestUid;
     RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
     intermediate->EvType = TEvKeyValue::TEvReadRange::EventType;
+    intermediate->UsePayloadInResponse = UsePayload.Update(ctx.Now());
     intermediate->TotalSize = ReadRangeRequestMetaDataSizeEstimation;
 
     intermediate->ReadCommand = TIntermediate::TRangeRead();
@@ -3028,7 +3034,7 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
         return false;
     }
 
-    TPrepareResult result = PrepareCommands(request, intermediate, info, ctx);
+    TPrepareResult result = PrepareCommands(request, intermediate, info, ctx, *ev->Get());
 
     if (result.WithError) {
         DropRefCountsOnError(intermediate->RefCountsIncr, false, ctx);

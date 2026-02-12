@@ -278,8 +278,8 @@ private:
         void SubscribeToPartition(std::uint32_t partition);
         std::optional<NThreading::TPromise<void>> HandleNewMessage();
         void HandleAcksEvent(std::uint64_t partition, TWriteSessionEvent::TAcksEvent&& event);
-        std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block, std::vector<EEventType> eventTypes = {});
-        std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt, std::vector<EEventType> eventTypes = {});
+        std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block, const std::vector<EEventType>& eventTypes = {});
+        std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt, const std::vector<EEventType>& eventTypes = {});
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueBegin(std::uint32_t partition);
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueEnd(std::uint32_t partition);
 
@@ -290,7 +290,7 @@ private:
         bool TransferEventsToOutputQueue();
         void AddReadyToAcceptEvent();
         bool AddSessionClosedIfNeeded();
-        std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block, std::vector<EEventType> eventTypes = {});
+        std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block, const std::vector<EEventType>& eventTypes = {});
         EEventType GetEventType(const TWriteSessionEvent::TEvent& event);
 
         TKeyedWriteSession* Session;
@@ -444,6 +444,9 @@ private:
     std::atomic<std::uint8_t> MainWorkerState = 0;
     std::atomic<size_t> Epoch = 0;
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
+
+    std::vector<TEventsWorker::EEventType> EventTypesWithoutHandlers;
+    std::vector<TEventsWorker::EEventType> EventTypesWithHandlers;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

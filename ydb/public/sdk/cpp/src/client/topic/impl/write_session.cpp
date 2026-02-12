@@ -679,7 +679,7 @@ TKeyedWriteSession::TEventsWorker::EEventType TKeyedWriteSession::TEventsWorker:
     Y_ABORT_UNLESS(false, "Unexpected event type");
 }
 
-std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEventImpl(bool block, std::vector<EEventType> eventTypes) {
+std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEventImpl(bool block, const std::vector<EEventType>& eventTypes) {
     std::unique_lock lock(Lock);
     if (EventsOutputQueue.empty() && block) {
         lock.unlock();
@@ -700,7 +700,7 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::Get
     return std::nullopt;
 }
 
-std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvent(bool block, std::vector<EEventType> eventTypes) {
+std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvent(bool block, const std::vector<EEventType>& eventTypes) {
     {
         std::unique_lock lock(Lock);
         AddSessionClosedIfNeeded();
@@ -710,7 +710,7 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::Get
     return event;
 }
 
-std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvents(bool block, std::optional<size_t> maxEventsCount, std::vector<EEventType> eventTypes) {
+std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvents(bool block, std::optional<size_t> maxEventsCount, const std::vector<EEventType>& eventTypes) {
     if (maxEventsCount.has_value() && maxEventsCount.value() == 0) {
         return {};
     }
@@ -1263,6 +1263,28 @@ TKeyedWriteSession::TKeyedWriteSession(
         Partitions[partition.GetPartitionId()].Children(childrenIndices);
     }
 
+    if (Settings.EventHandlers_.CommonHandler_) {
+        EventTypesWithHandlers.push_back(TEventsWorker::EEventType::SessionClosed);
+        EventTypesWithHandlers.push_back(TEventsWorker::EEventType::ReadyToAccept);
+        EventTypesWithHandlers.push_back(TEventsWorker::EEventType::Ack);
+    } else {
+        if (!Settings.EventHandlers_.SessionClosedHandler_) {
+            EventTypesWithoutHandlers.push_back(TEventsWorker::EEventType::SessionClosed);
+        } else {
+            EventTypesWithHandlers.push_back(TEventsWorker::EEventType::SessionClosed);
+        }
+        if (!Settings.EventHandlers_.ReadyToAcceptHandler_) {
+            EventTypesWithoutHandlers.push_back(TEventsWorker::EEventType::ReadyToAccept);
+        } else {
+            EventTypesWithHandlers.push_back(TEventsWorker::EEventType::ReadyToAccept);
+        }
+        if (!Settings.EventHandlers_.AcksHandler_) {
+            EventTypesWithoutHandlers.push_back(TEventsWorker::EEventType::Ack);
+        } else {
+            EventTypesWithHandlers.push_back(TEventsWorker::EEventType::Ack);
+        }
+    }
+
     switch (partitionChooserStrategy) {
         case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound:
             PartitioningKeyHasher = settings.PartitioningKeyHasher_;
@@ -1396,18 +1418,7 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvent(bool bloc
        return std::nullopt;
     }
 
-    std::vector<TEventsWorker::EEventType> eventTypes;
-    if (!Settings.EventHandlers_.SessionClosedHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::SessionClosed);
-    }
-    if (!Settings.EventHandlers_.ReadyToAcceptHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::ReadyToAccept);
-    }
-    if (!Settings.EventHandlers_.AcksHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::Ack);
-    }
-
-    return EventsWorker->GetEvent(block, eventTypes);
+    return EventsWorker->GetEvent(block, EventTypesWithoutHandlers);
 }
 
 std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvents(bool block, std::optional<size_t> maxEventsCount) {
@@ -1415,18 +1426,7 @@ std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvents(bool block
         return {};
     }
 
-    std::vector<TEventsWorker::EEventType> eventTypes;
-    if (!Settings.EventHandlers_.SessionClosedHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::SessionClosed);
-    }
-    if (!Settings.EventHandlers_.ReadyToAcceptHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::ReadyToAccept);
-    }
-    if (!Settings.EventHandlers_.AcksHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::Ack);
-    }
-
-    return EventsWorker->GetEvents(block, maxEventsCount, eventTypes);
+    return EventsWorker->GetEvents(block, maxEventsCount, EventTypesWithoutHandlers);
 }
 
 TDuration TKeyedWriteSession::GetCloseTimeout() {
@@ -1470,24 +1470,8 @@ void TKeyedWriteSession::RunUserEventLoop() {
         return;
     }
 
-    std::vector<TEventsWorker::EEventType> eventTypes;
-    if (Settings.EventHandlers_.ReadyToAcceptHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::ReadyToAccept);
-    }
-    if (Settings.EventHandlers_.AcksHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::Ack);
-    }
-    if (Settings.EventHandlers_.SessionClosedHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::SessionClosed);
-    }
-    if (Settings.EventHandlers_.CommonHandler_) {
-        eventTypes.push_back(TEventsWorker::EEventType::SessionClosed);
-        eventTypes.push_back(TEventsWorker::EEventType::ReadyToAccept);
-        eventTypes.push_back(TEventsWorker::EEventType::Ack);
-    }
-
     while (true) {
-        auto event = EventsWorker->GetEvent(false, eventTypes);
+        auto event = EventsWorker->GetEvent(false, EventTypesWithHandlers);
         if (!event) {
             break;
         }

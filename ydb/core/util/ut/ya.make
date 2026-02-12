@@ -38,6 +38,7 @@ SRCS(
     lf_stack_ut.cpp
     log_priority_mute_checker_ut.cpp
     lz4_data_generator_ut.cpp
+    max_tracker_ut.cpp
     operation_queue_priority_ut.cpp
     operation_queue_ut.cpp
     page_map_ut.cpp

@@ -92,7 +92,7 @@ class ParallelWorkloadTestBase:
             duration_value = self.timeout
 
         # Validate nodes percentage
-        if nodes_percentage < 1 or nodes_percentage > 100:
+        if nodes_percentage and (nodes_percentage < 1 or nodes_percentage > 100):
             raise ValueError(
                 f"nodes_percentage must be between 1 and 100, got: {nodes_percentage}"
             )

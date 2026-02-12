@@ -93,8 +93,6 @@ To store numbers (JSON Number) in `JsonDocument`, as well as for arithmetic oper
 
 {% endnote %}
 
-
-
 ## Date and time {#datetime}
 
 #|
@@ -290,8 +288,6 @@ SELECT -- these expressions are always true for any timezones: the timezone does
 
 Keep in mind that when converting between `TzDate` and `TzDatetime`, or `TzTimestamp` the date's midnight doesn't follow the local time zone, but midnight in UTC for the date in UTC.
 
-
-
 ## Casting between data types {#cast}
 
 ### Explicit casting {#explicit-cast}
@@ -400,4 +396,3 @@ Implicit type casting that occurs in basic operations ( +-\*/) between different
 | **TzDate** | — | — | — | `TzDate` | — | — | — |
 | **TzDatetime** | — | — | — | `TzDatetime` | — | — | — |
 | **TzTimestamp** | — | — | — | `TzTimestamp` | — | — | — |
-

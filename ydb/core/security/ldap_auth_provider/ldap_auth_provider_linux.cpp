@@ -1,10 +1,10 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/login/protos/login.pb.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_log.h>
 #include "ldap_auth_provider.h"
 
+#define LDAP_DEPRECATED 1
 #include <ldap.h>
 
 #include "ldap_compat.h"
@@ -15,41 +15,37 @@ namespace {
 
 char ldapNoAttribute[] = LDAP_NO_ATTRS;
 
-int ConvertOption(const EOption& option);
-const char* ConvertSaslMechanism(const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism);
+int ConvertOption(const EOption& option) {
+    switch(option) {
+        case EOption::DEBUG: {
+            return LDAP_OPT_DEBUG_LEVEL;
+        }
+        case EOption::TLS_CACERTDIR: {
+            return LDAP_OPT_X_TLS_CACERTDIR;
+        }
+        case EOption::TLS_CACERTFILE: {
+            return LDAP_OPT_X_TLS_CACERTFILE;
+        }
+        case EOption::TLS_REQUIRE_CERT: {
+            return LDAP_OPT_X_TLS_REQUIRE_CERT;
+        }
+        case EOption::PROTOCOL_VERSION: {
+            return LDAP_OPT_PROTOCOL_VERSION;
+        }
+    }
+}
 
 }
 
 char* noAttributes[] = {ldapNoAttribute, nullptr};
 const TString LDAPS_SCHEME = "ldaps";
 
-int Bind(LDAP* ld, const TString& dn, const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism, std::vector<char>* credentials) {
-    static char initBvVal[] = "";
-    static constexpr BerValue defaultCredentials {.bv_len = 0, .bv_val = initBvVal};
-    BerValue cred = defaultCredentials;
-    BerValue* credPtr = &cred;
-    if (credentials) {
-        cred.bv_len = credentials->size();
-        cred.bv_val = credentials->data();
-    }
-    struct berval* servercredp = nullptr;
-    int res = ldap_sasl_bind_s(ld, (dn.empty() ? nullptr : dn.c_str()), ConvertSaslMechanism(mechanism), credPtr, nullptr, nullptr, &servercredp);
-    if (mechanism == NLoginProto::ESaslAuthMech::External && res == LDAP_SASL_BIND_IN_PROGRESS) {
-        if (servercredp) {
-            cred.bv_len = servercredp->bv_len;
-            cred.bv_val = servercredp->bv_val;
-            ber_bvfree(servercredp);
-            servercredp = nullptr;
-        } else {
-            cred  = defaultCredentials;
-        }
-        return ldap_sasl_bind_s(ld, (dn.empty() ? nullptr : dn.c_str()), ConvertSaslMechanism(mechanism), credPtr, nullptr, nullptr, &servercredp);
-    }
-    return res;
+int Bind(LDAP* ld, const TString& dn, const TString& password) {
+    return ldap_simple_bind_s(ld, dn.c_str(), password.c_str());
 }
 
 int Unbind(LDAP* ld) {
-    return ldap_unbind_ext_s(ld, nullptr, nullptr);
+    return ldap_unbind(ld);
 }
 
 int Init(LDAP** ld, const TString& scheme, const TString& uris, ui32 port) {
@@ -64,7 +60,7 @@ int Search(LDAP* ld,
            char** attrs,
            int attrsonly,
            LDAPMessage** res) {
-    return ldap_search_ext_s(ld, base.c_str(), GetScope(scope), filter.c_str(), attrs, attrsonly, nullptr, nullptr, nullptr, 0, res);
+    return ldap_search_s(ld, base.c_str(), GetScope(scope), filter.c_str(), attrs, attrsonly, res);
 }
 
 TString LdapError(LDAP* ld) {
@@ -128,12 +124,12 @@ ui32 GetPort(const TString& scheme) {
 
 int GetScope(const EScope& scope) {
     switch (scope) {
-    case EScope::BASE:
-        return LDAP_SCOPE_BASE;
-    case EScope::ONE_LEVEL:
-        return LDAP_SCOPE_ONELEVEL;
-    case EScope::SUBTREE:
-        return LDAP_SCOPE_SUBTREE;
+        case EScope::BASE:
+            return LDAP_SCOPE_BASE;
+        case EScope::ONE_LEVEL:
+            return LDAP_SCOPE_ONELEVEL;
+        case EScope::SUBTREE:
+            return LDAP_SCOPE_SUBTREE;
     }
 }
 
@@ -148,26 +144,26 @@ int SetProtocolVersion(LDAP* ld) {
 
 NKikimr::TEvLdapAuthProvider::EStatus ErrorToStatus(int err) {
     switch (err) {
-    case LDAP_SUCCESS:
-        return NKikimr::TEvLdapAuthProvider::EStatus::SUCCESS;
-    case LDAP_INVALID_CREDENTIALS:
-        return NKikimr::TEvLdapAuthProvider::EStatus::UNAUTHORIZED;
-    case LDAP_FILTER_ERROR:
-        return NKikimr::TEvLdapAuthProvider::EStatus::BAD_REQUEST;
-    default:
-        return NKikimr::TEvLdapAuthProvider::EStatus::UNAVAILABLE;
+        case LDAP_SUCCESS:
+            return NKikimr::TEvLdapAuthProvider::EStatus::SUCCESS;
+        case LDAP_INVALID_CREDENTIALS:
+            return NKikimr::TEvLdapAuthProvider::EStatus::UNAUTHORIZED;
+        case LDAP_FILTER_ERROR:
+            return NKikimr::TEvLdapAuthProvider::EStatus::BAD_REQUEST;
+        default:
+            return NKikimr::TEvLdapAuthProvider::EStatus::UNAVAILABLE;
     }
 }
 
 bool IsRetryableError(int error) {
     switch (error) {
-    case LDAP_SERVER_DOWN:
-    case LDAP_TIMEOUT:
-    case LDAP_CONNECT_ERROR:
-    case LDAP_BUSY:
-    case LDAP_UNAVAILABLE:
-    case LDAP_ADMINLIMIT_EXCEEDED:
-        return true;
+        case LDAP_SERVER_DOWN:
+        case LDAP_TIMEOUT:
+        case LDAP_CONNECT_ERROR:
+        case LDAP_BUSY:
+        case LDAP_UNAVAILABLE:
+        case LDAP_ADMINLIMIT_EXCEEDED:
+            return true;
     }
     return false;
 }
@@ -186,69 +182,22 @@ int StartTLS(LDAP* ld) {
 
 int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRequire& requireCertOption) {
     switch (requireCertOption) {
-    case NKikimrProto::TLdapAuthentication::TUseTls::NEVER: {
-        return LDAP_OPT_X_TLS_NEVER;
-    }
-    case NKikimrProto::TLdapAuthentication::TUseTls::HARD: {
-        return LDAP_OPT_X_TLS_HARD;
-    }
-    case NKikimrProto::TLdapAuthentication::TUseTls::DEMAND: {
-        return LDAP_OPT_X_TLS_DEMAND;
-    }
-    case NKikimrProto::TLdapAuthentication::TUseTls::ALLOW: {
-        return LDAP_OPT_X_TLS_ALLOW;
-    }
-    case NKikimrProto::TLdapAuthentication::TUseTls::TRY: {
-        return LDAP_OPT_X_TLS_TRY;
-    }
-    }
-}
-
-namespace {
-
-int ConvertOption(const EOption& option) {
-    switch(option) {
-    case EOption::DEBUG: {
-        return LDAP_OPT_DEBUG_LEVEL;
-    }
-    case EOption::TLS_CACERTDIR: {
-        return LDAP_OPT_X_TLS_CACERTDIR;
-    }
-    case EOption::TLS_CACERTFILE: {
-        return LDAP_OPT_X_TLS_CACERTFILE;
-    }
-    case EOption::TLS_CERTFILE: {
-        return LDAP_OPT_X_TLS_CERTFILE;
-    }
-    case EOption::TLS_KEYFILE: {
-        return LDAP_OPT_X_TLS_KEYFILE;
-    }
-    case EOption::TLS_REQUIRE_CERT: {
-        return LDAP_OPT_X_TLS_REQUIRE_CERT;
-    }
-    case EOption::PROTOCOL_VERSION: {
-        return LDAP_OPT_PROTOCOL_VERSION;
-    }
+        case NKikimrProto::TLdapAuthentication::TUseTls::NEVER: {
+            return LDAP_OPT_X_TLS_NEVER;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::HARD: {
+            return LDAP_OPT_X_TLS_HARD;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::DEMAND: {
+            return LDAP_OPT_X_TLS_DEMAND;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::ALLOW: {
+            return LDAP_OPT_X_TLS_ALLOW;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::TRY: {
+            return LDAP_OPT_X_TLS_TRY;
+        }
     }
 }
-
-const char* ConvertSaslMechanism(const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism) {
-    switch (mechanism) {
-    case NLoginProto::ESaslAuthMech::Simple: {
-        return LDAP_SASL_SIMPLE;
-    }
-    case NLoginProto::ESaslAuthMech::Plain: {
-        return "PLAIN";
-    }
-    case NLoginProto::ESaslAuthMech::External: {
-        return "EXTERNAL";
-    }
-    default: {
-        return "UNKNOWN";
-    }
-    }
-}
-
-} // namespace
 
 }

@@ -5,10 +5,9 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
 
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/library/testlib/service_mocks/ldap_mock/simple_server.h>
-#include <ydb/library/testlib/service_mocks/ldap_mock/ldap_defines.h>
+#include <ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.h>
 
-#include <ydb/core/security/ldap_auth_provider/test_utils/test_settings.h>
+#include <util/system/tempfile.h>
 #include "ydb_common_ut.h"
 
 namespace NKikimr {
@@ -18,16 +17,94 @@ using namespace NYdb;
 
 namespace {
 
+TString certificateContent = R"___(-----BEGIN CERTIFICATE-----
+MIIDjTCCAnWgAwIBAgIURt5IBx0J3xgEaQvmyrFH2A+NkpMwDQYJKoZIhvcNAQEL
+BQAwVjELMAkGA1UEBhMCUlUxDzANBgNVBAgMBk1vc2NvdzEPMA0GA1UEBwwGTW9z
+Y293MQ8wDQYDVQQKDAZZYW5kZXgxFDASBgNVBAMMC3Rlc3Qtc2VydmVyMB4XDTE5
+MDkyMDE3MTQ0MVoXDTQ3MDIwNDE3MTQ0MVowVjELMAkGA1UEBhMCUlUxDzANBgNV
+BAgMBk1vc2NvdzEPMA0GA1UEBwwGTW9zY293MQ8wDQYDVQQKDAZZYW5kZXgxFDAS
+BgNVBAMMC3Rlc3Qtc2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
+AQEAs0WY6HTuwKntcEcjo+pBuoNp5/GRgMX2qOJi09Iw021ZLK4Vf4drN7pXS5Ba
+OVqzUPFmXvoiG13hS7PLTuobJc63qPbIodiB6EXB+Sp0v+mE6lYUUyW9YxNnTPDc
+GG8E4vk9j3tBawT4yJIFTudIALWJfQvn3O9ebmYkilvq0ZT+TqBU8Mazo4lNu0T2
+YxWMlivcEyNRLPbka5W2Wy5eXGOnStidQFYka2mmCgljtulWzj1i7GODg93vmVyH
+NzjAs+mG9MJkT3ietG225BnyPDtu5A3b+vTAFhyJtMmDMyhJ6JtXXHu6zUDQxKiX
+6HLGCLIPhL2sk9ckPSkwXoMOywIDAQABo1MwUTAdBgNVHQ4EFgQUDv/xuJ4CvCgG
+fPrZP3hRAt2+/LwwHwYDVR0jBBgwFoAUDv/xuJ4CvCgGfPrZP3hRAt2+/LwwDwYD
+VR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAinKpMYaA2tjLpAnPVbjy
+/ZxSBhhB26RiQp3Re8XOKyhTWqgYE6kldYT0aXgK9x9mPC5obQannDDYxDc7lX+/
+qP/u1X81ZcDRo/f+qQ3iHfT6Ftt/4O3qLnt45MFM6Q7WabRm82x3KjZTqpF3QUdy
+tumWiuAP5DMd1IRDtnKjFHO721OsEsf6NLcqdX89bGeqXDvrkwg3/PNwTyW5E7cj
+feY8L2eWtg6AJUnIBu11wvfzkLiH3QKzHvO/SIZTGf5ihDsJ3aKEE9UNauTL3bVc
+CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
+6g==
+-----END CERTIFICATE-----)___";
+
+TTempFileHandle certificateFile;
+
+void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    ldapSettings->SetHost("localhost");
+    ldapSettings->SetPort(ldapPort);
+    ldapSettings->SetBaseDn("dc=search,dc=yandex,dc=net");
+    ldapSettings->SetBindDn("cn=robouser,dc=search,dc=yandex,dc=net");
+    ldapSettings->SetBindPassword("robouserPassword");
+    ldapSettings->SetSearchFilter("uid=$username");
+
+    auto useTls = ldapSettings->MutableUseTls();
+    useTls->SetEnable(true);
+    certificateFile.Write(certificateContent.data(), certificateContent.size());
+    useTls->SetCaCertFile(certificateFile.Name());
+    useTls->SetCertRequire(NKikimrProto::TLdapAuthentication::TUseTls::ALLOW); // Enable TLS connection if server certificate is untrusted
+}
+
+void InitLdapSettingsWithInvalidRobotUserLogin(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetBindDn("cn=invalidRobouser,dc=search,dc=yandex,dc=net");
+}
+
+void InitLdapSettingsWithInvalidRobotUserPassword(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetBindPassword("invalidPassword");
+}
+
+void InitLdapSettingsWithInvalidFilter(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetSearchFilter("&(uid=$username)()");
+}
+
+void InitLdapSettingsWithUnavailableHost(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetHost("unavailablehost");
+}
+
+void InitLdapSettingsWithEmptyHosts(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetHost("");
+}
+
+void InitLdapSettingsWithEmptyBaseDn(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetBaseDn("");
+}
+
+void InitLdapSettingsWithEmptyBindDn(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetBindDn("");
+}
+
+void InitLdapSettingsWithEmptyBindPassword(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetBindPassword("");
+}
+
 class TLoginClientConnection {
 public:
-    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)> initLdapSettings, const TLdapClientOptions& ldapClientOptions = {})
-        : LdapClientOptions(ldapClientOptions)
-        , Server(InitAuthSettings(std::move(initLdapSettings)))
+    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings, bool isLoginAuthenticationEnabled = true)
+        : CaCertificateFile()
+        , Server(InitAuthSettings(std::move(initLdapSettings), isLoginAuthenticationEnabled))
         , Connection(GetDriverConfig(Server.GetPort()))
         , Client(Connection)
-    {
-        Server.GetRuntime()->SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NLog::PRI_TRACE);
-    }
+    {}
 
     ui16 GetLdapPort() const {
         return LdapPort;
@@ -42,7 +119,7 @@ public:
     }
 
 private:
-    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)>&& initLdapSettings) {
+    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)>&& initLdapSettings, bool isLoginAuthenticationEnabled = true) {
         TPortManager tp;
         LdapPort = tp.GetPort(389);
 
@@ -51,11 +128,11 @@ private:
 
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
-        authConfig->SetEnableLoginAuthentication(LdapClientOptions.IsLoginAuthenticationEnabled);
+        authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
-        initLdapSettings(authConfig->MutableLdapAuthentication(), LdapPort, LdapClientOptions);
+        initLdapSettings(authConfig->MutableLdapAuthentication(), LdapPort, CaCertificateFile);
         return appConfig;
     }
 
@@ -66,82 +143,60 @@ private:
     }
 
 private:
-    const TLdapClientOptions LdapClientOptions;
+    TTempFileHandle CaCertificateFile;
     ui16 LdapPort;
     TKikimrWithGrpcAndRootSchemaWithAuth Server;
     NYdb::TDriver Connection;
     NConsoleClient::TDummyClient Client;
 };
 
-TCertStorage CertStorage;
-
-void LdapAuthWithValidCredentials(const ESecurityConnectionType& secureType) {
-    TString login = "ldapuser";
-    TString password = "ldapUserPassword";
-
-    LdapMock::TLdapMockResponses responses;
-    responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
-    responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {.Status = LdapMock::EStatus::SUCCESS}});
-
-    LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
-        {
-            .BaseDn = "dc=search,dc=yandex,dc=net",
-            .Scope = 2,
-            .DerefAliases = 0,
-            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
-            .Attributes = {"1.1"}
-        }
-    };
-
-    std::vector<LdapMock::TSearchEntry> fetchUserSearchResponseEntries {
-        {
-            .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"
-        }
-    };
-
-    LdapMock::TSearchResponseInfo fetchUserSearchResponseInfo {
-        .ResponseEntries = fetchUserSearchResponseEntries,
-        .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
-    };
-    responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
-
-
-    TLoginClientConnection loginConnection(InitLdapSettings, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = secureType
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = loginConnection.GetLdapPort(),
-        .CertFile = CertStorage.GetServerCertFileName(),
-        .KeyFile = CertStorage.GetServerKeyFileName(),
-        .UseTls = secureType == ESecurityConnectionType::LDAPS_SCHEME
-    }, responses);
-
-    ldapServer.Start();
-    auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
-    auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-    TString token;
-    UNIT_ASSERT_NO_EXCEPTION(token = loginProvider->GetAuthInfo());
-    UNIT_ASSERT(!token.empty());
-
-    loginConnection.Stop();
-}
-
 } // namespace
 
 
 // These tests check to create token for ldap authenticated users
 Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
-    Y_UNIT_TEST(CanAuthWithValidCredentialsNonSecure) {
-        LdapAuthWithValidCredentials(ESecurityConnectionType::NON_SECURE);
-    }
+    Y_UNIT_TEST(LdapAuthWithValidCredentials) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
 
-    Y_UNIT_TEST(CanAuthWithValidCredentialsStartTls) {
-        LdapAuthWithValidCredentials(ESecurityConnectionType::START_TLS);
-    }
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
+        responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
-    Y_UNIT_TEST(CanAuthWithValidCredentialsLdaps) {
-        LdapAuthWithValidCredentials(ESecurityConnectionType::LDAPS_SCHEME);
+        LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
+            {
+                .BaseDn = "dc=search,dc=yandex,dc=net",
+                .Scope = 2,
+                .DerefAliases = 0,
+                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                .Attributes = {"1.1"}
+            }
+        };
+
+        std::vector<LdapMock::TSearchEntry> fetchUserSearchResponseEntries {
+            {
+                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"
+            }
+        };
+
+        LdapMock::TSearchResponseInfo fetchUserSearchResponseInfo {
+            .ResponseEntries = fetchUserSearchResponseEntries,
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
+        responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
+
+
+        TLoginClientConnection loginConnection(InitLdapSettings);
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
+
+        auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        TString token;
+        UNIT_ASSERT_NO_EXCEPTION(token = loginProvider->GetAuthInfo());
+        UNIT_ASSERT(!token.empty());
+
+        loginConnection.Stop();
+        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidRobouserLogin) {
@@ -152,14 +207,14 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         responses.BindResponses.push_back({{{.Login = "cn=invalidRobouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
 
         TLoginClientConnection loginConnection(InitLdapSettingsWithInvalidRobotUserLogin);
-        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
 
-        ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
+        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidRobouserPassword) {
@@ -170,14 +225,14 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "invalidPassword"}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
 
         TLoginClientConnection loginConnection(InitLdapSettingsWithInvalidRobotUserPassword);
-        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
 
-        ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
+        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidSearchFilter) {
@@ -188,30 +243,30 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
         TLoginClientConnection loginConnection(InitLdapSettingsWithInvalidFilter);
-        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
 
-        ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
+        ldapServer.Stop();
     }
 
-    void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)> initLdapSettings, const TString& expectedErrorMessage) {
+    void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings, const TString& expectedErrorMessage) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
 
-        LdapMock::TLdapMockResponses responses;
         TLoginClientConnection loginConnection(initLdapSettings);
-        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
+        LdapMock::TLdapMockResponses responses;
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
 
-        ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
 
         loginConnection.Stop();
+        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthServerIsUnavailable) {
@@ -219,7 +274,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
     }
 
     Y_UNIT_TEST(LdapAuthSettingsWithEmptyHosts) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHost, "Could not login via LDAP");
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHosts, "Could not login via LDAP");
     }
 
     Y_UNIT_TEST(LdapAuthSettingsWithEmptyBaseDn) {
@@ -258,14 +313,14 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
 
         TLoginClientConnection loginConnection(InitLdapSettings);
-        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
 
-        ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = nonExistentUser + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
+        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidPassword) {
@@ -299,14 +354,14 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
 
         TLoginClientConnection loginConnection(InitLdapSettings);
-        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
 
-        ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
+        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthWithEmptyPassword) {
@@ -339,14 +394,14 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
 
         TLoginClientConnection loginConnection(InitLdapSettings);
-        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
 
-        ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
+        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthSetIncorrectDomain) {
@@ -366,130 +421,12 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         TString login = "builtinUser";
         TString password = "builtinUserPassword";
 
-        TLoginClientConnection loginConnection(InitLdapSettings, {
-            .IsLoginAuthenticationEnabled = false
-        });
+        TLoginClientConnection loginConnection(InitLdapSettings, false);
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login, .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         TStringBuilder expectedErrorMessage;
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Login authentication is disabled");
-
-        loginConnection.Stop();
-    }
-
-    Y_UNIT_TEST(CanAuthWithValidCredentialsUseSaslExternal) {
-        TString login = "ldapuser";
-        TString password = "ldapUserPassword";
-
-        LdapMock::TLdapMockResponses responses;
-        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = "external"}}, {.Status = LdapMock::EStatus::SUCCESS}});
-        responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {.Status = LdapMock::EStatus::SUCCESS}});
-
-        LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
-            {
-                .BaseDn = "dc=search,dc=yandex,dc=net",
-                .Scope = 2,
-                .DerefAliases = 0,
-                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
-                .Attributes = {"1.1"}
-            }
-        };
-
-        std::vector<LdapMock::TSearchEntry> fetchUserSearchResponseEntries {
-            {
-                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"
-            }
-        };
-
-        LdapMock::TSearchResponseInfo fetchUserSearchResponseInfo {
-            .ResponseEntries = fetchUserSearchResponseEntries,
-            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
-        };
-        responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
-
-
-        TLoginClientConnection loginConnection(InitLdapSettingsWithSaslExternalBind, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .CertFile = CertStorage.GetClientCertFileName(),
-            .KeyFile = CertStorage.GetClientKeyFileName(),
-            .Type = ESecurityConnectionType::LDAPS_SCHEME
-        });
-        LdapMock::TSimpleServer ldapServer({
-            .Port = loginConnection.GetLdapPort(),
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .CertFile = CertStorage.GetServerCertFileName(),
-            .KeyFile = CertStorage.GetServerKeyFileName(),
-            .UseTls = true,
-            .RequireClientCert = true,
-            .ExternalAuthMap = {
-                {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=robouser,dc=search,dc=yandex,dc=net"}
-            }
-        }, responses);
-
-        ldapServer.Start();
-        auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
-        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TString token;
-        UNIT_ASSERT_NO_EXCEPTION(token = loginProvider->GetAuthInfo());
-        UNIT_ASSERT(!token.empty());
-
-        loginConnection.Stop();
-    }
-
-    Y_UNIT_TEST(CanNotAuthOverSaslExternalWithoutClientCert) {
-        TString login = "ldapuser";
-        TString password = "ldapUserPassword";
-
-        LdapMock::TLdapMockResponses responses;
-        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = "external"}}, {.Status = LdapMock::EStatus::SUCCESS}});
-        responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {.Status = LdapMock::EStatus::SUCCESS}});
-
-        LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
-            {
-                .BaseDn = "dc=search,dc=yandex,dc=net",
-                .Scope = 2,
-                .DerefAliases = 0,
-                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
-                .Attributes = {"1.1"}
-            }
-        };
-
-        std::vector<LdapMock::TSearchEntry> fetchUserSearchResponseEntries {
-            {
-                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"
-            }
-        };
-
-        LdapMock::TSearchResponseInfo fetchUserSearchResponseInfo {
-            .ResponseEntries = fetchUserSearchResponseEntries,
-            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
-        };
-        responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
-
-
-        TLoginClientConnection loginConnection(InitLdapSettingsWithSaslExternalBind, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::LDAPS_SCHEME
-        });
-        LdapMock::TSimpleServer ldapServer({
-            .Port = loginConnection.GetLdapPort(),
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .CertFile = CertStorage.GetServerCertFileName(),
-            .KeyFile = CertStorage.GetServerKeyFileName(),
-            .UseTls = true,
-            .RequireClientCert = true,
-            .ExternalAuthMap = {
-                {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=robouser,dc=search,dc=yandex,dc=net"}
-            }
-        }, responses);
-
-        ldapServer.Start();
-        auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
-        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TString token;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(token = loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
-        UNIT_ASSERT(token.empty());
 
         loginConnection.Stop();
     }

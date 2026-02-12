@@ -26,7 +26,6 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/util
-    ydb/library/login/protos
 )
 
 END()

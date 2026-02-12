@@ -17,7 +17,7 @@ TLdapResponse::TLdapResponse(int msgId, const std::vector<TLdapRequestProcessor:
     EncodeLdapMsg(msgId, protocolResults);
 }
 
-bool TLdapResponse::Send(std::shared_ptr<TSocket> socket) {
+bool TLdapResponse::Send(TAtomicSharedPtr<TLdapSocketWrapper> socket) {
     if (DataResponses.empty()) {
         return false;
     }

@@ -1,6 +1,6 @@
 #include <ydb/mvp/meta/mvp.h>
 
-int main(int argc, char **argv) {
+int main(int argc, const char* argv[]) {
     try {
         return NMVP::TMVP(argc, argv).Run();
     } catch (const yexception& e) {

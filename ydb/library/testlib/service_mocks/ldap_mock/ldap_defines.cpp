@@ -60,20 +60,17 @@ bool AreFiltersEqual(const TSearchRequestInfo::TSearchFilter& filter1, const TSe
 }
 } // namespace
 
-TBindRequestInfo::TBindRequestInfo(const TString& login, const TString& password, const TString& mechanism)
+TBindRequestInfo::TBindRequestInfo(const TString& login, const TString& password)
     : Login(login)
     , Password(password)
-    , Mechanism(mechanism)
 {}
 
 TBindRequestInfo::TBindRequestInfo(const TInitializeList& list)
-    : TBindRequestInfo(list.Login, list.Password, list.Mechanism)
+    : TBindRequestInfo(list.Login, list.Password)
 {}
 
 bool TBindRequestInfo::operator==(const TBindRequestInfo& otherRequest) const {
-    return (this->Login == otherRequest.Login
-        && this->Password == otherRequest.Password
-        && this->Mechanism == otherRequest.Mechanism);
+    return (this->Login == otherRequest.Login && this->Password == otherRequest.Password);
 }
 
 TSearchRequestInfo::TSearchRequestInfo(const TString& baseDn,

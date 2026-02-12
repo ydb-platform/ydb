@@ -1,9 +1,8 @@
 #pragma once
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-#include <util/generic/hash.h>
 #include "ldap_defines.h"
-#include "socket.h"
+#include "ldap_socket_wrapper.h"
 
 class TStreamSocket;
 
@@ -16,9 +15,9 @@ public:
         TString Data;
     };
 
-    TLdapRequestProcessor(std::shared_ptr<TSocket> socket, const THashMap<TString, TString>& externalAuthMap);
+    TLdapRequestProcessor(TAtomicSharedPtr<TLdapSocketWrapper> socket);
     int ExtractMessageId();
-    std::vector<TProtocolOpData> Process(std::shared_ptr<const TLdapMockResponses> responses);
+    std::vector<TProtocolOpData> Process(const TLdapMockResponses& responses);
     unsigned char GetByte();
     size_t GetLength();
 
@@ -33,12 +32,10 @@ private:
     void ProcessFilterEquality(TSearchRequestInfo::TSearchFilter* filter);
     void ProcessFilterExtensibleMatch(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter);
     void ProcessFilterOr(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter);
-    TString GetBindDnFromClientCert();
 
 private:
-    std::shared_ptr<TSocket> Socket;
+    TAtomicSharedPtr<TLdapSocketWrapper> Socket;
     size_t ReadBytes = 0;
-    THashMap<TString, TString> ExternalAuthMap;
 };
 
 }

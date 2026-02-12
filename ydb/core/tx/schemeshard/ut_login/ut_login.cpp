@@ -4,22 +4,19 @@
 #include <ydb/library/login/login.h>
 #include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include <ydb/library/testlib/service_mocks/ldap_mock/simple_server.h>
+#include <ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/login_page.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
-#include <ydb/core/security/ldap_auth_provider/test_utils/test_settings.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 namespace NSchemeShardUT_Private {
-
-TCertStorage CertStorage;
 
 void SetPasswordCheckerParameters(TTestActorRuntime &runtime, ui64 schemeShard, const NLogin::TPasswordComplexity::TInitializer& initializer) {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
@@ -1370,8 +1367,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
                 },
             };
         };
-        LdapMock::TSimpleServer ldapServer({.Port = ldapPort}, ldapResponses("user1", "password1"));
-        ldapServer.Start();
+        LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("user1", "password1"));
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
 
@@ -1404,7 +1400,6 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
         UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
         UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(AuditLogLdapLoginBadPassword) {
@@ -1468,8 +1463,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
                 },
             };
         };
-        LdapMock::TSimpleServer ldapServer({.Port = ldapPort}, ldapResponses("user1", "bad_password"));
-        ldapServer.Start();
+        LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("user1", "bad_password"));
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
 
@@ -1501,7 +1495,6 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP login failed for user uid=user1,dc=search,dc=yandex,dc=net on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
         UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(AuditLogLdapLoginBadUser) {
@@ -1565,8 +1558,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
                 },
             };
         };
-        LdapMock::TSimpleServer ldapServer({.Port = ldapPort}, ldapResponses("bad_user", "password1"));
-        ldapServer.Start();
+        LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("bad_user", "password1"));
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
 
@@ -1598,7 +1590,6 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP user bad_user does not exist. LDAP search for filter uid=bad_user on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=bad_user@ldap");
         UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
-        ldapServer.Stop();
     }
 
     // LDAP responses to bad BindDn or bad BindPassword are the same, so this test covers the both cases.
@@ -1663,8 +1654,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
                 },
             };
         };
-        LdapMock::TSimpleServer ldapServer({.Port = ldapPort}, ldapResponses("user1", "password1"));
-        ldapServer.Start();
+        LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("user1", "password1"));
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
 
@@ -1696,7 +1686,6 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
         UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token={none}");
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(AuditLogLogout) {

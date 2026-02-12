@@ -3,7 +3,7 @@
 #include <util/stream/format.h>
 #include <vector>
 #include "ldap_message_processor.h"
-#include "socket.h"
+#include "ldap_socket_wrapper.h"
 #include "ber.h"
 
 class TStreamSocket;
@@ -20,7 +20,7 @@ public:
     TLdapResponse();
     TLdapResponse(int msgId, const std::vector<TLdapRequestProcessor::TProtocolOpData>& protocolResults);
 
-    bool Send(std::shared_ptr<TSocket> socket);
+    bool Send(TAtomicSharedPtr<TLdapSocketWrapper> socket);
     bool EnableTls();
 };
 

@@ -192,15 +192,8 @@ private:
             }
         }
 
-        if (Settings.GetExtendedSettings().GetEnableSaslExternalBind()) {
-            LDAP_LOG_D("bind: Sasl EXTERNAL");
-            result = NKikimrLdap::Bind(*ld, "", NLoginProto::ESaslAuthMech::External, nullptr);
-        } else {
-            LDAP_LOG_D("bind: bindDn: " << Settings.GetBindDn());
-            const TString& bindPassword = Settings.GetBindPassword();
-            std::vector<char> credentials(bindPassword.begin(), bindPassword.end());
-            result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), NLoginProto::ESaslAuthMech::Simple, &credentials);
-        }
+        LDAP_LOG_D("bind: bindDn: " << Settings.GetBindDn());
+        result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), Settings.GetBindPassword());
         if (!NKikimrLdap::IsSuccess(result)) {
             TStringBuilder logErrorMessage;
             logErrorMessage << "Could not perform initial LDAP bind for dn " << Settings.GetBindDn() << " on server " + UrisCreator.GetUris() << ". "
@@ -233,28 +226,6 @@ private:
                 NKikimrLdap::Unbind(*ld);
                 return {{NKikimrLdap::ErrorToStatus(result),
                         {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
-            }
-            const TString& certFile = Settings.GetUseTls().GetCertFile();
-            const TString& keyFile = Settings.GetUseTls().GetKeyFile();
-            if (!certFile.empty() && !keyFile.empty()) {
-                result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_CERTFILE, certFile.c_str());
-                if (!NKikimrLdap::IsSuccess(result)) {
-                    TStringBuilder logErrorMessage;
-                    logErrorMessage << "Could not set LDAP client certificate file \"" << certFile + "\": " << NKikimrLdap::ErrorToString(result);
-                    LDAP_LOG_D(logErrorMessage);
-                    NKikimrLdap::Unbind(*ld);
-                    return {{NKikimrLdap::ErrorToStatus(result),
-                            {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
-                }
-                result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_KEYFILE, keyFile.c_str());
-                if (!NKikimrLdap::IsSuccess(result)) {
-                    TStringBuilder logErrorMessage;
-                    logErrorMessage << "Could not set LDAP client key file \"" << keyFile + "\": " << NKikimrLdap::ErrorToString(result);
-                    LDAP_LOG_D(logErrorMessage);
-                    NKikimrLdap::Unbind(*ld);
-                    return {{NKikimrLdap::ErrorToStatus(result),
-                            {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
-                }
             }
         }
 
@@ -313,8 +284,7 @@ private:
         }
         TEvLdapAuthProvider::TError error;
         LDAP_LOG_D("bind: bindDn: " << dn);
-        std::vector<char> credentials(request.Password.begin(), request.Password.end());
-        int result = NKikimrLdap::Bind(*request.Ld, dn, NLoginProto::ESaslAuthMech::Simple, &credentials);
+        int result = NKikimrLdap::Bind(*request.Ld, dn, request.Password);
         if (!NKikimrLdap::IsSuccess(result)) {
             TStringBuilder logErrorMessage;
             logErrorMessage << "LDAP login failed for user " << TString(dn) << " on server " << UrisCreator.GetUris() << ". "
@@ -472,10 +442,10 @@ private:
         if (Settings.GetBaseDn().empty()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BaseDn is empty", .Retryable = false}};
         }
-        if (Settings.GetBindDn().empty() && !Settings.GetExtendedSettings().GetEnableSaslExternalBind()) {
+        if (Settings.GetBindDn().empty()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindDn is empty", .Retryable = false}};
         }
-        if (Settings.GetBindPassword().empty() && !Settings.GetExtendedSettings().GetEnableSaslExternalBind()) {
+        if (Settings.GetBindPassword().empty()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindPassword is empty", .Retryable = false}};
         }
         return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};

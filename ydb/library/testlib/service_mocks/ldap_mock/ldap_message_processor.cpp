@@ -72,9 +72,8 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> CreateSearchEntryResponses(c
 
 } // namespace
 
-TLdapRequestProcessor::TLdapRequestProcessor(std::shared_ptr<TSocket> socket, const THashMap<TString, TString>& externalAuthMap)
+TLdapRequestProcessor::TLdapRequestProcessor(TAtomicSharedPtr<TLdapSocketWrapper> socket)
     : Socket(socket)
-    , ExternalAuthMap(externalAuthMap)
 {}
 
 unsigned char TLdapRequestProcessor::GetByte() {
@@ -132,14 +131,14 @@ int TLdapRequestProcessor::ExtractMessageId() {
     return res;
 }
 
-std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Process(std::shared_ptr<const TLdapMockResponses> responses) {
+std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Process(const TLdapMockResponses& responses) {
     unsigned char protocolOp = GetByte();
     switch (protocolOp) {
         case EProtocolOp::BIND_OP_REQUEST: {
-            return ProcessBindRequest(responses->BindResponses);
+            return ProcessBindRequest(responses.BindResponses);
         }
         case EProtocolOp::SEARCH_OP_REQUEST: {
-            return ProcessSearchRequest(responses->SearchResponses);
+            return ProcessSearchRequest(responses.SearchResponses);
         }
         case EProtocolOp::UNBIND_OP_REQUEST: {
             return {{.Type = EProtocolOp::UNBIND_OP_REQUEST}};
@@ -211,49 +210,10 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
 
     requestInfo.Login = GetString();
 
-    unsigned char authMethod = GetByte();
-    switch (authMethod) {
-    case EAuthMethod::LDAP_AUTH_NONE:
-        break;
-    case EAuthMethod::LDAP_AUTH_SIMPLE:
-        requestInfo.Mechanism = "simple";
-        requestInfo.Password = GetString();
-        break;
-    case EAuthMethod::LDAP_AUTH_SASL:
-        size_t authMessageLength = GetLength();
-        if (authMessageLength == 0) {
-            responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
-            Cerr << "LDAP_MOCK: BindRequest, protocol error, auth message length is zero" << Endl;
-            return {responseOpData};
-        }
-        elementType = GetByte();
-        if (elementType != EElementType::STRING) {
-            responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
-            Cerr << "LDAP_MOCK: BindRequest, protocol error, sasl mechanism is not a string" << Endl;
-            return {responseOpData};
-        }
-        TString saslMechanism = GetString();
-        elementType = GetByte();
-        if (elementType != EElementType::STRING) {
-            responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
-            Cerr << "LDAP_MOCK: BindRequest, protocol error, credentials is not a string" << Endl;
-            return {responseOpData};
-        }
-        TString credentials = GetString();
-        Y_UNUSED(credentials);
-        if (saslMechanism == "EXTERNAL") {
-            requestInfo.Mechanism = "external";
-            TString bindDn = GetBindDnFromClientCert();
-            if (bindDn.empty()) {
-                responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
-                Cerr << "LDAP_MOCK: BindRequest, protocol error, can not find login for client subject name" << Endl;
-                return {responseOpData};
-            }
-            requestInfo.Login = bindDn;
-            requestInfo.Password = "";
-        }
-        break;
-    }
+    unsigned char authType = GetByte();
+    Y_UNUSED(authType);
+
+    requestInfo.Password = GetString();
 
     const auto it = std::find_if(responses.begin(), responses.end(), [&requestInfo] (const std::pair<TBindRequestInfo, TBindResponseInfo>& el) {
         const auto& expectedRequestInfo = el.first;
@@ -499,11 +459,6 @@ void TLdapRequestProcessor::ProcessFilterOr(TSearchRequestInfo::TSearchFilter* f
     while (ReadBytes < limit) {
         filter->NestedFilters.push_back(std::make_shared<TSearchRequestInfo::TSearchFilter>(ProcessFilter()));
     }
-}
-
-TString TLdapRequestProcessor::GetBindDnFromClientCert() {
-    auto it = ExternalAuthMap.find(Socket->GetClientCertSubjectName());
-    return (it != ExternalAuthMap.end() ? it->second : Socket->GetClientCertSubjectName());
 }
 
 }

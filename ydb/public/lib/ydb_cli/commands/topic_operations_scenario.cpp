@@ -3,6 +3,7 @@
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_defines.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_describe.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_reader.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_keyed_writer.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_writer.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
@@ -308,7 +309,18 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .MaxMemoryUsageBytes = ProducerMaxMemoryUsageBytes,
         };
 
-        threads.push_back(std::async([writerParams = std::move(writerParams)]() { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));
+        if (KeyedWrites) {
+            TTopicWorkloadKeyedWriterParams keyedWriterParams(writerParams);
+            keyedWriterParams.ProducerKeysCount = ProducerKeysCount;
+
+            threads.push_back(std::async([keyedWriterParams = std::move(keyedWriterParams)]() {
+                TTopicWorkloadKeyedWriterWorker::RetryableWriterLoop(keyedWriterParams);
+            }));
+        } else {
+            threads.push_back(std::async([writerParams = std::move(writerParams)]() {
+                TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams);
+            }));
+        }
     }
 
     while (*count != ProducerThreadCount) {

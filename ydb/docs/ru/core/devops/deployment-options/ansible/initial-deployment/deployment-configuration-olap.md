@@ -155,7 +155,7 @@ all:
 1. Создайте файл `files/config.yaml` и заполните его.
 
 ```yaml
-  storage_config_generation: 0
+storage_config_generation: 0
 static_erasure: mirror-3-dc
 host_configs:
 - drive:

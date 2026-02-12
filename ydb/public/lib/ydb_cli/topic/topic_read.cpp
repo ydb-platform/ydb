@@ -96,8 +96,8 @@ namespace NYdb::NConsoleClient {
                 case ETopicMetadataField::CreateTime:
                     row.Column(idx, message.GetCreateTime());
                     break;
-                case ETopicMetadataField::MessageGroupID:
-                    row.Column(idx, message.GetMessageGroupId());
+                case ETopicMetadataField::ProducerID:
+                    row.Column(idx, message.GetProducerId());
                     break;
                 case ETopicMetadataField::Offset:
                     row.Column(idx, message.GetOffset());
@@ -125,6 +125,9 @@ namespace NYdb::NConsoleClient {
                         }
                         row.Column(idx, json);
                     }
+                    break;
+                case ETopicMetadataField::PartitionID:
+                    row.Column(idx, message.GetPartitionSession()->GetPartitionId());
                     break;
                 default:
                     break;
@@ -156,8 +159,8 @@ namespace NYdb::NConsoleClient {
                 case ETopicMetadataField::CreateTime:
                     writer.Write("create_time", message.GetCreateTime().ToString());
                     break;
-                case ETopicMetadataField::MessageGroupID:
-                    writer.Write("message_group_id", TString(message.GetMessageGroupId()));
+                case ETopicMetadataField::ProducerID:
+                    writer.Write("producer_id", TString(message.GetProducerId()));
                     break;
                 case ETopicMetadataField::Offset:
                     writer.Write("offset", message.GetOffset());
@@ -187,6 +190,9 @@ namespace NYdb::NConsoleClient {
                         }
                         writer.CloseMap();
                     }
+                    break;
+                case ETopicMetadataField::PartitionID:
+                    writer.Write("partition_id", message.GetPartitionSession()->GetPartitionId());
                     break;
                 default:
                     break;
@@ -239,8 +245,8 @@ namespace NYdb::NConsoleClient {
             case ETopicMetadataField::CreateTime:
                 output << message.GetCreateTime();
                 break;
-            case ETopicMetadataField::MessageGroupID:
-                output << GetFieldWithEscaping(TString(message.GetMessageGroupId()), delimiter);
+            case ETopicMetadataField::ProducerID:
+                output << GetFieldWithEscaping(TString(message.GetProducerId()), delimiter);
                 break;
             case ETopicMetadataField::Offset:
                 output << message.GetOffset();
@@ -268,6 +274,9 @@ namespace NYdb::NConsoleClient {
                     }
                     output << GetFieldWithEscaping(json.GetStringRobust(), delimiter);
                 }
+                break;
+            case ETopicMetadataField::PartitionID:
+                output << message.GetPartitionSession()->GetPartitionId();
                 break;
             default:
                 break;

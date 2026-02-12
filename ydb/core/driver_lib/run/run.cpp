@@ -97,7 +97,6 @@
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-#include <ydb/core/client/server/http_ping.h>
 
 #include <ydb/library/grpc/server/actors/logger.h>
 
@@ -460,6 +459,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
             monConfig.Certificate = TUnbufferedFileInput(appConfig.GetMonitoringConfig().GetMonitoringCertificateFile()).ReadAll();
         }
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
+        monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {
                 for (const auto& it : appConfig.GetNameserviceConfig().GetNode()) {
@@ -492,7 +492,6 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         }
         if (Monitoring) {
             Monitoring->RegisterCountersPage("counters", "Counters", Counters);
-            Monitoring->Register(NHttp::CreatePing());
             ActorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
         }
     }
@@ -504,7 +503,7 @@ void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&)
         Monitoring->RegisterActorHandler({
             .Path = "/login",
             .Handler = MakeWebLoginServiceId(),
-            .UseAuth = false, // we don't require token for the login page - it's the page to get the token
+            .AuthMode = TMon::EAuthMode::Disabled, // we don't require token for the login page - it's the page to get the token
         });
         Monitoring->RegisterActorHandler({
             .Path = "/logout",

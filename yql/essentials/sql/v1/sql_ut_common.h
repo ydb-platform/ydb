@@ -10548,6 +10548,35 @@ Y_UNIT_TEST(MetricsLevelBadNumericValue) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid numeric value for metrics_value");
 }
+
+Y_UNIT_TEST(TransferCPULimit) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $b($x); }
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+            V_CPU_RATE_LIMIT = 1.5
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTransferWithCPULimit) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        ALTER TRANSFER `TransferName`
+        SET (
+            V_CPU_RATE_LIMIT = 4
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
 } // Y_UNIT_TEST_SUITE(Transfer)
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {

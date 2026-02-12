@@ -48,7 +48,7 @@ namespace NKikimr::NDDisk {
         template<typename TRecord>
         struct THasWriteInstructionField {
             template<typename T> static constexpr auto check(T*) -> typename std::is_same<
-                std::decay_t<decltype(std::declval<T>().GetWriteInstruction())>,
+                std::decay_t<decltype(std::declval<T>().GetInstruction())>,
                 NKikimrBlobStorage::NDDisk::TWriteInstruction
             >::type;
 
@@ -308,7 +308,7 @@ namespace NKikimr::NDDisk {
                 }
 
                 if constexpr (NPrivate::THasWriteInstructionField<TRecord>::value) {
-                    const TWriteInstruction instruction(record.GetWriteInstruction());
+                    const TWriteInstruction instruction(record.GetInstruction());
                     size_t size = 0;
                     if (instruction.PayloadId) {
                         const TRope& data = ev.Get()->GetPayload(*instruction.PayloadId);

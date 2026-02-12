@@ -336,6 +336,10 @@ public:
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     addTable(source.GetReadRangesSource().GetTable());
                 }
+    
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    addTable(source.GetFullTextSource().GetTable());
+                }
             }
 
             for (const auto& sink : stage.GetSinks()) {

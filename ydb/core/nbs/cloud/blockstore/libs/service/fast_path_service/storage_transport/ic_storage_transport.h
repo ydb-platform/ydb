@@ -60,7 +60,7 @@ public:
         NWilson::TTraceId traceId,
         const ui64 requestId) override;
 
-    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult> Sync(
+    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult> SyncWithPersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,

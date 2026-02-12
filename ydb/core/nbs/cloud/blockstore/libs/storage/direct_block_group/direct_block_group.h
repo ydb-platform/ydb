@@ -166,7 +166,7 @@ private:
         ui64 storageRequestId,
         const TEvent& result);
 
-    void HandleSyncResult(
+    void HandleSyncWithPersistentBufferResult(
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult& result);
 };

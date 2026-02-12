@@ -238,7 +238,7 @@ void TDirectBlockGroup::ProcessSyncQueue()
 
         future.Subscribe([this, requestId = StorageRequestId](const auto& f) {
             const auto& result = f.GetValue();
-            HandleSyncResult(requestId, result);
+            HandleSyncWithPersistentBufferResult(requestId, result);
         });
 
         RequestHandlersByStorageRequestId[StorageRequestId] = syncRequestHandler;

@@ -45,7 +45,8 @@ namespace NKikimr::NDDisk {
             .Span={}, 
             .Creds=creds,
             .Requests={},
-            .ErrorReason={}
+            .ErrorReason={},
+            .SourceKind=TSyncInFlight::ESK_PERSISTENT_BUFFER
         }).first->second;
 
         const auto& ddiskId = record.GetDDiskId();
@@ -154,7 +155,8 @@ namespace NKikimr::NDDisk {
             .Span={}, 
             .Creds=creds,
             .Requests={},
-            .ErrorReason={}
+            .ErrorReason={},
+            .SourceKind=TSyncInFlight::ESK_DDISK 
         }).first->second;
 
         const auto& ddiskId = record.GetDDiskId();
@@ -227,6 +229,8 @@ namespace NKikimr::NDDisk {
     template <typename TEventPtr>
     void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
         ui64 syncId = SegmentManager.GetSync(ev->Cookie);
+
+        Cerr << "Receive read\n";
 
         if (syncId == Max<ui64>()) {
             return;

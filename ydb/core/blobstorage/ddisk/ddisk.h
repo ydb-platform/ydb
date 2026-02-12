@@ -24,8 +24,6 @@ namespace NKikimr::NDDisk {
             EvWritePersistentBufferResult,
             EvReadPersistentBuffer,
             EvReadPersistentBufferResult,
-            EvFlushPersistentBuffer,
-            EvFlushPersistentBufferResult,
             EvErasePersistentBuffer,
             EvErasePersistentBufferResult,
             EvListPersistentBuffer,
@@ -172,8 +170,6 @@ namespace NKikimr::NDDisk {
     struct TEvWritePersistentBufferResult;
     struct TEvReadPersistentBuffer;
     struct TEvReadPersistentBufferResult;
-    struct TEvFlushPersistentBuffer;
-    struct TEvFlushPersistentBufferResult;
     struct TEvErasePersistentBuffer;
     struct TEvErasePersistentBufferResult;
     struct TEvListPersistentBuffer;
@@ -325,41 +321,6 @@ namespace NKikimr::NDDisk {
             }
             if (data) {
                 TReadResult(AddPayload(std::move(data))).Serialize(Record.MutableReadResult());
-            }
-        }
-    };
-
-    DECLARE_DDISK_EVENT(FlushPersistentBuffer) {
-        using TResult = TEvFlushPersistentBufferResult;
-
-        TEvFlushPersistentBuffer() = default;
-
-        TEvFlushPersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
-                std::optional<std::tuple<ui32, ui32, ui32>> ddiskId, std::optional<ui64> ddiskInstanceGuid) {
-            creds.Serialize(Record.MutableCredentials());
-            selector.Serialize(Record.MutableSelector());
-            Record.SetLsn(lsn);
-            if (ddiskId) {
-                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
-                auto *m = Record.MutableDDiskId();
-                m->SetNodeId(nodeId);
-                m->SetPDiskId(pdiskId);
-                m->SetDDiskSlotId(ddiskSlotId);
-            }
-            if (ddiskInstanceGuid) {
-                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
-            }
-        }
-    };
-
-    DECLARE_DDISK_EVENT(FlushPersistentBufferResult) {
-        TEvFlushPersistentBufferResult() = default;
-
-        TEvFlushPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt) {
-            Record.SetStatus(status);
-            if (errorReason) {
-                Record.SetErrorReason(*errorReason);
             }
         }
     };

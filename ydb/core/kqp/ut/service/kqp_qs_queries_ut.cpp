@@ -1802,6 +1802,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         kikimr.GetTestClient().GrantConnect("user0@builtin");
         kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+        WaitForProxy(kikimr, "user0@builtin");
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())

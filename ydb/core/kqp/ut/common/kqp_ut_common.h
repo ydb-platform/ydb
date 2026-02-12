@@ -468,5 +468,9 @@ private:
 
 void CheckOwner(NYdb::NTable::TSession& session, const TString& path, const TString& name);
 
+// Waits until the KQP proxy recognizes the subject's connect permission.
+// Useful after GrantConnect to avoid UNAUTHORIZED/UNAVAILABLE races.
+void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject);
+
 } // namespace NKqp
 } // namespace NKikimr

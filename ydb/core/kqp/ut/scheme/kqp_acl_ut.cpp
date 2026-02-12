@@ -25,23 +25,6 @@ void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TStr
     Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);
 }
 
-void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
-    auto driver = NYdb::TDriver(NYdb::TDriverConfig()
-    .SetEndpoint(kikimr.GetEndpoint())
-    .SetDatabase("/Root")
-    .SetAuthToken(subject));
-
-    NYdb::NQuery::TQueryClient client(driver);
-    while(true) {
-        auto result = client.ExecuteScript("SELECT 1").ExtractValueSync();
-        NYdb::EStatus scriptStatus = result.Status().GetStatus();
-        UNIT_ASSERT_C(scriptStatus == NYdb::EStatus::UNAVAILABLE || scriptStatus == NYdb::EStatus::SUCCESS || scriptStatus == NYdb::EStatus::UNAUTHORIZED, result.Status().GetIssues().ToString());
-        if (scriptStatus == NYdb::EStatus::SUCCESS)
-            return;
-        Sleep(TDuration::Seconds(1));
-    };
-}
-
 void AddConnectPermission(const TKikimrRunner& kikimr, const TString& subject) {
     AddPermissions(kikimr, "/Root", subject, {"ydb.database.connect"});
     WaitForProxy(kikimr, subject);

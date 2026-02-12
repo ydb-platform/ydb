@@ -2,6 +2,7 @@
 #include "topic_workload_writer_producer.h"
 #include "topic_workload_writer_worker_common.h"
 #include "topic_workload_configurator.h"
+#include "topic_workload_describe.h"
 
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
@@ -245,6 +246,39 @@ void TTopicWorkloadWriterWorker::ConfiguratorLoop(const TTopicWorkloadConfigurat
     }
 
     WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Configurator finished " << Now().ToStringUpToSeconds());
+}
+
+void TTopicWorkloadWriterWorker::RetryableDescriberLoop(const TTopicWorkloadDescriberParams& params)
+{
+    auto errorFlag = params.ErrorFlag;
+
+    const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
+
+    while (!*errorFlag && Now() < endTime) {
+        try {
+            DescriberLoop(params, endTime);
+        } catch (const yexception& ex) {
+            WRITE_LOG(params.Log, ELogPriority::TLOG_WARNING, TStringBuilder() << ex);
+        }
+    }
+}
+
+void TTopicWorkloadWriterWorker::DescriberLoop(const TTopicWorkloadDescriberParams& params, TInstant endTime)
+{
+    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Describer started " << Now().ToStringUpToSeconds());
+
+    try {
+        TTopicWorkloadDescriberWorker describer(params);
+        describer.Process(endTime);
+    } catch (const std::runtime_error& re) {
+        WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder()
+            << "Describer failed with error: " << re.what());
+    } catch (...) {
+        WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder()
+            << "Describer caught unknown exception: " << CurrentExceptionMessage());
+    }
+
+    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Describer finished " << Now().ToStringUpToSeconds());
 }
 
 void TTopicWorkloadWriterWorker::TryCommitTx(TInstant& commitTime)

@@ -22,6 +22,8 @@ void TTopicWorkloadConfiguratorWorker::Process(TInstant endTime)
 
         AddConsumers(client);
         DropConsumers(client);
+
+        Sleep(TDuration::Seconds(3));
     }
 }
 

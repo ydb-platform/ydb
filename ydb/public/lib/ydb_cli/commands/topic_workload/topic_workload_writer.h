@@ -45,6 +45,7 @@ namespace NYdb {
         };
 
         struct TTopicWorkloadConfiguratorParams;
+        struct TTopicWorkloadDescriberParams;
 
         class TTopicWorkloadWriterProducer;
         class TTopicWorkloadWriterWorker {
@@ -58,6 +59,9 @@ namespace NYdb {
 
             static void RetryableConfiguratorLoop(const TTopicWorkloadConfiguratorParams& params);
             static void ConfiguratorLoop(const TTopicWorkloadConfiguratorParams& params, TInstant endTime);
+
+            static void RetryableDescriberLoop(const TTopicWorkloadDescriberParams& params);
+            static void DescriberLoop(const TTopicWorkloadDescriberParams& params, TInstant endTime);
 
         private:
             TTopicWorkloadWriterWorker(const TTopicWorkloadWriterParams& params);

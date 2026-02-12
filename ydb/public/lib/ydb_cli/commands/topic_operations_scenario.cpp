@@ -348,6 +348,24 @@ void TTopicOperationsScenario::StartConfiguratorThread(std::vector<std::future<v
     threads.push_back(std::async([params = std::move(params)]() { TTopicWorkloadWriterWorker::RetryableConfiguratorLoop(params); }));
 }
 
+void TTopicOperationsScenario::StartDescriberThread(std::vector<std::future<void>>& threads,
+                                                    const TString& database)
+{
+    if (!NeedDescribeTopic) {
+        return;
+    }
+    TTopicWorkloadDescriberParams params{
+        .TotalSec = TotalSec.Seconds(),
+        .WarmupSec = WarmupSec.Seconds(),
+        .Driver = *Driver,
+        .Log = Log,
+        .ErrorFlag = ErrorFlag,
+        .Database = database,
+        .TopicName = TopicName,
+    };
+    threads.push_back(std::async([params = std::move(params)]() { TTopicWorkloadWriterWorker::RetryableDescriberLoop(params); }));
+}
+
 void TTopicOperationsScenario::JoinThreads(const std::vector<std::future<void>>& threads)
 {
     for (auto& future : threads) {

@@ -1,7 +1,5 @@
 #include "topic_workload_describe.h"
-
 #include "topic_workload_defines.h"
-
 
 using namespace NYdb::NConsoleClient;
 
@@ -34,4 +32,25 @@ NYdb::NTopic::TTopicDescription TCommandWorkloadTopicDescribe::DescribeTopic(con
     }
 
     return description;
+}
+
+TTopicWorkloadDescriberWorker::TTopicWorkloadDescriberWorker(const TTopicWorkloadDescriberParams& params)
+    : Params(params)
+{
+}
+
+void TTopicWorkloadDescriberWorker::Process(TInstant endTime)
+{
+    Sleep(TDuration::Seconds(Params.WarmupSec));
+
+    while (!*Params.ErrorFlag) {
+        auto now = Now();
+        if (now > endTime) {
+            break;
+        }
+
+        TCommandWorkloadTopicDescribe::DescribeTopic(Params.Database, Params.TopicName, Params.Driver);
+
+        Sleep(TDuration::Seconds(3));
+    }
 }

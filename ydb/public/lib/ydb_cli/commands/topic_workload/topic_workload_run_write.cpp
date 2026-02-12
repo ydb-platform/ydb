@@ -124,6 +124,11 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .Hidden()
         .DefaultValue(0)
         .StoreResult(&Scenario.ConfigConsumerCount);
+    config.Opts->AddLongOption("describe-topic", "The program constantly calls the DescripeTopic method")
+        .Optional()
+        .Hidden()
+        .DefaultValue(false)
+        .StoreTrue(&Scenario.NeedDescribeTopic);
 
     config.IsNetworkIntensive = true;
 }

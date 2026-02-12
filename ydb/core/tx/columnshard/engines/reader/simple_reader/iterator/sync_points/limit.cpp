@@ -48,25 +48,6 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;
     }
-<<<<<<< HEAD
-<<<<<<< HEAD
-    const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
-    const auto& g = source->GetStageResult().GetBatch();
-    AFL_VERIFY(Iterators.size());
-<<<<<<< HEAD
-    AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("front", Iterators.front().DebugString())("source",
-                                                    source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_id", source->GetSourceId());
-    std::pop_heap(Iterators.begin(), Iterators.end());
-    if (!g || !g->GetRecordsCount()) {
-        Iterators.pop_back();
-    } else {
-=======
-    if (Iterators.front().GetSourceId() != source->GetSourceId()) {
-        for (auto it : Iterators) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("Iterator", it.DebugString());
-=======
-=======
->>>>>>> 6a7726e710d (Resolved merge conflicts)
 
     AFL_VERIFY(UnfilledIterators.size());
 
@@ -102,7 +83,6 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     const auto& g = source->GetStageResult().GetBatch();
 
     if (g && g->GetRecordsCount()) {
->>>>>>> e8c978d1427 (BACKPORT-CONFLICT: manual resolution required for commit 48e2293)
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrs;
         for (auto&& i : rk.fields()) {
             auto acc = g->GetAccessorByNameOptional(i->name());

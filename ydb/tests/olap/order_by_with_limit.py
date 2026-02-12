@@ -107,8 +107,6 @@ class TestOrderBy(object):
                     order by id {order[is_desc]} limit {limit}
                     """)
             assert keys == answer, keys
-<<<<<<< HEAD
-=======
 
     def random_char(self):
         characters = string.ascii_letters + string.digits
@@ -469,4 +467,3 @@ class TestOrderBy(object):
         )
 
         assert len(result_sets[0].rows) == 12
->>>>>>> e8c978d1427 (BACKPORT-CONFLICT: manual resolution required for commit 48e2293)

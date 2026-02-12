@@ -681,7 +681,7 @@ class LongRemoteExecution(AbstractContextManager):
         return self._err or ''
 
     @property
-    def return_code(self) -> int:
+    def return_code(self) -> Optional[int]:
         if self._return_code is None:
             rc = self._get_content(self._return_code_path)
             if rc is not None:
@@ -697,7 +697,8 @@ class LongRemoteExecution(AbstractContextManager):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.terminate()
-        allure.attach(self.return_code, 'return code', allure.attachment_type.TEXT)
+        if self.return_code is not None:
+            allure.attach(str(self.return_code), 'return code', allure.attachment_type.TEXT)
         allure.attach(self.stdout, 'remote stdout', allure.attachment_type.TEXT)
         allure.attach(self.stderr, 'remote stderr', allure.attachment_type.TEXT)
         self.allure.__exit__(exc_type, exc_val, exc_tb)

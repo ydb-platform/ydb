@@ -30,6 +30,7 @@ struct TEvPrivate {
         EvDelayedComplete,
         EvHardDeadline,
         EvSoftDeadline,
+        EvTruncatedCountResult,
     };
 
     struct TQueryToCompile {
@@ -53,10 +54,21 @@ struct TEvPrivate {
     struct TEvDelayedComplete : public NActors::TEventLocal<TEvDelayedComplete, EvDelayedComplete> {};
     struct TEvHardDeadline : public NActors::TEventLocal<TEvHardDeadline, EvHardDeadline> {};
     struct TEvSoftDeadline : public NActors::TEventLocal<TEvSoftDeadline, EvSoftDeadline> {};
+
+    struct TEvTruncatedCountResult : public NActors::TEventLocal<TEvTruncatedCountResult, EvTruncatedCountResult> {
+        bool Success;
+        ui64 Count;
+
+        TEvTruncatedCountResult(bool success, ui64 count = 0)
+            : Success(success)
+            , Count(count)
+        {}
+    };
 };
 
 /*
-    The actor-helper to fetch and parse data from /.sys/compile_cache_queries
+    Helper actor to fetch and parse data from /.sys/compile_cache_queries.
+    See TFetchCacheActor::OnRunQuery() for query constraints on cache records.
 */
 class TFetchCacheActor : public TQueryBase {
 public:
@@ -71,11 +83,11 @@ public:
     void OnRunQuery() override {
         const auto limit = std::max<ui32>(1u, MaxQueriesToLoad);
         TStringBuilder sql;
-        sql << "SELECT Query, UserSID, MAX(Metadata) AS Metadata, SUM(AccessCount) AS AccessCount, MAX(CompilationDuration) AS CompilationDuration"
+        sql << "SELECT Query, UserSID, MAX(Metadata) AS Metadata, SUM(AccessCount) AS AccessCount, MAX(CompilationDurationMs) AS CompilationDurationMs"
             << " FROM `" << Database << "/.sys/compile_cache_queries` "
             << "WHERE IsTruncated = false "
             << "  AND AccessCount > 0 "
-            << "  AND CompilationDuration < " << MaxCompilationDurationMs;
+            << "  AND CompilationDurationMs < " << MaxCompilationDurationMs;
 
         if (!NodeIds.empty()) {
             sql << "  AND NodeId IN (";
@@ -99,7 +111,7 @@ public:
             auto queryText = parser.ColumnParser("Query").GetOptionalUtf8();
             auto userSID = parser.ColumnParser("UserSID").GetOptionalUtf8();
             auto metadata = parser.ColumnParser("Metadata").GetOptionalUtf8();
-            auto compilationDuration = parser.ColumnParser("CompilationDuration").GetOptionalUint64();
+            auto compilationDuration = parser.ColumnParser("CompilationDurationMs").GetOptionalUint64();
 
             if (queryText && !queryText->empty()) {
                 TEvPrivate::TQueryToCompile query;
@@ -131,6 +143,59 @@ private:
     TVector<ui32> NodeIds;
     ui32 MaxNodesToQuery;
     std::unique_ptr<TEvPrivate::TEvFetchCacheResult> Result = std::make_unique<TEvPrivate::TEvFetchCacheResult>(false);
+};
+
+/*
+    Helper actor to count truncated queries in /.sys/compile_cache_queries.
+    Runs independently from the main fetch, result is used for observability only.
+*/
+class TFetchTruncatedCountActor : public TQueryBase {
+public:
+    TFetchTruncatedCountActor(const TString& database, const TVector<ui32>& nodeIds, ui32 maxNodesToQuery)
+        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
+        , NodeIds(nodeIds)
+        , MaxNodesToQuery(maxNodesToQuery)
+    {}
+
+    void OnRunQuery() override {
+        TStringBuilder sql;
+        sql << "SELECT COUNT(*) AS TruncatedCount"
+            << " FROM `" << Database << "/.sys/compile_cache_queries`"
+            << " WHERE IsTruncated = true AND AccessCount > 0";
+
+        if (!NodeIds.empty()) {
+            ui32 nodesToQuery = std::min<ui32>(MaxNodesToQuery, NodeIds.size());
+            sql << " AND NodeId IN (";
+            for (ui32 i = 0; i < nodesToQuery; ++i) {
+                if (i > 0) sql << ", ";
+                sql << NodeIds[i];
+            }
+            sql << ")";
+        }
+
+        RunStreamQuery(sql);
+    }
+
+    void OnStreamResult(NYdb::TResultSet&& resultSet) override {
+        NYdb::TResultSetParser parser(resultSet);
+        if (parser.TryNextRow()) {
+            TruncatedCount = parser.ColumnParser("TruncatedCount").GetUint64();
+        }
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&&) override {
+        Send(Owner, new TEvPrivate::TEvTruncatedCountResult(
+            status == Ydb::StatusIds::SUCCESS, TruncatedCount));
+    }
+
+private:
+    TVector<ui32> NodeIds;
+    ui32 MaxNodesToQuery;
+    ui64 TruncatedCount = 0;
 };
 
 namespace {
@@ -183,12 +248,12 @@ void FillYdbParametersFromMetadata(
 } // anonymous namespace
 
 
-/* 
-    Compile warmup actor runs before node is registered and is ready to serve queries.
-    The main goal is to compile popular queries before start to avoid execution time drops 
-    during the first moments of node works
-    Has hard deadline on the end of execution, soft deadline from fetching start.
-    Both is set in WarmupConfig
+/*
+    Compile warmup actor runs before the node is registered and ready to serve queries.
+    The main goal is to compile popular queries before node starts to avoid execution time drops
+    during the first moments of node work.
+    Has a hard deadline at the end of execution and a soft deadline from fetch start.
+    Both are set in WarmupConfig.
 */
 class TKqpCompileCacheWarmupActor : public NActors::TActorBootstrapped<TKqpCompileCacheWarmupActor> {
 public:
@@ -242,6 +307,7 @@ private:
             cFunc(TEvPrivate::EvDelayedComplete, HandleDelayedComplete);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
+            hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
             LOG_W("StateWaitingComplete: unexpected event " << ev->GetTypeRewrite());
@@ -263,6 +329,7 @@ private:
     STFUNC(StateFetching) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvFetchCacheResult, HandleFetchResult);
+            hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
@@ -275,6 +342,7 @@ private:
     STFUNC(StateCompiling) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqp::TEvQueryResponse, HandleQueryResponse);
+            hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
@@ -291,6 +359,14 @@ private:
 
     void HandleDelayedComplete() {
         Complete(true, SkipReason);
+    }
+
+    void HandleTruncatedCount(TEvPrivate::TEvTruncatedCountResult::TPtr& ev) {
+        if (ev->Get()->Success && Counters) {
+            Counters->WarmupQueriesTruncated->Set(ev->Get()->Count);
+        }
+        LOG_I("Truncated queries in cache: " << ev->Get()->Count
+              << ", success: " << ev->Get()->Success);
     }
 
     void HandleStartWarmup(TEvStartWarmup::TPtr& ev) {
@@ -318,6 +394,7 @@ private:
         LOG_I("Spawning fetch cache actor, filtering by " << std::min<size_t>(maxNodesToQuery, NodeIds.size()) << " nodes");
         const ui64 maxCompilationMs = Config.Deadline.MilliSeconds() / 2;
         Register(new TFetchCacheActor(Database, Config.MaxQueriesToLoad, maxCompilationMs, NodeIds, maxNodesToQuery));
+        Register(new TFetchTruncatedCountActor(Database, NodeIds, maxNodesToQuery));
         Become(&TThis::StateFetching);
     }
 
@@ -408,8 +485,10 @@ private:
         auto queryEv = std::make_unique<TEvKqp::TEvQueryRequest>();
         auto& record = queryEv->Record;
         // compile for each user separately
-        auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid, TVector<NACLib::TSID>{});
-        record.SetUserToken(userToken->SerializeAsString());
+        if (!userSid.empty()) {
+            auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid, TVector<NACLib::TSID>{});
+            record.SetUserToken(userToken->SerializeAsString());
+        }
         
         auto& request = *record.MutableRequest();
         request.SetDatabase(database);
@@ -483,10 +562,6 @@ private:
         Completed = true;
 
         LOG_I("Warmup " << (success ? "completed" : "finished") << ": " << message);
-
-        if (Counters) {
-            Counters->WarmupFinished->Inc();
-        }
 
         if (NotifyActorId) {
             Send(NotifyActorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded));

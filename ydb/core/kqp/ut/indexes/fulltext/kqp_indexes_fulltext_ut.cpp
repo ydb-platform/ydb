@@ -4659,7 +4659,7 @@ Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate) {
     }
 }
 
-Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate2) {
+Y_UNIT_TEST(AddFullTextFlatIndexWithTruncateWithSelect) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
     featureFlags.SetEnableTruncateTable(true);
@@ -4678,42 +4678,36 @@ Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate2) {
     CreateTexts(db);
     AddIndex(db);
 
-    auto retryableSelect = [&](){
-        constexpr size_t retryNumber = 3;
+    auto select = [&](){
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "404 not found")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
-        for (size_t retry = 0; retry < retryNumber; ++retry) {
-            TString query = R"sql(
-                SELECT `Key`, `Text`
-                FROM `/Root/Texts` VIEW `fulltext_idx`
-                WHERE FulltextMatch(`Text`, "404 not found")
-                ORDER BY `Key`;
-            )sql";
-            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    };
 
-            if (retry + 1 == retryNumber) {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            }
-
-            if (result.GetStatus() == EStatus::SUCCESS) {
-                CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-                break;
-            } else if (result.GetStatus() == EStatus::UNAVAILABLE) {
-                Sleep(TDuration::Seconds(1));
-                continue;
-            }
-        }
+    auto ensureTableIsEmpty = [&](){
+        auto result = db.ExecuteQuery("SELECT * FROM `/Root/Texts`;", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
     };
 
     auto verifyIndexWorksCorrectly = [&](){
-        retryableSelect();
+        select();
         UpsertSomeTexts(db);
-        retryableSelect();
+        select();
     };
 
     verifyIndexWorksCorrectly();
 
     for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
         TruncateTable(db);
+        ensureTableIsEmpty();
         verifyIndexWorksCorrectly();
     }
 }

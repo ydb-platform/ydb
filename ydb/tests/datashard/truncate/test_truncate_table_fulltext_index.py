@@ -55,6 +55,12 @@ def test_truncate_table_with_fulltext_index_table_service(ydb_cluster, ydb_datab
                     TRUNCATE TABLE `Texts`;
                 ''')
 
+                result = session.transaction().execute('''
+                    SELECT *
+                    FROM `Texts`;
+                ''', commit_tx=True)
+                assert_that(len(result[0].rows), equal_to(0))
+
             def verify_index_works_correctly():
                 select_empty_results()
                 upsert_some_texts()
@@ -108,6 +114,12 @@ def test_truncate_table_with_fulltext_index_with_query_service(ydb_cluster, ydb_
             session_pool.execute_with_retries('''
                 TRUNCATE TABLE `Texts`;
             ''')
+
+            result = session_pool.execute_with_retries('''
+                SELECT *
+                FROM `Texts`;
+            ''')
+            assert_that(len(result[0].rows), equal_to(0))
 
         def verify_index_works_correctly():
             select_empty_results()
@@ -167,12 +179,18 @@ def test_truncate_table_with_fulltext_index_with_query_service_many_sessions(ydb
                     TRUNCATE TABLE `Texts`;
                 ''')
 
+                result = session_pool.execute_with_retries('''
+                    SELECT *
+                    FROM `Texts`;
+                ''')
+                assert_that(len(result[0].rows), equal_to(0))
+
         def verify_index_works_correctly():
             select_empty_results()
             upsert_some_texts()
             select_empty_results()
 
-        verify_index_works_correctly(-1)
+        verify_index_works_correctly()
 
         for _ in range(5):
             truncate_table()

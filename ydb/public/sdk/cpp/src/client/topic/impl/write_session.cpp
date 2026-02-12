@@ -1379,9 +1379,9 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
     }
 
     RunMainWorker();
-    // if (eventsPromise) {
-    //     eventsPromise->TrySetValue();
-    // }
+    if (eventsPromise) {
+        eventsPromise->TrySetValue();
+    }
 }
 
 bool TKeyedWriteSession::Close(TDuration closeTimeout) {

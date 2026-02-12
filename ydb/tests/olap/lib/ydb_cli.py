@@ -437,7 +437,7 @@ class YdbCliHelper:
     def deploy_remote_cli(cls, host: str = ''):
         if not host:
             host = YdbCluster.get_client_host()
-        result = remote_execution.deploy_binary(host, YdbCluster.get_client_host(), os.path.dirname(cls.get_remote_cli_path()))
+        result = remote_execution.deploy_binary(cls.get_cli_path(), host, os.path.dirname(cls.get_remote_cli_path()))
         assert result.get('success', False), f"host: {host}, bin: {cls.get_cli_path()}, path: {result.get('path')}, error: {result.get('error')}"
 
     @classmethod

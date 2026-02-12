@@ -113,7 +113,7 @@ void TMvpStartupOptions::SetPorts() {
     }
 }
 
-TString AddSchemeToUserToken(const TString& token, const TString& scheme) {
+TString TMvpStartupOptions::AddSchemeToUserToken(const TString& token, const TString& scheme) {
     if (token.empty() || token.find(' ') != TString::npos) {
         return token;
     }

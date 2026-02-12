@@ -59,6 +59,7 @@ struct TCacheValue : TNonCopyable {
     }
 
     std::shared_ptr<TVector<TBatch>> GetValue() {
+        std::lock_guard lock(ValueMutex);
         if (Value) {
             return Value;
         }
@@ -77,13 +78,14 @@ struct TCacheValue : TNonCopyable {
     }
 
 private:
-    TKey Key;
+    const TKey Key;
     TString RawValue;
     std::shared_ptr<TVector<TBatch>> Value;
     const TActorId Owner;
     std::atomic<ui64> AccessTime;
     std::atomic<ui32> AccessCount;
-    size_t DataSize;
+    std::mutex ValueMutex;
+    const size_t DataSize;
 };
 
 struct TCacheBlobL2 {

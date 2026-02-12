@@ -88,7 +88,10 @@ public:
     FEATURE_FLAG_SETTER(EnableAccessToIndexImplTables)
     FEATURE_FLAG_SETTER(EnableIndexMaterialization)
     FEATURE_FLAG_SETTER(EnableTopicsSqlIoOperations)
-
+    FEATURE_FLAG_SETTER(EnableDataShardSplitHistogramSorting)
+    FEATURE_FLAG_SETTER(EnableDataShardSplitKeySelection)
+    FEATURE_FLAG_SETTER(EnableSchemeShardSplitHistogramSorting)
+    FEATURE_FLAG_SETTER(EnableSchemeShardSplitKeySelection)
     #undef FEATURE_FLAG_SETTER
 };
 

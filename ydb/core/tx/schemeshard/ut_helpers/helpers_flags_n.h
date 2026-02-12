@@ -4,6 +4,7 @@
 
 #include <util/system/compiler.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 
 template <auto FuncPtr>
 std::string_view GetFunctionName() {

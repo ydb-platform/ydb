@@ -1,6 +1,7 @@
 #include "datashard_ut_common_kqp.h"
 #include <ydb/core/tablet_flat/shared_cache_counters.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>  // for Y_UNIT_TEST_FLAGS_N
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -190,7 +191,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         }
     }
 
-    Y_UNIT_TEST(HistogramStatsCorrect) {
+    Y_UNIT_TEST_FLAGS_N(HistogramStatsCorrect, bool EnableDataShardSplitHistogramSorting, bool EnableDataShardSplitKeySelection) {
         const auto gDbStatsDataSizeResolutionBefore = NDataShard::gDbStatsDataSizeResolution;
         const auto gDbStatsRowCountResolutionBefore = NDataShard::gDbStatsRowCountResolution;
         NDataShard::gDbStatsDataSizeResolution = 1; // by page stats
@@ -199,7 +200,11 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetEnableDataShardSplitHistogramSorting(EnableDataShardSplitHistogramSorting)
+            .SetEnableDataShardSplitKeySelection(EnableDataShardSplitKeySelection)
+        ;
+        serverSettings.AppConfig->MutableDataShardConfig()->SetStatsReportIntervalSeconds(1);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -249,6 +254,9 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             auto dataSizeHistogram = ReadHistogram(stats.GetDataSizeHistogram());
             TVector<std::pair<ui64, ui64>> expectedDataSizeHistogram = {{475, 7145}, {950, 14290}, {1425, 21435}, {1900, 28580}};
             UNIT_ASSERT_VALUES_EQUAL(expectedDataSizeHistogram, dataSizeHistogram);
+
+            UNIT_ASSERT_VALUES_EQUAL(EnableDataShardSplitKeySelection, stats.HasSplitBySizeSuggestedKey());
+
 
             auto rowCountHistogram = ReadHistogram(stats.GetRowCountHistogram());
             TVector<std::pair<ui64, ui64>> expectedRowCountHistogram = {{475, 475}, {950, 950}, {1425, 1425}, {1900, 1900}};
@@ -930,8 +938,9 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
      *
      * @param[in] testFollower If true, use the follower for testing (the leader otherwise)
      */
-    void VerifyKeySampleCollection(bool testFollower) {
+    void VerifyKeySampleCollection(bool testFollower, bool EnableDataShardSplitHistogramSorting, bool EnableDataShardSplitKeySelection) {
         const ui64 followerId = (testFollower) ? 1 : 0;
+        const ui32 expectedSplitProtocolVersion = ((EnableDataShardSplitHistogramSorting || EnableDataShardSplitKeySelection) ? 1 : 0);
 
         // Create a table with a single follower
         Cerr << "TEST Creating a sample table" << Endl;
@@ -939,7 +948,10 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto serverSettings = TServerSettings(TPortManager().GetPort(2134))
             .SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableForceFollowers(true);
+            .SetEnableForceFollowers(true)
+            .SetEnableDataShardSplitHistogramSorting(EnableDataShardSplitHistogramSorting)
+            .SetEnableDataShardSplitKeySelection(EnableDataShardSplitKeySelection)
+        ;
 
         auto datashardConfig = serverSettings.AppConfig->MutableDataShardConfig();
 
@@ -975,7 +987,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         UpsertRows(server, senderActorId, 1, 100);
 
         // Before the key sample collection is active, send some reads
-        // for some keys - they should be ignored in subsequent key samples
+        // for some keys - they should be ignored in subsequent key samples.
+        // NOTE: also a follower will not be initialized until the first read
         {
             auto result = KqpSimpleExec(
                 runtime,
@@ -1026,6 +1039,9 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
             UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
             UNIT_ASSERT_C(result.GetTableStats().GetKeyAccessSample().GetBuckets().empty(), msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByAccessSuggestedKey(), false, msg);
         }
 
         // TEST 2: Send EvGetTableStats with the collectKeySample flag set to activate
@@ -1055,6 +1071,9 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
             UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
             UNIT_ASSERT_C(result.GetTableStats().GetKeyAccessSample().GetBuckets().empty(), msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByAccessSuggestedKey(), false, msg);
         }
 
         // Send some additional reads for new keys - they should be captured
@@ -1105,6 +1124,9 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
             UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
             UNIT_ASSERT_C(result.GetTableStats().GetKeyAccessSample().GetBuckets().empty(), msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByAccessSuggestedKey(), false, msg);
         }
 
         // Wait for the collection statistics to be accumulated
@@ -1150,6 +1172,9 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             };
 
             UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByAccessSuggestedKey(), EnableDataShardSplitKeySelection, msg);
         }
 
         // TEST 5: Send EvGetTableStats with the collectKeySample flag set to extend
@@ -1425,21 +1450,266 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
             UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
             UNIT_ASSERT_C(result.GetTableStats().GetKeyAccessSample().GetBuckets().empty(), msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByAccessSuggestedKey(), false, msg);
         }
     }
 
     /**
      * Verify that the key sample collection works correctly for the leader.
      */
-    Y_UNIT_TEST(CollectKeySampleLeader) {
-        VerifyKeySampleCollection(false /* testFollower */);
+    Y_UNIT_TEST_FLAGS_N(CollectKeySampleLeader, bool EnableDataShardSplitHistogramSorting, bool EnableDataShardSplitKeySelection) {
+        VerifyKeySampleCollection(false /* testFollower */, EnableDataShardSplitHistogramSorting, EnableDataShardSplitKeySelection);
     }
 
     /**
      * Verify that the key sample collection works correctly for the follower.
      */
-    Y_UNIT_TEST(CollectKeySampleFollower) {
-        VerifyKeySampleCollection(true /* testFollower */);
+    Y_UNIT_TEST_FLAGS_N(CollectKeySampleFollower, bool EnableDataShardSplitHistogramSorting, bool EnableDataShardSplitKeySelection) {
+        VerifyKeySampleCollection(true /* testFollower */, EnableDataShardSplitHistogramSorting, EnableDataShardSplitKeySelection);
+    }
+
+    // Verify that TableStats.SplitByAccessSuggestedKey is set but empty when split boundary can't be selected from the data.
+    Y_UNIT_TEST_FLAGS_N(SplitKeyByAccessIsEmptyOnNotEnoughData, bool Follower) {
+        const ui64 followerId = (Follower ? 1 : 0);
+
+        const ui32 collectionMinInterval = 5;
+        const ui32 collectionMaxInterval = 30;
+        const ui32 collectionValidInterval = 15;
+
+        auto serverSettings = TServerSettings(TPortManager().GetPort(2134))
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true)
+            .SetEnableDataShardSplitHistogramSorting(true)
+            .SetEnableDataShardSplitKeySelection(true)
+        ;
+        {
+            auto datashardConfig = serverSettings.AppConfig->MutableDataShardConfig();
+            datashardConfig->SetKeyAccessSampleCollectionMinIntervalSeconds(collectionMinInterval);
+            datashardConfig->SetKeyAccessSampleCollectionMaxIntervalSeconds(collectionMaxInterval);
+            datashardConfig->SetKeyAccessSampleValidityIntervalSeconds(collectionValidInterval);
+        }
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *(server->GetRuntime());
+        auto senderActorId = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, senderActorId);
+
+        // Create a table with a single follower
+        Cerr << "TEST Creating a sample table" << Endl;
+
+        auto [shards, tableId] = CreateShardedTable(
+            server,
+            senderActorId,
+            "/Root",
+            "table-1",
+            TShardedTableOptions()
+                .Followers(1)
+        );
+
+        const auto shardId = shards.at(0);
+
+        // Populate it with some fake data
+        Cerr << "TEST Populating the table with test data" << Endl;
+        UpsertRows(server, senderActorId, 1, 100);
+
+        auto readSingleKey = [&](ui32 key) {
+            for (auto i : xrange(3)) {
+                Y_UNUSED(i);
+                auto result = KqpSimpleExec(
+                    runtime,
+                    Sprintf("SELECT key FROM `/Root/table-1` WHERE (key = %u)", key),
+                    Follower /* staleRo */,
+                    "/Root"
+                );
+
+                UNIT_ASSERT_VALUES_EQUAL(
+                    result,
+                    Sprintf("{ items { uint32_value: %u } }", key)
+                );
+            }
+        };
+
+        if (Follower) {
+            Cerr << "TEST Read the follower to initialize" << Endl;
+            // Read from the follower to make it know the table it serves.
+            readSingleKey(10);
+        }
+
+        // Send EvGetTableStats with the collectKeySample flag set to activate
+        // the collection of the key access statistics.
+        //
+        // EXPECTED RESULT: No suggested split key in the EvGetTableStatsResult response
+        // because the collection has not been running long enough
+        const auto collectionStartTime = runtime.GetCurrentTime();
+
+        {
+            const TString msg = (
+                "TEST EvGetTableStats(collectKeySample=true) "
+                "to activate the key collection"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                Follower /* toFolower */
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
+
+            const auto& tableStats = result.GetTableStats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitProtocolVersion(), 1, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasKeyAccessSample(), false, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasSplitByAccessSuggestedKey(), false, msg);
+        }
+
+        // Send reads for a single key -- they should be captured in the key access sample.
+        readSingleKey(12);
+
+        // Wait for the collection statistics to be accumulated
+        //
+        // NOTE: This is exactly min interval + 1 seconds from the moment
+        // the key collection was started to ignore the time
+        // spent on executing the above SELECT queries
+        runtime.SimulateSleep(
+            TDuration::Seconds(collectionMinInterval + 1)
+                - (runtime.GetCurrentTime() - collectionStartTime)
+        );
+
+        // Send EvGetTableStats after the minimal collection time has passed.
+        //
+        // EXPECTED RESULT: The key access sample in the EvGetTableStatsResult response
+        // is populated, split key present but is empty as it can't be selected
+        // from a single key acccess histogram.
+        {
+            const TString msg = (
+                "TEST EvGetTableStats(collectKeySample=false) "
+                "after first key reads"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                Follower /* toFolower */
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
+
+            const auto& tableStats = result.GetTableStats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitProtocolVersion(), 1, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasKeyAccessSample(), true, msg);
+            const auto keyAccessSample = ReadHistogram(tableStats.GetKeyAccessSample());
+            const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                {12, 3},
+            };
+            UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasSplitByAccessSuggestedKey(), true, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitByAccessSuggestedKey().empty(), true, msg);
+        }
+
+        // Send aditional reads for a second single key.
+        readSingleKey(14);
+
+        // Send EvGetTableStats to get updated stats, stats collection is still active.
+        //
+        // EXPECTED RESULT: The key access sample in the EvGetTableStatsResult response
+        // is updated, split key present but is empty as it still can't be selected
+        // from a two key acccess histogram.
+        {
+            const TString msg = (
+                "TEST EvGetTableStats(collectKeySample=false) "
+                "after second key reads"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                Follower /* toFolower */
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
+
+            const auto& tableStats = result.GetTableStats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitProtocolVersion(), 1, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasKeyAccessSample(), true, msg);
+            const auto keyAccessSample = ReadHistogram(tableStats.GetKeyAccessSample());
+            const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                {12, 3},
+                {14, 3},
+            };
+            UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasSplitByAccessSuggestedKey(), true, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitByAccessSuggestedKey().empty(), true, msg);
+        }
+
+        // Send aditional reads for a third single key.
+        readSingleKey(16);
+
+        // Send EvGetTableStats to get updated stats, stats collection is still active.
+        //
+        // EXPECTED RESULT: The key access sample in the EvGetTableStatsResult response
+        // is updated, split key present and is non empty as 3 entries is enough to
+        // select a split key from.
+        {
+            const TString msg = (
+                "TEST EvGetTableStats(collectKeySample=false) "
+                "after third key reads"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                Follower /* toFolower */
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
+
+            const auto& tableStats = result.GetTableStats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitProtocolVersion(), 1, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasKeyAccessSample(), true, msg);
+            const auto keyAccessSample = ReadHistogram(tableStats.GetKeyAccessSample());
+            const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                {12, 3},
+                {14, 3},
+                {16, 3},
+            };
+            UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasSplitByAccessSuggestedKey(), true, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitByAccessSuggestedKey().empty(), false, msg);
+        }
     }
 
     /**

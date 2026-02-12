@@ -261,4 +261,14 @@ message TFeatureFlags {
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
+    // Move key access histogram sorting and split boundary selection to datashard side.
+    // EnableDataShardSplit* enables KeyAccessSample sorting and split boundary selection
+    // on the datashard side.
+    // EnableSchemeShardSplit* disables KeyAccessSample sorting and split boundary selection
+    // on the schemeshard side.
+    // Default values reproduce current behavior (schemeshard does all sorting and selection).
+    optional bool EnableDataShardSplitHistogramSorting = 237 [default = false];
+    optional bool EnableDataShardSplitKeySelection = 238 [default = false];
+    optional bool EnableSchemeShardSplitHistogramSorting = 239 [default = true];
+    optional bool EnableSchemeShardSplitKeySelection = 240 [default = true];
 }

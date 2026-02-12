@@ -295,6 +295,8 @@ protected:
 
     TControlWrapper ReadRequestsInFlightLimit_Base;
     TMemorizableControlWrapper ReadRequestsInFlightLimit;
+    TControlWrapper UsePayload_Base;
+    TMemorizableControlWrapper UsePayload;
 
 public:
     TKeyValueState();

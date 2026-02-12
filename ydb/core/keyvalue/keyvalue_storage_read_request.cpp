@@ -412,8 +412,12 @@ public:
         response->Record.set_requested_size(interRead.RequestedSize);
 
         TRope value = interRead.BuildRope();
-        const TContiguousSpan span = value.GetContiguousSpan();
-        response->Record.set_value(span.data(), span.size());
+        if (IntermediateResult->UsePayloadInResponse) {
+            response->SetBuffer(std::move(value));
+        } else {
+            const TContiguousSpan span = value.GetContiguousSpan();
+            response->Record.set_value(span.data(), span.size());
+        }
 
         if (IntermediateResult->RespondTo.NodeId() != SelfId().NodeId()) {
             response->Record.set_node_id(SelfId().NodeId());

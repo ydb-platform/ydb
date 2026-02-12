@@ -92,6 +92,8 @@ void PrepareCreationUnixTimeInNewApi(const R& request, I& interm)
 TKeyValueState::TKeyValueState()
     : ReadRequestsInFlightLimit_Base(3, 1, 4096)
     , ReadRequestsInFlightLimit(ReadRequestsInFlightLimit_Base)
+    , UsePayload_Base(0, 0, 1)
+    , UsePayload(UsePayload_Base)
 {
     TabletCounters = nullptr;
     Clear();
@@ -567,6 +569,8 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
         TControlBoard::RegisterSharedControl(ReadRequestsInFlightLimit_Base, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
         ReadRequestsInFlightLimit.ResetControl(ReadRequestsInFlightLimit_Base);
+        TControlBoard::RegisterSharedControl(UsePayload_Base, icb->KeyValueVolumeControls.USE_PAYLOAD);
+        UsePayload.ResetControl(UsePayload_Base);
     }
 
     // Issue hard barriers
@@ -2887,6 +2891,7 @@ bool TKeyValueState::PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::T
     ++NextRequestUid;
     RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
     intermediate->EvType = TEvKeyValue::TEvRead::EventType;
+    intermediate->UsePayloadInResponse = UsePayload.Update(ctx.Now());
 
     bool isInlineOnly = true;
     intermediate->ReadCommand = TIntermediate::TRead();

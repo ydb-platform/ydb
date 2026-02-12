@@ -248,6 +248,15 @@ void CopyProtobuf(const NKikimrKeyValue::ReadResult &from, Ydb::KeyValue::ReadRe
     }
 }
 
+void CopyReadResultFromEvent(const TEvKeyValue::TEvReadResponse& from, Ydb::KeyValue::ReadResult* to) {
+    CopyProtobuf(from.Record, to);
+    if (from.IsPayload()) {
+        TRope value = from.GetBuffer();
+        const TContiguousSpan span = value.GetContiguousSpan();
+        to->set_value(span.data(), span.size());
+    }
+}
+
 void CopyProtobuf(const Ydb::KeyValue::ReadRangeRequest &from, NKikimrKeyValue::ReadRangeRequest *to) {
     COPY_PRIMITIVE_OPTIONAL_FIELD(lock_generation);
     CopyProtobuf(from.range(), to->mutable_range());
@@ -938,11 +947,21 @@ protected:
         }
         if constexpr (IsOperational) {
             TResultRecord result;
-            CopyProtobuf(ev->Get()->Record, &result);
+            if constexpr (std::is_same_v<TKVRequest, TEvKeyValue::TEvRead>
+                    && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadResult>) {
+                CopyReadResultFromEvent(*ev->Get(), &result);
+            } else {
+                CopyProtobuf(ev->Get()->Record, &result);
+            }
             this->ReplyWithResult(status, result, TActivationContext::AsActorContext());
         } else {      
             TResultRecord result;//google::protobuf::Arena::CreateMessage<TResultRecord>(this->Request->GetArena());
-            CopyProtobuf(ev->Get()->Record, &result);
+            if constexpr (std::is_same_v<TKVRequest, TEvKeyValue::TEvRead>
+                    && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadResult>) {
+                CopyReadResultFromEvent(*ev->Get(), &result);
+            } else {
+                CopyProtobuf(ev->Get()->Record, &result);
+            }
             result.set_status(status);
             this->Request->Reply(&result, status);
             PassAway();
@@ -1092,6 +1111,7 @@ public:
             return TBase::StateFunc(ev);
         }
     }
+
     bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
     }

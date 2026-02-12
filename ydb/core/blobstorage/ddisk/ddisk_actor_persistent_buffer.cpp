@@ -414,6 +414,24 @@ namespace NKikimr::NDDisk {
         }
     }
 
+    TRope TDDiskActor::TPersistentBuffer::TRecord::JoinData() {
+        Y_ABORT_UNLESS(DataParts.size() == PartsCount && PartsCount > 0);
+        while (DataParts.size() > 1) {
+            auto first = DataParts.begin();
+            auto second = std::next(first);
+            first->second.Insert(first->second.Begin(), std::move(second->second));
+            DataParts.erase(second);
+        }
+        PartsCount = 1;
+        auto& payload = DataParts.begin()->second;
+        for (ui32 i = 1; i < Sectors.size(); i++) {
+            if (Sectors[i].HasSignatureCorrection) {
+                *payload.Position(SectorSize * (i - 1)).ContiguousDataMut() = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
+            }
+        }
+        return DataParts.begin()->second;
+    }
+
     void TDDiskActor::Handle(TEvErasePersistentBuffer::TPtr ev) {
         if (!CheckQuery(*ev, &Counters.Interface.ErasePersistentBuffer)) {
             return;

@@ -2013,8 +2013,6 @@ private:
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
         }
 
-        OnEmptyResult();
-
         TIssue validateIssue;
         if (!ValidateTasks(TasksGraph, EExecType::Data, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
@@ -2330,6 +2328,8 @@ private:
     using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
     void ContinueExecute() {
+        OnEmptyResult();
+
         StartCheckpointCoordinator();
         ExecuteTasks();
 

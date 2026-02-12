@@ -73,6 +73,10 @@ message TExtendedHostConfigDrive {
 
     optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6 [(NMarkers.CopyTo) = "THostConfigDrive"];
     optional uint64 ExpectedSlotCount = 7;
+    optional uint32 SlotSizeInUnits = 8;
+    reserved 9; // optional uint64 InferPDiskSlotCountFromUnitSize = 9 [(NMarkers.CopyTo) = "THostConfigDrive"]; // deprecated
+    reserved 10; // optional uint32 InferPDiskSlotCountMax = 10 [(NMarkers.CopyTo) = "THostConfigDrive"]; // deprecated
+    optional uint32 EncryptionThreadCount = 11;
 }
 
 message THosts {

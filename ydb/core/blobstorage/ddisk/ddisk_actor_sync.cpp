@@ -194,8 +194,6 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
         ui64 syncId = SegmentManager.GetSync(ev->Cookie);
 
-        Cerr << "Receive read\n";
-
         if (syncId == Max<ui64>()) {
             return;
         }

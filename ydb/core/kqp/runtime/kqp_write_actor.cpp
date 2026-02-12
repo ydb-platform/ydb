@@ -2691,6 +2691,7 @@ struct TWriteSettings {
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
+    TVector<NKikimrKqp::TKqpColumnMetadataProto> ReturningColumns;
     TTransactionSettings TransactionSettings;
     i64 Priority;
     bool EnableStreamWrite;
@@ -3272,6 +3273,17 @@ public:
                 .NeedWriteProjection = !settings.LookupColumns.empty(),
             });
 
+            std::optional<TKqpWriteTask::TReturningInfo> returningInfo;
+            if (!settings.ReturningColumns.empty()) {
+                returningInfo.emplace();
+                returningInfo->Consumer = &ReturningConsumers[token.Cookie];
+                returningInfo->ColumnsIndexes = GetIndexes(
+                    settings.Columns,
+                    settings.LookupColumns,
+                    settings.ReturningColumns,
+                    /* preferAdditionalInputColumns */ false);
+            }
+
             auto [taskIter, _] = WriteTasks.emplace(
                 token.Cookie,
                 TKqpWriteTask{
@@ -3282,7 +3294,7 @@ public:
                     settings.OperationType,
                     std::move(writes),
                     std::move(lookups),
-                    std::nullopt, // TODO:
+                    returningInfo,
                     settings.KeyColumns,
                     Alloc
                 });
@@ -4865,16 +4877,18 @@ private:
 
         std::vector<TAckMessage> FlushDelayedAcks() {
             AFL_ENSURE(!Acks.empty());
-            std::swap(Acks.back().OutputData, Data);
-            std::vector<TAckMessage> result;
-            std::swap(result, Acks);
-            AFL_ENSURE(IsEmpty());
 
             for (auto& data : Acks.back().OutputData) {
                 if (data) {
                     data->DetachAlloc();
                 }
             }
+
+            std::swap(Acks.back().OutputData, Data);
+            std::vector<TAckMessage> result;
+            std::swap(result, Acks);
+
+            AFL_ENSURE(IsEmpty());
             return result;
         }
 
@@ -4954,6 +4968,7 @@ public:
         std::vector<ui32> writeIndex(
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
+
         TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
@@ -5003,20 +5018,22 @@ private:
 
         WriteToken = result->Get()->Token;
 
-        for (const auto& batch : result->Get()->Data) {
-            AFL_ENSURE(TransformOutput);
-            for (const auto& row : GetRows(batch)) {
-                AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
-                NUdf::TUnboxedValue* outputRowItems = nullptr;
-                auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
+        if (TransformOutput) {
+            AFL_ENSURE(Alloc);
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            for (const auto& batch : result->Get()->Data) {
+                for (const auto& row : GetRows(batch)) {
+                    AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
+                    NUdf::TUnboxedValue* outputRowItems = nullptr;
+                    auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
 
-                for (size_t index = 0; index < ReturningColumnsTypes.size(); ++index) {
-                    outputRowItems[index] = NMiniKQL::GetCellValue(row[index], ReturningColumnsTypes[index]);
+                    for (size_t index = 0; index < ReturningColumnsTypes.size(); ++index) {
+                        outputRowItems[index] = NMiniKQL::GetCellValue(row[index], ReturningColumnsTypes[index]);
+                    }
+
+                    AFL_ENSURE(TransformOutput->GetFillLevel() == NYql::NDq::EDqFillLevel::NoLimit);
+                    TransformOutput->Consume(std::move(outputRow));
                 }
-
-                // TODO: stop writes
-                AFL_ENSURE(TransformOutput->GetFillLevel() == NYql::NDq::EDqFillLevel::NoLimit);
-                TransformOutput->Consume(std::move(outputRow));
             }
         }
 
@@ -5077,6 +5094,9 @@ private:
                 .KeyColumns = std::move(keyColumnsMetadata),
                 .Columns = std::move(columnsMetadata),
                 .LookupColumns = std::move(lookupColumnsMetadata),
+                .ReturningColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
+                    Settings.GetReturningColumns().begin(),
+                    Settings.GetReturningColumns().end()),
                 .TransactionSettings = TTransactionSettings{
                     .TxId = TxId,
                     .LockTxId = Settings.GetLockTxId(),
@@ -5170,6 +5190,13 @@ private:
 
     void PassAway() override {
         Counters->ForwardActorsCount->Dec();
+
+        if (TransformOutput) {
+            AFL_ENSURE(Alloc);
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            TransformOutput.Reset();
+        }
+
         TActorBootstrapped<TKqpForwardWriteActor>::PassAway();
     }
 

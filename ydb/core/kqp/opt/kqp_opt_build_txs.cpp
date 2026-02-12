@@ -711,6 +711,10 @@ private:
                 const auto outputs = stage.Cast().Outputs().Cast();
                 YQL_ENSURE(sinkIndex < outputs.Size());
                 const auto sink = outputs.Item(sinkIndex).Maybe<TDqSink>();
+                if (!sink) {
+                    // TODO: process output transform (new RETURNING)
+                    continue;
+                }
                 YQL_ENSURE(sink);
 
                 const auto sinkSettings = sink.Cast().Settings().Maybe<TKqpTableSinkSettings>();

@@ -593,7 +593,8 @@
                 {"Index": 4, "Name": "StreamWrite", "Type": "TCoAtom"},
                 {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom"},
                 {"Index": 6, "Name": "IsIndexImplTable", "Type": "TCoAtom"},
-                {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 7, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 8, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

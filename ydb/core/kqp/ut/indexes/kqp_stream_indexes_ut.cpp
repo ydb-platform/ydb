@@ -503,26 +503,13 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             auto it = client.StreamExecuteQuery(
                 R"(
                     INSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES
-                        (0, 0, 0)
+                        (0, 1, 2)
                     RETURNING c0, c1, c2;
                 )",
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[[0];[0];[0]]])");
-        }
-        //UNIT_ASSERT(false);
-
-
-        /*{
-            auto it = client.ExecuteQuery(
-                R"(
-                    UPSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES
-                        (false, 2817, false),
-                        (true, 60403, true);
-                )",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+            CompareYson(output, R"([[[0];[1];[2]]])");
         }
 
         {
@@ -531,8 +518,29 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[#;#;[%false]];[[%false];[0];[%true]]])");
-        }*/
+            CompareYson(output, R"([[[0];[1];[2]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                R"(
+                    DELETE FROM `/Root/DataShard` ON (c0) VALUES (0)
+                    RETURNING c0, c1, c2;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0];[1];[2]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT c0, c1, c2 FROM `/Root/DataShard` ORDER BY c0, c1, c2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([])");
+        }
     }
 }
 }

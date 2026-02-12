@@ -239,7 +239,7 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     YQL_ENSURE(sink.GetOutputIndex() == 0);
-                    YQL_ENSURE(stage.SinksSize() == 1);
+                    YQL_ENSURE(stage.SinksSize() + stage.OutputTransformsSize() == 1);
                     meta.TablePath = settings.GetTable().GetPath();
                     if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
                         meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
@@ -257,6 +257,32 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
                             meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
                         }
+                    }
+                }
+            }
+
+            for (auto& transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    YQL_ENSURE(transform.GetOutputIndex() == 0);
+                    YQL_ENSURE(stage.SinksSize() + stage.OutputTransformsSize() == 1);
+                    meta.TablePath = settings.GetTable().GetPath();
+                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
+                    } else {
+                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
+                    }
+
+                    AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+                    meta.TableId = MakeTableId(settings.GetTable());
+                    meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+
+                    for (const auto& indexSettings : settings.GetIndexes()) {
+                        meta.IndexMetas.emplace_back();
+                        meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetTable());
+                        meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
+                        meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
                     }
                 }
             }
@@ -1369,6 +1395,17 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
     for (auto& channel : output.Channels) {
         auto& channelDesc = *outputDesc.AddChannels();
         FillChannelDesc(channelDesc, GetChannel(channel), GetMeta().ChannelTransportVersion, enableSpilling);
+    }
+
+    if (output.Transform) {
+        auto* transformDesc = outputDesc.MutableTransform();
+        auto& transform = output.Transform;
+
+        transformDesc->SetType(transform->Type);
+        transformDesc->SetInputType(transform->InputType);
+        transformDesc->SetOutputType(transform->OutputType);
+
+        *transformDesc->MutableSettings() = transform->Settings;
     }
 }
 
@@ -3074,6 +3111,34 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
     output.SinkSettings = extSink.GetSettings();
 }
 
+void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, const TKqpTasksGraph::TTaskType& task) const {
+    auto& lockTxId = GetMeta().LockTxId;
+    if (lockTxId) {
+        settings.SetLockTxId(*lockTxId);
+        settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
+    }
+    if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
+        ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
+    }
+    if (!settings.GetInconsistentTx() && GetMeta().Snapshot.IsValid()) {
+        settings.MutableMvccSnapshot()->SetStep(GetMeta().Snapshot.Step);
+        settings.MutableMvccSnapshot()->SetTxId(GetMeta().Snapshot.TxId);
+    }
+    if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
+        settings.SetLockMode(*GetMeta().LockMode);
+    }
+
+    auto sinkPosition = std::lower_bound(
+        internalSinksOrder.begin(),
+        internalSinksOrder.end(),
+        std::make_pair(task.StageId.TxId, settings.GetPriority()));
+    AFL_ENSURE(sinkPosition != internalSinksOrder.end()
+            && sinkPosition->first == task.StageId.TxId
+            && sinkPosition->second == settings.GetPriority());
+
+    settings.SetPriority(std::distance(internalSinksOrder.begin(), sinkPosition));
+}
+
 void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const {
     const auto& intSink = sink.GetInternalSink();
     auto& output = task.Outputs[sink.GetOutputIndex()];
@@ -3088,31 +3153,7 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
             settings = *stageInfo.Meta.ResolvedSinkSettings;
         }
 
-        auto& lockTxId = GetMeta().LockTxId;
-        if (lockTxId) {
-            settings.SetLockTxId(*lockTxId);
-            settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
-        }
-        if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
-            ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
-        }
-        if (!settings.GetInconsistentTx() && GetMeta().Snapshot.IsValid()) {
-            settings.MutableMvccSnapshot()->SetStep(GetMeta().Snapshot.Step);
-            settings.MutableMvccSnapshot()->SetTxId(GetMeta().Snapshot.TxId);
-        }
-        if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
-            settings.SetLockMode(*GetMeta().LockMode);
-        }
-
-        auto sinkPosition = std::lower_bound(
-            internalSinksOrder.begin(),
-            internalSinksOrder.end(),
-            std::make_pair(task.StageId.TxId, settings.GetPriority()));
-        AFL_ENSURE(sinkPosition != internalSinksOrder.end()
-                && sinkPosition->first == task.StageId.TxId
-                && sinkPosition->second == settings.GetPriority());
-
-        settings.SetPriority(std::distance(internalSinksOrder.begin(), sinkPosition));
+        FillKqpTableSinkSettings(settings, internalSinksOrder, task);
 
         output.SinkSettings.ConstructInPlace();
         output.SinkSettings->PackFrom(settings);
@@ -3120,6 +3161,30 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         output.SinkSettings = intSink.GetSettings();
     }
 }
+
+void TKqpTasksGraph::BuildInternalOutputTransform(const NKqpProto::TKqpOutputTransform& transform, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const {
+    const auto& intSink = transform.GetInternalSink();
+    auto& output = task.Outputs[transform.GetOutputIndex()];
+    output.Type = TTaskOutputType::Map;
+
+    AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+
+    NKikimrKqp::TKqpTableSinkSettings settings;
+    if (!stageInfo.Meta.ResolvedSinkSettings) {
+        YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+    } else {
+        settings = *stageInfo.Meta.ResolvedSinkSettings;
+    }
+
+    FillKqpTableSinkSettings(settings, internalSinksOrder, task);
+
+    output.Transform.ConstructInPlace();
+    output.Transform->Type = TString(NYql::KqpTableSinkName);
+    output.Transform->InputType = transform.GetInputType();
+    output.Transform->OutputType = transform.GetOutputType();
+    output.Transform->Settings.PackFrom(settings);
+}
+
 
 void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const {
     if (stage.SinksSize() > 0) {
@@ -3131,6 +3196,18 @@ void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TSta
             BuildInternalSinks(sink, stageInfo, internalSinksOrder, task);
         } else if (sink.HasExternalSink()) {
             BuildExternalSinks(sink, task);
+        } else {
+            YQL_ENSURE(false, "unknown sink type");
+        }
+    }
+
+    if (stage.OutputTransformsSize() > 0) {
+        YQL_ENSURE(stage.OutputTransformsSize() == 1, "multiple output transforms are not supported");
+        const auto& transform = stage.GetOutputTransforms(0);
+        YQL_ENSURE(transform.GetOutputIndex() < task.Outputs.size());
+
+        if (transform.HasInternalSink()) {
+            BuildInternalOutputTransform(transform, stageInfo, internalSinksOrder, task);
         } else {
             YQL_ENSURE(false, "unknown sink type");
         }
@@ -3167,10 +3244,10 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             // build task conditions
             const bool buildFromSourceTasks = stage.SourcesSize() > 0;
             const bool buildSysViewTasks = stageInfo.Meta.IsSysView();
-            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() > 0);
+            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() + stage.OutputTransformsSize() > 0);
             const bool buildScanTasks = GetMeta().IsScan
                 ? stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()
-                : (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0
+                : (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0 && stage.OutputTransformsSize() == 0
                 ;
 
             // TODO: doesn't work right now - multiple conditions are possible in tests
@@ -3346,26 +3423,41 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
             const auto& stage = tx.Body->GetStages(stageIdx);
             auto& stageInfo = GetStageInfo(NYql::NDq::TStageId(txIdx, stageIdx));
 
-            if (stage.SinksSize() == 0) {
-                continue;
+            auto addSink = [&stageInfo, &order, txIdx](const NKqpProto::TKqpInternalSink& intSink) {
+                AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                if (!stageInfo.Meta.ResolvedSinkSettings) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    order.emplace_back(txIdx, settings.GetPriority());
+                } else {
+                    order.emplace_back(txIdx, stageInfo.Meta.ResolvedSinkSettings->GetPriority());
+                }
+            };
+
+            if (stage.SinksSize() > 0) {
+                YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
+                AFL_ENSURE(stage.OutputTransformsSize() == 0);
+                const auto& sink = stage.GetSinks(0);
+
+                if (!sink.HasInternalSink()) {
+                    continue;
+                }
+
+                const auto& intSink = sink.GetInternalSink();
+                addSink(intSink);
             }
+            if (stage.OutputTransformsSize() > 0) {
+                AFL_ENSURE(stage.OutputTransformsSize() == 1);
+                AFL_ENSURE(stage.SinksSize() == 0);
 
-            YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
-            const auto& sink = stage.GetSinks(0);
+                const auto& transform = stage.GetOutputTransforms(0);
 
-            if (!sink.HasInternalSink()) {
-                continue;
-            }
+                if (!transform.HasInternalSink()) {
+                    continue;
+                }
 
-            const auto& intSink = sink.GetInternalSink();
-
-            AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
-            if (!stageInfo.Meta.ResolvedSinkSettings) {
-                NKikimrKqp::TKqpTableSinkSettings settings;
-                YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                order.emplace_back(txIdx, settings.GetPriority());
-            } else {
-                order.emplace_back(txIdx, stageInfo.Meta.ResolvedSinkSettings->GetPriority());
+                const auto& intSink = transform.GetInternalSink();
+                addSink(intSink);
             }
         }
     }

@@ -43,11 +43,13 @@ TExprBase SelectFields(TExprBase node, Container fields, TExprContext& ctx, TPos
 }
 
 TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx) {
+    if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
+        return node;
+    }
     auto maybeReturning = node.Maybe<TKqlReturningList>();
     if (!maybeReturning) {
         return node;
     }
-
     auto returning = maybeReturning.Cast();
     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returning.Table().Path());
 

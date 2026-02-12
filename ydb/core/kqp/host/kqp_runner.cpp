@@ -360,7 +360,7 @@ private:
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
             //.Add(CreateKqpSinkPrecomputeTransformer(OptimizeCtx), "KqpSinkPrecompute")
-            .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
+            .Add(CreateKqpCheckPhysicalQueryTransformer(OptimizeCtx), "CheckKqlPhysicalQuery")
             .Build(false));
 
         auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
@@ -391,7 +391,7 @@ private:
             //.Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
             //.Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             //.Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
-            //.Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
+            //.Add(CreateKqpCheckPhysicalQueryTransformer(OptimizeCtx), "CheckKqlPhysicalQuery")
             .Build(false);
 
         auto physicalBuildTxsTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)

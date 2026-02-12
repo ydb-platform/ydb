@@ -23,7 +23,7 @@ TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
     return startupOptions;
 }
 
-TString TMvpStartupOptions::GetLocalEndpoint() {
+TString TMvpStartupOptions::GetLocalEndpoint() const {
     if (!HttpPort && !HttpsPort) {
         ythrow yexception() << "At least one of HTTP or HTTPS ports must be specified";
     }

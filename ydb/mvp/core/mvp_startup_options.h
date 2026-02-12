@@ -39,7 +39,7 @@ public:
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
 
     static TMvpStartupOptions Build(int argc, const char* argv[]);
-    TString GetLocalEndpoint();
+    TString GetLocalEndpoint() const;
 
 private:
     NLastGetopt::TOptsParseResult ParseArgs(int argc, const char* argv[]);

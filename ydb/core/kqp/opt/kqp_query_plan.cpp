@@ -3423,6 +3423,30 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     ModifyPlan(root, collectPlanNodeId);
     ModifyPlan(root, addStatsToPlanNode);
 
+    if (stats.GetNodes().size()) {
+        auto& nodesStats = root.InsertValue("Nodes", NJson::JSON_ARRAY);
+        for (auto&& node : stats.GetNodes()) {
+            auto& nodeInfo = nodesStats.AppendValue(NJson::JSON_MAP);
+            nodeInfo["NodeId"] = node.GetNodeId();
+            nodeInfo["Tasks"] = node.GetTotalTasksCount();
+            nodeInfo["FinishedTasks"] = node.GetFinishedTasksCount();
+            if (node.GetBaseTimeMs()) {
+                nodeInfo["BaseTimeMs"] = node.GetBaseTimeMs();
+            }
+            FillAggrStat(nodeInfo, node.GetCpuTimeUs(), "CpuTimeUs");
+            FillAggrStat(nodeInfo, node.GetMaxMemoryUsage(), "MaxMemoryUsage");
+            FillAggrStat(nodeInfo, node.GetInputBytes(), "InputBytes");
+            FillAggrStat(nodeInfo, node.GetOutputBytes(), "OutputBytes");
+            FillAggrStat(nodeInfo, node.GetResultBytes(), "ResultBytes");
+            FillAggrStat(nodeInfo, node.GetIngressBytes(), "IngressBytes");
+            FillAggrStat(nodeInfo, node.GetEgressBytes(), "EgressBytes");
+            FillAggrStat(nodeInfo, node.GetSpillingComputeBytes(), "SpillingComputeBytes");
+            FillAggrStat(nodeInfo, node.GetSpillingChannelBytes(), "SpillingChannelBytes");
+            FillAggrStat(nodeInfo, node.GetSpillingComputeTimeUs(), "SpillingComputeTimeUs");
+            FillAggrStat(nodeInfo, node.GetSpillingChannelTimeUs(), "SpillingChannelTimeUs");
+        }
+    }
+
     NJsonWriter::TBuf txWriter;
     txWriter.WriteJsonValue(&root, true, PREC_NDIGITS, 17);
     auto resultPlan = txWriter.Str();

@@ -275,6 +275,36 @@ struct TStageExecutionStats {
     bool IsFinished();
 };
 
+struct TNodeExecutionStats {
+    ui32 NodeId = 0;
+
+    std::map<ui32, ui32> Task2Index;
+    ui32 TaskCount = 0; // up rounded to multiple of 4, actual is Task2Index.size()
+    std::vector<bool> Finished;
+    ui32 FinishedCount = 0;
+
+    ui32 HistorySampleCount = 0;
+
+    TTimeSeriesStats CpuTimeUs;
+    TTimeSeriesStats MaxMemoryUsage;
+
+    TTimeSeriesStats InputBytes;
+    TTimeSeriesStats OutputBytes;
+    TTimeSeriesStats ResultBytes;
+
+    TTimeSeriesStats IngressBytes;
+    TTimeSeriesStats EgressBytes;
+
+    TTimeSeriesStats SpillingComputeBytes;
+    TTimeSeriesStats SpillingChannelBytes;
+    TTimeSeriesStats SpillingComputeTimeUs;
+    TTimeSeriesStats SpillingChannelTimeUs;
+
+    void Resize(ui32 taskCount);
+    void SetHistorySampleCount(ui32 historySampleCount);
+    void UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 maxMemoryUsage);
+};
+
 struct TExternalPartitionStat {
     ui64 ExternalRows = 0;
     ui64 ExternalBytes = 0;
@@ -332,6 +362,7 @@ private:
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
     std::unordered_map<ui32, bool> UseLlvmByStageId;
     THashMap<NYql::NDq::TStageId, TStageExecutionStats> StageStats;
+    THashMap<ui32, TNodeExecutionStats> NodeStats;
     std::unordered_map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
     ui64 BaseTimeMs = 0;
     std::unordered_map<ui32, TDuration> LongestTaskDurations;
@@ -406,7 +437,7 @@ public:
 
     void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
     void UpdateStorageTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
-    void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
+    void UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
         NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);

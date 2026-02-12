@@ -15,8 +15,6 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
 #include <ydb/library/actors/core/event.h>
-#include <ydb/library/actors/wilson/wilson_trace.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/workload/abstract/workload_factory.h>
 #include <ydb/library/workload/stock/stock.h>
 #include <ydb/library/workload/kv/kv.h>
@@ -56,8 +54,7 @@ inline void SendWithUndeliveryTracking(
     const NActors::TActorContext& ctx,
     const NActors::TActorId& recipient,
     IEventBasePtr event,
-    ui64 cookie,
-    NWilson::TSpan& span)
+    ui64 cookie = 0)
 {
     auto ev = std::make_unique<NActors::IEventHandle>(
         recipient,
@@ -65,11 +62,9 @@ inline void SendWithUndeliveryTracking(
         event.release(),
         NActors::IEventHandle::FlagForwardOnNondelivery,    // flags
         cookie,  // cookie
-        &ctx.SelfID,    // forwardOnNondelivery
-        std::move(span.GetTraceId())
+        &ctx.SelfID    // forwardOnNondelivery
     );
 
-    span.Event("SendRequest");
     ctx.Send(ev.release());
 }
 
@@ -94,7 +89,6 @@ public:
         , DurationSeconds(cmd.GetDurationSeconds())
         , Name(cmd.GetName())
         , RangeTest(cmd.GetRangeTest())
-        , TraceSamplePeriod(TDuration::MilliSeconds(100))
     {
         Y_UNUSED(index);
         Y_UNUSED(counters);
@@ -151,17 +145,11 @@ public:
 
         const auto& suiteResults = TestRunner->GetResults();
         NYdb::NBS::NProto::TTestResults proto;
-        auto startTime = TestRunner->GetStartTime().MicroSeconds();
-        auto endTime = stopped.MicroSeconds();
-        auto duration_s = (endTime - startTime) / 1e6;
-        auto dataSizeMb = (suiteResults.BlocksRead + suiteResults.BlocksWritten) * 4 / 1024;
         proto.SetName(Name);
         proto.SetResult(suiteResults.Status);
-        proto.SetStartTime(startTime);
-        proto.SetEndTime(endTime);
+        proto.SetStartTime(TestRunner->GetStartTime().MicroSeconds());
+        proto.SetEndTime(stopped.MicroSeconds());
         proto.SetRequestsCompleted(suiteResults.RequestsCompleted);
-        proto.SetIops(suiteResults.RequestsCompleted / duration_s);
-        proto.SetThroughputMbs(dataSizeMb / duration_s);
 
         if (suiteResults.BlocksRead) {
             proto.SetBlocksRead(suiteResults.BlocksRead);
@@ -179,20 +167,18 @@ public:
         }
 
         NProtobufJson::Proto2Json(proto, result["TestResults"], {});
-        TestContext.Result = NJson::WriteJson(result, true, true, false);
+        TestContext.Result = NJson::WriteJson(result, false, false, false);
     }
 
     void SendIORequest(
         const TActorContext& ctx,
         IEventBasePtr request,
-        NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb,
-        NWilson::TSpan span
+        NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb
     )
     {
         ui64 cookie = ++LastUsedCookie;
         CookieToRequestCB[cookie] = std::move(cb);
-        CookieToSpan[cookie] = std::move(span);
-        SendWithUndeliveryTracking(ctx, DirectPartitionId, std::move(request), cookie, CookieToSpan[cookie]);
+        SendWithUndeliveryTracking(ctx, DirectPartitionId, std::move(request), cookie);
     }
 
     NYdb::NBS::NBlockStore::NLoadTest::TLoadTestRequestCallbacks GetLoadTestCallbacks()
@@ -201,28 +187,13 @@ public:
         auto sendReadRequest =
             [this]
             (TBlockRange64 range, NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb, const void *udata) {
-            const TActorContext *actorContext = reinterpret_cast<const TActorContext*>(udata);
-
-            auto traceId = NWilson::TTraceId::NewTraceIdThrottled(
-                15,                         // verbosity
-                4095,                       // timeToLive
-                LastTraceTs,                // atomic counter for throttling
-                actorContext->Monotonic(),  // current monotonic time
-                TraceSamplePeriod           // sample period
-            );
-
-            auto span = NWilson::TSpan(15, std::move(traceId), "NbsLoadActor.ReadBlocks");
-            span.Event("PrepareRequest");
-
             auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksRequest>();
             request->Record.SetDiskId("TempDiskID");
             request->Record.SetStartIndex(range.Start);
             request->Record.SetBlocksCount(range.Size());
 
-            span.Attribute("StartIndex", static_cast<i64>(range.Start));
-            span.Attribute("BlocksCount", static_cast<i64>(range.Size()));
-
-            SendIORequest(*actorContext, std::move(request), std::move(cb), std::move(span));
+            const TActorContext *actorContext = reinterpret_cast<const TActorContext*>(udata);
+            SendIORequest(*actorContext, std::move(request), cb);
         };
 
         auto sendWriteRequest =
@@ -234,29 +205,14 @@ public:
                 NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb,
                 const void *udata
             ) {
-                const TActorContext *actorContext = reinterpret_cast<const TActorContext*>(udata);
-
-                auto traceId = NWilson::TTraceId::NewTraceIdThrottled(
-                    15,                         // verbosity
-                    4095,                       // timeToLive
-                    LastTraceTs,                // atomic counter for throttling
-                    actorContext->Monotonic(),  // current monotonic time
-                    TraceSamplePeriod           // sample period
-                );
-
-                auto span = NWilson::TSpan(15, std::move(traceId), "NbsLoadActor.WriteBlocks");
-                span.Event("PrepareRequest");
-
                 auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksRequest>();
                 request->Record.SetDiskId("TempDiskID");
                 request->Record.SetStartIndex(blockIndexWriteTo);
                 auto* dstBlocks = request->Record.MutableBlocks();
                 dstBlocks->AddBuffers(data, dataSize);
 
-                span.Attribute("StartIndex", static_cast<i64>(blockIndexWriteTo));
-                span.Attribute("DataSize", static_cast<i64>(dataSize));
-
-                SendIORequest(*actorContext, std::move(request), std::move(cb), std::move(span));
+                const TActorContext *actorContext = reinterpret_cast<const TActorContext*>(udata);
+                SendIORequest(*actorContext, std::move(request), cb);
         };
 
         auto notifyTestCompleted = [this] (const void *udata) {
@@ -317,23 +273,6 @@ public:
             return;
         }
 
-        auto spanIt = CookieToSpan.find(cookie);
-        if (spanIt != CookieToSpan.end()) {
-            spanIt->second.Event("ReceivedResponse");
-
-            auto error = HasError(record)
-                ? record.GetError()
-                : MakeError(S_OK);
-
-            if (SUCCEEDED(error.GetCode())) {
-                spanIt->second.EndOk();
-            } else {
-                spanIt->second.EndError(error.GetMessage());
-            }
-
-            CookieToSpan.erase(spanIt);
-        }
-
         auto error = HasError(record)
             ? record.GetError()
             : MakeError(S_OK);
@@ -370,13 +309,6 @@ public:
         if (it == CookieToRequestCB.end()) {
             LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "Could not find undelivered cookie request " << ev->Cookie);
             return;
-        }
-
-        auto spanIt = CookieToSpan.find(ev->Cookie);
-        if (spanIt != CookieToSpan.end()) {
-            spanIt->second.Event("Undelivered");
-            spanIt->second.EndError("Request is undelivered");
-            CookieToSpan.erase(spanIt);
         }
 
         auto error = MakeError(E_TRANSPORT_ERROR, "Request is undelivered");
@@ -496,7 +428,6 @@ private:
     NYdb::NBS::NBlockStore::NLoadTest::TTestContext TestContext; // TODO remove me
 
     TMap<ui64, NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB> CookieToRequestCB;
-    TMap<ui64, NWilson::TSpan> CookieToSpan;
     std::atomic<uint64_t> LastUsedCookie = 0;
 
     NYdb::NBS::NBlockStore::NLoadTest::ITestRunnerPtr TestRunner;
@@ -505,10 +436,6 @@ private:
     TDuration TestInitializingDuration;
     // ---
     TString ConfigString;
-
-    // Tracing
-    std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
-    TDuration TraceSamplePeriod;
 };
 
 IActor * CreateNBS2LoadActor(const NKikimr::TEvLoadTestRequest::TNBS2Load& cmd,

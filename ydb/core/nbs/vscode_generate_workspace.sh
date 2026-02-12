@@ -1,4 +1,4 @@
-../../../ya ide vscode --cursor --cpp --allow-project-inside-arc --use-arcadia-root --no-tool-clangd -P=workspace/cursor \
+../../../ya ide vscode --cpp --allow-project-inside-arc --use-arcadia-root --no-tool-clangd -P=workspace \
 ../../../library/cpp        \
 ../../../util               \
 ../../apps                  \

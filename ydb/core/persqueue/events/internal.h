@@ -1224,6 +1224,22 @@ struct TEvPQ {
             Record.SetGeneration(generaion);
             Record.SetCookie(cookie);
         }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+
+        ui32 GetGeneration() const {
+            return Record.GetGeneration();
+        }
+
+        ui64 GetCookie() const {
+            return Record.GetCookie();
+        }
     };
 
     struct TEvProcessChangeOwnerRequests : public TEventLocal<TEvProcessChangeOwnerRequests, EvProcessChangeOwnerRequests> {

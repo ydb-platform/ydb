@@ -134,12 +134,15 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
 
     StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
 
-    TStringBuilder s;
-    s << "BALANCER INIT DONE for " << Topic << ": ";
-    for (auto& p : PartitionsInfo) {
-        s << "(" << p.first << ", " << p.second.TabletId << ") ";
-    }
-    PQ_LOG_D(s);
+    auto getInitLog = [&]() {
+        TStringBuilder s;
+        s << "BALANCER INIT DONE for " << Topic << ": ";
+        for (auto& p : PartitionsInfo) {
+            s << "(" << p.first << ", " << p.second.TabletId << ") ";
+        }
+        return s;
+    };
+    PQ_LOG_D(getInitLog());
 
     for (auto &ev : UpdateEvents) {
         ctx.Send(ctx.SelfID, ev.Release());
@@ -479,6 +482,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
     }
 
     Balancer->Handle(ev, ctx);
+    MLPBalancer->Handle(ev, ctx);
 
     if (StatsRequestTracker.Cookies.empty()) {
         CheckStat(ctx);
@@ -772,6 +776,7 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
     Balancer->Handle(ev, ctx);
+    MLPBalancer->Handle(ev, ctx);
 }
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {

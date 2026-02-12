@@ -151,6 +151,13 @@ TDirectBlockGroup::TDirectBlockGroup(
 
     addDDiskConnections(std::move(ddisksIds), DDiskConnections, false);
     addDDiskConnections(std::move(persistentBufferDDiskIds), PersistentBufferConnections, true);
+    LOG_DEBUG_S(
+        TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "end of TDirectBlockGroup::TDirectBlockGroup: "
+            << "PersistentBufferConnections.size() == " << PersistentBufferConnections.size());
+
+
 }
 
 TDirectBlockGroup::~TDirectBlockGroup() = default;
@@ -221,6 +228,11 @@ void TDirectBlockGroup::HandleConnectResult(
 // TODO заблокировать IO до полного восстановления (где-то раньше)
 void TDirectBlockGroup::RestorePersistentBuffer()
 {
+    LOG_DEBUG_S(
+        TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "RestorePersistentBuffer started"
+            << "PersistentBufferConnections.size(): " << PersistentBufferConnections.size());
     size_t numberOfRequests = PersistentBufferConnections.size();
     auto requestsStalking =
         std::make_shared<TRequestsStalking>(numberOfRequests);
@@ -237,6 +249,12 @@ void TDirectBlockGroup::RestorePersistentBuffer()
              requestsStalking = requestsStalking,
              persistentBufferIndex = i](const auto& f)
             {
+                LOG_DEBUG_S(
+                    TActivationContext::AsActorContext(),
+                    NKikimrServices::NBS_PARTITION,
+                    "RestorePersistentBuffer future cb for "
+                    "persistentBufferIndex #"
+                        << persistentBufferIndex);
                 const auto& result = f.GetValue();
                 HandleListPersistentBufferResultOnRestore(
                     requestId, result, persistentBufferIndex, requestsStalking);
@@ -250,6 +268,11 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
     size_t persistentBufferIndex,
     std::shared_ptr<TRequestsStalking> requestsStalking)
 {
+    LOG_DEBUG_S(
+        TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "HandleListPersistentBufferResultOnRestore for "
+        "persistentBufferIndex #" << persistentBufferIndex);
     Y_UNUSED(storageRequestId);
     ++requestsStalking->ResponsesHandled;
 
@@ -277,7 +300,10 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
 
 void TDirectBlockGroup::RestorePersistentBufferFinised()
 {
-
+    LOG_DEBUG_S(
+        TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "RestorePersistentBufferFinised");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

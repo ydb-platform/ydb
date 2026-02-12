@@ -61,7 +61,7 @@ class Workload():
     def create_streaming_query(self):
         logger.info("Workload::create_streaming_query")
         max_tasks_per_stage = 'PRAGMA ydb.MaxTasksPerStage = "1";' if self.enable_watermarks else ""
-        watermarks = ', WATERMARK AS (CAST(time AS Timestamp) - Interval("PT1M"))' if self.enable_watermarks else ""
+        watermarks = ', WATERMARK = CAST(time AS Timestamp) - Interval("PT1M"), WATERMARK_IDLE_TIMEOUT = "PT10S"' if self.enable_watermarks else ""
         query = f"""
                 CREATE STREAMING QUERY `{self.prefix}/query_name` AS DO BEGIN
                 {max_tasks_per_stage}

@@ -20,7 +20,7 @@ def enable_watermarks(request):
 class TestYdbWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self, enable_watermarks: bool):
-        erasure = None if enable_watermarks else Erasure.MIRROR_3_DC  # TODO: Erasure.MIRROR_3_DC
+        erasure = Erasure.MIRROR_3_DC
         port_allocator = KikimrPortManagerPortAllocator()
         query_service_config = {
             "streaming_queries": {

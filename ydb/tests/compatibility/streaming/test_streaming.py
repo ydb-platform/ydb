@@ -31,7 +31,7 @@ class StreamingTestBase:
         os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
         os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "15"
 
-        erasure = None if enable_watermarks else Erasure.MIRROR_3_DC  # TODO: Erasure.MIRROR_3_DC
+        erasure = Erasure.MIRROR_3_DC
         port_allocator = KikimrPortManagerPortAllocator()
         query_service_config = {
             "streaming_queries": {
@@ -99,7 +99,7 @@ class StreamingTestBase:
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             max_tasks_per_stage = 'PRAGMA ydb.MaxTasksPerStage = "1";' if enable_watermarks else ""
-            watermarks = ', WATERMARK AS (CAST(time AS Timestamp) - Interval("PT1M"))' if enable_watermarks else ""
+            watermarks = ', WATERMARK = CAST(time AS Timestamp) - Interval("PT1M"), WATERMARK_IDLE_TIMEOUT = "PT1M"' if enable_watermarks else ""
             query = f"""
                 CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
                 {max_tasks_per_stage}
@@ -137,7 +137,7 @@ class StreamingTestBase:
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             max_tasks_per_stage = 'PRAGMA ydb.MaxTasksPerStage = "1";' if enable_watermarks else ""
-            watermarks = ', WATERMARK AS (CAST(time AS Timestamp) - Interval("PT1M"))' if enable_watermarks else ""
+            watermarks = ', WATERMARK = CAST(time AS Timestamp) - Interval("PT1M"), WATERMARK_IDLE_TIMEOUT = "PT1M"' if enable_watermarks else ""
             query = f"""
                 CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
                 {max_tasks_per_stage}

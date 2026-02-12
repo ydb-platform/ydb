@@ -30,7 +30,7 @@ security_config:
 
 ## Настройки режима аутентификации {#security-auth}
 
-#|
+# |
 || Параметр | Описание ||
 || `enforce_user_token_requirement` | Режим обязательной [аутентификации](../../security/authentication.md).
 
@@ -118,7 +118,7 @@ flowchart TD
 
 См. также раздел по [встроенной настройке безопасности](../../security/builtin-security.md) и влияющие на неё настройки [уровня `domains_config`](domains_config.md).
 
-#|
+# |
 || Параметр | Описание ||
 || `default_users` | Какие [пользователи](../../concepts/glossary.md#access-user) должны быть созданы на кластере при первом запуске.
 
@@ -205,7 +205,7 @@ default_access:
 
 [//]: # (TODO: добавить ссылку на справку по viewer api и требуемым правам, когда она появится)
 
-#|
+# |
 || Параметр | Описание ||
 || `viewer_allowed_sids` | Список [SID](../../concepts/glossary.md#access-sid)'ов с доступом уровня наблюдателя.
 
@@ -259,7 +259,7 @@ default_access:
 
 Флаги `disable_builtin_security`, `disable_builtin_groups`, `disable_builtin_access` влияют на настройку кластера, осуществляемую только при первом старте кластера {{ ydb-short-name }}.
 
-#|
+# |
 || Параметр | Описание ||
 || `disable_builtin_security` | Не выполнять [встроенную настройку безопасности](../../security/builtin-security.md).
 Встроенная настройка включает автоматическое создание суперпользователя `root`, набора встроенных пользовательских групп и выдачу прав доступа этим группам на корне кластера.

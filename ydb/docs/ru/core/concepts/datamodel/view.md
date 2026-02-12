@@ -89,6 +89,6 @@ CREATE VIEW some_view_which_is_going_to_be_redefined ...;
 
 ## См. также
 
-* [CREATE VIEW](../../yql/reference/syntax/create-view.md)
-* [ALTER VIEW](../../yql/reference/syntax/alter-view.md)
-* [DROP VIEW](../../yql/reference/syntax/drop-view.md)
+- [CREATE VIEW](../../yql/reference/syntax/create-view.md)
+- [ALTER VIEW](../../yql/reference/syntax/alter-view.md)
+- [DROP VIEW](../../yql/reference/syntax/drop-view.md)

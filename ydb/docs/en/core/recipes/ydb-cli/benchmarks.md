@@ -46,7 +46,6 @@ At this stage, for `tpch`, `tpcds`, and `clickbench`, you can configure the tabl
 
 You can also specify that tables should be deleted before creation if they already exist using the `--clear` parameter.
 
-
 For more details, see the description of the commands for each benchmark:
 
 * [tpcc init](../../reference/ydb-cli/workload-tpcc.md#init)

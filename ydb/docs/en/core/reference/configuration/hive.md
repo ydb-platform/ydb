@@ -6,7 +6,7 @@
 
 These options allow you to control the speed at which [tablets are booted](../../contributor/hive-booting.md) and how [nodes are selected](../../contributor/hive-booting.md#findbestnode) for them.
 
-#|
+# |
 || Configuration Parameter Name | Hive Web-viewer Parameter Name | Format | Description | Default Value ||
 || `max_tablets_scheduled` | MaxTabletsScheduled | Integer | Maximum number of tablets simultaneously in the startup process on a single node. | 100 ||
 || `max_boot_batch_size` | MaxBootBatchSize | Integer | Maximum number of tablets from the Hive [boot queue](../../contributor/hive-booting.md#bootqueue) processed at once. | 1000 ||
@@ -20,8 +20,8 @@ These options allow you to control the speed at which [tablets are booted](../..
 | `HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P` ||
 || `boot_strategy` | — | Enumeration | Controls behavior when starting large numbers of tablets. Possible values:
 
-* `HIVE_BOOT_STRATEGY_BALANCED` — when the `max_tablets_scheduled` limit is reached on one node, stops starting new tablets on all nodes.
-* `HIVE_BOOT_STRATEGY_FAST` — when the `max_tablets_scheduled` limit is reached on one node, continues starting tablets on other nodes.
+- `HIVE_BOOT_STRATEGY_BALANCED` — when the `max_tablets_scheduled` limit is reached on one node, stops starting new tablets on all nodes.
+- `HIVE_BOOT_STRATEGY_FAST` — when the `max_tablets_scheduled` limit is reached on one node, continues starting tablets on other nodes.
 
 If one node starts tablets slightly slower than others when starting a large number of tablets, then using `HIVE_BOOT_STRATEGY_FAST` will result in fewer tablets being started on that node than on the others. Using `HIVE_BOOT_STRATEGY_BALANCED` in the same situation will distribute tablets evenly across nodes, but their startup will take longer.
 
@@ -76,7 +76,7 @@ hive_config:
 
 These options control the [auto-balancing](../../contributor/hive.md#autobalancing) process: in which situations it starts, how many tablets it moves at what intervals, how it selects nodes and tablets. Some options are presented in two variations: for "emergency balancing," i.e., balancing when one or more nodes are overloaded, and for all other types of balancing.
 
-#|
+# |
 || Configuration Parameter Name | Hive Web-viewer Parameter Name | Format | Description | Default Value ||
 || `min_scatter_to_balance` | MinScatterToBalance | Real number | Threshold for [Scatter](../../contributor/hive.md#scatter) metric for CPU, Memory, Network resources. Has lower priority than the parameters below. | 0.5 ||
 || `min_cpuscatter_to_balance` | MinCPUScatterToBalance | Real number | Threshold for Scatter metric for CPU resource. | 0.5 ||
@@ -146,7 +146,7 @@ When using Hive UI for the same effect, you need to enter `Coordinator;Mediator`
 
 Hive collects [computational resource consumption metrics](../../contributor/hive.md#resources) from each node — CPU time, memory, network — both overall per node and broken down by tablets. These settings allow you to control the collection of these metrics, their normalization and aggregation.
 
-#|
+# |
 || Configuration Parameter Name | Hive Web-viewer Parameter Name | Format | Description | Default Value ||
 || `max_resource_cpu` | MaxResourceCPU | Integer microseconds | Maximum CPU consumption per node per second. Default value, used only if the node does not provide a value when registering with Hive. | 10000000 ||
 || `max_resource_memory` | MaxResourceMemory | Integer bytes | Maximum memory consumption per node. Default value, used only if the node does not provide a value when registering with Hive. | 512000000000 ||
@@ -167,7 +167,7 @@ This table contains advanced settings that in most cases do not require modifica
 
 {% endnote %}
 
-#|
+# |
 || Configuration Parameter Name | Hive Web-viewer Parameter Name | Format | Description | Default Value ||
 || `default_unit_iops` | DefaultUnitIOPS | Integer | Default value for IOPS of one channel. | 1 ||
 || `default_unit_throughput` | DefaultUnitThroughput | Integer bytes/second | Default value for throughput consumption by one channel. | 1000 ||
@@ -214,7 +214,7 @@ Hive tracks how often various nodes and tablets restart to identify problematic 
 
 ### Tablet Restart Tracking Options
 
-#|
+# |
 || Configuration Parameter Name | Hive Web-viewer Parameter Name | Format | Description | Default Value ||
 || `tablet_restart_watch_period` | — | Integer seconds | Size of window over which statistics on tablet restart count are collected. **This period is used only for statistics passed to HealthCheck.** | 3600 ||
 || `tablet_restarts_period` | — | Integer milliseconds | Size of window over which tablet restart count is calculated for penalizing problematic tablet startup. | 1000 ||
@@ -224,7 +224,7 @@ Hive tracks how often various nodes and tablets restart to identify problematic 
 
 ### Node Restart Tracking Options
 
-#|
+# |
 || Configuration Parameter Name | Hive Web-viewer Parameter Name | Format | Description | Default Value ||
 || `node_restart_watch_period` | — | Integer seconds | Size of window over which statistics on node restart count are collected. | 3600 ||
 || `node_restarts_for_penalty` | NodeRestartsForPenalty | Integer | Number of restarts in the `node_restart_watch_period` window after which nodes receive priority reduction. | 3 ||
@@ -240,7 +240,7 @@ This table contains advanced settings that in most cases do not require modifica
 
 {% endnote %}
 
-#|
+# |
 || Configuration Parameter Name | Hive Web-viewer Parameter Name | Format | Description | Default Value ||
 || `drain_inflight` | DrainInflight | Integer | Number of tablets simultaneously restarting during graceful movement of all tablets from one node (drain). | 10 ||
 || `request_sequence_size` | — | Integer | Number of tablet identifiers that database Hive requests from root Hive at once. | 1000 ||

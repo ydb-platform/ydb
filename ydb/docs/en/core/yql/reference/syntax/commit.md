@@ -14,4 +14,3 @@ COMMIT;
 -- result2 will already include the SELECT contents from the second line:
 INSERT INTO result3 SELECT * FROM result2;
 ```
-

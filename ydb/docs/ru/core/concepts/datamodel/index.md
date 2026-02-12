@@ -6,6 +6,7 @@
 * [Таблицы](table.md)
 
 {% if feature_view %}
+
 * [Представления](view.md)
 {% endif %}
 
@@ -19,5 +20,5 @@
 
 ## См. также {#see-also}
 
-- [{#T}](../index.md)
-- [{#T}](../topology.md)
+* [{#T}](../index.md)
+* [{#T}](../topology.md)

@@ -15,4 +15,3 @@ This documentation section contains reference information about various aspects 
 * [{#T}](./ydb-dstool/index.md)
 * [{#T}](./ydbops/index.md)
 * [{#T}](./docker/index.md)
-

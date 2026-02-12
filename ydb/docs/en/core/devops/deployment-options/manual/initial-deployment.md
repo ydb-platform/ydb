@@ -145,9 +145,9 @@ vdb    252:16   0   186G  0 disk
 
 The names of block devices depend on the operating system settings provided by the base image or manually configured. Typically, device names consist of up to three parts:
 
-- A fixed prefix or a prefix indicating the device type
-- A device sequential identifier (which can be a letter or a number)
-- A partition sequential identifier on the given device (usually a number)
+* A fixed prefix or a prefix indicating the device type
+* A device sequential identifier (which can be a letter or a number)
+* A partition sequential identifier on the given device (usually a number)
 
 1. Create partitions on the selected disks:
 
@@ -171,7 +171,7 @@ The names of block devices depend on the operating system settings provided by t
 
   To streamline the next setup step, it makes sense to use the same disk labels on cluster servers having the same disk configuration.
 
-2. Clear the disk by this command built-in the `ydbd` executable:
+1. Clear the disk by this command built-in the `ydbd` executable:
 
 {% note warning %}
 
@@ -208,7 +208,7 @@ Prepare a configuration file for {{ ydb-short-name }}:
      host_config_id: 1
    ```
 
-2. In the `hosts` section, specify the FQDN of each node, their configuration and location in a `data_center` or `rack`:
+1. In the `hosts` section, specify the FQDN of each node, their configuration and location in a `data_center` or `rack`:
 
    ```json
    hosts:
@@ -232,12 +232,12 @@ Prepare a configuration file for {{ ydb-short-name }}:
        rack: '1'
    ```
 
-3. Under `blob_storage_config`, edit the FQDNs of all the nodes accommodating your static storage group:
+1. Under `blob_storage_config`, edit the FQDNs of all the nodes accommodating your static storage group:
 
    * For the `mirror-3-dc` scheme, specify FQDNs for nine nodes.
    * For the `block-4-2` scheme, specify FQDNs for eight nodes.
 
-4. Enable user authentication (optional).
+1. Enable user authentication (optional).
 
    If you plan to use authentication and user access differentiation features in the {{ ydb-short-name }} cluster, add the following parameters to the `domains_config` section:
 
@@ -298,7 +298,7 @@ sudo chmod 700 /opt/ydb/certs
 
 {% list tabs group=manual-systemd %}
 
-- Manually
+* Manually
 
   Run a {{ ydb-short-name }} data storage service on each static cluster node:
 
@@ -310,7 +310,7 @@ sudo chmod 700 /opt/ydb/certs
     --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
-- Using systemd
+* Using systemd
 
   On each server that will host a static cluster node, create a systemd `/etc/systemd/system/ydbd-storage.service` configuration file by the template below. You can also [download](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-storage.service) the sample file from the repository.
 
@@ -363,7 +363,7 @@ Cluster initialization actions depend on whether the user authentication mode is
 
 {% list tabs group=authentication %}
 
-- Authentication enabled
+* Authentication enabled
 
   To execute administrative commands (including cluster initialization, database creation, disk management, and others) in a cluster with user authentication mode enabled, you must first get an authentication token using the {{ ydb-short-name }} CLI client version 2.0.0 or higher. You must install the {{ ydb-short-name }} CLI client on any computer with network access to the cluster nodes (for example, on one of the cluster nodes) by following the [installation instructions](../../../reference/ydb-cli/install.md).
 
@@ -385,7 +385,7 @@ Cluster initialization actions depend on whether the user authentication mode is
   echo $?
   ```
 
-- Authentication disabled
+* Authentication disabled
 
   On one of the storage servers in the cluster, run these commands:
 
@@ -412,7 +412,7 @@ The database creation procedure depends on whether you enabled user authenticati
 
 {% list tabs group=authentication %}
 
-- Authentication enabled
+* Authentication enabled
 
   Get an authentication token. Use the authentication token file that you obtained when [initializing the cluster](#initialize-cluster) or generate a new token.
 
@@ -425,7 +425,7 @@ The database creation procedure depends on whether you enabled user authenticati
   echo $?
   ```
 
-- Authentication disabled
+* Authentication disabled
 
   On one of the storage servers in the cluster, run these commands:
 
@@ -450,7 +450,7 @@ The command example above uses the following parameters:
 
 {% list tabs group=manual-systemd %}
 
-- Manually
+* Manually
 
   Run the {{ ydb-short-name }} dynamic node for the `/Root/testdb` database:
 
@@ -469,7 +469,7 @@ The command example above uses the following parameters:
 
   In the command example above, `<ydbN>` is replaced by FQDNs of any three servers running the cluster's static nodes.
 
-- Using systemd
+* Using systemd
 
   Create a systemd configuration file named `/etc/systemd/system/ydbd-testdb.service` by the following template: You can also [download](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service) the sample file from the repository.
 
@@ -555,7 +555,6 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
 
 In the command examples listed above, `<node.ydb.tech>` is the FQDN of the server where any dynamic node servicing the `/Root/testdb` database is running. When connecting via SSH to a {{ ydb-short-name }} node, it's convenient to use the `grpcs://$(hostname -f):2136` command to use the current server's FQDN.
 
-
 ## Start Using the Created Database {#try-first-db}
 
 1. Install the {{ ydb-short-name }} CLI as described in the [documentation](../../../reference/ydb-cli/install.md).
@@ -564,14 +563,14 @@ In the command examples listed above, `<node.ydb.tech>` is the FQDN of the serve
 
 {% list tabs %}
 
-- Creating a row-oriented table
+* Creating a row-oriented table
 
    ```bash
    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
       yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
    ```
 
-- Creating a column-oriented table
+* Creating a column-oriented table
 
    ```bash
    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
@@ -581,7 +580,6 @@ In the command examples listed above, `<node.ydb.tech>` is the FQDN of the serve
 {% endlist %}
 
 Here, `<node.ydb.tech>` is the FQDN of the server running the dynamic node that serves the `/Root/testdb` database.
-
 
 ## Checking Access to the Built-in Web Interface
 

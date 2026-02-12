@@ -139,9 +139,9 @@ vdb    252:16   0   186G  0 disk
 
 Названия блочных устройств зависят от настроек операционной системы, заданных базовым образом или настроенных вручную. Обычно имена устройств состоят из трех частей:
 
-- Фиксированный префикс или префикс, указывающий на тип устройства
-- Последовательный идентификатор устройства (может быть буквой или числом)
-- Последовательный идентификатор раздела на данном устройстве (обычно число)
+* Фиксированный префикс или префикс, указывающий на тип устройства
+* Последовательный идентификатор устройства (может быть буквой или числом)
+* Последовательный идентификатор раздела на данном устройстве (обычно число)
 
 1. Создайте разделы на выбранных дисках:
 
@@ -305,7 +305,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
 {% list tabs group=manual-systemd %}
 
-- Вручную
+* Вручную
 
   Запустите сервис хранения данных {{ ydb-short-name }} на каждом статическом узле кластера:
 
@@ -317,7 +317,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
-- С использованием systemd
+* С использованием systemd
 
   Создайте на каждом сервере, где будет размещен статический узел кластера, конфигурационный файл systemd `/etc/systemd/system/ydbd-storage.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-storage.service).
 
@@ -418,7 +418,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
 {% list tabs group=manual-systemd %}
 
-- Вручную
+* Вручную
 
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
 
@@ -438,7 +438,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
   В примере команды выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
 
-- С использованием systemd
+* С использованием systemd
 
   Создайте конфигурационный файл systemd `/etc/systemd/system/ydbd-testdb.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service).
 
@@ -576,14 +576,14 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
 {% list tabs %}
 
-- Создание строковой таблицы
+* Создание строковой таблицы
 
     ```bash
     ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
     ```
 
-- Создание колоночной таблицы
+* Создание колоночной таблицы
 
     ```bash
     ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
@@ -607,7 +607,6 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 Обычно для обеспечения доступа ко встроенному web-интерфейсу {{ ydb-short-name }} настраивают отказоустойчивый HTTP-балансировщик на базе программного обеспечения `haproxy`, `nginx` или аналогов. Детали настройки HTTP-балансировщика выходят за рамки стандартной инструкции по установке {{ ydb-short-name }}.
 
 {% endnote %}
-
 
 ## Особенности установки {{ ydb-short-name }} в незащищенном режиме
 

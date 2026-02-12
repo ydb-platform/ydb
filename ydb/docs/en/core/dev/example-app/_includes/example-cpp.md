@@ -64,7 +64,6 @@ void UpsertSimple(TQueryClient client) {
 
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
-
 To execute YQL queries, use the `ExecuteQuery` method.
 The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TTxControl` class.
 
@@ -267,7 +266,6 @@ Season, SeriesId: 1, SeasonId: 2, Title: Season 2, Air date: 2007-08-24
 Season, SeriesId: 1, SeasonId: 3, Title: Season 3, Air date: 2008-11-21
 Season, SeriesId: 1, SeasonId: 4, Title: Season 4, Air date: 2010-06-25
 ```
-
 
 {% include [multistep_transactions.md](steps/09_multistep_transactions.md) %}
 

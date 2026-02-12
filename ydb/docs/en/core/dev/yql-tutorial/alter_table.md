@@ -19,4 +19,3 @@ Delete the column you added from the table:
 ```yql
 ALTER TABLE episodes DROP COLUMN viewers;
 ```
-

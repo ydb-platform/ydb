@@ -467,4 +467,3 @@ SELECT
     StructSymmetricDifference($left, $right)    -- <|a: 1, b: 2, d: 2, e: 3|>
 ;
 ```
-

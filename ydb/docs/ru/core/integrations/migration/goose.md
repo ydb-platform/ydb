@@ -13,7 +13,7 @@ Goose – open-source инструмент, который помогает ве
 Утилита `goose` вызывается командой:
 
 ```bash
-$ goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
+goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
 ```
 
 где:
@@ -60,7 +60,7 @@ export YDB_CONNECTION_STRING="grpc://localhost:2136/local?go_query_mode=scriptin
 Создадим директорию migrations и далее все команды `goose` следует выполнять в этой директории:
 
 ```bash
-$ mkdir migrations && cd migrations
+mkdir migrations && cd migrations
 ```
 
 ## Управление миграциями с помощью goose

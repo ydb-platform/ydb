@@ -40,9 +40,9 @@ config:
 {% cut "Пример изменения конфигурации" %}
 
 ```bash
-$ ydb -e grpc://<ydb.example.com>:2135 admin cluster config fetch > config.yaml     # 1
-$ vim config.yaml                                                                   # 2
-$ ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.yaml  # 3
+ydb -e grpc://<ydb.example.com>:2135 admin cluster config fetch > config.yaml     # 1
+vim config.yaml                                                                   # 2
+ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.yaml  # 3
 ```
 
 {% endcut %}
@@ -94,5 +94,5 @@ $ ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.ya
 
 ## Смотрите также
 
-* [Справка по параметрам конфигурации](config-settings.md)
-* [{#T}](../compare-configs.md)
+- [Справка по параметрам конфигурации](config-settings.md)
+- [{#T}](../compare-configs.md)

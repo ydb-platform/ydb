@@ -28,4 +28,3 @@ DISCARD SELECT Ensure(
 ```
 
 {% endif %}
-

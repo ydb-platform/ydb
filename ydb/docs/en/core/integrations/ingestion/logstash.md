@@ -217,7 +217,6 @@ The `stdout` plugin writes the messages to the Logstash logs:
 }
 ```
 
-
 ## {{ ydb-short-name }} Topic Output Plugin
 
 This plugin allows writing `Logstash` events to a {{ ydb-short-name }} [topic](../../concepts/datamodel/topic.md).

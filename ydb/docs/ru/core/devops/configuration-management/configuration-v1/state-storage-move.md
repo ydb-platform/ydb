@@ -1,6 +1,5 @@
 # Перемещение State Storage
 
-
 Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../reference/configuration/index.md#domains-state), необходимо переместить её на другой хост.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}
@@ -46,4 +45,3 @@ domains_config:
 1. Обновите конфигурационные файлы `config.yaml` для всех узлов кластера, в том числе и динамических.
 1. С помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md) перезапустите все узлы кластера, включая динамические, кроме статических узлов на хостах с `node_id:1` и `node_id:10`. Обратите внимание, что между рестартом хостов необходима задержка как минимум в 15 секунд.
 1. Запустите статические узлы кластера на хостах `node_id:1` и `node_id:10`.
-

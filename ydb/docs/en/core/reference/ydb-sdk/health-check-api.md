@@ -102,7 +102,6 @@ message IssueLog {
 }
 ```
 
-
 ### Description of fields in the response {#fields-description}
 
 | Field | Description |

@@ -283,7 +283,7 @@ You can also specify any value in the `value` field. Data from the `value` field
 
 The type formatting table to load into the table:
 
-#|
+# |
 || {{ ydb-short-name }} type | Description format ||
 || `Bool` |
 `true` or `false`
@@ -566,10 +566,10 @@ In the examples above, a Docker container was used, which didn't require any add
 
 List of different authentication options through URL parameters:
 
-* Local or remote Docker (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:2136/local`
-* Self-hosted cluster:<br/>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
-* Connect with token to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
-* Connect with service account to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
+- Local or remote Docker (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:2136/local`
+- Self-hosted cluster:<br/>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
+- Connect with token to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
+- Connect with service account to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
 
 Also, if your cluster is configured using username and password, authentication is done through Liquibase parameters.
 

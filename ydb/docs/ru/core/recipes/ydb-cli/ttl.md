@@ -7,13 +7,13 @@
 В приведенном ниже примере строки таблицы `mytable` будут удаляться спустя час после наступления времени, записанного в колонке `created_at`:
 
 ```bash
-$ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column created_at --expire-after 3600 mytable
+{{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column created_at --expire-after 3600 mytable
 ```
 
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
 
 ```bash
-$ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column modified_at --expire-after 3600 --unit seconds mytable
+{{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column modified_at --expire-after 3600 --unit seconds mytable
 ```
 
 ## Включение вытеснения данных во внешнее S3-совместимое хранилище
@@ -38,7 +38,7 @@ $ {{ ydb-cli }} -e <endpoint> -d <database> sql -s '
 ## Выключение TTL {#disable}
 
 ```bash
-$ {{ ydb-cli }} -e <endpoint> -d <database> table ttl reset mytable
+{{ ydb-cli }} -e <endpoint> -d <database> table ttl reset mytable
 ```
 
 ## Получение настроек TTL {#describe}
@@ -46,6 +46,5 @@ $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl reset mytable
 Текущие настройки TTL можно получить из описания таблицы:
 
 ```bash
-$ {{ ydb-cli }} -e <endpoint> -d <database> scheme describe mytable
+{{ ydb-cli }} -e <endpoint> -d <database> scheme describe mytable
 ```
-

@@ -96,7 +96,6 @@
 
   {% endcut %}
 
-
 - Java
 
   ```java

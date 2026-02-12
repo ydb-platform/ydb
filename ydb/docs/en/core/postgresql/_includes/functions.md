@@ -10,12 +10,11 @@ The usual logical operators are available:
 
 ## 9.2. Comparison Functions and Operators {#comparison-functions}
 
-
 The usual comparison operators are available, as shown in Table 9.1.
 
 Table 9.1. Comparison Operators
 
-#|
+# |
 || **Operator**| **Description** ||
 || datatype < datatype → boolean | Less than ||
 || datatype > datatype → boolean | Greater than ||
@@ -28,7 +27,7 @@ Table 9.1. Comparison Operators
 
 There are also some comparison predicates, as shown in Table 9.2. These behave much like operators, but have special syntax mandated by the SQL standard.
 
-#|
+# |
 || Predicate | Description | Example(s) ||
 || datatype BETWEEN datatype AND datatype → boolean | Between (inclusive of the range endpoints). |
 ```sql
@@ -1095,7 +1094,7 @@ In addition to these facilities borrowed from LIKE, SIMILAR TO supports these pa
 
 * denotes repetition of the previous item zero or more times.
 
-+ denotes repetition of the previous item one or more times.
+* denotes repetition of the previous item one or more times.
 
 ? denotes repetition of the previous item zero or one time.
 
@@ -1161,7 +1160,7 @@ Table 9.16 lists the available operators for pattern matching using POSIX regula
 
 Table 9.16. Regular Expression Match Operators
 
-#|
+# |
 ||Operator|Description|Example(s)||
 ||ext ~ text → boolean|
 String matches regular expression, case sensitively|
@@ -1375,7 +1374,7 @@ The PostgreSQL formatting functions provide a powerful set of tools for converti
 
 Table 9.25. Formatting Functions
 
-#|
+# |
 ||Function|Description|Example(s)||
 ||to_char ( timestamp with time zone, text ) → text|
 Converts time stamp to string according to the given format.|
@@ -1466,7 +1465,7 @@ All the functions and operators described below that take time or timestamp inpu
 
 Table 9.31. Date/Time Operators
 
-#|
+# |
 ||Operator|Description|Example(s)||
 ||date + integer → date|
 Add a number of days to a date|
@@ -2044,7 +2043,7 @@ The AT TIME ZONE operator converts time stamp without time zone to/from time sta
 
 Table 9.33. AT TIME ZONE Variants
 
-#|
+# |
 ||Operator|Description|Example(s)|
 ||timestamp without time zone AT TIME ZONE zone → timestamp with time zone|
 Converts given time stamp without time zone to time stamp with time zone, assuming the given value is in the named time zone.|
@@ -2166,7 +2165,7 @@ The geometric types point, box, lseg, line, path, polygon, and circle have a lar
 
 Table 9.35. Geometric Operators
 
-#|
+# |
 ||Operator|Description|Example(s)||
 ||geometric_type + point → geometric_type|
 Adds the coordinates of the second point to those of each point of the first argument, thus performing translation. Available for point, box, path, circle.|
@@ -2846,7 +2845,6 @@ To process values of data type xml, PostgreSQL offers the functions xpath and xp
 
 xpath ( xpath text, xml xml [, nsarray text[] ] ) → xml[] (NOT SUPPORTED)
 
-
 9.15.3.2. Xpath_exists
 
 xpath_exists ( xpath text, xml xml [, nsarray text[] ] ) → boolean
@@ -2895,7 +2893,7 @@ Table 9.44 shows the operators that are available for use with JSON data types (
 
 Table 9.44. json and jsonb Operators
 
-#|
+# |
 ||Operator|Description|Example(s)||
 ||json -> integer → json
 jsonb -> integer → jsonb|
@@ -3697,7 +3695,7 @@ Table 9.51 shows the specialized operators available for array types. In additio
 
 Table 9.51. Array Operators
 
-#|
+# |
 ||Operator|Description|Example(s)||
 ||anyarray @> anyarray → boolean|
 Does the first array contain the second, that is, does each element appearing in the second array equal some element of the first array? (Duplicates are not treated specially, thus ARRAY[1] and ARRAY[1,1] are each considered to contain the other.)|
@@ -4118,7 +4116,7 @@ Table 9.58 shows aggregate functions typically used in statistical analysis. (Th
 
 Table 9.58. Aggregate Functions for Statistics
 
-#|
+# |
 ||Function|Description|Partial Mode|Examples||
 ||corr ( Y double precision, X double precision ) → double precision|
 Computes the correlation coefficient.|
@@ -4320,7 +4318,7 @@ In addition to these functions, any built-in or user-defined ordinary aggregate 
 
 Table 9.62. General-Purpose Window Functions
 
-#|
+# |
 ||Function|Description|Examples||
 ||row_number () → bigint|
 Returns the number of the current row within its partition, counting from 1.|
@@ -4711,7 +4709,7 @@ This section describes functions that possibly return more than one row. The mos
 
 Table 9.63. Series Generating Functions
 
-#|
+# |
 ||Function|Description||
 ||generate_series ( start integer, stop integer [, step integer ] ) → setof integer
 generate_series ( start bigint, stop bigint [, step bigint ] ) → setof bigint
@@ -4768,7 +4766,7 @@ SELECT * FROM generate_series('2008-03-01 00:00'::timestamp, '2008-03-04 12:00',
 
 Table 9.64. Subscript Generating Functions (NOT SUPPORTED)
 
-#|
+# |
 ||Function|Description||
 ||generate_subscripts ( array anyarray, dim integer ) → setof integer|
 Generates a series comprising the valid subscripts of the dim'th dimension of the given array.||

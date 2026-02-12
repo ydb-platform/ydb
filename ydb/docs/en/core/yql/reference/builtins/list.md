@@ -294,9 +294,9 @@ FROM my_table;
 
 Apply the function specified as the second argument to each list element. The functions differ in their returned result:
 
-* `ListMap` returns a list with results.
-* `ListFlatMap` returns a list with results, combining and expanding the first level of results (lists or optional values) for each item.
-* `ListFilter` leaves only those elements where the function returned `true`.
+- `ListMap` returns a list with results.
+- `ListFlatMap` returns a list with results, combining and expanding the first level of results (lists or optional values) for each item.
+- `ListFilter` leaves only those elements where the function returned `true`.
 
 {% note info %}
 
@@ -309,8 +309,8 @@ Arguments:
 1. Source list.
 2. Functions for processing list elements, such as:
 
-    * [Lambda function](../syntax/expressions.md#lambda).
-    * `Module::Function` - C++ UDF.
+    - [Lambda function](../syntax/expressions.md#lambda).
+    - `Module::Function` - C++ UDF.
 
 {% if feature_udf_noncpp %}
 
@@ -381,8 +381,8 @@ FROM my_table;
 
 Returns `true` for a list of Boolean values, if:
 
-* `ListAny`: At least one element is `true`.
-* `ListAll`: All elements are `true`.
+- `ListAny`: At least one element is `true`.
+- `ListAll`: All elements are `true`.
 
 Otherwise, it returns false.
 
@@ -514,15 +514,15 @@ Arguments:
 
 Specifics:
 
-* The end is not included, i.e. `ListFromRange(1,3) == AsList(1,2)`.
-* The type for the resulting elements is selected as the broadest from the argument types. For example, `ListFromRange(1, 2, 0.5)` results in a `Double` list.
-* If the start and the end is one of the date representing type, the step has to be `Interval`.
-* The list is "lazy", but if it's used incorrectly, it can still consume a lot of RAM.
-* If the step is positive and the end is less than or equal to the start, the result list is empty.
-* If the step is negative and the end is greater than or equal to the start, the result list is empty.
-* If the step is neither positive nor negative (0 or NaN), the result list is empty.
-* If any of the parameters is optional, the result list is optional.
-* If any of the parameters is `NULL`, the result is `NULL`.
+- The end is not included, i.e. `ListFromRange(1,3) == AsList(1,2)`.
+- The type for the resulting elements is selected as the broadest from the argument types. For example, `ListFromRange(1, 2, 0.5)` results in a `Double` list.
+- If the start and the end is one of the date representing type, the step has to be `Interval`.
+- The list is "lazy", but if it's used incorrectly, it can still consume a lot of RAM.
+- If the step is positive and the end is less than or equal to the start, the result list is empty.
+- If the step is negative and the end is greater than or equal to the start, the result list is empty.
+- If the step is neither positive nor negative (0 or NaN), the result list is empty.
+- If any of the parameters is optional, the result list is optional.
+- If any of the parameters is `NULL`, the result is `NULL`.
 
 ### Examples
 
@@ -638,8 +638,8 @@ Convert a list of tuples containing key-value pairs to a dictionary. In case of 
 
 It means that:
 
-* `ToDict` converts `List<TupleK, V="">` to `Dict<K, V="">`
-* `ToMultiDict` converts `List<TupleK, V>` to `Dict<K, List<V>>`
+- `ToDict` converts `List<TupleK, V="">` to `Dict<K, V="">`
+- `ToMultiDict` converts `List<TupleK, V>` to `Dict<K, List<V>>`
 
 Optional lists are also supported, resulting in an optional dictionary.
 

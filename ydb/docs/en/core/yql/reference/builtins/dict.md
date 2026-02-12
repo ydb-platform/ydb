@@ -301,4 +301,3 @@ SELECT SetSymmetricDifference(
     ($k, $a, $b) -> { RETURN AsTuple($a, $b) });
 -- { 2 : (null, "qwe"), 3 : ("bar", null) }
 ```
-

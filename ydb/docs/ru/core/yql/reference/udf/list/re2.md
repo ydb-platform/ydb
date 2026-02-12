@@ -83,7 +83,7 @@ SELECT
 
 Пояснения к параметрам Re2::Options из официального [репозитория](https://github.com/google/re2/blob/main/re2/re2.h#L595-L617)
 
-#|
+# |
 || Параметр | По умолчанию | Комментарий ||
 || CaseSensitive:Bool? |
 true |

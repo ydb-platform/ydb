@@ -34,9 +34,9 @@ If you plan to use virtual machines in a public cloud provider, consider followi
 
 To work with the project on a local (intermediate or installation) machine, you will need:
 
-- Python 3 version 3.10+
-- Ansible core version 2.15.2 or higher
-- A working directory on a server with SSH access to all cluster servers
+* Python 3 version 3.10+
+* Ansible core version 2.15.2 or higher
+* A working directory on a server with SSH access to all cluster servers
 
 {% note tip %}
 
@@ -79,7 +79,7 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
 
 {% list tabs %}
 
-- Via requirements.yaml
+* Via requirements.yaml
 
   ```bash
   $ cat <<EOF > requirements.yaml
@@ -92,10 +92,10 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
   $ ansible-galaxy install -r requirements.yaml
   ```
 
-- One-time
+* One-time
 
   ```bash
-  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
+  ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
   ```
 
 {% endlist %}
@@ -132,7 +132,7 @@ Create a `inventory/50-inventory.yaml` file using one of the templates below dep
 
 {% list tabs %}
 
-- 3 nodes
+* 3 nodes
 
   ```yaml
   all:
@@ -186,7 +186,7 @@ Create a `inventory/50-inventory.yaml` file using one of the templates below dep
               enforce_user_token_requirement: true
   ```
 
-- Cross-datacenter
+* Cross-datacenter
 
   ```yaml
   all:
@@ -262,7 +262,7 @@ Create a `inventory/50-inventory.yaml` file using one of the templates below dep
               enforce_user_token_requirement: true
   ```
 
-- Single datacenter
+* Single datacenter
 
   ```yaml
   all:
@@ -385,20 +385,20 @@ The values of the `system_timezone` and `system_ntp_servers` variables depend on
 
 {% list tabs %}
 
-- AWS
+* AWS
 
   * `system_timezone`: USA/<region_name>
   * `system_ntp_servers`: [169.254.169.123, time.aws.com] [Learn more](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html#configure-time-sync) about AWS NTP server settings.
 
-- Azure
+* Azure
 
   * You can read about how time synchronization is configured on Azure virtual machines in [this](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/time-sync) article.
 
-- Alibaba
+* Alibaba
 
   * The specifics of connecting to NTP servers in Alibaba are described in [this article](https://www.alibabacloud.com/help/en/ecs/user-guide/alibaba-cloud-ntp-server).
 
-- Yandex Cloud
+* Yandex Cloud
 
   * `system_timezone`: Europe/Moscow
   * `system_ntp_servers`: [0.ru.pool.ntp.org, 1.ru.pool.ntp.org, ntp0.NL.net, ntp2.vniiftri.ru, ntp.ix.ru, ntps1-1.cs.tu-berlin.de] [Learn more](https://yandex.cloud/en/docs/tutorials/infrastructure-management/ntp) about Yandex Cloud NTP server settings.

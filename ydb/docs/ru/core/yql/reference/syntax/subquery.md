@@ -82,6 +82,7 @@ SELECT * FROM $clean(); -- a: 10, b: 100
 ```
 
 {% if feature_mapreduce %}
+
 ```yql
 USE my_cluster;
 
@@ -199,5 +200,3 @@ $sub2 = SubqueryOrderBy($sub, [('x',false), ('y',true)]);
 
 PROCESS $sub2();
 ```
-
-

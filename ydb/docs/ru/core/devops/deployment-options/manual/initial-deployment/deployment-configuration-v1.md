@@ -891,11 +891,11 @@ export LD_LIBRARY_PATH=/opt/ydb/lib
 echo $?
 ```
 
-6. Команда создания базы данных выполняется в следующей форме:
+1. Команда создания базы данных выполняется в следующей форме:
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
 /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
 ```
 
-7. При обращении к базе данных из {{ ydb-short-name }} CLI и приложений используется протокол grpc вместо grpcs, и не используется аутентификация.
+1. При обращении к базе данных из {{ ydb-short-name }} CLI и приложений используется протокол grpc вместо grpcs, и не используется аутентификация.

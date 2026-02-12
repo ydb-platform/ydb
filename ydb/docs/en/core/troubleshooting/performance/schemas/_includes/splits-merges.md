@@ -43,7 +43,6 @@
 
     1. In the command output, analyze the **Auto partitioning settings**:
 
-        * `Partitioning by load`
-        * `Max partitions count`
-        * `Min partitions count`
-
+        - `Partitioning by load`
+        - `Max partitions count`
+        - `Min partitions count`

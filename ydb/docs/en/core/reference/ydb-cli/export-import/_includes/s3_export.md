@@ -181,6 +181,7 @@ Or using the alternate syntax:
 ### Exporting with encryption {#example-encryption}
 
 Exporting the whole database with encryption:
+
 - Using the `AES-128-GCM` encryption algorithm
 - Generating the random key using the `openssl` utility to the file `~/my_secret_key`
 - Reading the generated key from the file `~/my_secret_key`
@@ -195,6 +196,7 @@ openssl rand -out ~/my_secret_key 16
 ```
 
 Exporting the subdirectory `dir1` of a database with encryption:
+
 - Using the `AES-256-GCM` encryption algorithm
 - Generating the random key using the `openssl` utility to the environment variable `YDB_ENCRYPTION_KEY`
 - Reading the key from the environment variable `YDB_ENCRYPTION_KEY`

@@ -96,14 +96,14 @@ Distance functions return small values for close vectors, while similarity funct
 
 Similarity functions:
 
-* inner product `InnerProductSimilarity`, it's the dot product, also known as the scalar product (sum of products of coordinates)
-* cosine similarity `CosineSimilarity` (dot product divided by product of vector lengths)
+- inner product `InnerProductSimilarity`, it's the dot product, also known as the scalar product (sum of products of coordinates)
+- cosine similarity `CosineSimilarity` (dot product divided by product of vector lengths)
 
 Distance functions:
 
-* cosine distance `CosineDistance` (1 - cosine similarity)
-* manhattan distance `ManhattanDistance`, also known as `L1 distance` (sum of modules of coordinate differences)
-* euclidean distance `EuclideanDistance`, also known as `L2 distance` (square root of the sum of squares of coordinate differences)
+- cosine distance `CosineDistance` (1 - cosine similarity)
+- manhattan distance `ManhattanDistance`, also known as `L1 distance` (sum of modules of coordinate differences)
+- euclidean distance `EuclideanDistance`, also known as `L2 distance` (square root of the sum of squares of coordinate differences)
 
 #### Function signatures {#functions-distance-signatures}
 
@@ -297,9 +297,9 @@ SELECT ListMap($FloatList, $MapInt8);
 
 Approximate search algorithm:
 
-* an approximate search is performed using bit quantization;
-* an approximate list of vectors is obtained;
-* we search this list without using quantization.
+- an approximate search is performed using bit quantization;
+- an approximate list of vectors is obtained;
+- we search this list without using quantization.
 
 {% if backend_name == "YDB" %}
 

@@ -49,9 +49,9 @@ pathId: [OwnerId: <some>, LocalPathId: <some>], path type: EPathTypeDir, path st
 {{ ydb-cli }} [global options...] scheme rmdir [options...] <path>
 ```
 
-* `global options` — [глобальные параметры](../../commands/global-options.md).
-* `options` — [параметры подкоманды](#rmdir-options).
-* `path` — путь до удаляемой директории.
+- `global options` — [глобальные параметры](../../commands/global-options.md).
+- `options` — [параметры подкоманды](#rmdir-options).
+- `path` — путь до удаляемой директории.
 
 Посмотрите описание команды для удаления директории:
 

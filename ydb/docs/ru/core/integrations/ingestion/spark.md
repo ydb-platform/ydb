@@ -20,19 +20,19 @@
 
   {% list tabs %}
 
-  - Spark Shell
+  * Spark Shell
 
     ```shell
     ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
-  - PySpark
+  * PySpark
 
     ```shell
     ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
-  - Spark SQL
+  * Spark SQL
 
     ```shell
     ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
@@ -44,19 +44,19 @@
 
   {% list tabs %}
 
-  - Spark Shell
+  * Spark Shell
 
     ```shell
     ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
     ```
 
-  - PySpark
+  * PySpark
 
     ```shell
     ~ $ pyspark --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar  --conf spark.executor.memory=4g
     ```
 
-  - Spark SQL
+  * Spark SQL
 
     ```shell
     ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar  --conf spark.executor.memory=4g
@@ -74,13 +74,13 @@
 
 {% list tabs %}
 
-- Scala
+* Scala
 
   ```scala
   val ydb_df = spark.read.format("ydb").options(<options>).load("<table-path>")
   ```
 
-- Python
+* Python
 
   ```python
   ydb_df = spark.read.format("ydb").options(<options>).load("<table-path>")
@@ -92,13 +92,13 @@
 
 {% list tabs %}
 
-- Scala
+* Scala
 
   ```scala
   any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
   ```
 
-- Python
+* Python
 
   ```python
   any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
@@ -144,10 +144,10 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 * `url` — обязательный параметр с адресом подключения к {{ ydb-short-name }}. Имеет вид `grpc[s]://<endpoint>:<port>/<database>[?<options>]`.
    Примеры использования:
-   - Локальный Docker-контейнер с анонимной аутентификацией и без TLS:<br/>`grpc://localhost:2136/local`
-   - Удалённый кластер, размещённый на собственном сервере:<br/>`grpcs://my-private-cluster:2135/Root/my-database?secureConnectionCertificate=~/myCertificate.cer`
-   - Экземпляр облачной базы данных с токеном:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
-   - Экземпляр облачной базы данных с файлом сервисного аккаунта:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
+  * Локальный Docker-контейнер с анонимной аутентификацией и без TLS:<br/>`grpc://localhost:2136/local`
+  * Удалённый кластер, размещённый на собственном сервере:<br/>`grpcs://my-private-cluster:2135/Root/my-database?secureConnectionCertificate=~/myCertificate.cer`
+  * Экземпляр облачной базы данных с токеном:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
+  * Экземпляр облачной базы данных с файлом сервисного аккаунта:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
 
 * `ca.text` — указывает значение [сертификата](../../concepts/connect.md#tls-cert) для установки TLS-соединения.
 * `ca.file` — указывает путь к [сертификату](../../concepts/connect.md#tls-cert) для установки TLS-соединения. Может быть указан прямо в `url` в виде опции `secureConnectionCertificate`.
@@ -169,8 +169,8 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 * `table.autocreate` — если указано `true`, то при записи в несуществующую таблицу она будет создана автоматически. По умолчанию включено.
 * `table.type` — тип автоматически создаваемой таблицы. Возможные варианты:
-    - `row` — для создания строчной таблицы (по умолчанию);
-    - `column` — для создания колоночной таблицы;
+  * `row` — для создания строчной таблицы (по умолчанию);
+  * `column` — для создания колоночной таблицы;
 * `table.primary_keys` — разделённый запятой список колонок для использования в качестве первичного ключа. При отсутствии этой опции для ключа будет автоматически создана новая колонка.
 * `table.auto_pk_name` — имя колонки для автоматически создаваемого ключа. Эта колонка будет создана  с типом `Utf8` и будет заполняться случайными [UUID v4](https://en.wikipedia.org/wiki/Universally_unique_identifier#Version_4_(random)) значениями. По умолчанию `_spark_key`.
 
@@ -180,7 +180,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 {% list tabs %}
 
-- Spark Shell
+* Spark Shell
 
   ```shell
   ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
@@ -197,7 +197,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
   Type :help for more information.
   ```
 
-- PySpark
+* PySpark
 
   ```shell
   ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
@@ -218,7 +218,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 {% list tabs %}
 
-- Spark Shell
+* Spark Shell
 
   ```shell
   scala> val so_posts2020 = spark.read.format("parquet").load("/home/username/2020.parquet")
@@ -253,7 +253,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
   res1: Long = 4304021
   ```
 
-- PySpark
+* PySpark
 
   ```shell
   >>> so_posts2020 = spark.read.format("parquet").load("/home/username/2020.parquet")
@@ -292,7 +292,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 {% list tabs %}
 
-- Spark Shell
+* Spark Shell
 
   ```shell
   scala> val my_ydb = Map("url" -> "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token")
@@ -301,7 +301,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
   scala> so_posts2020.withColumn("Year", lit(2020)).write.format("ydb").options(my_ydb).option("table.type", "column").option("table.primary_keys", "Id").mode("append").save("stackoverflow/posts");
   ```
 
-- PySpark
+* PySpark
 
   ```shell
   >>> from pyspark.sql.functions import col,lit
@@ -315,7 +315,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 {% list tabs %}
 
-- Spark Shell
+* Spark Shell
 
   ```shell
   scala> val ydb_posts2020 = spark.read.format("ydb").options(my_ydb).load("stackoverflow/posts")
@@ -354,7 +354,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
   res4: Long = 843780
   ```
 
-- PySpark
+* PySpark
 
   ```shell
   >>> ydb_posts2020 = spark.read.format("ydb").options(**my_ydb).load("stackoverflow/posts")

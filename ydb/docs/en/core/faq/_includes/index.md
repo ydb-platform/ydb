@@ -7,4 +7,3 @@
 * [Errors](../errors.md)
 * [YQL](../yql.md)
 * [Analytics](../analytics.md)
-

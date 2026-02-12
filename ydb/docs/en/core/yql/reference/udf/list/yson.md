@@ -4,7 +4,6 @@
 
 YSON is a JSON-like data format developed at Yandex.
 
-
 * Similarities with JSON:
 
   * Does not have a strict scheme.
@@ -37,8 +36,6 @@ The module's functions must be considered as "building blocks" from which you ca
 * `Yson::Parse*** -> Yson::Serialize***`: Converting from one format to other.
 * `Yson::Parse*** -> Yson::Lookup -> Yson::Serialize***`: Extracting the value of the specified subtree in the source YSON tree.
 * `Yson::Parse*** -> Yson::ConvertToList -> ListMap -> Yson::Lookup***`: Extracting items by a key from the YSON list.
-
-
 
 ## Examples
 
@@ -243,8 +240,6 @@ Yson::YPathList(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> List<Resource<
 ```
 
 Lets you get a part of the resource based on the source resource and the part's path in YPath format.
-
-
 
 ## Yson::Attributes {#ysonattributes}
 

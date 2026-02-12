@@ -18,4 +18,3 @@ FROM series;
 
 COMMIT;
 ```
-

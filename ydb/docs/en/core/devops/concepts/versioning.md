@@ -27,10 +27,10 @@ You can update {{ ydb-short-name }} to a new version in the following cases:
 
 For example:
 
-* `X.Y.*.* → X.Y.*.*` — update is possible, all minor versions within the same major version are compatible.
-* `X.Y.Z.*` (last available `X.Y.*.*`) → `X.Y+1.*.*` - update is possible, major versions are sequential.
-* `X.Y.*.*` → `X.Y+2.*.*` — update is not possible, major versions are non-sequential.
-* `X.Y.*.* → X.Y-2.*.*` — update is not possible, major versions are non-sequential.
+- `X.Y.*.* → X.Y.*.*` — update is possible, all minor versions within the same major version are compatible.
+- `X.Y.Z.*` (last available `X.Y.*.*`) → `X.Y+1.*.*` - update is possible, major versions are sequential.
+- `X.Y.*.*` → `X.Y+2.*.*` — update is not possible, major versions are non-sequential.
+- `X.Y.*.* → X.Y-2.*.*` — update is not possible, major versions are non-sequential.
 
 {% note warning %}
 
@@ -40,10 +40,10 @@ Also, you cannot downgrade {{ ydb-short-name }} by more than two major versions 
 
 ### Version Compatibility Examples
 
-* `v.25.1.3.2`  →  `v.25.1.5.5` - update is possible
-* `v.25.1.5.5`  →  `v.25.2.3.1` - update is possible (where `v25.1.5.*` is the last available minor version in `v.25.1`)
-* `v.25.1.4.1`  →  `v.25.2.3.1` - update is not possible, you must first update to the last minor version (`v.25.1.5.*`)
-* `v.25.1.5.5`  →  `v.25.3.5.3` - update is not possible, you must first update to the next major version (`v.25.2.*.*`).
+- `v.25.1.3.2`  →  `v.25.1.5.5` - update is possible
+- `v.25.1.5.5`  →  `v.25.2.3.1` - update is possible (where `v25.1.5.*` is the last available minor version in `v.25.1`)
+- `v.25.1.4.1`  →  `v.25.2.3.1` - update is not possible, you must first update to the last minor version (`v.25.1.5.*`)
+- `v.25.1.5.5`  →  `v.25.3.5.3` - update is not possible, you must first update to the next major version (`v.25.2.*.*`).
 
 ## Formal Description of Possible Versions
 
@@ -74,6 +74,6 @@ Also, you cannot downgrade {{ ydb-short-name }} by more than two major versions 
 
 ### Examples of Full Versions
 
-* Testing version: `24.3.13.6-testing`
-* Stable version: `24.3.14.2-stable`
-* LTS version: `24.3.14.2-lts`
+- Testing version: `24.3.13.6-testing`
+- Stable version: `24.3.14.2-stable`
+- LTS version: `24.3.14.2-lts`

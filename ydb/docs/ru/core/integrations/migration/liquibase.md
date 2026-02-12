@@ -553,10 +553,10 @@ liquibase changelog-sync --changelog-file=dbchangelog.xml
 
 Существуют различные варианты настройки аутентификации через параметр URL:
 
-* Docker контейнер (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:2136/local`
-* Self-hosted кластер:<br/>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
-* Подключение с использованием токена:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
-* Подключение с использованием сервисного аккаунта:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
+- Docker контейнер (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:2136/local`
+- Self-hosted кластер:<br/>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
+- Подключение с использованием токена:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
+- Подключение с использованием сервисного аккаунта:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
 
 Если ваш кластер настроен с использованием логина и пароля, процесс аутентификации происходит через параметры Liquibase.
 

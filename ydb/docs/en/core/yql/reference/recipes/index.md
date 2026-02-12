@@ -10,5 +10,5 @@ Table of contents:
 
 See also:
 
-- [{#T}](../index.md)
-- [{#T}](../../../dev/index.md)
+* [{#T}](../index.md)
+* [{#T}](../../../dev/index.md)

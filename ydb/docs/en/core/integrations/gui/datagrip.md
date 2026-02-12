@@ -24,7 +24,6 @@ To add the downloaded JDBC driver to DataGrip, follow these steps:
 
 1. In the **Name** field, specify `YDB`.
 
-
 1. In the **Driver Files** section, click the **+** button, choose **Custom JARs…**, specify the path to the previously downloaded {{ ydb-short-name }} JDBC driver (the `ydb-jdbc-driver-shaded-<driver-version>.jar` file), and click **OK**:
 
 1. In the **Class** drop-down list, select `tech.ydb.jdbc.YdbDriver`.
@@ -62,12 +61,11 @@ To establish a connection, perform the following steps:
 
     ![connection](./_assets/datagrip-ydb-connection.png)
 
-2. Click **Test Connection** to verify the settings.
+1. Click **Test Connection** to verify the settings.
 
    If all the settings are correct, a message appears indicating a successful connection test.
 
-3. Click **OK** to save the connection.
-
+1. Click **OK** to save the connection.
 
 ## Working with {{ ydb-name }} {#datagrip_ydb_connection}
 

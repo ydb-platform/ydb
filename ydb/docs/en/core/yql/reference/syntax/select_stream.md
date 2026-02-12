@@ -40,8 +40,6 @@ Concatenating the results of multiple `SELECT STREAM` statements with their sche
 * If a column in different input tables had different types, then the shared type (the broadest one) is output.
 * If a column in different input tables had a heterogeneous type, for example, string and numeric, an error is raised.
 
-
-
 ### Examples
 
 ```yql
@@ -51,4 +49,3 @@ SELECT STREAM y FROM my_stream_2
 UNION ALL
 SELECT STREAM z FROM my_stream_3
 ```
-

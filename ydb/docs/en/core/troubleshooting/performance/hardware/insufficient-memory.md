@@ -33,7 +33,6 @@ Additionally, which components within the  {{ ydb-short-name }} process consume 
 
     Additionally, review the `ydbd` logs for relevant details.
 
-
 1. Determine whether memory usage reached 100% of capacity.
 
     1. Open the **[DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** dashboard in Grafana.

@@ -23,7 +23,6 @@ Autobalancing occurs in the following cases:
 
     For tablets with no explicit resource consumption, Hive uses a fake **Counter** resource to ensure their even distribution. Balancing is triggered if this distribution becomes skewed. Learn more: [{#T}](../../../contributor/hive.md#imbalance).
 
-
 ## Diagnostics
 
 <!-- The include is added to allow partial overrides in overlays  -->
@@ -72,6 +71,5 @@ Adjust Hive balancer settings:
     These parameters use relative values, where 1.0 represents 100% and effectively disables balancing. If the total hardware resource value can exceed 100%, adjust the ratio accordingly.
 
     {% endnote %}
-
 
 [*counter]: Counter - a fake resource representing a count of tablets of a certain type on a node, used to ensure such tablets are distributed evenly across nodes.

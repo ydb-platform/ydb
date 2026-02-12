@@ -46,12 +46,12 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 Для создания подключения к кластеру ClickHouse необходимо создать внешний источник данных `EXTERNAL DATA SOURCE`, указав:
 
-- В поле `SOURCE_TYPE` значение `ClickHouse`.
-- В поле `LOCATION` полный сетевой адрес кластера ClickHouse, включая порт. В качестве сетевого адреса можно указывать IP-адрес или FQDN. В данный момент подключение к кластеру ClickHouse всегда выполняется про HTTP протоколу.
-- В поле `USE_TLS` флаг, указывающий требование подключения к кластеру ClickHouse через безопасное соединение (TLS).
-- В поле `AUTH_METHOD` значение `BASIC`.
-- В поле `LOGIN` логин, используемый для подключения к кластеру ClickHouse.
-- В поле `PASSWORD_SECRET_PATH` [секрет](../../../concepts/datamodel/secrets.md), содержащий пароль для подключения к кластеру ClickHouse.
+* В поле `SOURCE_TYPE` значение `ClickHouse`.
+* В поле `LOCATION` полный сетевой адрес кластера ClickHouse, включая порт. В качестве сетевого адреса можно указывать IP-адрес или FQDN. В данный момент подключение к кластеру ClickHouse всегда выполняется про HTTP протоколу.
+* В поле `USE_TLS` флаг, указывающий требование подключения к кластеру ClickHouse через безопасное соединение (TLS).
+* В поле `AUTH_METHOD` значение `BASIC`.
+* В поле `LOGIN` логин, используемый для подключения к кластеру ClickHouse.
+* В поле `PASSWORD_SECRET_PATH` [секрет](../../../concepts/datamodel/secrets.md), содержащий пароль для подключения к кластеру ClickHouse.
 
 При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ ydb-full-name }}.
 
@@ -74,12 +74,12 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 Для создания подключения к кластеру PostgreSQL необходимо создать объект `EXTERNAL DATA SOURCE`, указав в полях:
 
-- в поле `SOURCE_TYPE` значение `PostgreSQL`;
-- в поле `LOCATION` полный сетевой адрес кластера PostgreSQL, включая порт. В качестве сетевого адреса можно указывать IP-адрес или FQDN;
-- в поле `USE_TLS` флаг, указывающий требование подключения к кластеру PostgreSQL через безопасное соединение (TLS);
-- в поле `AUTH_METHOD` значение `BASIC`;
-- в поле `LOGIN` логин, используемый для подключения к кластеру PostgreSQL;
-- в поле `PASSWORD_SECRET_PATH` [секрет](../../../concepts/datamodel/secrets.md), содержащий пароль для подключения к кластеру PostgreSQL.
+* в поле `SOURCE_TYPE` значение `PostgreSQL`;
+* в поле `LOCATION` полный сетевой адрес кластера PostgreSQL, включая порт. В качестве сетевого адреса можно указывать IP-адрес или FQDN;
+* в поле `USE_TLS` флаг, указывающий требование подключения к кластеру PostgreSQL через безопасное соединение (TLS);
+* в поле `AUTH_METHOD` значение `BASIC`;
+* в поле `LOGIN` логин, используемый для подключения к кластеру PostgreSQL;
+* в поле `PASSWORD_SECRET_PATH` [секрет](../../../concepts/datamodel/secrets.md), содержащий пароль для подключения к кластеру PostgreSQL.
 
 В данный момент подключение к кластеру PostgreSQL всегда выполняется про стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP. При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ydb-full-name}}.
 
@@ -102,9 +102,9 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 Для создания внешнего источника данных, ведущего на бакет с данными в S3 ({{ objstorage-name }}) необходимо создать объект `EXTERNAL DATA SOURCE`, указав в полях:
 
-- в поле `SOURCE_TYPE` значение `ObjectStorage`;
-- в поле `LOCATION` сетевой путь к бакету;
-- в поле `AUTH_METHOD` значение `NONE`.
+* в поле `SOURCE_TYPE` значение `ObjectStorage`;
+* в поле `LOCATION` сетевой путь к бакету;
+* в поле `AUTH_METHOD` значение `NONE`.
 
 {% note info %}
 
@@ -131,4 +131,3 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   LOCATION="http://s3.amazonaws.com/bucket/folder/",
   AUTH_METHOD="NONE"
 ```
-

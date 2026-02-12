@@ -164,9 +164,9 @@ Since {{ ydb-short-name }} supports various methods of user authentication (logi
 
 For LDAP users, the `<domain>` is determined by the **ldap_authentication_domain** configuration parameter in the [configuration section](../reference/configuration/auth_config.md#ldap-auth-config). By default, this parameter is set to `ldap`, so all usernames authenticated through the LDAP directory, as well as their corresponding group names in {{ ydb-short-name }}, will follow this format:
 
-- `user1@ldap`
-- `group1@ldap`
-- `group2@ldap`
+* `user1@ldap`
+* `group1@ldap`
+* `group2@ldap`
 
 {% note warning %}
 

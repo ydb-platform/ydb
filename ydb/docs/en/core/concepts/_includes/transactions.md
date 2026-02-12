@@ -39,13 +39,13 @@ In this mode, based on the query, {{ ydb-short-name }} decides whether to execut
 
 #### Behavior for Different Types of Statements
 
-- **[Data Definition Language](https://en.wikipedia.org/wiki/Data_definition_language) (DDL) Statements**
+* **[Data Definition Language](https://en.wikipedia.org/wiki/Data_definition_language) (DDL) Statements**
   DDL statements (such as [`CREATE TABLE`](../../yql/reference/syntax/create_table/index.md), [`DROP TABLE`](../../yql/reference/syntax/drop_table.md), etc.) are executed outside a transaction. A query can consist only of DDL statements. If an error occurs, changes made by previous statements in the query are not rolled back.
 
-- **[Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) (DML) Statements**
+* **[Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) (DML) Statements**
   DML statements (such as [`SELECT`](../../yql/reference/syntax/select/index.md), [`UPSERT`](../../yql/reference/syntax/upsert_into.md), [`UPDATE`](../../yql/reference/syntax/update.md), etc.) are wrapped in a transaction with *Serializable* mode. A query can consist only of DML statements. On success, changes are committed. If an error occurs, all changes are rolled back.
 
-- **Batch Modification Statements**
+* **Batch Modification Statements**
   Batch modification statements (such as [`BATCH UPDATE`](../../yql/reference/syntax/batch-update.md) and [`BATCH DELETE`](../../yql/reference/syntax/batch-delete.md)) are executed outside a transaction. A query can contain only one batch modification statement. If an error occurs, the statement's changes are not rolled back.
 
 #### Summary Table

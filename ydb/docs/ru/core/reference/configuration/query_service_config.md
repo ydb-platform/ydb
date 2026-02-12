@@ -6,7 +6,7 @@
 
 ## Описание параметров
 
-#|
+# |
 || **Параметр** | **Значение по умолчанию** | **Описание**  ||
 || `generic.connector.endpoint.host`
 | `localhost`
@@ -30,7 +30,7 @@
 ||
 || `available_external_data_sources`
 | пустой список
-| Список с разрешенными типами внешних источников. Применяется при `all_external_data_sources_are_available: false`. 
+| Список с разрешенными типами внешних источников. Применяется при `all_external_data_sources_are_available: false`.
 
 Возможные значения:
 
@@ -90,4 +90,4 @@ query_service_config:
 
 ## См. также
 
-- [{#T}](../../devops/deployment-options/manual/federated-queries/index.md)
+* [{#T}](../../devops/deployment-options/manual/federated-queries/index.md)

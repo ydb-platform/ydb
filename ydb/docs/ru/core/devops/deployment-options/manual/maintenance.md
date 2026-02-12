@@ -7,7 +7,7 @@
 Чтобы выполнить rolling restart всего кластера можно воспользоваться командой:
 
 ```bash
-$ ydbops restart
+ydbops restart
 ```
 
 По умолчанию, будет использован режим доступности `strong`, минимизирующий риск потери доступности. Его можно переопределить с помощью параметра `--availability-mode`.
@@ -21,14 +21,14 @@ $ ydbops restart
 1. Cоздать задачу обслуживания с помощью команды:
 
     ```bash
-    $ ydbops maintenance create --hosts=<fqdn> --duration=<seconds>
+    ydbops maintenance create --hosts=<fqdn> --duration=<seconds>
     ```
 
     Эта команда создаст задачу обслуживания, в рамках которой на хост с полным доменным именем `<fqdn>` будет взята эксклюзивная блокировка на `<seconds>` секунд.
 2. После создания задачи необходимо обновлять ее состояние, пока блокировка не будет взята, с помощью команды:
 
     ```bash
-    $ ydbops maintenance refresh --task-id=<id>
+    ydbops maintenance refresh --task-id=<id>
     ```
 
     Эта команда обновит задачу с идентификатором `<id>` и попытается взять требуемую блокировку. При получении ответа `PERFORMED` можно переходить к следующему пункту.
@@ -36,5 +36,5 @@ $ ydbops restart
 4. После завершения работ необходимо отпустить блокировку на хост с помощью команды:
 
     ```bash
-    $ ydbops maintenance complete --task-id=<id> --hosts=<fqdn>
+    ydbops maintenance complete --task-id=<id> --hosts=<fqdn>
     ```

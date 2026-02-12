@@ -40,7 +40,7 @@
 
     {% list tabs group=auth-type %}
 
-    - Пароль {#static-credentials}
+    * Пароль {#static-credentials}
 
         ```json
         {
@@ -51,7 +51,7 @@
         }
         ```
 
-    - Токен {#access-token-credentials}
+    * Токен {#access-token-credentials}
 
         ```json
         {
@@ -61,9 +61,7 @@
         }
         ```
 
-
-
-    - Сервисный аккаунт {#service-account-credentials}
+    * Сервисный аккаунт {#service-account-credentials}
 
         ```json
         {

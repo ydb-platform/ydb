@@ -42,8 +42,8 @@ The following shows the mappings used when reading values.
 
 `Decimal (Precision, Scale)` is a parameterized data type in {{ ydb-short-name }} that allows you to explicitly specify:
 
-* `Precision` — the total number of significant digits;
-* `Scale` — the number of digits after the decimal point.
+- `Precision` — the total number of significant digits;
+- `Scale` — the number of digits after the decimal point.
 
 For more details, see the [documentation](../../../yql/reference/types/primitive.md#numeric).
 

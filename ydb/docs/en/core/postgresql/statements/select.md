@@ -74,7 +74,7 @@ In the previous example, we used `WHERE` – an optional parameter for filtering
 
 ### Examples for HAVING
 
-#|
+# |
 || `HAVING` + `GROUP BY` | `HAVING` + `WHERE` + `GROUP BY` ||
 ||
 

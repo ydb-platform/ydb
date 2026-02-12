@@ -29,9 +29,11 @@ Builds the YDB documentation and outputs it to a specified directory.
 ```
 
 **Requirements:**
+
 - [YFM builder](https://diplodoc.com/docs/en/tools/docs/) (`yfm` command)
 
 **Returns:**
+
 - Exit code 0 on successful build
 - Exit code 1 on build failure
 
@@ -48,12 +50,14 @@ Builds the documentation and starts a local HTTP server to preview the results.
 ```
 
 **Requirements:**
+
 - [YFM builder](https://diplodoc.com/docs/en/tools/docs/) (`yfm` command)
 - Python 3 (for the HTTP server)
 
 **Access the documentation:**
-- English: http://localhost:8888/en
-- Russian: http://localhost:8888/ru
+
+- English: <http://localhost:8888/en>
+- Russian: <http://localhost:8888/ru>
 
 Press `Ctrl+C` to stop the server.
 

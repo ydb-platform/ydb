@@ -40,7 +40,6 @@ Skip this section if you have already configured a suitable {{ k8s }} cluster.
 
     It takes 10 to 15 minutes on average to create a {{ k8s }} cluster. Wait for the process to complete before proceeding to the next step of {{ ydb-short-name }} deployment. The `kubectl` configuration will be automatically updated to work with the cluster after it is created.
 
-
 - {{ managed-k8s-full-name }}
 
   Follow the instructions in the [{{ managed-k8s-full-name }} quick start guide](https://yandex.cloud/en/docs/managed-kubernetes/quickstart).
@@ -53,16 +52,16 @@ The Helm chart installs [YDB Kubernetes Operator](https://github.com/ydb-platfor
 
 A {{ ydb-short-name }} cluster consists of two kinds of nodes:
 
-* **Storage nodes** ([Storage](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/storage-block-4-2.yaml) resource) provide the data persistence layer.
-* **Dynamic nodes** ([Database](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/database.yaml) resource) implement data access and processing.
+- **Storage nodes** ([Storage](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/storage-block-4-2.yaml) resource) provide the data persistence layer.
+- **Dynamic nodes** ([Database](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/database.yaml) resource) implement data access and processing.
 
 Create both resources with the desired parameters to deploy a {{ ydb-short-name }} cluster in {{ k8s }}. The schema for these resources is [hosted on GitHub](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy/ydb-operator/crds).
 
 After the chart data is processed by the controller, the following resources are created:
 
-* [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/): A workload controller that assigns stable network IDs and disk resources to each container.
-* [Service](https://kubernetes.io/docs/concepts/services-networking/service/): An object that is used to access the created databases from applications.
-* [ConfigMap](https://kubernetes.io/docs/concepts/configuration/configmap/): An object that is used to store the cluster configuration.
+- [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/): A workload controller that assigns stable network IDs and disk resources to each container.
+- [Service](https://kubernetes.io/docs/concepts/services-networking/service/): An object that is used to access the created databases from applications.
+- [ConfigMap](https://kubernetes.io/docs/concepts/configuration/configmap/): An object that is used to store the cluster configuration.
 
 See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-kubernetes-operator). The Helm chart is in the [deploy](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy) folder.
 {{ ydb-short-name }} containers are deployed using `cr.yandex/yc/ydb` images. Currently, they are only available as prebuilt artifacts.
@@ -86,7 +85,7 @@ See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-k
   "ydb" has been added to your repositories
   ```
 
-2. Update the Helm chart index:
+1. Update the Helm chart index:
 
   Run the command:
 
@@ -112,8 +111,8 @@ Use `helm` to deploy the {{ ydb-short-name }} {{ k8s }} operator to the cluster:
 helm install ydb-operator ydb/ydb-operator
 ```
 
-* `ydb-operator`: The installation name.
-* `ydb/ydb-operator`: The name of the chart in the repository you have added earlier.
+- `ydb-operator`: The installation name.
+- `ydb/ydb-operator`: The name of the chart in the repository you have added earlier.
 
 Result:
 
@@ -255,9 +254,9 @@ Check how {{ ydb-short-name }} works:
       sql -s 'SELECT 2 + 2;'
     ```
 
-    * `--endpoint`: The database endpoint.
-    * `--database`: The name of the created database.
-    * `--query`: The query text.
+    - `--endpoint`: The database endpoint.
+    - `--database`: The name of the created database.
+    - `--query`: The query text.
 
     Result:
 
@@ -268,7 +267,6 @@ Check how {{ ydb-short-name }} works:
     | 4       |
     └─────────┘
     ```
-
 
 ## Further Steps
 
@@ -282,18 +280,15 @@ Below are a few more things to consider.
 
 To collect metrics, `ydb-controller` provides resources like `ServiceMonitor`. They can be handled using [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack).
 
-
 ### Tuning Allocated Resources {#resource-allocation}
 
 You can limit resource consumption for each {{ ydb-short-name }} pod. If you leave the limit values empty, a pod can use the entire CPU time and VM RAM. This may cause undesirable effects. We recommend that you always specify the resource limits explicitly.
 
 To learn more about resource allocation and limits, see the [{{ k8s }} documentation](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/).
 
-
 ### Release the Unused Resources {#cleanup}
 
 If you no longer need the created {{ ydb-short-name }} cluster, delete it by following these steps:
-
 
 1. To delete a {{ ydb-short-name }} database and its dynamic nodes, just delete the respective `Database` resource:
 
@@ -314,4 +309,4 @@ If you no longer need the created {{ ydb-short-name }} cluster, delete it by fol
    helm delete ydb-operator
    ```
 
-   * `ydb-operator`: The name of the release that the controller was installed under.
+   - `ydb-operator`: The name of the release that the controller was installed under.

@@ -141,8 +141,6 @@ When the aggregate function `SOME` is called multiple times, it's **not** guaran
 
 {% endnote %}
 
-
-
 ## CountDistinctEstimate, HyperLogLog, and HLL {#countdistinctestimate}
 
 Approximating the number of unique values using the [HyperLogLog](https://en.wikipedia.org/wiki/HyperLogLog) algorithm. Logically, it does the same thing as [COUNT(DISTINCT ...)](#count), but runs much faster at the cost of some error.
@@ -169,8 +167,6 @@ SELECT
   HyperLogLog(my_column, 4)
 FROM my_table;
 ```
-
-
 
 ## AGGREGATE_LIST {#agg-list}
 
@@ -211,8 +207,6 @@ Execution is **NOT** lazy, so when you use it, be sure that the list has a reaso
 
 {% endnote %}
 
-
-
 ## MAX_BY and MIN_BY {#max-min-by}
 
 Return the value of the first argument for the table row where the second argument is minimum/maximum.
@@ -252,8 +246,6 @@ SELECT
     AGGREGATE_BY(AsTuple(value, key), $max_by_factory)
 FROM my_table;
 ```
-
-
 
 ## TOP and BOTTOM {#top-bottom}
 
@@ -303,8 +295,6 @@ SELECT
 FROM my_table;
 ```
 
-
-
 ## TOPFREQ and MODE {#topfreq-mode}
 
 Getting an **approximate** list of the most common values in a column with an estimation of their count. Returns a list of structures with two fields:
@@ -328,8 +318,6 @@ SELECT
 FROM my_table;
 ```
 
-
-
 ## STDDEV and VARIANCE {#stddev-variance}
 
 Standard deviation and variance in a column. Those functions use a [single-pass parallel algorithm](https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm), whose result may differ from the more common methods requiring two passes through the data.
@@ -351,8 +339,6 @@ SELECT
   VARIANCE(numeric_column)
 FROM my_table;
 ```
-
-
 
 ## CORRELATION and COVARIANCE {#correlation-covariance}
 
@@ -381,8 +367,6 @@ SELECT
 FROM my_table;
 ```
 
-
-
 ## PERCENTILE and MEDIAN {#percentile-median}
 
 Calculating percentiles using the amortized version of the [TDigest](https://github.com/tdunning/t-digest) algorithm. `MEDIAN`: An alias for `PERCENTILE(N, 0.5)`.
@@ -399,8 +383,6 @@ SELECT
     PERCENTILE(numeric_column, 0.99)
 FROM my_table;
 ```
-
-
 
 ## HISTOGRAM {#histogram}
 
@@ -521,8 +503,6 @@ SELECT
 FROM my_table;
 ```
 
-
-
 ## BOOL_AND, BOOL_OR and BOOL_XOR {#bool-and-or-xor}
 
 ### Signature
@@ -537,22 +517,22 @@ Apply the relevant logical operation  (`AND`/`OR`/`XOR`) to all values in a Bool
 
 Unlike most other aggregate functions, these functions **don't skip** `NULL` during aggregation and use the following rules:
 
-- `true AND null == null`
-- `false OR null == null`
+* `true AND null == null`
+* `false OR null == null`
 
 For `BOOL_AND`:
 
-- If at least one `NULL` value is present, the result is `NULL` regardless of `true` values in the expression.
-- If at least one `false` value is present, the result changes to `false` regardless of `NULL` values in the expression.
+* If at least one `NULL` value is present, the result is `NULL` regardless of `true` values in the expression.
+* If at least one `false` value is present, the result changes to `false` regardless of `NULL` values in the expression.
 
 For `BOOL_OR`:
 
-- If at least one `NULL` value is present, the result changes to `NULL` regardless of `false` values in the expression.
-- If at least one `true` value is present, the result changes to `true` regardless of `NULL` values in the expression.
+* If at least one `NULL` value is present, the result changes to `NULL` regardless of `false` values in the expression.
+* If at least one `true` value is present, the result changes to `true` regardless of `NULL` values in the expression.
 
 For `BOOL_XOR`:
 
-- The result is `NULL` if any `NULL` is found.
+* The result is `NULL` if any `NULL` is found.
 
 Examples of such behavior can be found below.
 
@@ -595,17 +575,13 @@ SELECT
 FROM my_table;
 ```
 
-
-
 {% if feature_window_functions %}
 
-  ## SessionStart {#session-start}
+## SessionStart {#session-start}
 
 No arguments. It's allowed only if there is [SessionWindow](../syntax/select/group-by.md#session-window) in [GROUP BY](../syntax/select/group-by.md) / [PARTITION BY](../syntax/select/window.md#partition).
 Returns the value of the `SessionWindow` key column. If `SessionWindow` has two arguments, it returns the minimum value of the first argument within the group/section.
 In the case of the expanded version `SessionWindow`, it returns the value of the second element from the tuple returned by `<calculate_lambda>`, for which the first tuple element is `True`.
-
-
 
 {% endif %}
 
@@ -633,5 +609,3 @@ SELECT
     MULTI_AGGREGATE_BY(nums, AggregationFactory("percentile", 0.9)) as p90
 FROM my_table;
 ```
-
-

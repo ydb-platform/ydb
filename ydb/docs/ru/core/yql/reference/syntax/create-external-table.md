@@ -24,14 +24,13 @@ CREATE EXTERNAL TABLE table_name (
 * `format_name` - один из [допустимых типов хранения данных](../../../concepts/federated_query/s3/formats.md).
 * `compression_name` - один из [допустимых алгоритмов сжатия](../../../concepts/federated_query/s3/formats.md#compression).
 
-
 Допускается использование только ограниченного подмножества типов данных:
 
-- `Bool`.
-- `Int8`, `Uint8`, `Int16`, `Uint16`, `Int32`, `Uint32`, `Int64`, `Uint64`.
-- `Float`, `Double`.
-- `Date`, `DateTime`.
-- `String`, `Utf8`.
+* `Bool`.
+* `Int8`, `Uint8`, `Int16`, `Uint16`, `Int32`, `Uint32`, `Int64`, `Uint64`.
+* `Float`, `Double`.
+* `Date`, `DateTime`.
+* `String`, `Utf8`.
 
 Без дополнительных модификаторов колонка приобретает [опциональный тип](../types/optional.md) тип, и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
 
@@ -50,6 +49,3 @@ CREATE EXTERNAL TABLE s3_test_data (
   COMPRESSION="gzip"
 );
 ```
-
-
-

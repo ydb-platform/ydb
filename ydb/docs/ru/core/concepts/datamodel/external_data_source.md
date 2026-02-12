@@ -30,4 +30,3 @@ SELECT * FROM test_data_source.test_table;
 - [ClickHouse](../federated_query/clickhouse.md)
 - [PostgreSQL](../federated_query/postgresql.md)
 - [Подключения к S3 ({{ objstorage-name }})](../federated_query/s3/external_data_source.md)
-

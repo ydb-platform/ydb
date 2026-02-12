@@ -37,4 +37,3 @@ To change the logging level:
 1. To change the logging level for individual components, use the table under `Component log settings`. In the line with the name of the component whose logging level you want to change, in the `Component` column, select the desired logging level from the drop-down list in the `Log level` column.
 
 1. To save changes, click `Submit`
-

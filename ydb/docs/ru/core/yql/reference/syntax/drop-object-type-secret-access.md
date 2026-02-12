@@ -11,4 +11,3 @@
 ```yql
 DROP OBJECT (TYPE SECRET_ACCESS) `MySecretName:another_user`;
 ```
-

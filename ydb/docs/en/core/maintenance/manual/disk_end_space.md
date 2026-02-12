@@ -50,7 +50,7 @@ If the block store volume is running out of space, you can apply defragmentation
    sudo ydbd admin blobstorage disk obliterate <path to the store volume part label>
    ```
 
-6. Run the process
+1. Run the process
 
    ```bash
    sudo systemctl start ydbd

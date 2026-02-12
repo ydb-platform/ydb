@@ -16,7 +16,7 @@
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
   Чтобы установить пользовательский атрибут при создании таблицы `series`, передайте ключ `scheme_version` и значение атрибута `1` в опции `options.WithAttribute` метода `CreateTable`:
 
@@ -39,7 +39,7 @@
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
   Чтобы установить пользовательский атрибут для существующей таблицы `series`, передайте ключ `scheme_version` и значение атрибута `1` в опции `options.WithAddAttribute` метода `AlterTable`:
 
@@ -53,7 +53,7 @@
   )
   ```
 
-- CLI
+* CLI
 
   Чтобы установить пользовательский атрибут для существующей таблицы `series`, передайте ключ `scheme_version` и значение атрибута `1` в опции `--attribute` команды [ydb table attribute add](../reference/ydb-cli/table-attribute-add.md):
 
@@ -67,7 +67,7 @@
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
   Чтобы изменить пользовательский атрибут при изменении схемы таблицы, передайте ключ `scheme_version` и новое значение атрибута `2` в опции `WithAlterAttribute` метода `AlterTable`:
 
@@ -82,7 +82,7 @@
   )
   ```
 
-- CLI
+* CLI
 
   Чтобы изменить пользовательский атрибут для существующей таблицы `series`, передайте ключ `scheme_version` и значение атрибута `2` в опции `--attribute` команды [ydb table attribute add](../reference/ydb-cli/table-attribute-add.md):
 
@@ -96,7 +96,7 @@
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
   Чтобы получить информацию о схеме таблицы `series` включая данные о пользовательских атрибутах, используйте метод `table.Session.DescribeTable()`:
 
@@ -115,7 +115,7 @@
   )
   ```
 
-- CLI
+* CLI
 
   Чтобы получить информацию о схеме таблицы `series` включая данные о пользовательских атрибутах, используйте команду [ydb scheme describe](../reference/ydb-cli/commands/scheme-describe.md):
 
@@ -142,7 +142,7 @@
 
 {% list tabs group=lang %}
 
-- Go
+* Go
 
   Чтобы удалить пользовательский атрибут, передайте ключ `scheme_version` в опции `WithDropAttribute` метода `AlterTable`:
 
@@ -156,7 +156,7 @@
   )
   ```
 
-- CLI
+* CLI
 
   Чтобы удалить пользовательский атрибут, передайте ключ `scheme_version` в опции `--attributes` команды [ydb table attribute drop](../reference/ydb-cli/table-attribute-drop.md):
 

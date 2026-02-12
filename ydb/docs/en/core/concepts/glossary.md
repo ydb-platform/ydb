@@ -115,7 +115,6 @@ The term **interactive transactions** refers to transactions that are split into
 1. Update some data in the database.
 1. Commit the transaction in a separate query.
 
-
 ### Multi-version concurrency control {#mvcc}
 
 [**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](mvcc.md).
@@ -170,7 +169,6 @@ A special type of **secondary index** is singled out separately - [vector index]
 The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
 
 **Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
-
 
 #### Column family {#column-family}
 
@@ -331,9 +329,9 @@ An **access level** determines additional privileges of an [access subject](#acc
 
 {{ ydb-short-name }} uses three access levels:
 
-- viewer
-- operator
-- administrator
+* viewer
+* operator
+* administrator
 
 An access level is granted by adding an access subject to an [access level list](#access-level-list).
 
@@ -353,8 +351,8 @@ A **[user](../security/authorization.md#user)** is an individual utilizing {{ yd
 
 {{ ydb-short-name }} has the following types of users depending on their source:
 
-- local users in {{ ydb-short-name }} databases
-- external users from third-party directory services
+* local users in {{ ydb-short-name }} databases
+* external users from third-party directory services
 
 {{ ydb-short-name }} users are identified by their [SIDs](#access-sid).
 
@@ -414,15 +412,15 @@ A **Local** is an [actor service](#actor-service) running on each [node](#node).
 
 The **actor system pool** is a [thread pool](https://en.wikipedia.org/wiki/Thread_pool) used to run [actors](#actor). Each [node](#node) operates multiple pools to coarsely separate resources between different types of activities. A typical set of pools includes:
 
-- **System**: A pool that handles internal operations within {{ ydb-short-name }} node. It serves system [tablets](#tablet), [state storage](#state-storage), [distributed storage](#distributed-storage) I/O, and so on.
+* **System**: A pool that handles internal operations within {{ ydb-short-name }} node. It serves system [tablets](#tablet), [state storage](#state-storage), [distributed storage](#distributed-storage) I/O, and so on.
 
-- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [QP](#kqp).
+* **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [QP](#kqp).
 
-- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [QP](#kqp) background operations like backups, data compaction, and garbage collection.
+* **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [QP](#kqp) background operations like backups, data compaction, and garbage collection.
 
-- **IO**: A pool for tasks involving blocking operations, such as authentication or writing logs to files.
+* **IO**: A pool for tasks involving blocking operations, such as authentication or writing logs to files.
 
-- **IC**: A pool for [interconnect](#actor-system-interconnect), responsible for system calls related to data transfers across the network, data serialization, message splitting and merging.
+* **IC**: A pool for [interconnect](#actor-system-interconnect), responsible for system calls related to data transfers across the network, data serialization, message splitting and merging.
 
 ### Tablet implementation {#tablet-implementation}
 

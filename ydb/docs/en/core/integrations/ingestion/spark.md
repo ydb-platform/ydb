@@ -20,19 +20,19 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
 
   {% list tabs %}
 
-  - Spark Shell
+  * Spark Shell
 
     ```shell
     ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
-  - PySpark
+  * PySpark
 
     ```shell
     ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
-  - Spark SQL
+  * Spark SQL
 
     ```shell
     ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
@@ -44,19 +44,19 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
 
   {% list tabs %}
 
-  - Spark Shell
+  * Spark Shell
 
     ```shell
     ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
     ```
 
-  - PySpark
+  * PySpark
 
     ```shell
     ~ $ pyspark --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar  --conf spark.executor.memory=4g
     ```
 
-  - Spark SQL
+  * Spark SQL
 
     ```shell
     ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar  --conf spark.executor.memory=4g
@@ -74,13 +74,13 @@ To create a `DataFrame`, you need to specify the `ydb` format, pass a set of [co
 
 {% list tabs %}
 
-- Scala
+* Scala
 
   ```scala
   val ydb_df = spark.read.format("ydb").options(<options>).load("<table-path>")
   ```
 
-- Python
+* Python
 
   ```python
   ydb_df = spark.read.format("ydb").options(<options>).load("<table-path>")
@@ -92,13 +92,13 @@ To save any `DataFrame` in the table {{ ydb-short-name }}, you similarly need to
 
 {% list tabs %}
 
-- Scala
+* Scala
 
   ```scala
   any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
   ```
 
-- Python
+* Python
 
   ```python
   any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
@@ -146,10 +146,10 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
 * `url` — a required parameter with the {{ ydb-short-name }} connection string in the following format:
     `grpc[s]://<endpoint>:<port>/<database>[?<options>]`
     Examples:
-    - Local Docker container with anonymous authentication and without TLS:<br/>`grpc://localhost:2136/local`
-    - Remote self-hosted cluster:<br/>`grpcs://my-private-cluster:2135/Root/my-database?secureConnectionCertificate=~/myCertificate.cer`
-    - Cloud database instance with a token:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
-    - Cloud database instance with a service account key:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
+  * Local Docker container with anonymous authentication and without TLS:<br/>`grpc://localhost:2136/local`
+  * Remote self-hosted cluster:<br/>`grpcs://my-private-cluster:2135/Root/my-database?secureConnectionCertificate=~/myCertificate.cer`
+  * Cloud database instance with a token:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
+  * Cloud database instance with a service account key:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
 
 * `ca.text` — specifies the [certificate](../../concepts/connect.md#tls-cert) value for establishing a TLS connection.
 * `ca.file` — specifies the path to the [certificate](../../concepts/connect.md#tls-cert) for establishing a TLS connection. You can specify it directly in `url` as the `secureConnectionCertificate` option.
@@ -171,8 +171,8 @@ If you need the table to have some custom settings configured, create it manuall
 
 * `table.autocreate` — if set to `true`, then when writing to a non-existent table, it will be created automatically. Enabled by default;
 * `table.type` — the type of automatically created table. Possible values:
-    - `row` for creating a [row-oriented table](../../concepts/glossary.md#row-oriented-table) (default).
-    - `column` for creating a [column-oriented table](../../concepts/glossary.md#column-oriented-table).
+  * `row` for creating a [row-oriented table](../../concepts/glossary.md#row-oriented-table) (default).
+  * `column` for creating a [column-oriented table](../../concepts/glossary.md#column-oriented-table).
 * `table.primary_keys` — a comma-separated list of columns to use as the primary key. If this option is not provided, a new column with random content will be used for the key.
 * `table.auto_pk_name` — the name of the column for the randomly created key. This column will be created with the type `Utf8` and will be filled with random [UUID v4](https://en.wikipedia.org/wiki/Universally_unique_identifier#Version_4_(random)) values. Default value is `_spark_key`.
 
@@ -182,7 +182,7 @@ As an example, we'll show how to load a list of all Stack Overflow posts from 20
 
 {% list tabs %}
 
-- Spark Shell
+* Spark Shell
 
   ```shell
   ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
@@ -199,7 +199,7 @@ As an example, we'll show how to load a list of all Stack Overflow posts from 20
   Type :help for more information.
   ```
 
-- PySpark
+* PySpark
 
   ```shell
   ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
@@ -220,7 +220,7 @@ Let's display the schema of the Parquet file and count the number of rows it con
 
 {% list tabs %}
 
-- Spark Shell
+* Spark Shell
 
   ```shell
   scala> val so_posts2020 = spark.read.format("parquet").load("/home/username/2020.parquet")
@@ -255,7 +255,7 @@ Let's display the schema of the Parquet file and count the number of rows it con
   res1: Long = 4304021
   ```
 
-- PySpark
+* PySpark
 
   ```shell
   >>> so_posts2020 = spark.read.format("parquet").load("/home/username/2020.parquet")
@@ -294,7 +294,7 @@ Then add a new column with the year to this DataFrame and store it all to a colu
 
 {% list tabs %}
 
-- Spark Shell
+* Spark Shell
 
   ```shell
   scala> val my_ydb = Map("url" -> "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token")
@@ -303,7 +303,7 @@ Then add a new column with the year to this DataFrame and store it all to a colu
   scala> so_posts2020.withColumn("Year", lit(2020)).write.format("ydb").options(my_ydb).option("table.type", "column").option("table.primary_keys", "Id").mode("append").save("stackoverflow/posts");
   ```
 
-- PySpark
+* PySpark
 
   ```shell
   >>> from pyspark.sql.functions import col,lit
@@ -317,7 +317,7 @@ As a result, you can read the stored data from the {{ ydb-short-name }} table an
 
 {% list tabs %}
 
-- Spark Shell
+* Spark Shell
 
   ```shell
   scala> val ydb_posts2020 = spark.read.format("ydb").options(my_ydb).load("stackoverflow/posts")
@@ -356,7 +356,7 @@ As a result, you can read the stored data from the {{ ydb-short-name }} table an
   res4: Long = 843780
   ```
 
-- PySpark
+* PySpark
 
   ```shell
   >>> ydb_posts2020 = spark.read.format("ydb").options(**my_ydb).load("stackoverflow/posts")

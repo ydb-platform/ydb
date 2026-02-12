@@ -9,4 +9,3 @@ If there is no such table, an error is returned.
 ```yql
 DROP TABLE my_table;
 ```
-

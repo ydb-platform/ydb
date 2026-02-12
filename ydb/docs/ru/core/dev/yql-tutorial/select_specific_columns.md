@@ -16,4 +16,3 @@ SELECT
 
 FROM series;
 ```
-

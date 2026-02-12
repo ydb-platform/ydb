@@ -18,4 +18,3 @@ Let's take the query plan from the example above.
 The `lookup_by` parameter shows what columns (key or key prefix) reads are made by.
 The `scan_by` parameter shows what columns a read of all entries in a certain range of values is made by.
 The `columns` parameter lists the columns whose values will be read from the table.
-

@@ -24,4 +24,3 @@ SELECT
   TzTimestamp("2017-11-27T13:24:00.123456,GMT"),
   Uuid("f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb");
 ```
-

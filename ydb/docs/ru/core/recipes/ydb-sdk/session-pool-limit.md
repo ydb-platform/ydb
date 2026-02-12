@@ -90,5 +90,4 @@
     spring.datasource.hikari.maximum-pool-size=100 # maximum size of JDBC connections
   ```
 
-
 {% endlist %}

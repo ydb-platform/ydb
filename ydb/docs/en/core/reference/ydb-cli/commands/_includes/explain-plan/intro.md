@@ -11,4 +11,3 @@ Get a query plan:
   ORDER BY season_id, episode_id
   LIMIT 3"
 ```
-

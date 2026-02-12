@@ -24,8 +24,8 @@ CREATE TABLE Vectors (
 
 Эта таблица `Vectors` имеет два столбца:
 
-- `id` — уникальный идентификатор каждого вектора;
-- `embedding` — вектор вещественных чисел, [упакованный в строку](../../yql/reference/udf/list/knn.md#functions-convert).
+* `id` — уникальный идентификатор каждого вектора;
+* `embedding` — вектор вещественных чисел, [упакованный в строку](../../yql/reference/udf/list/knn.md#functions-convert).
 
 ## Шаг 2. Заполнение таблицы данными {#step2}
 

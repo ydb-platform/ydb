@@ -9,4 +9,3 @@ Table of contents:
 - [Enable logging](debug-logs.md)
 - [Enable metrics in Prometheus](debug-prometheus.md)
 - [Enable tracing in Jaeger](debug-jaeger.md)
-

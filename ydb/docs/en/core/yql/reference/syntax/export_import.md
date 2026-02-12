@@ -58,6 +58,3 @@ FROM (
   SELECT 3 AS x
 )
 ```
-
-
-

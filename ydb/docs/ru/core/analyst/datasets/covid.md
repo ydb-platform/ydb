@@ -18,7 +18,7 @@
 awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.csv && mv temp.csv metadata.csv
 ```
 
-3. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
+1. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
 {% list tabs %}
 
@@ -89,7 +89,7 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
 
 {% endlist %}
 
-4. Выполните команду импорта:
+1. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path covid_research metadata.csv

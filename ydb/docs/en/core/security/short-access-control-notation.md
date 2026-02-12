@@ -15,10 +15,10 @@ When the inheritance type is not specified, it means that permission wasn't inhe
 
 ### Examples
 
-* `+R:subject:O`
-* `+W:subject`
-* `+(SR|UR):subject`
-* `+(SR|ConnDB):subject:OC+`
+- `+R:subject:O`
+- `+W:subject`
+- `+(SR|UR):subject`
+- `+(SR|ConnDB):subject:OC+`
 
 ## List of permissions {#access-rights}
 

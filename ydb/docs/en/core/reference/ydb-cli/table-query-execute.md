@@ -22,7 +22,7 @@ View the description of the YQL query command:
 
 ## Parameters of the subcommand {#options}
 
-#|
+# |
 || Name | Description ||
 || `--timeout` | The time within which the operation should be completed on the server. ||
 || `-t`, `--type` | Query type.
@@ -147,4 +147,3 @@ Result:
 ### Passing parameters {#examples-params}
 
 You can find examples of executing parameterized queries, including streamed processing, in the [Passing parameters to YQL execution commands](parameterized-queries-cli.md) article.
-

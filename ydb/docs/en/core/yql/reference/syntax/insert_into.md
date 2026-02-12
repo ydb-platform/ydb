@@ -42,15 +42,12 @@ SELECT STREAM key FROM my_stream_src;
 
 You can specify a table on a {{ ydb-short-name }} cluster as the target. The table must exist at the time you create the operation. The table schema must be compatible with the type of query result.
 
-
 ```yql
 INSERT INTO ydb_cluster.`my_table_dst`
 SELECT STREAM * FROM rtmr_cluster.`my_stream_source`;
 ```
 
 {% endif %}
-
-
 
 {% if feature_insert_with_truncate %}
 
@@ -68,5 +65,3 @@ SELECT key FROM my_table_source;
 ```
 
 {% endif %}
-
-

@@ -46,7 +46,6 @@ Pile не являются самостоятельными кластерами
 
 В норме пара pile работает в режиме `PRIMARY/SYNCHRONIZED` или `SYNCHRONIZED/PRIMARY`. То есть один из pile — `PRIMARY`, в нём работают таблетки, второй pile — `SYNCHRONIZED`, все его группы хранения синхронизированы с `PRIMARY`. Операция записи считается завершённой при таком состоянии pile только после успешного выполнения записи в группы хранения каждого pile с необходимой избыточностью.
 
-
 ### Переходы между состояниями {#transitions-between-states}
 
 | Состояние до | Состояние после | Как происходит | Пояснение |
@@ -67,7 +66,6 @@ Pile не являются самостоятельными кластерами
 | `SUSPENDED` | `NOT_SYNCHRONIZED` | Вручную — [rejoin](../reference/ydb-cli/commands/bridge/rejoin.md) | Отмена планового отключения pile. |
 | `SUSPENDED` | `DISCONNECTED` | Автоматически | Завершение планового отключения. |
 | `SUSPENDED` | `DISCONNECTED` | Вручную — [failover](../reference/ydb-cli/commands/bridge/failover.md) | Аварийное отключение недоступного `SUSPENDED`. |
-
 
 ## Сценарии изменения состояния {#state-change-scenarios}
 

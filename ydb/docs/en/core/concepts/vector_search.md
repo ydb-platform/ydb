@@ -6,7 +6,6 @@
 
 One common approach, especially for large datasets, is **approximate nearest neighbor (ANN) search**, which allows faster vector retrieval at the cost of potential accuracy trade-offs.
 
-
 Vector search is actively used in the following areas:
 
 * recommendation systems

@@ -12,4 +12,3 @@ A high rate of read and write operations can overwhelm the disk subsystem, leadi
 Add more [storage groups](../../../concepts/glossary.md#storage-group) to the database.
 
 In cases of high microburst rates, balancing the load across storage groups might help.
-

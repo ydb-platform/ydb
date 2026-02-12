@@ -11,4 +11,3 @@
 | `Void` | Void is a singular data type with the only possible `"null"` value. |
 | `EmptyList` | A singular data type with the only possible [] value. It's the type of the `[]` literal and can be converted to any `List` type. |
 | `EmptyDict` | A singular data type with the only possible {} value. It's a type of the `{}` literal and can be converted to any `Dict` or `Set` type. |
-

@@ -67,4 +67,3 @@ Functions for data types are [described in the article](../builtins/types.md). B
 * Unlike containers, a resource isn't parameterized by the element type (it's a pointer in memory and YQL knows nothing about its contents). Instead, a resource is parameterized by a string label that can safeguard against passing resources between incompatible functions.
 
   Example: `Resource<Foo>`.
-

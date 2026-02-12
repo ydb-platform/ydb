@@ -8,7 +8,6 @@ The `CREATE TABLE` statement is used to create an empty table in the current dat
 
 {% include [syntax](../_includes/statements/create_table/syntax.md) %}
 
-
 When creating a table, you can specify:
 
 1. **Table Type**: `TEMPORARY` / `TEMP` – a temporary table that is automatically deleted at the end of the session. If this parameter is not set (left empty), a permanent table is created. Any indexes created on a temporary table will also be deleted at the end of the session, which means that they are temporary as well. A temporary table and a permanent table with the same name are allowed, in which case a temporary table will be selected.
@@ -23,10 +22,9 @@ When creating a table, you can specify:
     + The constraint name `<constraint name>`. The rules for creating an identifier for the constraint are the same as for table names and column names.
     + The constraint. For example, a primary key constraint can be defined for a single column as `PRIMARY KEY (<column name>)` or for multiple columns as a composite key: `PRIMARY KEY (<column name1>, <column name2>, ...)`.
 
-
 ## Creating two tables with primary key autoincrement {#create_table_pk_serial}
 
-#|
+# |
 || Table `people` | Table `social_card` ||
 ||
 
@@ -39,9 +37,7 @@ When creating a table, you can specify:
 ||
 |#
 
-
 In this example, we used the pseudo data type `Serial` – it's a convenient and straightforward way to create an auto-increment that automatically increases by 1 each time a new row is added to the table.
-
 
 ## Creating a table with constraints {#create_table_constraint_table}
 
@@ -49,13 +45,11 @@ In this example, we used the pseudo data type `Serial` – it's a convenient and
 
 In this example, we created the "people" table with a constraint block (`CONSTRAINT`), where we defined a primary key (`PRIMARY KEY`) consisting of the "id" column. An alternative notation could look like this: `PRIMARY KEY(id)` without mentioning the `CONSTRAINT` keyword.
 
-
 ## Creating a temporary table {#create_table_temp_table}
 
 {% include [create_table_temp.md](../_includes/statements/create_table/create_table_temp.md) %}
 
 The temporary table is defined using the `TEMPORARY` or `TEMP` keywords.
-
 
 ## Creating a table with sorting conditions {#create_table_collate}
 

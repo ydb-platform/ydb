@@ -67,8 +67,8 @@ Hardware from the same batch is more likely to have similar defects and may fail
 
 Therefore, the optimal initial hardware configurations for production {{ ydb-short-name }} clusters are as follows:
 
-* **A cluster hosted in one availability zone**: This setup uses the `block-4-2` mode and consists of nine or more racks, each with an identical number of servers.
-* **A cluster hosted in three availability zones**: This setup uses the `mirror-3-dc` mode and is distributed across three data centers, with four or more racks in each, all containing an identical number of servers.
+- **A cluster hosted in one availability zone**: This setup uses the `block-4-2` mode and consists of nine or more racks, each with an identical number of servers.
+- **A cluster hosted in three availability zones**: This setup uses the `mirror-3-dc` mode and is distributed across three data centers, with four or more racks in each, all containing an identical number of servers.
 
 ## Database Availability {#database-availability}
 
@@ -84,9 +84,9 @@ To survive an entire data center outage at the database level, assuming a cluste
 
 ## See Also
 
-* [Documentation for DevOps Engineers](../devops/index.md)
-* [{#T}](../reference/configuration/domains_config.md#domains-blob)
-* [Example Cluster Configuration Files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
-* [{#T}](../contributor/distributed-storage.md)
+- [Documentation for DevOps Engineers](../devops/index.md)
+- [{#T}](../reference/configuration/domains_config.md#domains-blob)
+- [Example Cluster Configuration Files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
+- [{#T}](../contributor/distributed-storage.md)
 
 [*recommended-node-count]: Using fewer than this number of nodes will limit the cluster's ability to [self-heal](../maintenance/manual/selfheal.md).

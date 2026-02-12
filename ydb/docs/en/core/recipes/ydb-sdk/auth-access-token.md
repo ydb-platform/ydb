@@ -96,7 +96,6 @@ Below are examples of the code for authentication using a token in different {{ 
 
   {% endcut %}
 
-
 - Java
 
   ```java

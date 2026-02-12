@@ -1,6 +1,5 @@
 # Changing Configurations via CMS
 
-
 {% note info %}
 
 This method of changing configuration is deprecated. The recommended configuration method for V1 is described in the [cluster dynamic configuration](./dynamic-config.md) section.

@@ -21,38 +21,38 @@ Links to the lists of packages that will be installed for Ubuntu 22.04 or Astra 
 
 * `configure clock` – A block of tasks for setting up system clocks:
 
-  + `assert required variables are defined` – Checks for the existence of the `system_timezone` variable. This check ensures that the necessary variable is available for the next task in the block.
-  + `set system timezone` – Sets the system timezone. The timezone is determined by the value of the `system_timezone` variable, and the hardware clock (`hwclock`) is set to UTC. After completing the task, a notification is sent to restart the `cron` service.
-  + `flush handlers` – Forces the execution of accumulated handlers using the `meta` directive. This will restart the following processes: `timesyncd`, `journald`, `cron`, `cpufrequtils`, and execute the `sysctl -p` command.
+  * `assert required variables are defined` – Checks for the existence of the `system_timezone` variable. This check ensures that the necessary variable is available for the next task in the block.
+  * `set system timezone` – Sets the system timezone. The timezone is determined by the value of the `system_timezone` variable, and the hardware clock (`hwclock`) is set to UTC. After completing the task, a notification is sent to restart the `cron` service.
+  * `flush handlers` – Forces the execution of accumulated handlers using the `meta` directive. This will restart the following processes: `timesyncd`, `journald`, `cron`, `cpufrequtils`, and execute the `sysctl -p` command.
 * `configure systemd-timesyncd` – A task block for configuring `systemd-timesyncd`:
-  + `assert required variables are defined` asserts that the number of NTP servers (`system_ntp_servers`) is more than one if the variable `system_ntp_servers` is defined. If the variable `system_ntp_servers` is not defined, the execution of the `configure systemd-timesyncd` task block will be skipped, including the check for the number of NTP servers and the configuration of `systemd-timesyncd`.
-  + `create conf.d directory for timesyncd` - Creates the `/etc/systemd/timesyncd.conf.d` directory if the `system_ntp_servers` variable is defined.
-  + `configure systemd-timesyncd` - Creates a configuration file `/etc/systemd/timesyncd.conf.d/ydb.conf` for the `systemd-timesyncd` service with primary and backup NTP servers. The task is executed if the `system_ntp_servers` variable is defined. After completing the task, a notification is sent to restart the `timesyncd` service.
-  + `flush handlers` - Calls accumulated handlers. Executes the handler `restart timesyncd`, which restarts the `systemd-timesyncd.service`.
-  + `start timesyncd` - Starts and enables the `systemd-timesyncd.service`. Subsequently, the service will start automatically at system boot.
+  * `assert required variables are defined` asserts that the number of NTP servers (`system_ntp_servers`) is more than one if the variable `system_ntp_servers` is defined. If the variable `system_ntp_servers` is not defined, the execution of the `configure systemd-timesyncd` task block will be skipped, including the check for the number of NTP servers and the configuration of `systemd-timesyncd`.
+  * `create conf.d directory for timesyncd` - Creates the `/etc/systemd/timesyncd.conf.d` directory if the `system_ntp_servers` variable is defined.
+  * `configure systemd-timesyncd` - Creates a configuration file `/etc/systemd/timesyncd.conf.d/ydb.conf` for the `systemd-timesyncd` service with primary and backup NTP servers. The task is executed if the `system_ntp_servers` variable is defined. After completing the task, a notification is sent to restart the `timesyncd` service.
+  * `flush handlers` - Calls accumulated handlers. Executes the handler `restart timesyncd`, which restarts the `systemd-timesyncd.service`.
+  * `start timesyncd` - Starts and enables the `systemd-timesyncd.service`. Subsequently, the service will start automatically at system boot.
 
 * `configure systemd-journald` – A block of tasks for configuring the `systemd-journald` service:
 
-  + `create conf.d directory for journald` - Creates the `/etc/systemd/journald.conf.d` directory for storing `systemd-journald` configuration files.
-  + `configure systemd-journald` - Creates a configuration file `/etc/systemd/journald.conf.d/ydb.conf` for `systemd-journald`, specifying a `Journal` section with the option `ForwardToWall=no`. The `ForwardToWall=no` setting in the `systemd-journald` configuration means that system log messages will not be forwarded as "wall" messages to all logged-in users. After completing the task, a notification is sent to restart the `journald` service.
-  + `flush handlers` - Calls accumulated handlers. Executes the handler `restart journald`, which restarts the `systemd-journald` service.
-  + `start journald` - Starts and enables the `systemd-journald.service`. Subsequently, the service will start automatically at system boot.
+  * `create conf.d directory for journald` - Creates the `/etc/systemd/journald.conf.d` directory for storing `systemd-journald` configuration files.
+  * `configure systemd-journald` - Creates a configuration file `/etc/systemd/journald.conf.d/ydb.conf` for `systemd-journald`, specifying a `Journal` section with the option `ForwardToWall=no`. The `ForwardToWall=no` setting in the `systemd-journald` configuration means that system log messages will not be forwarded as "wall" messages to all logged-in users. After completing the task, a notification is sent to restart the `journald` service.
+  * `flush handlers` - Calls accumulated handlers. Executes the handler `restart journald`, which restarts the `systemd-journald` service.
+  * `start journald` - Starts and enables the `systemd-journald.service`. Subsequently, the service will start automatically at system boot.
 
 * `configure kernel` – A block of tasks for kernel configuration:
 
-  + `configure /etc/modules-load.d dir` - Creates the `/etc/modules-load.d` directory with owner and group permissions for the root user and `0755` permissions.
-  + `setup conntrack module` - Copies the `nf_conntrack` line into the file `/etc/modules-load.d/conntrack.conf` to load the `nf_conntrack` module at system start.
-  + `load conntrack module` - Loads the `nf_conntrack` module in the current session.
-  + `setup sysctl files` - Applies templates to create configuration files in `/etc/sysctl.d/` for various system settings (such as security, network, and filesystem settings). The list of files includes `10-console-messages.conf`, `10-link-restrictions.conf`, and others. After completing this task, a notification is sent to apply the kernel settings changes.
-  + `flush handlers` - Calls accumulated handlers. Executes the handler `apply kernel settings`, which runs the `sysctl -p` command to apply the kernel parameters specified in `/etc/sysctl.conf` or in other files in the `/etc/sysctl.d/` directory.
+  * `configure /etc/modules-load.d dir` - Creates the `/etc/modules-load.d` directory with owner and group permissions for the root user and `0755` permissions.
+  * `setup conntrack module` - Copies the `nf_conntrack` line into the file `/etc/modules-load.d/conntrack.conf` to load the `nf_conntrack` module at system start.
+  * `load conntrack module` - Loads the `nf_conntrack` module in the current session.
+  * `setup sysctl files` - Applies templates to create configuration files in `/etc/sysctl.d/` for various system settings (such as security, network, and filesystem settings). The list of files includes `10-console-messages.conf`, `10-link-restrictions.conf`, and others. After completing this task, a notification is sent to apply the kernel settings changes.
+  * `flush handlers` - Calls accumulated handlers. Executes the handler `apply kernel settings`, which runs the `sysctl -p` command to apply the kernel parameters specified in `/etc/sysctl.conf` or in other files in the `/etc/sysctl.d/` directory.
 
 * `configure cpu governor` – A block of tasks for configuring the CPU frequency management mode:
 
-  + `install cpufrequtils` - Installs the `cpufrequtils` package from apt. The task is set with cache check parameters and a task timeout of 300 seconds to expedite task execution and avoid an infinite loop waiting for apt package updates.
-  + `use performance cpu governor` - Creates the file `/etc/default/cpufrequtils` with content "GOVERNOR=performance", which sets the CPU governor mode to "performance" (disabling power-saving mode when CPU cores are idle). After completing the task, a notification is sent to restart the `cpufrequtils` service.
-  + `disable ondemand.service` - Disables the `ondemand.service` if it is present in the system. The service is stopped, its automatic start is disabled, and it is masked (preventing its start). After completing the task, a notification is sent to restart cpufrequtils.
-  + `flush handlers` - Calls accumulated handlers. Executes the handler `restart cpufrequtils`, which restarts the `cpufrequtils` service.
-  + `start cpufrequtils` - Starts and enables the `cpufrequtils.service`. Subsequently, the service will start automatically at system boot.
+  * `install cpufrequtils` - Installs the `cpufrequtils` package from apt. The task is set with cache check parameters and a task timeout of 300 seconds to expedite task execution and avoid an infinite loop waiting for apt package updates.
+  * `use performance cpu governor` - Creates the file `/etc/default/cpufrequtils` with content "GOVERNOR=performance", which sets the CPU governor mode to "performance" (disabling power-saving mode when CPU cores are idle). After completing the task, a notification is sent to restart the `cpufrequtils` service.
+  * `disable ondemand.service` - Disables the `ondemand.service` if it is present in the system. The service is stopped, its automatic start is disabled, and it is masked (preventing its start). After completing the task, a notification is sent to restart cpufrequtils.
+  * `flush handlers` - Calls accumulated handlers. Executes the handler `restart cpufrequtils`, which restarts the `cpufrequtils` service.
+  * `start cpufrequtils` - Starts and enables the `cpufrequtils.service`. Subsequently, the service will start automatically at system boot.
 
 1. [Role](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/ydbd/tasks/main.yaml) `ydbd`. Tasks:
 
@@ -67,11 +67,11 @@ Links to the lists of packages that will be installed for Ubuntu 22.04 or Astra 
 * `create YDB audit directory` – Creates an `audit` subdirectory in the {{ ydb-short-name }} installation directory.
 * `setup certificates` – A block of tasks for setting up security certificates:
 
-  + `create YDB certs directory` – Creates a `certs` subdirectory in the {{ ydb-short-name }} installation directory.
-  + `copy the TLS ca.crt` – Copies the root certificate `ca.crt` to the server.
-  + `copy the TLS node.crt` – Copies the TLS certificate `node.crt` from the generated certificates directory.
-  + `copy the TLS node.key` – Copies the TLS certificate `node.key` from the generated certificates directory.
-  + `copy the TLS web.pem` – Copies the TLS pem key `web.pem` from the generated certificates directory.
+  * `create YDB certs directory` – Creates a `certs` subdirectory in the {{ ydb-short-name }} installation directory.
+  * `copy the TLS ca.crt` – Copies the root certificate `ca.crt` to the server.
+  * `copy the TLS node.crt` – Copies the TLS certificate `node.crt` from the generated certificates directory.
+  * `copy the TLS node.key` – Copies the TLS certificate `node.key` from the generated certificates directory.
+  * `copy the TLS web.pem` – Copies the TLS pem key `web.pem` from the generated certificates directory.
 
 * `copy configuration file` – Copies the configuration file `config.yaml` to the server.
 * `add configuration file updater script` – Copies the `update_config_file.sh` script to the server.

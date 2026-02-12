@@ -37,4 +37,3 @@ SELECT * FROM episodes WHERE series_id = 2 AND season_id = 5;
 
 COMMIT;
 ```
-

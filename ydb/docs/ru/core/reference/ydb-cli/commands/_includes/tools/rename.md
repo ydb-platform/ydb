@@ -30,13 +30,13 @@
 
 ## Примеры {#examples}
 
-- Переименование одной таблицы:
+* Переименование одной таблицы:
 
   ```bash
   {{ ydb-cli }} tools rename --item src=old_name,dst=new_name
   ```
 
-- Переименование нескольких таблиц в одной транзакции:
+* Переименование нескольких таблиц в одной транзакции:
 
   ```bash
   {{ ydb-cli }} tools rename \
@@ -45,7 +45,7 @@
     --item source=new-project/third_table,destination=new-project/series
   ```
 
-- Перемещение таблиц в другую директорию:
+* Перемещение таблиц в другую директорию:
 
   ```bash
   {{ ydb-cli }} tools rename \
@@ -54,14 +54,14 @@
     --item source=new-project/third_table,destination=cinema/third_table
   ```
 
-- Замена таблицы
+* Замена таблицы
 
   ```bash
   {{ ydb-cli }} tools rename \
     --item replace=True,source=pre-prod-project/main_table,destination=prod-project/main_table
   ```
 
-- Ротация таблицы
+* Ротация таблицы
 
   ```bash
   {{ ydb-cli }} tools rename \

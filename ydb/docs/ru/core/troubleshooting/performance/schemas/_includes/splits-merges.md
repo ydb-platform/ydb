@@ -43,6 +43,6 @@
 
     1. В выводе команды проанализируйте **Auto partitioning settings**:
 
-        * `Partitioning by load`
-        * `Max partitions count`
-        * `Min partitions count`
+        - `Partitioning by load`
+        - `Max partitions count`
+        - `Min partitions count`

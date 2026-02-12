@@ -184,4 +184,3 @@ Dictionary. An unordered set of key-value pairs. The type is set both for the ke
   * Value: `1:"Value1",2:"Value2"`.
 
 * Sample JSON value: `[[1,"Value1"],[2,"Value2"]]`.
-

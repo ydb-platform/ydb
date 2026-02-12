@@ -215,7 +215,6 @@ Released on December 24, 2024. To update to version **2.18.0**, select the [Down
 * Fixed a bug where the `{{ ydb-cli }} workload * run` command could crash in `--dry-run` mode.
 * Fixed a bug in the `{{ ydb-cli }} import file csv` where multiple columns with escaped quotes in the same row were parsed incorrectly.
 
-
 ## Version 2.17.0 {#2-17-0}
 
 Released on December 4, 2024. To update to version **2.17.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -280,7 +279,6 @@ Released on June 24, 2024. To update to version **2.10.0**, select the [Download
 
   * The `--path` option was moved to a specific workload level. For example: `{{ ydb-cli }} workload tpch --path some/tables/path init ...`.
   * The `--store=s3` option was changed to `--store=external-s3` in the `init` subcommand.
-
 
 ### Bug fixes
 

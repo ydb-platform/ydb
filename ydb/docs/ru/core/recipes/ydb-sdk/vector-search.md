@@ -27,7 +27,7 @@
 
 {% list tabs %}
 
-- Python
+* Python
 
     Для выполнения запросов необходимо создать `ydb.QuerySessionPool`.
 
@@ -41,7 +41,7 @@
     pool = ydb.QuerySessionPool(driver)
     ```
 
-- C++
+* C++
 
     ```cpp
     auto driverConfig = NYdb::CreateFromEnvironment(endpoint + "/?database=" + database);
@@ -50,7 +50,6 @@
     ```
 
 {% endlist %}
-
 
 ## Создание таблицы {#create-table}
 
@@ -70,10 +69,9 @@
 
 {% endnote %}
 
-
 {% list tabs %}
 
-- Python
+* Python
 
     ```python
     def create_vector_table(pool: ydb.QuerySessionPool, table_name: str) -> None:
@@ -90,7 +88,7 @@
         print(f"Vector table {table_name} created")
     ```
 
-- C++
+* C++
 
     ```cpp
     void CreateVectorTable(NYdb::NQuery::TQueryClient& client, const std::string& tableName)
@@ -113,7 +111,6 @@
 
 {% endlist %}
 
-
 ## Вставка векторов {#insert-vectors}
 
 Для вставки векторов необходимо подготовить и выполнить правильный YQL-запрос. Для унификации вставки разных данных он параметризован.
@@ -124,7 +121,7 @@
 
 {% list tabs %}
 
-- Python
+* Python
 
     Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста, заранее сериализованное в последовательность байт.
 
@@ -177,7 +174,7 @@
         print(f"{len(items)} items inserted")
     ```
 
-- C++
+* C++
 
     ```cpp
     std::string ConvertVectorToBytes(const std::vector<float>& vector)
@@ -242,7 +239,7 @@
 
     {% endnote %}
 
-- Python (альтернативный)
+* Python (альтернативный)
 
     Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста.
 
@@ -286,7 +283,7 @@
         print(f"{len(items)} items inserted")
     ```
 
-- C++ (альтернативный)
+* C++ (альтернативный)
 
     ```cpp
     void InsertItemsAsFloatList(
@@ -342,7 +339,6 @@
 
 {% endlist %}
 
-
 ## Добавление индекса {#add-vector-index}
 
 Использование векторного индекса позволяет эффективно решать задачу приближённого поиска ближайших векторов. Подробнее о преимуществах и особенностях использования описано в документации по [векторному индексу](../../dev/vector-indexes.md).
@@ -366,10 +362,9 @@
 
 Параметры, применяемые при создании индекса типа `vector_kmeans_tree`, описаны в документации [векторного индекса](../../dev/vector-indexes.md#kmeans-tree-type).
 
-
 {% list tabs %}
 
-- Python
+* Python
 
     ```python
     def add_vector_index(
@@ -412,7 +407,7 @@
         print(f"Table index {index_name} created.")
     ```
 
-- C++
+* C++
 
     ```cpp
     void AddIndex(
@@ -480,7 +475,7 @@
 
 {% list tabs %}
 
-- Python
+* Python
 
     ```python
     def search_items_vector_as_bytes(
@@ -532,7 +527,7 @@
         return items
     ```
 
-- C++
+* C++
 
     ```cpp
     std::vector<TResultItem> SearchItemsAsBytes(
@@ -584,7 +579,7 @@
     }
     ```
 
-- Python (alternative)
+* Python (alternative)
 
     ```python
     def search_items_vector_as_float_list(
@@ -636,7 +631,7 @@
         return items
     ```
 
-- C++ (alternative)
+* C++ (alternative)
 
     ```cpp
     std::vector<TResultItem> SearchItemsAsFloatList(
@@ -709,7 +704,7 @@
 
 {% list tabs %}
 
-- Python
+* Python
 
     Пример использования
 
@@ -823,7 +818,7 @@
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/python/examples/vector_search/vector_search.py).
 
-- C++
+* C++
 
     ```cpp
     void PrintResults(const std::vector<TResultItem>& items)

@@ -69,10 +69,10 @@
 {{ ydb-cli }} config profile create quickstart --endpoint grpc://localhost:2136 --database <path_database>
 ```
 
-* `path_database` — путь базы данных. Укажите одно из значений:
+- `path_database` — путь базы данных. Укажите одно из значений:
 
-  * `/Root/test` — если вы развернули кластер с помощью исполняемого файла;
-  * `/local` — если вы использовали Docker-образ.
+  - `/Root/test` — если вы развернули кластер с помощью исполняемого файла;
+  - `/local` — если вы использовали Docker-образ.
 
 #### Создание профиля по ранее использованным параметрам соединения {#cmdline-example-from-explicit}
 

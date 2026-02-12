@@ -33,7 +33,6 @@
 
     Кроме того, изучите логи `ydbd` для получения более подробной информации.
 
-
 1. Определите, используется ли память на 100%.
 
     1. Откройте панель мониторинга **[DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** в Grafana.

@@ -34,8 +34,8 @@ If none of the `--columns`, `--gen-columns`, or `--header` options are explicitl
 
 The values of the first row in the file are checked for the following conditions:
 
-* The values meet the [requirements for column names](../../yql/reference/syntax/create_table/index.md#column-naming-rules).
-* The types of the values in the first row are different from the data types in the other rows of the file.
+- The values meet the [requirements for column names](../../yql/reference/syntax/create_table/index.md#column-naming-rules).
+- The types of the values in the first row are different from the data types in the other rows of the file.
 
 If both conditions are met, the values from the first row are used as the table's column names. Otherwise, column names are generated automatically (as `column1`, `column2`, etc.). See the [example](#example-default) below for more details.
 

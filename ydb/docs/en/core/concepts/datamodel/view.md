@@ -87,6 +87,6 @@ The text of Alice's query does not change, which means that the compilation will
 
 ## See Also
 
-* [CREATE VIEW](../../yql/reference/syntax/create-view.md)
-* [ALTER VIEW](../../yql/reference/syntax/alter-view.md)
-* [DROP VIEW](../../yql/reference/syntax/drop-view.md)
+- [CREATE VIEW](../../yql/reference/syntax/create-view.md)
+- [ALTER VIEW](../../yql/reference/syntax/alter-view.md)
+- [DROP VIEW](../../yql/reference/syntax/drop-view.md)

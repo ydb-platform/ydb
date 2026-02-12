@@ -40,7 +40,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
 
 {% list tabs group=tool %}
 
-- Embedded UI
+* Embedded UI
 
     1. Open the page for managing load actors on the desired node (for example, `http://<address>:8765/actors/load`, where `address` is the address of the cluster node to run the load on).
     2. Paste the actor configuration into the input/output field:
@@ -65,10 +65,10 @@ The use case described below shows how to create and run the KqpLoad actor. The 
     }
     ```
 
-    3. To create and run the actor, click:
+    1. To create and run the actor, click:
 
-    * **Start new load on current node**: Runs the load on the current node.
-    * **Start new load on all tenant nodes**: Runs the load on all the tenant nodes at once.
+  * **Start new load on current node**: Runs the load on the current node.
+  * **Start new load on all tenant nodes**: Runs the load on all the tenant nodes at once.
 
     You'll see the following message in the input/output field:
 
@@ -76,10 +76,10 @@ The use case described below shows how to create and run the KqpLoad actor. The 
     {"status":"OK","tag":1}
     ```
 
-    * `status`: Load run status.
-    * `tag`: Tag assigned to the load.
+  * `status`: Load run status.
+  * `tag`: Tag assigned to the load.
 
-- CLI
+* CLI
 
     1. Create an actor configuration file:
 
@@ -103,15 +103,15 @@ The use case described below shows how to create and run the KqpLoad actor. The 
     }
     ```
 
-    2. Start the actor:
+    1. Start the actor:
 
     ```bash
     curl <endpoint>/actors/load -H "Content-Type: application/x-protobuf-text" --data mode=start --data all_nodes=<start_on_all_nodes> --data config="$(cat proto_file)"
     ```
 
-    * `endpoint`: Node HTTP endpoint (for example, `http://<address>:<port>`, where `address` is the node address and `port` is the node HTTP port).
-    * `proto_file`: Path to the actor configuration file.
-    * `start_on_all_nodes`: `true` to start load on all nodes of a tenant, `false` to start load only on node with given `endpoint`.
+  * `endpoint`: Node HTTP endpoint (for example, `http://<address>:<port>`, where `address` is the node address and `port` is the node HTTP port).
+  * `proto_file`: Path to the actor configuration file.
+  * `start_on_all_nodes`: `true` to start load on all nodes of a tenant, `false` to start load only on node with given `endpoint`.
 
 {% endlist %}
 
@@ -121,7 +121,7 @@ You can view the test results using the Embedded UI. For a description of output
 
 {% list tabs group=tool %}
 
-- Embedded UI
+* Embedded UI
 
     1. Open the page for managing load actors on the desired node (for example, `http://<address>:<port>/actors/load`, where `address` is the node address and `port` is the HTTP port used for monitoring the node under load).
     2. Click **Results**.

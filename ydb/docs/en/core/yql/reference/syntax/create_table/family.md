@@ -34,7 +34,7 @@ In the example below, for the created table, the `family_large` group of columns
 
 {% list tabs %}
 
-- Creating a row-oriented table
+* Creating a row-oriented table
 
     ```sql
     CREATE TABLE series_with_families (
@@ -54,7 +54,7 @@ In the example below, for the created table, the `family_large` group of columns
     );
     ```
 
-- Creating a column-oriented table
+* Creating a column-oriented table
 
     ```sql
     CREATE TABLE series_with_families (

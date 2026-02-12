@@ -45,4 +45,3 @@ The build process using the source code is described in the source code reposito
   {% include [install/cmd_rust.md](install/cmd_rust.md) %}
 
 {% endlist %}
-

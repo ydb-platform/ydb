@@ -170,54 +170,53 @@ Each rule includes an optional `scope` field with a set of selectors that determ
 
     Accepts a list of request types. A request matches this selector if its type is in the list.
 
-
 {% cut "Possible values" %}
 
-- KeyValue.CreateVolume
-- KeyValue.DropVolume
-- KeyValue.AlterVolume
-- KeyValue.DescribeVolume
-- KeyValue.ListLocalPartitions
-- KeyValue.AcquireLock
-- KeyValue.ExecuteTransaction
-- KeyValue.Read
-- KeyValue.ReadRange
-- KeyValue.ListRange
-- KeyValue.GetStorageChannelStatus
-- Table.CreateSession
-- Table.KeepAlive
-- Table.AlterTable
-- Table.CreateTable
-- Table.DropTable
-- Table.DescribeTable
-- Table.CopyTable
-- Table.CopyTables
-- Table.RenameTables
-- Table.ExplainDataQuery
-- Table.ExecuteSchemeQuery
-- Table.BeginTransaction
-- Table.DescribeTableOptions
-- Table.DeleteSession
-- Table.CommitTransaction
-- Table.RollbackTransaction
-- Table.PrepareDataQuery
-- Table.ExecuteDataQuery
-- Table.BulkUpsert
-- Table.StreamExecuteScanQuery
-- Table.StreamReadTable
-- Table.ReadRows
-- Query.ExecuteQuery
-- Query.ExecuteScript
-- Query.FetchScriptResults
-- Query.CreateSession
-- Query.DeleteSession
-- Query.AttachSession
-- Query.BeginTransaction
-- Query.CommitTransaction
-- Query.RollbackTransaction
-- Discovery.WhoAmI
-- Discovery.NodeRegistration
-- Discovery.ListEndpoints
+* KeyValue.CreateVolume
+* KeyValue.DropVolume
+* KeyValue.AlterVolume
+* KeyValue.DescribeVolume
+* KeyValue.ListLocalPartitions
+* KeyValue.AcquireLock
+* KeyValue.ExecuteTransaction
+* KeyValue.Read
+* KeyValue.ReadRange
+* KeyValue.ListRange
+* KeyValue.GetStorageChannelStatus
+* Table.CreateSession
+* Table.KeepAlive
+* Table.AlterTable
+* Table.CreateTable
+* Table.DropTable
+* Table.DescribeTable
+* Table.CopyTable
+* Table.CopyTables
+* Table.RenameTables
+* Table.ExplainDataQuery
+* Table.ExecuteSchemeQuery
+* Table.BeginTransaction
+* Table.DescribeTableOptions
+* Table.DeleteSession
+* Table.CommitTransaction
+* Table.RollbackTransaction
+* Table.PrepareDataQuery
+* Table.ExecuteDataQuery
+* Table.BulkUpsert
+* Table.StreamExecuteScanQuery
+* Table.StreamReadTable
+* Table.ReadRows
+* Query.ExecuteQuery
+* Query.ExecuteScript
+* Query.FetchScriptResults
+* Query.CreateSession
+* Query.DeleteSession
+* Query.AttachSession
+* Query.BeginTransaction
+* Query.CommitTransaction
+* Query.RollbackTransaction
+* Discovery.WhoAmI
+* Discovery.NodeRegistration
+* Discovery.ListEndpoints
 
 {% note info %}
 

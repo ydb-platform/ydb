@@ -13,7 +13,7 @@ Goose installation options are described in [its documentation](https://github.c
 After installation, the `goose` command line utility can be called:
 
 ```bash
-$ goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
+goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
 ```
 
 Where:
@@ -60,7 +60,7 @@ Further examples of calling `goose` commands will contain exactly this connectio
 Let's create a migrations directory and then all `goose` commands should be executed in this directory:
 
 ```bash
-$ mkdir migrations && cd migrations
+mkdir migrations && cd migrations
 ```
 
 ## Managing migrations using goose
@@ -366,7 +366,6 @@ Let's check the changes again:
   ```
 
 {% endlist %}
-
 
 ## Short list of "goose" commands
 

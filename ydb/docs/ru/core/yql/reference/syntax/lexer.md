@@ -1,5 +1,4 @@
 
-
 # Лексическая структура
 
 <!-- markdownlint-disable blanks-around-fences -->
@@ -326,6 +325,3 @@ SELECT
     PgConst(13.45, pgnumeric, 10, 1); -- 13.5
 ;
 ```
-
-
-

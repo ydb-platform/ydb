@@ -64,7 +64,6 @@ void UpsertSimple(TQueryClient client) {
 
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
-
 Для выполнения YQL-запросов используется метод `ExecuteQuery`.
 SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TTxControl`.  
 

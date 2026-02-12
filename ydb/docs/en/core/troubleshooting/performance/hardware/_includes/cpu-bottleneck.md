@@ -56,4 +56,4 @@
 
     Also, see all of the charts in the **Operations** section of the **DataShard** dashboard.
 
-2. If the spike is in the batch pool, check if there are any backups running.
+1. If the spike is in the batch pool, check if there are any backups running.

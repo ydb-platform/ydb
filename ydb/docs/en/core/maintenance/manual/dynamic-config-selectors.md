@@ -141,7 +141,7 @@ Tags are necessary for partial or complete reuse of configurations from previous
 **Action:** similar to the [merge tag](https://yaml.org/type/merge.html) in YAML, copy all child elements from the parent mapping and merge with the current ones, overwriting them.
 **Example:**
 
-#|
+# |
 || Original configuration | Override | Resulting configuration ||
 ||
 
@@ -180,7 +180,7 @@ config:
 **Action:** copy elements from the parent array and overwrite, treating the `key` object in the elements as the key, appending new keys to the end.
 **Example:**
 
-#|
+# |
 || Original configuration | Override | Resulting configuration ||
 ||
 
@@ -230,7 +230,7 @@ config:
 **Action:** remove the element with the corresponding key.
 **Example:**
 
-#|
+# |
 || Original configuration | Override | Resulting configuration ||
 ||
 
@@ -274,7 +274,7 @@ config:
 **Action:** copy elements from the parent array and append new ones to the end.
 **Example:**
 
-#|
+# |
 || Original configuration | Override | Resulting configuration ||
 ||
 

@@ -40,7 +40,6 @@
 
     {% endnote %}
 
-
 1. Откройте страницу [Interconnect overview](../../../reference/embedded-ui/interconnect-overview.md) во [Встроенном UI](../../../reference/embedded-ui/index.md).
 
 1. Используйте такие инструменты, как `pssh` или `ansible`, чтобы выполнить команду (например, `date +%s%N`) на всех узлах {{ ydb-short-name }} и отобразить значение системных часов.

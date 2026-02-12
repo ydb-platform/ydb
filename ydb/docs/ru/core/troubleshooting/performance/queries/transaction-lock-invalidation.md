@@ -8,7 +8,6 @@
 
 {% endnote %}
 
-
 ## Диагностика
 
 <!-- The include is added to allow partial overrides in overlays  -->

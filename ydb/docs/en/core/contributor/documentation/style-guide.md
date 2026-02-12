@@ -57,9 +57,9 @@ Ensure that text follows proper language rules with no typos, grammar, punctuati
 - **File naming.** Use dashes instead of underscores for spaces in new file and folder names (e.g., `new-folder/new-file.md` instead of `new_folder/new_file.md`). However, underscores are acceptable in keywords that should be written specifically with underscores, such as in setting names.
 - **Linking and references.**
 
-    - Provide clear and descriptive links to related resources or additional documentation.
-    - Links internal to documentation should always include a `.md` suffix and always be relative (that is, no `https://ydb.tech` prefix); otherwise, link consistency checking doesn't work, and they will eventually start leading to 404 errors. Internal links shouldn't contain `?version=...`, `?revision=...`, or similar parameters.
-    - Instead of repeating the target's header for internal links, use `[{#T}](path/to/an/article.md)`.
+  - Provide clear and descriptive links to related resources or additional documentation.
+  - Links internal to documentation should always include a `.md` suffix and always be relative (that is, no `https://ydb.tech` prefix); otherwise, link consistency checking doesn't work, and they will eventually start leading to 404 errors. Internal links shouldn't contain `?version=...`, `?revision=...`, or similar parameters.
+  - Instead of repeating the target's header for internal links, use `[{#T}](path/to/an/article.md)`.
 
 - **No copy-pasting.** If a piece of information needs to be displayed more than once, create a separate Markdown file in the `_includes` folder, then add it to all necessary places via the [`include`](https://diplodoc.com/docs/en/project/includes) feature instead of duplicating content by copying and pasting.
 - **Markdown syntax style.** {{ ydb-short-name }} documentation uses an automated linter for Markdown files. Refer to [.yfmlint](https://github.com/ydb-platform/ydb/blob/main/ydb/docs/.yfmlint) for the up-to-date list of enforced rules.

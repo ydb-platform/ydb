@@ -35,7 +35,6 @@ import (
 
 Для взаимодействия с {{ ydb-short-name }} необходимо создать экземляр {{ ydb-short-name }}-драйвера:
 
-
 ```go
 db, err := ydb.Open(context.Background(), "grpc://localhost:2136/local")
 if err != nil {
@@ -148,7 +147,7 @@ if err != nil {
 
 {% list tabs %}
 
-- ScanStruct
+* ScanStruct
 
   ```go
   var info struct {
@@ -162,7 +161,7 @@ if err != nil {
   }
   ```
 
-- ScanNamed
+* ScanNamed
 
   ```go
   var seriesID, title string
@@ -173,7 +172,7 @@ if err != nil {
   }
   ```
 
-- Scan
+* Scan
 
   ```go
   var seriesID, title string
@@ -195,7 +194,6 @@ if err != nil {
 Для таких запросов следует использовать методы `query.TxActor.Query` или `query.TxActor.QueryResultSet` на сессии или транзакции, которые предоставляют итератор по результату без полной материализации. Сессия `query.Session` доступна только из метода `query.Client.Do`, реализующего механизмы повторных попыток при ошибках. Нужно учитывать, что чтение может быть прервано в любой момент, и в таком случае весь процесс выполнения запроса начнётся заново. То есть функция, переданная в `Do`, может вызываться более одного раза.
 
 {% endnote %}
-
 
 ```go
 err = db.Query().Do(ctx,

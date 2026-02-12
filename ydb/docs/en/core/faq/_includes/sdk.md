@@ -19,4 +19,3 @@ Yes, the C++ SDK lets you override the DB parameters and token when creating a c
 ## What should I do if a VM has failed and it's impossible to make a query? {#vms-failed-and-you-cant-make-a-request}
 
 To detect that a VM is unavailable, set a client timeout. All queries contain the client timeout parameters. The timeout value should be an order of magnitude greater than the expected query execution time.
-

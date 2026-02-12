@@ -67,4 +67,3 @@ blob_storage_config:
 1. С помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md) перезапустите все статические узлы кластера.
 1. Перейдите на страницу мониторинга Embedded UI и убедитесь, что VDisk статической группы появился на целевом физическом диске и реплицируется. Подробнее см. [{#T}](../../../reference/embedded-ui/ydb-monitoring.md#static-group).
 1. С помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md) перезапустите все динамические узлы кластера.
-

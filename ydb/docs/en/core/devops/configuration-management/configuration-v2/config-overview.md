@@ -40,9 +40,9 @@ Changing the {{ ydb-short-name }} cluster configuration is performed by the admi
 {% cut "Configuration change example" %}
 
 ```bash
-$ ydb -e grpc://<ydb.example.com>:2135 admin cluster config fetch > config.yaml     # 1
-$ vim config.yaml                                                                   # 2
-$ ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.yaml  # 3
+ydb -e grpc://<ydb.example.com>:2135 admin cluster config fetch > config.yaml     # 1
+vim config.yaml                                                                   # 2
+ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.yaml  # 3
 ```
 
 {% endcut %}
@@ -94,5 +94,5 @@ When [expanding the cluster](cluster-expansion.md), configuration is delivered t
 
 ## See Also
 
-* [Configuration parameters reference](config-settings.md)
-* [{#T}](../compare-configs.md)
+- [Configuration parameters reference](config-settings.md)
+- [{#T}](../compare-configs.md)

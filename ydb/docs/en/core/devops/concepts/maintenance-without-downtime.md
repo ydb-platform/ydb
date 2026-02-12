@@ -41,8 +41,8 @@ Completed actions are automatically removed from the task.
 In a maintenance task, you need to specify the cluster's availability mode to comply with when checking whether actions can be performed. The following modes are supported:
 
 - **Strong**: a mode that minimizes the risk of availability loss.
-    - No more than one unavailable [VDisk](../../concepts/glossary.md#vdisk) is allowed in each affected storage group.
-    - No more than one unavailable State Storage ring is allowed.
+  - No more than one unavailable [VDisk](../../concepts/glossary.md#vdisk) is allowed in each affected storage group.
+  - No more than one unavailable State Storage ring is allowed.
 - **Weak**: a mode that does not allow exceeding the failure model.
 
   - For affected storage groups with the [block-4-2](../../reference/configuration/domains_config.md#reliability) scheme, no more than two unavailable VDisks are allowed.
@@ -92,7 +92,7 @@ The [ydbops](../../reference/ydbops/index.md) utility tool uses CMS for cluster 
 To perform a rolling restart of the entire cluster, you can use the command:
 
 ```bash
-$ ydbops restart
+ydbops restart
 ```
 
 The default availability mode is `strong`. This mode minimizes the risk of availability loss. Use the `--availability-mode` parameter to override the default availability mode.
@@ -106,14 +106,14 @@ To take out a host for maintenance, follow these steps:
 1. Create a maintenance task using the command:
 
     ```bash
-    $ ydbops maintenance create --hosts=<fqdn> --duration=<seconds>
+    ydbops maintenance create --hosts=<fqdn> --duration=<seconds>
     ```
 
     This command creates a maintenance task that will acquire an exclusive lock for `<seconds>` seconds on the host with the fully qualified domain name `<fqdn>`.
 2. After creating a task, refresh its state until the lock is taken, using the command:
 
     ```bash
-    $ ydbops maintenance refresh --task-id=<id>
+    ydbops maintenance refresh --task-id=<id>
     ```
 
     This command refreshes the task with identifier `<id>` and attempts to acquire the required lock. When a `PERFORMED` response is received, proceed to the next step.
@@ -121,5 +121,5 @@ To take out a host for maintenance, follow these steps:
 4. After the maintenance is complete, release the lock using the command:
 
     ```bash
-    $ ydbops maintenance complete --task-id=<id> --hosts=<fqdn>
+    ydbops maintenance complete --task-id=<id> --hosts=<fqdn>
     ```

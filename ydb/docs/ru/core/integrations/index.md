@@ -8,16 +8,13 @@
 
 {% endnote %}
 
-
 ##  Графические пользовательские интерфейсы {#gui}
 
  {% include notitle [Содержание](gui/_includes/toc-table.md) %}
 
-
 ## Визуализация данных (Business Intelligence, BI) {#bi}
 
 {% include notitle [Содержание](visualization/_includes/toc-table.md) %}
-
 
 ## Оркестрация {#orchestration}
 

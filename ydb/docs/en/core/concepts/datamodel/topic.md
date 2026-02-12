@@ -29,8 +29,8 @@ As of now, you can only reduce the number of partitions in a topic by deleting a
 
 Partitions can be:
 
- - **Active.** By default, all partitions are active. Both read and write operations are allowed on an active partition.
- - **Inactive.** An inactive partition is read-only. A partition becomes inactive after splitting for [autopartitioning](#autopartitioning). It is automatically deleted once all messages are removed due to the expiration of the retention period.
+* **Active.** By default, all partitions are active. Both read and write operations are allowed on an active partition.
+* **Inactive.** An inactive partition is read-only. A partition becomes inactive after splitting for [autopartitioning](#autopartitioning). It is automatically deleted once all messages are removed due to the expiration of the retention period.
 
 ### Offset {#offset}
 

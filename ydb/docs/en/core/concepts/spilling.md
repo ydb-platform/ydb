@@ -10,7 +10,6 @@ In data processing systems, including {{ ydb-short-name }}, spilling is essentia
 - executing complex analytical operations (aggregations, table joins) over large datasets
 - optimizing query performance through intermediate materialization of part of the data in external memory, which in certain scenarios can accelerate overall execution time
 
-
 Spilling operates based on the memory hierarchy principle:
 
 1. **Random Access Memory (RAM)** — fast but limited.
@@ -24,7 +23,6 @@ When memory usage approaches the limit, the system:
 - continues processing the query using data remaining in memory
 - loads data back into memory, when necessary, to continue computations
 
-
 ## Spilling in {{ ydb-short-name }}
 
 {{ ydb-short-name }} implements the spilling mechanism through the **Spilling Service**, an [actor service](glossary.md#actor-service) that provides temporary storage for data blobs. Spilling is only performed on [database nodes](glossary.md#database-node). Detailed technical information about it is available in [{#T}](../contributor/spilling-service.md).
@@ -33,8 +31,8 @@ When memory usage approaches the limit, the system:
 
 {{ ydb-short-name }} implements two primary types of spilling that operate at different levels of the computational process:
 
-* [Computation Spilling](#computation-spilling)
-* [Transport Spilling](#transport-spilling)
+- [Computation Spilling](#computation-spilling)
+- [Transport Spilling](#transport-spilling)
 
 These types work independently and can activate simultaneously within a single query, providing comprehensive memory management.
 
@@ -44,8 +42,8 @@ These types work independently and can activate simultaneously within a single q
 
 Main usage scenarios:
 
-* **Aggregations** — when grouping large data volumes, the system offloads intermediate hash tables to disk.
-* **Join operations** — when joining large tables, the [Grace Hash Join](https://en.wikipedia.org/wiki/Hash_join#Grace_hash_join) algorithm is used with data partitioning and offloading to disk.
+- **Aggregations** — when grouping large data volumes, the system offloads intermediate hash tables to disk.
+- **Join operations** — when joining large tables, the [Grace Hash Join](https://en.wikipedia.org/wiki/Hash_join#Grace_hash_join) algorithm is used with data partitioning and offloading to disk.
 
 ##### Operation Mechanism
 
@@ -57,7 +55,6 @@ Compute nodes contain specialized objects for monitoring memory usage. When the 
 4. Metadata about the data location is kept in memory.
 5. The system continues processing the data remaining in memory, which frees additional space.
 6. When necessary, data is loaded back and processed.
-
 
 #### Transport Spilling {#transport-spilling}
 

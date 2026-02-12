@@ -239,9 +239,9 @@ ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode
 
 ## См. также
 
-* [{#T}](../yql/reference/syntax/create-resource-pool.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool.md)
-* [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)

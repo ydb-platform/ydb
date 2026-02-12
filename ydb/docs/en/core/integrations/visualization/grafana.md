@@ -137,7 +137,7 @@ FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol` + Interval("PT24H"))
 ```
 
-#|
+# |
 || Macro | Description | Output example ||
 || `$__timeFilter(expr)` |
 Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds |

@@ -53,7 +53,6 @@ Release date: September 21, 2025.
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/24265) CPU resource limiting for column-oriented tables in Workload Manager. Previously CPU consumption could exceed the configured limits.
 
-
 ## Version 25.1 {#25-1}
 
 ### Version 25.1.4.7 {#25-1-4-7}
@@ -226,7 +225,6 @@ Release date: April 15, 2025
   * [auto-partitioning mode](./concepts/datamodel/topic.md#autopartitioning) for topics
   * [transactions involving topics and row-oriented tables simultaneously](./concepts/transactions.md#topic-table-transactions)
   * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions)
-
 
 * Added the ability to [read and write to a topic](./reference/kafka-api/examples.md#kafka-api-usage-examples) using the Kafka API without authentication.
 

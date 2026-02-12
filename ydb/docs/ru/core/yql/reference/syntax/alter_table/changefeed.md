@@ -11,27 +11,27 @@
 ## Параметры потока изменений {#changefeed-options}
 
 * `MODE` — режим работы. Указывает, что именно будет записано в поток при каждом изменении данных в таблице:
-    * `KEYS_ONLY` — будут записаны только компоненты первичного ключа и признак изменения.
-    * `UPDATES` — будут записаны значения изменившихся столбцов, получившиеся в результате изменения.
-    * `NEW_IMAGE` — будут записаны значения всех столбцов, получившиеся в результате изменения.
-    * `OLD_IMAGE` — будут записаны значения всех столбцов, предшествующие изменению.
-    * `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
+  * `KEYS_ONLY` — будут записаны только компоненты первичного ключа и признак изменения.
+  * `UPDATES` — будут записаны значения изменившихся столбцов, получившиеся в результате изменения.
+  * `NEW_IMAGE` — будут записаны значения всех столбцов, получившиеся в результате изменения.
+  * `OLD_IMAGE` — будут записаны значения всех столбцов, предшествующие изменению.
+  * `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
 * `FORMAT` — формат данных, в котором будут записаны данные:
-    * `JSON` — записывать данные в формате {% if oss == true and backend_name == "YDB" %}[JSON](../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
+  * `JSON` — записывать данные в формате {% if oss == true and backend_name == "YDB" %}[JSON](../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
 
     {% if audience == "tech" %}
 
-    * `DYNAMODB_STREAMS_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure){% else %}JSON-формате, совместимом с Amazon DynamoDB Streams{% endif %}.
+  * `DYNAMODB_STREAMS_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure){% else %}JSON-формате, совместимом с Amazon DynamoDB Streams{% endif %}.
 
     {% endif %}
 
-    * `DEBEZIUM_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
+  * `DEBEZIUM_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
 * `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == true and backend_name == "YDB" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}.
 * `BARRIERS_INTERVAL` — периодичность выгрузки [барьеров](../../../../concepts/cdc.md#barriers). Тип значения — `Interval`. По умолчанию выключено.
 * `RETENTION_PERIOD` — {% if oss == true and backend_name == "YDB" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
 * `TOPIC_AUTO_PARTITIONING` — {% if oss == true and backend_name == "YDB" %}[режим автопартиционирования топика](../../../../concepts/cdc.md#topic-partitions){% else %}режим автопартиционирования топика{% endif %}:
-    * `ENABLED` — для потока изменений будет создан {% if oss == true and backend_name == "YDB" %}[автопартиционированный топик](../../../../concepts/datamodel/topic.md#autopartitioning){% else %}автопартиционированный топик{% endif %}. Количество партиций в таком топике увеличивается автоматически по мере роста скорости обновления таблицы. Параметры автопартиционирования топика можно {% if oss == true and backend_name == "YDB" %}[настроить](../alter-topic.md#alter-topic){% else %}настроить{% endif %}.
-    * `DISABLED` — для потока изменений будет создан топик без {% if oss == true and backend_name == "YDB" %}[автопартиционирования](../../../../concepts/datamodel/topic.md#autopartitioning){% else %}автопартиционирования{% endif %}. Это значение по умолчанию.
+  * `ENABLED` — для потока изменений будет создан {% if oss == true and backend_name == "YDB" %}[автопартиционированный топик](../../../../concepts/datamodel/topic.md#autopartitioning){% else %}автопартиционированный топик{% endif %}. Количество партиций в таком топике увеличивается автоматически по мере роста скорости обновления таблицы. Параметры автопартиционирования топика можно {% if oss == true and backend_name == "YDB" %}[настроить](../alter-topic.md#alter-topic){% else %}настроить{% endif %}.
+  * `DISABLED` — для потока изменений будет создан топик без {% if oss == true and backend_name == "YDB" %}[автопартиционирования](../../../../concepts/datamodel/topic.md#autopartitioning){% else %}автопартиционирования{% endif %}. Это значение по умолчанию.
 * `TOPIC_MIN_ACTIVE_PARTITIONS` — {% if oss == true and backend_name == "YDB" %}[количество партиций топика](../../../../concepts/cdc.md#topic-partitions){% else %}количество партиций топика{% endif %}. По умолчанию количество партиций топика равно количеству партиций таблицы. Для автопартиционированных топиков количество партиций увеличивается по мере роста скорости обновления таблицы. Если при создании ченджфида опция `TOPIC_AUTO_PARTITIONING` была отключена (`DISABLED`), то число партиций в топике, связанном с таким ченджфидом, впоследствии изменить нельзя.
 * `INITIAL_SCAN` — включение-выключение {% if oss == true and backend_name == "YDB" %}[первоначального сканирования](../../../../concepts/cdc.md#initial-scan){% else %}первоначального сканирования{% endif %} таблицы. По умолчанию выключено.
 

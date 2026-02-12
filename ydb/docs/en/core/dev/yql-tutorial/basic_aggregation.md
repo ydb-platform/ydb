@@ -30,4 +30,3 @@ ORDER BY
 
 COMMIT;
 ```
-

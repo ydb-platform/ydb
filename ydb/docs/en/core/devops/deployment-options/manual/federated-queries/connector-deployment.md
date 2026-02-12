@@ -73,7 +73,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
 
     {% list tabs %}
 
-    - Manually
+    * Manually
 
         Start the service from the console with the following command:
 
@@ -81,7 +81,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
         /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml
         ```
 
-    - Using systemd
+    * Using systemd
 
         Along with the binary distribution, fq-connector-go includes a [sample](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/systemd/fq-connector-go.service) configuration file (unit) for the `systemd` initialization system. Copy the unit to the `/etc/systemd/system` directory, enable, and start the service:
 

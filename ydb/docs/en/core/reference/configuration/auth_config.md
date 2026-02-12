@@ -6,7 +6,7 @@
 
 For more information about the authentication of [local {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by username and password, define the following parameters in the `auth_config` section:
 
-#|
+# |
 || Parameter | Description ||
 || use_login_provider
 | Indicates whether to allow the authentication of local users with an [authentication token](../../concepts/glossary.md#auth-token) that is obtained after entering a username and password.
@@ -51,7 +51,7 @@ auth_config:
   #...
 ```
 
-#|
+# |
 || Parameter | Description ||
 || attempt_threshold
 | Specifies the number of failed attempts to enter the correct password for a user account, after which the account is blocked for a period specified by the `attempt_reset_duration` parameter.
@@ -102,7 +102,7 @@ auth_config:
   #...
 ```
 
-#|
+# |
 || Parameter | Description ||
 || min_length
 | Specifies the minimum password length.
@@ -182,7 +182,7 @@ auth_config:
   #...
 ```
 
-#|
+# |
 || Parameter | Description ||
 || `hosts`
 | Specifies a list of hostnames where the LDAP server is running.
@@ -259,7 +259,7 @@ Default value: `false`
 
 {{ ydb-short-name }} supports Yandex Identity and Access Management (IAM) used in Yandex Cloud for user authentication. To configure IAM authentication, define the following parameters:
 
-#|
+# |
 || Parameter | Description ||
 || use_access_service
 | Indicates whether to allow authentication in Yandex Cloud using IAM AccessService.
@@ -309,7 +309,7 @@ During the authentication process, a user session receives an authentication tok
 
 To configure the life cycle and other important aspects of managing user tokens, define the following parameters:
 
-#|
+# |
 || refresh_period
 | Specifies how often a {{ ydb-short-name }} node scans cached user tokens to find the ones that need to be refreshed because the `refresh_time`, `life_time` or `expire_time` interval elapses. The lower this parameter value, the higher the CPU load.
 

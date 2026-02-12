@@ -39,13 +39,13 @@
 
 #### Поведение для разных видов инструкций
 
-- **Инструкции [Data Definition Language](https://en.wikipedia.org/wiki/Data_definition_language) (DDL)**
+* **Инструкции [Data Definition Language](https://en.wikipedia.org/wiki/Data_definition_language) (DDL)**
   DDL-инструкции (такие как [CREATE TABLE](../../yql/reference/syntax/create_table/index.md), [DROP TABLE](../../yql/reference/syntax/drop_table.md) и т.д.) выполняются вне транзакции. Запрос может состоять только из DDL-инструкций. При возникновении ошибки изменения, внесённые предыдущими инструкциями запроса, не откатываются.
 
-- **Инструкции [Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) (DML)**
+* **Инструкции [Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) (DML)**
   DML-инструкции (такие как [UPSERT](../../yql/reference/syntax/upsert_into.md), [SELECT](../../yql/reference/syntax/select/index.md), [UPDATE](../../yql/reference/syntax/update.md) и т.д.) оборачиваются в транзакцию с режимом *Serializable*. Запрос может состоять только из DML-инструкций. При успешном выполнении изменения коммитятся (фиксируются), а при возникновении ошибки — откатываются.
 
-- **Инструкции пакетного изменения**
+* **Инструкции пакетного изменения**
   Инструкции пакетного изменения (такие как [BATCH UPDATE](../../yql/reference/syntax/batch-update.md) и [BATCH DELETE FROM](../../yql/reference/syntax/batch-delete.md)) выполняются вне транзакции. Запрос может состоять только из одной инструкции пакетного изменения. При возникновении ошибки изменения инструкции не откатываются.
 
 #### Сводная таблица

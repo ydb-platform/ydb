@@ -42,4 +42,3 @@ The functions for the hashes that support the initialization parameter (seed) ac
 SELECT Digest::Md5Hex("YQL");  -- "1a0c1b56e9d617688ee345da4030da3c"
 SELECT Digest::NumericHash(123456789); -- 1734215268924325803
 ```
-

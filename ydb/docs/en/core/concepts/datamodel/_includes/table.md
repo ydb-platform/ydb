@@ -24,9 +24,9 @@ Please note that currently, the `NOT NULL` constraint can only be applied to col
 Column names in {{ ydb-short-name }} must meet the following requirements:
 
 - Column names can include the following characters:
-    - Latin characters (`A-Z`, `a-z`)
-    - Digits (`0-9`)
-    - Special characters: `-` and `_`
+  - Latin characters (`A-Z`, `a-z`)
+  - Digits (`0-9`)
+  - Special characters: `-` and `_`
 - Column names must not start with the system prefix `__ydb_`.
 
 ## Row-Oriented Tables {#row-oriented-tables}
@@ -59,15 +59,15 @@ The following table partitioning parameters are defined in the data schema:
 
 #### AUTO_PARTITIONING_BY_SIZE {#auto_partitioning_by_size}
 
-* Type: `Enum` (`ENABLED`, `DISABLED`).
-* Default value: `ENABLED`.
+- Type: `Enum` (`ENABLED`, `DISABLED`).
+- Default value: `ENABLED`.
 
 Automatic partitioning by partition size. If a partition size exceeds the value specified by the [`AUTO_PARTITIONING_PARTITION_SIZE_MB`](#auto_partitioning_partition_size_mb) parameter, it is enqueued for splitting. If the total size of two or more adjacent partitions is less than 50% of the [`AUTO_PARTITIONING_PARTITION_SIZE_MB`](#auto_partitioning_partition_size_mb) value, they are enqueued for merging.
 
 #### AUTO_PARTITIONING_BY_LOAD {#auto_partitioning_by_load}
 
-* Type: `Enum` (`ENABLED`, `DISABLED`).
-* Default value: `DISABLED`.
+- Type: `Enum` (`ENABLED`, `DISABLED`).
+- Default value: `DISABLED`.
 
 Automatic partitioning by load. If a shard consumes more than 50% of the CPU for a few dozens of seconds, it is enqueued for splitting. If the total load on two or more adjacent shards uses less than 35% of a single CPU core within an hour, they are enqueued for merging.
 
@@ -79,8 +79,8 @@ When choosing the minimum number of partitions, it makes sense to consider that 
 
 #### AUTO_PARTITIONING_PARTITION_SIZE_MB {#auto_partitioning_partition_size_mb}
 
-* Type: `Uint64`.
-* Default value: `2000 MB` (`2 GB`).
+- Type: `Uint64`.
+- Default value: `2000 MB` (`2 GB`).
 
 The desired partition size threshold in megabytes. Recommended values range from `10 MB` to `2000 MB`. If this threshold is exceeded, a shard may split. This setting takes effect when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
 
@@ -88,22 +88,22 @@ This value serves as a recommendation for partitioning. Partitioning may sometim
 
 #### AUTO_PARTITIONING_MIN_PARTITIONS_COUNT {#auto_partitioning_min_partitions_count}
 
-* Type: `Uint64`.
-* Default value: `1`.
+- Type: `Uint64`.
+- Default value: `1`.
 
 Partitions are only merged if their actual number exceeds the value specified by this parameter. When using automatic partitioning by load, we recommend that you set this parameter to a value other than 1, so that periodic load drops don't lead to a decrease in the number of partitions below the required one.
 
 #### AUTO_PARTITIONING_MAX_PARTITIONS_COUNT {#auto_partitioning_max_partitions_count}
 
-* Type: `Uint64`.
-* Default value: `50`.
+- Type: `Uint64`.
+- Default value: `50`.
 
 Partitions are only split if their number doesn't exceed the value specified by this parameter. With any automatic partitioning mode enabled, we recommend that you set a meaningful value for this parameter and monitor when the actual number of partitions approaches this value; otherwise, splitting of partitions will stop sooner or later under an increase in data or load, which will lead to a failure.
 
 #### UNIFORM_PARTITIONS {#uniform_partitions}
 
-* Type: `Uint64`.
-* Default value: Not applicable.
+- Type: `Uint64`.
+- Default value: Not applicable.
 
 The number of partitions for uniform initial table partitioning. The primary key's first column must have type `Uint64` or `Uint32`. A created table is immediately divided into the specified number of partitions.
 
@@ -111,8 +111,8 @@ When automatic partitioning is enabled, make sure to set the correct value for [
 
 #### PARTITION_AT_KEYS {#partition_at_keys}
 
-* Type: `Expression`.
-* Default value: Not applicable.
+- Type: `Expression`.
+- Default value: Not applicable.
 
 Boundary values of keys for initial table partitioning. It's a list of boundary values separated by commas and surrounded with brackets. Each boundary value can be either a set of values of key columns (also separated by commas and surrounded with brackets) or a single value if only the values of the first key column are specified. Examples: `(100, 1000)`, `((100, "abc"), (1000, "cde"))`.
 
@@ -124,10 +124,10 @@ When making queries in {{ ydb-short-name }}, the actual execution of a query to 
 
 Reading data from followers allows you:
 
-* To serve clients demanding minimal delay, which is otherwise unachievable in a multi-DC cluster. This is accomplished by executing queries soon after they are formulated, which eliminates the delay associated with inter-DC transfers. As a result, you can both preserve all the storage reliability guarantees of a multi-DC cluster and respond to point read queries in milliseconds.
-* To handle read queries from followers without affecting modifying queries running on a shard. This can be useful both for isolating different scenarios and for increasing the partition bandwidth.
-* To ensure continued service when moving a partition leader (both in a planned manner for load balancing and in an emergency). It lets the processes in the cluster survive without affecting the reading clients.
-* To increase the overall shard read performance if many read queries access the same keys.
+- To serve clients demanding minimal delay, which is otherwise unachievable in a multi-DC cluster. This is accomplished by executing queries soon after they are formulated, which eliminates the delay associated with inter-DC transfers. As a result, you can both preserve all the storage reliability guarantees of a multi-DC cluster and respond to point read queries in milliseconds.
+- To handle read queries from followers without affecting modifying queries running on a shard. This can be useful both for isolating different scenarios and for increasing the partition bandwidth.
+- To ensure continued service when moving a partition leader (both in a planned manner for load balancing and in an emergency). It lets the processes in the cluster survive without affecting the reading clients.
+- To increase the overall shard read performance if many read queries access the same keys.
 
 You can enable running read replicas for each shard of the table in the table data schema. The read replicas (followers) are typically accessed without leaving the data center network, which ensures response delays in milliseconds.
 
@@ -158,8 +158,8 @@ Operations are performed in isolation; the external process sees only two states
 
 The speed of renaming is determined by the type of data transactions currently running against the table and doesn't depend on the table size.
 
-* [Renaming a table in YQL](../../../yql/reference/syntax/alter_table/rename.md)
-* [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
+- [Renaming a table in YQL](../../../yql/reference/syntax/alter_table/rename.md)
+- [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
 ### Bloom Filter {#bloom-filter}
 
@@ -181,8 +181,8 @@ Every table has a primary column group named `default` containing all columns no
 
 The following storage attributes are configured for column groups:
 
-* Storage device type (SSD or HDD, availability depends on {{ ydb-short-name }} cluster configuration);
-* Data compression mode (no compression or [LZ4](https://en.wikipedia.org/wiki/LZ4) algorithm compression).
+- Storage device type (SSD or HDD, availability depends on {{ ydb-short-name }} cluster configuration);
+- Data compression mode (no compression or [LZ4](https://en.wikipedia.org/wiki/LZ4) algorithm compression).
 
 Column group attributes are set during table creation and can be modified later. Storage attribute changes aren't immediately applied to existing data; instead, they take effect during subsequent background [LSM compaction](../../glossary.md#compaction).
 
@@ -204,14 +204,14 @@ At the moment, the main use case for {{ ydb-short-name }} column-oriented tables
 
 In most cases, working with {{ ydb-short-name }} column-oriented tables is similar to working with row tables, but there are differences:
 
-* Only `NOT NULL` columns can be used as the primary key.
-* Data is partitioned not by the primary key, but by the hash of the partitioning columns, to evenly distribute the data across the hosts.
-* Column-oriented tables support a limited set of data types:
+- Only `NOT NULL` columns can be used as the primary key.
+- Data is partitioned not by the primary key, but by the hash of the partitioning columns, to evenly distribute the data across the hosts.
+- Column-oriented tables support a limited set of data types:
 
-  + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
-  + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
+  - Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
+  - Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
 
-* Column-oriented tables support column groups, but only for compression settings.
+- Column-oriented tables support column groups, but only for compression settings.
 
 Let's recreate the "article" table, this time in column-oriented format, using the following YQL command:
 
@@ -228,16 +228,16 @@ WITH (STORE = COLUMN);
 
 At the moment, not all functionality of column-oriented tables is implemented. The following features are not currently supported:
 
-* Reading from replicas.
-* Secondary indexes.
-* Vector indexes.
-* Bloom filters.
-* Change Data Capture.
-* Table renaming.
-* Custom table attributes.
-* Modifying the list of columns.
-* Adding data to column-oriented tables using the SQL INSERT statement.
-* Deleting data from column-oriented tables using the SQL DELETE statement. In fact, deletion is only possible after the TTL data retention time has expired.
+- Reading from replicas.
+- Secondary indexes.
+- Vector indexes.
+- Bloom filters.
+- Change Data Capture.
+- Table renaming.
+- Custom table attributes.
+- Modifying the list of columns.
+- Adding data to column-oriented tables using the SQL INSERT statement.
+- Deleting data from column-oriented tables using the SQL DELETE statement. In fact, deletion is only possible after the TTL data retention time has expired.
 
 ### Partitioning Column-Oriented Tables {#olap-tables-partitioning}
 
@@ -265,7 +265,7 @@ To manage data partitioning, use the `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` ad
 
 `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` sets the minimum physical number of partitions used to store data.
 
-* Type: `Uint64`.
-* The default value is `1`.
+- Type: `Uint64`.
+- The default value is `1`.
 
 Because it ignores all the other partitioning parameters, the system uses the same value as the upper partition limit.

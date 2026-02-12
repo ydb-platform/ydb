@@ -31,8 +31,3 @@
 Профили хранятся локально в файле `~/.ydb/config/config.yaml`.
 
 {% include [location_overlay.md](location_overlay.md) %}
-
-
-
-
-

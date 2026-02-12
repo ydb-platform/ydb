@@ -34,4 +34,3 @@ UPSERT INTO my_table ( pk_column1, pk_column2, data_column2, data_column5 )
 VALUES ( 1, 10, 'Some text', Date('2021-10-07')),
        ( 2, 10, 'Some text', Date('2021-10-08'))
 ```
-

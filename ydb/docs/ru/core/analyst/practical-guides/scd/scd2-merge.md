@@ -94,7 +94,6 @@ UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, oper
 VALUES ('CUSTOMER_1002', 'John Doe', 'New York', Unwrap(CAST('2025-08-22T21:00:00Z' as Timestamp)), 'DELETE');
 ```
 
-
 ## Запрос для размещения изменений в формате SCD2
 
 Чтобы преобразовать данные из таблицы изменений в формат SCD2 и загрузить их в финальную таблицу, используется специальный запрос. Этот запрос нужно запускать регулярно — с такой периодичностью, с какой вы хотите обновлять данные в финальной таблице. Для автоматического запуска можно воспользоваться [интеграцию](../../../integrations/orchestration/airflow.md) {{ ydb-short-name }} с Apache Airflow™:
@@ -252,7 +251,6 @@ SELECT id, change_time FROM $changes;
 | CUSTOMER\_1002 | Judy Doe   | New York      | 2025-08-22 17:00 | 2025-08-22 21:00 | 0           | 0           |
 | CUSTOMER\_1002 | Judy Doe   | New York      | 2025-08-22 21:00 | NULL             | 0           | 1           |
 
-
 ## Получение данных из SCD2-таблицы
 
 ### Получение актуальных данных
@@ -273,7 +271,6 @@ WHERE is_current = 1ut;
 | id             | attribute1 | attribute2    | valid\_from      | valid\_to        | is\_current | is\_deleted |
 | -------------- | ---------- | ------------- | ---------------- | ---------------- | ----------- | ----------- |
 | CUSTOMER\_1001 | John Doe   | San Francisco | 2025-08-22 19:00 | NULL             | 1           | 0           |
-
 
 ### Получение данных на определённый момент времени
 
@@ -298,7 +295,6 @@ WHERE valid_from <= $as_of
 | -------------- | ---------- | ------------- | ---------------- | ---------------- |
 | CUSTOMER\_1001 | John Doe   | San Francisco | 2025-08-22 19:00 | NULL             |
 | CUSTOMER\_1002 | Judy Doe   | New York      | 2025-08-22 17:00 | 2025-08-22 21:00 |
-
 
 ### Получение истории изменений для конкретной записи
 

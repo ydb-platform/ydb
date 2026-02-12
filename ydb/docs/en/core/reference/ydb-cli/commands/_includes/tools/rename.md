@@ -30,13 +30,13 @@ When including multiple rename operations in a single `tools rename` call, they'
 
 ## Examples {#examples}
 
-- Renaming a single table:
+* Renaming a single table:
 
   ```bash
   {{ ydb-cli }} tools rename --item src=old_name,dst=new_name
   ```
 
-- Renaming multiple tables within a single transaction:
+* Renaming multiple tables within a single transaction:
 
   ```bash
   {{ ydb-cli }} tools rename \
@@ -45,7 +45,7 @@ When including multiple rename operations in a single `tools rename` call, they'
     --item source=new-project/third_table,destination=new-project/series
   ```
 
-- Moving tables to a different directory:
+* Moving tables to a different directory:
 
   ```bash
   {{ ydb-cli }} tools rename \
@@ -54,14 +54,14 @@ When including multiple rename operations in a single `tools rename` call, they'
     --item source=new-project/third_table,destination=cinema/third_table
   ```
 
-- Replacing a table
+* Replacing a table
 
   ```bash
   {{ ydb-cli }} tools rename \
     --item replace=True,source=pre-prod-project/main_table,destination=prod-project/main_table
   ```
 
-- Rotating a table
+* Rotating a table
 
   ```bash
   {{ ydb-cli }} tools rename \

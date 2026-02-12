@@ -29,7 +29,6 @@ The `BulkUpsert` method isn't supported for tables with synchronous secondary in
 
 {% endnote %}
 
-
 We recommend the following algorithm for efficiently uploading data to {{ ydb-short-name }}:
 
 1. Create a table with the desired number of shards based on 1 GB of data per shard.

@@ -19,7 +19,7 @@ View the description of this command by calling it with `--help` option:
 
 ## Parameters of the subcommand {#options}
 
-#|
+# |
 || Name | Description ||
 || `-h`, `--help` | Print general usage help. ||
 || `-hh` | Print complete usage help, including specific options not shown with `--help`. ||

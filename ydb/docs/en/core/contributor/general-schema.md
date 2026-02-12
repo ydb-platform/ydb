@@ -26,9 +26,7 @@ The distributed nature of the system and various issues, such as network partiti
 
 {% endnote %}
 
-
 For cluster-level [system tablets](../concepts/glossary.md#tablet-types), the node on which the tablet runs is chosen by a Bootstrapper, which implements [distributed consensus](https://en.wikipedia.org/wiki/Consensus_(computer_science)). User tablets are managed by a special tablet called [Hive](hive.md). Hive ensures that all tablets are running, distributes tablets across nodes, and manages [tablet channels](../concepts/glossary.md#channel) between storage groups.
-
 
 You can find out on which node the tablet in the current generation is running through the *StateStorage* service. To send messages to tablets, use a special set of libraries named *tablet pipe*. With this, knowing the ID of the target tablet, you can easily send the desired message to it.
 

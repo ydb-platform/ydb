@@ -49,9 +49,9 @@ The `scheme rmdir` command deletes a directory:
 {{ ydb-cli }} [global options...] scheme rmdir [options...] <path>
 ```
 
-* `global options`: [Global parameters](../../commands/global-options.md).
-* `options`: [Parameters of the subcommand](#rmdir-options).
-* `path`: Path to the deleted directory.
+- `global options`: [Global parameters](../../commands/global-options.md).
+- `options`: [Parameters of the subcommand](#rmdir-options).
+- `path`: Path to the deleted directory.
 
 Look up the description of the directory deletion command:
 

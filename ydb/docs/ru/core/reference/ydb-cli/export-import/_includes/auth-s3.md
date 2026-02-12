@@ -27,17 +27,17 @@
 
 ### Параметры командной строки
 
-* `--access-key` — идентификатор ключа доступа.
-* `--secret-key` — секретный ключ доступа.
-* `--aws-profile` — имя профиля в файле `~/.aws/credentials`. Значение по умолчанию `default`.
+- `--access-key` — идентификатор ключа доступа.
+- `--secret-key` — секретный ключ доступа.
+- `--aws-profile` — имя профиля в файле `~/.aws/credentials`. Значение по умолчанию `default`.
 
 ### Переменные окружения
 
 Если какой-либо параметр аутентификации не указан в командной строке, {{ ydb-short-name }} CLI пробует его получить из следующих переменных окружения:
 
-* `AWS_ACCESS_KEY_ID` — идентификатор ключа доступа.
-* `AWS_SECRET_ACCESS_KEY` — секретный ключ доступа.
-* `AWS_PROFILE` — имя профиля в файле `~/.aws/credentials`.
+- `AWS_ACCESS_KEY_ID` — идентификатор ключа доступа.
+- `AWS_SECRET_ACCESS_KEY` — секретный ключ доступа.
+- `AWS_PROFILE` — имя профиля в файле `~/.aws/credentials`.
 
 ### Файл аутентификации AWS
 
@@ -63,7 +63,6 @@
    folder-id: b2ge70qdcff4bo9q6t19
    ```
 
-
 3. [Создайте сервисный аккаунт](https://cloud.yandex.ru/docs/iam/operations/sa/create), выполнив следующую команду:
 
    ```bash
@@ -78,7 +77,7 @@
    yc iam service-account get --name <account-name>
    ```
 
-4. [Назначьте сервисному аккаунту](https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa) роли в соответствии с необходимым уровнем доступа к S3, выполнив команду:
+1. [Назначьте сервисному аккаунту](https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa) роли в соответствии с необходимым уровнем доступа к S3, выполнив команду:
 
    {% list tabs %}
 
@@ -102,7 +101,7 @@
 
    Вы можете также ознакомиться с [полным перечнем](https://cloud.yandex.ru/docs/iam/concepts/access-control/roles#object-storage) ролей {{ yandex-cloud }}.
 
-5. Получите [статические ключи доступа](https://cloud.yandex.ru/docs/iam/operations/sa/create-access-key), выполнив следующую команду:
+2. Получите [статические ключи доступа](https://cloud.yandex.ru/docs/iam/operations/sa/create-access-key), выполнив следующую команду:
 
    ```bash
    yc iam access-key create --service-account-name s3account

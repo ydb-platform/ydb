@@ -8,7 +8,6 @@ The YDB SDK provides a built-in mechanism for handling temporary failures. For m
 
 {% endnote %}
 
-
 ## Diagnostics
 
 <!-- The include is added to allow partial overrides in overlays  -->

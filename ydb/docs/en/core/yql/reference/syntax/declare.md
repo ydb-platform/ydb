@@ -33,4 +33,3 @@ DECLARE $z AS List<String>;
 
 SELECT $x, $y, $z;
 ```
-

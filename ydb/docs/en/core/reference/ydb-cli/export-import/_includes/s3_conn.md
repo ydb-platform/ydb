@@ -27,17 +27,17 @@ The YDB CLI takes values of these parameters from the following sources (listed 
 
 ### Command line parameters
 
-* `--access-key`: Access key ID.
-* `--secret-key`: Secret access key.
-* `--aws-profile`: Profile name from the `~/.aws/credentials` file. The default value is `default`.
+- `--access-key`: Access key ID.
+- `--secret-key`: Secret access key.
+- `--aws-profile`: Profile name from the `~/.aws/credentials` file. The default value is `default`.
 
 ### Environment variables
 
 If a certain authentication parameter is omitted in the command line, the YDB CLI tries to retrieve it from the following environment variables:
 
-* `AWS_ACCESS_KEY_ID`: Access key ID.
-* `AWS_SECRET_ACCESS_KEY`: Secret access key.
-* `AWS_PROFILE`: Profile name from the `~/.aws/credentials` file.
+- `AWS_ACCESS_KEY_ID`: Access key ID.
+- `AWS_SECRET_ACCESS_KEY`: Secret access key.
+- `AWS_PROFILE`: Profile name from the `~/.aws/credentials` file.
 
 ### AWS authentication file
 

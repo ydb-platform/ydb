@@ -1,6 +1,5 @@
 # State Storage Move
 
-
 If you need to decommission a {{ ydb-short-name }} cluster host that contains part of [State Storage](../../../reference/configuration/domains_config.md#domains-state), you need to move it to another host.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}

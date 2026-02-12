@@ -23,8 +23,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   The user can affect the logic of the `retry.Retry` function in two ways:
 
-  * Via the context (where you can set the deadline and cancel)
-  * Via the operation's idempotency flag `retry.WithIdempotent()`. By default, the operation is considered non-idempotent.
+  - Via the context (where you can set the deadline and cancel)
+  - Via the operation's idempotency flag `retry.WithIdempotent()`. By default, the operation is considered non-idempotent.
 
   The user passes a custom function to `retry.Retry` that returns an error by its signature.
   If the custom function returns `nil`, then repeat queries stop.
@@ -261,19 +261,19 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   Additionally, the user can specify some other options:
 
-  * `maxRetries(int maxRetries)`: The maximum number of operation retries, not counting the first execution. Default value: `10`
-  * `retryNotFound(boolean retryNotFound)`: The option to retry operations that returned the `NOT_FOUND` status. Enabled by default.
-  * `idempotent(boolean idempotent)`: Indicates idempotence of operations. Idempotent operations will be retried for a broader range of errors. Disabled by default.
+  - `maxRetries(int maxRetries)`: The maximum number of operation retries, not counting the first execution. Default value: `10`
+  - `retryNotFound(boolean retryNotFound)`: The option to retry operations that returned the `NOT_FOUND` status. Enabled by default.
+  - `idempotent(boolean idempotent)`: Indicates idempotence of operations. Idempotent operations will be retried for a broader range of errors. Disabled by default.
 
   The `SessionRetryContext` class provides two methods to run operations with retries.
 
-  * `CompletableFuture<Status> supplyStatus`: Executing the operation that returns the status. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Status>> fn`
-  * `CompletableFuture<Result<T>> supplyResult`: Executing the operation that returns data. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Result<T>>> fn`
+  - `CompletableFuture<Status> supplyStatus`: Executing the operation that returns the status. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Status>> fn`
+  - `CompletableFuture<Result<T>> supplyResult`: Executing the operation that returns data. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Result<T>>> fn`
 
   When using the `SessionRetryContext` class, make sure that the operation will be retried in the following cases:
 
-  * The lambda function returned a [retryable](../../reference/ydb-sdk/error_handling.md) error code
-  * The lambda function invoked an `UnexpectedResultException` with a [retryable](../../reference/ydb-sdk/error_handling.md) error code
+  - The lambda function returned a [retryable](../../reference/ydb-sdk/error_handling.md) error code
+  - The lambda function invoked an `UnexpectedResultException` with a [retryable](../../reference/ydb-sdk/error_handling.md) error code
 
   {% cut "Sample code using SessionRetryContext.supplyStatus:" %}
 

@@ -109,7 +109,6 @@ SELECT
 ;
 ```
 
-
 ## Операторы {#operators}
 
 Операторы PostgreSQL (унарные и бинарные) доступны через встроенную функцию `PgOp(<оператор>, <операнды>)`:
@@ -194,7 +193,6 @@ SELECT
 | `Decimal` | `numeric` |`pgnumeric` |
 | `DyNumber` | `numeric` |`pgnumeric` |
 
-
 ### Таблица соответствия типов `ToPg` {#topg}
 
 Таблица соответствия типов данных YQL и PostgreSQL при использовании функции `ToPg`:
@@ -235,8 +233,6 @@ SELECT * FROM
     --- 'b'p,pgjson('"bar"')
 ;
 ```
-
-
 
 ## Вызов агрегационных PostgreSQL функций {#pgaggrfunction}
 
@@ -300,4 +296,3 @@ SELECT
     PgNot(PgBool(true)), -- PgBool(false)
 ;
 ```
-

@@ -5,4 +5,3 @@
     ![](../_assets/transactions-locks-invalidation.png)
 
     This chart shows the number of queries that returned the transaction locks invalidation error per second.
-

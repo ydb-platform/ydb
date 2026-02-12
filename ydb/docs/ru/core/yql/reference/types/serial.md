@@ -63,4 +63,3 @@ Error: Failed to get next val for sequence: /dev/test/users/_serial_column_user_
 Отметим, что следующее значение выдаётся генератором до непосредственной вставки в таблицу и уже будет считаться использованным, даже если строка, содержащая это значение, не была успешно вставлена, например, при откате транзакции. Поэтому множество значений такой колонки может содержать пропуски и состоять из нескольких промежутков.
 
 Для таблиц с автоинкрементными колонками поддержаны операции [copy](../../../reference/ydb-cli/tools-copy.md), [dump](../../../reference/ydb-cli/export-import/tools-dump.md), [restore](../../../reference/ydb-cli/export-import/import-file.md) и [import](../../../reference/ydb-cli/export-import/import-s3.md)/[export](../../../reference/ydb-cli/export-import/export-s3.md).
-

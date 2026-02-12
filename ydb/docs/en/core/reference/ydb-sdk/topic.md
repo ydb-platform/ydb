@@ -713,7 +713,7 @@ Only connections with matching [producer and message group](../../concepts/topic
 
   There are two ways to get a message write acknowledgement from the server:
 
-  * `write_with_ack(...)`: Sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
+  - `write_with_ack(...)`: Sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
 
   ```python
   # Put multiple messages to the internal buffer and then wait
@@ -797,7 +797,6 @@ Only connections with matching [producer and message group](../../concepts/topic
 ### Selecting a codec for message compression {#codec}
 
 For more details on using data compression for topics, see [here](../../concepts/topic#message-codec).
-
 
 {% list tabs group=lang %}
 
@@ -1459,7 +1458,6 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 {% endlist %}
 
-
 ### Reading without a commit {#no-commit}
 
 #### Reading messages one by one
@@ -1941,9 +1939,9 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 - Python
 
   To read without a `Consumer`, create a reader using the `reader` method with specifying these arguments:
-  * `topic` - `ydb.TopicReaderSelector` object with defined `path` and `partitions` list;
-  * `consumer` - should be `None`;
-  * `event_handler` - inheritor of `ydb.TopicReaderEvents.EventHandler` that implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts and during reconnections. The client application must specify this offset in the parameter `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. The function can also be implemented as asynchronous.
+  - `topic` - `ydb.TopicReaderSelector` object with defined `path` and `partitions` list;
+  - `consumer` - should be `None`;
+  - `event_handler` - inheritor of `ydb.TopicReaderEvents.EventHandler` that implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts and during reconnections. The client application must specify this offset in the parameter `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. The function can also be implemented as asynchronous.
 
   Example:
 
@@ -2034,7 +2032,6 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 - Go
 
   To read messages from a topic within a transaction, use the [Reader.PopMessagesBatchTx](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx) method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's important to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order. The simplest way to ensure this is by using the reader within a loop.
-
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
 
@@ -2154,7 +2151,6 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
-
 
 ### Processing a server read interrupt {#stop}
 
@@ -2384,7 +2380,6 @@ In case of a _hard interruption_, the client receives a notification that it is 
   The SDK supports two topic reading modes with autoscaling enabled: full support mode and compatibility mode. The reading mode is set using the `topicoptions.WithReaderSupportSplitMergePartitions` option when creating the reader. Full support mode is used by default (`true`).
 
   From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
-
 
   ```go
   import (

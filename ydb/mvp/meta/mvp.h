@@ -48,7 +48,7 @@ public:
     void TryGetMetaOptionsFromConfig(const YAML::Node& config);
 
     TMVPAppData AppData;
-    TMvpStartupOptions StartupOptions;
+    const TMvpStartupOptions StartupOptions;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
     THolder<NActors::TActorSystemSetup> ActorSystemSetup;
     NActors::TActorSystem ActorSystem;

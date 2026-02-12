@@ -5,9 +5,6 @@
 #include <util/system/tempfile.h>
 #include <util/stream/file.h>
 
-#include <fstream>
-#include <cstdio>
-
 using namespace NMVP;
 
 Y_UNIT_TEST_SUITE(TMvpStartupOptions) {
@@ -80,7 +77,7 @@ Y_UNIT_TEST_SUITE(TMvpStartupOptions) {
         UNIT_ASSERT(!opts.SslCertificate.empty());
     }
 
-    Y_UNIT_TEST(SslCertWithoutPortsDefaultsHttp) {
+    Y_UNIT_TEST(SslCertWithoutPortsDefaultsHttps) {
         TTempFileHandle tmpYaml = TTempFileHandle::InCurrentDir("mvp_startup_options_test_cert_noports", ".yaml");
         TTempFileHandle tmpCert = TTempFileHandle::InCurrentDir("mvp_test_cert2", ".pem");
         {

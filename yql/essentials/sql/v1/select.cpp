@@ -149,7 +149,7 @@ public:
 private:
     TNodePtr Source_;
     TString Alias_;
-    bool IsUsed_;
+    bool IsUsed_ = false;
 
     TNodePtr Node_;
 };
@@ -175,9 +175,11 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (IsInlineScalar_ &&
-            !ctx.IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
-            ctx.Error(Source_->GetPos())
-                << "Inline subquery is not available before 2025.04";
+            !ctx.EnsureBackwardCompatibleFeatureAvailable(
+                Source_->GetPos(),
+                "Inline subquery",
+                MakeLangVersion(2025, 04)))
+        {
             return false;
         }
 

@@ -3180,20 +3180,24 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
             } else if (arg->GetLabel() == "ExtraMem") {
                 ExtraMem_ = MakeAtomFromExpression(Pos_, ctx, arg);
             } else if (arg->GetLabel() == "Depends") {
-                if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
-                                                          NYql::MakeLangVersion(2025, 3), ctx.Settings.BackportMode))
+                if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                        Pos_,
+                        "Udf: named argument Depends",
+                        NYql::MakeLangVersion(2025, 3)))
                 {
-                    ctx.Error() << "Udf: named argument Depends is not available before version 2025.03";
                     return false;
                 }
+
                 Depends_.push_back(arg);
             } else if (arg->GetLabel() == "Layers") {
-                if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
-                                                          NYql::MakeLangVersion(2025, 4), ctx.Settings.BackportMode))
+                if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                        Pos_,
+                        "Udf: named argument Layers",
+                        NYql::MakeLangVersion(2025, 4)))
                 {
-                    ctx.Error() << "Udf: named argument Layers is not available before version 2025.04";
                     return false;
                 }
+
                 Layers_ = arg;
             } else {
                 ctx.Error() << "Udf: unexpected named argument: " << arg->GetLabel();

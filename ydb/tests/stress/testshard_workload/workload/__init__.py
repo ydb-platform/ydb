@@ -40,10 +40,6 @@ timing:
 tracing:
   put_fraction_ppm: 1000
   verbosity: 15
-
-validation:
-  server: "localhost:__TSSERVER_PORT__"
-  after_bytes: 5000000000
 """
 
 

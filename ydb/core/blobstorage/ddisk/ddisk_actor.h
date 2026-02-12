@@ -25,7 +25,6 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
     XX(Sync) \
     XX(WritePersistentBuffer) \
     XX(ReadPersistentBuffer) \
-    XX(FlushPersistentBuffer) \
     XX(ErasePersistentBuffer) \
     XX(ListPersistentBuffer) \
     /**/
@@ -472,20 +471,8 @@ namespace NKikimr::NDDisk {
         void GetPersistentBufferRecordData(TDDiskActor::TPersistentBuffer::TRecord& pr, std::function<void(TRope data)> callback);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
 
-        struct TWriteInFlight {
-            TActorId Sender;
-            ui64 Cookie;
-            TActorId InterconnectionSessionId;
-            NWilson::TSpan Span;
-            ui32 Size;
-        };
-
-        ui64 NextWriteCookie = 1;
-        THashMap<ui64, TWriteInFlight> WritesInFlight;
-
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);
-        void Handle(TEvFlushPersistentBuffer::TPtr ev);
         void Handle(TEvErasePersistentBuffer::TPtr ev);
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);

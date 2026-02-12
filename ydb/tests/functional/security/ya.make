@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 TEST_SRCS(
     conftest.py
     test_mon_endpoints_auth.py
+    test_mon_mtls_auth.py
 )
 
 SPLIT_FACTOR(20)

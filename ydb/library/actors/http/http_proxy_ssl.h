@@ -52,7 +52,7 @@ struct TSslHelpers {
         return CreateSslCtx(SSLv23_client_method());
     }
 
-    static TSslHolder<SSL_CTX> CreateServerContext(const TString& certificate, const TString& key) {
+    static TSslHolder<SSL_CTX> CreateServerContext(const TString& certificate, const TString& key, const TString& caFile) {
         TSslHolder<SSL_CTX> ctx = CreateSslCtx(SSLv23_server_method());
         SSL_CTX_set_ecdh_auto(ctx.Get(), 1);
         int res;
@@ -65,6 +65,15 @@ struct TSslHelpers {
         if (res < 0) {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;
+        }
+        if (!caFile.empty()) {
+            if (SSL_CTX_load_verify_locations(ctx.Get(), caFile.c_str(), nullptr) != 1) {
+                // TODO(yurikiselev): more diagnostics?
+                return nullptr;
+            }
+            // SSL_VERIFY_PEER option requests the client certificate during TLS handshake (mTLS),
+            // but doesn't fail if not provided
+            SSL_CTX_set_verify(ctx.Get(), SSL_VERIFY_PEER, nullptr);
         }
         return ctx;
     }
@@ -106,7 +115,7 @@ struct TSslHelpers {
         return true;
     }
 
-    static TSslHolder<SSL_CTX> CreateServerContext(const TString& pem) {
+    static TSslHolder<SSL_CTX> CreateServerContext(const TString& pem, const TString& caFile) {
         TSslHolder<SSL_CTX> ctx = CreateSslCtx(SSLv23_server_method());
         SSL_CTX_set_ecdh_auto(ctx.Get(), 1);
         if (!LoadX509Chain(ctx, pem)) {
@@ -114,6 +123,15 @@ struct TSslHelpers {
         }
         if (!LoadPrivateKey(ctx, pem)) {
             return nullptr;
+        }
+        if (!caFile.empty()) {
+            if (SSL_CTX_load_verify_locations(ctx.Get(), caFile.c_str(), nullptr) != 1) {
+                // TODO(yurikiselev): more diagnostics?
+                return nullptr;
+            }
+            // SSL_VERIFY_PEER option requests the client certificate during TLS handshake (mTLS),
+            // but doesn't fail if not provided
+            SSL_CTX_set_verify(ctx.Get(), SSL_VERIFY_PEER, nullptr);
         }
         return ctx;
     }

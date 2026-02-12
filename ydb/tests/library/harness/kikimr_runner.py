@@ -259,6 +259,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if getattr(self.__configurator, "tiny_mode", False):
             command.append("--tiny-mode")
 
+        if getattr(self.__configurator, "monitoring_tls_ca_path", None) is not None:
+            command.append("--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path)
+
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
         return command

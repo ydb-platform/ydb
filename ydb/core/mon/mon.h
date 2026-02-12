@@ -49,6 +49,7 @@ public:
         TVector<TString> AllowedSIDs;
         TString RedirectMainPageTo;
         TString Certificate;
+        TString CaFile; // CA certificate file path for verifying client certificates (mTLS)
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
         TString AllowOrigin;

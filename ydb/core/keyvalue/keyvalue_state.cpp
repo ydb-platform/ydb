@@ -569,7 +569,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
         TControlBoard::RegisterSharedControl(ReadRequestsInFlightLimit_Base, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
         ReadRequestsInFlightLimit.ResetControl(ReadRequestsInFlightLimit_Base);
-        TControlBoard::RegisterSharedControl(UsePayload_Base, icb->KeyValueVolumeControls.USE_PAYLOAD);
+        TControlBoard::RegisterSharedControl(UsePayload_Base, icb->KeyValueVolumeControls.UsePayload);
         UsePayload.ResetControl(UsePayload_Base);
     }
 

@@ -2298,6 +2298,28 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return shares;
     }
 
+    Y_UNIT_TEST(ConfigureSchedulerAppliesWeights) {
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        const ui32 owner = vdisk.PDiskParams->Owner;
+        const ui32 ownerRound = vdisk.PDiskParams->OwnerRound;
+
+        TPDiskSchedulerConfig cfg;
+        cfg.LowReadWeight = 42;
+
+        auto *ev = new NPDisk::TEvConfigureScheduler(owner, ownerRound);
+        ev->SchedulerCfg = cfg;
+        testCtx.TestResponse<NPDisk::TEvConfigureSchedulerResult>(ev, NKikimrProto::OK);
+
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            auto* low = pdisk->ForsetiScheduler.GetCbs(owner, NPDisk::GateLow);
+            UNIT_ASSERT(low);
+            UNIT_ASSERT_EQUAL(low->Weight, cfg.LowReadWeight);
+        });
+    }
+
     Y_UNIT_TEST(CheckChunkReadOperationPriorities) {
         using namespace NPriRead;
         std::vector<ui8> PriRead = {SyncLog, HullComp, HullOnlineRt, HullOnlineOther, HullLoad, HullLow};

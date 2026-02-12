@@ -860,6 +860,12 @@ public:
         PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
     }
 
+    void ErrorHandle(NPDisk::TEvConfigureScheduler::TPtr &ev) {
+        PDisk->Mon.YardConfigureScheduler.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvConfigureSchedulerResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.YardConfigureScheduler.CountResponse();
+    }
+
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
         PDisk->Mon.ChunkReserve.CountRequest();
         Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, StateErrorReason), 0, ev->Cookie);
@@ -1604,6 +1610,7 @@ public:
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
             hFunc(NPDisk::TEvYardResize, ErrorHandle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
+            hFunc(NPDisk::TEvConfigureScheduler, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

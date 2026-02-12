@@ -2784,6 +2784,12 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestConfigureScheduler: {
                 const auto& cfgReq = static_cast<TConfigureScheduler&>(*req);
                 SchedulerConfigure(cfgReq.SchedulerCfg, cfgReq.OwnerId);
+                Cfg->SchedulerCfg = cfgReq.SchedulerCfg;
+                if (cfgReq.Sender) {
+                    Mon.YardConfigureScheduler.CountResponse();
+                    PCtx->ActorSystem->Send(cfgReq.Sender,
+                        new NPDisk::TEvConfigureSchedulerResult(NKikimrProto::OK, TString()));
+                }
                 break;
             }
             case ERequestType::RequestWhiteboartReport:

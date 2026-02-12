@@ -571,6 +571,11 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         ReadRequestsInFlightLimit.ResetControl(ReadRequestsInFlightLimit_Base);
         TControlBoard::RegisterSharedControl(UsePayload_Base, icb->KeyValueVolumeControls.UsePayload);
         UsePayload.ResetControl(UsePayload_Base);
+
+        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+        << " Init KeyValue with ICB UsePayload# " << UsePayload.Update(ctx.Now())
+        << " ReadRequestsInFlightLimit# " << ReadRequestsInFlightLimit.Update(ctx.Now())
+        << " Marker# KV92");
     }
 
     // Issue hard barriers

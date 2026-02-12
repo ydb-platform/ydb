@@ -16,7 +16,10 @@ const TPartitionGraph& TMLPConsumer::GetPartitionGraph() const {
 }
 
 const TPartitionGraph::Node* TMLPConsumer::NextPartition() {
-    AFL_ENSURE(!PartitionsForBalancing.empty());
+    AFL_VERIFY_DEBUG(!PartitionsForBalancing.empty());
+    if (PartitionsForBalancing.empty()) {
+        return nullptr;
+    }
 
     auto partitionId = PartitionIterator++ % PartitionsForBalancing.size();
     return GetPartitionGraph().GetPartition(PartitionsForBalancing[partitionId]);
@@ -117,7 +120,7 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
                 auto [it, _] = Consumers.try_emplace(consumerName, *this);
                 auto& consumer = it->second;
             
-                bool changed = consumer.SetCommittedState(partitionId, endOffset - consumerResult.GetCommitedOffset(), consumerResult.GetReadingFinished(), generation, cookie);
+                bool changed = consumer.SetCommittedState(partitionId, std::max<i64>(0, endOffset - consumerResult.GetCommitedOffset()), consumerResult.GetReadingFinished(), generation, cookie);
                 mit->second |= changed;
             }
         }
@@ -148,6 +151,26 @@ void TMLPBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, con
 
     if (consumer.SetCommittedState(result.GetPartitionId(), 0, true, result.GetGeneration(), result.GetCookie())) {
         consumer.Rebuild();
+    }
+}
+
+void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
+    absl::flat_hash_set<TString> mlpConsumers;
+    for (const auto& consumer : GetConfig().GetConsumers()) {
+        if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            mlpConsumers.insert(consumer.GetName());
+        }
+    }
+
+    for (auto& [consumerName, consumer] : Consumers) {
+        if (mlpConsumers.contains(consumerName)) {
+            for (const auto& partitionId : addedPartitions) {
+                consumer.SetCommittedState(partitionId, 0, false, 0, 0);
+            }
+            consumer.Rebuild();
+        } else {
+            Consumers.erase(consumerName);
+        }
     }
 }
 

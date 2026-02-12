@@ -42,13 +42,15 @@ public:
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr&, const TActorContext&);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
+    void UpdateConfig(const std::vector<ui32>& addedPartitions);
+
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
 
 private:
     TPersQueueReadBalancer& TopicActor;
 
-    std::unordered_map<TString, TMLPConsumer> Consumers;
+    absl::flat_hash_map<TString, TMLPConsumer> Consumers;
 };
 
 } // namespace NKikimr::NPQ::NBalancing

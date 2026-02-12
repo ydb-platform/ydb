@@ -303,6 +303,9 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
         auto& runtime = setup->GetRuntime();
 
+        size_t messagesCount = 0;
+        size_t writeErrors = 0;
+
         auto end = TInstant::Now() + TDuration::Seconds(5);
         while (TInstant::Now() < end) {
             CreateWriterActor(runtime, {
@@ -316,13 +319,70 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
                     }
                 }
             });
+
+            auto r = GetWriteResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(r->Messages.size(), 1);
+            if (r->Messages[0].Status == Ydb::StatusIds::SUCCESS) {
+                ++messagesCount;
+            } else {
+                ++writeErrors;
+            }
+
+            Sleep(TDuration::MilliSeconds(10));
         }
+
+        Cerr << (TStringBuilder() << ">>>>> written messagesCount: " << messagesCount << Endl);
+        Cerr << (TStringBuilder() << ">>>>> write errors: " << writeErrors << Endl);
 
         {
             auto client = setup->MakeClient();
             auto describe = client.DescribeTopic(GetTopicPath("/Root/topic1")).GetValueSync();
             UNIT_ASSERT_GE_C(describe.GetTopicDescription().GetPartitions().size(), 3, "Split must be done");
+            Cerr << (TStringBuilder() << ">>>>> partitions count: " << describe.GetTopicDescription().GetPartitions().size() << Endl);
         }
+
+        size_t emptyResults = 0;
+
+        for (size_t i = 0; i < messagesCount;) {
+            CreateReaderActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Consumer = "mlp-consumer",
+                .WaitTime = TDuration::Seconds(0),
+                .VisibilityTimeout = TDuration::Seconds(5),
+                .MaxNumberOfMessage = 1,
+                .UncompressMessages = true
+            });
+            auto r = GetReadResponse(runtime);
+
+            if (r->Messages.empty()) {
+                ++emptyResults;
+                continue;
+            }
+
+            ++i;
+
+            CreateCommitterActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Consumer = "mlp-consumer",
+                .Messages = { r->Messages[0].MessageId }
+            });
+        }
+
+        Cerr << (TStringBuilder() << ">>>>> empty results: " << emptyResults << Endl);
+
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+            .UncompressMessages = true
+        });
+        auto r = GetReadResponse(runtime);
+        UNIT_ASSERT_C(r->Messages.empty(), "all messages have already been read successfully");
     }
 
 

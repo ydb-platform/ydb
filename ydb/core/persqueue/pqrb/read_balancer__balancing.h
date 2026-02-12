@@ -314,7 +314,7 @@ public:
     const std::unordered_map<TString, std::unique_ptr<TConsumer>>& GetConsumers() const;
     const std::unordered_map<TActorId, std::unique_ptr<TSession>>& GetSessions() const;
 
-    void UpdateConfig(std::vector<ui32> addedPartitions, std::vector<ui32> deletedPartitions, const TActorContext& ctx);
+    void UpdateConfig(const std::vector<ui32>& addedPartitions, const std::vector<ui32>& deletedPartitions, const TActorContext& ctx);
     bool SetCommittedState(const TString& consumer, ui32 partitionId, ui32 generation, ui64 cookie, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);

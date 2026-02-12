@@ -71,8 +71,8 @@ namespace NKikimr::NDDisk {
                 },
                 [this, chunkIdx](const TChunkForPersistentBuffer&) {
                     IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
-                        , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
-                        PersistentBufferSpaceAllocator.AddNewChunk(chunkIdx);
+                        , CreatePersistentBufferChunkMapSnapshot({chunkIdx}), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
+                        IssuePersistentBufferChunkAllocationInflight = false;
                         Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
                         ++*Counters.Chunks.ChunksOwned;
                     });
@@ -123,9 +123,14 @@ namespace NKikimr::NDDisk {
         ++*Counters.RecoveryLog.CutLogMessages;
     }
 
-    NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord TDDiskActor::CreatePersistentBufferChunkMapSnapshot() {
+    NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord TDDiskActor::CreatePersistentBufferChunkMapSnapshot(const std::vector<ui64>& newChunkIdxs) {
         NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord record;
         for (const auto& chunkIdx : PersistentBufferSpaceAllocator.OwnedChunks) {
+            record.AddChunkIdxs(chunkIdx);
+        }
+        for (const auto& chunkIdx : newChunkIdxs) {
+            Y_DEBUG_ABORT_UNLESS(std::find(PersistentBufferSpaceAllocator.OwnedChunks.begin(),
+                PersistentBufferSpaceAllocator.OwnedChunks.end(), chunkIdx) == PersistentBufferSpaceAllocator.OwnedChunks.end());
             record.AddChunkIdxs(chunkIdx);
         }
         return record;

@@ -26,6 +26,8 @@ using THashMapLimited = THashMap<TKey, TValue, THash<TKey>, TEqualTo<TKey>, TStd
 template <class TValue>
 using TVectorLimited = TVector<TValue, TStdIAllocator<const TValue>>;
 
+using NodeDataProviderPair = std::pair<const TExprNode*, IDataProvider*>;
+
 class TLimitedStringStream: public TStringStream {
 public:
     explicit TLimitedStringStream(size_t maxSize)
@@ -58,7 +60,6 @@ public:
         , Reads_(Allocator_.get())
         , Writes_(Allocator_.get())
         , ReadIds_(Allocator_.get())
-        , WriteIds_(Allocator_.get())
         , Lineages_(Allocator_.get())
         , HasReads_(Allocator_.get())
         , Standalone_(standalone)
@@ -126,30 +127,45 @@ public:
         writer.OnEndList();
         writer.OnKeyedItem("Writes");
         writer.OnBeginList();
+        THashMapLimited<TString, TVectorLimited<NodeDataProviderPair>> writeTables(Allocator_.get());
         for (const auto& w : Writes_) {
-            auto data = w.first->Child(3);
             TVector<TPinInfo> outputs;
-            auto& formatter = w.second->GetPlanFormatter();
-            formatter.GetOutputs(*w.first, outputs, /* withLimits */ false);
+            w.second->GetPlanFormatter().GetOutputs(*w.first, outputs, /* withLimits */ false);
             YQL_ENSURE(outputs.size() == 1);
-            auto id = ++NextWriteId_;
-            WriteIds_[w.first] = id;
+            writeTables.try_emplace(outputs.front().DisplayName, TVectorLimited<NodeDataProviderPair>(Allocator_.get())).first->second.push_back(w);
+        }
+        for (const auto& w : writeTables) {
             writer.OnListItem();
             writer.OnBeginMap();
             writer.OnKeyedItem("Id");
-            writer.OnInt64Scalar(id);
+            writer.OnInt64Scalar(++NextWriteId_);
             writer.OnKeyedItem("Name");
-            writer.OnStringScalar(outputs.front().DisplayName);
+            writer.OnStringScalar(w.first);
             writer.OnKeyedItem("Schema");
+            auto data = w.second[0].first->Child(3);
             const auto& itemType = *data->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             WriteSchema(writer, itemType, nullptr);
+            auto& formatter = w.second[0].second->GetPlanFormatter();
             if (formatter.WriteSchemaHeader(writer)) {
                 WriteSchema(writer, itemType, &formatter);
             }
 
             writer.OnKeyedItem("Lineage");
-            auto lineage = CollectLineage(*data);
-            WriteLineage(writer, *lineage);
+            if (w.second.size() == 1) {
+                WriteLineage(writer, *CollectLineage(*data));
+            } else {
+                TVectorLimited<TLineage> lineages(Allocator_.get());
+                lineages.reserve(w.second.size());
+                Transform(w.second.begin(),
+                          w.second.end(),
+                          std::back_inserter(lineages),
+                          [this](const auto& e) {
+                              return *CollectLineage(*e.first->Child(3));
+                          });
+                TLineage lineage;
+                MergeLineages(lineage, lineages);
+                WriteLineage(writer, lineage);
+            }
             writer.OnEndMap();
         }
 
@@ -756,15 +772,7 @@ private:
                           TFieldsLineageMap(Allocator_.get()));
     }
 
-    void HandleExtend(TLineage& lineage, const TExprNode& node) {
-        TVectorLimited<TLineage> inners(Allocator_.get());
-        for (const auto& child : node.Children()) {
-            inners.push_back(*CollectLineage(*child));
-            if (!inners.back().Fields.Defined()) {
-                return;
-            }
-        }
-
+    void MergeLineages(TLineage& lineage, TVectorLimited<TLineage>& inners) {
         if (inners.empty()) {
             return;
         }
@@ -804,6 +812,17 @@ private:
                 }
             }
         }
+    }
+
+    void HandleExtend(TLineage& lineage, const TExprNode& node) {
+        TVectorLimited<TLineage> inners(Allocator_.get());
+        for (const auto& child : node.Children()) {
+            inners.push_back(*CollectLineage(*child));
+            if (!inners.back().Fields.Defined()) {
+                return;
+            }
+        }
+        MergeLineages(lineage, inners);
     }
 
     void HandleWindow(TLineage& lineage, const TExprNode& node) {
@@ -1084,7 +1103,6 @@ private:
     ui32 NextReadId_ = 0;
     ui32 NextWriteId_ = 0;
     TNodeMapLimited<TVectorLimited<ui32>> ReadIds_;
-    TNodeMapLimited<ui32> WriteIds_;
     TNodeMapLimited<TLineage> Lineages_;
     TNodeSetLimited HasReads_;
     bool Standalone_;

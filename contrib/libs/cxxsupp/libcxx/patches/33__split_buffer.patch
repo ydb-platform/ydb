@@ -1,8 +1,8 @@
 diff --git a/include/__split_buffer b/include/__split_buffer
-index 5ee7022..4ca3393 100644
+index a8f679c..b9d9080 100644
 --- a/include/__split_buffer
 +++ b/include/__split_buffer
-@@ -148,7 +148,7 @@ public:
+@@ -146,7 +146,7 @@ public:
  
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void pop_front() { __destruct_at_begin(__begin_ + 1); }
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void pop_back() { __destruct_at_end(__end_ - 1); }
@@ -11,7 +11,7 @@ index 5ee7022..4ca3393 100644
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __construct_at_end(size_type __n);
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __construct_at_end(size_type __n, const_reference __x);
  
-@@ -228,6 +228,11 @@ _LIBCPP_CONSTEXPR_SINCE_CXX20 bool __split_buffer<_Tp, _Allocator>::__invariants
+@@ -226,6 +226,11 @@ _LIBCPP_CONSTEXPR_SINCE_CXX20 bool __split_buffer<_Tp, _Allocator>::__invariants
    return true;
  }
  

@@ -146,7 +146,8 @@ public:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult, TActorBase::Handle);
-        default: TBase::StateWork(ev);
+        default:
+            TBase::StateWork(ev);
         }
     }
 

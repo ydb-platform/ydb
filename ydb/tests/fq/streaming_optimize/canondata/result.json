@@ -225,6 +225,14 @@
             "uri": "file://test_sql_streaming.test_solomon-ReadTopicGroupWriteToSolomon-default.txt_/plan.json"
         }
     },
+    "test_sql_streaming.test[watermarks-watermark_over_unused_column-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermark_over_unused_column-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermark_over_unused_column-default.txt_/plan.json"
+        }
+    },
     "test_sql_streaming.test[watermarks-watermarks-default.txt]": {
         "Ast": {
             "uri": "file://test_sql_streaming.test_watermarks-watermarks-default.txt_/ast.txt"

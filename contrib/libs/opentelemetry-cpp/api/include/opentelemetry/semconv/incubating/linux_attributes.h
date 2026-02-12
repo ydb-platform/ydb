@@ -21,8 +21,13 @@ namespace linux
 
 /**
   The Linux Slab memory state
+
+  @deprecated
+  {"note": "Replaced by @code system.memory.linux.slab.state @endcode.", "reason": "renamed",
+  "renamed_to": "system.memory.linux.slab.state"}
  */
-static constexpr const char *kLinuxMemorySlabState = "linux.memory.slab.state";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kLinuxMemorySlabState =
+    "linux.memory.slab.state";
 
 namespace LinuxMemorySlabStateValues
 {

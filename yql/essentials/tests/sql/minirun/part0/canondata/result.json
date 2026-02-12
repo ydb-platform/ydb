@@ -529,16 +529,16 @@
     ],
     "test.test[expr-cast_decimal-default.txt-Debug]": [
         {
-            "checksum": "f4d5d9897fb3c8fa45f67e69e97e4a6a",
-            "size": 2344,
-            "uri": "https://{canondata_backend}/1881367/2d9d0d3d1ddc9faf1368797d4ac0c730a540cd0c/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Debug_/opt.yql"
+            "checksum": "91294751a47cfcb87a5a3af5e0db632c",
+            "size": 1564,
+            "uri": "https://{canondata_backend}/1773845/486531303c5d3ec35ed8056fbdb4be070aadc061/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[expr-cast_decimal-default.txt-Results]": [
         {
-            "checksum": "b57165ab0c7a5165085c351444b6c5fd",
-            "size": 19328,
-            "uri": "https://{canondata_backend}/1881367/2d9d0d3d1ddc9faf1368797d4ac0c730a540cd0c/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Results_/results.txt"
+            "checksum": "7bede4f19295253e7740f658c336afed",
+            "size": 14064,
+            "uri": "https://{canondata_backend}/1773845/486531303c5d3ec35ed8056fbdb4be070aadc061/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Results_/results.txt"
         }
     ],
     "test.test[expr-cast_string_implicit-default.txt-Debug]": [

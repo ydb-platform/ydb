@@ -52,6 +52,7 @@ namespace TEvPrivate {
         EvLoginFinalize,
         EvContinuousBackupCleanerResult,
         EvTestNotifySubdomainCleanup,
+        EvFlushConditionalEraseBatch,
         EvEnd
     };
 
@@ -90,6 +91,14 @@ namespace TEvPrivate {
     };
 
     struct TEvRunConditionalErase: public TEventLocal<TEvRunConditionalErase, EvRunConditionalErase> {
+    };
+
+    struct TEvFlushConditionalEraseBatch : public TEventLocal<TEvFlushConditionalEraseBatch, EvFlushConditionalEraseBatch> {
+        TInstant BatchStartTime;
+
+        explicit TEvFlushConditionalEraseBatch(const TInstant& batchStartTime)
+            : BatchStartTime(batchStartTime)
+        { }
     };
 
     struct TEvIndexBuildingMakeABill: public TEventLocal<TEvIndexBuildingMakeABill, EvIndexBuildBilling> {

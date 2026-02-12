@@ -1232,7 +1232,9 @@ struct TFullTextApplyParseResult {
     TExprNode::TPtr DefaultOperator;
     TExprNode::TPtr MinimumShouldMatch;
 
+    ui64 FulltextExprCount = 0;
     bool IsScoreApply = false;
+    bool HasErrors = false;
 
     TFullTextApplyParseResult()
     {}
@@ -1313,6 +1315,71 @@ struct TFullTextApplyParseResult {
         return true;
     }
 
+    bool ValidateApply(TExprContext& ctx) {
+        if (!EnsureArgsCount(*Apply, 2, ctx)) {
+            return false;
+        }
+
+        IsScoreApply = Apply->Content() == "FulltextScore";
+        TExprNode::TPtr positinalArgsParent = Apply;
+        TExprNode::TPtr namedArgsParent = nullptr;
+        if (Apply->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+            positinalArgsParent = Apply->Child(0);
+            namedArgsParent = Apply->Child(1);
+        }
+
+        SearchColumn = positinalArgsParent->Child(0);
+        SearchQuery = positinalArgsParent->Child(1);
+        if (!ValidateRequiredSettings()) {
+            return false;
+        }
+
+        if (!namedArgsParent) {
+            return true;
+        }
+
+        for(auto& arg : namedArgsParent->Children()) {
+            if (!TExprBase(arg).Maybe<TCoNameValueTuple>()) {
+                return false;
+            }
+
+            auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
+            if (nameValueTuple.Name().StringValue() == "B") {
+                BFactor = nameValueTuple.Value().Cast().Ptr();
+            }
+
+            if (nameValueTuple.Name().StringValue() == "K1") {
+                K1Factor = nameValueTuple.Value().Cast().Ptr();
+            }
+
+            if (nameValueTuple.Name().StringValue() == "DefaultOperator") {
+                DefaultOperator = nameValueTuple.Value().Cast().Ptr();
+            }
+
+            if (nameValueTuple.Name().StringValue() == "MinimumShouldMatch") {
+                MinimumShouldMatch = nameValueTuple.Value().Cast().Ptr();
+            }
+        }
+
+        if (!ValidateBFactor()) {
+            return false;
+        }
+
+        if (!ValidateK1Factor()) {
+            return false;
+        }
+
+        if (!ValidateDefaultOperator()) {
+            return false;
+        }
+
+        if (!ValidateMinimumShouldMatch()) {
+            return false;
+        }
+
+        return true;
+    }
+
     TVector<TCoNameValueTuple> Settings(TExprContext& ctx, TPositionHandle pos) {
         TVector<TCoNameValueTuple> settings;
         if (BFactor) {
@@ -1353,87 +1420,84 @@ struct TFullTextApplyParseResult {
     }
 };
 
-TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx) {
+TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx, std::string_view indexName) {
 
     TFullTextApplyParseResult result;
+    THashMap<const TExprNode*, const TExprNode*> nodeToParentMap;
+    static const THashSet<TString> AllowedFulltextExprs = {
+        "FulltextScore",
+        "FulltextMatch",
+        "And",
+        "OptionalIf",
+        "Member",
+        "Just",
+        "AsStruct"};
 
     VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
+        bool isGreenNode = false;
+        auto parent = nodeToParentMap.find(expr.Get());
+        if (AllowedFulltextExprs.contains(expr->Content())) {
+            isGreenNode = true;
+        } else if (parent != nodeToParentMap.end() && parent->second->Content() == "AsStruct") {
+            isGreenNode = true;
+        } else {
+            isGreenNode = false;
+        }
+
+        if (!isGreenNode) {
+            return false;
+        }
+
+        for(auto& child : expr->Children()) {
+            nodeToParentMap.emplace(child.Get(), expr.Get());
+        }
+
         if (expr->Content() == "FulltextScore" || expr->Content() == "FulltextMatch") {
-            if (!EnsureArgsCount(*expr, 2, ctx)) {
-                return false;
-            }
-
-            result.IsScoreApply = expr->Content() == "FulltextScore";
-            TExprNode::TPtr positinalArgsParent = expr;
-            TExprNode::TPtr namedArgsParent = nullptr;
-            if (expr->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
-                positinalArgsParent = expr->Child(0);
-                namedArgsParent = expr->Child(1);
-            }
-
-            result.SearchColumn = positinalArgsParent->Child(0);
-            result.SearchQuery = positinalArgsParent->Child(1);
-            if (!result.ValidateRequiredSettings()) {
-                return false;
-            }
-
-            if (!namedArgsParent) {
-                result.Apply = expr;
-                return false;
-            }
-
-            for(auto& arg : namedArgsParent->Children()) {
-                if (!TExprBase(arg).Maybe<TCoNameValueTuple>()) {
-                    return false;
-                }
-
-                auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
-                if (nameValueTuple.Name().StringValue() == "B") {
-                    result.BFactor = nameValueTuple.Value().Cast().Ptr();
-                }
-
-                if (nameValueTuple.Name().StringValue() == "K1") {
-                    result.K1Factor = nameValueTuple.Value().Cast().Ptr();
-                }
-
-                if (nameValueTuple.Name().StringValue() == "DefaultOperator") {
-                    result.DefaultOperator = nameValueTuple.Value().Cast().Ptr();
-                }
-
-                if (nameValueTuple.Name().StringValue() == "MinimumShouldMatch") {
-                    result.MinimumShouldMatch = nameValueTuple.Value().Cast().Ptr();
-                }
-            }
-
-            if (!result.ValidateBFactor()) {
-                return false;
-            }
-
-            if (!result.ValidateK1Factor()) {
-                return false;
-            }
-
-            if (!result.ValidateDefaultOperator()) {
-                return false;
-            }
-
-            if (!result.ValidateMinimumShouldMatch()) {
-                return false;
-            }
-
             result.Apply = expr;
-
             return false;
         }
 
         return true;
     });
 
+    VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
+        if (expr->Content() == "FulltextMatch" || expr->Content() == "FulltextScore") {
+            result.FulltextExprCount++;
+            return false;
+        }
+
+        return true;
+    });
+
+    bool hasValidApply = result.Apply && result.ValidateApply(ctx);
+
+    if (!hasValidApply || result.FulltextExprCount != 1) {
+        result.HasErrors = true;
+        auto message = TStringBuilder{} << "Unsupported index access, index name: " << indexName << ".";
+        if (result.FulltextExprCount > 1) {
+            message << " Multiple fulltext predicates in a single read are not supported.";
+        } else if (result.FulltextExprCount == 0) {
+            message << " FulltextMatch/FulltextScore predicate is not specified to access index.";
+        } else if (!result.Apply) {
+            message << " FulltextMatch/FulltextScore node is not reachable by conjunctions.";
+        } else if (!hasValidApply) {
+            message << " FulltextMatch/FulltextScore predicate is not valid.";
+        }
+
+        TIssue baseIssue{ctx.GetPosition(node.Pos()), message};
+        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, baseIssue);
+
+        TIssue subIssue{ctx.GetPosition(node.Pos()), TStringBuilder{} << "Unsupported predicate is used to access index: " << indexName };
+        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, subIssue);
+        baseIssue.AddSubIssue(MakeIntrusive<TIssue>(std::move(subIssue)));
+        ctx.AddError(baseIssue);
+    }
+
     return result;
 }
 
 
-TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap)
 {
     Y_UNUSED(kqpCtx, parentsMap);
@@ -1457,9 +1521,9 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
         return node;
     }
 
-    auto result = FindMatchingApply(topSort.KeySelectorLambda().Body(), ctx);
-    if (!result.Apply) {
-        return node;
+    auto result = FindMatchingApply(topSort.KeySelectorLambda().Body(), ctx, read.Index().Value());
+    if (result.HasErrors) {
+        return {};
     }
 
     if (!result.IsScoreApply) {
@@ -1541,7 +1605,7 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
     return mapResult;
 };
 
-TExprBase KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap)
 {
     Y_UNUSED(kqpCtx, parentsMap);
@@ -1555,22 +1619,9 @@ TExprBase KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node
         return node;
     }
 
-    auto reject = [&] (const TReadMatch& readTableIndex) {
-        auto message = TStringBuilder{} << "Failed to rewrite read over full text index.";
-        TIssue baseIssue{ctx.GetPosition(readTableIndex.Pos()), message};
-        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, baseIssue);
-
-        TIssue subIssue{ctx.GetPosition(readTableIndex.Pos()), "Matching udf apply is not found"};
-        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, subIssue);
-        baseIssue.AddSubIssue(MakeIntrusive<TIssue>(std::move(subIssue)));
-        ctx.AddError(baseIssue);
-        return;
-    };
-
-    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx);
-    if (!result.Apply) {
-        reject(read);
-        return node;
+    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value());
+    if (result.HasErrors) {
+        return {};
     }
 
     auto searchQuery = TExprBase(result.SearchQuery);

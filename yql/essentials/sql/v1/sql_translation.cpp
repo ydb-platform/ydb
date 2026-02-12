@@ -817,6 +817,15 @@ TNodePtr ParseDatabaseSettingValue(TContext& ctx, const TRule_database_setting_v
     }
 }
 
+TNodePtr ParseLiteral(const TRule_compact_setting_value& value, TContext& ctx, NSQLTranslation::ESqlMode mode, const TString& expectedType) {
+    TSqlExpression sqlExpr(ctx, mode);
+    auto exprOrId = sqlExpr.LiteralExpr(value.GetRule_literal_value1());
+    if (!exprOrId || !exprOrId->Expr || !exprOrId->Expr->IsLiteral() || exprOrId->Expr->GetLiteralType() != expectedType) {
+        return nullptr;
+    }
+    return exprOrId->Expr;
+}
+
 } // namespace
 
 bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out) {
@@ -886,6 +895,39 @@ bool TSqlTranslation::AddIndexSetting(const TIdentifier& id,
         return false;
     }
 
+    return true;
+}
+
+bool TSqlTranslation::AddCompactSetting(const TIdentifier& id, const TRule_compact_setting_value& value, TCompactEntry& compactEntry) {
+    if (to_lower(id.Name) == "cascade") {
+        if (compactEntry.Cascade) {
+            Ctx_.Error() << "Duplicated " << to_upper(id.Name);
+            return false;
+        }
+        compactEntry.Cascade = ParseLiteral(value, Ctx_, Mode_, "Bool");
+        if (!compactEntry.Cascade) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a boolean";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "max_shards_in_flight") {
+        if (compactEntry.MaxShardsInFlight) {
+            Ctx_.Error() << "Duplicated " << to_upper(id.Name);
+            return false;
+        }
+        compactEntry.MaxShardsInFlight = ParseLiteral(value, Ctx_, Mode_, "Int32");
+        if (!compactEntry.MaxShardsInFlight) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a Int32";
+            return false;
+        }
+        i32 value = FromString<i32>(compactEntry.MaxShardsInFlight->GetLiteralValue());
+        if (value <= 0) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be positive" << value;
+            return false;
+        }
+    } else {
+        Ctx_.Error() << to_upper(id.Name) << ": unknown setting for compact";
+        return false;
+    }
     return true;
 }
 
@@ -5199,11 +5241,12 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
 TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
 
-    if (auto v = NYql::GetMaxLangVersion();
-        !isEvaluate && !IsBackwardCompatibleFeatureAvailable(v)) {
-        Ctx_.Error(GetPos(stmt.GetToken2()))
-            << "IF without EVALUATE "
-            << "is not available before version " << NYql::FormatLangVersion(v);
+    if (!isEvaluate &&
+        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            GetPos(stmt.GetToken2()),
+            "IF without EVALUATE",
+            GetMaxLangVersion()))
+    {
         return {};
     }
 
@@ -5233,19 +5276,21 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
     bool isParallel = stmt.HasBlock2();
 
-    if (auto v = NYql::GetMaxLangVersion();
-        isParallel && !IsBackwardCompatibleFeatureAvailable(v)) {
-        Ctx_.Error(GetPos(stmt.GetBlock2().GetToken1()))
-            << "PARALLEL FOR "
-            << "is not available before version " << NYql::FormatLangVersion(v);
+    if (isParallel &&
+        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            GetPos(stmt.GetBlock2().GetToken1()),
+            "PARALLEL FOR",
+            GetMaxLangVersion()))
+    {
         return {};
     }
 
-    if (auto v = NYql::GetMaxLangVersion();
-        !isEvaluate && !IsBackwardCompatibleFeatureAvailable(v)) {
-        Ctx_.Error(GetPos(stmt.GetToken3()))
-            << "FOR without EVALUATE "
-            << "is not available before version " << NYql::FormatLangVersion(v);
+    if (!isEvaluate &&
+        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            GetPos(stmt.GetToken3()),
+            "FOR without EVALUATE",
+            GetMaxLangVersion()))
+    {
         return {};
     }
 
@@ -6226,10 +6271,9 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return legacy();
     }
 
-    const NYql::TLangVersion langVer = YqlSelectLangVersion();
-    if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
-        Error() << "YqlSelect is not available before "
-                << FormatLangVersion(langVer);
+    if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            Ctx_.Pos(), "YqlSelect", YqlSelectLangVersion()))
+    {
         return nullptr;
     }
 

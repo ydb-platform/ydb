@@ -7,11 +7,13 @@
 #include <string>
 
 #include "opentelemetry/sdk/configuration/attribute_limits_configuration.h"
+#include "opentelemetry/sdk/configuration/distribution_configuration.h"
 #include "opentelemetry/sdk/configuration/document.h"
 #include "opentelemetry/sdk/configuration/logger_provider_configuration.h"
 #include "opentelemetry/sdk/configuration/meter_provider_configuration.h"
 #include "opentelemetry/sdk/configuration/propagator_configuration.h"
 #include "opentelemetry/sdk/configuration/resource_configuration.h"
+#include "opentelemetry/sdk/configuration/severity_number.h"
 #include "opentelemetry/sdk/configuration/tracer_provider_configuration.h"
 #include "opentelemetry/version.h"
 
@@ -65,7 +67,7 @@ public:
 
   std::string file_format;
   bool disabled{false};
-  std::string log_level;
+  enum SeverityNumber log_level = SeverityNumber::info;
 
   std::unique_ptr<AttributeLimitsConfiguration> attribute_limits;
   std::unique_ptr<LoggerProviderConfiguration> logger_provider;
@@ -74,6 +76,7 @@ public:
   std::unique_ptr<TracerProviderConfiguration> tracer_provider;
   std::unique_ptr<ResourceConfiguration> resource;
   // Ignored: instrumentation
+  std::unique_ptr<DistributionConfiguration> distribution;
 
 private:
   std::unique_ptr<Document> doc_;

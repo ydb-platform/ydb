@@ -2836,16 +2836,9 @@
     ],
     "test_sql2yql.test[expr-cast_decimal]": [
         {
-            "checksum": "516eb39f82fe3c94951162e0da5a1b83",
-            "size": 6001,
-            "uri": "https://{canondata_backend}/1784117/30ea169afcb95c01597ed603d28a50d31fe02139/resource.tar.gz#test_sql2yql.test_expr-cast_decimal_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[expr-cast_decimal_fail]": [
-        {
-            "checksum": "dfb0588cec4672fb8e7d794167daa264",
-            "size": 1099,
-            "uri": "https://{canondata_backend}/1937001/148a5f7275b829096c74bf6601aae10f48dfa1aa/resource.tar.gz#test_sql2yql.test_expr-cast_decimal_fail_/sql.yql"
+            "checksum": "0beea95df85e9ea70b06ffa9d9eac69f",
+            "size": 4965,
+            "uri": "https://{canondata_backend}/1937367/202da80d0009198056876ba9c30253c7f740a46a/resource.tar.gz#test_sql2yql.test_expr-cast_decimal_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-cast_decimal_implicit_fail_1]": [
@@ -12270,11 +12263,6 @@
             "uri": "file://test_sql_format.test_expr-cast_decimal_/formatted.sql"
         }
     ],
-    "test_sql_format.test[expr-cast_decimal_fail]": [
-        {
-            "uri": "file://test_sql_format.test_expr-cast_decimal_fail_/formatted.sql"
-        }
-    ],
     "test_sql_format.test[expr-cast_decimal_implicit_fail_1]": [
         {
             "uri": "file://test_sql_format.test_expr-cast_decimal_implicit_fail_1_/formatted.sql"
@@ -16297,9 +16285,9 @@
     ],
     "test_sql_negative.test[intersect-intersect_2025_02_disable-]": [
         {
-            "checksum": "9403dc19d6e14cdcbfe62ab16ec2a391",
-            "size": 150,
-            "uri": "https://{canondata_backend}/1923547/b5b8195ecbefd69ddf9a6d63b4f3896f5822995d/resource.tar.gz#test_sql_negative.test_intersect-intersect_2025_02_disable-_/err_file.out"
+            "checksum": "6a39c37cf7d11fa7749a56c0a39fd017",
+            "size": 159,
+            "uri": "https://{canondata_backend}/1942173/fe73e57771d4b18e109b2278755cb00294bcab61/resource.tar.gz#test_sql_negative.test_intersect-intersect_2025_02_disable-_/err_file.out"
         }
     ],
     "test_sql_negative.test[join-eq_bad_dependency_detection-]": [

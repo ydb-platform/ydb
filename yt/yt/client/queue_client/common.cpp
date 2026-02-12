@@ -33,17 +33,7 @@ TCrossClusterReference::operator TRichYPath() const
 
 TCrossClusterReference TCrossClusterReference::FromString(TStringBuf path)
 {
-    TCrossClusterReference result;
-    if (!StringSplitter(path).Split(':').Limit(2).TryCollectInto(&result.Cluster, &result.Path)) {
-        THROW_ERROR_EXCEPTION("Ill-formed cross-cluster reference %Qv", path);
-    }
-    if (result.Cluster.empty()) {
-        THROW_ERROR_EXCEPTION("The cluster component of cross-cluster reference %Qv cannot be empty", path);
-    }
-    if (result.Path.empty()) {
-        THROW_ERROR_EXCEPTION("The path component of cross-cluster reference %Qv cannot be empty", path);
-    }
-    return result;
+    return FromRichYPath(TRichYPath::Parse(path));
 }
 
 TCrossClusterReference TCrossClusterReference::FromRichYPath(const TRichYPath& path)

@@ -32,12 +32,16 @@ private:
     YDB_READONLY(ui64, TotalBlobBytes, 0);
     const NArrow::TSimpleRow FirstPK;
     const NArrow::TSimpleRow LastPK;
+    YDB_READONLY_DEF(bool, IsCommitted);
 
 public:
-    TPortionInfoForCompaction(const ui64 totalBlobBytes, const NArrow::TSimpleRow& firstPK, const NArrow::TSimpleRow& lastPK)
+    TPortionInfoForCompaction(
+        const ui64 totalBlobBytes, const NArrow::TSimpleRow& firstPK, const NArrow::TSimpleRow& lastPK, const bool isCommitted)
         : TotalBlobBytes(totalBlobBytes)
         , FirstPK(firstPK)
-        , LastPK(lastPK) {
+        , LastPK(lastPK)
+        , IsCommitted(isCommitted)
+    {
     }
 
     const NArrow::TSimpleRow& GetFirstPK() const {

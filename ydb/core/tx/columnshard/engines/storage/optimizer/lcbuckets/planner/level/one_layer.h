@@ -8,7 +8,7 @@ class TOneLayerPortions: public IPortionsLevel {
 private:
     using TBase = IPortionsLevel;
 
-    std::set<TOrderedPortion, std::less<>> Portions;
+    TOrderedPortionsContainer Portions;
     const double BytesLimitFraction = 1;
     const ui64 ExpectedPortionSize = (1 << 20);
     const ui64 SizeLimitGuarantee = 0;
@@ -34,13 +34,13 @@ private:
     }
 
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const override {
-        if (Portions.empty()) {
+        if (Portions.GetPortions().empty()) {
             return std::nullopt;
         }
         std::vector<TPortionInfo::TConstPtr> result;
-        auto itFrom = Portions.upper_bound(from);
-        auto itTo = Portions.upper_bound(to);
-        if (itFrom != Portions.begin()) {
+        auto itFrom = Portions.GetPortions().upper_bound(from);
+        auto itTo = Portions.GetPortions().upper_bound(to);
+        if (itFrom != Portions.GetPortions().begin()) {
             auto it = itFrom;
             --it;
             if (from <= it->GetPortion()->IndexKeyEnd()) {
@@ -50,7 +50,7 @@ private:
         for (auto it = itFrom; it != itTo; ++it) {
             result.emplace_back(it->GetPortion());
         }
-        if (itTo != Portions.end()) {
+        if (itTo != Portions.GetPortions().end()) {
             return TPortionsChain(std::move(result), itTo->GetPortion());
         } else if (result.size()) {
             return TPortionsChain(std::move(result), nullptr);
@@ -105,7 +105,7 @@ public:
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
-        for (auto&& i : Portions) {
+        for (auto&& i : Portions.GetPortions()) {
             if (locksManager->IsLocked(*i.GetPortion(), NDataLocks::ELockCategory::Compaction)) {
                 return true;
             }
@@ -114,17 +114,17 @@ public:
     }
 
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const override {
-        if (Portions.empty()) {
+        if (Portions.GetPortions().empty()) {
             return 0;
         }
         AFL_VERIFY(from <= to);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("from", from.DebugString())("to", to.DebugString());
         ui64 result = 0;
         ui64 resultPacked = 0;
-        auto itFrom = Portions.upper_bound(from);
-        auto itTo = Portions.upper_bound(to);
+        auto itFrom = Portions.GetPortions().upper_bound(from);
+        auto itTo = Portions.GetPortions().upper_bound(to);
         ui32 count = 0;
-        if (itFrom != Portions.begin()) {
+        if (itFrom != Portions.GetPortions().begin()) {
             auto it = itFrom;
             --it;
             if (from <= it->GetPortion()->IndexKeyEnd()) {
@@ -138,8 +138,8 @@ public:
             resultPacked += it->GetPortion()->GetTotalBlobBytes();
             ++count;
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("itFrom", itFrom == Portions.end())("itTo", itTo == Portions.end())("raw", result)(
-            "count", count)("packed", resultPacked);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("itFrom", itFrom == Portions.GetPortions().end())(
+            "itTo", itTo == Portions.GetPortions().end())("raw", result)("count", count)("packed", resultPacked);
         return result;
     }
 
@@ -150,7 +150,7 @@ public:
 
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         NArrow::NMerger::TIntervalPositions result;
-        for (auto&& i : Portions) {
+        for (auto&& i : Portions.GetPortions()) {
             result.AddPosition(i.GetStart().BuildSortablePosition(), false);
         }
         return result;

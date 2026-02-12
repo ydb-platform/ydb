@@ -523,7 +523,6 @@ private:
     std::shared_ptr<const NOlap::TVersionedIndex> VersionedIndex;
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     const TIndexationCounters Counters;
-    const NOlap::TSnapshot SnapshotModification;
     const bool NeedBlobs = true;
     const std::shared_ptr<TAtomicCounter> TabletActivity;
 
@@ -575,7 +574,7 @@ private:
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(Changes, false);
         Changes->FetchingContext.emplace(std::move(context));
         {
-            NOlap::TConstructionContext context(*VersionedIndex, Counters, SnapshotModification);
+            NOlap::TConstructionContext context(*VersionedIndex, Counters);
             if (NeedBlobs) {
                 Changes->ConstructBlobs(context).Validate();
             }
@@ -617,15 +616,15 @@ private:
 public:
     TCompactionExecutor(const ui64 tabletId, const NActors::TActorId parentActorId, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
         const std::shared_ptr<const NOlap::TVersionedIndex>& versionedIndex, const TIndexationCounters& counters,
-        const NOlap::TSnapshot snapshotModification, const std::shared_ptr<TAtomicCounter>& tabletActivity, const bool needBlobs = true)
+        const std::shared_ptr<TAtomicCounter>& tabletActivity, const bool needBlobs = true)
         : TabletId(tabletId)
         , ParentActorId(parentActorId)
         , Changes(changes)
         , VersionedIndex(versionedIndex)
         , Counters(counters)
-        , SnapshotModification(snapshotModification)
         , NeedBlobs(needBlobs)
-        , TabletActivity(tabletActivity) {
+        , TabletActivity(tabletActivity)
+    {
     }
 };
 
@@ -656,7 +655,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
         auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
         NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
             std::make_shared<TCompactionExecutor>(
-                TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl),
+                TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(), TabletActivityImpl),
             env, NConveyorComposite::ESpecialTaskCategory::Compaction);
     }
 }
@@ -782,14 +781,12 @@ bool TColumnShard::SetupTtl() {
         auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
         if (i->NeedConstruction()) {
             NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
-                std::make_shared<TCompactionExecutor>(
-                    TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, true),
-                env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+                std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(),
+                    TabletActivityImpl, true), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         } else {
             NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
-                std::make_shared<TCompactionExecutor>(
-                    TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
-                env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+                std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(),
+                    TabletActivityImpl, false), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         }
     }
     return true;
@@ -826,9 +823,8 @@ void TColumnShard::SetupCleanupPortions() {
         NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier(), processGuard);
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
     NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
-        std::make_shared<TCompactionExecutor>(
-            TabletID(), SelfId(), changes, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
-        env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+        std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), changes, actualIndexInfo, Counters.GetIndexationCounters(),
+            TabletActivityImpl, false), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
 }
 
 void TColumnShard::SetupCleanupTables() {

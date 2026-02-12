@@ -13,7 +13,6 @@ PEERDIR(
     library/cpp/netliba/v6
     library/cpp/openssl/init
     library/cpp/openssl/method
-    library/cpp/deprecated/atomic_bool
     library/cpp/threading/thread_local
     library/cpp/deprecated/atomic
 )

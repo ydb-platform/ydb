@@ -2801,7 +2801,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatch, UTF8) {
         )sql");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
     }
 }
 
@@ -2858,7 +2858,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore node is not reachable by conjunctions.");
     }
 
     {
@@ -2880,7 +2881,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore node is not reachable by conjunctions.");
     }
 
     // temporary forbidden to use multiple fulltext match expressions in the same query.
@@ -2892,7 +2894,32 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Multiple fulltext predicates in a single read are not supported.");
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE Text = "404 not found"
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore predicate is not specified to access index.");
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts`
+            WHERE FulltextMatch(`Text`, "404 not found")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Fulltext index is not specified or unsupported predicate is used to access index");
     }
 }
 
@@ -3157,7 +3184,8 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
         )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Fulltext index is not specified or unsupported predicate is used to access index");
     }
 }
 

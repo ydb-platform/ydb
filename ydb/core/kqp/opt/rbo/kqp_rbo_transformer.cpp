@@ -169,7 +169,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
     if (IsSuitableToRequestStatistics()) {
         // Async request for statistics.
-        auto status = RequestColumnStatistics();
+        auto status = RequestColumnStatistics(ctx);
         if (status == TStatus::Async || status == TStatus::Error) {
             return status;
         }
@@ -184,7 +184,58 @@ NThreading::TFuture<void> TKqpNewRBOTransformer::DoGetAsyncFuture(const TExprNod
     return ColumnStatisticsReadiness;
 }
 
-IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics() {
+bool TKqpNewRBOTransformer::IsSuitableToCollectStatistics(const std::shared_ptr<IOperator>& op) const {
+    return op->Props.Metadata.has_value();
+}
+
+void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const std::shared_ptr<IOperator>& op) {
+    if (MatchOperator<TOpFilter>(op)) {
+        CollectTablesAndColumnsNames(CastOperator<TOpFilter>(op)->FilterExpr, op->Props);
+    }
+}
+
+void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props) {
+    const auto& mapping = props.Metadata->ColumnLineage.Mapping;
+    auto lambda = TCoLambda(expr.GetLambda());
+    const auto members = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("Member"); });
+
+    TVector<TInfoUnit> colNames;
+    for (const auto& member : members) {
+        const auto memberName = TCoMember(member).Name().StringValue();
+        const auto pos = memberName.find(".");
+        if (pos != TString::npos) {
+            const auto aliasName = memberName.substr(0, pos);
+            Y_ENSURE(pos + 1 < memberName.size());
+            const auto colName = memberName.substr(pos + 1);
+            colNames.emplace_back(aliasName, colName);
+        }
+    }
+
+    for (const auto& column : colNames) {
+        const auto it = mapping.find(column.GetFullName());
+        if (it != mapping.end()) {
+            const auto& tableName = it->second.TableName;
+            const auto& colName = it->second.ColumnName;
+            CMColumnsByTableName[tableName].insert(colName);
+            HistColumnsByTableName[tableName].insert(colName);
+        }
+    }
+}
+
+void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
+    Y_ENSURE(OpRoot);
+    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
+    OpRoot->ComputePlanMetadata(rboCtx);
+    for (auto it : *OpRoot) {
+        if (IsSuitableToCollectStatistics(it.Current)) {
+            CollectTablesAndColumnsNames(it.Current);
+        }
+    }
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprContext& ctx) {
+    CollectTablesAndColumnsNames(ctx);
+
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
                    [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
@@ -234,15 +285,15 @@ bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
 IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
+    Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
 
     // Apply optimizations.
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-            Y_UNUSED(ctx);
             if (TKqpOpRoot::Match(node.Get())) {
-                Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
-                return RBO.Optimize(OpRoot, ctx);
+                TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
+                return RBO.Optimize(OpRoot, rboCtx);
             } else {
                 return node;
             }
@@ -252,9 +303,21 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
     return status;
 }
 
-IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
-    // Make sure statistics is ready.
+void TKqpNewRBOTransformer::ApplyColumnStatistics() {
     Y_ENSURE(ColumnStatisticsReadiness.IsReady());
+    if (!ColumnStatisticsResponse->Issues().Empty()) {
+        TStringStream ss;
+        ColumnStatisticsResponse->Issues().PrintTo(ss);
+        YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
+    } else {
+        for (auto&& [tableName, columnStatistics] : ColumnStatisticsResponse->ColumnStatisticsByTableName) {
+            TypeCtx.ColumnStatisticsByTableName.insert({std::move(tableName), new TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))});
+        }
+    }
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    ApplyColumnStatistics();
     return ContinueOptimizations(input, output, ctx);
 }
 
@@ -303,12 +366,13 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
                                              const NMiniKQL::IFunctionRegistry& funcRegistry)
     : TypeCtx(typeCtx)
     , KqpCtx(*kqpCtx)
-    , RBO(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), funcRegistry)
+    , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
+    , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
+    , FuncRegistry(funcRegistry)
     , Tables(tables)
     , Cluster(cluster)
     , Database(database)
     , ActorSystem(actorSystem) {
-
     // Predicate pull-up stage
     TVector<std::shared_ptr<IRule>> filterPullUpRules{std::make_shared<TPullUpCorrelatedFilterRule>()};
     RBO.AddStage(std::make_shared<TRuleBasedStage>("Correlated predicte pullup", std::move(filterPullUpRules)));

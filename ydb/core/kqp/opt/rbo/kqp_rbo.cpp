@@ -98,25 +98,24 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(std::shared_ptr<TOpRoot> opRoot, TExprContext &ctx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(std::shared_ptr<TOpRoot> opRoot, TRBOContext& rboCtx) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     Y_ENSURE(opRoot);
     auto& root = *opRoot;
+    auto& ctx = rboCtx.ExprCtx;
 
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
     }
 
-    auto context = TRBOContext(KqpCtx, ctx, TypeCtx, std::move(RBOTypeAnnTransformer), std::move(PeepholeTypeAnnTransformer), FuncRegistry);
-
     for (size_t idx = 0; idx < Stages.size(); idx++) {
         auto stage = Stages[idx];
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
-        ComputeRequiredProps(root, stage->Props, context);
+        ComputeRequiredProps(root, stage->Props, rboCtx);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
-        stage->RunStage(root, context);
+        stage->RunStage(root, rboCtx);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
@@ -125,12 +124,12 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(std::shared_ptr<TOpRoot> opRoot, T
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
     auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
-    ComputeRequiredProps(root, convertProps, context);
+    ComputeRequiredProps(root, convertProps, rboCtx);
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
     }
 
-    return ConvertToPhysical(root, context);
+    return ConvertToPhysical(root, rboCtx);
 }
 } // namespace NKqp
 } // namespace NKikimr

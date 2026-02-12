@@ -884,7 +884,7 @@ std::shared_ptr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const std::sh
     TExprNode::TPtr afterPeephole;
     bool hasNonDeterministicFunctions;
     // Using a special PeepholeTypeAnnTransformer.
-    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, ctx.PeepholeTypeAnnTransformer.Get(),
+    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, &(ctx.PeepholeTypeAnnTransformer),
                                                  hasNonDeterministicFunctions);
         status != IGraphTransformer::TStatus::Ok) {
         YQL_CLOG(ERROR, ProviderKqp) << "[NEW RBO] Peephole failed with status: " << status << Endl;

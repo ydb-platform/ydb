@@ -126,7 +126,7 @@ class IUnaryOperator : public IOperator {
   public:
     IUnaryOperator(EOperator kind, TPositionHandle pos) : IOperator(kind, pos) {}
     IUnaryOperator(EOperator kind, TPositionHandle pos, std::shared_ptr<IOperator> input) : IOperator(kind, pos) { Children.push_back(input); }
-    std::shared_ptr<IOperator> & GetInput() { return Children[0]; }
+    std::shared_ptr<IOperator>& GetInput() { return Children[0]; }
     void SetInput(std::shared_ptr<IOperator> newInput) { Children[0] = newInput; }
 
     virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
@@ -380,11 +380,11 @@ class TOpRoot : public IUnaryOperator {
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
     void ComputeParents();
-    IGraphTransformer::TStatus ComputeTypes(TRBOContext & ctx);
+    IGraphTransformer::TStatus ComputeTypes(TRBOContext& ctx);
 
 
     TString PlanToString(TExprContext& ctx, ui32 printOptions = 0x0);
-    void PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int ntabs, ui32 printOptions = 0x0);
+    void PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int ntabs, ui32 printOptions = 0x0) const;
 
     void ComputePlanMetadata(TRBOContext& ctx);
     void ComputePlanStatistics(TRBOContext& ctx);
@@ -415,7 +415,7 @@ class TOpRoot : public IUnaryOperator {
             Root = ptr;
 
             std::unordered_set<std::shared_ptr<IOperator>> visited;
-            for (auto subplan : Root->PlanProps.Subplans.Get()) {
+            for (const auto& subplan : Root->PlanProps.Subplans.Get()) {
                 BuildDfsList(subplan.Plan, {}, size_t(0), visited, std::make_shared<TInfoUnit>(subplan.IU));
             }
             auto child = ptr->GetInput();
@@ -457,6 +457,7 @@ class TOpRoot : public IUnaryOperator {
             }
             visited.insert(current);
         }
+
         TVector<IteratorItem> DfsList;
         size_t CurrElement;
         TOpRoot *Root;
@@ -464,6 +465,10 @@ class TOpRoot : public IUnaryOperator {
 
     Iterator begin() { return Iterator(this); }
     Iterator end() { return Iterator(nullptr); }
+
+private:
+   void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent, int parentChildIndex) const;
+
 };
 
 } // namespace NKqp

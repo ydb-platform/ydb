@@ -148,7 +148,7 @@ all:
         ydb_password: <password>
 ```
 
-Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/group_vars/ydb/vault.yaml`.
+Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/99-inventory-vault.yaml`.
 
 ## Подготовьте конфигурационные файлы {{ ydb-short-name }} {#ydb-config-prepare}
 

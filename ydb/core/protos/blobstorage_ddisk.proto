@@ -144,39 +144,46 @@ message TEvReadPersistentBufferResult {
     TReadResult ReadResult = 3;
 }
 
-message TEvSync {
-    message FromPersistentBuffer {
+message TSegmentResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+}
+
+message TEvSyncWithPersistentBuffer {
+    message TSegment {
         TBlockSelector Selector = 1;
         uint64 Lsn = 2;
     }
 
-    message FromDDisk {
-        TBlockSelector Selector = 1;
-    }
-
-    message TSegments {
-        oneof Source {
-            FromPersistentBuffer PersistentBuffer = 1;
-            FromDDisk DDisk = 2;
-        }
-    }
-
     TQueryCredentials Credentials = 1;
-    repeated TSegments Segments = 2;
+    repeated TSegment Segments = 2;
     TDDiskId DDiskId = 3;
     fixed64 DDiskInstanceGuid = 4;
 }
 
-message TEvSyncResult {
-    message SegmentResult {
-        TReplyStatus.E Status = 1;
-        optional string ErrorReason = 2;
-    }
-
+message TEvSyncWithPersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
 
-    repeated SegmentResult SegmentResults = 3;
+    repeated TSegmentResult SegmentResults = 3;
+}
+
+message TEvSyncWithDDisk {
+    message TSegment {
+        TBlockSelector Selector = 1;
+    }
+
+    TQueryCredentials Credentials = 1;
+    repeated TSegment Segments = 2;
+    TDDiskId DDiskId = 3;
+    fixed64 DDiskInstanceGuid = 4;
+}
+
+message TEvSyncWithDDiskResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+
+    repeated TSegmentResult SegmentResults = 3;
 }
 
 message TEvErasePersistentBuffer {

@@ -22,7 +22,8 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
 #define LIST_COUNTERS_INTERFACE_OPS(XX) \
     XX(Write) \
     XX(Read) \
-    XX(Sync) \
+    XX(SyncWithPersistentBuffer) \
+    XX(SyncWithDDisk) \
     XX(WritePersistentBuffer) \
     XX(ReadPersistentBuffer) \
     XX(ErasePersistentBuffer) \
@@ -354,6 +355,11 @@ namespace NKikimr::NDDisk {
         };
 
         struct TSyncInFlight {
+            enum ESourceKind {
+                ESK_DDISK,
+                ESK_PERSISTENT_BUFFER
+            };
+
             TActorId Sender;
             ui64 Cookie;
             TActorId InterconnectionSessionId;
@@ -364,6 +370,7 @@ namespace NKikimr::NDDisk {
             ui64 VChunkIndex = 0;
             ui64 FirstRequestId = Max<ui64>();
             TStringBuilder ErrorReason;
+            ESourceKind SourceKind;
         };
 
         using TSyncIt = THashMap<ui64, TSyncInFlight>::iterator;
@@ -372,7 +379,8 @@ namespace NKikimr::NDDisk {
         THashMap<ui64, TSyncInFlight> SyncsInFlight; // syncId -> TSyncInFlight
         TSegmentManager SegmentManager;
 
-        void Handle(TEvSync::TPtr ev);
+        void Handle(TEvSyncWithPersistentBuffer::TPtr ev);
+        void Handle(TEvSyncWithDDisk::TPtr ev);
         void Handle(TEvReadPersistentBufferResult::TPtr ev);
         void Handle(TEvReadResult::TPtr ev);
 

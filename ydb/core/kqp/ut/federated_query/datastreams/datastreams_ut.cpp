@@ -4368,7 +4368,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
         constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
-
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 

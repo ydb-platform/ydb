@@ -324,14 +324,14 @@ THashMap<TString, TString> GetDefaultFromSequences(NYql::TKikimrTableMetadataPtr
     return sequences;
 }
 
-bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, const TString& name,
+bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, const TString& tableName,
     NYql::TKikimrTableMetadataPtr metadata, TString& error)
 {
-    tableDesc.SetName(name);
+    tableDesc.SetName(tableName);
 
     Y_ENSURE(metadata->ColumnOrder.size() == metadata->Columns.size());
-    for (const auto& name : metadata->ColumnOrder) {
-        auto columnIt = metadata->Columns.find(name);
+    for (const auto& columnName : metadata->ColumnOrder) {
+        const auto columnIt = metadata->Columns.find(columnName);
         Y_ENSURE(columnIt != metadata->Columns.end());
         const auto& cMeta = columnIt->second;
 

@@ -384,8 +384,17 @@ namespace NKikimr::NDDisk {
         void Handle(TEvReadPersistentBufferResult::TPtr ev);
         void Handle(TEvReadResult::TPtr ev);
 
+        struct TSyncWithPersistentBufferPolicy;
+        struct TSyncWithDDiskPolicy;
+
+        template <typename TPolicy, typename TEventPtr>
+        void HandleSync(TEventPtr ev);
+
         template <typename TEventPtr>
         void InternalSyncReadResult(TEventPtr ev);
+
+        template <typename TResultEvent, typename TCounters>
+        std::unique_ptr<IEventHandle> MakeSyncResult(const TSyncInFlight& sync, TCounters& counters) const;
 
         void ReplySync(TSyncIt it);
 

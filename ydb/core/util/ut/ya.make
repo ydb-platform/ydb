@@ -38,6 +38,11 @@ SRCS(
     lf_stack_ut.cpp
     log_priority_mute_checker_ut.cpp
     lz4_data_generator_ut.cpp
+<<<<<<< HEAD
+=======
+    max_tracker_ut.cpp
+    numerical_maybe_ut.cpp
+>>>>>>> 4897bfbcfbe (EXT-1956: Introduce new MaxTracket to monitor DeviceInFlight (#33717))
     operation_queue_priority_ut.cpp
     operation_queue_ut.cpp
     page_map_ut.cpp

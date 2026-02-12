@@ -3509,7 +3509,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSingleStar) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*")
+            WHERE FulltextMatch(`Text`, "%")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3912,7 +3912,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardBoundaries) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    for (const TString& q : {"are*", "*rea", "b"}) {
+    for (const TString& q : {"are\%", "\%rea", "b"}) {
         const TString query = std::format(R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextMatch(`Text`, "{}")
@@ -4494,7 +4494,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
         UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 
-    for (const TString& q : {"at", "*at*"}) {
+    for (const TString& q : {"at", "\%at\%"}) {
         const TString query = std::format(R"sql(
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -5387,7 +5387,7 @@ Y_UNIT_TEST(FulltextQueryWithResultColumnsCovered) {
         const TString query = R"sql(
             SELECT count(*)
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Name`, "*cat*");
+            WHERE FulltextMatch(`Name`, "%cat%");
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -5398,7 +5398,7 @@ Y_UNIT_TEST(FulltextQueryWithResultColumnsCovered) {
         const TString query = R"sql(
             SELECT `Name`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Name`, "*cat*");
+            WHERE FulltextMatch(`Name`, "%cat%");
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

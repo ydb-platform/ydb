@@ -71,6 +71,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
     info.SetState(DatashardStateName(State));
     info.SetIsActive(IsStateActive());
     info.SetHasSharedBlobs(HasSharedBlobs());
+    info.SetFollowerId(FollowerId());
 
     auto addControl = [&](ui64 value, const TString& name) {
         auto& control = *response->Record.AddControls();
@@ -249,7 +250,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev) {
     if (rec.GetActualData()) {
         if (CurrentKeySampler == DisabledKeySampler) {
             // datashard stores expired stats
-            Send(ev->Sender, response);
+            Send(ev->Sender, response, 0, ev->Cookie);
             return;
         }
     }
@@ -268,7 +269,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev) {
         SerializeKeySample(tinfo, tinfo.Stats.AccessStats, *hist.MutableKeyAccessSample());
     }
 
-    Send(ev->Sender, response);
+    Send(ev->Sender, response, 0, ev->Cookie);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev) {

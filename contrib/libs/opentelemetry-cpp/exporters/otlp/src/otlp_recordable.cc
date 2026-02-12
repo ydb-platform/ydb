@@ -120,6 +120,12 @@ void OtlpRecordable::SetResource(const sdk::resource::Resource &resource) noexce
 void OtlpRecordable::SetAttribute(nostd::string_view key,
                                   const common::AttributeValue &value) noexcept
 {
+  if (static_cast<uint32_t>(span_.attributes_size()) >= max_attributes_)
+  {
+    span_.set_dropped_attributes_count(span_.dropped_attributes_count() + 1);
+    return;
+  }
+
   auto *attribute = span_.add_attributes();
   OtlpPopulateAttributeUtils::PopulateAttribute(attribute, key, value, false);
 }
@@ -128,11 +134,22 @@ void OtlpRecordable::AddEvent(nostd::string_view name,
                               common::SystemTimestamp timestamp,
                               const common::KeyValueIterable &attributes) noexcept
 {
+  if (static_cast<uint32_t>(span_.events_size()) >= max_events_)
+  {
+    span_.set_dropped_events_count(span_.dropped_events_count() + 1);
+    return;
+  }
+
   auto *event = span_.add_events();
   event->set_name(name.data(), name.size());
   event->set_time_unix_nano(timestamp.time_since_epoch().count());
 
   attributes.ForEachKeyValue([&](nostd::string_view key, common::AttributeValue value) noexcept {
+    if (static_cast<uint32_t>(event->attributes_size()) >= max_attributes_per_event_)
+    {
+      event->set_dropped_attributes_count(event->dropped_attributes_count() + 1);
+      return true;
+    }
     OtlpPopulateAttributeUtils::PopulateAttribute(event->add_attributes(), key, value, false);
     return true;
   });
@@ -141,6 +158,11 @@ void OtlpRecordable::AddEvent(nostd::string_view name,
 void OtlpRecordable::AddLink(const trace::SpanContext &span_context,
                              const common::KeyValueIterable &attributes) noexcept
 {
+  if (static_cast<uint32_t>(span_.links_size()) >= max_links_)
+  {
+    span_.set_dropped_links_count(span_.dropped_links_count() + 1);
+    return;
+  }
   auto *link = span_.add_links();
   link->set_trace_id(reinterpret_cast<const char *>(span_context.trace_id().Id().data()),
                      trace::TraceId::kSize);
@@ -148,6 +170,11 @@ void OtlpRecordable::AddLink(const trace::SpanContext &span_context,
                     trace::SpanId::kSize);
   link->set_trace_state(span_context.trace_state()->ToHeader());
   attributes.ForEachKeyValue([&](nostd::string_view key, common::AttributeValue value) noexcept {
+    if (static_cast<uint32_t>(link->attributes_size()) >= max_attributes_per_link_)
+    {
+      link->set_dropped_attributes_count(link->dropped_attributes_count() + 1);
+      return true;
+    }
     OtlpPopulateAttributeUtils::PopulateAttribute(link->add_attributes(), key, value, false);
     return true;
   });

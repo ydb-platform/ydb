@@ -643,11 +643,15 @@ ACCESSORS(TimezoneId, ui16)
 #undef ACCESSORS
 #undef ACCESSORS_POLY
 
+// FIXME(YQL-20908): Currently here is a bug hidden under NOLINTs,
+// the condition is always true, see the linked ticket.
 template <const char* TResourceName>
 inline bool ValidateYear(std::conditional_t<TResourceName == TMResourceName, ui16, i32> year) {
     if constexpr (TResourceName == TMResourceName) {
+        // NOLINTNEXTLINE(misc-redundant-expression)
         return year >= NUdf::MIN_YEAR || year < NUdf::MAX_YEAR;
     } else {
+        // NOLINTNEXTLINE(misc-redundant-expression)
         return year >= NUdf::MIN_YEAR32 || year < NUdf::MAX_YEAR32;
     }
 }
@@ -674,11 +678,6 @@ inline bool ValidateSecond(ui8 second) {
 
 inline bool ValidateMicrosecond(ui32 microsecond) {
     return microsecond < 1000000;
-}
-
-inline bool ValidateTimezoneId(ui16 timezoneId) {
-    const auto& zones = NTi::GetTimezones();
-    return timezoneId < zones.size() && !zones[timezoneId].empty();
 }
 
 inline bool ValidateMonthShortName(const std::string_view& monthName, ui8& month) {
@@ -737,29 +736,6 @@ inline bool ValidateMonthFullName(const std::string_view& monthName, ui8& month)
         return true;
     }
     return false;
-}
-
-template <typename TType>
-inline bool Validate(typename TDataType<TType>::TLayout arg);
-
-template <>
-inline bool Validate<TTimestamp>(ui64 timestamp) {
-    return timestamp < MAX_TIMESTAMP;
-}
-
-template <>
-inline bool Validate<TTimestamp64>(i64 timestamp) {
-    return timestamp >= MIN_TIMESTAMP64 && timestamp <= MAX_TIMESTAMP64;
-}
-
-template <>
-inline bool Validate<TInterval>(i64 interval) {
-    return interval > -i64(MAX_TIMESTAMP) && interval < i64(MAX_TIMESTAMP);
-}
-
-template <>
-inline bool Validate<TInterval64>(i64 interval) {
-    return interval >= -MAX_INTERVAL64 && interval <= MAX_INTERVAL64;
 }
 
 // Split
@@ -1786,7 +1762,7 @@ private:
                 }
                 if (args[8]) {
                     auto timezoneId = args[8].Get<ui16>();
-                    if (!ValidateTimezoneId(timezoneId)) {
+                    if (!NMiniKQL::IsValidTimezoneId(timezoneId)) {
                         return TUnboxedValuePod();
                     }
                     SetTimezoneId<TResourceName>(result, timezoneId);
@@ -1824,7 +1800,7 @@ template <typename TInput, typename TOutput, i64 UsecMultiplier>
 inline TUnboxedValuePod TFromConverter(TInput arg) {
     using TLayout = TDataType<TOutput>::TLayout;
     const TLayout usec = TLayout(arg) * UsecMultiplier;
-    return Validate<TOutput>(usec) ? TUnboxedValuePod(usec) : TUnboxedValuePod();
+    return IsValidLayoutValue<TOutput>(usec) ? TUnboxedValuePod(usec) : TUnboxedValuePod();
 }
 
 template <typename TInput, typename TOutput, i64 UsecMultiplier>
@@ -1832,7 +1808,7 @@ using TFromConverterKernel = TUnaryUnsafeFixedSizeFilterKernel<TInput,
                                                                typename TDataType<TOutput>::TLayout, [](TInput arg) {
                                                                    using TLayout = TDataType<TOutput>::TLayout;
                                                                    const TLayout usec = TLayout(arg) * UsecMultiplier;
-                                                                   return std::make_pair(usec, Validate<TOutput>(usec));
+                                                                   return std::make_pair(usec, IsValidLayoutValue<TOutput>(usec));
                                                                }>;
 
 #define DATETIME_FROM_CONVERTER_UDF(name, retType, argType, usecMultiplier)              \

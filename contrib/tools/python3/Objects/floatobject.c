@@ -4,18 +4,19 @@
    for any kind of float exception without losing portability. */
 
 #include "Python.h"
+#include "pycore_abstract.h"      // _PyNumber_Index()
 #include "pycore_dtoa.h"          // _Py_dg_dtoa()
 #include "pycore_floatobject.h"   // _PyFloat_FormatAdvancedWriter()
 #include "pycore_initconfig.h"    // _PyStatus_OK()
-#include "pycore_interp.h"        // _PyInterpreterState.float_state
+#include "pycore_interp.h"        // _Py_float_freelist
 #include "pycore_long.h"          // _PyLong_GetOne()
-#include "pycore_object.h"        // _PyObject_Init()
+#include "pycore_modsupport.h"    // _PyArg_NoKwnames()
+#include "pycore_object.h"        // _PyObject_Init(), _PyDebugAllocatorStats()
 #include "pycore_pymath.h"        // _PY_SHORT_FLOAT_REPR
 #include "pycore_pystate.h"       // _PyInterpreterState_GET()
 #include "pycore_structseq.h"     // _PyStructSequence_FiniBuiltin()
 
-#include <ctype.h>
-#include <float.h>
+#include <float.h>                // DBL_MAX
 #include <stdlib.h>               // strtol()
 
 /*[clinic input]
@@ -25,17 +26,13 @@ class float "PyObject *" "&PyFloat_Type"
 
 #include "clinic/floatobject.c.h"
 
-#ifndef PyFloat_MAXFREELIST
-#  define PyFloat_MAXFREELIST   100
-#endif
-
-
-#if PyFloat_MAXFREELIST > 0
-static struct _Py_float_state *
-get_float_state(void)
+#ifdef WITH_FREELISTS
+static struct _Py_float_freelist *
+get_float_freelist(void)
 {
-    PyInterpreterState *interp = _PyInterpreterState_GET();
-    return &interp->float_state;
+    struct _Py_object_freelists *freelists = _Py_object_freelists_GET();
+    assert(freelists != NULL);
+    return &freelists->floats;
 }
 #endif
 
@@ -136,16 +133,12 @@ PyObject *
 PyFloat_FromDouble(double fval)
 {
     PyFloatObject *op;
-#if PyFloat_MAXFREELIST > 0
-    struct _Py_float_state *state = get_float_state();
-    op = state->free_list;
+#ifdef WITH_FREELISTS
+    struct _Py_float_freelist *float_freelist = get_float_freelist();
+    op = float_freelist->items;
     if (op != NULL) {
-#ifdef Py_DEBUG
-        // PyFloat_FromDouble() must not be called after _PyFloat_Fini()
-        assert(state->numfree != -1);
-#endif
-        state->free_list = (PyFloatObject *) Py_TYPE(op);
-        state->numfree--;
+        float_freelist->items = (PyFloatObject *) Py_TYPE(op);
+        float_freelist->numfree--;
         OBJECT_STAT_INC(from_freelist);
     }
     else
@@ -256,19 +249,15 @@ _PyFloat_ExactDealloc(PyObject *obj)
 {
     assert(PyFloat_CheckExact(obj));
     PyFloatObject *op = (PyFloatObject *)obj;
-#if PyFloat_MAXFREELIST > 0
-    struct _Py_float_state *state = get_float_state();
-#ifdef Py_DEBUG
-    // float_dealloc() must not be called after _PyFloat_Fini()
-    assert(state->numfree != -1);
-#endif
-    if (state->numfree >= PyFloat_MAXFREELIST)  {
+#ifdef WITH_FREELISTS
+    struct _Py_float_freelist *float_freelist = get_float_freelist();
+    if (float_freelist->numfree >= PyFloat_MAXFREELIST || float_freelist->numfree < 0) {
         PyObject_Free(op);
         return;
     }
-    state->numfree++;
-    Py_SET_TYPE(op, (PyTypeObject *)state->free_list);
-    state->free_list = op;
+    float_freelist->numfree++;
+    Py_SET_TYPE(op, (PyTypeObject *)float_freelist->items);
+    float_freelist->items = op;
     OBJECT_STAT_INC(to_freelist);
 #else
     PyObject_Free(op);
@@ -279,7 +268,7 @@ static void
 float_dealloc(PyObject *op)
 {
     assert(PyFloat_Check(op));
-#if PyFloat_MAXFREELIST > 0
+#ifdef WITH_FREELISTS
     if (PyFloat_CheckExact(op)) {
         _PyFloat_ExactDealloc(op);
     }
@@ -480,82 +469,67 @@ float_richcompare(PyObject *v, PyObject *w, int op)
         assert(vsign != 0); /* if vsign were 0, then since wsign is
                              * not 0, we would have taken the
                              * vsign != wsign branch at the start */
-        /* We want to work with non-negative numbers. */
-        if (vsign < 0) {
-            /* "Multiply both sides" by -1; this also swaps the
-             * comparator.
-             */
-            i = -i;
-            op = _Py_SwappedOp[op];
-        }
-        assert(i > 0.0);
         (void) frexp(i, &exponent);
         /* exponent is the # of bits in v before the radix point;
          * we know that nbits (the # of bits in w) > 48 at this point
          */
         if (exponent < 0 || (size_t)exponent < nbits) {
-            i = 1.0;
-            j = 2.0;
+            j = i;
+            i = 0.0;
             goto Compare;
         }
         if ((size_t)exponent > nbits) {
-            i = 2.0;
-            j = 1.0;
+            j = 0.0;
             goto Compare;
         }
         /* v and w have the same number of bits before the radix
-         * point.  Construct two ints that have the same comparison
-         * outcome.
+         * point.  Construct an int from the integer part of v and
+         * update op if necessary, so comparing two ints has the same outcome.
          */
         {
             double fracpart;
             double intpart;
             PyObject *result = NULL;
             PyObject *vv = NULL;
-            PyObject *ww = w;
-
-            if (wsign < 0) {
-                ww = PyNumber_Negative(w);
-                if (ww == NULL)
-                    goto Error;
-            }
-            else
-                Py_INCREF(ww);
 
             fracpart = modf(i, &intpart);
+            if (fracpart != 0.0) {
+                switch (op) {
+                    /* Non-integer float never equals to an int. */
+                    case Py_EQ:
+                        Py_RETURN_FALSE;
+                    case Py_NE:
+                        Py_RETURN_TRUE;
+                    /* For non-integer float, v <= w <=> v < w.
+                     * If v > 0: trunc(v) < v < trunc(v) + 1
+                     *   v < w => trunc(v) < w
+                     *   trunc(v) < w => trunc(v) + 1 <= w => v < w
+                     * If v < 0: trunc(v) - 1 < v < trunc(v)
+                     *   v < w => trunc(v) - 1 < w => trunc(v) <= w
+                     *   trunc(v) <= w => v < w
+                     */
+                    case Py_LT:
+                    case Py_LE:
+                        op = vsign > 0 ? Py_LT : Py_LE;
+                        break;
+                    /* The same as above, but with opposite directions. */
+                    case Py_GT:
+                    case Py_GE:
+                        op = vsign > 0 ? Py_GE : Py_GT;
+                        break;
+                }
+            }
+
             vv = PyLong_FromDouble(intpart);
             if (vv == NULL)
                 goto Error;
 
-            if (fracpart != 0.0) {
-                /* Shift left, and or a 1 bit into vv
-                 * to represent the lost fraction.
-                 */
-                PyObject *temp;
-
-                temp = _PyLong_Lshift(ww, 1);
-                if (temp == NULL)
-                    goto Error;
-                Py_SETREF(ww, temp);
-
-                temp = _PyLong_Lshift(vv, 1);
-                if (temp == NULL)
-                    goto Error;
-                Py_SETREF(vv, temp);
-
-                temp = PyNumber_Or(vv, _PyLong_GetOne());
-                if (temp == NULL)
-                    goto Error;
-                Py_SETREF(vv, temp);
-            }
-
-            r = PyObject_RichCompareBool(vv, ww, op);
+            r = PyObject_RichCompareBool(vv, w, op);
             if (r < 0)
                 goto Error;
             result = PyBool_FromLong(r);
          Error:
             Py_XDECREF(vv);
-            Py_XDECREF(ww);
             return result;
         }
     } /* else if (PyLong_Check(w)) */
@@ -650,7 +624,7 @@ float_rem(PyObject *v, PyObject *w)
     CONVERT_TO_DOUBLE(w, wx);
     if (wx == 0.0) {
         PyErr_SetString(PyExc_ZeroDivisionError,
-                        "float modulo");
+                        "float modulo by zero");
         return NULL;
     }
     mod = fmod(vx, wx);
@@ -2006,28 +1980,23 @@ _PyFloat_InitTypes(PyInterpreterState *interp)
 }
 
 void
-_PyFloat_ClearFreeList(PyInterpreterState *interp)
+_PyFloat_ClearFreeList(struct _Py_object_freelists *freelists, int is_finalization)
 {
-#if PyFloat_MAXFREELIST > 0
-    struct _Py_float_state *state = &interp->float_state;
-    PyFloatObject *f = state->free_list;
+#ifdef WITH_FREELISTS
+    struct _Py_float_freelist *state = &freelists->floats;
+    PyFloatObject *f = state->items;
     while (f != NULL) {
         PyFloatObject *next = (PyFloatObject*) Py_TYPE(f);
         PyObject_Free(f);
         f = next;
     }
-    state->free_list = NULL;
-    state->numfree = 0;
-#endif
-}
-
-void
-_PyFloat_Fini(PyInterpreterState *interp)
-{
-    _PyFloat_ClearFreeList(interp);
-#if defined(Py_DEBUG) && PyFloat_MAXFREELIST > 0
-    struct _Py_float_state *state = &interp->float_state;
-    state->numfree = -1;
+    state->items = NULL;
+    if (is_finalization) {
+        state->numfree = -1;
+    }
+    else {
+        state->numfree = 0;
+    }
 #endif
 }
 
@@ -2041,11 +2010,11 @@ _PyFloat_FiniType(PyInterpreterState *interp)
 void
 _PyFloat_DebugMallocStats(FILE *out)
 {
-#if PyFloat_MAXFREELIST > 0
-    struct _Py_float_state *state = get_float_state();
+#ifdef WITH_FREELISTS
+    struct _Py_float_freelist *float_freelist = get_float_freelist();
     _PyDebugAllocatorStats(out,
                            "free PyFloatObject",
-                           state->numfree, sizeof(PyFloatObject));
+                           float_freelist->numfree, sizeof(PyFloatObject));
 #endif
 }
 

@@ -1,93 +1,44 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/direct_block_group.h>
-#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
-
-using namespace NActors;
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPartitionActor
-    : public TActorBootstrapped<TPartitionActor>
+    : public NActors::TActorBootstrapped<TPartitionActor>
 {
 private:
-    TActorId BSControllerPipeClient;
+    NYdb::NBS::NProto::TStorageConfig StorageConfig;
+    NKikimrBlockStore::TVolumeConfig VolumeConfig;
 
-    std::unique_ptr<TDirectBlockGroup> DirectBlockGroup;
+    NActors::TActorId BSControllerPipeClient;
 
-    std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
-    // Throttle trace ID creation to avoid overwhelming the tracing system
-    // One trace per 100ms should be sufficient for observability
-    // TODO: get from config
-    TDuration TraceSamplePeriod = TDuration::MilliSeconds(100);
+    NActors::TActorId LoadActorAdapter;
+
 
 public:
-    TPartitionActor() = default;
+    TPartitionActor(
+        NYdb::NBS::NProto::TStorageConfig storageConfig,
+        NKikimrBlockStore::TVolumeConfig volumeConfig);
 
-    void Bootstrap(const TActorContext& ctx);
+    void Bootstrap(const NActors::TActorContext& ctx);
 
 private:
     STFUNC(StateWork);
 
-    void CreateBSControllerPipeClient(const TActorContext& ctx);
+    void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
 
-    void AllocateDDiskBlockGroup(const TActorContext& ctx);
+    void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
     void HandleControllerAllocateDDiskBlockGroupResult(
-        const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
-        const TActorContext& ctx);
-
-    void HandleWriteBlocksRequest(
-        const TEvService::TEvWriteBlocksRequest::TPtr& ev,
-        const TActorContext& ctx);
-
-    void HandleReadBlocksRequest(
-        const TEvService::TEvReadBlocksRequest::TPtr& ev,
-        const TActorContext& ctx);
-
-    // Forward events to DirectBlockGroup
-    void HandleDDiskConnectResult(
-        const NDDisk::TEvConnectResult::TPtr& ev,
-        const TActorContext& ctx);
-
-    void HandlePersistentBufferWriteResult(
-        const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
-        const TActorContext& ctx);
-
-    void HandlePersistentBufferFlushResult(
-        const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
-        const TActorContext& ctx);
-
-    template <typename TEvent>
-    void HandleReadResult(
-        const typename TEvent::TPtr& ev,
-        const TActorContext& ctx);
-
-    template<typename TEvPtr>
-    void AddTraceId(const TEvPtr& ev, const NActors::TActorContext& ctx);
+        const NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
-template<typename TEvPtr>
-void TPartitionActor::AddTraceId(const TEvPtr& ev, const NActors::TActorContext& ctx)
-{
-    if (!ev->TraceId) {
-        // Generate new trace id with throttling to avoid overwhelming the tracing system
-        ev->TraceId = NWilson::TTraceId::NewTraceIdThrottled(
-            15,                 // verbosity
-            4095,               // timeToLive
-            LastTraceTs,        // atomic counter for throttling
-            ctx.Monotonic(),    // current monotonic time
-            TraceSamplePeriod   // 100ms between samples
-        );
-    }
-}
-
-} // namespace NYdb::NBS::NStorage::NPartitionDirect
+}  // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

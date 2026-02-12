@@ -117,11 +117,11 @@ public:
             return false;
         }
         ParsedRows[ParsedRowsCount++] = rowId;
-
+        bool success = false;
         if (DataSlot != NYql::NUdf::EDataSlot::Json) {
-            ParseDataType(std::move(jsonValue), resultValue, Status);
+            success = ParseDataType(std::move(jsonValue), resultValue, Status);
         } else {
-            ParseJsonType(std::move(jsonValue), resultValue, Status);
+            success = ParseJsonType(std::move(jsonValue), resultValue, Status);
         }
 
         if (IsOptional && resultValue) {
@@ -130,8 +130,9 @@ public:
 
         if (Y_UNLIKELY(!SkipErrors && Status.IsFail())) {
             Status.AddParentIssue(TStringBuilder() << "Failed to parse json string at offset " << offset << ", got parsing error for column '" << Name << "' with type " << TypeYson);
+            return false;
         }
-        return resultValue.HasValue();
+        return success;
     }
 
     void ValidateNumberValues(ui16 expectedNumberValues, const TVector<ui64>& offsets) {
@@ -175,10 +176,11 @@ private:
         }
     }
 
-    Y_FORCE_INLINE void ParseDataType(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) const {
+    Y_FORCE_INLINE bool ParseDataType(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) const {
         simdjson::builtin::ondemand::json_type cellType;
         CHECK_JSON_ERROR(jsonValue.type().get(cellType)) {
-            return GetParsingError(error, jsonValue, "determine json value type", status);
+            SetParsingError(error, jsonValue, "determine json value type", status);
+            return false;
         }
 
         switch (cellType) {
@@ -224,79 +226,85 @@ private:
                 if (Y_UNLIKELY(status.IsFail())) {
                     status.AddParentIssue(TStringBuilder() << "Failed to parse data type " << DataTypeName << " from json number (raw: '" << TruncateString(jsonValue.raw_json_token()) << "')");
                 }
-                return;
+                return resultValue.HasValue();
             }
 
             case simdjson::builtin::ondemand::json_type::string: {
                 std::string_view rawString;
                 CHECK_JSON_ERROR(jsonValue.get_string(rawString)) {
-                    return GetParsingError(error, jsonValue, "extract json string", status);
+                    SetParsingError(error, jsonValue, "extract json string", status);
+                    return false;
                 }
 
                 resultValue = LockObject(NKikimr::NMiniKQL::ValueFromString(DataSlot, rawString));
                 if (Y_UNLIKELY(!resultValue)) {
                     status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse data type " << DataTypeName << " from json string: '" << TruncateString(rawString) << "'");
                 }
-                return;
+                return resultValue.HasValue();
             }
 
             case simdjson::builtin::ondemand::json_type::array:
             case simdjson::builtin::ondemand::json_type::object: {
                 std::string_view rawJson;
                 CHECK_JSON_ERROR(jsonValue.raw_json().get(rawJson)) {
-                    return GetParsingError(error, jsonValue, "extract json value", status);
+                    SetParsingError(error, jsonValue, "extract json value", status);
+                    return false;
                 }
                 status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type " <<DataTypeName << ", please use Json type for nested values");
-                return;
+                return false;
             }
 
             case simdjson::builtin::ondemand::json_type::boolean: {
                 if (Y_UNLIKELY(DataSlot != NYql::NUdf::EDataSlot::Bool)) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected bool value, expected data type " << DataTypeName);
-                    return;
+                    return false;
                 }
 
                 bool boolValue;
                 CHECK_JSON_ERROR(jsonValue.get_bool().get(boolValue)) {
-                    return GetParsingError(error, jsonValue, "extract json bool", status);
+                    SetParsingError(error, jsonValue, "extract json bool", status);
+                    return false;
                 }
 
                 resultValue = NYql::NUdf::TUnboxedValuePod(boolValue);
-                return;
+                return true;
             }
 
             case simdjson::builtin::ondemand::json_type::null: {
                 if (Y_UNLIKELY(!IsOptional)) {
                     status =  TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected null value, expected non optional data type " << DataTypeName);
-                    return;
+                    return false;
                 }
 
                 resultValue = NYql::NUdf::TUnboxedValuePod();
-                return;
+                return true;
             }
             case simdjson::builtin::ondemand::json_type::unknown: {
                 std::string_view rawString;
                 CHECK_JSON_ERROR(jsonValue.get_string(rawString)) {
-                    return GetParsingError(error, jsonValue, "extract json string", status);
+                    SetParsingError(error, jsonValue, "extract json string", status);
+                    return false;
                 }
                 status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse data type " << DataTypeName << " from json string: '" << TruncateString(rawString) << "'");
-                return;
+                return false;
             }
         }
     }
 
-    Y_FORCE_INLINE void ParseJsonType(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) const {
+    Y_FORCE_INLINE bool ParseJsonType(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) const {
         std::string_view rawJson;
         CHECK_JSON_ERROR(jsonValue.raw_json().get(rawJson)) {
-            return GetParsingError(error, jsonValue, "extract json value", status);
+            SetParsingError(error, jsonValue, "extract json value", status);
+            return false;
         }
 
         if (Y_UNLIKELY(!NYql::NDom::IsValidJson(rawJson))) {
             status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Found bad json value: '" << TruncateString(rawJson) << "'");
-            return;
+            return false;
         }
 
         resultValue = LockObject(NKikimr::NMiniKQL::MakeString(rawJson));
+        return true;
     }
 
     template <typename TResult, typename TJsonNumber>
@@ -325,7 +333,7 @@ private:
         resultValue = NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(jsonNumber.value()));
     }
 
-    static void GetParsingError(simdjson::error_code error, simdjson::builtin::ondemand::value jsonValue, const TString& description, TStatus& status) {
+    static void SetParsingError(simdjson::error_code error, simdjson::builtin::ondemand::value jsonValue, const TString& description, TStatus& status) {
         status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to " << description << ", current token: '" << TruncateString(jsonValue.raw_json_token()) << "', error: " << simdjson::error_message(error));
     }
 

@@ -1147,6 +1147,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         lookupPayloadColumns,
         inputColumns
     );
+    auto taskCounters = args.TaskCounters;
+    if (taskCounters) {
+        taskCounters = taskCounters->GetSubgroup("task_id", ToString(args.TaskId))->GetSubgroup("input", ToString(args.InputIndex));
+    }
     if (settings.GetIsMultiget()) {
         auto actor = isWide ?
             (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupWide(
@@ -1156,7 +1160,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 args.InputIndex,
                 args.TransformInput,
                 args.ComputeActorId,
-                args.TaskCounters,
+                taskCounters,
                 factory,
                 std::move(settings),
                 std::move(lookupKeyInputIndexes),
@@ -1176,7 +1180,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 args.InputIndex,
                 args.TransformInput,
                 args.ComputeActorId,
-                args.TaskCounters,
+                taskCounters,
                 factory,
                 std::move(settings),
                 std::move(lookupKeyInputIndexes),
@@ -1199,7 +1203,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             args.InputIndex,
             args.TransformInput,
             args.ComputeActorId,
-            args.TaskCounters,
+            taskCounters,
             factory,
             std::move(settings),
             std::move(lookupKeyInputIndexes),
@@ -1219,7 +1223,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             args.InputIndex,
             args.TransformInput,
             args.ComputeActorId,
-            args.TaskCounters,
+            taskCounters,
             factory,
             std::move(settings),
             std::move(lookupKeyInputIndexes),

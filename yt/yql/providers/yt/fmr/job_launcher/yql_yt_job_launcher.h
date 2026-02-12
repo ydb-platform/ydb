@@ -19,7 +19,7 @@ public:
 
     TFmrUserJobLauncher(const TFmrUserJobLauncherOptions& jobLauncherOptions);
 
-    std::variant<TError, TStatistics> LaunchJob(
+    std::variant<TFmrError, TStatistics> LaunchJob(
         TFmrUserJob& job,
         const TMaybe<TString>& jobEnvironmentDir = Nothing(),
         const std::vector<TFileInfo>& jobFiles = {},

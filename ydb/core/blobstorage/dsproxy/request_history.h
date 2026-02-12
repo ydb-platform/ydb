@@ -29,28 +29,20 @@ public:
     };
 
     struct TVRequestEntry : public TBaseEntry {
-        ui8 PartIdx;
         ui8 OrderNumber;
         ui32 QueryCount;
 
-        TVRequestEntry(TMonotonic startTime, ui8 partIdx, ui32 queryCount, ui8 orderNumber)
+        TVRequestEntry(TMonotonic startTime, ui32 queryCount, ui8 orderNumber)
             : TBaseEntry(startTime)
-            , PartIdx(partIdx)
             , OrderNumber(orderNumber)
             , QueryCount(queryCount)
         {}
 
-        void Output(IOutputStream& str, const char* typeName, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                const TLogoBlobID* blobId) const {
-            str << typeName         << "{"
-                << " TimestampMs# " << Timestamp.MillisecondsFloat();
-            if (blobId && PartIdx != InvalidPartId) {
-                str << " sample PartId# " << TLogoBlobID(*blobId, PartIdx).ToString();
-            }
-            str << " QueryCount# "  << QueryCount
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            str << " TimestampMs# " << Timestamp.MillisecondsFloat()
+                << " QueryCount# "  << QueryCount
                 << " VDiskId# "     << info->GetVDiskId(OrderNumber).ToString()
-                << " NodeId# "      << info->GetActorId(OrderNumber).NodeId()
-                << " }";
+                << " NodeId# "      << info->GetActorId(OrderNumber).NodeId();
         }
     };
 
@@ -66,62 +58,188 @@ public:
             , ErrorReason(errorReason)
         {}
 
-        void Output(IOutputStream& str, const char* typeName, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
-            str << typeName         << "{"
-                << " TimestampMs# " << Timestamp.MillisecondsFloat()
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            str << " TimestampMs# " << Timestamp.MillisecondsFloat()
                 << " VDiskId# "     << info->GetVDiskId(OrderNumber).ToString()
                 << " NodeId# "      << info->GetActorId(OrderNumber).NodeId()
                 << " Status# "      << NKikimrProto::EReplyStatus_Name(Status);
             if (ErrorReason) {
                 str << " ErrorReason# \"" << ErrorReason << "\"";
             }
-            str << " }";
         }
     };
 
     struct TVPutEntry : public TVRequestEntry {
-        TVPutEntry(TMonotonic startTime, ui8 partIdx, ui32 queryCount, ui8 orderNumber)
-            : TVRequestEntry(startTime, partIdx, queryCount, orderNumber)
+        struct TSubrequest {
+            TLogoBlobID BlobId;
+
+            TSubrequest(const TLogoBlobID& blobId)
+                : BlobId(blobId)
+            {}
+
+            void Output(IOutputStream& str) const {
+                str << "{ BlobId# " << BlobId.ToString()
+                    << " }";
+            }
+        };
+
+        TVector<TSubrequest> Subrequests;
+
+        TVPutEntry(TMonotonic startTime, ui32 queryCount, ui8 orderNumber)
+            : TVRequestEntry(startTime, queryCount, orderNumber)
         {}
 
-        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                const TLogoBlobID* blobId) const {
-            TVRequestEntry::Output(str, "TEvVPut", info, blobId);
+        void AddSubrequest(const TLogoBlobID& blobId) {
+            Subrequests.emplace_back(blobId);
+        }
+
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            str << "TEvVPut{";
+            TVRequestEntry::Output(str, info);
+            if (!Subrequests.empty()) {
+                str << " Subrequests# [";
+                for (size_t i = 0; i < Subrequests.size(); ++i) {
+                    if (i > 0) str << ", ";
+                    Subrequests[i].Output(str);
+                }
+                str << "]";
+            }
+            str << " }";
         }
     };
 
     struct TVGetEntry : public TVRequestEntry {
-        TVGetEntry(TMonotonic startTime, ui8 partIdx, ui32 queryCount, ui8 orderNumber)
-            : TVRequestEntry(startTime, partIdx, queryCount, orderNumber)
+        struct TSubrequest {
+            TLogoBlobID BlobId;
+            ui32 Shift;
+            ui32 Size;
+
+            TSubrequest(const TLogoBlobID& blobId, ui32 shift, ui32 size)
+                : BlobId(blobId)
+                , Shift(shift)
+                , Size(size)
+            {}
+
+            void Output(IOutputStream& str) const {
+                str << "{ BlobId# " << BlobId.ToString()
+                    << " Shift# " << Shift
+                    << " Size# " << Size
+                    << " }";
+            }
+        };
+
+        TVector<TSubrequest> Subrequests;
+
+        TVGetEntry(TMonotonic startTime, ui32 queryCount, ui8 orderNumber)
+            : TVRequestEntry(startTime, queryCount, orderNumber)
         {}
 
-        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                const TLogoBlobID* blobId) const {
-            TVRequestEntry::Output(str, "TEvVGet", info, blobId);
+        void AddSubrequest(const TLogoBlobID& blobId, ui32 shift, ui32 size) {
+            Subrequests.emplace_back(blobId, shift, size);
+        }
+
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            str << "TEvVGet{";
+            TVRequestEntry::Output(str, info);
+            if (!Subrequests.empty()) {
+                str << " Subrequests# [";
+                for (size_t i = 0; i < Subrequests.size(); ++i) {
+                    if (i > 0) str << ", ";
+                    Subrequests[i].Output(str);
+                }
+                str << "]";
+            }
+            str << " }";
         }
     };
 
     struct TVPutResultEntry : public TVResponseEntry {
+        struct TSubrequestResult {
+            TLogoBlobID BlobId;
+            ui8 Status;
+
+            TSubrequestResult(const TLogoBlobID& blobId, NKikimrProto::EReplyStatus status)
+                : BlobId(blobId)
+                , Status(status)
+            {}
+
+            void Output(IOutputStream& str) const {
+                str << "{ BlobId# " << BlobId.ToString()
+                    << " Status# " << NKikimrProto::EReplyStatus_Name(Status)
+                    << " }";
+            }
+        };
+
+        TVector<TSubrequestResult> SubrequestResults;
+
         TVPutResultEntry(TMonotonic startTime, ui8 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason)
             : TVResponseEntry(startTime, orderNumber, status, errorReason)
         {}
 
-        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                const TLogoBlobID* blobId) const {
-            Y_UNUSED(blobId);
-            TVResponseEntry::Output(str, "TEvVPutResult", info);
+        void AddSubrequestResult(const TLogoBlobID& blobId, NKikimrProto::EReplyStatus status) {
+            SubrequestResults.emplace_back(blobId, status);
+        }
+
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            str << "TEvVPutResult{";
+            TVResponseEntry::Output(str, info);
+            if (!SubrequestResults.empty()) {
+                str << " SubrequestResults# [";
+                for (size_t i = 0; i < SubrequestResults.size(); ++i) {
+                    if (i > 0) str << ", ";
+                    SubrequestResults[i].Output(str);
+                }
+                str << "]";
+            }
+            str << " }";
         }
     };
 
     struct TVGetResultEntry : public TVResponseEntry {
+        struct TSubrequestResult {
+            TLogoBlobID BlobId;
+            ui8 Status;
+            ui32 Shift;
+            ui32 Size;
+
+            TSubrequestResult(const TLogoBlobID& blobId, NKikimrProto::EReplyStatus status, ui32 shift, ui32 size)
+                : BlobId(blobId)
+                , Status(status)
+                , Shift(shift)
+                , Size(size)
+            {}
+
+            void Output(IOutputStream& str) const {
+                str << "{ BlobId# " << BlobId.ToString()
+                    << " Status# " << NKikimrProto::EReplyStatus_Name(Status)
+                    << " Shift# " << Shift
+                    << " Size# " << Size
+                    << " }";
+            }
+        };
+
+        TVector<TSubrequestResult> SubrequestResults;
+
         TVGetResultEntry(TMonotonic startTime, ui8 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason)
             : TVResponseEntry(startTime, orderNumber, status, errorReason)
         {}
+        
+        void AddSubrequestResult(const TLogoBlobID& blobId, NKikimrProto::EReplyStatus status, ui32 shift, ui32 size) {
+            SubrequestResults.emplace_back(blobId, status, shift, size);
+        }
 
-        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                const TLogoBlobID* blobId) const {
-            Y_UNUSED(blobId);
-            TVResponseEntry::Output(str, "TEvVGetResult", info);
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            str << "TEvVGetResult{";
+            TVResponseEntry::Output(str, info);
+            if (!SubrequestResults.empty()) {
+                str << " SubrequestResults# [";
+                for (size_t i = 0; i < SubrequestResults.size(); ++i) {
+                    if (i > 0) str << ", ";
+                    SubrequestResults[i].Output(str);
+                }
+                str << "]";
+            }
+            str << " }";
         }
     };
 
@@ -131,9 +249,8 @@ public:
             , Type(type)
         {}
 
-        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TLogoBlobID* blobId) const {
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
             Y_UNUSED(info);
-            Y_UNUSED(blobId);
             str << AccelerationTypeName(Type) << "{ TimestampMs# " << Timestamp.MillisecondsFloat() << " }";
         }
 
@@ -160,19 +277,46 @@ public:
         , StartTime(TMonotonic::Now())
     {}
 
-    void AddVPutToWaitingList(ui8 partId, ui32 queryCount, ui32 orderNumber) {
-        WaitingEntries.emplace_back(TVPutEntry(StartTime, partId, queryCount, orderNumber));
+    TVPutEntry CreateVPut(ui32 queryCount, ui32 orderNumber) {
+        return TVPutEntry(StartTime, queryCount, orderNumber);
     }
-    void AddVGetToWaitingList(ui8 partId, ui32 queryCount, ui32 orderNumber) {
-        WaitingEntries.emplace_back(TVGetEntry(StartTime, partId, queryCount, orderNumber));
+    void AddVPutToWaitingList(TVPutEntry&& entry) {
+        WaitingEntries.emplace_back(std::move(entry));
+    }
+    void AddVPutToWaitingList(const TLogoBlobID& blobId, ui8 orderNumber) {
+        auto vput = CreateVPut(1, orderNumber);
+        vput.AddSubrequest(blobId);
+        WaitingEntries.emplace_back(std::move(vput));
     }
 
+    TVGetEntry CreateVGet(ui32 queryCount, ui32 orderNumber) {
+        return TVGetEntry(StartTime, queryCount, orderNumber);
+    }
+    void AddVGetToWaitingList(TVGetEntry&& entry) {
+        WaitingEntries.emplace_back(std::move(entry));
+    }
+    void AddVGetToWaitingList(ui32 queryCount, ui32 orderNumber) {
+        WaitingEntries.emplace_back(CreateVGet(queryCount, orderNumber));
+    }
+
+    TVPutResultEntry CreateVPutResult(ui32 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason) {
+        return TVPutResultEntry(StartTime, orderNumber, status, errorReason);
+    }
+    void AddVPutResult(TVPutResultEntry&& entry) {
+        entry.Timestamp = TMonotonic::Now() - StartTime;
+        Entries.emplace_back(std::move(entry));
+    }
     void AddVPutResult(ui32 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason) {
-        Entries.emplace_back(TVPutResultEntry(StartTime, orderNumber, status, errorReason));
+        TVPutResultEntry entry = CreateVPutResult(orderNumber, status, errorReason);
+        AddVPutResult(std::move(entry));
     }
 
-    void AddVGetResult(ui32 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason) {
-        Entries.emplace_back(TVGetResultEntry(StartTime, orderNumber, status, errorReason));
+    TVGetResultEntry CreateVGetResult(ui32 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason) {
+        return TVGetResultEntry(StartTime, orderNumber, status, errorReason);
+    }
+    void AddVGetResult(TVGetResultEntry&& entry) {
+        entry.Timestamp = TMonotonic::Now() - StartTime;
+        Entries.emplace_back(std::move(entry));
     }
 
     void AddAcceleration(bool isPut) {
@@ -190,12 +334,12 @@ public:
         WaitingEntries.clear();
     }
 
-    TString Print(const TLogoBlobID* blobId = nullptr) const {
+    TString Print() const {
         TStringStream str("THistory { Entries# [");
         for (const TEntry& entry : Entries) {
             str << " ";
             std::visit([&](const auto& e) {
-                e.Output(str, Info, blobId);
+                e.Output(str, Info);
             }, entry);
         }
         str << " ] }";

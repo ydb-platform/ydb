@@ -6,6 +6,7 @@ TEST_SRCS(
     conftest.py
     test_grants.py
     test_paths_lookup.py
+    test_mon_endpoints_auth.py
 )
 
 SPLIT_FACTOR(20)

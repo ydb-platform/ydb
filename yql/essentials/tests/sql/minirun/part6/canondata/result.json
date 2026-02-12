@@ -55,20 +55,6 @@
             "uri": "https://{canondata_backend}/1937367/b6bc878e9971cb3293892fcd550e8dfbdcd963c0/resource.tar.gz#test.test_action-pass_subquery_as_param-default.txt-Results_/results.txt"
         }
     ],
-    "test.test[action-runtime_for_select-default.txt-Debug]": [
-        {
-            "checksum": "82f091a10f928e1cbf120543ab7aac8c",
-            "size": 1836,
-            "uri": "https://{canondata_backend}/1942100/3e33d7929facca390789438146a295ea293c8844/resource.tar.gz#test.test_action-runtime_for_select-default.txt-Debug_/opt.yql"
-        }
-    ],
-    "test.test[action-runtime_for_select-default.txt-Results]": [
-        {
-            "checksum": "160f973e87365f85a49d5052aeb877ae",
-            "size": 5549,
-            "uri": "https://{canondata_backend}/1942100/3e33d7929facca390789438146a295ea293c8844/resource.tar.gz#test.test_action-runtime_for_select-default.txt-Results_/results.txt"
-        }
-    ],
     "test.test[action-runtime_parse_type-default.txt-Debug]": [
         {
             "checksum": "2b91a4aaa4a288e2eb4fbc3ed891855d",
@@ -1849,9 +1835,9 @@
     ],
     "test.test[window-rank/nulls_legacy-default.txt-Debug]": [
         {
-            "checksum": "fe3da55ac0b8ab732b49a5d8760d80db",
-            "size": 1028,
-            "uri": "https://{canondata_backend}/1817427/83903caba057ddc7f2c6584714c26b7c6a60a3ab/resource.tar.gz#test.test_window-rank_nulls_legacy-default.txt-Debug_/opt.yql"
+            "checksum": "02ba02e3e5644f6d3d8becb80de6a84e",
+            "size": 857,
+            "uri": "https://{canondata_backend}/212715/265667fd1b1977913ef47360b59d9462f71c8389/resource.tar.gz#test.test_window-rank_nulls_legacy-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[window-rank/nulls_legacy-default.txt-Results]": [
@@ -1859,6 +1845,20 @@
             "checksum": "c2dd0e36230b67b6957cd886214ce774",
             "size": 2663,
             "uri": "https://{canondata_backend}/1817427/83903caba057ddc7f2c6584714c26b7c6a60a3ab/resource.tar.gz#test.test_window-rank_nulls_legacy-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[window-win_partition_functions_ansi_current-default.txt-Debug]": [
+        {
+            "checksum": "b847c89771b86e001c8dfedb96f652d2",
+            "size": 1579,
+            "uri": "https://{canondata_backend}/212715/265667fd1b1977913ef47360b59d9462f71c8389/resource.tar.gz#test.test_window-win_partition_functions_ansi_current-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_partition_functions_ansi_current-default.txt-Results]": [
+        {
+            "checksum": "991775366469a167efcb38c51df501b8",
+            "size": 4038,
+            "uri": "https://{canondata_backend}/1920236/0e892e9b91285d55ecbdbca4cf0ed88a590f5afc/resource.tar.gz#test.test_window-win_partition_functions_ansi_current-default.txt-Results_/results.txt"
         }
     ],
     "test.test[window-win_range_datetime64--Debug]": [

@@ -32,10 +32,10 @@ class TestYdsBase(object):
         topic = topic_path if topic_path else self.input_topic
         write_stream(topic, data, partition_key=partition_key, database=database, endpoint=fqdn)
 
-    def read_stream(self, messages_count, commit_after_processing=True, topic_path=None, endpoint=None):
+    def read_stream(self, messages_count, commit_after_processing=True, topic_path=None, endpoint=None, timeout=None):
         database, fqdn = self.__unwrap_endpoint(endpoint)
         topic = topic_path if topic_path else self.output_topic
-        return read_stream(topic, messages_count, commit_after_processing, self.consumer_name, database=database, endpoint=fqdn)
+        return read_stream(topic, messages_count, commit_after_processing, self.consumer_name, database=database, endpoint=fqdn, timeout=timeout)
 
     def wait_until(self, predicate, wait_time=plain_or_under_sanitizer(10, 50)):
         deadline = time.time() + wait_time

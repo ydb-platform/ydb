@@ -59,6 +59,7 @@ private:
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
+        FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);
 
@@ -358,7 +359,7 @@ inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSess
     return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson);
 }
 
-NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query);
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query, NYdb::NQuery::TTxControl txControl = NYdb::NQuery::TTxControl::NoTx());
 
 class TStreamReadError : public yexception {
 public:

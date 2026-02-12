@@ -65,6 +65,9 @@ namespace {
             )", TStringBuf(serverless ? "/MyRoot/Shared" : dbName).RNextTok('/').data()));
             env.TestWaitNotification(runtime, txId);
 
+            const auto describeResult = DescribePath(runtime, serverless ? "/MyRoot/Shared" : dbName);
+            const auto subDomainPathId = describeResult.GetPathId();
+
             TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
                 PlanResolution: 50
                 Coordinators: 1
@@ -94,9 +97,9 @@ namespace {
                     Name: "%s"
                     ResourcesDomainKey {
                         SchemeShard: %lu
-                        PathId: 2
+                        PathId: %lu
                     }
-                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard), attrs);
+                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard, subDomainPathId), attrs);
                 env.TestWaitNotification(runtime, txId);
 
                 TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -628,7 +631,7 @@ namespace {
 
         void ShouldCheckQuotas(const TSchemeLimits& limits, Ydb::StatusIds::StatusCode expectedFailStatus) {
             const TString userSID = "user@builtin";
-            EnvOptions().SystemBackupSIDs({userSID}).EnableRealSystemViewPaths(false);
+            EnvOptions().SystemBackupSIDs({userSID});
             Env(); // Init test env
 
             SetSchemeshardSchemaLimits(Runtime(), limits);
@@ -1985,7 +1988,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ShouldCheckQuotasChildrenLimited) {
-        ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 1}, Ydb::StatusIds::CANCELLED);
+        ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 2}, Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST(ShouldRetryAtFinalStage) {
@@ -3208,6 +3211,57 @@ state: STATE_ENABLED
 
     Y_UNIT_TEST(TopicsWithPermissionsExport) {
       TestTopic(true, 5, 4);
+    }
+
+    Y_UNIT_TEST(SystemViewWithPermissionsExport) {
+        Env();
+        ui64 txId = 100;
+
+        Runtime().GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+        TestLs(Runtime(), "/MyRoot/.sys/partition_stats", false, NLs::PathExist);
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+        TestModifyACL(Runtime(), ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto exportRequest = NDescUT::TExportRequest(S3Port(), {
+            R"(
+                items {
+                    source_path: "/MyRoot/.sys/partition_stats"
+                    destination_prefix: "/partition_stats"
+                }
+            )",
+        });
+
+        TestExport(Runtime(), ++txId, "/MyRoot", exportRequest.GetRequest());
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot");
+
+        UNIT_ASSERT(HasS3File("/partition_stats/system_view.pb"));
+        UNIT_ASSERT(HasS3File("/partition_stats/permissions.pb"));
+        UNIT_ASSERT(HasS3File("/partition_stats/metadata.json"));
+
+        const auto sysviewDesc = GetS3FileContent("/partition_stats/system_view.pb");
+        const auto sysviewDescExpected = "sys_view_id: 1\nsys_view_name: \"partition_stats\"\n";
+        UNIT_ASSERT_EQUAL_C(
+            sysviewDesc, sysviewDescExpected,
+            TStringBuilder() << "\nExpected:\n\n" << sysviewDescExpected << "\n\nActual:\n\n" << sysviewDesc);
+
+        const auto permissions = GetS3FileContent("/partition_stats/permissions.pb");
+        CheckPermissions(permissions, CreateProtoComparator(R"(
+            actions {
+              change_owner: "user0@builtin"
+            }
+            actions {
+              grant {
+                subject: "user0@builtin"
+                permission_names: "ydb.generic.use"
+              }
+            }
+        )"));
     }
 
     Y_UNIT_TEST(ExportTableWithUniqueIndex) {

@@ -99,7 +99,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             return TStatus::Error;
         }
 
-        auto* argType = input->GetTypeAnn();
+        auto argType = input->GetTypeAnn();
         if constexpr (std::is_same_v<TStage, TDqPhyStage>) {
             if (TDqConnection::Match(input.Get()) && argType->GetKind() == ETypeAnnotationKind::List) {
                 auto* itemType = argType->Cast<TListExprType>()->GetItemType();
@@ -147,7 +147,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    auto* resultType = programLambda->GetTypeAnn();
+    auto resultType = programLambda->GetTypeAnn();
     if (!resultType) {
         return TStatus::Repeat;
     }
@@ -249,7 +249,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
         } else {
             for (auto transform : transforms) {
-                auto* type = transform->GetTypeAnn();
+                auto type = transform->GetTypeAnn();
                 if (!EnsureListType(transform->Pos(), *type, ctx)) {
                     return TStatus::Error;
                 }

@@ -733,6 +733,7 @@ namespace NActors {
             if (!region) {
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     "Unable to allocate memory region to perform rdma handshake");
+                RunDelayedRdmaHandshake = true;
                 return nullptr;
             }
 
@@ -1278,13 +1279,15 @@ namespace NActors {
                         TryRdmaQpExchange(rdmaIncommingHandshake.value(), success);
                         if (Rdma && rdmaIncommingHandshake->HasRead()) {
                             rdma = rdmaIncommingHandshake->GetRead();
-                        }
-                        if (rdmaIncommingHandshake->HasRdmaChecksum() && rdmaIncommingHandshake->GetRdmaChecksum() == true) {
-                            Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
-                            success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
+                            if (rdmaIncommingHandshake->HasRdmaChecksum() && rdmaIncommingHandshake->GetRdmaChecksum() == true) {
+                                Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
+                                success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
+                            } else {
+                                Params.ChecksumRdmaEvent = false;
+                                success.MutableQpPrepared()->SetRdmaChecksum(false);
+                            }
                         } else {
-                            Params.ChecksumRdmaEvent = false;
-                            success.MutableQpPrepared()->SetRdmaChecksum(false);
+                            success.SetRdmaErr("Unable to perform qp exchange on the incomming side");
                         }
                     } else {
                         success.SetRdmaErr("Rdma is not ready on the incomming side");

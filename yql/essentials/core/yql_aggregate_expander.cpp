@@ -2513,7 +2513,12 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         }
 
         bool isAggApply = originalTrait->IsCallable("AggApply");
-        auto serializedStateType = isAggApply ? AggApplySerializedStateType(originalTrait, Ctx_) : originalTrait->Child(3)->GetTypeAnn();
+        TCheckedDerefPtr<const TTypeAnnotationNode> serializedStateType;
+        if (isAggApply) {
+            serializedStateType = AggApplySerializedStateType(originalTrait, Ctx_);
+        } else {
+            serializedStateType = originalTrait->Child(3)->GetTypeAnn();
+        }
         if (many) {
             serializedStateType = Ctx_.MakeType<TOptionalExprType>(serializedStateType);
         }

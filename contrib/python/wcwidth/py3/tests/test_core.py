@@ -1,10 +1,9 @@
-"""Core tests for wcwidth module. isort:skip_file"""
-try:
-    # std import
-    import importlib.metadata as importmeta
-except ImportError:
-    # 3rd party for python3.7 and earlier
-    import importlib_metadata as importmeta
+"""Core tests for wcwidth module."""
+# std imports
+import importlib.metadata
+
+# 3rd party
+import pytest
 
 # local
 import wcwidth
@@ -13,7 +12,7 @@ import wcwidth
 def test_package_version():
     """wcwidth.__version__ is expected value."""
     # given,
-    expected = importmeta.version('wcwidth')
+    expected = importlib.metadata.version('wcwidth')
 
     # exercise,
     result = wcwidth.__version__
@@ -43,7 +42,7 @@ def test_empty_string():
 
 def basic_string_type():
     """
-    This is a python 2-specific test of the basic "string type"
+    This is a python 2-specific test of the basic "string type".
 
     Such strings cannot contain anything but ascii in python2.
     """
@@ -122,14 +121,14 @@ def test_null_width_0():
 
 
 def test_control_c0_width_negative_1():
-    """How the API reacts to CSI (Control sequence initiate).
+    """
+    How the API reacts to CSI (Control sequence initiate).
 
-    An example of bad fortune, this terminal sequence is a width of 0
-    on all terminals, but wcwidth doesn't parse Control-Sequence-Inducer
-    (CSI) sequences.
+    An example of bad fortune, this terminal sequence is a width of 0 on all terminals, but wcwidth
+    doesn't parse Control-Sequence-Inducer (CSI) sequences.
 
-    Also the "legacy" posix functions wcwidth and wcswidth return -1 for
-    any string containing the C1 control character \x1b (ESC).
+    Also the "legacy" posix functions wcwidth and wcswidth return -1 for any string containing the
+    C1 control character \x1b (ESC).
     """
     # given,
     phrase = '\x1b[0m'
@@ -195,8 +194,8 @@ def test_balinese_script():
     """
     Balinese kapal (ship) is length 3.
 
-    This may be an example that is not yet correctly rendered by any terminal so
-    far, like devanagari.
+    This may be an example that is not yet correctly rendered by any terminal so far, like
+    devanagari.
     """
     phrase = ("\u1B13"    # Category 'Lo', EAW 'N' -- BALINESE LETTER KA
               "\u1B28"    # Category 'Lo', EAW 'N' -- BALINESE LETTER PA KAPAL
@@ -216,7 +215,7 @@ def test_balinese_script():
 
 def test_kr_jamo():
     """
-    Test basic combining of HANGUL CHOSEONG and JUNGSEONG
+    Test basic combining of HANGUL CHOSEONG and JUNGSEONG.
 
     Example and from Raymond Chen's blog post,
     https://devblogs.microsoft.com/oldnewthing/20201009-00/?p=104351
@@ -380,21 +379,32 @@ def test_kannada_script_2():
     assert length_phrase == expect_length_phrase
 
 
-def test_zero_wide_conflict():
-    # Test characters considered both "wide" and "zero" width
-    # -  (0x03000, 0x0303e,),  # Ideographic Space       ..Ideographic Variation In
-    # +  (0x03000, 0x03029,),  # Ideographic Space       ..Hangzhou Numeral Nine
-    assert wcwidth.wcwidth(chr(0x03029), unicode_version='4.1.0') == 2
-    assert wcwidth.wcwidth(chr(0x0302a), unicode_version='4.1.0') == 0
-
-    # - (0x03099, 0x030ff,),  # Combining Katakana-hirag..Katakana Digraph Koto
-    # + (0x0309b, 0x030ff,),  # Katakana-hiragana Voiced..Katakana Digraph Koto
-    assert wcwidth.wcwidth(chr(0x03099), unicode_version='4.1.0') == 0
-    assert wcwidth.wcwidth(chr(0x0309a), unicode_version='4.1.0') == 0
-    assert wcwidth.wcwidth(chr(0x0309b), unicode_version='4.1.0') == 2
-
 def test_soft_hyphen():
     # Test SOFT HYPHEN, category 'Cf' usually are zero-width, but most
     # implementations agree to draw it was '1' cell, visually
     # indistinguishable from a space, ' ' in Konsole, for example.
     assert wcwidth.wcwidth(chr(0x000ad)) == 1
+
+
+PREPENDED_CONCATENATION_MARKS = [
+    (0x0600, 'ARABIC NUMBER SIGN'),
+    (0x0601, 'ARABIC SIGN SANAH'),
+    (0x0602, 'ARABIC FOOTNOTE MARKER'),
+    (0x0603, 'ARABIC SIGN SAFHA'),
+    (0x0604, 'ARABIC SIGN SAMVAT'),
+    (0x0605, 'ARABIC NUMBER MARK ABOVE'),
+    (0x06DD, 'ARABIC END OF AYAH'),
+    (0x070F, 'SYRIAC ABBREVIATION MARK'),
+    (0x0890, 'ARABIC POUND MARK ABOVE'),
+    (0x0891, 'ARABIC PIASTRE MARK ABOVE'),
+    (0x08E2, 'ARABIC DISPUTED END OF AYAH'),
+    (0x110BD, 'KAITHI NUMBER SIGN'),
+    (0x110CD, 'KAITHI NUMBER SIGN ABOVE'),
+]
+
+
+@pytest.mark.parametrize('codepoint,name', PREPENDED_CONCATENATION_MARKS)
+def test_prepended_concatenation_mark_width(codepoint, name):
+    """Prepended Concatenation Marks have width 1, not 0."""
+    # https://github.com/jquast/wcwidth/issues/119
+    assert wcwidth.wcwidth(chr(codepoint)) == 1

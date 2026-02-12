@@ -484,6 +484,7 @@ public:
     explicit TAstListNodeImpl(TPosition pos);
     TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes);
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    const TString* GetSourceName() const override;
 
 protected:
     TNodePtr DoClone() const final;
@@ -1336,6 +1337,11 @@ struct TAnalyzeParams {
     TVector<TString> Columns;
 };
 
+struct TCompactEntry {
+    TNodePtr Cascade;
+    TNodePtr MaxShardsInFlight;
+};
+
 struct TAlterTableParameters {
     TVector<TColumnSchema> AddColumns;
     TVector<TString> DropColumns;
@@ -1352,9 +1358,24 @@ struct TAlterTableParameters {
     TVector<TChangefeedDescription> AlterChangefeeds;
     TVector<TIdentifier> DropChangefeeds;
     ETableType TableType = ETableType::Table;
+    TMaybe<TCompactEntry> Compact;
 
     bool IsEmpty() const {
-        return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty() && AddColumnFamilies.empty() && AlterColumnFamilies.empty() && !TableSettings.IsSet() && AddIndexes.empty() && AlterIndexes.empty() && DropIndexes.empty() && !RenameIndexTo.Defined() && !RenameTo.Defined() && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
+        return AddColumns.empty() &&
+               DropColumns.empty() &&
+               AlterColumns.empty() &&
+               AddColumnFamilies.empty() &&
+               AlterColumnFamilies.empty() &&
+               !TableSettings.IsSet() &&
+               AddIndexes.empty() &&
+               AlterIndexes.empty() &&
+               DropIndexes.empty() &&
+               !RenameIndexTo.Defined() &&
+               !RenameTo.Defined() &&
+               AddChangefeeds.empty() &&
+               AlterChangefeeds.empty() &&
+               DropChangefeeds.empty() &&
+               !Compact.Defined();
     }
 };
 
@@ -1408,6 +1429,12 @@ struct TTopicConsumerSettings {
     NYql::TResetableSetting<TNodePtr, void> AvailabilityPeriod;
     NYql::TResetableSetting<TNodePtr, void> ReadFromTs;
     NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
+    TNodePtr Type;
+    TNodePtr KeepMessagesOrder;
+    TNodePtr DefaultProcessingTimeout;
+    TNodePtr MaxProcessingAttempts;
+    TNodePtr DeadLetterPolicy;
+    TNodePtr DeadLetterQueue;
 };
 
 struct TTopicConsumerDescription {

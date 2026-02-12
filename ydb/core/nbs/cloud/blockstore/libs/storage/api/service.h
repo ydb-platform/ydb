@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/actorid.h>
 
 
-namespace NYdb::NBS {
+namespace NYdb::NBS::NBlockStore {
 
     struct TEvService {
 
@@ -29,4 +29,4 @@ namespace NYdb::NBS {
         BLOCKSTORE_DECLARE_PROTO_EVENTS(ReadBlocks)
     };
 
-} // namespace NYdb::NBS
+} // namespace NYdb::NBS::NBlockStore

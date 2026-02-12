@@ -33,6 +33,7 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -131,6 +132,9 @@ struct TBackupToS3Settings {
     // External Table
     TControlWrapper EnableExternalTableExport;
     TControlWrapper EnableExternalTableImport;
+    // System Views
+    TControlWrapper EnableSysViewPermissionsExport;
+    TControlWrapper EnableSysViewPermissionsImport;
 
     TBackupToS3Settings()
         : EnableAsyncReplicationExport(1, 0, 1)
@@ -141,6 +145,8 @@ struct TBackupToS3Settings {
         , EnableExternalDataSourceImport(1, 0, 1)
         , EnableExternalTableExport(1, 0, 1)
         , EnableExternalTableImport(1, 0, 1)
+        , EnableSysViewPermissionsExport(1, 0, 1)
+        , EnableSysViewPermissionsImport(1, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -155,6 +161,9 @@ struct TBackupToS3Settings {
 
         TControlBoard::RegisterSharedControl(EnableExternalTableExport, icb->BackupControls.S3Controls.EnableExternalTableExport);
         TControlBoard::RegisterSharedControl(EnableExternalTableImport, icb->BackupControls.S3Controls.EnableExternalTableImport);
+
+        TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
+        TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
     }
 };
 
@@ -1682,6 +1691,12 @@ struct IQuotaCounters {
     virtual void SetShardsQuota(ui64 value) = 0;
 };
 
+enum class EPathCategory : ui8 {
+    Regular = 0,
+    Backup,
+    System,
+};
+
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     using TPtr = TIntrusivePtr<TSubDomainInfo>;
     using TConstPtr = TIntrusiveConstPtr<TSubDomainInfo>;
@@ -1896,27 +1911,51 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return BackupPathsCount;
     }
 
-    void IncPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
+    ui64 GetSystemPaths() const {
+        return SystemPathsCount;
+    }
+
+    void IncPathsInside(IQuotaCounters* counters, ui64 delta = 1, EPathCategory category = EPathCategory::Regular) {
         Y_ENSURE(Max<ui64>() - PathsInsideCount >= delta);
         PathsInsideCount += delta;
 
-        if (isBackup) {
+        switch (category) {
+        case EPathCategory::Backup: {
             Y_ENSURE(Max<ui64>() - BackupPathsCount >= delta);
             BackupPathsCount += delta;
-        } else {
+            break;
+        }
+        case EPathCategory::System: {
+            Y_ENSURE(Max<ui64>() - SystemPathsCount >= delta);
+            SystemPathsCount += delta;
+            break;
+        }
+        case EPathCategory::Regular: {
             counters->ChangePathCount(delta);
+            break;
+        }
         }
     }
 
-    void DecPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
+    void DecPathsInside(IQuotaCounters* counters, ui64 delta = 1, EPathCategory category = EPathCategory::Regular) {
         Y_ENSURE(PathsInsideCount >= delta, "PathsInsideCount: " << PathsInsideCount << " delta: " << delta);
         PathsInsideCount -= delta;
 
-        if (isBackup) {
+        switch (category) {
+        case EPathCategory::Backup: {
             Y_ENSURE(BackupPathsCount >= delta, "BackupPathsCount: " << BackupPathsCount << " delta: " << delta);
             BackupPathsCount -= delta;
-        } else {
+            break;
+        }
+        case EPathCategory::System: {
+            Y_ENSURE(SystemPathsCount >= delta, "SystemPathsCount: " << SystemPathsCount << " delta: " << delta);
+            SystemPathsCount -= delta;
+            break;
+        }
+        case EPathCategory::Regular: {
             counters->ChangePathCount(-delta);
+            break;
+        }
         }
     }
 
@@ -2405,6 +2444,7 @@ private:
 
     ui64 PathsInsideCount = 0;
     ui64 BackupPathsCount = 0;
+    ui64 SystemPathsCount = 0;
     TDiskSpaceUsage DiskSpaceUsage;
 
     THashSet<TShardIdx> InternalShards;
@@ -3251,6 +3291,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString SrcPath; // Src path from schema mapping
         TMaybe<Ydb::Table::CreateTableRequest> Table;
         TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
+        TMaybe<Ydb::Table::DescribeSystemViewResult> SysView;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;

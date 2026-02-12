@@ -324,6 +324,30 @@ std::pair<TExprBase, TExprBase> BuildVectorIndexPrefixRowsWithNew(
 
     TVectorIndexPrefixLookup lookup = BuildVectorIndexPrefixLookup(table, prefixTable, true, true, indexDesc, inputRows, pos, ctx);
 
+    // Just Precompute<CnStreamLookup> leads to 'Unexpected Precompute in query results' because
+    // YQL tries to deduplicate the CnStreamLookup in that case by putting it in a TxResultBinding
+    // Without a Precompute here, it works with ONE prefixed vector index and stops working with two :),
+    // caused by YQL_ENSURE(false) in DqReplicateStageMultiOutput.
+    lookup.Node = Build<TDqPhyPrecompute>(ctx, pos)
+        .Connection<TDqCnUnionAll>()
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Add(lookup.Node)
+                        .Build()
+                    .Program()
+                        .Args({"rows"})
+                        .Body<TCoToStream>()
+                            .Input("rows")
+                            .Build()
+                        .Build()
+                    .Settings().Build()
+                    .Build()
+                .Index().Build(0)
+                .Build()
+            .Build()
+        .Done();
+
     const auto lookupArg = Build<TCoArgument>(ctx, pos).Name("lookupRow").Done();
     const auto leftRow = BuildNth(lookupArg, "0", pos, ctx);
     const auto rightRow = BuildNth(lookupArg, "1", pos, ctx);
@@ -346,8 +370,8 @@ std::pair<TExprBase, TExprBase> BuildVectorIndexPrefixRowsWithNew(
 
     const auto keyArg = Build<TCoArgument>(ctx, pos).Name("keyArg").Done();
     const auto payloadArg = Build<TCoArgument>(ctx, pos).Name("payloadArg").Done();
-    auto newPrefixDict = Build<TCoSqueezeToDict>(ctx, pos)
-        .Stream(newPrefixStream)
+    auto newPrefixDict = Build<TCoToDict>(ctx, pos)
+        .List(newPrefixStream)
         .KeySelector<TCoLambda>()
             .Args(keyArg)
             .Body<TCoAsStruct>()
@@ -365,36 +389,18 @@ std::pair<TExprBase, TExprBase> BuildVectorIndexPrefixRowsWithNew(
             .Build()
         .Done();
 
-    auto newPrefixDictPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
-        .Connection<TDqCnValue>()
-            .Output()
-                .Stage<TDqStage>()
-                    .Inputs()
-                        .Add(lookup.Node)
-                        .Build()
-                    .Program()
-                        .Args({newRowsArg})
-                        .Body(newPrefixDict)
-                        .Build()
-                    .Settings().Build()
-                    .Build()
-                .Index().Build(0)
-                .Build()
-            .Build()
-        .Done();
-
     // Feed newPrefixes from dict to KqpCnSequencer
 
     const auto dictArg = Build<TCoArgument>(ctx, pos).Name("dict").Done();
     auto newPrefixesStage = Build<TDqStage>(ctx, pos)
         .Inputs()
-            .Add(newPrefixDictPrecompute)
+            .Add(lookup.Node)
             .Build()
         .Program()
-            .Args({dictArg})
+            .Args({newRowsArg})
             .Body<TCoToStream>()
                 .Input<TCoDictKeys>()
-                    .Dict(dictArg)
+                    .Dict(newPrefixDict)
                     .Build()
                 .Build()
             .Build()

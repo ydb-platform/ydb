@@ -252,7 +252,7 @@ public:
         other.Type_ = EType::Freezed;
     }
 
-    void operator=(const TSelf& other) {
+    TSelf& operator=(const TSelf& other) {
         if (this != &other) {
             if (other.Chunk_) {
                 other.Chunk_->Ref();
@@ -269,9 +269,11 @@ public:
 
             other.Type_ = EType::Freezed;
         }
+
+        return *this;
     }
 
-    void operator=(TSelf&& other) {
+    TSelf& operator=(TSelf&& other) {
         if (Chunk_) {
             Chunk_->UnRef();
         }
@@ -285,6 +287,8 @@ public:
         other.Begin_ = nullptr;
         other.End_ = nullptr;
         other.Type_ = EType::Freezed;
+
+        return *this;
     }
 
     inline void FromSingleElement(T&& element) {

@@ -1082,6 +1082,13 @@ Y_UNIT_TEST(CreateObjectWithFeaturesAndFlags) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
 }
 
+Y_UNIT_TEST(CreateObjectWithFeaturesWithoutCluster) {
+    ExpectFailWithError(R"sql(
+        CREATE OBJECT secretId (TYPE SECRET)
+        WITH (Key1=Value1, K2=V2);
+    )sql", "<main>:2:9: Error: No cluster name given and no default cluster is selected\n");
+}
+
 Y_UNIT_TEST(Select1Type) {
     NYql::TAstParseResult res = SqlToYql("SELECT 1 type;");
     UNIT_ASSERT(res.Root);
@@ -2494,6 +2501,13 @@ Y_UNIT_TEST(PragmasFileAndUdfOrder) {
     UNIT_ASSERT(file < udfs);
 }
 
+Y_UNIT_TEST(PragmaPackageURLSyntaxError) {
+    ExpectFailWithError(R"sql(
+        PRAGMA Package("project.package", "yt://plato/{$_path/to/package");
+    )sql", "<main>:2:43: Error: Failed to substitute parameters into url: "
+           "'yt://plato/{$_path/to/package', reason: 'Missing }', position: 28\n");
+}
+
 Y_UNIT_TEST(ProcessUserType) {
     NYql::TAstParseResult res = SqlToYql("process plato.Input using Kikimr::PushData(TableRows());", 1, TString(NYql::KikimrProviderName));
     UNIT_ASSERT(res.Root);
@@ -2821,6 +2835,42 @@ Y_UNIT_TEST(DuplicateSemicolonsAreAllowedBetweenLambdaStatements) {
     UNIT_ASSERT(SqlToYql(req).IsOk());
 }
 
+Y_UNIT_TEST(ForStatementLangVerFailure) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        FOR $i IN AsList(1,2,3) DO BEGIN
+            SELECT $i;
+        END DO;
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToString(),
+        "FOR without EVALUATE is not available before language version 2025.05");
+}
+
+Y_UNIT_TEST(ForStatementLangVerSuccess) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        FOR $i IN AsList(1,2,3) DO BEGIN
+            SELECT $i;
+        END DO;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(ParallelForStatementLangVer) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        PARALLEL FOR $i IN AsList(1,2,3) DO BEGIN
+            SELECT $i;
+        END DO;
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToString(),
+        "PARALLEL FOR is not available before language version 2025.05");
+}
+
 Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
     NYql::TAstParseResult res1 = SqlToYql(R"foo(SELECT 'a\\';)foo");
     NYql::TAstParseResult res2 = SqlToYql(R"foo(SELECT "a\\";)foo");
@@ -2961,7 +3011,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOnlyCallable) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -2970,7 +3020,7 @@ Y_UNIT_TEST(UdfSyntaxSugarTypeNoRun) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\")";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\")";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -2979,7 +3029,7 @@ Y_UNIT_TEST(UdfSyntaxSugarRunNoType) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"\" (Void))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"\" (Void))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -2988,7 +3038,7 @@ Y_UNIT_TEST(UdfSyntaxSugarFullTest) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -2997,7 +3047,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (String '\"55\"))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (String '\"55\"))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3006,7 +3056,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs2) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" '((Int32 '\"32\") (String '\"no\") (AsStruct '('\"SomeFloat\" (Double '\"1e-9\")))))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" '((Int32 '\"32\") (String '\"no\") (AsStruct '('\"SomeFloat\" (Double '\"1e-9\")))))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3015,7 +3065,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOptional) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (OptionalType (DataType 'String)) (OptionalType (OptionalType (DataType 'Int32))) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (OptionalType (DataType 'String)) (OptionalType (OptionalType (DataType 'Int32))) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3426,6 +3476,21 @@ Y_UNIT_TEST(WindowPartitionByExpressionWithoutAliasesAreAllowed) {
 
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["CalcOverWindow"]);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AddMember"]);
+}
+
+Y_UNIT_TEST(WindowPartitionByOrderByWindowFunctionIsNotAllowed) {
+    ExpectFailWithError(
+        R"sql(SELECT Rank() OVER (PARTITION BY x ORDER BY Rank()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:45: Error: Failed to use window function: Rank without window\n");
+    ExpectFailWithError(
+        R"sql(SELECT Rank() OVER (PARTITION BY x ORDER BY RowNumber()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:45: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
+    ExpectFailWithError(
+        R"sql(SELECT RowNumber() OVER (PARTITION BY x ORDER BY Rank()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:50: Error: Failed to use window function: Rank without window\n");
+    ExpectFailWithError(
+        R"sql(SELECT RowNumber() OVER (PARTITION BY x ORDER BY RowNumber()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:50: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
 }
 
 Y_UNIT_TEST(PqReadByAfterUse) {
@@ -3904,6 +3969,52 @@ Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
 Y_UNIT_TEST(AlterTableYtNotSupported) {
     ExpectFailWithError("ALTER TABLE plato.table ADD COLUMN a int32",
                         "<main>:1:19: Error: ALTER TABLE is not supported for yt provider.\n");
+}
+
+Y_UNIT_TEST(AlterTableCompactIsCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table COMPACT;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableCompactWithSettingsIsCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableCompactWithSettingsWrongValues) {
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (cascade = 23, MAX_SHARDS_IN_FLIGHT = 2);
+    )sql", "<main>:3:55: Error: CASCADE value should be a boolean\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, max_shards_in_flight = "abc");
+    )sql", "<main>:3:84: Error: MAX_SHARDS_IN_FLIGHT value should be a Int32\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, some_option = 3);
+    )sql", "<main>:3:87: Error: SOME_OPTION: unknown setting for compact\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, max_shards_in_flight = 5000000000);
+    )sql", "<main>:3:84: Error: MAX_SHARDS_IN_FLIGHT value should be a Int32\n");
+}
+
+Y_UNIT_TEST(AlterTableCompactWithSettingsDuplicatedValues) {
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
+    )sql", "<main>:3:87: Error: Duplicated CASCADE\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, MAX_SHARDS_IN_FLIGHT = 10);
+    )sql", "<main>:3:87: Error: Duplicated MAX_SHARDS_IN_FLIGHT\n");
 }
 
 Y_UNIT_TEST(AlterSequence) {
@@ -5051,7 +5162,7 @@ Y_UNIT_TEST(InvalidHexInStringLiteral) {
     NYql::TAstParseResult res = SqlToYql("select \"foo\\x1\\xfe\"");
     UNIT_ASSERT(!res.Root);
     TString a1 = Err2Str(res);
-    TString a2 = "<main>:1:15: Error: Failed to parse string literal: Invalid hexadecimal value\n";
+    TString a2 = "<main>:1:15: Error: Failed to parse string literal: Invalid hexadecimal value near byte 7\n";
 
     UNIT_ASSERT_NO_DIFF(a1, a2);
 }
@@ -5062,7 +5173,7 @@ Y_UNIT_TEST(InvalidOctalInMultilineStringLiteral) {
                                          "\\01\"");
     UNIT_ASSERT(!res.Root);
     TString a1 = Err2Str(res);
-    TString a2 = "<main>:3:4: Error: Failed to parse string literal: Invalid octal value\n";
+    TString a2 = "<main>:3:4: Error: Failed to parse string literal: Invalid octal value near byte 12\n";
 
     UNIT_ASSERT_NO_DIFF(a1, a2);
 }
@@ -5549,7 +5660,7 @@ Y_UNIT_TEST(BuiltinFileOpNoArgs) {
 Y_UNIT_TEST(ProcessWithHaving) {
     NYql::TAstParseResult res = SqlToYql("process plato.Input using some::udf(value) having value == 1");
     UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet! You may request it on yql@ maillist.\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet!\n");
 }
 
 Y_UNIT_TEST(ReduceNoBy) {
@@ -7007,9 +7118,9 @@ Y_UNIT_TEST(For) {
                   "  select 1;\n"
                   "end define;\n"
                   "\n"
-                  "for $i in ListFromRange(1, 10)\n"
+                  "evaluate for $i in ListFromRange(1, 10)\n"
                   "do $a();";
-    CheckUnused(req, "$i", 5, 5);
+    CheckUnused(req, "$i", 5, 14);
 }
 
 Y_UNIT_TEST(LambdaParams) {
@@ -7488,6 +7599,13 @@ Y_UNIT_TEST(JsonQueryNullInput) {
     VerifyProgram(res, elementStat, verifyLine);
     UNIT_ASSERT(elementStat["JsonQuery"] > 0);
 }
+
+Y_UNIT_TEST(YQL_20777) {
+    ExpectFailWithError(
+        R"sql(SELECT JSON_QUERY ('{}'j, '\1');)sql",
+        "<main>:1:30: Error: Failed to parse string literal: Invalid octal value near byte 3\n");
+}
+
 } // Y_UNIT_TEST_SUITE(JsonQuery)
 
 Y_UNIT_TEST_SUITE(JsonPassing) {
@@ -10390,6 +10508,23 @@ Y_UNIT_TEST(MetricsLevelValueValidation) {
     UNIT_ASSERT_C(!res.IsOk(), "Should reject invalid metrics level");
     UNIT_ASSERT_C(res.Issues.ToString().Contains("Invalid metrics_level value"), res.Issues.ToString());
 }
+
+Y_UNIT_TEST(MetricsLevelNumericValue) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $b($x); }
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+            METRICS_LEVEL = "1"
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
+
 Y_UNIT_TEST(MetricsLevelEmptyValue) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
         USE plato;
@@ -10401,16 +10536,17 @@ Y_UNIT_TEST(MetricsLevelEmptyValue) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "metrics_level value must be a string literal");
 }
-Y_UNIT_TEST(MetricsLevelNonStringValue) {
+
+Y_UNIT_TEST(MetricsLevelBadNumericValue) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
         USE plato;
         CREATE TRANSFER `TransferName`
         FROM `TopicName` TO `TableName`
         USING ($x) -> { return $x; }
-        WITH (METRICS_LEVEL = 123);
+        WITH (METRICS_LEVEL = 11);
     )sql");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid metrics_level value");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid numeric value for metrics_value");
 }
 } // Y_UNIT_TEST_SUITE(Transfer)
 
@@ -11585,6 +11721,29 @@ Y_UNIT_TEST(NamedNode) {
         )sql");
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
+
+Y_UNIT_TEST(LangVerBefore202504) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = 202502;
+
+    NYql::TAstParseResult res;
+    res = SqlToYqlWithSettings(R"sql(SELECT 1 + (SELECT 1);)sql", s);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "is not available");
+
+    res = SqlToYqlWithSettings(R"sql(SELECT (SELECT 1);)sql", s);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "is not available");
+
+    res = SqlToYqlWithSettings(R"sql($x = SELECT 1 + (SELECT 1); SELECT $x;)sql", s);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "is not available");
+
+    res = SqlToYqlWithSettings(R"sql($x = SELECT (SELECT 1); SELECT $x;)sql", s);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "is not available");
+
+    // Historically, there was a bug, because of which a langver was not checked.
+    res = SqlToYqlWithSettings(R"sql($x = (SELECT 1);)sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 } // Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery)
 
 Y_UNIT_TEST_SUITE(YqlSelect) {
@@ -11600,7 +11759,7 @@ Y_UNIT_TEST(LangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         res.Issues.ToOneLineString(),
-        "YqlSelect is not available before 2025.05");
+        "YqlSelect is not available before language version 2025.05");
 }
 
 Y_UNIT_TEST(AutoTopLevel) {

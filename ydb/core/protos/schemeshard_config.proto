@@ -1,0 +1,44 @@
+import "ydb/core/protos/counters_schemeshard.proto";
+
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TSchemeShardConfig {
+    message TInFlightCounterConfig {
+        optional NKikimr.NSchemeShard.ESimpleCounters Type = 1;
+        // after this amount scheme shard begin to abort the operations
+        // to disable set to 0
+        optional uint32 InFlightLimit = 2 [default = 10000];
+    }
+    // after this amount of time we forcibly write full stats to local DB
+    // to disable set to 0
+    optional uint32 StatsBatchTimeoutMs = 1 [default = 100];
+
+    // number of shards stats to batch together
+    // to disable set to 0
+    optional uint32 StatsMaxBatchSize = 2 [default = 100];
+
+    optional uint32 StatsMaxExecuteMs = 3 [default = 10];
+
+    repeated TInFlightCounterConfig InFlightCounterConfig = 4;
+
+    // number of shards per table
+    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
+
+    // number of shards per table
+    // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
+    optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
+
+    // number of shards per table
+    // database level default for TTL mechanics
+    // 0 means no limit
+    optional uint32 MaxTTLShardsInFlight = 7 [default = 0];
+
+    // number of conditional erase responses to batch together
+    // 0 disables batching (processes each response immediately via non-batch path)
+    // 1 processes each response immediately via batch path (not recommended)
+    optional uint32 CondEraseResponseBatchSize = 8 [default = 100];
+
+    // maximum time to hold an incomplete conditional erase response batch before processing
+    optional uint32 CondEraseResponseBatchMaxTimeMs = 9 [default = 100];
+}

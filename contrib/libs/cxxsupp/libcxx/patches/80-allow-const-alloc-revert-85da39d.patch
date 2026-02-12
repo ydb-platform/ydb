@@ -1,8 +1,8 @@
 diff --git a/include/__memory/allocator.h b/include/__memory/allocator.h
-index c935c51..d50df9a 100644
+index c8e3b08..326be6d 100644
 --- a/include/__memory/allocator.h
 +++ b/include/__memory/allocator.h
-@@ -170,6 +170,8 @@ inline _LIBCPP_HIDE_FROM_ABI bool operator!=(const allocator<_Tp>&, const alloca
+@@ -172,6 +172,8 @@ inline _LIBCPP_HIDE_FROM_ABI bool operator!=(const allocator<_Tp>&, const alloca
  
  #endif
  
@@ -12,7 +12,7 @@ index c935c51..d50df9a 100644
  
  #endif // _LIBCPP___MEMORY_ALLOCATOR_H
 diff --git a/include/__memory/construct_at.h b/include/__memory/construct_at.h
-index d8c9746..855f190 100644
+index 1f129d1..9abd335 100644
 --- a/include/__memory/construct_at.h
 +++ b/include/__memory/construct_at.h
 @@ -37,7 +37,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
@@ -34,7 +34,7 @@ index d8c9746..855f190 100644
  }
  
 diff --git a/include/__memory/uninitialized_algorithms.h b/include/__memory/uninitialized_algorithms.h
-index 627ee44..194914f 100644
+index 9587f01..33354b6 100644
 --- a/include/__memory/uninitialized_algorithms.h
 +++ b/include/__memory/uninitialized_algorithms.h
 @@ -563,8 +563,9 @@ struct __allocator_has_trivial_copy_construct<allocator<_Type>, _Type> : true_ty
@@ -60,15 +60,15 @@ index 627ee44..194914f 100644
    }
  }
  
-@@ -640,7 +645,11 @@ __uninitialized_allocator_relocate(_Alloc& __alloc, _Tp* __first, _Tp* __last, _
+@@ -642,7 +647,11 @@ _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 void __uninitialized_allocat
      std::__allocator_destroy(__alloc, __first, __last);
    } else {
      // Casting to void* to suppress clang complaining that this is technically UB.
 +#ifdef _LIBCPP_ENABLE_REMOVED_ALLOCATOR_CONST
-+    __builtin_memcpy(static_cast<void*>(const_cast<__remove_const_t<_Tp>*>(__result)), __first, sizeof(_Tp) * (__last - __first));
++    __builtin_memcpy(static_cast<void*>(const_cast<__remove_const_t<__remove_pointer_t<_ContiguousIterator>>*>(std::__to_address(__result))),
 +#else
-     __builtin_memcpy(static_cast<void*>(__result), __first, sizeof(_Tp) * (__last - __first));
+     __builtin_memcpy(static_cast<void*>(std::__to_address(__result)),
 +#endif
+                      std::__to_address(__first),
+                      sizeof(_ValueType) * (__last - __first));
    }
- }
- 

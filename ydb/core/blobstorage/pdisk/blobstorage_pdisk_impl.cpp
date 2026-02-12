@@ -98,7 +98,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     AddCbs(OwnerUnallocated, GateTrim, "Trim", 0ull);
     ConfigureCbs(OwnerUnallocated, GateTrim, 16);
 
-    Format.Clear();
+    Format.Clear(Cfg->EnableFormatEncryption);
     *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Initial;
     *Mon.PDiskBriefState = TPDiskMon::TPDisk::Booting;
     ErrorStr = "PDisk is initializing now";
@@ -138,8 +138,15 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
     Format.SectorSize = FormatSectorSize;
     ui32 mainKeySize = mainKey.Keys.size();
 
+    const bool allowObsoleteKey =
+#ifdef DISABLE_PDISK_ENCRYPTION
+        false;
+#else
+        true;
+#endif
+
     for (ui32 k = 0; k < mainKeySize; ++k) {
-        TPDiskStreamCypher cypher(true); // Format record is always encrypted
+        TPDiskStreamCypher cypher(Cfg->EnableFormatEncryption);
         cypher.SetKey(mainKey.Keys[k]);
 
         ui32 lastGoodIdx = (ui32)-1;
@@ -153,6 +160,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
 
             cypher.StartMessage(footer->Nonce);
             alignas(16) TDiskFormat diskFormat;
+            diskFormat.SetEncryptFormat(Cfg->EnableFormatEncryption);
             cypher.Encrypt(&diskFormat, formatSector, sizeof(TDiskFormat));
 
             isBad[i] = !diskFormat.IsHashOk(FormatSectorSize);
@@ -182,7 +190,10 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
             ui64 sectorOffset = lastGoodIdx * FormatSectorSize;
             ui8* formatSector = formatSectors + sectorOffset;
             if (k < mainKeySize - 1) { // obsolete key is used
-                return TCheckDiskFormatResult(true, true);
+                if (allowObsoleteKey) {
+                    return TCheckDiskFormatResult(true, true);
+                }
+                continue;
             } else if (isBadPresent) {
                 for (ui32 i = 0; i < ReplicationFactor; ++i) {
                     if (isBad[i]) {
@@ -223,7 +234,12 @@ bool TPDisk::IsFormatMagicValid(ui8 *magicData8, ui32 magicDataSize, const TMain
     if (magicOr == 0ull || isIncompleteFormatMagicPresent) {
         return true;
     }
-    auto format = CheckMetadataFormatSector(magicData8, magicDataSize, mainKey, PCtx->PDiskLogPrefix);
+    auto format = CheckMetadataFormatSector(
+        magicData8,
+        magicDataSize,
+        mainKey,
+        PCtx->PDiskLogPrefix,
+        Cfg->EnableFormatEncryption);
     return format.has_value();
 }
 
@@ -1743,7 +1759,7 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 
         // Encrypt chunk0 format record using mainKey
         ui64 nonce = 1;
-        bool encrypt = true; // Always write encrypter format because some tests use wrong main key to initiate errors
+        bool encrypt = Cfg->EnableFormatEncryption;
         TSysLogWriter formatWriter(Mon, *BlockDevice.Get(), Format, nonce, mainKey, BufferPool.Get(),
                 0, ReplicationFactor, Format.MagicFormatChunk, 0, nullptr, 0, nullptr, PCtx,
                 &DriveModel, encrypt);
@@ -1769,11 +1785,11 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
         const ui64 &diskGuid, const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
         TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
-        std::optional<TRcBuf> metadata, bool plainDataChunks) {
+        std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic) {
     TGuard<TMutex> guard(StateMutex);
     // Prepare format record
     alignas(16) TDiskFormat format;
-    format.Clear();
+    format.Clear(Cfg->EnableFormatEncryption);
     format.SetPlainDataChunks(plainDataChunks);
     format.DiskSize = diskSizeBytes;
     format.SectorSize = sectorSizeBytes;
@@ -1784,7 +1800,14 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     format.ChunkKey = chunkKey;
     format.LogKey = logKey;
     format.SysLogKey = sysLogKey;
-    format.InitMagic();
+    bool randomizeMagic = !Cfg->EnableFormatEncryption || !Cfg->EnableSectorEncryption || plainDataChunks;
+#ifdef DISABLE_PDISK_ENCRYPTION
+    randomizeMagic = true;
+#endif
+    if (forceRandomizeMagic) {
+        randomizeMagic = *forceRandomizeMagic;
+    }
+    format.InitMagic(randomizeMagic);
     memcpy(format.FormatText, textMessage.data(), Min(sizeof(format.FormatText) - 1, textMessage.size()));
     format.SysLogSectorCount = RecordsInSysLog * format.SysLogSectorsPerRecord();
     ui64 firstSectorIdx = format.FirstSysLogSectorIdx();
@@ -1946,6 +1969,9 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(owner, result->StartingPoints);
+    if (evYardInit.GetDiskFd) {
+        result->DiskFd = BlockDevice->DuplicateFd();
+    }
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
     ownerData.WhiteboardProxyId = evYardInit.WhiteboardProxyId;
@@ -2111,6 +2137,9 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
+    if (evYardInit.GetDiskFd) {
+        result->DiskFd = BlockDevice->DuplicateFd();
+    }
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});
 
@@ -2171,10 +2200,8 @@ void TPDisk::ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight) {
     }
 }
 
-void TPDisk::SchedulerConfigure(const TConfigureScheduler &reqCfg) {
+void TPDisk::SchedulerConfigure(const TPDiskSchedulerConfig& cfg, ui32 ownerId) {
     // TODO(cthulhu): Check OwnerRound here
-    const TPDiskSchedulerConfig& cfg = reqCfg.SchedulerCfg;
-    ui32 ownerId = reqCfg.OwnerId;
     ui64 bytesTotalWeight = cfg.LogWeight + cfg.FreshWeight + cfg.CompWeight;
     ConfigureCbs(ownerId, GateLog, cfg.LogWeight * cfg.BytesSchedulerWeight);
     ConfigureCbs(ownerId, GateFresh, cfg.FreshWeight * cfg.BytesSchedulerWeight);
@@ -2760,9 +2787,11 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestAskForCutLog:
                 SendCutLog(static_cast<TAskForCutLog&>(*req));
                 break;
-            case ERequestType::RequestConfigureScheduler:
-                SchedulerConfigure(static_cast<TConfigureScheduler&>(*req));
+            case ERequestType::RequestConfigureScheduler: {
+                const auto& cfgReq = static_cast<TConfigureScheduler&>(*req);
+                SchedulerConfigure(cfgReq.SchedulerCfg, cfgReq.OwnerId);
                 break;
+            }
             case ERequestType::RequestWhiteboartReport:
                 WhiteboardReport(static_cast<TWhiteboardReport&>(*req));
                 break;
@@ -3349,6 +3378,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 const ui64 diskOffset = Format.Offset(ev.ChunkIdx, 0, ev.Offset);
                 void *buffer = completion->GetBuffer();
                 BlockDevice->PreadAsync(buffer, ev.Size, diskOffset, completion.release(), ev.ReqId, &traceId);
+                delete request;
                 return false;
             }
 
@@ -3398,6 +3428,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 
                 auto completion = std::make_unique<TCompletionChunkWriteRaw>(std::move(buffer), ev.Sender, ev.Cookie, std::move(ev.Span));
                 BlockDevice->PwriteAsync(span.data(), span.size(), diskOffset, completion.release(), ev.ReqId, &traceId);
+                delete request;
                 return false;
             }
 
@@ -4289,8 +4320,7 @@ void TPDisk::AddCbsSet(ui32 ownerId) {
     AddCbs(ownerId, GateSyncLog, "SyncLog", 0ull);
     AddCbs(ownerId, GateLow, "LowRead", 0ull);
 
-    TConfigureScheduler conf(ownerId, 0);
-    SchedulerConfigure(conf);
+    SchedulerConfigure(Cfg->SchedulerCfg, ownerId);
 }
 
 TChunkIdx TPDisk::GetUnshreddedFreeChunk() {

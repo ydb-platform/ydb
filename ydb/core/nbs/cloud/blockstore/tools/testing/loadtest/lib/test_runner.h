@@ -10,7 +10,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -53,4 +53,4 @@ ITestRunnerPtr CreateTestRunner(
     TLoadTestRequestCallbacks requestCallbacks,
     const void *udata);
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

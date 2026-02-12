@@ -6,23 +6,7 @@
 
 #include <memory>
 
-namespace NMonitoring {
-
-////////////////////////////////////////////////////////////////////////////////
-
-class IMetricSupplier;
-
-}   // NMonitoring
-
-namespace NCloud::NStorage {
-
-////////////////////////////////////////////////////////////////////////////////
-
-using IUserMetricsSupplierPtr = std::shared_ptr<NMonitoring::IMetricSupplier>;
-
-}   // NCloud::NStorage
-
-namespace NCloud::NBlockStore {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -30,6 +14,12 @@ constexpr TDuration RequestTimeWarnThreshold = TDuration::Seconds(10);
 constexpr TDuration UpdateLeakyBucketCountersInterval = TDuration::Seconds(1);
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct IVHostStats;
+using IVHostStatsPtr = std::shared_ptr<IVHostStats>;
+
+class TVHostStatsSimple;
+using TVHostStatsSimplePtr = std::shared_ptr<TVHostStatsSimple>;
 
 class TDiagnosticsConfig;
 using TDiagnosticsConfigPtr = std::shared_ptr<TDiagnosticsConfig>;
@@ -55,8 +45,6 @@ using IStatsAggregatorPtr = std::shared_ptr<IStatsAggregator>;
 struct IClientPercentileCalculator;
 using IClientPercentileCalculatorPtr = std::shared_ptr<IClientPercentileCalculator>;
 
-using IMetricConsumerPtr = std::shared_ptr<NMonitoring::IMetricConsumer>;
-
 struct IIncompleteRequestProvider;
 using IIncompleteRequestProviderPtr = std::shared_ptr<IIncompleteRequestProvider>;
 
@@ -69,4 +57,4 @@ using IBlockDigestGeneratorPtr = std::shared_ptr<IBlockDigestGenerator>;
 struct IVolumeBalancerSwitch;
 using IVolumeBalancerSwitchPtr = std::shared_ptr<IVolumeBalancerSwitch>;
 
-}   // namespace NCloud::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore

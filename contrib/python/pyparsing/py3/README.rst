@@ -66,8 +66,8 @@ AI Instructions
 There are also instructions for AI agents to use when helping you to create your parser. They can
 be pulled from the GitHub project repository, at pyparsing/ai/best_practices.md. You can also tell
 the AI to access them programmatically after installing pyparsing, either from the CLI with
-`python -m pyparsing.ai.show_best_practices` or within python with
-`import pyparsing; pyparsing.show_best_practices()`.
+``python -m pyparsing.ai.show_best_practices`` or within python with
+``import pyparsing; pyparsing.show_best_practices()``.
 
 
 License

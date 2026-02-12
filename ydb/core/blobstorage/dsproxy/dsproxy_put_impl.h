@@ -209,8 +209,7 @@ public:
     TString ToString() const;
 
     TString PrintHistory() const {
-        Y_DEBUG_ABORT_UNLESS(!Blobs.empty());
-        return History.Print(&Blobs[0].BlobId);
+        return History.Print();
     }
 
     void InvalidatePartStates(ui32 orderNumber) {
@@ -261,29 +260,34 @@ public:
                     record.SetIgnoreBlock(true);
                 }
 
-                History.AddVPutToWaitingList(ptr->Id.PartId(), 1, orderNumber);
+                auto vput = History.CreateVPut(1, orderNumber);
+                vput.AddSubrequest(ptr->Id);
+                History.AddVPutToWaitingList(std::move(vput));
                 events.emplace_back(std::move(ev));
                 HandoffPartsSent += ptr->IsHandoff;
                 ++VPutRequests;
             } else { // TEvVMultiPut
+                ui32 itemsCount = 0;
                 TInstant deadline;
                 for (auto temp = it; temp != end; ++temp) {
                     auto [orderNumber, ptr] = *temp;
                     deadline = Max(deadline, Blobs[ptr->BlobIdx].Deadline);
+                    ++itemsCount;
                 }
                 auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, deadline, Blackboard.PutHandleClass,
                     false);
 
-                ui8 firstPartId = it->second->Id.PartId();
                 ui8 orderNumber = it->first;
+                auto vput = History.CreateVPut(itemsCount, orderNumber);
                 while (it != end) {
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, blob.IssueKeepFlag, blob.IgnoreBlock,
                         &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming);
                     HandoffPartsSent += ptr->IsHandoff;
+                    vput.AddSubrequest(ptr->Id);
                 }
-                History.AddVPutToWaitingList(firstPartId, ev->Record.ItemsSize(), orderNumber);
+                History.AddVPutToWaitingList(std::move(vput));
                 events.emplace_back(std::move(ev));
                 ++VMultiPutRequests;
             }
@@ -305,10 +309,12 @@ public:
         ++VMultiPutResponses;
         ProcessResponseCommonPart(msg.Record);
         ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
+        auto vputResult = History.CreateVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
         for (const auto& item : msg.Record.GetItems()) {
             ProcessResponseBlob(orderNumber, item);
+            vputResult.AddSubrequestResult(LogoBlobIDFromLogoBlobID(item.GetBlobID()), item.GetStatus());
         }
-        History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
+        History.AddVPutResult(std::move(vputResult));
     }
 
     size_t GetBlobIdx(const TLogoBlobID& id) const {

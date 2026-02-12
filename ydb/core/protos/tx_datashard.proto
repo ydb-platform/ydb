@@ -1036,6 +1036,7 @@ message TEvGetInfoResponse {
         optional string State = 5;
         optional bool IsActive = 6;
         optional bool HasSharedBlobs = 7;
+        optional uint32 FollowerId = 8;
     }
 
     message TNamedValue {
@@ -2089,8 +2090,8 @@ message TEvGetCompactTableStats {
 }
 
 message TEvGetCompactTableStatsResult {
-    optional uint64 BackgroundCompactionRequests = 1;
-    optional uint64 BackgroundCompactionCount = 2;
+    optional uint64 CompactionRequests = 1;
+    optional uint64 CompactionCount = 2;
     optional uint64 CompactBorrowedCount = 3;
 }
 

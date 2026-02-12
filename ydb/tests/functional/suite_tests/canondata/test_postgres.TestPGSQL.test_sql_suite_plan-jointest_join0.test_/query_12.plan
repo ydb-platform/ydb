@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Node Type": "Limit-LeftJoin (Map)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -50,7 +50,7 @@
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "LeftJoin (Map)"
                                             }
                                         ],
                                         "PlanNodeId": 12,
@@ -61,7 +61,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "LeftJoin (MapJoin)",
+                                                        "Node Type": "LeftJoin (Map)",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "a.unique1 = b.thousand",
@@ -73,7 +73,7 @@
                                                                         "ExternalPlanNodeId": 6
                                                                     }
                                                                 ],
-                                                                "Name": "LeftJoin (MapJoin)"
+                                                                "Name": "LeftJoin (Map)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,

@@ -716,6 +716,14 @@ message TEvKqpScanCursor {
 
     message TColumnShardScanPlain {
     }
+    message TDeprecatedColumnShardScanSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
+    message TDeprecatedColumnShardScanNotSortedSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
     message TColumnShardScanSimple {
         optional uint64 SourceIdx = 1;
         optional uint32 StartRecordIndex = 2;
@@ -728,10 +736,11 @@ message TEvKqpScanCursor {
     }
     oneof Implementation {
         TColumnShardScanPlain ColumnShardPlain = 10;
+        TDeprecatedColumnShardScanSimple DeprecatedColumnShardSimple = 11;
+        TDeprecatedColumnShardScanNotSortedSimple DeprecatedColumnShardNotSortedSimple = 12;
         TColumnShardScanSimple ColumnShardSimple = 13;
         TColumnShardScanNotSortedSimple ColumnShardNotSortedSimple = 14;
     }
-    reserved 11, 12; // deprecated
 }
 
 message TEvRemoteScanData {
@@ -900,7 +909,7 @@ message TKqpFullTextSourceSettings {
 
     optional double K1Factor = 12;
     optional double BFactor = 13;
-    optional string QueryMode = 14;
+    optional string DefaultOperator = 14;
     optional string MinimumShouldMatch = 15;
 };
 

@@ -768,7 +768,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     TString structuredToken;
     const auto& sourceName = compiledSource.GetSourceName();
     if (sourceName) {
-        structuredToken = NYql::CreateStructuredTokenParser(compiledSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
+        structuredToken = ReplaceStructuredTokenReferences(compiledSource.GetAuthInfo());
     }
 
     TTransform dqSourceStreamLookupTransform = {
@@ -1005,6 +1005,9 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
     channelDesc.SetEnableSpilling(enableSpilling);
     channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
     channelDesc.SetWatermarksMode(channel.WatermarksMode);
+    if (channel.WatermarksIdleTimeoutUs) {
+        channelDesc.SetWatermarksIdleTimeoutUs(*channel.WatermarksIdleTimeoutUs);
+    }
 
     const auto& resultChannelProxies = GetMeta().ResultChannelProxies;
 
@@ -1303,6 +1306,9 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
         case NYql::NDq::TTaskInputType::Source:
             inputDesc.MutableSource()->SetType(input.SourceType);
             inputDesc.MutableSource()->SetWatermarksMode(input.WatermarksMode);
+            if (input.WatermarksIdleTimeoutUs) {
+                inputDesc.MutableSource()->SetWatermarksIdleTimeoutUs(*input.WatermarksIdleTimeoutUs);
+            }
             if (Y_LIKELY(input.Meta.SourceSettings)) {
                 enableMetering = true;
                 YQL_ENSURE(input.Meta.SourceSettings->HasTable());
@@ -1558,6 +1564,9 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
             channel.InMemory = protoInfo.GetInMemory();
             channel.CheckpointingMode = protoInfo.GetCheckpointingMode();
             channel.WatermarksMode = protoInfo.GetWatermarksMode();
+            if (protoInfo.HasWatermarksIdleTimeoutUs()) {
+                channel.WatermarksIdleTimeoutUs = protoInfo.GetWatermarksIdleTimeoutUs();
+            }
         }
 
         return channel;
@@ -1659,6 +1668,9 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                     const auto& sourceInfo = inputInfo.GetSource();
                     newInput.SourceType = sourceInfo.GetType();
                     newInput.WatermarksMode = sourceInfo.GetWatermarksMode();
+                    if (sourceInfo.HasWatermarksIdleTimeoutUs()) {
+                        newInput.WatermarksIdleTimeoutUs = sourceInfo.GetWatermarksIdleTimeoutUs();
+                    }
                     if (sourceInfo.HasSettings()) {
                         const auto& settings = sourceInfo.GetSettings();
                         if (settings.Is<NKikimrTxDataShard::TKqpReadRangesSourceSettings>()) {
@@ -1777,7 +1789,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
             if (const auto& compiledSource = input.GetDqSourceStreamLookup().GetLookupSource(); const auto& sourceName = compiledSource.GetSourceName()) {
                 newTask.Meta.SecureParams.emplace(
                     sourceName,
-                    NYql::CreateStructuredTokenParser(compiledSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson()
+                    ReplaceStructuredTokenReferences(compiledSource.GetAuthInfo())
                 );
             }
         }
@@ -2345,7 +2357,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
     auto sourceName = externalSource.GetSourceName();
     TString structuredToken;
     if (sourceName) {
-        structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
+        structuredToken = ReplaceStructuredTokenReferences(externalSource.GetAuthInfo());
     }
 
     ui64 nodeOffset = 0;
@@ -2375,6 +2387,13 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
             input.ConnectionInfo = NYql::NDq::TSourceInput{};
             input.SourceSettings = externalSource.GetSettings();
             input.SourceType = externalSource.GetType();
+            if (externalSource.HasWatermarksSettings()) {
+                const auto& watermarksSettings = externalSource.GetWatermarksSettings();
+                input.WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT;
+                if (watermarksSettings.HasIdleTimeoutUs()) {
+                    input.WatermarksIdleTimeoutUs = watermarksSettings.GetIdleTimeoutUs();
+                }
+            }
         }
 
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
@@ -2451,12 +2470,12 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
-    if (fullTextSource.HasQueryMode()) {
+    if (fullTextSource.HasDefaultOperator()) {
         auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetQueryMode(),
+            stageInfo, fullTextSource.GetDefaultOperator(),
             TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
         if (value.HasValue()) {
-            settings->SetQueryMode(TString(value.AsStringRef()));
+            settings->SetDefaultOperator(TString(value.AsStringRef()));
         }
     }
 
@@ -2783,7 +2802,7 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
     const auto& extSink = sink.GetExternalSink();
     auto sinkName = extSink.GetSinkName();
     if (sinkName) {
-        auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
+        auto structuredToken = ReplaceStructuredTokenReferences(extSink.GetAuthInfo());
         task.Meta.SecureParams.emplace(sinkName, structuredToken);
         if (GetMeta().UserRequestContext->TraceId) {
             task.Meta.TaskParams.emplace("fq.job_id", GetMeta().UserRequestContext->CustomerSuppliedId);
@@ -2895,13 +2914,15 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             //     stageInfo.Introspections.push_back("Using tasks count limit because of enabled reads merge");
             // }
 
+            const bool maybeOlapRead = (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap();
+
             // build task conditions
             const bool buildFromSourceTasks = stage.SourcesSize() > 0;
             const bool buildSysViewTasks = stageInfo.Meta.IsSysView();
-            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() > 0);
+            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() > 0 && !(maybeOlapRead && stageInfo.Meta.HasReads()));
             const bool buildScanTasks = GetMeta().IsScan
                 ? stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()
-                : (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0
+                : maybeOlapRead && (stage.SinksSize() == 0 || stageInfo.Meta.HasReads())
                 ;
 
             // TODO: doesn't work right now - multiple conditions are possible in tests
@@ -3013,13 +3034,15 @@ TKqpTasksGraph::TKqpTasksGraph(
     const TPartitionPrunerConfig& partitionPrunerConfig,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
     const TKqpRequestCounters::TPtr& counters,
-    TActorId bufferActorId)
+    TActorId bufferActorId,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
     : PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     , Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
     , Counters(counters)
     , BufferActorId(bufferActorId)
+    , UserToken(std::move(userToken))
 {
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;
@@ -3103,6 +3126,17 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
     std::sort(order.begin(), order.end());
 
     return order;
+}
+
+TString TKqpTasksGraph::ReplaceStructuredTokenReferences(const TString& token) const {
+    const auto parser = NYql::CreateStructuredTokenParser(token);
+    auto builder = parser.ToBuilder();
+    if (!parser.HasTransientToken()) {
+        builder.ReplaceReferences(GetMeta().SecureParams);
+    } else if (UserToken && UserToken->GetSerializedToken()) {
+        builder.SetTransientTokenAuth(UserToken->GetSerializedToken());
+    }
+    return builder.ToJson();
 }
 
 TVector<TString> TKqpTasksGraph::GetStageIntrospection(const TStageId& stageId) const {

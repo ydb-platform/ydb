@@ -63,18 +63,26 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Aggregate",
+                                                        "Node Type": "Aggregate-LeftJoin (Lookup)",
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "{COUNT(item.t2.q1)}",
                                                                 "GroupBy": "item.t1.q2",
                                                                 "Inputs": [
                                                                     {
-                                                                        "ExternalPlanNodeId": 5
+                                                                        "InternalOperatorId": 1
                                                                     }
                                                                 ],
                                                                 "Name": "Aggregate",
                                                                 "Phase": "Intermediate"
+                                                            },
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 5
+                                                                    }
+                                                                ],
+                                                                "Name": "LeftJoin (Lookup)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 6,

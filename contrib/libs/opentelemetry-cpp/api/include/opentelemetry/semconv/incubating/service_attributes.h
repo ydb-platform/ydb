@@ -74,8 +74,21 @@ static constexpr const char *kServiceName = "service.name";
 static constexpr const char *kServiceNamespace = "service.namespace";
 
 /**
-  The version string of the service API or implementation. The format is not defined by these
-  conventions.
+  Logical name of the service on the other side of the connection. SHOULD be equal to the actual <a
+  href="/docs/resource/README.md#service">@code service.name @endcode</a> resource attribute of the
+  remote service if any.
+ */
+static constexpr const char *kServicePeerName = "service.peer.name";
+
+/**
+  Logical namespace of the service on the other side of the connection. SHOULD be equal to the
+  actual <a href="/docs/resource/README.md#service">@code service.namespace @endcode</a> resource
+  attribute of the remote service if any.
+ */
+static constexpr const char *kServicePeerNamespace = "service.peer.namespace";
+
+/**
+  The version string of the service component. The format is not defined by these conventions.
  */
 static constexpr const char *kServiceVersion = "service.version";
 

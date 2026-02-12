@@ -1,6 +1,6 @@
 #include "two_level_fair_share_thread_pool.h"
-#include "private.h"
 #include "notify_manager.h"
+#include "private.h"
 #include "profiling_helpers.h"
 #include "scheduler_thread.h"
 #include "thread_pool_detail.h"
@@ -10,9 +10,8 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/hazard_ptr.h>
 #include <yt/yt/core/misc/heap.h>
-#include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <yt/yt/core/misc/range_formatters.h>
+#include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/library/profiling/sensor.h>
 
@@ -20,15 +19,18 @@
 
 #include <library/cpp/yt/memory/public.h>
 
+#include <library/cpp/yt/misc/range_formatters.h>
 #include <library/cpp/yt/misc/tls.h>
 
-#include <util/system/spinlock.h>
-
 #include <util/generic/xrange.h>
+
+#include <util/system/spinlock.h>
 
 namespace NYT::NConcurrency {
 
 using namespace NProfiling;
+
+const TFairShareThreadPoolTag DefaultExecutionTag = "default";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -609,9 +611,14 @@ public:
         , CumulativeSchedulingTimeCounter_(Profiler_
             .WithTags(GetThreadTags(ThreadNamePrefix_))
             .TimeCounter("/time/scheduling_cumulative"))
-        , PoolWeightProvider_(options.PoolWeightProvider)
         , VerboseLogging_(options.VerboseLogging)
+        , PoolWeightProvider_(options.PoolWeightProvider)
     { }
+
+    void SetWeightProvider(IPoolWeightProviderPtr weightProvider)
+    {
+        PoolWeightProvider_ = std::move(weightProvider);
+    }
 
     ~TTwoLevelFairShareQueue()
     {
@@ -674,6 +681,8 @@ public:
     // Invoke is lock free on a fast path (a.k.a. no shutdown).
     void Invoke(TClosure callback, TBucket* bucket) override
     {
+        YT_VERIFY(bucket);
+
         // We can't guarantee read of |true| in time anyway
         // So relaxed order is enough.
         if (Stopped_.load(std::memory_order::relaxed)) {
@@ -821,9 +830,9 @@ private:
     const std::string ThreadNamePrefix_;
     const TProfiler Profiler_;
     const NProfiling::TTimeCounter CumulativeSchedulingTimeCounter_;
-    const IPoolWeightProviderPtr PoolWeightProvider_;
     const bool VerboseLogging_;
 
+    IPoolWeightProviderPtr PoolWeightProvider_;
     std::atomic<bool> Stopped_ = false;
     TMpscStack<TAction> InvokeQueue_;
     char Padding0_[CacheLineSize - sizeof(TMpscStack<TAction>)];
@@ -1355,6 +1364,11 @@ public:
     {
         EnsureStarted();
         return Queue_->GetInvoker(poolName, bucketName);
+    }
+
+    void SetWeightProvider(IPoolWeightProviderPtr weightProvider) override
+    {
+        Queue_->SetWeightProvider(std::move(weightProvider));
     }
 
     void Shutdown() override

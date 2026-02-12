@@ -9,6 +9,7 @@ option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
 import "yt_proto/yt/core/misc/proto/error.proto";
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
+import "yt_proto/yt/core/rpc/proto/rpc.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
@@ -637,6 +638,7 @@ message TReqMultiLookup
     optional TTabletReadOptions tablet_read_options = 3;
     optional EReplicaConsistency replica_consistency = 6;
     optional EMultiplexingBand multiplexing_band = 4;
+    optional string execution_pool = 7;
 }
 
 message TRspMultiLookup
@@ -3963,3 +3965,18 @@ message TReqWriteShuffleData
 message TRspWriteShuffleData
 {
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqFairSharePoolExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TReqFairSharePoolExt req_fair_share_pool_ext = 202;
+    }
+
+    optional string execution_pool = 1 [default = "default"];
+    optional string execution_tag = 2 [default = "default"];
+}
+
+////////////////////////////////////////////////////////////////////////////////

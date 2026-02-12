@@ -148,21 +148,24 @@ private:
         TString ysonTableContent = input.ReadAll();
         auto tableDataServiceKey = GetTableDataServiceKey(input);
         TString group = tableDataServiceKey.Group, chunkId = tableDataServiceKey.ChunkId;
-        TableDataService_->Put(group, chunkId, ysonTableContent).GetValueSync();
+        bool putResult = TableDataService_->Put(group, chunkId, ysonTableContent).GetValueSync();
+        auto protoPutResult = TableDataServicePutResponseToProto(putResult);
         YQL_CLOG(TRACE, FastMapReduce) << "Putting key in table service with group " << group << " and chunkId " << chunkId;
-        return THttpResponse(HTTP_OK);
+        THttpResponse httpResponse(HTTP_OK);
+        httpResponse.SetContent(protoPutResult.SerializeAsStringOrThrow());
+        httpResponse.SetContentType("application/x-protobuf");
+        return httpResponse;
     }
 
     THttpResponse GetTableDataServiceHandler(THttpInput& input) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
         auto tableDataServiceKey = GetTableDataServiceKey(input);
         TString group = tableDataServiceKey.Group, chunkId = tableDataServiceKey.ChunkId;
-        TString ysonTableContent;
-        if (auto value = TableDataService_->Get(group, chunkId).GetValueSync()) {
-            ysonTableContent = *value;
-        }
+        TMaybe<TString> getResult = TableDataService_->Get(group, chunkId).GetValueSync();
+        auto protoGetResult = TableDataServiceGetResponseToProto(getResult);
         THttpResponse httpResponse(HTTP_OK);
-        httpResponse.SetContent(ysonTableContent);
+        httpResponse.SetContent(protoGetResult.SerializeAsString());
+        httpResponse.SetContentType("application/x-protobuf");
         YQL_CLOG(TRACE, FastMapReduce) << "Getting key in table service with group " << group << " and chunkId " << chunkId;
         return httpResponse;
     }
@@ -181,7 +184,7 @@ private:
         TString serializedProtoGroupDeletionRequest = input.ReadAll();
         NProto::TTableDataServiceGroupDeletionRequest protoGroupDeletionRequest;
         protoGroupDeletionRequest.ParseFromStringOrThrow(serializedProtoGroupDeletionRequest);
-        auto deletionRequest = TTableDataServiceGroupDeletionRequestFromProto(protoGroupDeletionRequest);
+        auto deletionRequest = TableDataServiceGroupDeletionRequestFromProto(protoGroupDeletionRequest);
         TableDataService_->RegisterDeletion(deletionRequest).GetValueSync();
         YQL_CLOG(TRACE, FastMapReduce) << "Deleting groups in table data service" << JoinRange(' ', deletionRequest.begin(), deletionRequest.end());        return THttpResponse(HTTP_OK);
     }

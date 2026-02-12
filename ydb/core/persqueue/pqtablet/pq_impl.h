@@ -98,6 +98,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPPurgeRequest::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     template<typename TEventHandle>
@@ -271,6 +272,7 @@ private:
         TEvPQ::TEvMLPCommitRequest::TPtr,
         TEvPQ::TEvMLPUnlockRequest::TPtr,
         TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
+        TEvPQ::TEvMLPPurgeRequest::TPtr,
         TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
     >;
     TDeque<TMLPRequest> MLPRequests;
@@ -307,7 +309,7 @@ private:
     // транзакции
     //
     THashMap<ui64, TDistributedTransaction> Txs;
-    TDeque<std::pair<ui64, ui64>> TxQueue;
+    TDeque<std::pair<ui64, ui64>> TxQueue; // упорядоченный список пар (step, txid)
     ui64 PlanStep = 0;
     ui64 PlanTxId = 0;
     ui64 ExecStep = 0;

@@ -715,7 +715,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         // Test ORDER BY DESC for compile_cache_queries sys view
         // Primary key: NodeId, QueryId
         auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
         auto client = kikimr.GetQueryClient();
@@ -1137,7 +1136,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
     Y_UNIT_TEST_TWIN(CompileCacheBasic, EnableCompileCacheView) {
         auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(EnableCompileCacheView);
         auto tableClient = kikimr.GetTableClient();

@@ -276,6 +276,10 @@ message TEvChannelAckV2 {
 
     optional bool EarlyFinished = 8;
     optional uint64 PopBytes = 9;
+
+    // Only if ERROR
+
+    optional string Message = 10;
 };
 
 message TEvChannelUpdateV2 {

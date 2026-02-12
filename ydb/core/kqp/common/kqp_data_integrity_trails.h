@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <unordered_map>
 #include <openssl/sha.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -33,33 +34,41 @@ public:
         }
         with_lock(Lock) {
             // Only add if (queryTraceId, queryText) pair is different from the previous entry
-            if (!Cache.empty() &&
-                Cache.back().first == queryTraceId &&
-                Cache.back().second == queryText) {
+            if (!Entries.empty() &&
+                Entries.back().first == queryTraceId &&
+                Entries.back().second == queryText) {
                 return;
             }
-            // Remove oldest entry if cache is full
-            while (Cache.size() >= MaxCacheSize) {
-                Cache.pop_front();
+            // Evict oldest entries if cache is full
+            while (Entries.size() >= MaxCacheSize) {
+                Index.erase(Entries.front().first);
+                Entries.pop_front();
             }
-            Cache.push_back({queryTraceId, queryText});
+            Entries.push_back({queryTraceId, queryText});
+            // Point to the last element; overwrites if queryTraceId already exists (keeping newest text)
+            Index[queryTraceId] = std::prev(Entries.end());
         }
     }
 
     TString Get(ui64 queryTraceId) const {
         with_lock(Lock) {
-            for (const auto& [traceId, queryText] : Cache) {
-                if (traceId == queryTraceId) {
-                    return queryText;
-                }
+            auto it = Index.find(queryTraceId);
+            if (it != Index.end()) {
+                return it->second->second;
             }
         }
         return "";
     }
 
 private:
+    using TEntry = std::pair<ui64, TString>;
+    using TDeque = std::deque<TEntry>;
+    using TIterator = TDeque::iterator;
+
     mutable TAdaptiveLock Lock;
-    std::deque<std::pair<ui64, TString>> Cache;
+    TDeque Entries;
+    // Auxiliary index: queryTraceId -> iterator into Entries for O(1) lookup
+    std::unordered_map<ui64, TIterator> Index;
 };
 
 // Collects query texts and QueryTraceIds for TLI logging and victim stats attribution

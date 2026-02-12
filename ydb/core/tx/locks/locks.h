@@ -61,7 +61,7 @@ public:
     virtual bool MayAddLock(ui64 lockId) = 0;
 
     // Persist adding/removing a lock info
-    virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 queryTraceId = 0) = 0;
+    virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 victimQueryTraceId = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;

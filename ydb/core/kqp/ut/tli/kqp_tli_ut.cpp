@@ -20,6 +20,26 @@ using namespace NYdb::NTable;
 namespace {
     // ==================== Low-level TLI parsing helpers ====================
 
+    // Check if position starts an ISO 8601 timestamp followed by " node " (log record boundary).
+    // Format: YYYY-MM-DDTHH:MM:SS.xxxxxxZ node
+    bool IsTimestampBoundary(const TString& logs, size_t pos) {
+        if (pos + 30 >= logs.size()) {
+            return false;
+        }
+        return std::isdigit(logs[pos]) && std::isdigit(logs[pos + 1]) &&
+               std::isdigit(logs[pos + 2]) && std::isdigit(logs[pos + 3]) &&
+               logs[pos + 4] == '-' &&
+               std::isdigit(logs[pos + 5]) && std::isdigit(logs[pos + 6]) &&
+               logs[pos + 7] == '-' &&
+               std::isdigit(logs[pos + 8]) && std::isdigit(logs[pos + 9]) &&
+               logs[pos + 10] == 'T' &&
+               logs[pos + 13] == ':' &&
+               logs[pos + 16] == ':' &&
+               logs[pos + 19] == '.' &&
+               logs[pos + 26] == 'Z' &&
+               logs.find(" node ", pos) == pos + 27;
+    }
+
     std::vector<TString> ExtractTliRecords(const TString& logs) {
         const TString delimiter = "TLI ";
         std::vector<TString> result;
@@ -30,22 +50,10 @@ namespace {
                 break;
             }
             size_t recordEnd = logs.size();
-            size_t timestampPos = found;
-            while (timestampPos < logs.size()) {
-                timestampPos = logs.find("202", timestampPos + 1);
-                if (timestampPos == TString::npos) {
-                    break;
-                }
-                if (timestampPos + 30 < logs.size() &&
-                    logs[timestampPos + 4] == '-' &&
-                    logs[timestampPos + 7] == '-' &&
-                    logs[timestampPos + 10] == 'T' &&
-                    logs[timestampPos + 13] == ':' &&
-                    logs[timestampPos + 16] == ':' &&
-                    logs[timestampPos + 19] == '.' &&
-                    logs[timestampPos + 26] == 'Z' &&
-                    logs.find(" node ", timestampPos) == timestampPos + 27) {
-                    recordEnd = std::min(recordEnd, timestampPos);
+            // Scan for the next log record timestamp boundary
+            for (size_t i = found + 1; i < logs.size(); ++i) {
+                if (IsTimestampBoundary(logs, i)) {
+                    recordEnd = std::min(recordEnd, i);
                     break;
                 }
             }

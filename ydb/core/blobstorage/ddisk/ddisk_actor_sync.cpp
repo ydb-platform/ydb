@@ -60,9 +60,28 @@ namespace NKikimr::NDDisk {
 
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
+        TSyncIt syncIt = SyncsInFlight.end();
+        counters.Request();
+
+        auto cleanupSyncState = [&] {
+            if (syncIt == SyncsInFlight.end()) {
+                return;
+            }
+
+            auto& sync = syncIt->second;
+            std::vector<TSegmentManager::TSegment> removedSegments;
+            if (sync.FirstRequestId != Max<ui64>()) {
+                for (ui64 requestId = sync.FirstRequestId; requestId < sync.FirstRequestId + sync.Requests.size(); ++requestId) {
+                    SegmentManager.PopRequest(requestId, &removedSegments);
+                }
+            }
+            sync.Span.End();
+            SyncsInFlight.erase(syncIt);
+            syncIt = SyncsInFlight.end();
+        };
 
         auto reject = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
-            counters.Request();
+            cleanupSyncState();
             counters.Reply(false);
             SendReply(*ev, TPolicy::MakeResult(status, std::move(errorReason)));
         };
@@ -78,13 +97,12 @@ namespace NKikimr::NDDisk {
         }
 
         const ui64 syncId = NextSyncId++;
-        counters.Request();
         auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Sync",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
             .Attribute("sync_id", static_cast<long>(syncId)));
 
-        auto& sync = SyncsInFlight.emplace(syncId, TSyncInFlight{
+        syncIt = SyncsInFlight.emplace(syncId, TSyncInFlight{
             .Sender=ev->Sender,
             .Cookie=ev->Cookie,
             .InterconnectionSessionId=ev->InterconnectSession,
@@ -93,7 +111,9 @@ namespace NKikimr::NDDisk {
             .Requests={},
             .ErrorReason={},
             .SourceKind=TPolicy::SourceKind
-        }).first->second;
+        }).first;
+        auto& sync = syncIt->second;
+        sync.Span = std::move(span);
 
         const auto& ddiskId = record.GetDDiskId();
         const TQueryCredentials sourceCreds(creds.TabletId, creds.Generation, record.GetDDiskInstanceGuid(), true);
@@ -108,14 +128,12 @@ namespace NKikimr::NDDisk {
             if (!vChunkIndex) {
                 vChunkIndex = selector.VChunkIndex;
             } else if (*vChunkIndex != selector.VChunkIndex) {
-                // TODO(kruall): clean
                 reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     "Segments must be in one VChunk");
                 return;
             }
 
             if (selector.OffsetInBytes % BlockSize || selector.Size % BlockSize || !selector.Size) {
-                // TODO(kruall): clean already sent requests
                 reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     "offset and size must be multiple of block size and size must be nonzero");
                 return;
@@ -138,17 +156,16 @@ namespace NKikimr::NDDisk {
             });
 
             for (auto& [outdatedSyncId, outdatedRequestId] : outdated) {
-                auto syncIt = SyncsInFlight.find(outdatedSyncId);
-                if (syncIt == SyncsInFlight.end()) {
+                auto outdatedIt = SyncsInFlight.find(outdatedSyncId);
+                if (outdatedIt == SyncsInFlight.end()) {
                     continue;
                 }
-                auto& outdatedSync = syncIt->second;
+                auto& outdatedSync = outdatedIt->second;
                 auto& request = outdatedSync.Requests[outdatedRequestId - outdatedSync.FirstRequestId];
                 const auto prevStatus = std::exchange(request.Status, NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED);
                 if (prevStatus == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
                     if (--outdatedSync.RequestsInFlight == 0) {
-                        // TODO(kruall): send reply
-                        ReplySync(syncIt);
+                        ReplySync(outdatedIt);
                     }
                 }
             }
@@ -157,11 +174,10 @@ namespace NKikimr::NDDisk {
                 TPolicy::MakeReadQuery(sourceCreds, selector, segment),
                 IEventHandle::FlagTrackDelivery,
                 requestId,
-                span.GetTraceId());
+                sync.Span.GetTraceId());
             sync.RequestsInFlight++;
         }
 
-        sync.Span = std::move(span);
         sync.VChunkIndex = *vChunkIndex;
     }
 

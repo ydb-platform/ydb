@@ -1,5 +1,6 @@
 #include "blobstorage_pdisk_requestimpl.h"
 #include "blobstorage_pdisk_completion_impl.h"
+#include "blobstorage_pdisk_impl.h"
 
 namespace NKikimr {
 namespace NPDisk {
@@ -64,6 +65,11 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
     SlackSize = Max<ui32>();
 }
 
+void TChunkWrite::Abort(TActorSystem* actorSystem) {
+    if (!AtomicSwap(&Aborted, true)) {
+        actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkRead
@@ -87,6 +93,50 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
 }
 
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TChunkWritePiece
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, bool isLast, NWilson::TSpan span)
+    : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
+    , PDisk(pdisk)
+    , ChunkWrite(write)
+    , PieceShift(pieceShift)
+    , PieceSize(pieceSize)
+    , ShouldDetach(ChunkWrite->ChunkEncrypted && pdisk->EncryptionThreadCountCached)
+{
+
+    /*
+    * If encryption threads are used, each TChunkWritePiece has its own completion.
+    * If no encryption threads are used, last TChunkWritePiece completion tracks whole write completion.
+    */
+    if (ShouldDetach) {
+        Completion = MakeHolder<TCompletionChunkWritePiece>(this, ChunkWrite->Completion);
+    } else if (isLast) {
+        Completion = THolder<TCompletionChunkWrite>(ChunkWrite->Completion);
+    }
+
+    ChunkWrite->RegisterPiece();
+    GateId = ChunkWrite->GateId;
+}
+
+TChunkWritePiece::~TChunkWritePiece() {
+}
+
+void TChunkWritePiece::Process() {
+    PDisk->ChunkWritePiece(this);
+    PDisk->PushChunkWrite(this);
+}
+
+void TChunkWritePiece::MarkReady(const TString& logPrefix) {
+    Processed = true;
+    auto evChunkWrite = ChunkWrite.Get();
+    ui8 old = evChunkWrite->ReadyForBlockDevice.fetch_add(1, std::memory_order::seq_cst);
+    if (old + 1 == evChunkWrite->Pieces) {
+        Y_VERIFY_S(evChunkWrite->RemainingSize == 0, logPrefix);
+        Y_VERIFY_S(evChunkWrite->Completion, logPrefix);
+        evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
+    }
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkReadPiece
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

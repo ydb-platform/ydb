@@ -16,6 +16,7 @@ namespace NMVP {
 struct TMvpStartupOptions {
 private:
     static constexpr ui16 DEFAULT_HTTP_PORT = 8788;
+    static constexpr ui16 DEFAULT_HTTPS_PORT = 8789;
 
     NLastGetopt::TOpts Opts;
     TString YamlConfigPath;

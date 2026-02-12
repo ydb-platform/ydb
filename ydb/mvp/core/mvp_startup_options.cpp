@@ -40,7 +40,7 @@ NLastGetopt::TOptsParseResult TMvpStartupOptions::ParseArgs(int argc, const char
     Opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&Mlock);
     Opts.AddLongOption("config", "Path to configuration YAML file").RequiredArgument("PATH").StoreResult(&YamlConfigPath);
     Opts.AddLongOption("http-port", "HTTP port. Default " + ToString(DEFAULT_HTTP_PORT)).StoreResult(&HttpPort);
-    Opts.AddLongOption("https-port", "HTTPS port").StoreResult(&HttpsPort);
+    Opts.AddLongOption("https-port", "HTTPS port. Default " + ToString(DEFAULT_HTTPS_PORT)).StoreResult(&HttpsPort);
 
     return NLastGetopt::TOptsParseResult(&Opts, argc, argv);
 }
@@ -108,6 +108,11 @@ void TMvpStartupOptions::SetPorts() {
             ythrow yexception() << "SSL certificate file must be provided for HTTPS";
         }
     }
+
+    if (!HttpsPort && !SslCertificateFile.empty()) {
+        HttpsPort = DEFAULT_HTTPS_PORT;
+    }
+
     if (!HttpPort && !HttpsPort) {
         HttpPort = DEFAULT_HTTP_PORT;
     }

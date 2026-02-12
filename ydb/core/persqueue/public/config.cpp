@@ -65,12 +65,6 @@ bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return AppData()->FeatureFlags.GetEnableMetricsLevel() && config.HasMetricsLevel() && config.GetMetricsLevel() == METRICS_LEVEL_DETAILED;
 }
 
-bool HasMLPOrderedConsumer(const NKikimrPQ::TPQTabletConfig& config) {
-    return AnyOf(config.GetConsumers(), [](const auto& consumer) {
-        return consumer.GetType() == ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP && consumer.GetKeepMessageOrder();
-    });
-}
-
 }
 
 } // NKikimr

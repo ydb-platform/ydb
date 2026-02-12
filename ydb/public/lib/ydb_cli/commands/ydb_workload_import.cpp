@@ -251,6 +251,10 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
             break;
         }
     }
+
+    if (Initializer->PostImport() == EXIT_FAILURE) {
+        AtomicIncrement(ErrorsCount);
+    }
     return AtomicGet(ErrorsCount) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 

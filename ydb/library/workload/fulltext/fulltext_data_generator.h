@@ -16,6 +16,7 @@ public:
 
     virtual void ConfigureOpts(NLastGetopt::TOpts& opts) override;
     virtual TBulkDataGeneratorList DoGetBulkInitialData() override;
+    virtual int PostImport() override;
 };
 
 } // namespace NYdbWorkload

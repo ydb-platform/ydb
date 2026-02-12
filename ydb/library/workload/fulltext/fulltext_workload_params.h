@@ -18,12 +18,13 @@ public:
     TString TableName = "fulltext_workload";
     TString IndexName = "fulltext_index";
     TString IndexType = "fulltext_plain";
-    TString IndexAnalyzer = "standard";
-    THashSet<TString> IndexParamOverrides;
+    THashSet<TString> IndexParams;
 
     ui64 MinPartitions = 1;
     ui64 PartitionSizeMb = 0;
     bool AutoPartitioningByLoad = true;
+
+    TString QueryText = "Random";
 };
 
 } // namespace NYdbWorkload

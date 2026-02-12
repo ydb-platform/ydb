@@ -10,20 +10,25 @@ void TFulltextWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECom
     Y_UNUSED(workloadType);
 
     switch (commandType) {
-    case TWorkloadParams::ECommandType::Init:
-        opts.AddLongOption("table", "Table name")
+    case TWorkloadParams::ECommandType::Root:
+        opts.AddLongOption("table", "Table name.")
             .DefaultValue(TableName).StoreResult(&TableName);
-        opts.AddLongOption("min-partitions", "Minimum number of partitions")
+        break;
+    case TWorkloadParams::ECommandType::Init:
+        opts.AddLongOption("min-partitions", "Minimum number of partitions.")
             .DefaultValue(MinPartitions).StoreResult(&MinPartitions);
-        opts.AddLongOption("partition-size", "Partition size in MB")
+        opts.AddLongOption("partition-size", "Partition size in MB.")
             .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
-        opts.AddLongOption("auto-partition", "Enable auto partitioning by load")
+        opts.AddLongOption("auto-partition", "Enable auto partitioning by load.")
             .DefaultValue(AutoPartitioningByLoad).StoreResult(&AutoPartitioningByLoad);
         break;
     case TWorkloadParams::ECommandType::Import:
-    case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption("table", "Table name")
-            .DefaultValue(TableName).StoreResult(&TableName);
+        opts.AddLongOption("index-name", "Fulltext index name.")
+            .DefaultValue(IndexName).StoreResult(&IndexName);
+        opts.AddLongOption("index-type", "Fulltext index type (fulltext_plain, fulltext_relevance).")
+            .DefaultValue(IndexType).StoreResult(&IndexType);
+        opts.AddLongOption("index-param", "Fulltext index param. Can be specified multiple times. Format: `--index-param=\"<name>=<value>\" --index-param=...`.")
+            .InsertTo(&IndexParams).DefaultValue("tokenizer=standard");
         break;
     default:
         break;

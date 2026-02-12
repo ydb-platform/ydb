@@ -13,16 +13,11 @@ public:
     using TBase = TWorkloadQueryGeneratorBase<TFulltextWorkloadParams>;
     TFulltextWorkloadGenerator(const TFulltextWorkloadParams* params);
 
-    void Init() override;
     std::string GetDDLQueries() const override;
     TQueryInfoList GetInitialData() override;
     TVector<std::string> GetCleanPaths() const override;
     TQueryInfoList GetWorkload(int type) override;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
-
-private:
-    TQueryInfoList Upsert();
-    TQueryInfoList Select();
 };
 
 } // namespace NYdbWorkload

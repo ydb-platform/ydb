@@ -1,28 +1,17 @@
-#include "mvp_tokens.h"
 #include "merger.h"
+#include "mvp_tokens.h"
+#include "mvp_test_runtime.h"
 #include "reducer.h"
+#include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.pb.h>
+#include <ydb/library/testlib/service_mocks/session_service_mock.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/map.h>
-#include <ydb/library/testlib/service_mocks/session_service_mock.h>
-#include <ydb/mvp/core/protos/mvp.pb.h>
-#include "mvp_test_runtime.h"
-
-namespace {
 
 using namespace NActors;
-
-template <typename HttpType>
-void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
-    request->EnsureEnoughSpaceAvailable(data.size());
-    auto size = std::min(request->Avail(), data.size());
-    memcpy(request->Pos(), data.data(), size);
-    request->Advance(size);
-}
-
-}
 
 Y_UNIT_TEST_SUITE(Mvp) {
     Y_UNIT_TEST(TokenatorGetMetadataTokenGood) {
@@ -116,4 +105,5 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT(!token.empty());
         UNIT_ASSERT_STRINGS_EQUAL(token, "Bearer refreshed.test.iam.token");
     }
+
 }

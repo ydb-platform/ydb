@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 SRCS(
     oidc_proxy_ut.cpp
+    tokenator_integration_ut.cpp
     openid_connect.cpp
 )
 

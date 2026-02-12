@@ -18,6 +18,7 @@ struct TOpenIdConnectSettings {
     static const inline TString DEFAULT_TOKEN_URL_PATH = "/oauth/token";
     static const inline TString DEFAULT_EXCHANGE_URL_PATH = "/oauth2/session/exchange";
     static const inline TString DEFAULT_IMPERSONATE_URL_PATH = "/oauth2/impersonation/impersonate";
+    static const inline TString DEFAULT_SESSION_SERVICE_TOKEN_NAME = "__jwtToken";
 
     static constexpr inline TDuration DEFAULT_REQUEST_TIMEOUT = TDuration::Seconds(120);
 
@@ -29,6 +30,7 @@ struct TOpenIdConnectSettings {
     TString SessionServiceEndpoint;
     TString SessionServiceTokenName;
     TString AuthorizationServerAddress;
+    TString SecretName;
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
     TString WhoamiExtendedInfoEndpoint;

@@ -1,6 +1,11 @@
 package NMvp;
 
 message TJwtInfo {
+    enum EAuthMethod {
+        static_creds = 0;
+        federated_creds = 1;
+    }
+
     optional string Name = 1;
     optional string Endpoint = 2;
     optional string AccountId = 3;
@@ -8,6 +13,8 @@ message TJwtInfo {
     optional string PublicKey = 5;
     optional string PrivateKey = 6;
     optional string Audience = 7 [default = "https://iam.api.cloud.yandex.net/iam/v1/tokens"];
+    optional string Token = 8;
+    optional EAuthMethod AuthMethod = 9 [default = static_creds];
 }
 
 message TOAuthInfo {
@@ -52,12 +59,4 @@ message TTokensConfig {
     repeated TStaticCredentialsInfo StaticCredentialsInfo = 6; // Data for create token from static credentials
     optional TStaffApiUserTokenInfo StaffApiUserTokenInfo = 7; // OAuth token for staff api
     optional EAccessServiceType AccessServiceType = 8; // Access Service Type for algorithm selection
-}
-
-message TOpenIdClientConfig {
-    optional string SecretName = 1;
-    optional string SessionServiceEndpoint = 2;
-    optional string SessionServiceTokenName = 3;
-    optional string AuthorizationServerAddress = 4;
-    repeated string AllowedProxyHosts = 5;
 }

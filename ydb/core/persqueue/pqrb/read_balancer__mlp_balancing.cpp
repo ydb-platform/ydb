@@ -162,7 +162,10 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
         }
     }
 
-    for (auto& [consumerName, consumer] : Consumers) {
+    for (auto it = Consumers.begin(); it != Consumers.end();) {
+        auto& [consumerName, consumer] = *it;
+        it++;
+
         if (mlpConsumers.contains(consumerName)) {
             for (const auto& partitionId : addedPartitions) {
                 consumer.SetCommittedState(partitionId, 0, false, 0, 0);

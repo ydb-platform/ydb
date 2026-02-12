@@ -343,7 +343,9 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
         size_t emptyResults = 0;
 
-        for (size_t i = 0; i < messagesCount;) {
+        end = TInstant::Now() + TDuration::Seconds(15);
+        size_t readMessages = 0;
+        while (readMessages < messagesCount && TInstant::Now() < end) {
             CreateReaderActor(runtime, {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
@@ -360,7 +362,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
                 continue;
             }
 
-            ++i;
+            ++readMessages;
 
             CreateCommitterActor(runtime, {
                 .DatabasePath = "/Root",
@@ -371,6 +373,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
         }
 
         Cerr << (TStringBuilder() << ">>>>> empty results: " << emptyResults << Endl);
+        UNIT_ASSERT_VALUES_EQUAL(messagesCount, readMessages);
 
         CreateReaderActor(runtime, {
             .DatabasePath = "/Root",

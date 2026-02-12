@@ -65,29 +65,29 @@ namespace {
         }
     }
 
-    // Set FirstQueryTraceId on lock proto for lock-breaking attribution.
-    // Prefers actorQueryTraceId, falls back to TxManager's per-shard or global trace ID.
-    void SetFirstQueryTraceIdOnLocks(NKikimrDataEvents::TKqpLocks* protoLocks,
-        ui64 actorQueryTraceId, ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
+    // Set FirstQuerySpanId on lock proto for lock-breaking attribution.
+    // Prefers actorQuerySpanId, falls back to TxManager's per-shard or global trace ID.
+    void SetFirstQuerySpanIdOnLocks(NKikimrDataEvents::TKqpLocks* protoLocks,
+        ui64 actorQuerySpanId, ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
     {
-        ui64 id = actorQueryTraceId;
+        ui64 id = actorQuerySpanId;
         if (id == 0) {
-            auto perShard = txManager->GetShardBreakerQueryTraceId(shardId);
-            id = perShard.value_or(txManager->GetFirstQueryTraceId());
+            auto perShard = txManager->GetShardBreakerQuerySpanId(shardId);
+            id = perShard.value_or(txManager->GetFirstQuerySpanId());
         }
         if (id != 0) {
-            protoLocks->SetFirstQueryTraceId(id);
+            protoLocks->SetFirstQuerySpanId(id);
         }
     }
 
-    // Extract VictimQueryTraceId from the first broken lock in a WriteResult record.
-    void SetVictimQueryTraceIdFromBrokenLocks(const NKikimrDataEvents::TEvWriteResult& record,
+    // Extract VictimQuerySpanId from the first broken lock in a WriteResult record.
+    void SetVictimQuerySpanIdFromBrokenLocks(const NKikimrDataEvents::TEvWriteResult& record,
         const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
     {
         if (!record.GetTxLocks().empty()) {
             const auto& lock = record.GetTxLocks(0);
-            if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                txManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
+            if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
+                txManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
             }
         }
     }
@@ -108,7 +108,7 @@ namespace {
 
     void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite,
         ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager,
-        ui64 actorQueryTraceId = 0)
+        ui64 actorQuerySpanId = 0)
     {
         evWrite->Record.SetTxId(txId);
         auto* protoLocks = evWrite->Record.MutableLocks();
@@ -159,7 +159,7 @@ namespace {
             *protoLocks->AddLocks() = lock;
         }
 
-        SetFirstQueryTraceIdOnLocks(protoLocks, actorQueryTraceId, shardId, txManager);
+        SetFirstQuerySpanIdOnLocks(protoLocks, actorQuerySpanId, shardId, txManager);
     }
 
     void FillEvWriteRollback(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
@@ -283,7 +283,7 @@ struct TKqpTableWriterStatistics {
     ui64 EraseBytes = 0;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
-    TVector<ui64> BreakerQueryTraceIds;
+    TVector<ui64> BreakerQuerySpanIds;
 
     THashSet<ui64> AffectedPartitions;
 
@@ -307,12 +307,12 @@ struct TKqpTableWriterStatistics {
 
         LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
         LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
-        if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.HasBreakerQueryTraceId() && txStats.GetBreakerQueryTraceId() != 0) {
-            BreakerQueryTraceIds.push_back(txStats.GetBreakerQueryTraceId());
+        if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.HasBreakerQuerySpanId() && txStats.GetBreakerQuerySpanId() != 0) {
+            BreakerQuerySpanIds.push_back(txStats.GetBreakerQuerySpanId());
         }
     }
 
-    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim, const TVector<ui64>& breakerQueryTraceIds = {}) {
+    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim, const TVector<ui64>& breakerQuerySpanIds = {}) {
         NKqpProto::TKqpTaskExtraStats extraStats;
         if (stats->HasExtra()) {
             stats->GetExtra().UnpackTo(&extraStats);
@@ -321,17 +321,17 @@ struct TKqpTableWriterStatistics {
             extraStats.GetLockStats().GetBrokenAsBreaker() + brokenAsBreaker);
         extraStats.MutableLockStats()->SetBrokenAsVictim(
             extraStats.GetLockStats().GetBrokenAsVictim() + brokenAsVictim);
-        for (ui64 id : breakerQueryTraceIds) {
-            extraStats.MutableLockStats()->AddBreakerQueryTraceIds(id);
+        for (ui64 id : breakerQuerySpanIds) {
+            extraStats.MutableLockStats()->AddBreakerQuerySpanIds(id);
         }
         stats->MutableExtra()->PackFrom(extraStats);
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
-        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQueryTraceIds);
+        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQuerySpanIds);
         LocksBrokenAsBreaker = 0;
         LocksBrokenAsVictim = 0;
-        BreakerQueryTraceIds.clear();
+        BreakerQuerySpanIds.clear();
 
         if (ReadRows + WriteRows + EraseRows == 0) {
             // Avoid empty table_access stats
@@ -422,7 +422,7 @@ public:
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
-        ui64 queryTraceId)
+        ui64 querySpanId)
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
@@ -438,7 +438,7 @@ public:
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
         , Counters(counters)
-        , QueryTraceId(queryTraceId)
+        , QuerySpanId(querySpanId)
     {
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
@@ -455,10 +455,10 @@ public:
         ClearMkqlData();
     }
 
-    // Update QueryTraceId if a smaller (earlier) one is found.
-    void MaybeUpdateQueryTraceId(ui64 queryTraceId) {
-        if (queryTraceId != 0 && (QueryTraceId == 0 || queryTraceId < QueryTraceId)) {
-            QueryTraceId = queryTraceId;
+    // Update QuerySpanId if a smaller (earlier) one is found.
+    void MaybeUpdateQuerySpanId(ui64 querySpanId) {
+        if (querySpanId != 0 && (QuerySpanId == 0 || querySpanId < QuerySpanId)) {
+            QuerySpanId = querySpanId;
         }
     }
 
@@ -1024,7 +1024,7 @@ public:
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
 
-            SetVictimQueryTraceIdFromBrokenLocks(ev->Get()->Record, TxManager);
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record, TxManager);
             RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
@@ -1093,8 +1093,8 @@ public:
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
                     YQL_ENSURE(TxManager->BrokenLocks());
-                    if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                        TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
+                    if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
+                        TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
                     }
                     RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
                     return;
@@ -1161,7 +1161,7 @@ public:
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
             }
-            TxManager->AddAction(shardInfo.ShardId, flags, QueryTraceId);
+            TxManager->AddAction(shardInfo.ShardId, flags, QuerySpanId);
         }
     }
 
@@ -1200,7 +1200,7 @@ public:
             return false;
         }
 
-        // BreakerQueryTraceId is set in AddAction during write phase, not here
+        // BreakerQuerySpanId is set in AddAction during write phase, not here
 
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
@@ -1223,11 +1223,11 @@ public:
                 for (const auto& lock : locks) {
                     *protoLocks->AddLocks() = lock;
                 }
-                SetFirstQueryTraceIdOnLocks(protoLocks, QueryTraceId, shardId, TxManager);
+                SetFirstQuerySpanIdOnLocks(protoLocks, QuerySpanId, shardId, TxManager);
             }
         } else if (isPrepare) {
             YQL_ENSURE(TxId);
-            FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager, QueryTraceId);
+            FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager, QuerySpanId);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
 
@@ -1240,7 +1240,7 @@ public:
             evWrite->Record.SetLockMode(LockMode);
         }
 
-        evWrite->Record.SetQueryTraceId(QueryTraceId);
+        evWrite->Record.SetQuerySpanId(QuerySpanId);
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
@@ -1573,8 +1573,8 @@ private:
 
     NWilson::TTraceId ParentTraceId;
     NWilson::TSpan TableWriteActorSpan;
-    // First (minimum) QueryTraceId that wrote to this table; may update on out-of-order delivery
-    ui64 QueryTraceId = 0;
+    // First (minimum) QuerySpanId that wrote to this table; may update on out-of-order delivery
+    ui64 QuerySpanId = 0;
 };
 
 
@@ -2412,7 +2412,7 @@ public:
                 nullptr,
                 TActorId{},
                 Counters,
-                Settings.GetQueryTraceId());
+                Settings.GetQuerySpanId());
             WriteTableActor->SetParentTraceId(DirectWriteActorSpan.GetTraceId());
             WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
 
@@ -2759,7 +2759,7 @@ struct TWriteSettings {
     std::vector<TIndex> Indexes;
 
     bool EnableStreamWrite;
-    ui64 QueryTraceId = 0;
+    ui64 QuerySpanId = 0;
 };
 
 struct TBufferWriteMessage {
@@ -2816,7 +2816,7 @@ public:
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
-        , QueryTraceId(settings.QueryTraceId)
+        , QuerySpanId(settings.QuerySpanId)
     {
         Counters->BufferActorsCount->Inc();
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
@@ -2991,7 +2991,7 @@ public:
             // Can't have CTAS here
             AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
 
-            auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns, ui64 firstQueryTraceId) -> std::pair<TKqpTableWriteActor*, TActorId> {
+            auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns, ui64 firstQuerySpanId) -> std::pair<TKqpTableWriteActor*, TActorId> {
                 TVector<NScheme::TTypeInfo> keyColumnTypes;
                 keyColumnTypes.reserve(keyColumns.size());
                 for (const auto& column : keyColumns) {
@@ -3015,10 +3015,10 @@ public:
                     TxManager,
                     SessionActorId,
                     Counters,
-                    firstQueryTraceId);
+                    firstQuerySpanId);
                 ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 TActorId id = RegisterWithSameMailbox(ptr);
-                CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id << ". firstQueryTraceId=" << firstQueryTraceId);
+                CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id << ". firstQuerySpanId=" << firstQuerySpanId);
 
                 return {ptr, id};
             };
@@ -3049,7 +3049,7 @@ public:
                     .LockTxId = LockTxId,
                     .LockNodeId = LockNodeId,
                     .LockMode = settings.TransactionSettings.LockMode,
-                    .QueryTraceId = QueryTraceId,
+                    .QuerySpanId = QuerySpanId,
                     .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
 
                     .TxManager = TxManager,
@@ -3070,15 +3070,15 @@ public:
 
 
             auto& writeInfo = WriteInfos[settings.TableId.PathId];
-            // Track the first (minimum) QueryTraceId for this table - messages may arrive out of order
-            if (settings.QueryTraceId != 0) {
-                if (writeInfo.FirstQueryTraceId == 0 || settings.QueryTraceId < writeInfo.FirstQueryTraceId) {
-                    writeInfo.FirstQueryTraceId = settings.QueryTraceId;
+            // Track the first (minimum) QuerySpanId for this table - messages may arrive out of order
+            if (settings.QuerySpanId != 0) {
+                if (writeInfo.FirstQuerySpanId == 0 || settings.QuerySpanId < writeInfo.FirstQuerySpanId) {
+                    writeInfo.FirstQuerySpanId = settings.QuerySpanId;
                 }
             }
             if (!writeInfo.Actors.contains(settings.TableId.PathId)) {
                 AFL_ENSURE(writeInfo.Actors.empty());
-                const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns, writeInfo.FirstQueryTraceId);
+                const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns, writeInfo.FirstQuerySpanId);
                 writeInfo.Actors.emplace(settings.TableId.PathId, TWriteInfo::TActorInfo{
                     .WriteActor = ptr,
                     .Id = id,
@@ -3090,9 +3090,9 @@ public:
                         settings.TablePath)) {
                     return;
                 }
-                // Update the actor's QueryTraceId if we found a smaller (earlier) one.
+                // Update the actor's QuerySpanId if we found a smaller (earlier) one.
                 // This handles out-of-order TEvBufferWrite message delivery.
-                writeInfo.Actors.at(settings.TableId.PathId).WriteActor->MaybeUpdateQueryTraceId(writeInfo.FirstQueryTraceId);
+                writeInfo.Actors.at(settings.TableId.PathId).WriteActor->MaybeUpdateQuerySpanId(writeInfo.FirstQuerySpanId);
             }
 
             if (!settings.LookupColumns.empty()) {
@@ -3127,8 +3127,8 @@ public:
             for (const auto& indexSettings : settings.Indexes) {
                 AFL_ENSURE(!settings.IsOlap);
                 if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                    // Use the same FirstQueryTraceId as the main table for index tables
-                    const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns, writeInfo.FirstQueryTraceId);
+                    // Use the same FirstQuerySpanId as the main table for index tables
+                    const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns, writeInfo.FirstQuerySpanId);
                     writeInfo.Actors.emplace(indexSettings.TableId.PathId, TWriteInfo::TActorInfo{
                         .WriteActor = ptr,
                         .Id = id,
@@ -3140,8 +3140,8 @@ public:
                             indexSettings.TablePath)) {
                         return;
                     }
-                    // Update the actor's QueryTraceId if we found a smaller (earlier) one.
-                    writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->MaybeUpdateQueryTraceId(writeInfo.FirstQueryTraceId);
+                    // Update the actor's QuerySpanId if we found a smaller (earlier) one.
+                    writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->MaybeUpdateQuerySpanId(writeInfo.FirstQuerySpanId);
                 }
 
                 if (indexSettings.IsUniq) {
@@ -3703,12 +3703,12 @@ public:
             FillEvWriteRollback(evWrite.get(), shardId, TxManager);
         } else {
             YQL_ENSURE(TxId);
-            // BreakerQueryTraceId comes from TxManager (set by per-table write actors), not this actor
+            // BreakerQuerySpanId comes from TxManager (set by per-table write actors), not this actor
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             evWrite->Record.SetOverloadSubscribe(++ExternalShardIdToOverloadSeqNo[shardId]);
         }
 
-        evWrite->Record.SetQueryTraceId(QueryTraceId);
+        evWrite->Record.SetQuerySpanId(QuerySpanId);
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "BufferActor");
 
@@ -4505,7 +4505,7 @@ public:
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
 
-            SetVictimQueryTraceIdFromBrokenLocks(ev->Get()->Record, TxManager);
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record, TxManager);
             ReplyError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
@@ -4886,9 +4886,9 @@ private:
         };
 
         THashMap<TPathId, TActorInfo> Actors;
-        // Track the first (minimum) QueryTraceId for this table.
+        // Track the first (minimum) QuerySpanId for this table.
         // This handles out-of-order TEvBufferWrite message delivery.
-        ui64 FirstQueryTraceId = 0;
+        ui64 FirstQuerySpanId = 0;
     };
 
     struct TLookupInfo {
@@ -4932,7 +4932,7 @@ private:
 
     NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;
-    ui64 QueryTraceId = 0;
+    ui64 QuerySpanId = 0;
 };
 
 class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {
@@ -5086,7 +5086,7 @@ private:
                 .DefaultColumns = std::move(defaultColumns),
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
-                .QueryTraceId = Settings.GetQueryTraceId(),
+                .QuerySpanId = Settings.GetQuerySpanId(),
             };
 
             for (const auto& indexSettings : Settings.GetIndexes()) {

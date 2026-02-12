@@ -297,8 +297,8 @@ private:
         if (Settings.HasLockNodeId()) {
             src->SetLockNodeId(Settings.GetLockNodeId());
         }
-        if (Settings.HasQueryTraceId()) {
-            src->SetQueryTraceId(Settings.GetQueryTraceId());
+        if (Settings.HasQuerySpanId()) {
+            src->SetQuerySpanId(Settings.GetQuerySpanId());
         }
 
         // Level table key is parent+id

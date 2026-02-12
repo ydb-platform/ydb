@@ -1400,8 +1400,8 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                         : NKikimrDataEvents::OPTIMISTIC);
             }
 
-            if (GetMeta().QueryTraceId && !isTableImmutable) {
-                input.Meta.StreamLookupSettings->SetQueryTraceId(GetMeta().QueryTraceId);
+            if (GetMeta().QuerySpanId && !isTableImmutable) {
+                input.Meta.StreamLookupSettings->SetQuerySpanId(GetMeta().QuerySpanId);
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
@@ -1424,8 +1424,8 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 input.Meta.VectorResolveSettings->SetLockMode(*GetMeta().LockMode);
             }
 
-            if (GetMeta().QueryTraceId) {
-                input.Meta.VectorResolveSettings->SetQueryTraceId(GetMeta().QueryTraceId);
+            if (GetMeta().QuerySpanId) {
+                input.Meta.VectorResolveSettings->SetQuerySpanId(GetMeta().QuerySpanId);
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.VectorResolveSettings);
@@ -2527,8 +2527,8 @@ void TKqpTasksGraph::FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSour
         settings.SetLockTxId(*lockTxId);
         settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
     }
-    if (GetMeta().QueryTraceId) {
-        settings.SetQueryTraceId(GetMeta().QueryTraceId);
+    if (GetMeta().QuerySpanId) {
+        settings.SetQuerySpanId(GetMeta().QuerySpanId);
     }
 }
 
@@ -2860,11 +2860,11 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
             settings.SetLockMode(*GetMeta().LockMode);
         }
-        // Use per-transaction QueryTraceId if available (for deferred effects),
-        // otherwise fall back to global QueryTraceId
-        ui64 queryTraceId = GetMeta().GetTxQueryTraceId(task.StageId.TxId);
-        if (queryTraceId) {
-            settings.SetQueryTraceId(queryTraceId);
+        // Use per-transaction QuerySpanId if available (for deferred effects),
+        // otherwise fall back to global QuerySpanId
+        ui64 querySpanId = GetMeta().GetTxQuerySpanId(task.StageId.TxId);
+        if (querySpanId) {
+            settings.SetQuerySpanId(querySpanId);
         }
 
         auto sinkPosition = std::lower_bound(
@@ -3069,10 +3069,10 @@ TKqpTasksGraph::TKqpTasksGraph(
         return;
     }
 
-    // Store per-transaction QueryTraceIds for deferred effects
+    // Store per-transaction QuerySpanIds for deferred effects
     for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
-        if (Transactions[txIdx].QueryTraceId != 0) {
-            GetMeta().SetTxQueryTraceId(txIdx, Transactions[txIdx].QueryTraceId);
+        if (Transactions[txIdx].QuerySpanId != 0) {
+            GetMeta().SetTxQuerySpanId(txIdx, Transactions[txIdx].QuerySpanId);
         }
     }
 

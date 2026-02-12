@@ -26,12 +26,12 @@ public:
 private:
     void HandleLookup(TEvLookupQueryText::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        ui64 queryTraceId = record.GetQueryTraceId();
+        ui64 querySpanId = record.GetQuerySpanId();
 
-        TString queryText = NDataIntegrity::TNodeQueryTextCache::Instance().Get(queryTraceId);
+        TString queryText = NDataIntegrity::TNodeQueryTextCache::Instance().Get(querySpanId);
 
         auto response = MakeHolder<TEvLookupQueryTextResponse>();
-        response->Record.SetQueryTraceId(queryTraceId);
+        response->Record.SetQuerySpanId(querySpanId);
         if (!queryText.empty()) {
             response->Record.SetQueryText(queryText);
         }

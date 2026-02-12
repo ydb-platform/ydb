@@ -9,16 +9,16 @@ using namespace NYql;
 
 namespace {
 
-void AppendQueryTraceIdInfo(TStringBuilder& message, TMaybe<ui64> victimQueryTraceId) {
-    if (victimQueryTraceId && *victimQueryTraceId != 0) {
-        message << " VictimQueryTraceId: " << *victimQueryTraceId << ".";
+void AppendQuerySpanIdInfo(TStringBuilder& message, TMaybe<ui64> victimQuerySpanId) {
+    if (victimQuerySpanId && *victimQuerySpanId != 0) {
+        message << " VictimQuerySpanId: " << *victimQuerySpanId << ".";
     }
 }
 
 } // anonymous namespace
 
 NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKikimrPathId& pathId,
-    TMaybe<ui64> victimQueryTraceId)
+    TMaybe<ui64> victimQuerySpanId)
 {
     TStringBuilder message;
     message << "Transaction locks invalidated.";
@@ -27,42 +27,42 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
         auto table = txCtx.TableByIdMap.FindPtr(pathId);
         if (!table) {
             message << " Unknown table, pathId: " << pathId.ToString() << ".";
-            AppendQueryTraceIdInfo(message, victimQueryTraceId);
+            AppendQuerySpanIdInfo(message, victimQuerySpanId);
             return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
         }
         message << " Table: `" << *table << "`.";
-        AppendQueryTraceIdInfo(message, victimQueryTraceId);
+        AppendQuerySpanIdInfo(message, victimQuerySpanId);
         return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     } else {
         // Olap tables don't return SchemeShard in locks, thus we use tableId here.
         for (const auto& [candidatePathId, table] : txCtx.TableByIdMap) {
             if (candidatePathId.TableId() == pathId.TableId()) {
                 message << " Table: `" << table << "`.";
-                AppendQueryTraceIdInfo(message, victimQueryTraceId);
+                AppendQuerySpanIdInfo(message, victimQuerySpanId);
                 return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
             }
         }
         message << " Unknown table, pathId: " << pathId.ToString() << ".";
-        AppendQueryTraceIdInfo(message, victimQueryTraceId);
+        AppendQuerySpanIdInfo(message, victimQuerySpanId);
         return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     }
 }
 
 TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
-    // In the old lock path (non-TxManager), locks don't carry per-lock QueryTraceIds.
+    // In the old lock path (non-TxManager), locks don't carry per-lock QuerySpanIds.
     // Use the first query's TraceId as the victim, since it established the MVCC snapshot
     // and is typically the SELECT whose read locks were broken.
-    TMaybe<ui64> victimQueryTraceId = txCtx.QueryTextCollector.GetFirstQueryTraceId();
+    TMaybe<ui64> victimQuerySpanId = txCtx.QueryTextCollector.GetFirstQuerySpanId();
     return GetLocksInvalidatedIssue(
         txCtx,
         TKikimrPathId(
             invalidatedLock.GetSchemeShard(),
             invalidatedLock.GetPathId()),
-            victimQueryTraceId);
+            victimQuerySpanId);
 }
 
 NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
-    TMaybe<ui64> victimQueryTraceId)
+    TMaybe<ui64> victimQuerySpanId)
 {
     TStringBuilder message;
     message << "Transaction locks invalidated.";
@@ -78,11 +78,11 @@ NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableI
             message << "`" << path << "`";
         }
         message << ".";
-        AppendQueryTraceIdInfo(message, victimQueryTraceId);
+        AppendQuerySpanIdInfo(message, victimQuerySpanId);
         return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     } else {
         message << " Unknown table, tabletId: " << shardId << ".";
-        AppendQueryTraceIdInfo(message, victimQueryTraceId);
+        AppendQuerySpanIdInfo(message, victimQuerySpanId);
     }
     return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
 }

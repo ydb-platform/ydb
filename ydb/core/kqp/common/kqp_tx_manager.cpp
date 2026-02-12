@@ -51,15 +51,15 @@ public:
         AddAction(shardId, action, 0);
     }
 
-    void AddAction(ui64 shardId, ui8 action, ui64 queryTraceId) override {
+    void AddAction(ui64 shardId, ui8 action, ui64 querySpanId) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         auto& shardInfo = ShardsInfo.at(shardId);
         shardInfo.Flags |= action;
         if (action & EAction::WRITE) {
             ReadOnly = false;
-            // Track the QueryTraceId of the query that wrote to this shard
-            if (queryTraceId != 0 && shardInfo.BreakerQueryTraceId == 0) {
-                shardInfo.BreakerQueryTraceId = queryTraceId;
+            // Track the QuerySpanId of the query that wrote to this shard
+            if (querySpanId != 0 && shardInfo.BreakerQuerySpanId == 0) {
+                shardInfo.BreakerQuerySpanId = querySpanId;
             }
         }
         ++ActionsCount;
@@ -329,61 +329,61 @@ public:
         return LocksIssue;
     }
 
-    void SetVictimQueryTraceId(ui64 queryTraceId) override {
-        if (queryTraceId == 0) {
+    void SetVictimQuerySpanId(ui64 querySpanId) override {
+        if (querySpanId == 0) {
             return;
         }
 
-        if (!VictimQueryTraceId_) {
-            VictimQueryTraceId_ = queryTraceId;
+        if (!VictimQuerySpanId_) {
+            VictimQuerySpanId_ = querySpanId;
 
             // If we already have a LocksIssue, update its message to include the victim query trace id
             if (LocksIssue) {
                 TString currentMessage = LocksIssue->GetMessage();
-                if (!currentMessage.Contains("VictimQueryTraceId:")) {
+                if (!currentMessage.Contains("VictimQuerySpanId:")) {
                     TStringBuilder message;
                     message << currentMessage;
-                    message << " VictimQueryTraceId: " << *VictimQueryTraceId_ << ".";
+                    message << " VictimQuerySpanId: " << *VictimQuerySpanId_ << ".";
                     LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
                 }
             }
         }
     }
 
-    std::optional<ui64> GetVictimQueryTraceId() const override {
-        return VictimQueryTraceId_;
+    std::optional<ui64> GetVictimQuerySpanId() const override {
+        return VictimQuerySpanId_;
     }
 
-    void SetShardBreakerQueryTraceId(ui64 shardId, ui64 queryTraceId) override {
-        if (queryTraceId == 0) {
+    void SetShardBreakerQuerySpanId(ui64 shardId, ui64 querySpanId) override {
+        if (querySpanId == 0) {
             return;
         }
         auto it = ShardsInfo.find(shardId);
         if (it == ShardsInfo.end()) {
             return;
         }
-        // Store the first BreakerQueryTraceId for this shard (the query that created the conflict)
-        if (it->second.BreakerQueryTraceId == 0) {
-            it->second.BreakerQueryTraceId = queryTraceId;
+        // Store the first BreakerQuerySpanId for this shard (the query that created the conflict)
+        if (it->second.BreakerQuerySpanId == 0) {
+            it->second.BreakerQuerySpanId = querySpanId;
         }
     }
 
-    std::optional<ui64> GetShardBreakerQueryTraceId(ui64 shardId) const override {
+    std::optional<ui64> GetShardBreakerQuerySpanId(ui64 shardId) const override {
         auto it = ShardsInfo.find(shardId);
-        if (it != ShardsInfo.end() && it->second.BreakerQueryTraceId != 0) {
-            return it->second.BreakerQueryTraceId;
+        if (it != ShardsInfo.end() && it->second.BreakerQuerySpanId != 0) {
+            return it->second.BreakerQuerySpanId;
         }
         return std::nullopt;
     }
 
-    void SetFirstQueryTraceId(ui64 queryTraceId) override {
-        if (FirstQueryTraceId_ == 0 && queryTraceId != 0) {
-            FirstQueryTraceId_ = queryTraceId;
+    void SetFirstQuerySpanId(ui64 querySpanId) override {
+        if (FirstQuerySpanId_ == 0 && querySpanId != 0) {
+            FirstQuerySpanId_ = querySpanId;
         }
     }
 
-    ui64 GetFirstQueryTraceId() const override {
-        return FirstQueryTraceId_;
+    ui64 GetFirstQuerySpanId() const override {
+        return FirstQuerySpanId_;
     }
 
     const THashSet<ui64>& GetShards() const override {
@@ -596,7 +596,7 @@ private:
             TKqpLock Lock;
             bool Invalidated = false;
             bool LocksAcquireFailure = false;
-            ui64 BreakerQueryTraceId = 0;  // QueryTraceId of the query that modified this lock
+            ui64 BreakerQuerySpanId = 0;  // QuerySpanId of the query that modified this lock
         };
 
         THashMap<TKqpLock::TKey, TLockInfo> Locks;
@@ -608,7 +608,7 @@ private:
         bool Reattaching = false;
         TReattachState ReattachState;
 
-        ui64 BreakerQueryTraceId = 0;  // QueryTraceId of the query that created conflicts on this shard
+        ui64 BreakerQuerySpanId = 0;  // QuerySpanId of the query that created conflicts on this shard
     };
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {
@@ -625,8 +625,8 @@ private:
             message << "`" << path << "`";
         }
         message << ".";
-        if (VictimQueryTraceId_ && *VictimQueryTraceId_ != 0) {
-            message << " VictimQueryTraceId: " << *VictimQueryTraceId_ << ".";
+        if (VictimQuerySpanId_ && *VictimQuerySpanId_ != 0) {
+            message << " VictimQuerySpanId: " << *VictimQuerySpanId_ << ".";
         }
         LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     }
@@ -645,10 +645,10 @@ private:
     bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
     std::optional<NYql::TIssue> LocksIssue;
-    std::optional<ui64> VictimQueryTraceId_;
-    // First query's QueryTraceId. Used for TLI victim attribution in deferred lock scenarios
-    // where the commit-time QueryTraceId differs from the snapshot-establishing query.
-    ui64 FirstQueryTraceId_ = 0;
+    std::optional<ui64> VictimQuerySpanId_;
+    // First query's QuerySpanId. Used for TLI victim attribution in deferred lock scenarios
+    // where the commit-time QuerySpanId differs from the snapshot-establishing query.
+    ui64 FirstQuerySpanId_ = 0;
 
     THashSet<ui64> SendingShards;
     THashSet<ui64> ReceivingShards;

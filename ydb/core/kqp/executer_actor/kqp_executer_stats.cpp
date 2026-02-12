@@ -862,8 +862,8 @@ ui64 TQueryExecutionStats::EstimateFinishMem() {
 void TQueryExecutionStats::CollectLockStats(const NKikimrQueryStats::TTxStats& txStats) {
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
-    if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.HasBreakerQueryTraceId() && txStats.GetBreakerQueryTraceId() != 0) {
-        BreakerQueryTraceIds.push_back(txStats.GetBreakerQueryTraceId());
+    if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.HasBreakerQuerySpanId() && txStats.GetBreakerQuerySpanId() != 0) {
+        BreakerQuerySpanIds.push_back(txStats.GetBreakerQuerySpanId());
     }
 }
 
@@ -906,9 +906,9 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
     if (taskStats.GetExtra().UnpackTo(&extraStats)) {
         LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
         LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
-        for (auto id : extraStats.GetLockStats().GetBreakerQueryTraceIds()) {
+        for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {
             if (id != 0) {
-                BreakerQueryTraceIds.push_back(id);
+                BreakerQuerySpanIds.push_back(id);
             }
         }
     }
@@ -1015,9 +1015,9 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
             if (taskStats.GetExtra().UnpackTo(&extraStats)) {
                 LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
                 LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
-                for (auto id : extraStats.GetLockStats().GetBreakerQueryTraceIds()) {
+                for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {
                     if (id != 0) {
-                        BreakerQueryTraceIds.push_back(id);
+                        BreakerQuerySpanIds.push_back(id);
                     }
                 }
             }

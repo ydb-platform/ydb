@@ -233,32 +233,32 @@ struct TGraphMeta {
         LockMode = lockMode;
     }
 
-    void SetQueryTraceId(ui64 queryTraceId) {
-        QueryTraceId = queryTraceId;
+    void SetQuerySpanId(ui64 querySpanId) {
+        QuerySpanId = querySpanId;
     }
 
-    // Set per-transaction QueryTraceId (used for deferred effects)
-    void SetTxQueryTraceId(ui32 txIndex, ui64 queryTraceId) {
-        if (queryTraceId != 0) {
-            TxQueryTraceIds[txIndex] = queryTraceId;
+    // Set per-transaction QuerySpanId (used for deferred effects)
+    void SetTxQuerySpanId(ui32 txIndex, ui64 querySpanId) {
+        if (querySpanId != 0) {
+            TxQuerySpanIds[txIndex] = querySpanId;
         }
     }
 
-    // Get QueryTraceId for a specific transaction index
-    // Fast path: if no per-transaction IDs are stored, return global QueryTraceId directly
-    ui64 GetTxQueryTraceId(ui32 txIndex) const {
-        if (TxQueryTraceIds.empty()) {
-            return QueryTraceId;
+    // Get QuerySpanId for a specific transaction index
+    // Fast path: if no per-transaction IDs are stored, return global QuerySpanId directly
+    ui64 GetTxQuerySpanId(ui32 txIndex) const {
+        if (TxQuerySpanIds.empty()) {
+            return QuerySpanId;
         }
-        auto it = TxQueryTraceIds.find(txIndex);
-        if (it != TxQueryTraceIds.end()) {
+        auto it = TxQuerySpanIds.find(txIndex);
+        if (it != TxQuerySpanIds.end()) {
             return it->second;
         }
-        return QueryTraceId;  // Fall back to global QueryTraceId
+        return QuerySpanId;  // Fall back to global QuerySpanId
     }
 
-    ui64 QueryTraceId = 0;
-    THashMap<ui32, ui64> TxQueryTraceIds;  // Per-transaction QueryTraceIds (for deferred effects)
+    ui64 QuerySpanId = 0;
+    THashMap<ui32, ui64> TxQuerySpanIds;  // Per-transaction QuerySpanIds (for deferred effects)
 };
 
 struct TTaskInputMeta {

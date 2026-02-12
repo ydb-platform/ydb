@@ -99,9 +99,9 @@ public:
 
         auto [_, locksBrokenByReplication] = Self->SysLocksTable().ApplyLocks();
         if (!locksBrokenByReplication.empty()) {
-            auto victimQueryTraceIds = Self->SysLocksTable().ExtractVictimQueryTraceIds(locksBrokenByReplication);
+            auto victimQuerySpanIds = Self->SysLocksTable().ExtractVictimQuerySpanIds(locksBrokenByReplication);
             NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Replication apply broke locks on replicated rows", locksBrokenByReplication,
-                                           Nothing(), victimQueryTraceIds);
+                                           Nothing(), victimQuerySpanIds);
         }
         return true;
     }

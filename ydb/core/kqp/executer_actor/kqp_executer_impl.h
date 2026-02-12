@@ -817,7 +817,7 @@ protected:
 
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
-        TasksGraph.GetMeta().SetQueryTraceId(Request.QueryTraceId);
+        TasksGraph.GetMeta().SetQuerySpanId(Request.QuerySpanId);
 
         switch (Request.IsolationLevel) {
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
@@ -1466,12 +1466,12 @@ protected:
 
         ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
         ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
-        // Deduplicate BreakerQueryTraceIds: the same ID may appear from both prepare and commit phases
+        // Deduplicate BreakerQuerySpanIds: the same ID may appear from both prepare and commit phases
         {
             THashSet<ui64> seen;
-            for (ui64 id : Stats->BreakerQueryTraceIds) {
+            for (ui64 id : Stats->BreakerQuerySpanIds) {
                 if (seen.insert(id).second) {
-                    ResponseEv->BreakerQueryTraceIds.push_back(id);
+                    ResponseEv->BreakerQuerySpanIds.push_back(id);
                 }
             }
         }

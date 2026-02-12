@@ -2402,8 +2402,8 @@ private:
             switch (Request.LocksOp) {
                 case ELocksOp::Commit:
                     locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (Request.FirstQueryTraceId != 0) {
-                        locks->SetFirstQueryTraceId(Request.FirstQueryTraceId);
+                    if (Request.FirstQuerySpanId != 0) {
+                        locks->SetFirstQuerySpanId(Request.FirstQuerySpanId);
                     }
                     break;
                 case ELocksOp::Rollback:
@@ -2597,8 +2597,8 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (Request.FirstQueryTraceId != 0) {
-                        shardTx->MutableLocks()->SetFirstQueryTraceId(Request.FirstQueryTraceId);
+                    if (Request.FirstQuerySpanId != 0) {
+                        shardTx->MutableLocks()->SetFirstQuerySpanId(Request.FirstQuerySpanId);
                     }
                     if (!columnShardArbiter) {
                         *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
@@ -2627,8 +2627,8 @@ private:
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (Request.FirstQueryTraceId != 0) {
-                        tx->MutableLocks()->SetFirstQueryTraceId(Request.FirstQueryTraceId);
+                    if (Request.FirstQuerySpanId != 0) {
+                        tx->MutableLocks()->SetFirstQuerySpanId(Request.FirstQuerySpanId);
                     }
                     if (!columnShardArbiter) {
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
@@ -3071,8 +3071,8 @@ private:
         ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
             brokenLock.GetSchemeShard(),
             brokenLock.GetPathId());
-        if (brokenLock.HasQueryTraceId()) {
-            ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
+        if (brokenLock.HasQuerySpanId()) {
+            ResponseEv->BrokenLockQuerySpanId = brokenLock.GetQuerySpanId();
         }
     }
 
@@ -3095,8 +3095,8 @@ private:
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
                         if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
-                            if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                                TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
+                            if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
+                                TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
                             }
                         }
                     }
@@ -3113,7 +3113,7 @@ private:
                 }
                 // Collect deferred breaker info for TLI logging at SessionActor level
                 {
-                    const auto& traceIds = info.GetDeferredBreakerQueryTraceIds();
+                    const auto& traceIds = info.GetDeferredBreakerQuerySpanIds();
                     const auto& nodeIds = info.GetDeferredBreakerNodeIds();
                     for (int i = 0; i < traceIds.size(); ++i) {
                         ResponseEv->DeferredBreakers.push_back({
@@ -3142,12 +3142,12 @@ private:
                         }
 
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        // Pass the lock's QueryTraceId to track which query wrote to this shard
-                        ui64 queryTraceId = lock.HasQueryTraceId() ? lock.GetQueryTraceId() : 0;
-                        TxManager->AddAction(lock.GetDataShard(), flags, queryTraceId);
+                        // Pass the lock's QuerySpanId to track which query wrote to this shard
+                        ui64 querySpanId = lock.HasQuerySpanId() ? lock.GetQuerySpanId() : 0;
+                        TxManager->AddAction(lock.GetDataShard(), flags, querySpanId);
                         if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
-                            if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                                TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
+                            if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
+                                TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
                             }
                         }
                     }

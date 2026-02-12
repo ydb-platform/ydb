@@ -153,9 +153,9 @@ public:
             }
             auto [_, locksBrokenBySplit] = Self->SysLocksTable().ApplyLocks();
             if (!locksBrokenBySplit.empty()) {
-                auto victimQueryTraceIds = Self->SysLocksTable().ExtractVictimQueryTraceIds(locksBrokenBySplit);
+                auto victimQuerySpanIds = Self->SysLocksTable().ExtractVictimQuerySpanIds(locksBrokenBySplit);
                 NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Tablet split operation invalidated locks", locksBrokenBySplit,
-                                               Nothing(), victimQueryTraceIds);
+                                               Nothing(), victimQuerySpanIds);
             }
             auto countAfter = Self->SysLocksTable().GetLocks().size();
             Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");

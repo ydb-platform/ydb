@@ -20,6 +20,7 @@
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/string.h>
+#include <util/random/random.h>
 
 #include <map>
 #include <memory>
@@ -50,11 +51,10 @@ public:
         TMaybe<TTxId> Id;
     };
 
-    TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, ui64 queryTraceId, const TString& database, const TMaybe<TString>& applicationName,
+    TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt, i32 runtimeParameterSizeLimit)
         : QueryId(queryId)
-        , QueryTraceId(queryTraceId)
         , Database(database)
         , ApplicationName(applicationName)
         , Cluster(cluster)
@@ -102,6 +102,11 @@ public:
         if (KqpSessionSpan && AppData()) {
             KqpSessionSpan.Attribute("database", AppData()->TenantName);
         }
+        if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            QuerySpanId = KqpSessionSpan ?
+                *reinterpret_cast<const ui64*>(KqpSessionSpan.GetTraceId().GetSpanIdPtr()) :
+                RandomNumber<ui64>();
+        }
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
         } else {
@@ -124,7 +129,7 @@ public:
     // this counter may be used as a cookie by a session actor to reject events
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
-    ui64 QueryTraceId = 0;
+    ui64 QuerySpanId = 0;
     TString Database;
     TMaybe<TString> ApplicationName;
     TString Cluster;
@@ -307,6 +312,10 @@ public:
         return FormatsSettings;
     }
 
+    ui64 GetQuerySpanId() const {
+        return QuerySpanId;
+    }
+
     // todo: gvit
     // fill this hash set only once on query compilation.
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {
@@ -482,7 +491,7 @@ public:
             // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
-                bool success = TxCtx->AddDeferredEffect(tx, QueryData, QueryTraceId);
+                bool success = TxCtx->AddDeferredEffect(tx, QueryData, GetQuerySpanId());
                 YQL_ENSURE(success);
                 if (CurrentTx + 1 < phyQuery.TransactionsSize()) {
                     ++CurrentTx;

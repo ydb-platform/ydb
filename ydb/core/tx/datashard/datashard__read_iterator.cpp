@@ -1994,7 +1994,7 @@ public:
         }
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QueryTraceId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
         if (guardLocks.LockTxId) {
             bool createMissing = state.LockMode == NKikimrDataEvents::OPTIMISTIC;
@@ -2150,7 +2150,7 @@ public:
 
         state.LockId = request->Record.GetLockTxId();
         state.LockNodeId = request->Record.GetLockNodeId();
-        state.QueryTraceId = request->Record.GetQueryTraceId();
+        state.QuerySpanId = request->Record.GetQuerySpanId();
         state.LockMode = request->Record.GetLockMode();
         switch (state.LockMode) {
             case NKikimrDataEvents::OPTIMISTIC:
@@ -2605,19 +2605,19 @@ private:
         ValidationInfo.SetLoaded();
     }
 
-    // Set QueryTraceId on a lock proto: VictimQueryTraceId for broken locks, current QueryTraceId for normal locks.
-    static void SetLockQueryTraceId(NKikimrDataEvents::TLock* addLock, const TSysTables::TLocksTable::TLock& lock,
-                                    TSysLocks& sysLocks, ui64 currentQueryTraceId)
+    // Set QuerySpanId on a lock proto: VictimQuerySpanId for broken locks, current QuerySpanId for normal locks.
+    static void SetLockQuerySpanId(NKikimrDataEvents::TLock* addLock, const TSysTables::TLocksTable::TLock& lock,
+                                    TSysLocks& sysLocks, ui64 currentQuerySpanId)
     {
         if (lock.IsError()) {
             if (auto rawLock = sysLocks.GetRawLock(lock.LockId)) {
-                ui64 id = rawLock->GetVictimQueryTraceId();
+                ui64 id = rawLock->GetVictimQuerySpanId();
                 if (id != 0) {
-                    addLock->SetQueryTraceId(id);
+                    addLock->SetQuerySpanId(id);
                 }
             }
-        } else if (currentQueryTraceId != 0) {
-            addLock->SetQueryTraceId(currentQueryTraceId);
+        } else if (currentQuerySpanId != 0) {
+            addLock->SetQuerySpanId(currentQuerySpanId);
         }
     }
 
@@ -2637,38 +2637,38 @@ private:
         // Determine victim query trace ID:
         // - If lock was already broken (e.g., breaker wrote to same key), use the original victim
         // - If lock wasn't broken before (deferred scenario), use current query as victim
-        TMaybe<ui64> victimQueryTraceId;
+        TMaybe<ui64> victimQuerySpanId;
         if (lockWasAlreadyBroken) {
-            victimQueryTraceId = state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing();
+            victimQuerySpanId = state.LockId ? sysLocks.GetVictimQuerySpanIdForLock(state.LockId) : Nothing();
         } else {
-            victimQueryTraceId = state.QueryTraceId
-                ? TMaybe<ui64>(state.QueryTraceId)
-                : (state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing());
+            victimQuerySpanId = state.QuerySpanId
+                ? TMaybe<ui64>(state.QuerySpanId)
+                : (state.LockId ? sysLocks.GetVictimQuerySpanIdForLock(state.LockId) : Nothing());
 
-            // Update the lock's VictimQueryTraceId so SessionActor receives the correct victim info
-            if (state.LockId && state.QueryTraceId) {
+            // Update the lock's VictimQuerySpanId so SessionActor receives the correct victim info
+            if (state.LockId && state.QuerySpanId) {
                 if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
-                    rawLock->SetVictimQueryTraceId(state.QueryTraceId);
+                    rawLock->SetVictimQuerySpanId(state.QuerySpanId);
                 }
             }
         }
 
         NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
             "Read transaction was a victim of broken locks",
-            victimQueryTraceId,
-            state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
+            victimQuerySpanId,
+            state.QuerySpanId ? TMaybe<ui64>(state.QuerySpanId) : Nothing());
 
         // In deferred lock scenarios, emit breaker logs and pass info to SessionActor
-        if (victimQueryTraceId) {
+        if (victimQuerySpanId) {
             auto breakerInfos = Self->FindBreakerInfoForTli(state.ReadVersion);
-            TVector<ui64> victimIds = {*victimQueryTraceId};
+            TVector<ui64> victimIds = {*victimQuerySpanId};
             for (const auto& info : breakerInfos) {
                 NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(),
                     "Write transaction broke other locks (deferred)",
                     {}, // No specific lock IDs in deferred scenario
-                    TMaybe<ui64>(info.QueryTraceId),
+                    TMaybe<ui64>(info.QuerySpanId),
                     victimIds);
-                Result->Record.AddDeferredBreakerQueryTraceIds(info.QueryTraceId);
+                Result->Record.AddDeferredBreakerQuerySpanIds(info.QuerySpanId);
                 Result->Record.AddDeferredBreakerNodeIds(info.SenderNodeId);
             }
         }
@@ -2738,7 +2738,7 @@ private:
                 addLock->SetHasWrites(true);
             }
 
-            SetLockQueryTraceId(addLock, lock, sysLocks, state.QueryTraceId);
+            SetLockQuerySpanId(addLock, lock, sysLocks, state.QuerySpanId);
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
                 << " Acquired lock# " << lock.LockId << ", counter# " << lock.Counter
@@ -3247,7 +3247,7 @@ public:
             << ", FirstUnprocessedQuery# " << state.FirstUnprocessedQuery);
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QueryTraceId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
         Reader.reset(new TReader(
             state,

@@ -403,7 +403,7 @@ public:
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
-    TVector<ui64> BreakerQueryTraceIds;
+    TVector<ui64> BreakerQuerySpanIds;
 
     void CollectLockStats(const NKikimrQueryStats::TTxStats& txStats);
 

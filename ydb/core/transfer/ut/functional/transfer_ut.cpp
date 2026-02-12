@@ -1775,7 +1775,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.ExecuteQuery(Sprintf("INSERT INTO `%s` (Key, Message) VALUES ( 7, '13' )", cdcTableName.data()));
 
         testCase.CheckResult({{
-            _C("Message", TString("{\"user\":\"<anonymous>\",\"update\":{\"Message\":\"13\"},\"key\":[7]}"))
+            _C("Message", TString("{\"update\":{\"Message\":\"13\"},\"key\":[7]}"))
         }});
 
         testCase.DropTransfer();

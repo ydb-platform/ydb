@@ -7139,6 +7139,11 @@
                 "ColumnId": 10,
                 "ColumnName": "SchemaChanges",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "UserSIDs",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7154,7 +7159,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7232,6 +7238,11 @@
                 "ColumnId": 10,
                 "ColumnName": "SchemaChanges",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "UserSIDs",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7247,7 +7258,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,

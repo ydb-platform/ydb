@@ -120,6 +120,7 @@ private:
      * @param[in] subDomainInfo The information about the corresponding subdomain
      * @param[in] newPartitionStats The new partition statistics (from the event)
      * @param[in] collectKeySample If true, request the key access sample to be collected
+     * @param[in] shardIsOversized If true, split is blocked for an oversized shard and should be logged as warning
      */
     bool VerifySplitAndRequestStats(
         const TActorContext& ctx,
@@ -130,7 +131,8 @@ private:
         TPathElement::TPtr pathElement,
         TSubDomainInfo::TPtr subDomainInfo,
         const TPartitionStats& newPartitionStats,
-        bool collectKeySample
+        bool collectKeySample,
+        bool shardIsOversized
     );
 };
 
@@ -403,6 +405,14 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                 << ", reason: " << splitReason
         );
 
+        bool shardIsOversized = false;
+        table->ShouldSplitBySize(
+            newStats.DataSize,
+            Self->SplitSettings.GetForceShardSplitSettings(),
+            splitReason,
+            &shardIsOversized
+        );
+
         VerifySplitAndRequestStats(
             ctx,
             item.Ev->Sender,
@@ -412,7 +422,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             pathElement,
             subDomainInfo,
             newStats,
-            true /* collectKeySample */
+            true /* collectKeySample */,
+            shardIsOversized
         );
 
         return true;
@@ -645,7 +656,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         pathElement,
         subDomainInfo,
         newStats,
-        collectKeySample
+        collectKeySample,
+        shardIsOversized
     );
 
     return true;
@@ -660,7 +672,8 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     TPathElement::TPtr pathElement,
     TSubDomainInfo::TPtr subDomainInfo,
     const TPartitionStats& newPartitionStats,
-    bool collectKeySample
+    bool collectKeySample,
+    bool shardIsOversized
 ) {
     // NOTE: intentionally avoid using TPath.Check().{PathShardsLimit,ShardsLimit}() here.
     // PathShardsLimit() no longer performs full shard count validation by iterating all ShardInfos
@@ -668,42 +681,78 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     {
         constexpr ui64 deltaShards = 2;
         if ((pathElement->GetShardsInside() + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShardsInPath) {
-            LOG_WARN_S(
-                ctx,
-                NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Tablet " << datashardId << " size " << newPartitionStats.DataSize
-                    << " will not split: shards count limit exceeded (in path)"
-                    << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShardsInPath
-                    << ", current: " << pathElement->GetShardsInside()
-                    << ", delta: " << deltaShards
-            );
+            if (shardIsOversized) {
+                LOG_WARN_S(
+                    ctx,
+                    NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Tablet " << datashardId << " size " << newPartitionStats.DataSize
+                        << " will not split: shards count limit exceeded (in path)"
+                        << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShardsInPath
+                        << ", current: " << pathElement->GetShardsInside()
+                        << ", delta: " << deltaShards
+                );
+            } else {
+                LOG_NOTICE_S(
+                    ctx,
+                    NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Do not request full stats from datashard " << datashardId
+                        << " (size " << newPartitionStats.DataSize << ")"
+                        << ", reason: shards count limit exceeded (in path)"
+                        << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShardsInPath
+                        << ", current: " << pathElement->GetShardsInside()
+                        << ", delta: " << deltaShards
+                );
+            }
 
             return false;
         }
 
         const auto currentShards = (subDomainInfo->GetShardsInside() - subDomainInfo->GetBackupShards());
         if ((currentShards + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShards) {
-            LOG_WARN_S(
-                ctx,
-                NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Tablet " << datashardId << " size " << newPartitionStats.DataSize
-                    << " will not split: shards count limit exceeded (in subdomain)"
-                    << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShards
-                    << ", current: " << currentShards
-                    << ", delta: " << deltaShards
-            );
+            if (shardIsOversized) {
+                LOG_WARN_S(
+                    ctx,
+                    NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Tablet " << datashardId << " size " << newPartitionStats.DataSize
+                        << " will not split: shards count limit exceeded (in subdomain)"
+                        << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShards
+                        << ", current: " << currentShards
+                        << ", delta: " << deltaShards
+                );
+            } else {
+                LOG_NOTICE_S(
+                    ctx,
+                    NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Do not request full stats from datashard " << datashardId
+                        << " (size " << newPartitionStats.DataSize << ")"
+                        << ", reason: shards count limit exceeded (in subdomain)"
+                        << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShards
+                        << ", current: " << currentShards
+                        << ", delta: " << deltaShards
+                );
+            }
 
             return false;
         }
     }
 
     if (newPartitionStats.HasBorrowedData) {
-        LOG_WARN_S(
-            ctx,
-            NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Tablet " << datashardId << " size " << newPartitionStats.DataSize
-                << " cannot split yet: has borrowed parts, enqueue compaction first"
-        );
+        if (shardIsOversized) {
+            LOG_WARN_S(
+                ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Tablet " << datashardId << " size " << newPartitionStats.DataSize
+                    << " cannot split yet: has borrowed parts, enqueue compaction first"
+            );
+        } else {
+            LOG_NOTICE_S(
+                ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Postpone split tablet " << datashardId
+                    << " (size " << newPartitionStats.DataSize << ")"
+                    << " because it has borrow parts, enqueue compact them first"
+            );
+        }
 
         Self->EnqueueBorrowedCompaction(shardIdx);
         return false;
@@ -712,12 +761,22 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     // path.IsLocked() and path.LockedBy() equivalent
     if (const auto& found = Self->LockedPaths.find(pathId); found != Self->LockedPaths.end()) {
         const auto txId = found->second;
-        LOG_WARN_S(
-            ctx,
-            NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Tablet " << datashardId << " size " << newPartitionStats.DataSize
-                << " cannot split yet: path is locked by " << txId
-        );
+        if (shardIsOversized) {
+            LOG_WARN_S(
+                ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Tablet " << datashardId << " size " << newPartitionStats.DataSize
+                    << " cannot split yet: path is locked by " << txId
+            );
+        } else {
+            LOG_NOTICE_S(
+                ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Postpone split tablet " << datashardId
+                    << " (size " << newPartitionStats.DataSize << ")"
+                    << " because it is locked by " << txId
+            );
+        }
 
         return false;
     }

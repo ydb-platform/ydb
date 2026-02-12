@@ -1055,6 +1055,23 @@ public:
             *isShardOversized = false;
         }
 
+        // Calculate oversized marker independently from split-by-size enablement.
+        // This allows callers to decide WARN/NOTICE level even when split-by-size is disabled.
+        ui64 shardSizeToSplit = PartitionConfig().GetPartitioningPolicy().GetSizeToSplit();
+        if (params.DisableForceShardSplit) {
+            if (shardSizeToSplit == 0) {
+                shardSizeToSplit = Max<ui64>();
+            }
+        } else {
+            if (shardSizeToSplit == 0 || shardSizeToSplit >= params.ForceShardSplitDataSize) {
+                shardSizeToSplit = params.ForceShardSplitDataSize;
+            }
+        }
+        const bool shardIsOversized = dataSize >= shardSizeToSplit;
+        if (isShardOversized) {
+            *isShardOversized = shardIsOversized;
+        }
+
         // Don't split/merge backup tables
         if (IsBackup) {
             if (needReason) {
@@ -1078,12 +1095,6 @@ public:
 
         const ui64 maxPartitionsCount = GetMaxPartitionsCount();
         const ui64 shardCount = Partitions.size();
-        const ui64 shardSizeToSplit = GetShardSizeToSplit(params);
-        const bool shardIsOversized = dataSize >= shardSizeToSplit;
-
-        if (isShardOversized) {
-            *isShardOversized = shardIsOversized;
-        }
 
         // When shard is over the maximum size we split even when over max partitions
         if (dataSize >= params.ForceShardSplitDataSize && !params.DisableForceShardSplit) {

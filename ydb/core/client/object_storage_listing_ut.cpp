@@ -832,6 +832,69 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         CompareS3Listing(annoyingClient, 100, "/Videos/", "/", "", 1000, {});
     }
 
+    Y_UNIT_TEST(TombstoneRestarts) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServerSettings serverSettings(port);
+
+        TStringStream ss;
+        serverSettings.SetLogBackend(new TStreamLogBackend(&ss));
+
+        TServer cleverServer = TServer(serverSettings);
+        GRPC_PORT = pm.GetPort(2135);
+        cleverServer.EnableGRpc(GRPC_PORT);
+
+        TFlatMsgBusClient annoyingClient(port);
+        PrepareS3Data(annoyingClient);
+
+        const int N_ROWS = 4000;
+
+        TString bigData(200, 'a');
+
+        for (int i = 0; i < N_ROWS; ++i) {
+            S3WriteRow(annoyingClient, 100, "Bucket100", "/Tomb/" + ToString(i), 1, 1100, bigData, "Table");
+        }
+        for (int i = 0; i < N_ROWS; ++i) {
+            S3DeleteRow(annoyingClient, 100, "Bucket100", "/Tomb/" + ToString(i), 1, "Table");
+        }
+
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+
+        TVector<TString> commonPrefixes;
+        TVector<TString> contents;
+        DoS3Listing(GRPC_PORT, 100, "/Tomb/", "/", "", "", {}, 1, commonPrefixes, contents);
+        UNIT_ASSERT_EQUAL(0, commonPrefixes.size());
+        UNIT_ASSERT_EQUAL(0, contents.size());
+
+        auto restartsCount = [](const TString& log) {
+            const TString tag = "restarted:";
+            int maxRestart = -1;
+            size_t pos = log.find(tag);
+            while (pos != TString::npos) {
+                pos += tag.size();
+                while (pos < log.size() && log[pos] == ' ') {
+                    ++pos;
+                }
+                ui32 value = 0;
+                bool hasValue = false;
+                while (pos < log.size() && log[pos] >= '0' && log[pos] <= '9') {
+                    value = value * 10 + (log[pos] - '0');
+                    hasValue = true;
+                    ++pos;
+                }
+                if (hasValue && static_cast<int>(value) > maxRestart) {
+                    maxRestart = static_cast<int>(value);
+                }
+                pos = log.find(tag, pos);
+            }
+            return maxRestart;
+        };
+
+        int restarts = restartsCount(ss.Str());
+        UNIT_ASSERT_VALUES_EQUAL_C(restarts, 1, TStringBuilder()
+            << "expected 1 restart, got " << restarts);
+    }
+
     Y_UNIT_TEST(CornerCases) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);

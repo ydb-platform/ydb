@@ -33,17 +33,6 @@ NActors::IActor* CreateMemProfiler();
 
 namespace NMVP::NOIDC {
 
-namespace {
-
-TString AddSchemeToUserToken(const TString& token, const TString& scheme) {
-    if (token.find(' ') != TString::npos) {
-        return token;
-    }
-    return scheme + " " + token;
-}
-
-}
-
 const TString& GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
     static const TString mvpName("MVP");
@@ -249,10 +238,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TYdbLocation::UserToken = StartupOptions.UserToken;
     TYdbLocation::CaCertificate = StartupOptions.CaCertificate;
     TYdbLocation::SslCertificate = StartupOptions.SslCertificate;
-
-    if (TYdbLocation::UserToken) {
-        TYdbLocation::UserToken = AddSchemeToUserToken(TYdbLocation::UserToken, "OAuth");
-    }
 
     TokensConfig = StartupOptions.Tokens;
 

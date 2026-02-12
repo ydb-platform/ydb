@@ -38,12 +38,14 @@ public:
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
 
     static TMvpStartupOptions Build(int argc, const char* argv[]);
+    TString GetLocalEndpoint();
 
 private:
     NLastGetopt::TOptsParseResult ParseArgs(int argc, const char* argv[]);
     void LoadConfig(const NLastGetopt::TOptsParseResult& parsedArgs);
     void TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs);
     void SetPorts();
+    TString AddSchemeToUserToken(const TString& token, const TString& scheme);
     void LoadTokens();
     void LoadCertificates();
 };

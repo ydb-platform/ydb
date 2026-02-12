@@ -22,17 +22,6 @@ using namespace NMVP;
 
 NMVP::TMVP* NMVP::InstanceMVP;
 
-namespace {
-
-TString AddSchemeToUserToken(const TString& token, const TString& scheme) {
-    if (token.find(' ') != TString::npos) {
-        return token;
-    }
-    return scheme + " " + token;
-}
-
-}
-
 const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
     static const TString mvpName("MVP");
@@ -127,9 +116,15 @@ int TMVP::Shutdown() {
 }
 
 TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) {
-    TString httpEndpoint = "http://[::1]:" + ToString(StartupOptions.HttpPort);
-    TString httpsEndpoint = "https://[::1]:" + ToString(StartupOptions.HttpsPort);
-    return req->Endpoint->Secure ? httpsEndpoint : httpEndpoint;
+    const bool secure = req->Endpoint->Secure;
+    const ui16 port = secure ? StartupOptions.HttpsPort : StartupOptions.HttpPort;
+
+    TStringBuilder b;
+    b << (secure ? "https://[::1]" : "http://[::1]");
+    if (port) {
+        b << ":" << port;
+    }
+    return b;
 }
 
 NMvp::TTokensConfig TMVP::TokensConfig;
@@ -209,10 +204,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TYdbLocation::UserToken = StartupOptions.UserToken;
     TYdbLocation::CaCertificate = StartupOptions.CaCertificate;
     TYdbLocation::SslCertificate = StartupOptions.SslCertificate;
-
-    if (TYdbLocation::UserToken) {
-        TYdbLocation::UserToken = AddSchemeToUserToken(TYdbLocation::UserToken, "OAuth");
-    }
 
     TokensConfig = StartupOptions.Tokens;
 

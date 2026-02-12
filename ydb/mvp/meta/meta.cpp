@@ -166,7 +166,7 @@ void TMVP::InitMeta() {
     MetaLocation.Endpoints.emplace_back("cluster-api", MetaApiEndpoint);
     MetaLocation.RootDomain = MetaDatabase;
 
-    LocalEndpoint = TStringBuilder() << "http://" << FQDNHostName() << ":" << StartupOptions.HttpPort;
+    LocalEndpoint = StartupOptions.GetLocalEndpoint();
 
     TActorId httpIncomingProxyId = ActorSystem.Register(NHttp::CreateIncomingHttpCache(HttpProxyId, GetIncomingMetaCachePolicy));
 

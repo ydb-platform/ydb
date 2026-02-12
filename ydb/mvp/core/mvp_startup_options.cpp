@@ -3,6 +3,7 @@
 #include <util/stream/file.h>
 #include <util/generic/yexception.h>
 #include <util/string/strip.h>
+#include <util/system/hostname.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -20,6 +21,16 @@ TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
     startupOptions.LoadCertificates();
 
     return startupOptions;
+}
+
+TString TMvpStartupOptions::GetLocalEndpoint() {
+    if (!HttpPort && !HttpsPort) {
+        ythrow yexception() << "At least one of HTTP or HTTPS ports must be specified";
+    }
+
+    return HttpsPort
+        ? TStringBuilder() << "https://" << FQDNHostName() << ":" << HttpsPort
+        : TStringBuilder() << "http://" << FQDNHostName() << ":" << HttpPort;
 }
 
 NLastGetopt::TOptsParseResult TMvpStartupOptions::ParseArgs(int argc, const char* argv[]) {
@@ -102,6 +113,13 @@ void TMvpStartupOptions::SetPorts() {
     }
 }
 
+TString AddSchemeToUserToken(const TString& token, const TString& scheme) {
+    if (token.empty() || token.find(' ') != TString::npos) {
+        return token;
+    }
+    return scheme + " " + token;
+}
+
 void TMvpStartupOptions::LoadTokens() {
     if (YdbTokenFile.empty()) {
         return;
@@ -113,6 +131,7 @@ void TMvpStartupOptions::LoadTokens() {
         } else if (Tokens.HasStaffApiUserToken()) {
             UserToken = Tokens.GetStaffApiUserToken();
         }
+        UserToken = AddSchemeToUserToken(UserToken, "OAuth");
         if (!Tokens.HasAccessServiceType()) {
             Tokens.SetAccessServiceType(AccessServiceType);
         }

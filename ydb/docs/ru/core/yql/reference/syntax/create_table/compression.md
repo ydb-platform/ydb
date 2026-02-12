@@ -10,7 +10,7 @@
 
 - Создание колоночной таблицы
 
-    ```sql
+    ```yql
     CREATE TABLE compressed_table (
         id Uint64 NOT NULL,
         title Utf8 COMPRESSION(algorithm=lz4),

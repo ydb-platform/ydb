@@ -28,13 +28,13 @@ ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_n
 
 ## Пример
 
-Приведенный ниже код добавит к таблице `episodes` колонку `views` с типом данных `Uint64`.
+Приведённый ниже код добавит к таблице `episodes` колонку `views` с типом данных `Uint64`.
 
 ```yql
 ALTER TABLE episodes ADD COLUMN views Uint64;
 ```
 
-Приведенный ниже код добавит к таблице `episodes` колонку `rate` с типом данных `Double` и значением по умолчанию `5.0`.
+Приведённый ниже код добавит к таблице `episodes` колонку `rate` с типом данных `Double` и значением по умолчанию `5.0`.
 
 ```yql
 ALTER TABLE episodes ADD COLUMN rate Double NOT NULL DEFAULT 5.0;
@@ -67,7 +67,7 @@ ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_nam
 
 ### Пример
 
-Приведенный ниже запретит пустые значения в колонке `title` из таблицы `episodes` .
+Приведённый ниже код запретит пустые значения в колонке `title` из таблицы `episodes` .
 
 ```yql
 ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
@@ -94,7 +94,7 @@ ALTER TABLE table_name DROP COLUMN column_name;
 
 ### Пример
 
-Приведенный ниже код удалит колонку `views` из таблицы `episodes`.
+Приведённый ниже код удалит колонку `views` из таблицы `episodes`.
 
 ```yql
 ALTER TABLE episodes DROP COLUMN views;

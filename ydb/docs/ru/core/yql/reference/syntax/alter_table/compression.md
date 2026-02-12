@@ -10,13 +10,13 @@
 
 - Изменение настроек сжатия колонки
 
-    ```sql
+    ```yql
     ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION(algorithm=zstd, level=7);
     ```
 
 - Сброс настроек сжатия колонки
 
-    ```sql
+    ```yql
     ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
     ```
 

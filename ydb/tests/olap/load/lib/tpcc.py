@@ -1,6 +1,7 @@
 from __future__ import annotations
 from os import getenv
 from .conftest import LoadSuiteBase
+from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
@@ -75,6 +76,9 @@ class TpccSuiteBase(LoadSuiteBase):
             tx_mode=self.tx_mode
         )[self.get_users()[0]]
         self.process_query_result(result, 'test', True)
+        stats = result.get_stats('test')
+        if result.success and 'tpcc_json' in stats:
+            ResultsProcessor.upload_tpcc_results(stats['tpcc_json'])
 
 
 class TestTpccW3000T0Serializable(TpccSuiteBase):

@@ -1995,7 +1995,7 @@ message TImmediateControlsConfig {
             MaxValue: 4096,
             DefaultValue: 3
         }];
-        optional uint64 USE_PAYLOAD = 2 [(ControlOptions) = {
+        optional uint64 UsePayload = 2 [(ControlOptions) = {
             Description: "Use payload transport for KeyValue read responses",
             MinValue: 0,
             MaxValue: 1,

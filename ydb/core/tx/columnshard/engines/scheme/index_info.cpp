@@ -493,7 +493,7 @@ std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui
         if (i.second->GetClassName() != NIndexes::NMax::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
-        auto maxIndex = dynamic_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
+        auto maxIndex = static_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
         if (maxIndex->GetColumnId() == columnId) {
             return maxIndex;
         }
@@ -506,7 +506,7 @@ std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexMetaC
         if (i.second->GetClassName() != NIndexes::NCountMinSketch::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
-        auto index = dynamic_pointer_cast<NIndexes::NCountMinSketch::TIndexMeta>(i.second.GetObjectPtr());
+        auto index = static_pointer_cast<NIndexes::NCountMinSketch::TIndexMeta>(i.second.GetObjectPtr());
         if (index->GetColumnIds() == columnIds) {
             return index;
         }
@@ -714,7 +714,7 @@ std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(
             continue;
         }
         // Cerr << MySprintf("FindSkipIndexes 3,&result: %p,\n", &result);
-        auto skipIndex = std::dynamic_pointer_cast<NIndexes::TSkipIndex>(i.GetObjectPtrVerified());
+        auto skipIndex = std::static_pointer_cast<NIndexes::TSkipIndex>(i.GetObjectPtrVerified());
         // Cerr << MySprintf("FindSkipIndexes 4,&result: %p,\n", &result);
 
         AFL_VERIFY(skipIndex != nullptr);

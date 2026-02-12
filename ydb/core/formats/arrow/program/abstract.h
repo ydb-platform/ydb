@@ -68,10 +68,6 @@ public:
         Greater,
         LessOrEqual,
         GreaterOrEqual,
-        OpenInterval, // (a, b)
-        ClosedInterval, // [a, b]
-        LeftOnlyOpenInterval, // (a, b]
-        RightOnlyOpenInterval // [b, a)
     };
 
 private:

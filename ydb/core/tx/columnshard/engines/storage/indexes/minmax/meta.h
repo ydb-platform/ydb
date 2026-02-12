@@ -4,10 +4,18 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
-
+#include <ydb/core/formats/arrow/program/functions.h>
+#include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/scalar/serialization.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/common/print_debug.h>
+
+#define AFL_VERIFY_UNREACHABLE(...) AFL_VERIFY(false)("error", "unreachable")
+
+#define VALUE_OR_VERIFY(result) NKikimr::NArrow::TStatusValidator::GetValid(result)
+
+
+
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 struct TKeyPair {
     std::shared_ptr<arrow::Scalar> Min;
@@ -53,23 +61,27 @@ inline TKeyPair Deserialize(TStringBuf data, const std::shared_ptr<arrow::DataTy
 
 }   // namespace NArrowProtocol
 
+inline bool cmp(NKikimr::NKernels::EOperation op , const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+    arrow::Datum res = VALUE_OR_VERIFY(arrow::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
+    return res.scalar_as<arrow::BooleanScalar>().value;
+}
+
 inline bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    return NArrow::ScalarLess(left, right);
+    return cmp(NKernels::EOperation::Less, left, right);
 }
 
 inline bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    return NArrow::ScalarGreater(left, right);
+    return cmp(NKernels::EOperation::Greater, left, right);
 }
 
 inline bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    return NArrow::ScalarLessOrEqual(left, right);
+    return cmp(NKernels::EOperation::LessEqual, left, right);
 }
 
 inline bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    return NArrow::ScalarGreaterOrEqual(left, right);
+    return cmp(NKernels::EOperation::GreaterEqual, left, right);
 }
 
-#define AFL_VERIFY_UNREACHABLE(...) AFL_VERIFY(false)("error", "unreachable")
 
 class TIndexMeta: public TSkipIndex {
 public:
@@ -93,10 +105,6 @@ private:
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Greater:
             case NArrow::NSSA::TIndexCheckOperation::EOperation::LessOrEqual:
             case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
-            case NArrow::NSSA::TIndexCheckOperation::EOperation::OpenInterval:
-            case NArrow::NSSA::TIndexCheckOperation::EOperation::ClosedInterval:
-            case NArrow::NSSA::TIndexCheckOperation::EOperation::LeftOnlyOpenInterval:
-            case NArrow::NSSA::TIndexCheckOperation::EOperation::RightOnlyOpenInterval:
                 return true;
             default:
                 Y_VERIFY(false, "unhandled enum case");
@@ -111,6 +119,7 @@ protected:
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override {
         TKeyPair thisChunkIndex;
+        ASSIGN_OR_RAISE
         AFL_VERIFY(reader.GetColumnsCount() == 1)("got_count", reader.GetColumnsCount());
         {
             TChunkedColumnReader cReader = *reader.begin();
@@ -149,65 +158,20 @@ protected:
         SingleValue,
         PairOfValues
     };
-    ValueShape InputValueShape(const NArrow::NSSA::TIndexCheckOperation& op) const {
-        AFL_VERIFY(DoIsAppropriateFor(op));
+    bool Skip(TKeyPair chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op) const {
         switch (op.GetOperation()) {
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Equals:
+                return requestValue < chunkValue.Min || requestValue > chunkValue.Max;
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Less:
+                return requestValue <= chunkValue.Min;
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Greater:
+                return requestValue >= chunkValue.Max;
             case NArrow::NSSA::TIndexCheckOperation::EOperation::LessOrEqual:
+                return requestValue < chunkValue.Min;
             case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
-                return ValueShape::SingleValue;
-            case NArrow::NSSA::TIndexCheckOperation::EOperation::OpenInterval:
-            case NArrow::NSSA::TIndexCheckOperation::EOperation::ClosedInterval:
-            case NArrow::NSSA::TIndexCheckOperation::EOperation::LeftOnlyOpenInterval:
-            case NArrow::NSSA::TIndexCheckOperation::EOperation::RightOnlyOpenInterval:
-                return ValueShape::PairOfValues;
+                return requestValue > chunkValue.Max;
             default:
                 AFL_VERIFY_UNREACHABLE();
-        }
-    }
-    bool Skip(TKeyPair chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op) const {
-        if (InputValueShape(op) == ValueShape::SingleValue) {
-            // auto requestValue = NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(requestValueBuf, MinMaxStructType->field(0)->type()).DetachResult();
-            switch (op.GetOperation()) {
-                case NArrow::NSSA::TIndexCheckOperation::EOperation::Equals:
-                    return requestValue < chunkValue.Min || requestValue > chunkValue.Max;
-                case NArrow::NSSA::TIndexCheckOperation::EOperation::Less:
-                    return requestValue <= chunkValue.Min;
-                case NArrow::NSSA::TIndexCheckOperation::EOperation::Greater:
-                    return requestValue >= chunkValue.Max;
-                case NArrow::NSSA::TIndexCheckOperation::EOperation::LessOrEqual:
-                    return requestValue < chunkValue.Min;
-                case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
-                    return requestValue > chunkValue.Max;
-                default:
-                    AFL_VERIFY_UNREACHABLE();
-            }
-
-        } else {
-            // TKeyPair requestInterval = NArrowProtocol::Deserialize(requestValueBuf, MinMaxStructType.get());
-            auto* structValue = dynamic_cast<arrow::StructScalar*>(requestValue.get());
-            AFL_VERIFY(structValue)("details", MySprintf("mismatched type of request value, expected arrow::StructType with Min and Max fields for interval operation: %s", op.DebugString()));
-            TKeyPair requestInterval;
-            requestInterval.Max = structValue->field(NArrowProtocol::MaxFieldName).ValueOrDie();
-            requestInterval.Min = structValue->field(NArrowProtocol::MinFieldName).ValueOrDie();
-            switch (op.GetOperation()) {
-                case NArrow::NSSA::TIndexCheckOperation::EOperation::OpenInterval:
-                    return requestInterval.Max <= chunkValue.Min || requestInterval.Min >= chunkValue.Max;
-
-                case NArrow::NSSA::TIndexCheckOperation::EOperation::ClosedInterval:
-                    return requestInterval.Max < chunkValue.Min || requestInterval.Min > chunkValue.Max;
-
-                case NArrow::NSSA::TIndexCheckOperation::EOperation::LeftOnlyOpenInterval:
-                    return requestInterval.Max < chunkValue.Min || requestInterval.Min >= chunkValue.Max;
-
-                case NArrow::NSSA::TIndexCheckOperation::EOperation::RightOnlyOpenInterval:
-                    return requestInterval.Max <= chunkValue.Min || requestInterval.Min > chunkValue.Max;
-
-                default:
-                    AFL_VERIFY_UNREACHABLE();
-            }
         }
     }
     virtual bool DoCheckValue(const TString& data, [[maybe_unused]] const std::optional<ui64> cat,

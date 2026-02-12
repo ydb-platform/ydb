@@ -724,6 +724,31 @@ protected:
                 }
                 str << Endl;
 
+                str << Endl << "Stages:";
+                TABLE_SORTABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                            TABLEH() {str << "StageId";}
+                            TABLEH() {str << "TaskCount";}
+                            TABLEH() {str << "FinishedCount";}
+                            TABLEH() {str << "Deadlocked (1 min)";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (const auto& [stageId, stageStat] : Stats->StageStats) {
+                            TABLER() {
+                                TABLED() {str << stageId.TxId;}
+                                TABLED() {str << stageId.StageId;}
+                                TABLED() {str << stageStat.Task2Index.size();}
+                                TABLED() {str << stageStat.FinishedCount;}
+                                TABLED() {str << stageStat.IsDeadlocked(60'000'000);}
+                            }
+                        }
+                    }
+                }
+
+                str << Endl << "Tasks:";
                 TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {

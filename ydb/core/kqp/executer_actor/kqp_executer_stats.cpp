@@ -658,7 +658,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     return baseTimeMs;
 }
 
-bool TStageExecutionStats::IsDeadlocked(ui64 deadline) {
+bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
     if (CurrentWaitInputTimeUs.MinValue < deadline || InputStages.empty()) {
         return false;
     }
@@ -672,7 +672,7 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) {
                 return false;
             }
         } else {
-            if (stat->CurrentWaitOutputTimeUs.MinValue < deadline) {
+            if (stat->CurrentWaitOutputTimeUs.MinValue < deadline && !stat->IsDeadlocked(deadline)) {
                 return false;
             }
         }

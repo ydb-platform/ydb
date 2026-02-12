@@ -9,6 +9,8 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_window_features.h>
 
+#include <library/cpp/iterator/zip.h>
+
 namespace NYql {
 
 TExprNode::TPtr WrapWithNonNegativeCheck(TPositionHandle pos, const TExprNode::TPtr& value, TExprContext& ctx, const TString& message) {
@@ -66,6 +68,22 @@ TNodeMap<ui32> GatherSubLinks(const TExprNode::TPtr& root) {
     });
 
     return subLinks;
+}
+
+std::tuple<TNodeMap<ui32>, THashMap<ui32, const TExprNode*>>
+GatherSubLinksWithOriginal(
+    const TExprNode::TPtr& root,
+    const TExprNode::TPtr& originalRoot)
+{
+    TNodeMap<ui32> subLinks = GatherSubLinks(root);
+
+    THashMap<ui32, const TExprNode*> originalSubLinks;
+    originalSubLinks.reserve(subLinks.size());
+    for (const auto& [originalNode, id] : GatherSubLinks(originalRoot)) {
+        originalSubLinks[id] = originalNode;
+    }
+
+    return {std::move(subLinks), std::move(originalSubLinks)};
 }
 
 TExprNode::TPtr AsFilterPredicate(TPositionHandle pos, const TExprNode::TPtr& expr, TExprContext& ctx) {
@@ -234,6 +252,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
     const TExprNode::TPtr& root,
     const TExprNode::TPtr& originalArg,
     const TNodeMap<ui32>& subLinks,
+    const THashMap<ui32, const TExprNode*>& originalSubLinks,
     const TVector<TString>& inputAliases,
     const TExprNode::TListType& cleanedInputs,
     TExprContext& ctx,
@@ -251,8 +270,16 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
             auto linkType = node->Head().Content();
             auto testLambda = node->ChildPtr(3);
             auto extColumns = NTypeAnnImpl::ExtractExternalColumns(node->Tail());
+
+            const auto subLinkId = it->second;
+            const auto* originalNode = originalSubLinks.at(subLinkId);
+
             if (extColumns.empty()) {
-                auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, it->second, cleanedInputs, inputAliases);
+                auto select = ExpandPgSelectSublink(
+                    node->TailPtr(), originalNode->TailPtr(),
+                    ctx, optCtx, subLinkId,
+                    cleanedInputs, inputAliases);
+
                 if (linkType == "exists") {
                     // clang-format off
                     TExprNode::TPtr result = ctx.Builder(node->Pos())
@@ -442,7 +469,10 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                     .Seal()
                     .Build();
 
-                auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, it->second, cleanedInputs, inputAliases);
+                auto select = ExpandPgSelectSublink(
+                    node->TailPtr(), originalNode->TailPtr(),
+                    ctx, optCtx, subLinkId,
+                    cleanedInputs, inputAliases);
 
                 auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yqls");
                 YQL_ENSURE(exportsPtr);
@@ -794,6 +824,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(
     const TExprNode::TPtr& list,
     const TExprNode::TPtr& lambda,
     const TNodeMap<ui32>& subLinks,
+    const THashMap<ui32, const TExprNode*> subLinkAnns,
     const TVector<TString>& inputAliases,
     const TExprNode::TListType& cleanedInputs,
     TExprContext& ctx,
@@ -808,7 +839,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(
 
     TExprNode::TPtr newList, newRoot;
     std::tie(newRoot, newList) = RewriteSubLinksPartial(
-        pos, list, root, lambda->Head().HeadPtr(), subLinks, inputAliases,
+        pos, list, root, lambda->Head().HeadPtr(),
+        subLinks, subLinkAnns, inputAliases,
         cleanedInputs, ctx, optCtx, /*isYql=*/isYql, leftPrefix, sublinkColumns);
 
     newRoot = ctx.ReplaceNode(std::move(newRoot), lambda->Head().Head(), arg);
@@ -831,11 +863,11 @@ TExprNode::TPtr BuildFilter(
     bool isYql)
 {
     TExprNode::TPtr actualList = list, actualFilter = filter;
-    auto subLinks = GatherSubLinks(filter);
+    auto [subLinks, subLinkAnns] = GatherSubLinksWithOriginal(filter, filter);
     if (!subLinks.empty()) {
         std::tie(actualFilter, actualList) = RewriteSubLinks(
             filter->Pos(), list, filter,
-            subLinks, inputAliases, cleanedInputs,
+            subLinks, subLinkAnns, inputAliases, cleanedInputs,
             ctx, optCtx, /*isYql=*/isYql);
     }
 
@@ -2028,6 +2060,7 @@ TExprNode::TPtr BuildCrossJoinsBetweenGroups(TPositionHandle pos, const TExprNod
 TExprNode::TPtr BuildProjectionLambda(
     TPositionHandle pos,
     const TExprNode::TPtr& result,
+    const TExprNode::TPtr& originalResult,
     const TStructExprType* finalType,
     const TColumnOrder* nodeColumnOrder,
     const TColumnOrder* setItemColumnOrder,
@@ -2118,7 +2151,10 @@ TExprNode::TPtr BuildProjectionLambda(
                     }
                 }
 
-                for (const auto& x : result->Tail().Children()) {
+                for (const auto& [x, originalX] : Zip(
+                         result->Tail().Children(),
+                         originalResult->Tail().Children()))
+                {
                     if (x->HeadPtr()->IsAtom()) {
                         if (emitPgStar) {
                             continue;
@@ -2128,10 +2164,10 @@ TExprNode::TPtr BuildProjectionLambda(
 
                         auto listBuilder = parent.List(index++);
                         listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
-                        addPgCast(listBuilder, 1, rightColumnName, x->GetTypeAnn(),
+                        addPgCast(listBuilder, 1, rightColumnName, originalX->GetTypeAnn(),
                              [&addResultItem, &x] (TExprNodeBuilder& builder, ui32 idx) { addResultItem(builder, idx, x.Get()); });
                     } else {
-                        auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                        auto type = originalX->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                         Y_ENSURE(type);
                         TColumnOrder localOrder;
                         for (auto& c: x->Child(0)->Children()) {
@@ -2592,12 +2628,15 @@ TExprNode::TPtr BuildHaving(
 {
     auto havingLambda = having->TailPtr();
     auto havingLambdaRoot = havingLambda->TailPtr();
+    auto originalHavingLambdaRoot = havingLambdaRoot;
     RewriteAggsPartial(havingLambdaRoot, havingLambda->Head().HeadPtr(), aggId, ctx, optCtx, false);
-    auto havingSubLinks = GatherSubLinks(havingLambdaRoot);
+    auto [havingSubLinks, originalHavingSubLinks] =
+        GatherSubLinksWithOriginal(havingLambdaRoot, originalHavingLambdaRoot);
     if (!havingSubLinks.empty()) {
         std::tie(havingLambdaRoot, list) = RewriteSubLinksPartial(
             havingLambda->Pos(), list, havingLambdaRoot,
-            havingLambda->Head().HeadPtr(), havingSubLinks,
+            havingLambda->Head().HeadPtr(),
+            havingSubLinks, originalHavingSubLinks,
             inputAliases, cleanedInputs, ctx, optCtx, /*isYql=*/isYql);
     }
 
@@ -3847,8 +3886,15 @@ TExprNode::TPtr CombineSetItems(TPositionHandle pos, const TExprNode::TPtr& left
     return ret;
 }
 
-TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx,
-    TMaybe<ui32> subLinkId, const TExprNode::TListType& outerInputs, const TVector<TString>& outerInputAliases) {
+/// @param originalNode is the fully-typed original node, see YQL-20895.
+TExprNode::TPtr ExpandPgSelectImpl(
+    const TExprNode::TPtr& node,
+    const TExprNode::TPtr& originalNode,
+    TExprContext& ctx,
+    TOptimizeContext& optCtx,
+    TMaybe<ui32> subLinkId,
+    const TExprNode::TListType& outerInputs,
+    const TVector<TString>& outerInputAliases) {
     struct TColumnOrderInfo {
         TColumnOrder Node;
         TExprNode::TListType Items;
@@ -3866,7 +3912,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
     const bool isExternalInputExist = !outerInputAliases.empty() && !isOneRow;
 
     TMaybe<TColumnOrderInfo> columnOrder;
-    if (auto order = optCtx.Types->LookupColumnOrder(*node)) {
+    if (auto order = optCtx.Types->LookupColumnOrder(*originalNode)) {
         columnOrder.ConstructInPlace();
         columnOrder->Node = std::move(*order);
         columnOrder->Target = columnOrder->Node;
@@ -3890,6 +3936,8 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
     YQL_ENSURE(!isOrderedColumns || columnOrder, "Column order was required, but absent");
 
     auto setItems = GetSetting(node->Head(), "set_items");
+    const auto originalSetItems = GetSetting(originalNode->Head(), "set_items");
+
     auto setOps = GetSetting(node->Head(), "set_ops");
     YQL_ENSURE(setItems);
     YQL_ENSURE(setOps);
@@ -3899,8 +3947,11 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
     TExprNode::TPtr finalSortDirections;
 
     TExprNode::TListType setItemNodes;
-    for (auto setItem : setItems->Tail().Children()) {
-        TMaybe<TColumnOrder> childOrder = optCtx.Types->LookupColumnOrder(*setItem);
+    for (auto [setItem, originalSetItem] : Zip(
+             setItems->Tail().Children(),
+             originalSetItems->Tail().Children()))
+    {
+        TMaybe<TColumnOrder> childOrder = optCtx.Types->LookupColumnOrder(*originalSetItem);
         if (columnOrder) {
             YQL_ENSURE(childOrder);
 
@@ -3922,6 +3973,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         }
 
         auto result = GetSetting(setItem->Tail(), "result");
+        const auto originalResult = GetSetting(originalSetItem->Tail(), "result");
         auto values = GetSetting(setItem->Tail(), "values");
         auto from = GetSetting(setItem->Tail(), "from");
         auto filter = GetSetting(setItem->Tail(), "where");
@@ -3949,12 +4001,13 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
         } else {
             YQL_ENSURE(result);
-            auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            auto finalType = originalNode->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             Y_ENSURE(finalType);
 
             TExprNode::TPtr projectionLambda = BuildProjectionLambda(
                 node->Pos(),
                 result,
+                originalResult,
                 finalType,
                 columnOrder ? &columnOrder->Node : nullptr,
                 childOrder.Get(),
@@ -3965,6 +4018,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
 
             TExprNode::TPtr projectionArg = projectionLambda->Head().HeadPtr();
             TExprNode::TPtr projectionRoot = projectionLambda->TailPtr();
+            const TExprNode::TPtr originalProjectionRoot = originalResult->TailPtr();
 
             TVector<TString> inputAliases;
             TExprNode::TListType cleanedInputs;
@@ -4054,12 +4108,15 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
 
             RewriteAggsPartial(projectionRoot, projectionArg, aggId, ctx, optCtx, false);
-            auto projectionSubLinks = GatherSubLinks(projectionRoot);
+
+            auto [projectionSubLinks, originalProjectionSubLinks] =
+                GatherSubLinksWithOriginal(projectionRoot, originalProjectionRoot);
+
             if (!projectionSubLinks.empty()) {
                 std::tie(projectionRoot, list) = RewriteSubLinksPartial(
                     projectionLambda->Pos(), list,
                     projectionRoot, projectionArg,
-                    projectionSubLinks, inputAliases,
+                    projectionSubLinks, originalProjectionSubLinks, inputAliases,
                     cleanedInputs, ctx, optCtx, /*isYql=*/isYql);
             }
 
@@ -4101,13 +4158,18 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             TVector<TString> sublinkColumns;
             if (sort) {
                 auto sortLambdaRoot = sortLambda->TailPtr();
+                auto originalSortLambdaRoot = sortLambdaRoot;
+
                 RewriteAggsPartial(sortLambdaRoot, sortLambda->Head().HeadPtr(), aggId, ctx, optCtx, false);
 
-                auto sortSubLinks = GatherSubLinks(sortLambdaRoot);
+                auto [sortSubLinks, originalSortSubLinks] =
+                    GatherSubLinksWithOriginal(sortLambdaRoot, originalSortLambdaRoot);
+
                 if (!sortSubLinks.empty()) {
                     std::tie(sortLambdaRoot, list) = RewriteSubLinksPartial(
                         sortLambda->Pos(), list, sortLambdaRoot,
-                        sortLambda->Head().HeadPtr(), sortSubLinks,
+                        sortLambda->Head().HeadPtr(),
+                        sortSubLinks, originalSortSubLinks,
                         inputAliases, cleanedInputs, ctx, optCtx,
                         /*isYql=*/isYql, "_yql_extra_", &sublinkColumns);
                 }
@@ -4250,12 +4312,18 @@ TExprNode::TPtr ExpandPgSelect(const TExprNode::TPtr& node, TExprContext& ctx, T
     if (optCtx.Types != nullptr && optCtx.Types->IgnoreExpandPg) {
         return node;
     }
-    return ExpandPgSelectImpl(node, ctx, optCtx, Nothing(), {}, {});
+    return ExpandPgSelectImpl(node, /*originalNode=*/node, ctx, optCtx, Nothing(), {}, {});
 }
 
-TExprNode::TPtr ExpandPgSelectSublink(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx, ui32 subLinkId,
-    const TExprNode::TListType& outerInputs, const TVector<TString>& outerInputAliases) {
-    return ExpandPgSelectImpl(node, ctx, optCtx, subLinkId, outerInputs, outerInputAliases);
+TExprNode::TPtr ExpandPgSelectSublink(
+    const TExprNode::TPtr& node,
+    const TExprNode::TPtr& originalNode,
+    TExprContext& ctx,
+    TOptimizeContext& optCtx,
+    ui32 subLinkId,
+    const TExprNode::TListType& outerInputs,
+    const TVector<TString>& outerInputAliases) {
+    return ExpandPgSelectImpl(node, originalNode, ctx, optCtx, subLinkId, outerInputs, outerInputAliases);
 }
 
 TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

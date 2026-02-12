@@ -81,7 +81,6 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
     auto [it, newConsumer] = Consumers.try_emplace(consumerName, *this);
     auto& consumer = it->second;
     if (newConsumer) {
-        Cerr << (TStringBuilder() << ">>>>> DO rebuild" << Endl);
         consumer.Rebuild();
     }
 

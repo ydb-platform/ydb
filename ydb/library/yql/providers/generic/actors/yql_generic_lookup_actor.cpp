@@ -63,6 +63,8 @@ namespace NYql::NDq {
             NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator;
             ILookupRetryState::TPtr RetryState;
             TInstant SentTime;
+            size_t FullscanLimit = 0;
+            size_t ResultRows = 0;
         };
     } // namespace
 
@@ -173,6 +175,9 @@ namespace NYql::NDq {
         size_t GetMaxSupportedKeysInRequest() const override {
             return MaxKeysInRequest;
         }
+        size_t GetMaxSupportedFullscanRequest() const override {
+            return MaxSupportedFullscanRequest;
+        }
         void AsyncLookup(std::weak_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) override {
             auto guard = Guard(*Alloc);
             CreateRequest(request.lock());
@@ -280,7 +285,13 @@ namespace NYql::NDq {
 
         void Handle(TEvLookupRetry::TPtr ev) {
             auto guard = Guard(*Alloc);
-            SendRequest(std::move(ev->Get()->State));
+            auto state = std::move(ev->Get()->State);
+            if (IsMultiMatches) {
+                for (auto& [_, value]: *state->Request) {
+                    value = NUdf::TUnboxedValue();
+                }
+            }
+            SendRequest(std::move(state));
         }
 
         void Handle(NActors::TEvents::TEvPoison::TPtr) {
@@ -289,7 +300,7 @@ namespace NYql::NDq {
 
         void Handle(TEvLookupRequest::TPtr ev) {
             auto guard = Guard(*Alloc);
-            CreateRequest(ev->Get()->Request.lock());
+            CreateRequest(ev->Get()->Request.lock(), ev->Get()->FullscanLimit);
         }
 
         void HandleException(const std::exception& e) {
@@ -302,12 +313,13 @@ namespace NYql::NDq {
             return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
         }
 
-        void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) {
+        void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request, size_t fullscanLimit = 0) {
             if (!request) {
                 return;
             }
+            Y_DEBUG_ABORT_UNLESS(request->empty() == (fullscanLimit > 0));
             YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
-            Y_ABORT_IF(request->size() == 0 || request->size() > MaxKeysInRequest);
+            Y_ABORT_IF((request->empty() == (fullscanLimit == 0)) || request->size() > MaxKeysInRequest);
             if (Count) {
                 Count->Inc();
                 InFlight->Inc();
@@ -319,6 +331,7 @@ namespace NYql::NDq {
                 .Request = std::move(request),
                 .RetryState = RetryPolicy->CreateRetryState(),
                 .SentTime = TInstant::Now(),
+                .FullscanLimit = fullscanLimit
             });
             SendRequest(state);
         }
@@ -412,6 +425,7 @@ namespace NYql::NDq {
             }
 
             auto height = columns[0].size();
+            state->ResultRows += height;
             for (size_t i = 0; i != height; ++i) {
                 NUdf::TUnboxedValue* keyItems;
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(KeyType->GetMembersCount(), keyItems);
@@ -420,12 +434,20 @@ namespace NYql::NDq {
                 for (size_t j = 0; j != columns.size(); ++j) {
                     (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
                 }
-                if (auto* v = state->Request->FindPtr(key)) {
-                    if (IsMultiMatches) {
-                        *v = HolderFactory.CreateDirectListHolder((*v ? *NKikimr::NMiniKQL::GetDefaultListRepresentation(*v) : NKikimr::NMiniKQL::TDefaultListRepresentation{}).Append(std::move(output)));
-                    } else {
-                        *v = std::move(output); // duplicates will be overwritten
-                    }
+
+                NUdf::TUnboxedValue *v;
+                if (state->FullscanLimit > 0) {
+                    auto [it, _] = state->Request->emplace(key, NUdf::TUnboxedValue{});
+                    v = &(it->second);
+                } else if (auto it = state->Request->find(key); it != state->Request->end()) {
+                    v = &(it->second);
+                } else {
+                    continue;
+                }
+                if (IsMultiMatches) {
+                    *v = HolderFactory.CreateDirectListHolder((*v ? *NKikimr::NMiniKQL::GetDefaultListRepresentation(*v) : NKikimr::NMiniKQL::TDefaultListRepresentation{}).Append(std::move(output)));
+                } else {
+                    *v = std::move(output); // duplicates will be overwritten
                 }
             }
             if (CpuTime) {
@@ -440,11 +462,11 @@ namespace NYql::NDq {
             }
             --LocalInFlight;
             auto guard = Guard(*Alloc);
-            auto ev = new IDqAsyncLookupSource::TEvLookupResult(std::move(state->Request));
             if (AnswerTime) {
                 AnswerTime->Add((TInstant::Now() - state->SentTime).MilliSeconds());
                 InFlight->Dec();
             }
+            auto* ev = new IDqAsyncLookupSource::TEvLookupResult(std::move(state->Request), state->ResultRows, state->FullscanLimit);
             state.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
         }
@@ -460,6 +482,10 @@ namespace NYql::NDq {
             auto nextRetry = state->RetryState->GetNextRetryDelay(status);
             if (nextRetry && LocalInFlight) {
                 YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
+                if (state->FullscanLimit > 0) {
+                    state->ResultRows = 0;
+                    state->Request->clear();
+                }
                 auto ev = new TEvLookupRetry();
                 ev->State = std::move(state);
                 actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, ev));
@@ -504,7 +530,7 @@ namespace NYql::NDq {
             return result;
         }
 
-        void AddClause(NConnector::NApi::TPredicate::TDisjunction &disjunction, 
+        void AddClause(NConnector::NApi::TPredicate::TDisjunction &disjunction,
                        ui32 columnsCount, const NUdf::TUnboxedValue& keys) {
             NConnector::NApi::TPredicate::TConjunction& conjunction = *disjunction.mutable_operands()->Add()->mutable_conjunction();
             for (ui32 c = 0; c != columnsCount; ++c) {
@@ -532,6 +558,13 @@ namespace NYql::NDq {
             }
 
             select.mutable_from()->Settable(LookupSource.table());
+
+            if (state->FullscanLimit > 0) {
+                auto& limit = *select.mutable_limit();
+                limit.set_limit(state->FullscanLimit);
+                limit.set_offset(0);
+                return {};
+            }
 
             NConnector::NApi::TPredicate::TDisjunction disjunction;
             for (const auto& [keys, _] : *state->Request) {
@@ -572,6 +605,7 @@ namespace NYql::NDq {
         ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
+        static constexpr size_t MaxSupportedFullscanRequest = 1000; // todo: consider making tweakable
     };
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(

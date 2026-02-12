@@ -2,9 +2,9 @@
 
 ## Version 25.2 {#25-2}
 
-### Version 25.2.1.ent.2 {#24-2-1-ent-2}
+### Version 25.2.1.ent.4 {#24-2-1-ent-4}
 
-Release date: February 9, 2026.
+Release date: February 12, 2026.
 
 #### New Features
 
@@ -46,9 +46,9 @@ Release date: February 9, 2026.
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.4.ent.7 {#24-1-4-ent-7}
+### Version 25.1.4.ent.8 {#24-1-4-ent-8}
 
-Release date: January 13, 2026.
+Release date: February 12, 2026.
 
 #### Bug Fixes
 

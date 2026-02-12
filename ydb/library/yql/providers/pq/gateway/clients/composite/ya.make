@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/protobuf/interop
     library/cpp/threading/future
+    ydb/library/accessor
     ydb/library/actors/core
     ydb/library/services
     ydb/library/yql/dq/actors/compute

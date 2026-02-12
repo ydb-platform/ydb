@@ -1,5 +1,6 @@
 #include "yql_pq_composite_read_session.h"
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -144,7 +145,7 @@ private:
         if (counterId == PartitionsCountValue.GetCounterId()) {
             AllPartitionsStarted = static_cast<ui64>(value) == AmountPartitionsCount;
             Metrics.UpdatePendingPartitionsCount(value);
-            SRC_LOG_D("All partitions started: " << AllPartitionsStarted << ", AmountPartitionsCount: " << AmountPartitionsCount);
+            SRC_LOG_D("Partitions started: " << value << ", AmountPartitionsCount: " << AmountPartitionsCount);
         } else if (counterId == ReadTimeValue.GetCounterId()) {
             ExternalReadTime = TInstant::MilliSeconds(value);
             SRC_LOG_D("ExternalReadTime: " << *ExternalReadTime);
@@ -300,16 +301,8 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
             return ReadSession->Close(timeout);
         }
 
-        TInstant GetLastReadTime() const {
-            return LastReadTime;
-        }
-
-        bool HasEvent() const {
-            return LastEvent.has_value();
-        }
-
-        bool CheckEvent() const {
-            return LastEvent && Self->CanProcessEvent(Idx, *LastEvent);
+        bool IsIdle() const {
+            return !LastEvent && !WaitEvent().IsReady() && LastReadTime + Self->IdleTimeout >= TInstant::Now();
         }
 
         bool IsSuspended() const {
@@ -319,17 +312,22 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
         bool ReadEvent(const TReadSessionGetEventSettings& settings) {
             if (!LastEvent) {
                 LastEvent = ReadSession->GetEvent(settings);
+
                 if (LastEvent) {
                     LastReadTime = TInstant::Now();
+                } else {
+                    return false;
                 }
             }
-            return CheckEvent();
+
+            return !IsSuspended();
         }
 
         TReadSessionEvent::TEvent ExtractEvent() {
             Y_VALIDATE(LastEvent, "Unexpected extract event call");
             auto event = std::move(*LastEvent);
             LastEvent = std::nullopt;
+            HasProcessedEvents = HasProcessedEvents || std::holds_alternative<TReadSessionEvent::TDataReceivedEvent>(event);
             return event;
         }
 
@@ -339,6 +337,7 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
         std::shared_ptr<IReadSession> ReadSession;
         std::optional<TReadSessionEvent::TEvent> LastEvent;
         TInstant LastReadTime;
+        YDB_READONLY(bool, HasProcessedEvents, false);
     };
 
 public:
@@ -527,21 +526,21 @@ public:
             }
         }
 
-        if (ReadyReadSessionIdx && !ReadSessions[*ReadyReadSessionIdx].CheckEvent()) {
+        if (ReadyReadSessionIdx && ReadSessions[*ReadyReadSessionIdx].IsSuspended()) {
             ReadyReadSessionIdx.reset();
         }
     }
 
     TInstant GetReadTime() final {
         if (IdleTimeout) {
-            const auto now = TInstant::Now();
             while (!PartitionsReadTimeSet.empty()) {
                 const auto it = PartitionsReadTimeSet.begin();
-                const auto& readSession = ReadSessions[it->second];
-                if (readSession.HasEvent() || readSession.WaitEvent().IsReady() || readSession.GetLastReadTime() + IdleTimeout >= now) {
+                const auto idx = it->second;
+                if (!ReadSessions[idx].IsIdle()) {
                     break;
                 }
 
+                PartitionsReadTime[idx] = TInstant::Max(); // Guaranty that next event will be processed
                 PartitionsReadTimeSet.erase(it);
             }
         }
@@ -574,10 +573,16 @@ private:
     }
 
     bool CanProcessEvent(ui64 idx, const TReadSessionEvent::TEvent& event) {
-        if (std::holds_alternative<TReadSessionEvent::TDataReceivedEvent>(event)) {
-            return PartitionsReadTime[idx] <= ExternalReadTime + MaxPartitionReadSkew;
+        if (!std::holds_alternative<TReadSessionEvent::TDataReceivedEvent>(event)) {
+            return true;
         }
-        return true;
+
+        if (const auto readTime = PartitionsReadTime[idx]) {
+            return readTime <= ExternalReadTime + MaxPartitionReadSkew;
+        }
+
+        // If session is not initialized yet and we already sent one event, we should wait AdvancePartitionTime call
+        return !ReadSessions[idx].GetHasProcessedEvents();
     }
 
     const TString SessionId;

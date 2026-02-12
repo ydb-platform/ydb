@@ -340,10 +340,15 @@ public:
             if (const auto maxPartitionReadSkew = NProtoInterop::CastFromProto(SourceParams.GetMaxPartitionReadSkew())) {
                 YQL_ENSURE(InfoAggregator, "Missing DQ info aggregator for distributed read session");
 
+                ui64 amountPartitions = 0;
+                for (const auto& cluster : Clusters) {
+                    amountPartitions += cluster.PartitionsCount;
+                }
+
                 std::tie(clusterState.ReadSession, clusterState.ReadSessionControl) = CreateCompositeTopicReadSession(ActorContext(), GetTopicClient(clusterState), {
                     .TxId = TxId,
                     .TaskId = TaskId,
-                    .AmountPartitionsCount = TopicPartitionsCount,
+                    .AmountPartitionsCount = amountPartitions,
                     .Counters = Metrics.Task,
                     .BaseSettings = GetReadSessionSettings(clusterState),
                     .IdleTimeout = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetIdleTimeoutUs()),

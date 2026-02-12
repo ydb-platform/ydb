@@ -332,7 +332,7 @@ private:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    struct MetricGauge {
+    struct TMetricGauge {
         std::uint64_t MetricCount = 0;
         std::uint64_t Sum = 0;
 
@@ -341,12 +341,12 @@ private:
         void Clear();
     };
 
-    struct Metrics {
-        Metrics(TKeyedWriteSession* session);
+    struct TMetrics {
+        TMetrics(TKeyedWriteSession* session);
 
-        MetricGauge MainWorkerTimeMs;
-        MetricGauge CycleTimeMs;
-        MetricGauge WriteLagMs;
+        TMetricGauge MainWorkerTimeMs;
+        TMetricGauge CycleTimeMs;
+        TMetricGauge WriteLagMs;
         std::mutex Lock;
         TKeyedWriteSession* Session;
 
@@ -410,7 +410,7 @@ private:
     std::shared_ptr<TTopicClient::TImpl> Client;
     TDbDriverStatePtr DbDriverState;
 
-    Metrics Metrics;
+    TMetrics Metrics;
 
     std::unordered_map<std::uint32_t, TPartitionInfo> Partitions;
     std::map<std::string, std::uint64_t> PartitionsIndex;
@@ -445,7 +445,6 @@ private:
     std::atomic<size_t> Epoch = 0;
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
 
-    std::vector<TEventsWorker::EEventType> EventTypesWithoutHandlers;
     std::vector<TEventsWorker::EEventType> EventTypesWithHandlers;
 };
 

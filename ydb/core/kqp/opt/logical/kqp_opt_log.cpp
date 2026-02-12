@@ -52,7 +52,7 @@ public:
         AddHandler(0, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup));
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
         AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
-        AddHandler(0, &TCoTopSort::Match, HNDL(RewriteFlatMapOverFullTextRelevance));
+        AddHandler(0, &TCoTopBase::Match, HNDL(PushLimitOverFullText));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
 
         AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
@@ -247,18 +247,18 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextRelevance(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        auto output = KqpRewriteFlatMapOverFullTextRelevance(node, ctx, KqpCtx, *getParents());
+    TMaybeNode<TExprBase> PushLimitOverFullText(TExprBase node, TExprContext& ctx) {
+        auto output = KqpPushLimitOverFullText(node, ctx);
         if (!output.IsValid()) {
             return {};
         }
 
-        DumpAppliedRule("RewriteFlatMapOverFullTextRelevance", node.Ptr(), output.Cast().Ptr(), ctx);
+        DumpAppliedRule("PushLimitOverFullText", node.Ptr(), output.Cast().Ptr(), ctx);
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextMatch(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx, *getParents());
+    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextMatch(TExprBase node, TExprContext& ctx) {
+        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx);
         if (!output.IsValid()) {
             return {};
         }

@@ -841,6 +841,44 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
 
+    // Test: Multi-table writes with standalone COMMIT_TX (TPCC-like scenario)
+    // Breaker writes to multiple tables in separate queries, then uses breakerTx->Commit() (QUERY_ACTION_COMMIT_TX)
+    // This is different from CommitTx() on the last query (QUERY_ACTION_EXECUTE_PREPARED with commit flag)
+    Y_UNIT_TEST(ManyUpsertsStandaloneCommit) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        for (int i = 1; i <= 6; ++i) {
+            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
+            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
+        }
+
+        const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
+        const TString victimSelectTable3 = "SELECT * FROM `/Root/Tenant1/Table3` WHERE Key = 1u";
+        const TString victimUpdateTable4 = "UPDATE `/Root/Tenant1/Table4` SET Value = \"VictimUpdate\" WHERE Key = 1u";
+        const TString breakerUpdateTable2 = "UPDATE `/Root/Tenant1/Table2` SET Value = \"BreakerUpdate2\" WHERE Key = 1u";
+        const TString breakerUpdateTable5 = "UPDATE `/Root/Tenant1/Table5` SET Value = \"BreakerUpdate5\" WHERE Key = 1u";
+        const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
+
+        // Victim: read tables 1,2,3, then update table 4 (without commit)
+        auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
+        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
+
+        // Breaker: update tables 5,2,6, then standalone COMMIT_TX (no query, just commit)
+        auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
+        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx)).GetValueSync());
+        // Standalone COMMIT_TX (QUERY_ACTION_COMMIT_TX, unlike CommitTx() which is QUERY_ACTION_EXECUTE_PREPARED)
+        NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
+
+        auto [status, issues] = CommitTxWithIssues(victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
+    }
+
     // Test: Victim reads key 1, breaker writes key 1, victim writes key 2
     Y_UNIT_TEST(DifferentKeys) {
         TStringStream ss;
@@ -1132,6 +1170,42 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto breakerTx = BeginTx(*ctx.BreakerSession, breakerUpdateTable5);
         NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
         NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+
+        auto [status, issues] = CommitTxWithIssues(victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
+    }
+
+    // Test: 2-node version of ManyUpsertsStandaloneCommit
+    Y_UNIT_TEST(ManyUpsertsStandaloneCommit2Node) {
+        TStringStream ss;
+        TTli2NodeTestContext ctx(ss);
+        for (int i = 1; i <= 6; ++i) {
+            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
+            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
+        }
+
+        const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
+        const TString victimSelectTable3 = "SELECT * FROM `/Root/Tenant1/Table3` WHERE Key = 1u";
+        const TString victimUpdateTable4 = "UPDATE `/Root/Tenant1/Table4` SET Value = \"VictimUpdate\" WHERE Key = 1u";
+        const TString breakerUpdateTable2 = "UPDATE `/Root/Tenant1/Table2` SET Value = \"BreakerUpdate2\" WHERE Key = 1u";
+        const TString breakerUpdateTable5 = "UPDATE `/Root/Tenant1/Table5` SET Value = \"BreakerUpdate5\" WHERE Key = 1u";
+        const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
+
+        // Victim: read tables 1,2,3, then update table 4 (without commit)
+        auto victimTx = BeginReadTx(*ctx.VictimSession, victimSelectTable1);
+        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
+
+        // Breaker: update tables 5,2,6, then standalone COMMIT_TX (no query, just commit)
+        auto breakerTx = BeginTx(*ctx.BreakerSession, breakerUpdateTable5);
+        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx)).GetValueSync());
+        // Standalone COMMIT_TX (QUERY_ACTION_COMMIT_TX)
+        NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);

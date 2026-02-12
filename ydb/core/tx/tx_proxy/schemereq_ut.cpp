@@ -246,7 +246,8 @@ NYdb::NDiscovery::TDiscoveryClient CreateDiscoveryClient(const TTestEnv& env, co
 }
 
 auto RetryableGetQueryClientSession(NYdb::NQuery::TQueryClient&& client) {
-    while (true) {
+    size_t retriesCount = 0;
+    while (retriesCount++ < 10) {
         auto settings = NYdb::NQuery::TCreateSessionSettings()
             .ClientTimeout(TDuration::Seconds(30));
         auto sessionResult = client.GetSession(settings).ExtractValueSync();
@@ -258,6 +259,9 @@ auto RetryableGetQueryClientSession(NYdb::NQuery::TQueryClient&& client) {
             return sessionResult.GetSession();
         }
     }
+
+    UNIT_ASSERT_C(false, "Too many retries for creating session");
+    Y_UNREACHABLE();
 }
 
 void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& name, const TString& token) {

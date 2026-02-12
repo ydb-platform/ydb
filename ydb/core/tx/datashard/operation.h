@@ -768,7 +768,7 @@ public:
     }
     virtual ui64 LockTxId() const { return 0; }
     virtual ui32 LockNodeId() const { return 0; }
-    virtual ui64 QueryTraceId() const { return 0; }
+    virtual ui64 QuerySpanId() const { return 0; }
     virtual bool HasLockedWrites() const { return false; }
 
     ////////////////////////////////////////

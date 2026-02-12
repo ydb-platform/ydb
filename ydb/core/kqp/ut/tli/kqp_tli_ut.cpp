@@ -207,18 +207,18 @@ namespace {
         return value.empty() ? std::nullopt : std::make_optional(FromString<ui64>(value));
     }
 
-    std::optional<ui64> ExtractCurrentQueryTraceId(const TString& logs, const TString& component, const TString& messagePattern) {
+    std::optional<ui64> ExtractCurrentQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern) {
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            return ExtractNumericField(record, "CurrentQueryTraceId");
+            return ExtractNumericField(record, "CurrentQuerySpanId");
         }
         return std::nullopt;
     }
 
 
-    std::optional<ui64> ExtractBreakerQueryTraceId(const TString& logs, const TString& component, const TString& messagePattern,
+    std::optional<ui64> ExtractBreakerQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern,
         const std::optional<TString>& expectedBreakerQueryText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
@@ -231,14 +231,14 @@ namespace {
                     continue;
                 }
             }
-            return ExtractNumericField(record, "BreakerQueryTraceId");
+            return ExtractNumericField(record, "BreakerQuerySpanId");
         }
         return std::nullopt;
     }
 
 
 
-    std::optional<ui64> ExtractVictimQueryTraceId(const TString& logs, const TString& component, const TString& messagePattern,
+    std::optional<ui64> ExtractVictimQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern,
         const std::optional<TString>& expectedVictimQueryText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
@@ -251,24 +251,25 @@ namespace {
                     continue;
                 }
             }
-            return ExtractNumericField(record, "VictimQueryTraceId");
+            return ExtractNumericField(record, "VictimQuerySpanId");
         }
         return std::nullopt;
     }
 
-    std::optional<std::vector<ui64>> ExtractVictimQueryTraceIds(const TString& logs, const TString& component, const TString& messagePattern) {
+    std::optional<std::vector<ui64>> ExtractVictimQuerySpanIds(const TString& logs, const TString& component, const TString& messagePattern) {
         std::vector<ui64> result;
         bool foundField = false;
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            const size_t idsPos = record.find("VictimQueryTraceIds: [");
+            static constexpr TStringBuf victimIdsPrefix = "VictimQuerySpanIds: [";
+            const size_t idsPos = record.find(victimIdsPrefix);
             if (idsPos == TString::npos) {
                 continue;
             }
             foundField = true;
-            const size_t listStart = idsPos + 22;
+            const size_t listStart = idsPos + victimIdsPrefix.size();
             const size_t listEnd = record.find(']', listStart);
             if (listEnd == TString::npos) {
                 continue;
@@ -280,7 +281,7 @@ namespace {
         return foundField ? std::make_optional(result) : std::nullopt;
     }
 
-    std::optional<std::vector<ui64>> ExtractVictimQueryTraceIdOccurrences(
+    std::optional<std::vector<ui64>> ExtractVictimQuerySpanIdOccurrences(
         const TString& logs,
         const TString& component,
         const TString& messagePattern)
@@ -290,7 +291,7 @@ namespace {
             if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            auto value = ExtractNumericField(record, "VictimQueryTraceId");
+            auto value = ExtractNumericField(record, "VictimQuerySpanId");
             if (value) {
                 result.push_back(*value);
             }
@@ -334,27 +335,27 @@ namespace {
         std::optional<TString> VictimQueryTexts;
         std::optional<TString> BreakerQueryText;
         std::optional<TString> VictimQueryText;
-        std::optional<ui64> BreakerSessionBreakerQueryTraceId;
-        std::optional<ui64> BreakerShardBreakerQueryTraceId;
-        std::optional<std::vector<ui64>> BreakerShardVictimQueryTraceIds;
+        std::optional<ui64> BreakerSessionBreakerQuerySpanId;
+        std::optional<ui64> BreakerShardBreakerQuerySpanId;
+        std::optional<std::vector<ui64>> BreakerShardVictimQuerySpanIds;
 
-        std::optional<ui64> VictimSessionCurrentQueryTraceId;
-        std::optional<ui64> VictimShardCurrentQueryTraceId;
-        std::optional<ui64> VictimSessionVictimQueryTraceId;
-        std::optional<ui64> VictimShardVictimQueryTraceId;
-        std::optional<std::vector<ui64>> VictimSessionVictimQueryTraceIdOccurrences;
+        std::optional<ui64> VictimSessionCurrentQuerySpanId;
+        std::optional<ui64> VictimShardCurrentQuerySpanId;
+        std::optional<ui64> VictimSessionVictimQuerySpanId;
+        std::optional<ui64> VictimShardVictimQuerySpanId;
+        std::optional<std::vector<ui64>> VictimSessionVictimQuerySpanIdOccurrences;
 
         bool FoundBreakerRecordInDatashard = false;
-        std::optional<std::vector<ui64>> MatchingDsBreakerVictimQueryTraceIds;
+        std::optional<std::vector<ui64>> MatchingDsBreakerVictimQuerySpanIds;
         bool FoundVictimRecordInDatashard = false;
     };
 
     std::pair<bool, std::optional<std::vector<ui64>>> ExtractMatchingFromBreakerDatashard(
         const TString& logs,
         const TString& messagePattern,
-        std::optional<ui64> breakerQueryTraceIdFromKQP)
+        std::optional<ui64> breakerQuerySpanIdFromKQP)
     {
-        if (!breakerQueryTraceIdFromKQP) {
+        if (!breakerQuerySpanIdFromKQP) {
             return {false, std::nullopt};
         }
 
@@ -362,12 +363,13 @@ namespace {
             if (!record.Contains("Component: DataShard") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            auto breakerQueryTraceId = ExtractNumericField(record, "BreakerQueryTraceId");
-            if (breakerQueryTraceId && *breakerQueryTraceId == *breakerQueryTraceIdFromKQP) {
+            auto breakerQuerySpanId = ExtractNumericField(record, "BreakerQuerySpanId");
+            if (breakerQuerySpanId && *breakerQuerySpanId == *breakerQuerySpanIdFromKQP) {
                 std::optional<std::vector<ui64>> matchingVictimIds;
-                const size_t idsPos = record.find("VictimQueryTraceIds: [");
+                static constexpr TStringBuf victimIdsPrefix = "VictimQuerySpanIds: [";
+                const size_t idsPos = record.find(victimIdsPrefix);
                 if (idsPos != TString::npos) {
-                    const size_t listStart = idsPos + 22;
+                    const size_t listStart = idsPos + victimIdsPrefix.size();
                     const size_t listEnd = record.find(']', listStart);
                     if (listEnd != TString::npos) {
                         matchingVictimIds.emplace();
@@ -385,17 +387,17 @@ namespace {
     bool CheckMatchingInVictimDatashard(
         const TString& logs,
         const TString& messagePattern,
-        std::optional<ui64> victimQueryTraceIdFromKQP)
+        std::optional<ui64> victimQuerySpanIdFromKQP)
     {
-        if (!victimQueryTraceIdFromKQP) {
+        if (!victimQuerySpanIdFromKQP) {
             return false;
         }
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: DataShard") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            auto victimQueryTraceId = ExtractNumericField(record, "VictimQueryTraceId");
-            if (victimQueryTraceId && *victimQueryTraceId == *victimQueryTraceIdFromKQP) {
+            auto victimQuerySpanId = ExtractNumericField(record, "VictimQuerySpanId");
+            if (victimQuerySpanId && *victimQuerySpanId == *victimQuerySpanIdFromKQP) {
                 return true;
             }
         }
@@ -411,21 +413,21 @@ namespace {
         data.VictimQueryTexts = ExtractVictimQueryTexts(logs, patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
         data.BreakerQueryText = ExtractQueryText(logs, patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
         data.VictimQueryText = ExtractVictimQueryText(logs, patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
-        data.BreakerSessionBreakerQueryTraceId = ExtractBreakerQueryTraceId(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
-        data.BreakerShardBreakerQueryTraceId = ExtractBreakerQueryTraceId(logs, "DataShard", patterns.BreakerDatashardMessage);
-        data.BreakerShardVictimQueryTraceIds = ExtractVictimQueryTraceIds(logs, "DataShard", patterns.BreakerDatashardMessage);
-        data.VictimSessionCurrentQueryTraceId = ExtractCurrentQueryTraceId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
-        data.VictimShardCurrentQueryTraceId = ExtractCurrentQueryTraceId(logs, "DataShard", patterns.VictimDatashardMessage);
-        data.VictimSessionVictimQueryTraceId = ExtractVictimQueryTraceId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
-        data.VictimShardVictimQueryTraceId = ExtractVictimQueryTraceId(logs, "DataShard", patterns.VictimDatashardMessage);
-        data.VictimSessionVictimQueryTraceIdOccurrences = ExtractVictimQueryTraceIdOccurrences(
+        data.BreakerSessionBreakerQuerySpanId = ExtractBreakerQuerySpanId(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
+        data.BreakerShardBreakerQuerySpanId = ExtractBreakerQuerySpanId(logs, "DataShard", patterns.BreakerDatashardMessage);
+        data.BreakerShardVictimQuerySpanIds = ExtractVictimQuerySpanIds(logs, "DataShard", patterns.BreakerDatashardMessage);
+        data.VictimSessionCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
+        data.VictimShardCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
+        data.VictimSessionVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
+        data.VictimShardVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
+        data.VictimSessionVictimQuerySpanIdOccurrences = ExtractVictimQuerySpanIdOccurrences(
             logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
 
-        auto [foundBreaker, matchingVictimIds] = ExtractMatchingFromBreakerDatashard(logs, patterns.BreakerDatashardMessage, data.BreakerSessionBreakerQueryTraceId);
+        auto [foundBreaker, matchingVictimIds] = ExtractMatchingFromBreakerDatashard(logs, patterns.BreakerDatashardMessage, data.BreakerSessionBreakerQuerySpanId);
         data.FoundBreakerRecordInDatashard = foundBreaker;
-        data.MatchingDsBreakerVictimQueryTraceIds = matchingVictimIds;
+        data.MatchingDsBreakerVictimQuerySpanIds = matchingVictimIds;
 
-        data.FoundVictimRecordInDatashard = CheckMatchingInVictimDatashard(logs, patterns.VictimDatashardMessage, data.VictimSessionVictimQueryTraceId);
+        data.FoundVictimRecordInDatashard = CheckMatchingInVictimDatashard(logs, patterns.VictimDatashardMessage, data.VictimSessionVictimQuerySpanId);
 
         return data;
     }
@@ -436,25 +438,25 @@ namespace {
         const TString& victimQueryText,
         const std::optional<TString>& victimExtraQueryText = std::nullopt)
     {
-        // ==================== QueryTraceId Linkage Assertions ====================
+        // ==================== QuerySpanId Linkage Assertions ====================
 
-        UNIT_ASSERT_C(data.BreakerSessionBreakerQueryTraceId, "breaker SessionActor BreakerQueryTraceId should be present");
-        UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceId, "victim SessionActor VictimQueryTraceId should be present");
+        UNIT_ASSERT_C(data.BreakerSessionBreakerQuerySpanId, "breaker SessionActor BreakerQuerySpanId should be present");
+        UNIT_ASSERT_C(data.VictimSessionVictimQuerySpanId, "victim SessionActor VictimQuerySpanId should be present");
 
-        // 1. DS Breaker ↔ KQP Breaker: Find the DataShard breaker record matching the SessionActor's BreakerQueryTraceId
+        // 1. DS Breaker ↔ KQP Breaker: Find the DataShard breaker record matching the SessionActor's BreakerQuerySpanId
         UNIT_ASSERT_C(data.FoundBreakerRecordInDatashard,
-            "SessionActor BreakerQueryTraceId should exist in some DataShard breaker record");
+            "SessionActor BreakerQuerySpanId should exist in some DataShard breaker record");
 
-        // 2. DS Victim ↔ KQP Victim: Find the DataShard victim record matching the SessionActor's VictimQueryTraceId
+        // 2. DS Victim ↔ KQP Victim: Find the DataShard victim record matching the SessionActor's VictimQuerySpanId
         UNIT_ASSERT_C(data.FoundVictimRecordInDatashard,
-            "SessionActor VictimQueryTraceId should exist in some DataShard victim record");
+            "SessionActor VictimQuerySpanId should exist in some DataShard victim record");
 
-        // 3. DS Breaker ↔ DS Victim: The matching DataShard breaker record should contain the VictimQueryTraceId
-        UNIT_ASSERT_C(data.MatchingDsBreakerVictimQueryTraceIds.has_value(), "matching DataShard breaker record should have VictimQueryTraceIds");
-        bool victimInBreaker = std::find(data.MatchingDsBreakerVictimQueryTraceIds->begin(), data.MatchingDsBreakerVictimQueryTraceIds->end(),
-            *data.VictimSessionVictimQueryTraceId) != data.MatchingDsBreakerVictimQueryTraceIds->end();
+        // 3. DS Breaker ↔ DS Victim: The matching DataShard breaker record should contain the VictimQuerySpanId
+        UNIT_ASSERT_C(data.MatchingDsBreakerVictimQuerySpanIds.has_value(), "matching DataShard breaker record should have VictimQuerySpanIds");
+        bool victimInBreaker = std::find(data.MatchingDsBreakerVictimQuerySpanIds->begin(), data.MatchingDsBreakerVictimQuerySpanIds->end(),
+            *data.VictimSessionVictimQuerySpanId) != data.MatchingDsBreakerVictimQuerySpanIds->end();
         UNIT_ASSERT_C(victimInBreaker,
-            "victim VictimQueryTraceId should be in matching DataShard breaker's VictimQueryTraceIds");
+            "victim VictimQuerySpanId should be in matching DataShard breaker's VictimQuerySpanIds");
 
         // Query text assertions
         UNIT_ASSERT_C(data.BreakerQueryTexts && data.BreakerQueryTexts->Contains(breakerQueryText),
@@ -606,9 +608,9 @@ namespace {
         return {result.GetStatus(), result.GetIssues().ToString()};
     }
 
-    // Extract VictimQueryTraceId from issue message
-    std::optional<ui64> ExtractVictimQueryTraceIdFromIssue(const TString& issues) {
-        const TString prefix = "VictimQueryTraceId: ";
+    // Extract VictimQuerySpanId from issue message
+    std::optional<ui64> ExtractVictimQuerySpanIdFromIssue(const TString& issues) {
+        const TString prefix = "VictimQuerySpanId: ";
         size_t pos = issues.find(prefix);
         if (pos == TString::npos) {
             return std::nullopt;
@@ -658,14 +660,14 @@ namespace {
     void VerifyTliIssueContent(const TString& issues) {
         UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
             "Issue should contain 'Transaction locks invalidated': " << issues);
-        UNIT_ASSERT_C(!issues.Contains("BreakerQueryTraceId:"),
-            "Issue should NOT contain 'BreakerQueryTraceId:': " << issues);
+        UNIT_ASSERT_C(!issues.Contains("BreakerQuerySpanId:"),
+            "Issue should NOT contain 'BreakerQuerySpanId:': " << issues);
 
-        auto victimQueryTraceId = ExtractVictimQueryTraceIdFromIssue(issues);
-        UNIT_ASSERT_C(victimQueryTraceId.has_value(),
-            "Issue should contain 'VictimQueryTraceId:': " << issues);
-        UNIT_ASSERT_C(*victimQueryTraceId != 0,
-            "VictimQueryTraceId should not be 0: " << issues);
+        auto victimQuerySpanId = ExtractVictimQuerySpanIdFromIssue(issues);
+        UNIT_ASSERT_C(victimQuerySpanId.has_value(),
+            "Issue should contain 'VictimQuerySpanId:': " << issues);
+        UNIT_ASSERT_C(*victimQuerySpanId != 0,
+            "VictimQuerySpanId should not be 0: " << issues);
     }
 
     void VerifyTliIssueAndLogs(
@@ -686,12 +688,12 @@ namespace {
         const auto data = ExtractAllTliData(ss.Str(), patterns, breakerQueryText, victimQueryText);
         AssertCommonTliAsserts(data, breakerQueryText, victimQueryText, victimExtraQueryText);
 
-        auto victimQueryTraceId = ExtractVictimQueryTraceIdFromIssue(issues);
-        UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceIdOccurrences.has_value(),
-            "victim SessionActor VictimQueryTraceId should be present");
-        const auto& occurrences = *data.VictimSessionVictimQueryTraceIdOccurrences;
-        UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), *victimQueryTraceId) != occurrences.end(),
-            "VictimQueryTraceId should match between issue and victim SessionActor log");
+        auto victimQuerySpanId = ExtractVictimQuerySpanIdFromIssue(issues);
+        UNIT_ASSERT_C(data.VictimSessionVictimQuerySpanIdOccurrences.has_value(),
+            "victim SessionActor VictimQuerySpanId should be present");
+        const auto& occurrences = *data.VictimSessionVictimQuerySpanIdOccurrences;
+        UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), *victimQuerySpanId) != occurrences.end(),
+            "VictimQuerySpanId should match between issue and victim SessionActor log");
 
         AssertTliRecordCounts(ss.Str(), patterns, expectedBreakerCount, expectedVictimCount);
     }
@@ -703,14 +705,14 @@ namespace {
         UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
             "Issue should contain 'Transaction locks invalidated': " << issues);
 
-        // BreakerQueryTraceId should NOT be present in the issue
-        UNIT_ASSERT_C(!issues.Contains("BreakerQueryTraceId:"),
-            "Issue should NOT contain 'BreakerQueryTraceId:': " << issues);
+        // BreakerQuerySpanId should NOT be present in the issue
+        UNIT_ASSERT_C(!issues.Contains("BreakerQuerySpanId:"),
+            "Issue should NOT contain 'BreakerQuerySpanId:': " << issues);
 
-        auto victimQueryTraceId = ExtractVictimQueryTraceIdFromIssue(issues);
+        auto victimQuerySpanId = ExtractVictimQuerySpanIdFromIssue(issues);
 
-        UNIT_ASSERT_C(!victimQueryTraceId.has_value(),
-            "Issue should not contain 'VictimQueryTraceId:' when TLI logs are disabled: " << issues);
+        UNIT_ASSERT_C(!victimQuerySpanId.has_value(),
+            "Issue should not contain 'VictimQuerySpanId:' when TLI logs are disabled: " << issues);
 
         UNIT_ASSERT_C(ss.Str().find("TLI INFO") == TString::npos,
             "no TLI INFO logs expected when TLI logs are disabled");
@@ -946,8 +948,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     }
 
     // Test: Two victims on two different tables, one breaker writes to both tables.
-    // The breaker's SessionActor should emit two TLI log entries with different BreakerQueryTraceIds,
-    // each matching the corresponding DataShard's BreakerQueryTraceId.
+    // The breaker's SessionActor should emit two TLI log entries with different BreakerQuerySpanIds,
+    // each matching the corresponding DataShard's BreakerQuerySpanId.
     Y_UNIT_TEST(TwoVictimsOneBreaker) {
         TStringStream ss;
         TTliTestContext ctx(ss);
@@ -1107,7 +1109,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     }
 
     // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
-    // Tests that BreakerQueryTraceId and VictimQueryTraceId linkage is maintained even with
+    // Tests that BreakerQuerySpanId and VictimQuerySpanId linkage is maintained even with
     // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).
     Y_UNIT_TEST(ConcurrentUpsertSelect) {
         TStringStream ss;

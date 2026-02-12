@@ -80,12 +80,12 @@ public:
     struct TPhysicalTxData : private TMoveOnly {
         TKqpPhyTxHolder::TConstPtr Body;
         NKikimr::NKqp::TQueryData::TPtr Params;
-        ui64 QueryTraceId = 0;  // Original query's trace ID for lock-breaking attribution
+        ui64 QuerySpanId = 0;  // Original query's trace ID for lock-breaking attribution
 
-        TPhysicalTxData(const TKqpPhyTxHolder::TConstPtr& body, const TQueryData::TPtr& params, ui64 queryTraceId = 0)
+        TPhysicalTxData(const TKqpPhyTxHolder::TConstPtr& body, const TQueryData::TPtr& params, ui64 querySpanId = 0)
             : Body(body)
             , Params(params)
-            , QueryTraceId(queryTraceId) {}
+            , QuerySpanId(querySpanId) {}
     };
 
     struct TKqpSnapshot {
@@ -168,11 +168,11 @@ public:
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
         TString UserTraceId;
-        ui64 QueryTraceId = 0;  // QueryTraceId of the current query being executed
-        // QueryTraceId of the first query in this transaction. Passed to DataShard during commit
+        ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
+        // QuerySpanId of the first query in this transaction. Passed to DataShard during commit
         // so it can attribute lock breaks to the original victim query in deferred lock scenarios,
         // where the conflicting write happened between the first SELECT and the commit.
-        ui64 FirstQueryTraceId = 0;
+        ui64 FirstQuerySpanId = 0;
 
         NTopic::TTopicOperations TopicOperations;
 

@@ -318,8 +318,8 @@ public:
         record.SetLockMode(!isUniqueCheck
             ? Settings.LockMode
             : NKikimrDataEvents::OPTIMISTIC);
-        if (Settings.QueryTraceId) {
-            record.SetQueryTraceId(Settings.QueryTraceId);
+        if (Settings.QuerySpanId) {
+            record.SetQuerySpanId(Settings.QuerySpanId);
         }
 
         AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
@@ -418,10 +418,10 @@ public:
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
             Settings.TxManager->SetError(shardId);
-            // Store the broken lock's QueryTraceId for TLI logging
+            // Store the broken lock's QuerySpanId for TLI logging
             for (const auto& brokenLock : record.GetBrokenTxLocks()) {
-                if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
-                    Settings.TxManager->SetVictimQueryTraceId(brokenLock.GetQueryTraceId());
+                if (brokenLock.HasQuerySpanId() && brokenLock.GetQuerySpanId() != 0) {
+                    Settings.TxManager->SetVictimQuerySpanId(brokenLock.GetQuerySpanId());
                     break;
                 }
             }
@@ -433,9 +433,9 @@ public:
                     TStringBuilder builder;
                     builder << "Transaction locks invalidated. Table: `"
                         << lookupState.Worker->GetTablePath() << "`.";
-                    auto victimId = Settings.TxManager->GetVictimQueryTraceId();
+                    auto victimId = Settings.TxManager->GetVictimQuerySpanId();
                     if (victimId && *victimId != 0) {
-                        builder << " VictimQueryTraceId: " << *victimId << ".";
+                        builder << " VictimQuerySpanId: " << *victimId << ".";
                     }
                     message = builder;
                 }
@@ -448,9 +448,9 @@ public:
         for (const auto& lock : record.GetTxLocks()) {
             if (!Settings.TxManager->AddLock(shardId, lock)) {
                 YQL_ENSURE(Settings.TxManager->BrokenLocks());
-                // Store the broken lock's QueryTraceId for TLI logging
-                if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                    Settings.TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
+                // Store the broken lock's QuerySpanId for TLI logging
+                if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
+                    Settings.TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
                 }
                 TString message;
                 if (auto lockIssue = Settings.TxManager->GetLockIssue()) {

@@ -38,7 +38,7 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
-        ui64 VictimQueryTraceId = 0;
+        ui64 VictimQuerySpanId = 0;
 
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
@@ -61,7 +61,7 @@ public:
     virtual bool MayAddLock(ui64 lockId) = 0;
 
     // Persist adding/removing a lock info
-    virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 victimQueryTraceId = 0) = 0;
+    virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 victimQuerySpanId = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
@@ -253,12 +253,12 @@ inline bool operator!(ELockConflictFlags c) { return ELockConflictFlagsRaw(c) ==
 
 struct TConflictLockInfo {
     ELockConflictFlags Flags = ELockConflictFlags::None;
-    ui64 BreakerQueryTraceId = 0;
+    ui64 BreakerQuerySpanId = 0;
 
     TConflictLockInfo() = default;
-    TConflictLockInfo(ELockConflictFlags flags, ui64 breakerQueryTraceId = 0)
+    TConflictLockInfo(ELockConflictFlags flags, ui64 breakerQuerySpanId = 0)
         : Flags(flags)
-        , BreakerQueryTraceId(breakerQueryTraceId)
+        , BreakerQuerySpanId(breakerQuerySpanId)
     {}
 };
 
@@ -353,8 +353,8 @@ public:
 
     ui64 GetLockId() const { return LockId; }
     ui32 GetLockNodeId() const { return LockNodeId; }
-    ui64 GetVictimQueryTraceId() const { return VictimQueryTraceId; }
-    void SetVictimQueryTraceId(ui64 victimQueryTraceId) { VictimQueryTraceId = victimQueryTraceId; }
+    ui64 GetVictimQuerySpanId() const { return VictimQuerySpanId; }
+    void SetVictimQuerySpanId(ui64 victimQuerySpanId) { VictimQuerySpanId = victimQuerySpanId; }
 
     TInstant GetCreationTime() const { return CreationTime; }
 
@@ -372,7 +372,7 @@ public:
 
     bool PersistRanges(ILocksDb* db);
 
-    bool AddConflict(TLockInfo* otherLock, ILocksDb* db, ui64 breakerQueryTraceId = 0);
+    bool AddConflict(TLockInfo* otherLock, ILocksDb* db, ui64 breakerQuerySpanId = 0);
     bool AddVolatileDependency(ui64 txId, ILocksDb* db);
     bool PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
@@ -401,10 +401,10 @@ public:
         }
     }
 
-    ui64 GetConflictBreakerQueryTraceId(TLockInfo* otherLock) const {
+    ui64 GetConflictBreakerQuerySpanId(TLockInfo* otherLock) const {
         auto it = ConflictLocks.find(otherLock);
         if (it != ConflictLocks.end()) {
-            return it->second.BreakerQueryTraceId;
+            return it->second.BreakerQuerySpanId;
         }
         return 0;
     }
@@ -453,7 +453,7 @@ private:
     ui64 Counter;
     TInstant CreationTime;
     ELockFlags Flags = ELockFlags::None;
-    ui64 VictimQueryTraceId = 0;
+    ui64 VictimQuerySpanId = 0;
     THashSet<TPathId> ReadTables;
     THashSet<TPathId> WriteTables;
     TVector<TPointKey> Points;
@@ -755,9 +755,9 @@ private:
 struct TLocksUpdate {
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
-    ui64 VictimQueryTraceId = 0;       // Stored on the lock; identifies the victim if this lock is broken
-    ui64 BreakerQueryTraceId = 0;       // Stored on conflicts; identifies the breaker when CommitLock breaks others
-    bool BreakerQueryTraceIdExplicitlySet = false;  // Set when overridden by FirstQueryTraceId from KQP commit
+    ui64 VictimQuerySpanId = 0;       // Stored on the lock; identifies the victim if this lock is broken
+    ui64 BreakerQuerySpanId = 0;       // Stored on conflicts; identifies the breaker when CommitLock breaks others
+    bool BreakerQuerySpanIdExplicitlySet = false;  // Set when overridden by FirstQuerySpanId from KQP commit
     TLockInfo::TPtr Lock;
 
     TStackVec<TPointKey, 4> PointLocks;
@@ -932,8 +932,8 @@ public:
 
     std::pair<TVector<TLock>, TVector<ui64>> ApplyLocks();
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
-    TVector<ui64> ExtractVictimQueryTraceIds(const TVector<ui64>& lockIds) const;
-    TMaybe<ui64> GetVictimQueryTraceIdForLock(ui64 lockTxId) const;
+    TVector<ui64> ExtractVictimQuerySpanIds(const TVector<ui64>& lockIds) const;
+    TMaybe<ui64> GetVictimQuerySpanIdForLock(ui64 lockTxId) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
@@ -1024,18 +1024,18 @@ public:
         return Locker.GetRemovedLocks();
     }
 
-    TMaybe<ui64> GetCurrentBreakerQueryTraceId() const {
-        if (Update && Update->BreakerQueryTraceId != 0) {
-            return Update->BreakerQueryTraceId;
+    TMaybe<ui64> GetCurrentBreakerQuerySpanId() const {
+        if (Update && Update->BreakerQuerySpanId != 0) {
+            return Update->BreakerQuerySpanId;
         }
         return Nothing();
     }
 
-    // Override BreakerQueryTraceId (e.g., from FirstQueryTraceId in KQP commit)
-    void SetBreakerQueryTraceId(ui64 queryTraceId) {
-        if (Update && queryTraceId != 0) {
-            Update->BreakerQueryTraceId = queryTraceId;
-            Update->BreakerQueryTraceIdExplicitlySet = true;
+    // Override BreakerQuerySpanId (e.g., from FirstQuerySpanId in KQP commit)
+    void SetBreakerQuerySpanId(ui64 querySpanId) {
+        if (Update && querySpanId != 0) {
+            Update->BreakerQuerySpanId = querySpanId;
+            Update->BreakerQuerySpanIdExplicitlySet = true;
         }
     }
 

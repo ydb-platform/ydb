@@ -268,11 +268,11 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
         if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock " << lockProto.GetLockId() << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter() << " found " << lock.Generation << ":" << lock.Counter);
             auto& brokenLock = brokenLocks.emplace_back(lockProto);
-            // Try to get QueryTraceId from the actual lock in the system
+            // Try to get QuerySpanId from the actual lock in the system
             if (auto rawLock = sysLocks.GetRawLock(lockProto.GetLockId())) {
-                ui64 queryTraceId = rawLock->GetVictimQueryTraceId();
-                if (queryTraceId != 0) {
-                    brokenLock.SetQueryTraceId(queryTraceId);
+                ui64 querySpanId = rawLock->GetVictimQuerySpanId();
+                if (querySpanId != 0) {
+                    brokenLock.SetQuerySpanId(querySpanId);
                 }
             }
         }
@@ -832,11 +832,11 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
     }
 
     if (NeedCommitLocks(kqpLocks->GetOp())) {
-        // Default BreakerQueryTraceId from FirstQueryTraceId (the query that wrote to this shard).
+        // Default BreakerQuerySpanId from FirstQuerySpanId (the query that wrote to this shard).
         // CommitLock may override with a more specific ID from stored conflict info.
-        ui64 firstQueryTraceId = kqpLocks->GetFirstQueryTraceId();
-        if (firstQueryTraceId != 0) {
-            sysLocks.SetBreakerQueryTraceId(firstQueryTraceId);
+        ui64 firstQuerySpanId = kqpLocks->GetFirstQuerySpanId();
+        if (firstQuerySpanId != 0) {
+            sysLocks.SetBreakerQuerySpanId(firstQuerySpanId);
         }
 
         for (const auto& lockProto : kqpLocks->GetLocks()) {

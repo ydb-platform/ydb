@@ -651,7 +651,7 @@ namespace TEvDataShard {
             commitVersion->SetTxId(stepOrderId.second);
         }
 
-        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites, ui64 queryTraceId = 0) {
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites, ui64 querySpanId = 0) {
             auto entry = Record.AddTxLocks();
             entry->SetLockId(lockId);
             entry->SetDataShard(shard);
@@ -662,8 +662,8 @@ namespace TEvDataShard {
             if (hasWrites) {
                 entry->SetHasWrites(true);
             }
-            if (queryTraceId != 0) {
-                entry->SetQueryTraceId(queryTraceId);
+            if (querySpanId != 0) {
+                entry->SetQuerySpanId(querySpanId);
             }
         }
 

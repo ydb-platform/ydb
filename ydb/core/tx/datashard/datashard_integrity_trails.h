@@ -154,8 +154,8 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
 
 // Unified function that logs lock breaking events to both integrity trails and TLI systems
 inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletId, TStringBuf message,
-                           const TVector<ui64>& brokenLocks, TMaybe<ui64> breakerQueryTraceId = Nothing(),
-                           const TVector<ui64>& victimQueryTraceIds = {}) {
+                           const TVector<ui64>& brokenLocks, TMaybe<ui64> breakerQuerySpanId = Nothing(),
+                           const TVector<ui64>& victimQuerySpanIds = {}) {
     // Check if logging is enabled before formatting (performance optimization)
     const bool tliEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::TLI);
     const bool integrityEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY);
@@ -164,7 +164,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
     }
 
     // Determine what we can actually log for each service
-    const bool canLogTli = tliEnabled && !victimQueryTraceIds.empty();
+    const bool canLogTli = tliEnabled && !victimQuerySpanIds.empty();
     const bool canLogIntegrity = integrityEnabled && !brokenLocks.empty();
 
     // Early return if neither service has anything to log
@@ -182,13 +182,13 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
     if (canLogTli) {
         TStringStream ss;
         LogKeyValue("Component", "DataShard", ss);
-        if (breakerQueryTraceId && *breakerQueryTraceId != 0) {
-            LogKeyValue("BreakerQueryTraceId", ToString(*breakerQueryTraceId), ss);
+        if (breakerQuerySpanId && *breakerQuerySpanId != 0) {
+            LogKeyValue("BreakerQuerySpanId", ToString(*breakerQuerySpanId), ss);
         }
-        ss << "VictimQueryTraceIds: [";
-        for (size_t i = 0; i < victimQueryTraceIds.size(); ++i) {
-            ss << victimQueryTraceIds[i];
-            if (i + 1 < victimQueryTraceIds.size()) {
+        ss << "VictimQuerySpanIds: [";
+        for (size_t i = 0; i < victimQuerySpanIds.size(); ++i) {
+            ss << victimQuerySpanIds[i];
+            if (i + 1 < victimQuerySpanIds.size()) {
                 ss << " ";
             }
         }
@@ -219,8 +219,8 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
 
 // Log victim detection in DataShard (when a transaction detects its locks were broken)
 inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabletId, TStringBuf message,
-                              TMaybe<ui64> victimQueryTraceId = Nothing(),
-                              TMaybe<ui64> currentQueryTraceId = Nothing()) {
+                              TMaybe<ui64> victimQuerySpanId = Nothing(),
+                              TMaybe<ui64> currentQuerySpanId = Nothing()) {
     // Check if logging is enabled before formatting (performance optimization)
     const bool tliEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::TLI);
     const bool integrityEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY);
@@ -231,11 +231,11 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
     // Build message body once (everything except Component and Type)
     TStringStream bodySs;
     LogKeyValue("TabletId", ToString(tabletId), bodySs);
-    if (victimQueryTraceId && *victimQueryTraceId != 0) {
-        LogKeyValue("VictimQueryTraceId", ToString(*victimQueryTraceId), bodySs);
+    if (victimQuerySpanId && *victimQuerySpanId != 0) {
+        LogKeyValue("VictimQuerySpanId", ToString(*victimQuerySpanId), bodySs);
     }
-    if (currentQueryTraceId && *currentQueryTraceId != 0) {
-        LogKeyValue("CurrentQueryTraceId", ToString(*currentQueryTraceId), bodySs);
+    if (currentQuerySpanId && *currentQuerySpanId != 0) {
+        LogKeyValue("CurrentQuerySpanId", ToString(*currentQuerySpanId), bodySs);
     }
     LogKeyValue("Message", message, bodySs, /*last*/ true);
     TString messageBody = bodySs.Str();

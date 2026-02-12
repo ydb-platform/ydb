@@ -39,7 +39,7 @@ public:
 
     virtual void AddShard(ui64 shardId, bool isOlap, const TString& path) = 0;
     virtual void AddAction(ui64 shardId, ui8 action) = 0;
-    virtual void AddAction(ui64 shardId, ui8 action, ui64 queryTraceId) = 0;
+    virtual void AddAction(ui64 shardId, ui8 action, ui64 querySpanId) = 0;
     virtual void AddTopic(ui64 topicId, const TString& path) = 0;
     virtual void AddTopicsToShards() = 0;
     virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock) = 0;
@@ -95,14 +95,14 @@ public:
     virtual bool BrokenLocks() const = 0;
     virtual ui64 GetBrokenLocksCount() const = 0;
     virtual const std::optional<NYql::TIssue>& GetLockIssue() const = 0;
-    virtual void SetVictimQueryTraceId(ui64 queryTraceId) = 0;
-    virtual std::optional<ui64> GetVictimQueryTraceId() const = 0;
-    virtual void SetShardBreakerQueryTraceId(ui64 shardId, ui64 queryTraceId) = 0;
-    virtual std::optional<ui64> GetShardBreakerQueryTraceId(ui64 shardId) const = 0;
+    virtual void SetVictimQuerySpanId(ui64 querySpanId) = 0;
+    virtual std::optional<ui64> GetVictimQuerySpanId() const = 0;
+    virtual void SetShardBreakerQuerySpanId(ui64 shardId, ui64 querySpanId) = 0;
+    virtual std::optional<ui64> GetShardBreakerQuerySpanId(ui64 shardId) const = 0;
 
-    // First query's QueryTraceId - used for lock-breaking attribution in separate commit scenarios
-    virtual void SetFirstQueryTraceId(ui64 queryTraceId) = 0;
-    virtual ui64 GetFirstQueryTraceId() const = 0;
+    // First query's QuerySpanId - used for lock-breaking attribution in separate commit scenarios
+    virtual void SetFirstQuerySpanId(ui64 querySpanId) = 0;
+    virtual ui64 GetFirstQuerySpanId() const = 0;
 
     virtual const THashSet<ui64>& GetShards() const = 0;
     virtual ui64 GetShardsCount() const = 0;

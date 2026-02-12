@@ -17,7 +17,7 @@
 namespace NKikimr {
 namespace NDataIntegrity {
 
-// Node-level cache: QueryTraceId -> QueryText.
+// Node-level cache: QuerySpanId -> QueryText.
 // Used for breaker query text lookup in deferred lock TLI scenarios.
 // Cross-node lookups use TKqpQueryTextCacheService when local cache misses.
 class TNodeQueryTextCache {
@@ -28,14 +28,14 @@ public:
         return *Singleton<TNodeQueryTextCache>();
     }
 
-    void Add(ui64 queryTraceId, const TString& queryText) {
-        if (queryTraceId == 0 || queryText.empty()) {
+    void Add(ui64 querySpanId, const TString& queryText) {
+        if (querySpanId == 0 || queryText.empty()) {
             return;
         }
         with_lock(Lock) {
-            // Only add if (queryTraceId, queryText) pair is different from the previous entry
+            // Only add if (querySpanId, queryText) pair is different from the previous entry
             if (!Entries.empty() &&
-                Entries.back().first == queryTraceId &&
+                Entries.back().first == querySpanId &&
                 Entries.back().second == queryText) {
                 return;
             }
@@ -44,15 +44,15 @@ public:
                 Index.erase(Entries.front().first);
                 Entries.pop_front();
             }
-            Entries.push_back({queryTraceId, queryText});
-            // Point to the last element; overwrites if queryTraceId already exists (keeping newest text)
-            Index[queryTraceId] = std::prev(Entries.end());
+            Entries.push_back({querySpanId, queryText});
+            // Point to the last element; overwrites if querySpanId already exists (keeping newest text)
+            Index[querySpanId] = std::prev(Entries.end());
         }
     }
 
-    TString Get(ui64 queryTraceId) const {
+    TString Get(ui64 querySpanId) const {
         with_lock(Lock) {
-            auto it = Index.find(queryTraceId);
+            auto it = Index.find(querySpanId);
             if (it != Index.end()) {
                 return it->second->second;
             }
@@ -67,26 +67,26 @@ private:
 
     mutable TAdaptiveLock Lock;
     TDeque Entries;
-    // Auxiliary index: queryTraceId -> iterator into Entries for O(1) lookup
+    // Auxiliary index: querySpanId -> iterator into Entries for O(1) lookup
     std::unordered_map<ui64, TIterator> Index;
 };
 
-// Collects query texts and QueryTraceIds for TLI logging and victim stats attribution
+// Collects query texts and QuerySpanIds for TLI logging and victim stats attribution
 class TQueryTextCollector {
 public:
     // First query always stored (for victim stats); subsequent only if TLI enabled
-    void AddQueryText(ui64 queryTraceId, const TString& queryText) {
+    void AddQueryText(ui64 querySpanId, const TString& queryText) {
         if (queryText.empty()) {
             return;
         }
-        TNodeQueryTextCache::Instance().Add(queryTraceId, queryText);
+        TNodeQueryTextCache::Instance().Add(querySpanId, queryText);
 
         if (QueryTexts.empty() || IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             // Deduplicate consecutive identical entries
             if (QueryTexts.empty() ||
-                QueryTexts.back().first != queryTraceId ||
+                QueryTexts.back().first != querySpanId ||
                 QueryTexts.back().second != queryText) {
-                QueryTexts.push_back({queryTraceId, queryText});
+                QueryTexts.push_back({querySpanId, queryText});
                 // Keep only the last N queries to prevent unbounded memory growth
                 constexpr size_t MAX_QUERY_TEXTS = 100;
                 while (QueryTexts.size() > MAX_QUERY_TEXTS) {
@@ -108,7 +108,7 @@ public:
             if (i > 0) {
                 builder << " | ";
             }
-            builder << "QueryTraceId=" << QueryTexts[i].first
+            builder << "QuerySpanId=" << QueryTexts[i].first
                 << " QueryText=" << QueryTexts[i].second;
         }
         builder << "]";
@@ -125,8 +125,8 @@ public:
         return QueryTexts.size();
     }
 
-    // Get the first QueryTraceId
-    TMaybe<ui64> GetFirstQueryTraceId() const {
+    // Get the first QuerySpanId
+    TMaybe<ui64> GetFirstQuerySpanId() const {
         if (QueryTexts.empty() || QueryTexts.front().first == 0) {
             return Nothing();
         }
@@ -141,17 +141,17 @@ public:
         return QueryTexts.front().second;
     }
 
-    // Get query text by QueryTraceId
-    TString GetQueryTextByTraceId(ui64 queryTraceId) const {
-        for (const auto& [traceId, queryText] : QueryTexts) {
-            if (traceId == queryTraceId) {
+    // Get query text by QuerySpanId
+    TString GetQueryTextBySpanId(ui64 querySpanId) const {
+        for (const auto& [spanId, queryText] : QueryTexts) {
+            if (spanId == querySpanId) {
                 return queryText;
             }
         }
         return "";
     }
 
-    // Clear all query texts and QueryTraceIds
+    // Clear all query texts and QuerySpanIds
     void Clear() {
         QueryTexts.clear();
     }
@@ -274,9 +274,9 @@ struct TTliLogParams {
     TString QueryText;
     TString QueryTexts;
     TString TraceId;
-    TMaybe<ui64> BreakerQueryTraceId;
-    TMaybe<ui64> VictimQueryTraceId;
-    TMaybe<ui64> CurrentQueryTraceId;
+    TMaybe<ui64> BreakerQuerySpanId;
+    TMaybe<ui64> VictimQuerySpanId;
+    TMaybe<ui64> CurrentQuerySpanId;
     TString VictimQueryText;
     bool IsCommitAction = false;
 };
@@ -295,16 +295,16 @@ inline void LogTli(const TTliLogParams& params, const TActorContext& ctx) {
     }
 
     // Determine if this is a breaker or victim log based on which TraceId is set (and non-zero)
-    const bool isBreaker = params.BreakerQueryTraceId.Defined() && *params.BreakerQueryTraceId != 0;
+    const bool isBreaker = params.BreakerQuerySpanId.Defined() && *params.BreakerQuerySpanId != 0;
 
     if (isBreaker) {
-        LogKeyValue("BreakerQueryTraceId", ToString(*params.BreakerQueryTraceId), ss);
-    } else if (params.VictimQueryTraceId && *params.VictimQueryTraceId != 0) {
-        LogKeyValue("VictimQueryTraceId", ToString(*params.VictimQueryTraceId), ss);
+        LogKeyValue("BreakerQuerySpanId", ToString(*params.BreakerQuerySpanId), ss);
+    } else if (params.VictimQuerySpanId && *params.VictimQuerySpanId != 0) {
+        LogKeyValue("VictimQuerySpanId", ToString(*params.VictimQuerySpanId), ss);
     }
 
-    if (params.CurrentQueryTraceId && *params.CurrentQueryTraceId != 0) {
-        LogKeyValue("CurrentQueryTraceId", ToString(*params.CurrentQueryTraceId), ss);
+    if (params.CurrentQuerySpanId && *params.CurrentQuerySpanId != 0) {
+        LogKeyValue("CurrentQuerySpanId", ToString(*params.CurrentQuerySpanId), ss);
     }
 
     // Use appropriate field names based on breaker vs victim

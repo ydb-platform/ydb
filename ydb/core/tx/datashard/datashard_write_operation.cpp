@@ -52,8 +52,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     const NKikimrDataEvents::TEvWrite& record = ev.Record;
 
-    if (record.HasQueryTraceId()) {
-        QueryTraceId = record.GetQueryTraceId();
+    if (record.HasQuerySpanId()) {
+        QuerySpanId = record.GetQuerySpanId();
     }
 
     if (record.GetLockTxId()) {

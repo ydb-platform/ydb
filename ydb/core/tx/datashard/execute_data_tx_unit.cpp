@@ -359,14 +359,14 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
     auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
     op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
     if (!locksBrokenByTx.empty()) {
-        auto breakerQueryTraceId = DataShard.SysLocksTable().GetCurrentBreakerQueryTraceId();
-        ui64 effectiveBreakerQueryTraceId = breakerQueryTraceId ? *breakerQueryTraceId : op->QueryTraceId();
-        op->Result()->Record.MutableTxStats()->SetBreakerQueryTraceId(effectiveBreakerQueryTraceId);
+        auto breakerQuerySpanId = DataShard.SysLocksTable().GetCurrentBreakerQuerySpanId();
+        ui64 effectiveBreakerQuerySpanId = breakerQuerySpanId ? *breakerQuerySpanId : op->QuerySpanId();
+        op->Result()->Record.MutableTxStats()->SetBreakerQuerySpanId(effectiveBreakerQuerySpanId);
     }
     NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), op->GetTxId(), locksBrokenByTx);
 
     // Get the query trace ID to include in the returned locks
-    ui64 queryTraceId = op->QueryTraceId();
+    ui64 querySpanId = op->QuerySpanId();
     for (const auto& lock : locks) {
         if (lock.IsError()) {
             LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
@@ -374,7 +374,7 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
                                                 << " lock " << lock);
         }
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
-                                lock.SchemeShard, lock.PathId, lock.HasWrites, queryTraceId);
+                                lock.SchemeShard, lock.PathId, lock.HasWrites, querySpanId);
     }
     DataShard.SubscribeNewLocks(ctx);
 }

@@ -126,7 +126,7 @@ private:
 
     YDB_READONLY_DEF(ui64, LockTxId);
     YDB_READONLY_DEF(ui32, LockNodeId);
-    YDB_READONLY_DEF(ui64, QueryTraceId);
+    YDB_READONLY_DEF(ui64, QuerySpanId);
 
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
@@ -247,8 +247,8 @@ public:
         return WriteTx ? WriteTx->GetLockNodeId() : 0;
     }
 
-    ui64 QueryTraceId() const override {
-        return WriteTx ? WriteTx->GetQueryTraceId() : 0;
+    ui64 QuerySpanId() const override {
+        return WriteTx ? WriteTx->GetQuerySpanId() : 0;
     }
 
     bool HasLockedWrites() const override {

@@ -84,11 +84,11 @@ struct TKqpTxLocks {
 struct TDeferredEffect {
     TKqpPhyTxHolder::TConstPtr PhysicalTx;
     TQueryData::TPtr Params;
-    ui64 QueryTraceId = 0;  // Original query's trace ID for lock-breaking attribution
+    ui64 QuerySpanId = 0;  // Original query's trace ID for lock-breaking attribution
 
-    explicit TDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, ui64 queryTraceId = 0)
+    explicit TDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, ui64 querySpanId = 0)
         : PhysicalTx(physicalTx)
-        , QueryTraceId(queryTraceId) {}
+        , QuerySpanId(querySpanId) {}
 };
 
 
@@ -114,8 +114,8 @@ public:
 
 private:
     [[nodiscard]]
-    bool Add(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 queryTraceId = 0) {
-        DeferredEffects.emplace_back(physicalTx, queryTraceId);
+    bool Add(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 querySpanId = 0) {
+        DeferredEffects.emplace_back(physicalTx, querySpanId);
         DeferredEffects.back().Params = params;
         return true;
     }
@@ -192,8 +192,8 @@ public:
     }
 
     [[nodiscard]]
-    bool AddDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 queryTraceId = 0) {
-        return DeferredEffects.Add(physicalTx, params, queryTraceId);
+    bool AddDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 querySpanId = 0) {
+        return DeferredEffects.Add(physicalTx, params, querySpanId);
     }
 
     bool TxHasEffects() const {
@@ -223,13 +223,13 @@ public:
         LastAccessTime = TInstant::Now();
     }
 
-    void OnBeginQuery(ui64 queryTraceId, const TString& queryText) {
+    void OnBeginQuery(ui64 querySpanId, const TString& queryText) {
         ++QueriesCount;
         BeginQueryTime = TInstant::Now();
-        QueryTextCollector.AddQueryText(queryTraceId, queryText);
-        // Track the first query's QueryTraceId in TxManager for lock-breaking attribution
-        if (TxManager && queryTraceId != 0) {
-            TxManager->SetFirstQueryTraceId(queryTraceId);
+        QueryTextCollector.AddQueryText(querySpanId, queryText);
+        // Track the first query's QuerySpanId in TxManager for lock-breaking attribution
+        if (TxManager && querySpanId != 0) {
+            TxManager->SetFirstQuerySpanId(querySpanId);
         }
     }
 
@@ -528,9 +528,9 @@ public:
 };
 
 NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId,
-    TMaybe<ui64> victimQueryTraceId = Nothing());
+    TMaybe<ui64> victimQuerySpanId = Nothing());
 NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
-    TMaybe<ui64> victimQueryTraceId = Nothing());
+    TMaybe<ui64> victimQuerySpanId = Nothing());
 std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 

@@ -26,15 +26,15 @@ struct TSetupSysLocks
         SysLocksTable.SetupUpdate(this, db);
     }
 
-    TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, ui64 queryTraceId, TDataShard& self, ILocksDb* db)
+    TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, ui64 querySpanId, TDataShard& self, ILocksDb* db)
         : SysLocksTable(self.SysLocksTable())
     {
         LockTxId = lockTxId;
         LockNodeId = lockNodeId;
-        // queryTraceId serves two roles: identifies our lock as victim if broken,
+        // querySpanId serves two roles: identifies our lock as victim if broken,
         // and is stored on conflicts to attribute us as breaker on commit.
-        VictimQueryTraceId = queryTraceId;
-        BreakerQueryTraceId = queryTraceId;
+        VictimQuerySpanId = querySpanId;
+        BreakerQuerySpanId = querySpanId;
 
         SysLocksTable.SetupUpdate(this, db);
     }
@@ -46,8 +46,8 @@ struct TSetupSysLocks
     {
         LockTxId = op->LockTxId();
         LockNodeId = op->LockNodeId();
-        VictimQueryTraceId = op->QueryTraceId();
-        BreakerQueryTraceId = op->QueryTraceId();
+        VictimQuerySpanId = op->QuerySpanId();
+        BreakerQuerySpanId = op->QuerySpanId();
 
         auto mvccVersion = self.GetMvccVersion(op.Get());
 

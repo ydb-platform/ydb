@@ -3401,6 +3401,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
                     MODE = 'KEYS_ONLY',
                     FORMAT = 'json',
                     INITIAL_SCAN = TRUE,
+                    USER_SIDS = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
                     BARRIERS_INTERVAL = Interval("PT1S"),
                     SCHEMA_CHANGES = FALSE,
@@ -3420,6 +3421,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("format"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("json"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("initial_scan"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("user_sids"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
@@ -6624,6 +6626,20 @@ Y_UNIT_TEST(InvalidChangefeedInitialScan) {
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:95: Error: Literal of Bool type is expected for INITIAL_SCAN\n");
 }
+
+Y_UNIT_TEST(InvalidChangefeedUserSIDs) {
+    auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", USER_SIDS = "foo")
+            );
+        )";
+    auto res = SqlToYql(req);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:92: Error: Literal of Bool type is expected for USER_SIDS\n");
+}
+
 
 Y_UNIT_TEST(InvalidChangefeedVirtualTimestamps) {
     auto req = R"(
@@ -10547,6 +10563,35 @@ Y_UNIT_TEST(MetricsLevelBadNumericValue) {
     )sql");
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid numeric value for metrics_value");
+}
+
+Y_UNIT_TEST(TransferCPULimit) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $b($x); }
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+            V_CPU_RATE_LIMIT = 1.5
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTransferWithCPULimit) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        ALTER TRANSFER `TransferName`
+        SET (
+            V_CPU_RATE_LIMIT = 4
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
 }
 } // Y_UNIT_TEST_SUITE(Transfer)
 

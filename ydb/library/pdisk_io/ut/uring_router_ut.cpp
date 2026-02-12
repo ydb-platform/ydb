@@ -7,9 +7,12 @@
 #include <util/system/file.h>
 #include <util/system/event.h>
 
-#include <cstring>
-#include <unistd.h>
 #include <sys/uio.h>
+
+#include <unistd.h>
+
+#include <atomic>
+#include <cstring>
 
 using NActors::TActorSystem;
 using namespace NKikimr::NPDisk;

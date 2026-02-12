@@ -14,6 +14,8 @@
 // in by liburing) defines a BLOCK_SIZE macro that clashes with bitmap.h.
 #include <liburing.h>
 
+#include <cstring>
+
 using NActors::TActorSystem;
 
 namespace NKikimr::NPDisk {

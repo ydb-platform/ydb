@@ -20,6 +20,7 @@ using namespace NActors;
 class TConsumerActor : public TBaseTabletActor<TConsumerActor>
                      , public TConstantLogPrefix {
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
+    static constexpr TDuration NoMessagesTimeout = TDuration::MilliSeconds(50);
 
 public:
     TConsumerActor(const TString& database, ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
@@ -89,6 +90,9 @@ private:
 
     void UpdateMetrics();
 
+    bool UseForReading() const;
+    void NotifyPQRB(bool force = false);
+
 private:
     const TString Database;
     const ui32 PartitionId;
@@ -126,6 +130,9 @@ private:
     ui64 CPUUsageMetric = 0;
     NMonitoring::TDynamicCounterPtr DetailedMetricsRoot;
     std::unique_ptr<TDetailedMetrics> DetailedMetrics;
+
+    TInstant LastTimeWithMessages;
+    bool LastUseForReading = false;
 };
 
 class TDetailedMetrics {

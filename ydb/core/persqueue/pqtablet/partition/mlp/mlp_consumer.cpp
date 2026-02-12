@@ -317,6 +317,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     if (!FetchMessagesIfNeeded()) {
         LOG_D("Initialized");
+        NotifyPQRB(true);
         Become(&TConsumerActor::StateWork);
         ProcessEventQueue();
     }
@@ -711,6 +712,11 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
 }
 
 bool TConsumerActor::FetchMessagesIfNeeded() {
+    if (Storage->GetMessageCount() > 0) {
+        LastTimeWithMessages = TInstant::Now();
+        NotifyPQRB();
+    }
+
     if (FetchInProgress) {
         return false;
     }
@@ -812,6 +818,11 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         FetchMessagesIfNeeded();
     }
 
+    if (messageCount > 0) {
+        LastTimeWithMessages = TInstant::Now();
+        NotifyPQRB();
+    }
+
     if (CurrentStateFunc() == &TConsumerActor::StateWork) {
         ProcessEventQueue();
     }
@@ -825,6 +836,7 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
     FetchMessagesIfNeeded();
     ProcessEventQueue();
     UpdateMetrics();
+    NotifyPQRB();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
@@ -878,6 +890,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
     LOG_D("Handle TEvents::TEvWakeup");
     UpdateMetrics();
+    NotifyPQRB();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
@@ -885,6 +898,20 @@ void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
     auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), TabletId, FirstPipeCacheRequest, 1);
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
     FirstPipeCacheRequest = false;
+}
+
+bool TConsumerActor::UseForReading() const {
+    return LastTimeWithMessages > TInstant::Now() - NoMessagesTimeout;
+}
+
+void TConsumerActor::NotifyPQRB(bool force) {
+    auto useForReading = UseForReading();
+    if (force || useForReading != LastUseForReading) {
+        auto ev =std::make_unique<TEvPQ::TEvMLPConsumerStatus>("TODO", Config.GetName(), PartitionId,
+            PartitionEndOffset - LastCommittedOffset, useForReading);
+        Send(PartitionActorId, std::move(ev));
+        LastUseForReading = useForReading;
+    }
 }
 
 NActors::IActor* CreateConsumerActor(

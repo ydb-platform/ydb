@@ -825,6 +825,10 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
     Balancer->Handle(ev, ctx);
 }
 
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
+    MLPBalancer->Handle(ev);
+}
+
 
 
 //
@@ -920,6 +924,8 @@ STFUNC(TPersQueueReadBalancer::StateInit) {
         HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+        // MLP
+        hFunc(TEvPQ::TEvMLPConsumerStatus, Handle);
         // From kafka
         HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
         HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
@@ -966,6 +972,7 @@ STFUNC(TPersQueueReadBalancer::StateWork) {
         HFunc(TEvPQ::TEvMirrorTopicDescription, Handle);
         // MLP
         hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
+        hFunc(TEvPQ::TEvMLPConsumerStatus, Handle);
         default:
             HandleDefaultEvents(ev, SelfId());
             break;

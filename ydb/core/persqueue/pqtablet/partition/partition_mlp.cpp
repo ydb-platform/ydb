@@ -90,6 +90,19 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
 
     auto& consumerInfo = it->second;
     consumerInfo.Metrics = std::move(metrics);
+    consumerInfo.UseForReading = ev->Get()->UseForReading;
+}
+
+void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+
+    const auto* userInfo = UsersInfoStorage->GetIfExists(record.GetConsumer());
+    if (userInfo && LastOffsetHasBeenCommited(*userInfo)) {
+        record.SetUseForReading(false);
+    }
+    record.SetGeneration(TabletGeneration);
+    record.SetCookie(++PQRBCookie);
+    Forward(ev, TabletActorId);
 }
 
 void TPartition::ProcessMLPPendingEvents() {

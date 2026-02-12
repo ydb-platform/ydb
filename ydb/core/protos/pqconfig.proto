@@ -899,6 +899,7 @@ message TStatusResponse {
         optional bool ReadingFinished = 10;
         optional uint64 CommitedLagMs = 11;
         optional string CommittedMetadata = 12;
+        optional bool UseForReading = 13;
     }
 
 
@@ -1404,6 +1405,16 @@ message TEvMLPPurgeRequest {
 // From PQTablet
 message TEvMLPPurgeResponse {
     optional uint32 PartitionId = 1;
+}
+
+message TEvMLPConsumerStatus {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional uint64 Messages = 5;
+    optional bool UseForReading = 6;
+    optional uint64 Generation = 7;
+    optional uint64 Cookie = 8;
 }
 
 

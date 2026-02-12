@@ -25,18 +25,18 @@ const TPartitionGraph::Node* TMLPConsumer::NextPartition() {
     return GetPartitionGraph().GetPartition(PartitionsForBalancing[partitionId]);
 }
 
-bool TMLPConsumer::SetCommittedState(ui32 partitionId, ui64 messages, bool committed, ui32 generation, ui64 cookie) {
+bool TMLPConsumer::SetUseForReading(ui32 partitionId, ui64 messages, bool useForReading, ui32 generation, ui64 cookie) {
     auto& status = Partitions[partitionId];
 
-    if (status.generation < generation || (status.generation == generation && status.cookie < cookie)) {
-        auto oldCommitted = status.committed;
+    if (status.Generation < generation || (status.Generation == generation && status.Cookie < cookie)) {
+        auto oldUseForReading = status.UseForReading;
 
-        status.messages = messages;
-        status.committed = committed;
-        status.generation = generation;
-        status.cookie = cookie;
+        status.Messages = messages;
+        status.UseForReading = useForReading;
+        status.Generation = generation;
+        status.Cookie = cookie;
 
-        return oldCommitted != committed;
+        return oldUseForReading != useForReading;
     }
 
     return false;
@@ -47,13 +47,13 @@ void TMLPConsumer::Rebuild() {
 
     if (Partitions.empty()) {
         for (const auto& partitionConfig : GetConfig().GetAllPartitions()) {
-            Partitions[partitionConfig.GetPartitionId()] = {0, 0, 0, false};
+            Partitions[partitionConfig.GetPartitionId()] = {0, 0, 0, true};
         }
     }
 
     PartitionsForBalancing.reserve(Partitions.size());
     for (const auto& [partitionId, status] : Partitions) {
-        if (!status.committed) {
+        if (status.UseForReading) {
             PartitionsForBalancing.push_back(partitionId);
         }
     }
@@ -119,9 +119,10 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
             if (mit != std::end(mlpConsumers)) {
                 auto [it, _] = Consumers.try_emplace(consumerName, *this);
                 auto& consumer = it->second;
-            
-                bool changed = consumer.SetCommittedState(partitionId, std::max<i64>(0, endOffset - consumerResult.GetCommitedOffset()), consumerResult.GetReadingFinished(), generation, cookie);
-                mit->second |= changed;
+
+                auto useForReading = consumerResult.GetUseForReading();
+                auto messages = std::max<i64>(0, endOffset - consumerResult.GetCommitedOffset());
+                mit->second |=consumer.SetUseForReading(partitionId, messages, useForReading, generation, cookie);
             }
         }
     }
@@ -134,24 +135,25 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
 }
 
 void TMLPBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext&) {
-    auto& result = ev->Get()->Record;
-    auto& consumerName = result.GetConsumer();
+    auto& record = ev->Get()->Record;
+    PQ_LOG_D("Handle TEvPQ::TEvReadingPartitionStatusRequest " << record.ShortDebugString());
+    SetUseForReading(record.GetConsumer(),
+                     record.GetPartitionId(),
+                     0, // expected messages
+                     false, // use for reading
+                     record.GetGeneration(),
+                     record.GetCookie());
+}
 
-    auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
-    if (!consumerConfig) {
-        return;
-    }
-
-    if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-        return;
-    }
-
-    auto [it, _] = Consumers.try_emplace(consumerName, *this);
-    auto& consumer = it->second;
-
-    if (consumer.SetCommittedState(result.GetPartitionId(), 0, true, result.GetGeneration(), result.GetCookie())) {
-        consumer.Rebuild();
-    }
+void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    PQ_LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << record.ShortDebugString());
+    SetUseForReading(record.GetConsumer(),
+                     record.GetPartitionId(),
+                     record.GetMessages(), // expected messages
+                     record.GetUseForReading(), // use for reading
+                     record.GetGeneration(),
+                     record.GetCookie());
 }
 
 void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
@@ -168,13 +170,32 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
 
         if (mlpConsumers.contains(consumerName)) {
             for (const auto& partitionId : addedPartitions) {
-                consumer.SetCommittedState(partitionId, 0, false, 0, 0);
+                consumer.SetUseForReading(partitionId, 0, true, 0, 0);
             }
             consumer.Rebuild();
         } else {
             Consumers.erase(consumerName);
         }
     }
+}
+
+void TMLPBalancer::SetUseForReading(const TString& consumerName, ui32 partitionId, ui64 messages, bool useForReading, ui32 generation, ui64 cookie) {
+    auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
+    if (!consumerConfig) {
+        return;
+    }
+
+    if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+        return;
+    }
+
+    auto [it, _] = Consumers.try_emplace(consumerName, *this);
+    auto& consumer = it->second;
+
+    if (consumer.SetUseForReading(partitionId, messages, useForReading, generation, cookie)) {
+        consumer.Rebuild();
+    }
+
 }
 
 const NKikimrPQ::TPQTabletConfig& TMLPBalancer::GetConfig() const {

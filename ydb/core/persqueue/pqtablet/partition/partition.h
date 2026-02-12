@@ -274,6 +274,7 @@ private:
     void HandleWakeup(const TActorContext& ctx);
     void HandleWriteResponse(const TActorContext& ctx);
     void Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev);
+    void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev);
 
     void InitComplete(const TActorContext& ctx);
     void InitUserInfoForImportantClients(const TActorContext& ctx);
@@ -634,6 +635,7 @@ private:
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -711,6 +713,7 @@ private:
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -1257,6 +1260,7 @@ private:
     struct TMLPConsumerInfo {
         TActorId ActorId;
         NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
+        bool UseForReading = true;
     };
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
 

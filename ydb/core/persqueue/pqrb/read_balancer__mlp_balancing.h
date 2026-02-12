@@ -15,7 +15,7 @@ public:
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
 
-    bool SetCommittedState(ui32 partitionId, ui64 messages, bool committed, ui32 generation, ui64 cookie);
+    bool SetUseForReading(ui32 partitionId, ui64 messages, bool useForReading, ui32 generation, ui64 cookie);
     void Rebuild();
 
 private:
@@ -25,10 +25,10 @@ private:
     std::vector<ui32> PartitionsForBalancing;
 
     struct TPartitionStatus {
-        ui64 messages = 0; 
-        ui64 cookie = 0;
-        ui32 generation = 0;
-        bool committed = false;
+        ui64 Messages = 0; 
+        ui64 Cookie = 0;
+        ui32 Generation = 0;
+        bool UseForReading = true;
     };
     absl::flat_hash_map<ui32, TPartitionStatus> Partitions;
 };
@@ -41,8 +41,11 @@ public:
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr&, const TActorContext&);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
 
     void UpdateConfig(const std::vector<ui32>& addedPartitions);
+
+    void SetUseForReading(const TString& consumerName, ui32 partitionId, ui64 messages, bool useForReading, ui32 generation, ui64 cookie);
 
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;

@@ -907,10 +907,9 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     resSpeed.resize(4);
     ui64 maxQuota = 0;
     bool filterConsumers = !ev->Get()->Consumers.empty();
+    const auto& clientId = ev->Get()->ClientId;
     TSet<TString> requiredConsumers(ev->Get()->Consumers.begin(), ev->Get()->Consumers.end());
-    for (auto&& userInfoPair : UsersInfoStorage->GetAll()) {
-        auto& userInfo = userInfoPair.second;
-        auto& clientId = ev->Get()->ClientId;
+    for (auto&& [_, userInfo] : UsersInfoStorage->GetAll()) {
         bool consumerShouldBeProcessed = filterConsumers
             ? requiredConsumers.contains(userInfo.User)
             : clientId.empty() || clientId == userInfo.User;
@@ -989,7 +988,16 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             clientInfo->SetAvgReadSpeedPerHour(userInfo.AvgReadBytes[2].GetValue());
             clientInfo->SetAvgReadSpeedPerDay(userInfo.AvgReadBytes[3].GetValue());
 
-            clientInfo->SetReadingFinished(LastOffsetHasBeenCommited(userInfo));
+            auto lastOffsetHasBeenCommited = LastOffsetHasBeenCommited(userInfo);
+            clientInfo->SetReadingFinished(lastOffsetHasBeenCommited);
+
+            clientInfo->SetUseForReading(false);
+            if (!lastOffsetHasBeenCommited) {
+                auto mit = MLPConsumers.find(userInfo.User);
+                if (mit != MLPConsumers.end()) {
+                    clientInfo->SetUseForReading(mit->second.UseForReading);
+                }
+            }
         }
     }
 

@@ -1,3 +1,5 @@
 items:
 - name: "Быстрый старт: чтение и запись в топики"
   href: topics.md
+- name: Отладочное чтение из топика
+  href: debug-read.md

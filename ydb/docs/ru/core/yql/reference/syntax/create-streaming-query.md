@@ -34,17 +34,17 @@ END DO
 
 Примеры создания потокового запроса [см. ниже](#examples).
 
-## Разрешения
-
-Требуется [разрешение](./grant.md#permissions-list) `CREATE TABLE` на директорию, где будет создаваться потоковый запрос, пример выдачи такого разрешения для директории `my_queries/`:
-
-```sql
-GRANT CREATE TABLE ON my_queries TO `user@domain`
-```
-
 ## Использование читателя {#consumer-usage}
 
-Читатель создаётся через [CLI](../../../reference/ydb-cli/topic-consumer-add.md) или при создании топика с помощью [CREATE TOPIC](create-topic.md). Имя читателя указывается в тексте запроса: `PRAGMA pq.Consumer="my_consumer"`.
+[Читатель (consumer)](../../../concepts/datamodel/topic.md#consumer) — это именованная подписка на [топик](../../../concepts/datamodel/topic.md), которая хранит текущую позицию чтения.
+
+Читатель создаётся через [CLI](../../../reference/ydb-cli/topic-consumer-add.md) или при создании топика с помощью [CREATE TOPIC](create-topic.md). Имя читателя указывается в тексте запроса с помощью прагмы:
+
+```sql
+PRAGMA pq.Consumer="my_consumer";
+```
+
+Если читатель не указан, чтение из топика выполняется без читателя. Позиция чтения в обоих случаях сохраняется в [чекпоинте](../../../dev/streaming-query/checkpoints.md). Указание читателя позволяет отслеживать позицию чтения и лаг со стороны топика, например, через [CLI](../../../reference/ydb-cli/topic-read.md).
 
 ## Примеры {#examples}
 
@@ -60,27 +60,27 @@ GRANT CREATE TABLE ON my_queries TO `user@domain`
 
 {% endnote %}
 
-```sql
+```yql
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
--- ydb_source — external data source для работы с топиками
-INSERT INTO ydb_source.output_topic
-SELECT
-    -- Формирование JSON из отдельных полей
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
-        AsStruct(Id AS id, Name AS name)
-    ))))
-FROM
-    -- Чтение из топика
-    ydb_source.input_topic
-WITH (
-    FORMAT = json_each_row,  -- Формат входных данных
-    SCHEMA = (               -- Схема входных данных
-        Id Uint64 NOT NULL,
-        Name Utf8 NOT NULL
-    )
-)
+    -- ydb_source — external data source для работы с топиками
+    INSERT INTO ydb_source.output_topic
+    SELECT
+        -- Формирование JSON из отдельных полей
+        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
+            AsStruct(Id AS id, Name AS name)
+        ))))
+    FROM
+        -- Чтение из топика
+        ydb_source.input_topic
+    WITH (
+        FORMAT = json_each_row,  -- Формат входных данных
+        SCHEMA = (               -- Схема входных данных
+            Id Uint64 NOT NULL,
+            Name Utf8 NOT NULL
+        )
+    );
 
 END DO
 ```
@@ -91,7 +91,7 @@ END DO
 
 {% note warning %}
 
-Запись в таблицы в потоковых запросах поддерживается **только в режиме UPSERT**. Операция `INSERT INTO` для таблиц не поддерживается. При UPSERT, если строка с таким первичным ключом уже существует, она будет обновлена, иначе будет вставлена новая строка.
+Запись в таблицы в потоковых запросах поддерживается **только в режиме UPSERT**. Операция `INSERT INTO` не поддерживается, так как при повторной обработке событий (гарантия [at-least-once](../../../concepts/streaming-query.md#guarantees)) она привела бы к дублированию строк. При UPSERT, если строка с таким первичным ключом уже существует, она будет обновлена, иначе будет вставлена новая строка.
 
 {% endnote %}
 
@@ -99,21 +99,21 @@ END DO
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
--- Запись в таблицу (только UPSERT, INSERT не поддерживается)
-UPSERT INTO output_table
-SELECT
-    Id,
-    Name
-FROM
-    -- ydb_source — external data source для работы с топиками
-    ydb_source.input_topic
-WITH (
-    FORMAT = json_each_row,  -- Формат входных данных
-    SCHEMA = (               -- Схема входных данных
-        Id Uint64 NOT NULL,
-        Name Utf8 NOT NULL
-    )
-)
+    -- Запись в таблицу (только UPSERT, INSERT не поддерживается)
+    UPSERT INTO output_table
+    SELECT
+        Id,
+        Name
+    FROM
+        -- ydb_source — external data source для работы с топиками
+        ydb_source.input_topic
+    WITH (
+        FORMAT = json_each_row,  -- Формат входных данных
+        SCHEMA = (               -- Схема входных данных
+            Id Uint64 NOT NULL,
+            Name Utf8 NOT NULL
+        )
+    );
 
 END DO
 ```
@@ -129,21 +129,21 @@ CREATE STREAMING QUERY my_streaming_query WITH (
 ) AS
 DO BEGIN
 
--- ydb_source — external data source для работы с топиками
-INSERT INTO ydb_source.output_topic
-SELECT
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
-        AsStruct(Id AS id, Name AS name)
-    ))))
-FROM
-    ydb_source.input_topic
-WITH (
-    FORMAT = json_each_row,
-    SCHEMA = (
-        Id Uint64 NOT NULL,
-        Name Utf8 NOT NULL
-    )
-)
+    -- ydb_source — external data source для работы с топиками
+    INSERT INTO ydb_source.output_topic
+    SELECT
+        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
+            AsStruct(Id AS id, Name AS name)
+        ))))
+    FROM
+        ydb_source.input_topic
+    WITH (
+        FORMAT = json_each_row,
+        SCHEMA = (
+            Id Uint64 NOT NULL,
+            Name Utf8 NOT NULL
+        )
+    );
 
 END DO
 ```

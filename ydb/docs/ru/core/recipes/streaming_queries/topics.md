@@ -98,12 +98,10 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 CREATE STREAMING QUERY query_example AS
 DO BEGIN
 
-PRAGMA ydb.DqChannelVersion = "1";
-
 $number_errors = SELECT
     Host,
     COUNT(*) AS ErrorCount,
-    CAST(HOP_START() AS String) AS Ts  -- Время начала окна HOP соответствующего результату агрегации
+    CAST(HOP_START() AS String) AS Ts  -- Время начала окна, соответствующего результату агрегации
 FROM
     ydb_source.input_topic
 WITH (
@@ -123,17 +121,18 @@ GROUP BY
 INSERT INTO
     ydb_source.output_topic
 SELECT
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))  -- Serialize all columns into JSON
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))  -- Сериализация всех колонок в JSON
 FROM
-    $number_errors
+    $number_errors;
 
 END DO
 ```
 
 Подробнее:
 
-- Агрегация `GROUP BY HOP` — [{#T}](../../yql/reference/syntax/select/group-by.md#group-by-hop).
+- Агрегация `GROUP BY HOP` и функция `HOP_START` — [{#T}](../../yql/reference/syntax/select/group-by.md#group-by-hop).
 - Запись данных в топик — [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats).
+- Сериализация в JSON: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
 ## Шаг 4. Просмотр состояния запроса {#step4}
 

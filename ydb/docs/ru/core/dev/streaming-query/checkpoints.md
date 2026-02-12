@@ -8,7 +8,7 @@
 
 - текущие [смещения](../../concepts/datamodel/topic.md#consumer-offset) во входных топиках;
 - [порядковые номера сообщений](../../concepts/datamodel/topic.md#seqno) в выходных топиках;
-- состояния агрегаций, таких как `GROUP BY HOP`, `MATCH_RECOGNIZE` и другие.
+- состояния агрегаций, таких как [GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop) и других.
 
 ## Восстановление после сбоя {#recovery}
 
@@ -37,7 +37,7 @@ INSERT INTO
 SELECT
     *
 FROM
-    ydb_source.input_topic
+    ydb_source.input_topic;
 
 END DO
 ```

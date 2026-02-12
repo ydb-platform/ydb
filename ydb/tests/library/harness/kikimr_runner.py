@@ -73,6 +73,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self._tenant_affiliation = tenant_affiliation
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
+        self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
@@ -258,6 +259,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         if getattr(self.__configurator, "tiny_mode", False):
             command.append("--tiny-mode")
+
+        if self.__configurator.monitoring_tls_cert_path is not None:
+            command.append(
+                "--mon-cert=%s" % self.__configurator.monitoring_tls_cert_path
+            )
 
         if getattr(self.__configurator, "monitoring_tls_ca_path", None) is not None:
             command.append("--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path)
@@ -782,7 +788,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def __wait_for_bs_controller_to_start(self, token=None):
         monitors = [
-            KikimrMonitor(node.host, node.mon_port, token=token)
+            KikimrMonitor(
+                node.host,
+                node.mon_port,
+                use_https=getattr(node, 'mon_uses_https', False),
+                token=token
+            )
             for node in self.nodes.values()
         ]
 

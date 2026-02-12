@@ -112,7 +112,7 @@ all:
           - static-node-1.ydb-cluster.com
           - static-node-2.ydb-cluster.com
           - static-node-3.ydb-cluster.com
-          ydbops_local: true
+        ydbops_local: true
         
         ydb_use_dynamic_config: true
         ydb_custom_dynconfig:  "{{ ansible_config_file | dirname }}/files/dynamic-config.yaml"

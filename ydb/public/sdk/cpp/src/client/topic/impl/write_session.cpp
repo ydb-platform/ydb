@@ -1,3 +1,4 @@
+#include <format>
 #include "write_session.h"
 
 #include <util/system/byteorder.h>

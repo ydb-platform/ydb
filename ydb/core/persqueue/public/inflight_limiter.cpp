@@ -40,11 +40,12 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
     AFL_ENSURE(!Layout.empty());
     Layout.back() = Offset;
 
-    if (!wasMemoryLimitReached && IsMemoryLimitReached()) {
+    bool isMemoryLimitReached = IsMemoryLimitReached();
+    if (!wasMemoryLimitReached && isMemoryLimitReached) {
         InFlightFullSince = TInstant::Now();
     }
 
-    return TotalSize < MaxAllowedSize;
+    return !isMemoryLimitReached;
 }
 
 bool TInFlightController::Remove(ui64 Offset) {

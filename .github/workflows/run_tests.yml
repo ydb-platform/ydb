@@ -267,16 +267,16 @@ jobs:
         id: set-vars
         run: |
           if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
-            echo "threads_count=24" >> $GITHUB_ENV
+            echo "threads_count=8" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
             echo "threads_count=8" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
-            echo "threads_count=4" >> $GITHUB_ENV
+            echo "threads_count=2" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
-            echo "threads_count=8" >> $GITHUB_ENV
+            echo "threads_count=2" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           else
             echo "Unknown build_preset value."

@@ -4,6 +4,8 @@
 #include "dq_opt_join_tree_node.h"
 #include "bitset.h"
 
+#include <util/generic/yexception.h>
+
 namespace NYql::NDq {
 
 TString GetJoinOrderString(const std::shared_ptr<IBaseOptimizerNode>& node) {
@@ -47,12 +49,14 @@ public:
     TDPHypSolverBase(
         TJoinHypergraph<TNodeSet>& graph,
         IProviderContext& ctx,
-        TDerived& derived
+        TDerived& derived,
+        std::chrono::milliseconds hardTimeout
     )
         : Graph_(graph)
         , NNodes_(graph.GetNodes().size())
         , Pctx_(ctx)
         , Derived(derived)
+        , HardTimeout_(hardTimeout)
     {}
 
     // Run DPHyp algorithm and produce the join tree in CBO's internal representation
@@ -114,6 +118,27 @@ protected:
     THashMap<TNodeSet, TCardinalityHints::TCardinalityHint*, std::hash<TNodeSet>> BytesHintsTable_;
     THashMap<TNodeSet, TCardinalityHints::TCardinalityHint*, std::hash<TNodeSet>> CardHintsTable_;
     THashMap<TNodeSet, TJoinAlgoHints::TJoinAlgoHint*, std::hash<TNodeSet>> JoinAlgoHintsTable_;
+
+protected:
+    std::optional<std::chrono::time_point<std::chrono::high_resolution_clock>> EnumerationStart_ = {};
+    std::chrono::milliseconds HardTimeout_;
+
+    ui32 TimeoutCheckThrottleCounter_ = 0;
+
+    bool HasTimeouted() {
+        if (!EnumerationStart_) {
+            return false;
+        }
+        return (std::chrono::high_resolution_clock::now() - *EnumerationStart_) >= HardTimeout_;
+    };
+
+    void CheckTimeout() {
+        if (++ TimeoutCheckThrottleCounter_ % 128 == 0) {
+            if (HasTimeouted()) {
+                ythrow yexception() << "CBO has timeouted";
+            }
+        }
+    }
 };
 
 template <typename TNodeSet>
@@ -122,9 +147,10 @@ public:
     TDPHypSolverShuffleElimination(
         TJoinHypergraph<TNodeSet>& graph,
         IProviderContext& ctx,
-        TOrderingsStateMachine& orderingFSM
+        TOrderingsStateMachine& orderingFSM,
+        std::chrono::milliseconds hardTimeout = std::chrono::milliseconds(UINT32_MAX)
     )
-        : TDPHypSolverBase<TNodeSet, TDPHypSolverShuffleElimination<TNodeSet>>(graph, ctx, *this)
+        : TDPHypSolverBase<TNodeSet, TDPHypSolverShuffleElimination<TNodeSet>>(graph, ctx, *this, hardTimeout)
         , OrderingsFSM(orderingFSM)
     {}
 
@@ -229,9 +255,10 @@ class TDPHypSolverClassic : public TDPHypSolverBase<TNodeSet, TDPHypSolverClassi
 public:
     TDPHypSolverClassic(
         TJoinHypergraph<TNodeSet>& graph,
-        IProviderContext& ctx
+        IProviderContext& ctx,
+        std::chrono::milliseconds hardTimeout = std::chrono::milliseconds(UINT32_MAX)
     )
-        : TDPHypSolverBase<TNodeSet, TDPHypSolverClassic<TNodeSet>>(graph, ctx, *this)
+        : TDPHypSolverBase<TNodeSet, TDPHypSolverClassic<TNodeSet>>(graph, ctx, *this, hardTimeout)
     {}
 
     std::string Type() const {
@@ -497,6 +524,9 @@ template<typename TNodeSet, typename TDerived> TNodeSet TDPHypSolverBase<TNodeSe
 }
 
 template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolverBase<TNodeSet, TDerived>::Solve(const TOptimizerHints& hints) {
+    // Record start time for timeouts
+    EnumerationStart_ = std::chrono::high_resolution_clock::now();
+
     for (auto& h : hints.CardinalityHints->Hints) {
         TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
         CardHintsTable_[hintSet] = &h;
@@ -553,6 +583,8 @@ template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNo
  * Then it recurses on the S fused with its neighbors.
  */
 template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, TDerived>::EnumerateCsgRec(const TNodeSet& s1, const TNodeSet& x) {
+    this->CheckTimeout();
+
     TNodeSet neighs =  Neighs(s1, x);
 
     if (neighs == TNodeSet{}) {
@@ -573,6 +605,7 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
             break;
         }
         prev = next;
+        this->CheckTimeout();
     }
 
     prev.reset();
@@ -587,6 +620,7 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
         }
 
         prev = next;
+        this->CheckTimeout();
     }
 }
 
@@ -596,6 +630,7 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
  * (S,S2), where S2 is the neighbor of S. Then it recursively emits complement pairs
  */
 template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, TDerived>::EmitCsg(const TNodeSet& s1) {
+    this->CheckTimeout();
     TNodeSet x = s1 | MakeBiMin(s1);
     TNodeSet neighs = Neighs(s1, x);
 
@@ -614,6 +649,7 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
 
             EnumerateCmpRec(s1, s2, x | MakeB(neighs, GetLowestSetBit(s2)));
         }
+        this->CheckTimeout();
     }
 }
 
@@ -624,6 +660,8 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
  * Then it recusrses into pairs (S1,S2+next)
  */
 template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, TDerived>::EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x) {
+    this->CheckTimeout();
+
     TNodeSet neighs = Neighs(s2, x);
 
     if (neighs == TNodeSet{}) {
@@ -647,6 +685,7 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
         }
 
         prev = next;
+        this->CheckTimeout();
     }
 
     prev.reset();
@@ -660,6 +699,7 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
         }
 
         prev = next;
+        this->CheckTimeout();
     }
 }
 
@@ -1015,6 +1055,7 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
     const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge,
     const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge
 ) {
+    this->CheckTimeout();
     // Here we actually build the join and choose and compare the
     // new plan to what's in the dpTable, if it there
 
@@ -1085,6 +1126,7 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
                     AddNodeToDpTableEntries(std::move(trees[i]), this->DpTable_[joined]);
                 }
             }
+            this->CheckTimeout();
         }
     }
 

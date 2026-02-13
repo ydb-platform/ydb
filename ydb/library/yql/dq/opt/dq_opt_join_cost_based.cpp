@@ -1,12 +1,15 @@
 #include "dq_opt_join_cost_based.h"
 #include "dq_opt_dphyp_solver.h"
 #include "dq_opt_make_join_hypergraph.h"
+#include "dq_opt_cbo_latency_predictor.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <chrono>
 
 namespace NYql::NDq {
 
@@ -318,7 +321,8 @@ public:
         TExprContext& exprCtx,
         bool enableShuffleElimination,
         TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
-        TTableAliasMap* tableAliases
+        TTableAliasMap* tableAliases,
+        std::chrono::milliseconds hardTimeout
     )
         : IOptimizerNew(ctx)
         , OptimizerSettings_(optimizerSettings)
@@ -326,6 +330,7 @@ public:
         , EnableShuffleElimination(enableShuffleElimination && orderingsFSM != nullptr)
         , OrderingsFSM(orderingsFSM)
         , TableAliases(tableAliases)
+        , HardTimeout_(hardTimeout)
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
@@ -365,9 +370,9 @@ private:
         }
 
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
-            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx);
+            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx, HardTimeout_);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
-            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM);
+            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM, HardTimeout_);
         } else {
             static_assert(false, "No such DPHyp implementation");
         }
@@ -382,13 +387,35 @@ private:
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypImpl solver = GetDPHypImpl<TNodeSet, TDPHypImpl>(hypergraph);
         YQL_CLOG(TRACE, CoreDq) << "Enumeration algorithm chosen: " << solver.Type();
-        if (solver.CountCC(OptimizerSettings_.MaxDPhypDPTableSize) >= OptimizerSettings_.MaxDPhypDPTableSize) {
-            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
+
+        // Use fast ML model to predict approximately how long it would take to run full CBO
+        // on this query and find the optimal plan
+        ui64 approxNanosToOptimize = PredictCBOTime(hypergraph);
+        ui64 approxMillisToOptimize = static_cast<ui64>(std::ceil(approxNanosToOptimize / 1'000'000.0));
+        ui64 timeBudgetNanos = OptimizerSettings_.CBOTimeout /* Millis */ * 1'000'000ULL;
+
+        std::string timeBudgetStr = FormatTime(timeBudgetNanos);
+        std::string predictedCBOTimeStr = FormatTime(approxNanosToOptimize);
+
+        YQL_CLOG(TRACE, CoreDq) << "CBO is predicted to take " << predictedCBOTimeStr
+                                << " (" << approxNanosToOptimize << ")";
+
+        if (approxNanosToOptimize > timeBudgetNanos) {
+            YQL_CLOG(TRACE, CoreDq) << "CBO time budget exceeded: "
+                                    << predictedCBOTimeStr << " > " << timeBudgetStr
+                                    << " - CBO disabled for this query";
+
+            TStringBuilder message;
+            message << "Cost based optimizer was disabled for this query because predicted "
+                    << "optimization time (it will take approximately " << predictedCBOTimeStr << ") "
+                    << "exceeds given time budget (" << timeBudgetStr << "). "
+                    << "Use PRAGMA ydb.CBOTimeout='" << approxMillisToOptimize << "' "
+                    << "or higher to run CBO for this query anyway.";
+
             ExprCtx.AddWarning(
                 YqlIssue(
                     {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
-                    "Cost Based Optimizer could not be applied to this query: "
-                    "Enumeration is too large, use PRAGMA ydb.MaxDPHypDPTableSize='4294967295' to disable the limitation"
+                    message
                 )
             );
             ComputeStatistics(joinTree, this->Pctx);
@@ -512,6 +539,8 @@ private:
 
     TSimpleSharedPtr<TOrderingsStateMachine> OrderingsFSM;
     TTableAliasMap* TableAliases;
+
+    std::chrono::milliseconds HardTimeout_;
 };
 
 IOptimizerNew* MakeNativeOptimizerNew(
@@ -520,9 +549,10 @@ IOptimizerNew* MakeNativeOptimizerNew(
     TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
-    TTableAliasMap* tableAliases
+    TTableAliasMap* tableAliases,
+    std::chrono::milliseconds hardTimeout
 ) {
-    return new TOptimizerNativeNew(pctx, settings, ectx, enableShuffleElimination, orderingsFSM, tableAliases);
+    return new TOptimizerNativeNew(pctx, settings, ectx, enableShuffleElimination, orderingsFSM, tableAliases, hardTimeout);
 }
 
 void CollectInterestingOrderingsFromJoinTree(

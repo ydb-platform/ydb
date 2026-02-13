@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         std::string queryWithShuffleElimination = "PRAGMA ydb.OptShuffleElimination=\"";
         queryWithShuffleElimination += enableShuffleElimination ? "true" : "false";
         queryWithShuffleElimination += "\";\n";
-        queryWithShuffleElimination += "PRAGMA ydb.MaxDPHypDPTableSize='4294967295';\n";
+        queryWithShuffleElimination += "PRAGMA ydb.CBOTimeout='" + std::to_string(UINT32_MAX) + "';\n";
         queryWithShuffleElimination += "PRAGMA ydb.ShuffleEliminationJoinNumCutoff='" + std::to_string(UINT32_MAX) + "';\n";
         queryWithShuffleElimination += "PRAGMA ydb.CostBasedOptimizationLevel=\"" + std::to_string(optLevel) + "\";\n";
         queryWithShuffleElimination += query;

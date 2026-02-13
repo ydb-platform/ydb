@@ -1021,7 +1021,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TAct
     }
 
     NTabletPipe::SendData(ctx, PipeClient, req.Release());
-    ctx.Schedule(TDuration::Seconds(60), new TEvPQProxy::TEvUpdateReadMetrics());
+    ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {

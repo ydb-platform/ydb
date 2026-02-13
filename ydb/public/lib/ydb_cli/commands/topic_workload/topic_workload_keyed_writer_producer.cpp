@@ -58,7 +58,7 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
 
     NYdb::NTopic::TWriteMessage writeMessage(data);
     writeMessage.SeqNo(MessageId_);
-    // writeMessage.CreateTimestamp(enqueueTimestamp);
+    writeMessage.CreateTimestamp(enqueueTimestamp);
     writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
 
     if (transaction.has_value()) {
@@ -105,17 +105,6 @@ void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration
 
         if (!foundEvent) {
             return;
-            // auto variant = WriteSession_->GetEvent(false).value();
-            // if (std::holds_alternative<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(variant)) {
-            //     auto event = std::get<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(variant);
-            //     ContinuationTokens_.push(std::move(event.ContinuationToken));
-            //     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-            //                     << "Producer " << ProducerId_
-            //                     << " in writer " << Params_.WriterIdx
-            //                     << ": Got new ContinuationToken token");
-            // } else {
-            //     ythrow yexception() << "Unexpected event type in WaitForContinuationToken";
-            // }
         }
     }
 }

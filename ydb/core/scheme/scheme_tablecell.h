@@ -368,7 +368,17 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, const NScheme::TTyp
     return 0;
 }
 
-// ATTENTION!!! return value is int!! (NOT just -1,0,1)
+// Low level cell vectors comparison.
+// Consider using higher level CompareKeys or CompareKeysPrefix.
+//
+// This function is suitable for comparing cell vectors representing table keys of equal size.
+// It is unsuitable for comparing table keys to key prefixes to range borders.
+// If actual cell vector lengths are not equal, result of the key comparison can be semantically incorrect.
+//
+// Compares up to `cnt` components of the given vectors, not taking into account remaining tails.
+//
+// NULL as a key component is considered equal to another NULL and less than non-NULL value.
+// NOTE: return value can be a full range int and NOT just [-1,0,1].
 template<class TTypeClass>
 inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt) {
     for (ui32 i = 0; i < cnt; ++i) {
@@ -379,22 +389,54 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
     return 0;
 }
 
-/// @warning Do not use this func to compare key with a range border. Partial key means it ends with Nulls here.
-// ATTENTION!!! return value is int!! (NOT just -1,0,1)
+// Low level cell vectors comparison.
+// Consider using higher level CompareKeys() or CompareKeysPrefix().
+//
+// This function is suitable for comparing cell vectors representing table keys,
+// key prefixes or partial keys (or range borders) -- vectors of potentially different sizes.
+//
+//  For range borders comparison consider using specialized scheme_borders.h:ComparePrefixBorders().
+//
+// Compares given vectors up to the length of the shorter one, then takes into account remaining tail.
+//
+// Absent tail components of the shorter key are considered +inf, so, greater than any value.
+// NULL as a key component is considered equal to another NULL and less than any non-NULL value.
+// NOTE: return value can be a full range int and NOT just [-1,0,1].
 template<class TTypeClass>
-inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt_a, const ui32 cnt_b) {
-    Y_ENSURE(cnt_b <= cnt_a);
-    ui32 i = 0;
-    for (; i < cnt_b; ++i) {
-        int cmpRes = CompareTypedCells(a[i], b[i], type[i]);
-        if (cmpRes != 0)
-            return cmpRes;
+inline int CompareTypedCellVectorsAsKeyPrefixes(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 len_a, const ui32 len_b) {
+    const auto compareSize = std::min(len_a, len_b);
+    int cmp = CompareTypedCellVectors(a, b, type, compareSize);
+    if (cmp == 0 && len_a != len_b) {
+        // smaller key is filled with +inf => always bigger
+        cmp = (len_a < len_b) ? +1 : -1;
     }
-    for (; i < cnt_a; ++i) {
-        if (!a[i].IsNull())
-            return 1;
-    }
-    return 0;
+    return cmp;
+};
+
+template <class Container>
+concept CellVector = std::contiguous_iterator<typename Container::iterator>
+    && std::same_as<std::remove_cv_t<typename Container::value_type>, TCell>;
+
+template <class Container>
+concept TypeInfoVector = std::contiguous_iterator<typename Container::iterator>
+    && std::convertible_to<typename Container::value_type, NScheme::TTypeInfoOrder>;
+
+// Higher level wrapper for cell vectors comparison.
+//
+// Compares cell vectors as keys or key prefixes, vector lengths may differ.
+//
+// NOTE: return value can be a full range int and NOT just [-1,0,1].
+inline int CompareKeys(const CellVector auto& a, const CellVector auto& b, const TypeInfoVector auto& types) {
+    return CompareTypedCellVectorsAsKeyPrefixes(a.data(), b.data(), types.data(), a.size(), b.size());
+}
+
+// Higher level wrapper for cell vectors comparison.
+//
+// Compares prefixes of the cell vectors as keys or key prefixes, vector lengths may differ.
+//
+// NOTE: return value can be a full range int and NOT just [-1,0,1].
+inline int CompareKeysPrefix(const CellVector auto& a, const CellVector auto& b, const TypeInfoVector auto& types, const size_t limit) {
+    return CompareTypedCellVectorsAsKeyPrefixes(a.data(), b.data(), types.data(), std::min(a.size(), limit), std::min(b.size(), limit));
 }
 
 // Bool with NULL semantics.

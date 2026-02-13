@@ -25,7 +25,7 @@ namespace NTest {
             , Run(run)
         {
         }
-        
+
         TWrapPartImpl(const TPartEggs &eggs, TIntrusiveConstPtr<TSlices> slices = nullptr, bool defaults = true)
             : Eggs(eggs)
             , Scheme(eggs.Scheme)
@@ -156,11 +156,7 @@ namespace NTest {
             TDbTupleRef key = Iter->GetKey();
 
             if (StopKey) {
-                auto cmp = CompareTypedCellVectors(key.Cells().data(), StopKey.data(), Scheme->Keys->Types.data(), Min(key.Cells().size(), StopKey.size()));
-                if (cmp == 0 && key.Cells().size() != StopKey.size()) {
-                    // smaller key is filled with +inf => always bigger
-                    cmp = key.Cells().size() < StopKey.size() ? +1 : -1;
-                }
+                auto cmp = CompareKeys(key.Cells(), StopKey, Scheme->Keys->Types);
                 if (Direction == EDirection::Forward && cmp > 0 || Direction == EDirection::Reverse && cmp < 0) {
                    return EReady::Gone;
                 }

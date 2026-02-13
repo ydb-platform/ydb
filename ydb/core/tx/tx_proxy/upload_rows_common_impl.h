@@ -1017,15 +1017,9 @@ private:
                 MaxKey = serializedKey;
             } else {
                 // For all next keys
-                if (CompareTypedCellVectors(serializedKey.GetCells().data(), MinKey.GetCells().data(),
-                                            KeyColumnTypes.data(),
-                                            serializedKey.GetCells().size(), MinKey.GetCells().size()) < 0)
-                {
+                if (CompareKeys(serializedKey.GetCells(), MinKey.GetCells(), KeyColumnTypes) < 0) {
                     MinKey = serializedKey;
-                } else if (CompareTypedCellVectors(serializedKey.GetCells().data(), MaxKey.GetCells().data(),
-                                                   KeyColumnTypes.data(),
-                                                   serializedKey.GetCells().size(), MaxKey.GetCells().size()) > 0)
-                {
+                } else if (CompareKeys(serializedKey.GetCells(), MaxKey.GetCells(), KeyColumnTypes) > 0) {
                     MaxKey = serializedKey;
                 }
             }

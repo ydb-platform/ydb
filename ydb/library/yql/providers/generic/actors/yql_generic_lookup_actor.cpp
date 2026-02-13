@@ -271,6 +271,11 @@ namespace NYql::NDq {
 
         void Handle(TEvLookupRetry::TPtr) {
             auto guard = Guard(*Alloc);
+            if (IsMultiMatches) {
+                for (auto& [_, value]: *Request) {
+                    value = NUdf::TUnboxedValue{};
+                }
+            }
             SendRequest();
         }
 
@@ -515,6 +520,7 @@ namespace NYql::NDq {
             for (const auto& [keys, _] : *Request) {
                 // TODO consider skipping already retrieved keys
                 // ... but careful, can we end up with zero? TODO
+                // (... and we MUST re-request ALL keys for IsMultiMatches)
                 AddClause(disjunction, KeyType->GetMembersCount(), keys);
             }
             auto& keys = Request->begin()->first; // Request is never empty

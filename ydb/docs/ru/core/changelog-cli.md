@@ -373,7 +373,7 @@
 * Добавлена поддержка вывода результата выполнения команд [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) в формате [Apache Parquet](https://parquet.apache.org/docs/).
 * В командах [ydb workload](reference/ydb-cli/commands/workload/index.md) добавлена опция `--executer`, задающая используемый тип запросов.
 * Добавлена колонка медианного времени выполнения бенчмарка в таблице статистики в команде [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md).
-* **_(Experimental)_** Добавлен тип запросов `generic` в команде [ydb table query execute](reference/ydb-cli/table-query-execute.md), позволяющий выполнять [DDL](https://ru.wikipedia.org/wiki/Data_Definition_Language) и [DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) операции, с результатами произвольного размера и c поддержкой [MVCC](concepts/mvcc.md). Команда использует экспериментальное API, совместимость не гарантируется.
+* **_(Experimental)_** Добавлен тип запросов `generic` в команде [ydb table query execute](reference/ydb-cli/table-query-execute.md), позволяющий выполнять [DDL](https://ru.wikipedia.org/wiki/Data_Definition_Language) и [DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) операции, с результатами произвольного размера и c поддержкой [MVCC](concepts/query_execution/mvcc.md). Команда использует экспериментальное API, совместимость не гарантируется.
 * **_(Experimental)_** В команде `{{ ydb-cli }} table query explain` добавлена опция `--collect-diagnostics` для сбора диагностики запроса и сохранения её в файл. Команда использует экспериментальное API, совместимость не гарантируется.
 
 ### Исправления ошибок

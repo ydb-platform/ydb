@@ -147,20 +147,79 @@ $all_failures_with_pr_base = (
         AND base.test_name IS NOT NULL
 );
 
+$all_pr_check_runs = (
+    -- Все PR-check job'ы (не только failure), чтобы корректно определить последний запуск PR
+    SELECT
+        job_id,
+        pr_number,
+        MAX(run_timestamp) AS run_timestamp
+    FROM (
+        SELECT
+            job_id,
+            run_timestamp,
+            ListHead(
+                Unicode::SplitToList(
+                    CASE
+                        WHEN String::Contains(
+                            ListHead(ListSkip(Unicode::SplitToList(CAST(pull AS UTF8), 'PR_'), 1)),
+                            '#'
+                        ) THEN ListHead(
+                            ListSkip(
+                                Unicode::SplitToList(
+                                    ListHead(ListSkip(Unicode::SplitToList(CAST(pull AS UTF8), 'PR_'), 1)),
+                                    '#'
+                                ),
+                                1
+                            )
+                        )
+                        ELSE ListHead(ListSkip(Unicode::SplitToList(CAST(pull AS UTF8), 'PR_'), 1))
+                    END,
+                    '_'
+                )
+            ) AS pr_number
+        FROM
+            `test_results/test_runs_column`
+        WHERE
+            build_type = 'relwithdebinfo'
+            AND job_name = 'PR-check'
+            AND run_timestamp > CurrentUtcDate() - $pr_check_lookback_days * Interval("P1D")
+            AND pull IS NOT NULL
+            AND pull != ''
+            AND String::Contains(pull, 'PR_')
+            AND job_id IS NOT NULL
+    ) AS runs
+    GROUP BY
+        job_id,
+        pr_number
+);
+
+$last_job_per_pr = (
+    SELECT
+        pr_number,
+        MAX_BY(job_id, run_timestamp) AS last_job_id
+    FROM
+        $all_pr_check_runs
+    GROUP BY
+        pr_number
+);
+
 $all_failures_with_pr = (
     SELECT 
-        full_name,
-        suite_folder,
-        test_name,
-        job_id,
-        run_timestamp,
-        branch,
-        status_description,
-        pr_number,
-        attempt_number,
-        CASE WHEN job_id = MAX_BY(job_id, run_timestamp) OVER (PARTITION BY pr_number) THEN 1 ELSE 0 END AS is_last_run_in_pr
+        f.full_name AS full_name,
+        f.suite_folder AS suite_folder,
+        f.test_name AS test_name,
+        f.job_id AS job_id,
+        f.run_timestamp AS run_timestamp,
+        f.branch AS branch,
+        f.status_description AS status_description,
+        f.pr_number AS pr_number,
+        f.attempt_number AS attempt_number,
+        CASE WHEN f.job_id = l.last_job_id THEN 1 ELSE 0 END AS is_last_run_in_pr
     FROM 
-        $all_failures_with_pr_base
+        $all_failures_with_pr_base AS f
+    LEFT JOIN
+        $last_job_per_pr AS l
+        ON f.pr_number = l.pr_number
 );
 
 $test_pr_failures = (

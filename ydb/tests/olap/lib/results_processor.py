@@ -7,24 +7,26 @@ import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param, get_ci_version, get_self_version
 from time import time_ns
+from datetime import datetime
 
 
 class ResultsProcessor:
     class Endpoint:
-        def __init__(self, ep: str, db: str, table: str, key: str, iam_file: str) -> None:
+        def __init__(self, ep: str, db: str, table: str, key: str, iam_file: str, columns: ydb.BulkUpsertColumns) -> None:
             self._endpoint = ep
             self._driver = YdbCluster._create_ydb_driver(ep, db, oauth=key, iam_file=iam_file)
             self._db = db
             self._table = table
+            self._columns = columns
 
         def send_data(self, data):
             try:
                 logging.info(f"[ResultsProcessor] Sending data to YDB endpoint: {self._endpoint}, db: {self._db}, table: {self._table}")
                 logging.debug(f"[ResultsProcessor] Data: {json.dumps(data)[:1000]}" + ("..." if len(json.dumps(data)) > 1000 else ""))
-                logging.info(f"[ResultsProcessor] Columns types: {ResultsProcessor._columns_types}")
+                logging.info(f"[ResultsProcessor] Columns types: {self._columns}")
                 ydb.retry_operation_sync(
                     lambda: self._driver.table_client.bulk_upsert(
-                        os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
+                        os.path.join(self._db, self._table), [data], self._columns
                     )
                 )
                 logging.info(f"[ResultsProcessor] Data sent successfully to {os.path.join(self._db, self._table)}")
@@ -32,6 +34,7 @@ class ResultsProcessor:
                 logging.error(f'[ResultsProcessor] Exception while send results: {e}')
 
     _endpoints: list[ResultsProcessor.Endpoint] = None
+    _tpcc_endpoints: list[ResultsProcessor.Endpoint] = None
     _run_id: int = None
 
     send_results = external_param_is_true('send-results')
@@ -54,25 +57,57 @@ class ResultsProcessor:
         .add_column('Info', ydb.OptionalType(ydb.PrimitiveType.JsonDocument))
     )
 
+    _tpcc_columns_types = (
+        ydb.BulkUpsertColumns()
+        .add_column('timestamp', ydb.PrimitiveType.Timestamp)
+        .add_column('cluster', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('version', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('git_repository', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('git_commit_timestamp', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column('git_branch', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('run_type', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('tool', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('label', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('warehouses', ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column('duration_seconds', ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column('tpmC', ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column('efficiency', ydb.OptionalType(ydb.PrimitiveType.Double))
+        .add_column('throughput', ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column('goodput', ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column('newOrderLatency90', ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column('json', ydb.OptionalType(ydb.PrimitiveType.Json))
+    )
+
+    @staticmethod
+    def _create_endpoints(tables: list[str], columns: ydb.BulkUpsertColumns) -> list[ResultsProcessor.Endpoint]:
+        endpoints = get_external_param('results-endpoint', 'grpc://ydb-ru-prestable.yandex.net:2135').split(',')
+        dbs = get_external_param('results-db', '/ru-prestable/kikimr/preprod/olap-click-perf').split(',')
+        count = max(len(endpoints), len(dbs), len(tables))
+        common_key = os.getenv('RESULT_YDB_OAUTH', None)
+        result = []
+        for i in range(count):
+            ep = endpoints[i] if i < len(endpoints) else endpoints[-1]
+            db = dbs[i] if i < len(dbs) else dbs[-1]
+            table = tables[i] if i < len(tables) else tables[-1]
+            iam_file = os.getenv(f'RESULT_IAM_FILE_{i}', None)
+            key = None
+            if iam_file is None:
+                key = os.getenv(f'RESULT_YDB_OAUTH_{i}', common_key)
+            result.append(ResultsProcessor.Endpoint(ep, db, table, key, iam_file, columns))
+        return result
+
     @classmethod
     def get_endpoints(cls):
         if cls._endpoints is None:
-            endpoints = get_external_param('results-endpoint', 'grpc://ydb-ru-prestable.yandex.net:2135').split(',')
-            dbs = get_external_param('results-db', '/ru-prestable/kikimr/preprod/olap-click-perf').split(',')
-            tables = get_external_param('results-table', 'tests_results').split(',')
-            count = max(len(endpoints), len(dbs), len(tables))
-            common_key = os.getenv('RESULT_YDB_OAUTH', None)
-            cls._endpoints = []
-            for i in range(count):
-                ep = endpoints[i] if i < len(endpoints) else endpoints[-1]
-                db = dbs[i] if i < len(dbs) else dbs[-1]
-                table = tables[i] if i < len(tables) else tables[-1]
-                iam_file = os.getenv(f'RESULT_IAM_FILE_{i}', None)
-                key = None
-                if iam_file is None:
-                    key = os.getenv(f'RESULT_YDB_OAUTH_{i}', common_key)
-                cls._endpoints.append(ResultsProcessor.Endpoint(ep, db, table, key, iam_file))
+            cls._endpoints = cls._create_endpoints(get_external_param('results-table', 'tests_results').split(','), cls._columns_types)
         return cls._endpoints
+
+    @classmethod
+    def get_tpcc_endpoints(cls):
+        if cls._tpcc_endpoints is None:
+            tables = get_external_param('results-tpcc-table', '')
+            cls._tpcc_endpoints = cls._create_endpoints(tables.split(','), cls._tpcc_columns_types) if tables else []
+        return cls._tpcc_endpoints
 
     @classmethod
     def get_run_id(cls) -> int:
@@ -195,4 +230,48 @@ class ResultsProcessor:
                 'Info': json.dumps(info),
             }
             for endpoint in cls.get_endpoints():
+                endpoint.send_data(data)
+
+    @classmethod
+    def upload_tpcc_results(cls, results, run_type: str):
+        if not cls.send_results or not cls.get_tpcc_endpoints():
+            return
+        with allure.step("Upload TPCC results to YDB"):
+            cluster_info = YdbCluster.get_cluster_info()
+            cluster_name = os.getenv('CI_CLUSTER_NAME', '').replace('oltp-', '').replace('-', '') or cluster_info.get('name', '')
+            ver = cluster_info.get('version', '').split('.')
+            version = ver[-1]
+            branch = ver[0] if len(ver) > 1 else ''
+            commit_ts = 0
+            ci_git_info = os.getenv('CI_YDB_GIT_INFO')
+            if ci_git_info:
+                ci_git_info = json.loads(ci_git_info)
+                branch = ci_git_info.get('branch', branch)
+                version = ci_git_info.get('version', version)
+                commit_ts = ci_git_info.get('commit_timestamp', 0)
+            branch = f'origin/{branch}' if branch else ''
+
+            summary = results.get('summary', {})
+            json_string = json.dumps(results, separators=(',', ':'))
+            data = {
+                'timestamp': 1000000 * summary.get('measure_start_ts', 0),
+                'cluster': cluster_name,
+                'version': version,
+                'git_repository': 'https://github.com/ydb-platform/ydb.git',
+                'git_commit_timestamp': 1000000 * commit_ts,
+                'git_branch': branch,
+                'run_type': run_type,
+                'tool': 'ydb_cli_tpcc',
+                'label': f"{datetime.fromtimestamp(commit_ts).strftime('%Y-%m-%d_%H%M%S')}_{version}_{summary.get('measure_start_ts', 0)}",
+                'warehouses': summary.get('warehouses', 0),
+                'duration_seconds': summary.get('time_seconds', 0),
+                'tpmC': summary.get('tpmc', 0),
+                'efficiency': summary.get('efficiency', 0),
+                'throughput': None,
+                'goodput': None,
+                'newOrderLatency90': results.get('transactions', {}).get('NewOrder', {}).get('percentiles', {}).get('90', 0),
+                'json': json_string
+            }
+            allure.attach(json.dumps(data), 'data', allure.attachment_type.JSON)
+            for endpoint in cls.get_tpcc_endpoints():
                 endpoint.send_data(data)

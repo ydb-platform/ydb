@@ -27,6 +27,7 @@ PY3TEST()
         test_clickbench.py
         test_external.py
         test_import_csv.py
+        test_tpcc.py
         test_tpcds.py
         test_tpch.py
         test_upload.py

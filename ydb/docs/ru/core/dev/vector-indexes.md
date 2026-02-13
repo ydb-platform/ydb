@@ -4,16 +4,117 @@
 
 Данные в таблице {{ ydb-short-name }} хранятся и сортируются по первичному ключу, что обеспечивает эффективный поиск по точному совпадению и сканирование диапазонов. Векторные индексы предоставляют аналогичную эффективность для поиска ближайших соседей в векторных пространствах.
 
-## Характеристики векторных индексов {#characteristics}
+## Виды векторных индексов
 
-Векторные индексы в {{ ydb-short-name }} решают задачу поиска ближайших соседей с использованием [функций схожести или расстояния](../yql/reference/udf/list/knn.md#functions-distance). Параметры функций расстояния/схожести для векторных индексов:
+Векторный индекс может быть глобальным либо фильтрующим (категоризованным). Также векторный индекс может быть покрывающим и включать копию данных дополнительных колонок из основной таблицы.
 
-* `distance` - функция расстояния (`cosine`, `euclidean`, `manhattan`), взаимоисключающий с `similarity`.
-* `similarity` - функция схожести (`inner_product`, `cosine`), взаимоисключающий с `distance`.
+### Глобальный векторный индекс {#basic}
+
+Глобальный векторный индекс по колонке `embedding` позволяет быстро искать приближённых ближайших соседей по всей таблице:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding)
+  COVER (embedding, data)
+  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+```
+
+Пример запроса поиска к такому индексу:
+
+```yql
+PRAGMA ydb.KMeansTreeSearchTopSize = "10";
+
+DECLARE $query_vector AS string;
+
+$query_vector = Knn::ToBinaryStringFloat([1.0, 1.2, 0, ...]);
+
+SELECT user, data
+FROM my_table VIEW my_index
+ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
+LIMIT 10;
+```
+
+Обратите внимание, что:
+- Как векторная колонка, так и параметр `$query_vector` должны иметь строковый тип и содержать массив чисел в простом [бинарном формате](../yql/reference/udf/list/knn.md#functions-convert-format).
+- Передавать параметр из SDK эффективнее в виде строки, сериализуя числа на стороне приложения ([примеры](../recipes/ydb-sdk/vector-search.md#search-by-vector)). Альтернативно значение можно передавать из SDK как вектор чисел и конвертировать из списка функциями `Knn::ToBinaryString*`, но это медленнее.
+- Конструкция `COVER (embedding, data)` необязательна и предназначена для создания [покрывающего индекса](#covering). Это помогает дополнительно ускорить поиск.
+- Поиск по векторному индексу всегда приближённый - его результаты отличаются от поиска полным перебором.
+- Увеличение параметра [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) повышает качество (полноту) поиска, но снижает его скорость. Параметр задаёт число ближайших к запросу сканируемых кластеров индекса.
+- Параметр `overlap_clusters=3` сильно повышает качество будущего поиска при индексации, задавая число кластеров, в которые добавляется каждый вектор, но увеличивает размер индекса.
+
+### Векторный индекс с фильтрацией {#filtered}
+
+Векторный индекс с фильтрацией (категоризованный) позволяет искать ближайших соседей в рамках каждой категории, заданной уникальным значением дополнительных колонок.
+
+Чтобы создать такой индекс, укажите несколько индексных колонок. Последняя колонка должна быть векторной, остальные (колонки категорий) - любыми:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (user, embedding)
+  COVER (embedding, data)
+  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+```
+
+Запросы поиска к такому индексу с фильтрацией должны включать условия по колонке `user`:
+
+```yql
+PRAGMA ydb.KMeansTreeSearchTopSize = "10";
+
+$query_vector = Knn::ToBinaryStringFloat([1.0, 1.2, 0, ...]);
+
+SELECT user, data
+FROM my_table VIEW my_index
+WHERE user = 'john'
+ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
+LIMIT 10;
+```
+
+Параметры индексации и поиска здесь работают аналогично глобальному индексу.
+
+### Покрывающий векторный индекс {#covering}
+
+Покрывающий векторный индекс содержит копию данных дополнительных колонок, чтобы избежать чтения из основной таблицы и еще сильнее ускорить поиск.
+
+Обратите внимание, что по умолчанию индекс не содержит копию векторной колонки (в примере - embedding), поэтому если её не добавить в список покрытых колонок явно, то избежать чтения из основной таблицы не удастся, так как вектора всегда используются для точной сортировки результатов на последнем этапе поиска.
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding)
+  COVER (embedding, data)
+  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+```
+
+## Функции расстояния {#distance}
+
+Поддерживаются следующие [функции схожести или расстояния](../yql/reference/udf/list/knn.md#functions-distance):
+
+* `distance=cosine` или `similarity=cosine` - косинусное расстояние, соответствует сортировке `ORDER BY Knn::CosineDistance(...) ASC` либо `ORDER BY Knn::CosineSimilarity(...) DESC`.
+* `distance=manhattan` - Манхэттенское расстояние (L1-метрика), соответствует `ORDER BY Knn::ManhattanDistance(...) ASC`.
+* `distance=euclidean` - Евклидово расстояние (L2-метрика), соответствует `ORDER BY Knn::EuclideanDistance(...) ASC`.
+* `similarity=inner_product` - скалярное произведение, соответствует `ORDER BY Knn::InnerProductSimilarity(...) DESC`.
+
+## Полный синтаксис векторных индексов {#syntax}
+
+Создание векторного индекса:
+
+* При создании таблицы: [CREATE TABLE](../yql/reference/syntax/create_table/vector_index.md).
+* Добавление к существующей таблице: [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md).
+
+Полный синтаксис запроса к векторному индексу:
+
+* [VIEW VECTOR INDEX](../yql/reference/syntax/select/vector_index.md).
+
+## Алгоритм поиска
 
 В текущей реализации доступен один тип индекса: `vector_kmeans_tree`.
 
-## Векторный индекс типа `vector_kmeans_tree` {#kmeans-tree-type}
+### Векторный индекс типа `vector_kmeans_tree` {#kmeans-tree-type}
 
 Индекс `vector_kmeans_tree` реализует иерархическую кластеризацию данных. Структура индекса включает:
 
@@ -34,126 +135,69 @@
 
     * `levels`: число уровней в дереве, задает глубину поиска (рекомендуется 1-3);
     * `clusters`: количество кластеров в k-means, определяющее ширину поиска (рекомендуется 64-512).
+    * `overlap_clusters`: количество кластеров нижнего уровня, в которые добавляется каждый вектор (рекомендуется 3).
 
-Внутри векторный индекс состоит из скрытых индексных таблиц вида `indexImpl*Table`. В [запросах на выборку](#select) с использованием векторного индекса эти таблицы отображаются в [статистике запросов](query-plans-optimization.md). Подробнее об устройстве векторного индекса см. в отдельной статье [{#T}](vector-indexes-kmeans-tree-type.md).
-
-## Виды векторных индексов {#types}
-
-Векторный индекс может быть **покрывающим**, что означает включение дополнительных колонок для возможности чтения из индекса без обращения к основной таблице.
-
-Или же он может быть с поддержкой **фильтрации**, что позволяет учитывать дополнительные колонки для быстрой фильтрации при выполнении чтения.
-
-Ниже приведены примеры создания векторного индекса различных типов.
-
-### Базовый векторный индекс {#basic}
-
-Глобальный векторный индекс по колонке `embedding`:  
-
-```yql
-ALTER TABLE my_table
-  ADD INDEX my_index
-  GLOBAL USING vector_kmeans_tree
-  ON (embedding)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
-```
-
-### Векторный индекс с покрывающими колонками {#covering}
-
-Покрывающий векторный индекс, включающий дополнительную колонку `data`, чтобы избежать чтения из основной таблицы при поиске:  
-
-```yql
-ALTER TABLE my_table
-  ADD INDEX my_index
-  GLOBAL USING vector_kmeans_tree
-  ON (embedding) COVER (data)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
-```
-
-### Векторный индекс с фильтрацией {#filtered}
-
-Векторный индекс с фильтрацией, позволяющий фильтровать по колонке `user` в момент выполнения векторного поиска:
-
-```yql
-ALTER TABLE my_table
-  ADD INDEX my_index
-  GLOBAL USING vector_kmeans_tree
-  ON (user, embedding)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
-```
-
-### Векторный индекс с фильтрацией и покрывающими колонками {#filtered-covering}
-
-Векторный индекс с фильтрацией и покрывающими колонками:  
-
-```yql
-ALTER TABLE my_table
-  ADD INDEX my_index
-  GLOBAL USING vector_kmeans_tree
-  ON (user, embedding) COVER (data)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
-```
+Внутри векторный индекс состоит из индексных таблиц с названиями вида `indexImpl*Table`. В запросах на выборку с использованием векторного индекса эти таблицы отображаются в [статистике запросов](query-plans-optimization.md). Подробнее об устройстве данного типа векторного индекса см. статью [{#T}](vector-indexes-kmeans-tree-type.md).
 
 ### Перекрытие кластеров {#overlap-clusters}
 
-Векторный индекс в YDB может добавлять каждый вектор в несколько кластеров с целью
-улучшения полноты и скорости поиска:
+Векторный индекс в YDB может добавлять каждый вектор в несколько кластеров с целью улучшения полноты и скорости поиска:
 
 ```yql
 ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
 ```
 
 В данном примере каждый вектор будет добавлен в 3 ближайших кластера вместо 1.
 
-Использование такого индекса позволяет значительно улучшить полноту поиска даже с небольшими значениями PRAGMA
-[KMeansTreeSearchTopSize](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) (например, 3).
+Параметр overlap_clusters рекомендуется использовать практически всегда, особенно, для векторных индексов с `levels > 1`, так как он позволяет значительно улучшить полноту поиска даже с небольшими значениями PRAGMA [KMeansTreeSearchTopSize](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) (например, 3).
 
-## Создание векторных индексов {#creation}
+Таким образом, можно снизить параметр PRAGMA и значительно ускорить поиск при сохранении той же полноты.
 
-Векторные индексы можно создавать:
+## Партиционирование индексных таблиц {#partitioning}
 
-* при создании таблицы с помощью YQL-оператора [CREATE TABLE](../yql/reference/syntax/create_table/vector_index.md);
-* добавлять к существующей таблице с помощью YQL-оператора [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md).
+Основная нагруженная таблица векторного индекса - `indexImplLevelTable`, таблица структуры кластеров. Любой запрос поиска по индексу читает эту таблицу, поэтому нагрузка на её партиции может ограничивать производительность выборок.
 
-## Использование векторных индексов {#select}
-
-Запросы к векторным индексам выполняются с использованием синтаксиса `VIEW` в YQL:
+Чтобы улучшить производительность, можно включить для неё автопартиционирование по нагрузке:
 
 ```yql
-DECLARE $query_vector AS List<Uint8>;
-
-SELECT user, data
-FROM my_table VIEW my_index
-ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
-LIMIT 10;
+ALTER TABLE `my_table/my_index/indexImplLevelTable`
+SET AUTO_PARTITIONING_BY_LOAD ENABLED;
 ```
 
-Для индексов с фильтрацией укажите соответствующие колонки в условии `WHERE`:
+Или по размеру:
 
 ```yql
-DECLARE $query_vector AS List<Uint8>;
-
-SELECT user, data
-FROM my_table VIEW my_index
-WHERE user = 'john'
-ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
-LIMIT 10;
+ALTER TABLE `my_table/my_index/indexImplLevelTable`
+SET AUTO_PARTITIONING_PARTITION_SIZE_MB 100;
 ```
 
-Подробнее о выполнении запросов `SELECT` с использованием векторных индексов можно прочитать в разделе [VIEW VECTOR INDEX](../yql/reference/syntax/select/vector_index.md).
+Аналогичную настройку можно применять и к другим индексным таблицам (`indexImplPostingTable` и `indexImplPrefixTable`), но таблица Level - самая нагруженная и при этом небольшая по размеру, поэтому для неё настройки автопартиционирования наиболее актуальны.
 
-{% note info %}
+## Использование реплик индексных таблиц {#replicas}
 
-Если не использовать выражение `VIEW`, запрос выполнит полное сканирование таблицы с попарным сравнением векторов.
+Ещё один способ ускорения поиска - использовать реплики таблиц. Для этого нужно:
 
-Рекомендуется проверять оптимальность написанного запроса, используя [статистику запросов](query-plans-optimization.md). В частности, следует следить за отсутствием полного сканирования (full scan) основной таблицы.
-
-{% endnote %}
+1. Создать [покрывающий индекс](#covering), чтобы в запросе поиска участвовали только индексные таблицы.
+2. Включить реплики на всех индексных таблицах:
+   ```yql
+   ALTER TABLE `my_table/my_index/indexImplLevelTable` SET READ_REPLICAS_SETTINGS 'PER_AZ:3';
+   ALTER TABLE `my_table/my_index/indexImplPostingTable` SET READ_REPLICAS_SETTINGS 'PER_AZ:3';
+   ```
+   И, для индекса с фильтрацией, также:
+   ```yql
+   ALTER TABLE `my_table/my_index/indexImplPrefixTable` SET READ_REPLICAS_SETTINGS 'PER_AZ:3';
+   ```
+3. Использовать режим запроса [Stale Read-Only](../recipes/ydb-sdk/tx-control.md#stale-read-only).
 
 ## Обновление векторных индексов {#update}
+
+Обновление векторных индексов имеет следующие особенности:
+
+### Кластеры не пересчитываются при обновлении
 
 При обновлении таблицы с векторным индексом его внутренняя структура — дерево кластеров (групп схожих векторов) — не перестраивается. Новые или изменённые записи лишь распределяются по уже существующим кластерам.
 
@@ -173,6 +217,14 @@ LIMIT 10;
 
 * Не создавайте векторный индекс на пустой таблице;
 * Если в таблице накопилось много новых данных, [постройте новый индекс](../yql/reference/syntax/alter_table/indexes.md) и [атомарно замените](../reference/ydb-cli/commands/secondary_index.md#rename) старый индекс на вновь построенный.
+
+### Неконсистентность при обновлении во время построения
+
+Векторные индексы не поддерживают консистентные обновления во время построения. То есть, векторный индекс не обновляется, если данные в основной таблице меняются до завершения построения индекса.
+
+Это означает, что если вы хотите, чтобы векторный индекс оставался на 100% консистентным, вы должны приостановить обновления данных в таблице во время его построения.
+
+Обновления таблицы не блокируются автоматически, так как поиск по векторному индексу всегда приблизительный и поэтому отсутствие консистентности при построении часто не является проблемой.
 
 ## Рецепты работы с векторным индексом {#vector-index-recipes}
 

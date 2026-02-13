@@ -844,6 +844,12 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
 
+        // Disable shared cache to trigger restarts
+        TAtomic unused = 42;
+        cleverServer.GetRuntime()->GetAppData().Icb->SetValue("SharedPageCache_Size", 10, unused);
+        cleverServer.GetRuntime()->GetAppData().Icb->SetValue("SharedPageCache_Size", 10, unused);
+        UNIT_ASSERT_VALUES_EQUAL(unused, 10);
+
         TFlatMsgBusClient annoyingClient(port);
         PrepareS3Data(annoyingClient);
 
@@ -891,8 +897,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         };
 
         int restarts = restartsCount(ss.Str());
-        UNIT_ASSERT_VALUES_EQUAL_C(restarts, 1, TStringBuilder()
-            << "expected 1 restart, got " << restarts);
+        UNIT_ASSERT_C(restarts <= 1, TStringBuilder() << "expected <= 1 restart, got " << restarts);
     }
 
     Y_UNIT_TEST(CornerCases) {

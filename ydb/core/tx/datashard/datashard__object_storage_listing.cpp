@@ -57,6 +57,7 @@ public:
             if (!execSpan) {
                 return;
             }
+            execSpan.Attribute("Shard", std::to_string(this->Self->TabletID()));
             execSpan.Attribute("ScannedRows", std::to_string(scannedRows));
             execSpan.Attribute("LeafRows", std::to_string(leafRows));
             execSpan.Attribute("ErasedRows", std::to_string(erasedRows));

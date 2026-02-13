@@ -6,6 +6,8 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+////////////////////////////////////////////////////////////////////////////////
+
 // In-memory implementation of DirectBlockGroup that doesn't use DDisk
 
 class TInMemoryDirectBlockGroup: public IDirectBlockGroup
@@ -56,10 +58,12 @@ private:
 
 public:
     TInMemoryDirectBlockGroup(
-        ui64 tabletId, ui32 generation,
+        ui64 tabletId,
+        ui32 generation,
         TVector<NKikimr::NBsController::TDDiskId> ddisksIds,
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
-        ui32 blockSize, ui64 blocksCount);
+        ui32 blockSize,
+        ui64 blocksCount);
 
     ~TInMemoryDirectBlockGroup() override = default;
 
@@ -86,5 +90,7 @@ public:
         ReadBlocksReplyCallback = std::move(callback);
     }
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

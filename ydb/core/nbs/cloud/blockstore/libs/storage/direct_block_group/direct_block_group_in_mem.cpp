@@ -4,13 +4,17 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+////////////////////////////////////////////////////////////////////////////////
+
 using namespace NKikimr;
 using namespace NYdb::NBS;
 
 TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
-    ui64 tabletId, ui32 generation,
+    ui64 tabletId,
+    ui32 generation,
     TVector<NBsController::TDDiskId> ddisksIds,
-    TVector<NBsController::TDDiskId> persistentBufferDDiskIds, ui32 blockSize,
+    TVector<NBsController::TDDiskId> persistentBufferDDiskIds,
+    ui32 blockSize,
     ui64 blocksCount)
     : BlockSize(blockSize)
 {
@@ -23,8 +27,9 @@ TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
     ui64 deviceSize = blocksCount * blockSize;
 
     // Create an in-memory sector map
-    SectorMap = MakeIntrusive<NPDisk::TSectorMap>(deviceSize,
-                                                  NPDisk::NSectorMap::DM_NONE);
+    SectorMap = MakeIntrusive<NPDisk::TSectorMap>(
+        deviceSize,
+        NPDisk::NSectorMap::DM_NONE);
 }
 
 void TInMemoryDirectBlockGroup::EstablishConnections()
@@ -49,8 +54,8 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
         // Failed to acquire guard, return error
         TWriteBlocksLocalResponse response;
         response.Error =
-            MakeError(E_REJECTED, "Failed to acquire sglist guard");
-        promise.SetValue(response);
+            MakeError(E_CANCELLED, "Failed to acquire sglist guard");
+        promise.SetValue(std::move(response));
         return promise.GetFuture();
     }
 
@@ -60,6 +65,16 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
     ui64 startOffset = request->Range.Start * BlockSize;
     ui64 totalSize = request->Range.Size() * BlockSize;
 
+    if (totalSize != SgListGetSize(sglist)) {
+        TWriteBlocksLocalResponse response;
+        response.Error = MakeError(
+            E_ARGUMENT,
+            TStringBuilder() << "Buffer size and sglist size mismatch "
+                             << totalSize << " != " << SgListGetSize(sglist));
+        promise.SetValue(std::move(response));
+        return promise.GetFuture();
+    }
+
     // Sector map requires 4096-byte alignment
     constexpr ui64 SECTOR_SIZE = 4096;
 
@@ -68,24 +83,16 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
         TWriteBlocksLocalResponse response;
         response.Error =
             MakeError(E_ARGUMENT, "Buffer not aligned to sector size");
-        promise.SetValue(response);
+        promise.SetValue(std::move(response));
         return promise.GetFuture();
     }
 
     // Prepare buffer to write
     TVector<ui8> buffer;
-    buffer.reserve(totalSize);
+    buffer.resize(totalSize);
 
     // Copy data from sglist to buffer
-    for (const auto& blockDataRef: sglist) {
-        if (blockDataRef.Data() && blockDataRef.Size() > 0) {
-            const ui8* data = reinterpret_cast<const ui8*>(blockDataRef.Data());
-            buffer.insert(buffer.end(), data, data + blockDataRef.Size());
-        } else {
-            // Zero block
-            buffer.insert(buffer.end(), blockDataRef.Size(), 0);
-        }
-    }
+    SgListCopy(sglist, TBlockDataRef::Create(buffer));
 
     // Write to sector map
     bool writeSuccess =
@@ -100,7 +107,7 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
         WriteBlocksReplyCallback(true);
     }
 
-    promise.SetValue(response);
+    promise.SetValue(std::move(response));
     return promise.GetFuture();
 }
 
@@ -109,7 +116,8 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
 NThreading::TFuture<TReadBlocksLocalResponse>
 TInMemoryDirectBlockGroup::ReadBlocksLocal(
     TCallContextPtr callContext,
-    std::shared_ptr<TReadBlocksLocalRequest> request, NWilson::TTraceId traceId)
+    std::shared_ptr<TReadBlocksLocalRequest> request,
+    NWilson::TTraceId traceId)
 {
     Y_UNUSED(callContext);
     Y_UNUSED(traceId);
@@ -122,8 +130,8 @@ TInMemoryDirectBlockGroup::ReadBlocksLocal(
         // Failed to acquire guard, return error
         TReadBlocksLocalResponse response;
         response.Error =
-            MakeError(E_REJECTED, "Failed to acquire sglist guard");
-        promise.SetValue(response);
+            MakeError(E_CANCELLED, "Failed to acquire sglist guard");
+        promise.SetValue(std::move(response));
         return promise.GetFuture();
     }
 
@@ -133,6 +141,16 @@ TInMemoryDirectBlockGroup::ReadBlocksLocal(
     ui64 startOffset = request->Range.Start * BlockSize;
     ui64 totalSize = request->Range.Size() * BlockSize;
 
+    if (totalSize != SgListGetSize(sglist)) {
+        TReadBlocksLocalResponse response;
+        response.Error = MakeError(
+            E_ARGUMENT,
+            TStringBuilder() << "Buffer size and sglist size mismatch "
+                             << totalSize << " != " << SgListGetSize(sglist));
+        promise.SetValue(std::move(response));
+        return promise.GetFuture();
+    }
+
     // Sector map requires 4096-byte alignment
     constexpr ui64 SECTOR_SIZE = 4096;
 
@@ -141,7 +159,7 @@ TInMemoryDirectBlockGroup::ReadBlocksLocal(
         TReadBlocksLocalResponse response;
         response.Error =
             MakeError(E_ARGUMENT, "Buffer not aligned to sector size");
-        promise.SetValue(response);
+        promise.SetValue(std::move(response));
         return promise.GetFuture();
     }
 
@@ -155,35 +173,18 @@ TInMemoryDirectBlockGroup::ReadBlocksLocal(
     TReadBlocksLocalResponse response;
     if (!readSuccess) {
         response.Error = MakeError(E_IO, "Failed to read from sector map");
-        promise.SetValue(response);
+        promise.SetValue(std::move(response));
         return promise.GetFuture();
     }
 
     // Copy data from buffer to sglist
-    size_t bufferOffset = 0;
-    for (const auto& blockDataRef: sglist) {
-        if (blockDataRef.Data() && blockDataRef.Size() > 0) {
-            ui8* dest = const_cast<ui8*>(
-                reinterpret_cast<const ui8*>(blockDataRef.Data()));
-            size_t copySize =
-                std::min<size_t>(blockDataRef.Size(), totalSize - bufferOffset);
-            memcpy(dest, buffer.data() + bufferOffset, copySize);
-            bufferOffset += copySize;
-        } else {
-            // Skip zero blocks
-            bufferOffset += blockDataRef.Size();
-        }
-
-        if (bufferOffset >= totalSize) {
-            break;
-        }
-    }
+    SgListCopy(TBlockDataRef::Create(buffer), sglist);
 
     if (ReadBlocksReplyCallback) {
         ReadBlocksReplyCallback(true);
     }
 
-    promise.SetValue(response);
+    promise.SetValue(std::move(response));
     return promise.GetFuture();
 }
 

@@ -269,6 +269,61 @@ namespace NActors {
         bool Cancelled = false;
     };
 
+    /**
+     * Base class for awaiters which resume within the same actor context
+     */
+    class TAsyncAwaiterBase
+        : private TActorRunnableItem::TImpl<TAsyncAwaiterBase>
+    {
+        friend TActorRunnableItem::TImpl<TAsyncAwaiterBase>;
+
+    public:
+        static constexpr bool IsActorAwareAwaiter = true;
+
+        bool await_ready() noexcept {
+            return false;
+        }
+
+        void await_suspend(std::coroutine_handle<> h) noexcept {
+            Suspend(h);
+        }
+
+        std::coroutine_handle<> await_cancel(std::coroutine_handle<> h) noexcept {
+            Cancel();
+            return h;
+        }
+
+        void await_resume() noexcept {}
+
+    protected:
+        bool Suspended() const noexcept {
+            return bool(Continuation);
+        }
+
+        void Suspend(std::coroutine_handle<> h) noexcept {
+            Continuation = h;
+        }
+
+        void Resume() {
+            Y_ASSERT(Continuation);
+            TActorRunnableQueue::Schedule(this);
+        }
+
+        void Cancel() {
+            Y_ASSERT(Continuation);
+            TActorRunnableQueue::Cancel(this);
+            Continuation = {};
+        }
+
+    private:
+        void DoRun(IActor*) noexcept {
+            Continuation.resume();
+        }
+
+    private:
+        std::coroutine_handle<> Continuation;
+    };
+
     namespace NDetail {
 
         /**

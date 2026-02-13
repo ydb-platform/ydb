@@ -2645,6 +2645,10 @@ private:
             }
 
             break;
+
+        default:
+            // Other cases are unsupported and rejected during initialization
+            break;
         }
 
         auto [locks, _] = sysLocks.ApplyLocks();
@@ -3465,10 +3469,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
-    size_t totalInFly = ReadIteratorsInFly() + TxInFly() + ImmediateInFly()
-        + MediatorStateWaitingMsgs.size() + ProposeQueue.Size() + TxWaiting();
-
-    if (totalInFly > GetMaxTxInFly()) {
+    if (!Pipeline.CheckInflightLimit()) {
         replyWithError(
             Ydb::StatusIds::OVERLOADED,
             TStringBuilder() << "Request " << readId.ReadId << " rejected, MaxTxInFly was exceeded"

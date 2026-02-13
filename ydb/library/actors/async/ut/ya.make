@@ -10,6 +10,7 @@ SRCS(
     cancellation_ut.cpp
     continuation_ut.cpp
     event_ut.cpp
+    low_priority_ut.cpp
     sleep_ut.cpp
     task_group_ut.cpp
     timeout_ut.cpp

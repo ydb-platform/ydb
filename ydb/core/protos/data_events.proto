@@ -70,6 +70,7 @@ message TMvccSnapshot {
 enum ELockMode {
     OPTIMISTIC = 0;
     OPTIMISTIC_SNAPSHOT_ISOLATION = 1;
+    PESSIMISTIC_EXCLUSIVE = 2;
 }
 
 enum EDataFormat {
@@ -171,4 +172,47 @@ message TEvWriteResult {
 
     // Commit version when available
     optional NKikimrProto.TRowVersion CommitVersion = 14;
+}
+
+message TEvLockRows {
+    optional uint64 RequestId = 1;
+    optional uint64 LockId = 2;
+    optional uint32 LockNodeId = 3;
+    optional uint64 LockTimestamp = 4;
+    optional ELockMode LockMode = 5; // must be PESSIMISTIC
+    optional NKikimrProto.TRowVersion Snapshot = 6;
+
+    repeated TLock ExistingLocks = 7;
+    optional bool SkipLocked = 8;
+
+    optional TTableId TableId = 9;
+    repeated uint32 ColumnIds = 10 [packed = true];
+    optional uint64 PayloadIndex = 11;
+    optional EDataFormat PayloadFormat = 12;
+    optional string PayloadSchema = 13;
+}
+
+message TEvLockRowsCancel {
+    optional uint64 RequestId = 1;
+}
+
+message TEvLockRowsResult {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_BAD_REQUEST = 2;
+        STATUS_OVERLOADED = 3;
+        STATUS_WRONG_SHARD_STATE = 4;
+        STATUS_LOCKS_BROKEN = 5;
+        STATUS_SCHEME_ERROR = 6;
+        STATUS_SCHEME_CHANGED = 7;
+        STATUS_INTERNAL_ERROR = 8;
+    }
+
+    optional uint64 TabletId = 1;
+    optional uint64 RequestId = 2;
+    optional EStatus Status = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 4;
+
+    repeated TLock Locks = 5;
 }

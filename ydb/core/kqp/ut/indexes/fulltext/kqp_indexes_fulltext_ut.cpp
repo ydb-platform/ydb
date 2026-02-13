@@ -2801,7 +2801,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatch, UTF8) {
         )sql");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
     }
 }
 
@@ -2858,7 +2858,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore node is not reachable by conjunctions.");
     }
 
     {
@@ -2880,7 +2881,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore node is not reachable by conjunctions.");
     }
 
     // temporary forbidden to use multiple fulltext match expressions in the same query.
@@ -2892,7 +2894,32 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Multiple fulltext predicates in a single read are not supported.");
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE Text = "404 not found"
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore predicate is not specified to access index.");
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts`
+            WHERE FulltextMatch(`Text`, "404 not found")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Fulltext index is not specified or unsupported predicate is used to access index");
     }
 }
 
@@ -3157,7 +3184,8 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
         )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Fulltext index is not specified or unsupported predicate is used to access index");
     }
 }
 
@@ -3509,7 +3537,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSingleStar) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*")
+            WHERE FulltextMatch(`Text`, "%")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3912,7 +3940,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardBoundaries) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    for (const TString& q : {"are*", "*rea", "b"}) {
+    for (const TString& q : {"are\%", "\%rea", "b"}) {
         const TString query = std::format(R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextMatch(`Text`, "{}")
@@ -4494,7 +4522,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
         UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 
-    for (const TString& q : {"at", "*at*"}) {
+    for (const TString& q : {"at", "\%at\%"}) {
         const TString query = std::format(R"sql(
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -5338,6 +5366,78 @@ Y_UNIT_TEST(FullTextDeliveryProblem) {
     Cerr << "Test completed successfully, total reads observed: " << readCount << Endl;
 }
 
+Y_UNIT_TEST(FulltextQueryWithResultColumnsCovered) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        const TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                `Name` Utf8,
+                `Text` Utf8,
+                PRIMARY KEY (`Name`)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Name`, `Text`) VALUES
+                ("high cat frequency", "Cats love cats and more cats."),
+                ("medium frequency", "Dogs chase cats."),
+                ("no cats", "Animals in the wild."),
+                ("single cat mention", "Cats are domestic animals.")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX `fulltext_idx`
+                GLOBAL USING fulltext_plain
+                ON (`Name`)
+                WITH (
+                    tokenizer=standard,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=3,
+                    filter_ngram_max_length=3
+                )
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT count(*)
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Name`, "%cat%");
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[3u]])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Name`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Name`, "%cat%");
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["high cat frequency"]];
+            [["no cats"]];
+            [["single cat mention"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 }
+
+} // namespace NKikimr::NKqp

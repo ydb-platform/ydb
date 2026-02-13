@@ -94,8 +94,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           sparse-checkout: |
-            .github/config/stable_branches.json
-            .github/scripts/tests/comment-pr.py
+            .github/config
+            .github/scripts/tests
 
       - name: Set branches
         id: set-branches

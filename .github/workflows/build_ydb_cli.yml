@@ -51,6 +51,7 @@ jobs:
     outputs:
       branch-name: ${{ steps.create-branch.outputs.branch-name }}
       new-version: ${{ steps.update-version.outputs.new-version }}
+      release-commit-sha: ${{ steps.push-branch.outputs.release-commit-sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -140,8 +141,12 @@ jobs:
         run: |
           git commit -m "YDB CLI release ${{ steps.update-version.outputs.new-version }}"
       - name: Push branch
+        id: push-branch
         run: |
           git push origin "${{ steps.create-branch.outputs.branch-name }}"
+          RELEASE_SHA=$(git rev-parse HEAD)
+          echo "release-commit-sha=$RELEASE_SHA" >> $GITHUB_OUTPUT
+          echo "Release commit SHA: $RELEASE_SHA"
 
   build-matrix:
     name: Build platform matrix
@@ -391,12 +396,14 @@ jobs:
           fi
       - name: Create release tag
         run: |
-          # Create tag on release branch (exact state that CLI was built in)
-          git fetch origin "${{ needs.prepare-release.outputs.branch-name }}"
-          git checkout "${{ needs.prepare-release.outputs.branch-name }}"
-          git tag "CLI_${{ needs.prepare-release.outputs.new-version }}"
-          git push origin "CLI_${{ needs.prepare-release.outputs.new-version }}"
-          echo "Created and pushed tag CLI_${{ needs.prepare-release.outputs.new-version }} on release branch"
+          # Tag the exact release commit by SHA (branch may be auto-deleted after PR merge)
+          RELEASE_SHA="${{ needs.prepare-release.outputs.release-commit-sha }}"
+          TAG_NAME="CLI_${{ needs.prepare-release.outputs.new-version }}"
+          # After merge, release commit is reachable from main as a parent of the merge commit
+          git fetch origin main
+          git tag "$TAG_NAME" "$RELEASE_SHA"
+          git push origin "$TAG_NAME"
+          echo "Created and pushed tag $TAG_NAME on commit $RELEASE_SHA"
 
   cleanup-on-failure:
     name: Cleanup release branch on failure

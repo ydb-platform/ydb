@@ -6,11 +6,13 @@
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/util/light.h>
+#include <ydb/core/util/max_tracker.h>
 
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
+
 
 namespace NKikimr {
 
@@ -287,7 +289,9 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightBytesRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightBytesWrite;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightReads;
+    TMaxTracker MaxDeviceInFlightReads;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightWrites;
+    TMaxTracker MaxDeviceInFlightWrites;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceTakeoffs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceLandings;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceHaltDetected;

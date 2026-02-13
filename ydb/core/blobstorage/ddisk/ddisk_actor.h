@@ -25,7 +25,6 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
     XX(Sync) \
     XX(WritePersistentBuffer) \
     XX(ReadPersistentBuffer) \
-    XX(FlushPersistentBuffer) \
     XX(ErasePersistentBuffer) \
     XX(ListPersistentBuffer) \
     /**/
@@ -48,7 +47,7 @@ namespace NKikimr::NDDisk {
         template<typename TRecord>
         struct THasWriteInstructionField {
             template<typename T> static constexpr auto check(T*) -> typename std::is_same<
-                std::decay_t<decltype(std::declval<T>().GetWriteInstruction())>,
+                std::decay_t<decltype(std::declval<T>().GetInstruction())>,
                 NKikimrBlobStorage::NDDisk::TWriteInstruction
             >::type;
 
@@ -308,7 +307,7 @@ namespace NKikimr::NDDisk {
                     }
 
                 if constexpr (NPrivate::THasWriteInstructionField<TRecord>::value) {
-                    const TWriteInstruction instruction(record.GetWriteInstruction());
+                    const TWriteInstruction instruction(record.GetInstruction());
                     size_t size = 0;
                     if (instruction.PayloadId) {
                         const TRope& data = ev.Get()->GetPayload(*instruction.PayloadId);
@@ -473,20 +472,8 @@ namespace NKikimr::NDDisk {
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         double GetPersistentBufferFreeSpace();
 
-        struct TWriteInFlight {
-            TActorId Sender;
-            ui64 Cookie;
-            TActorId InterconnectionSessionId;
-            NWilson::TSpan Span;
-            ui32 Size;
-        };
-
-        ui64 NextWriteCookie = 1;
-        THashMap<ui64, TWriteInFlight> WritesInFlight;
-
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);
-        void Handle(TEvFlushPersistentBuffer::TPtr ev);
         void Handle(TEvErasePersistentBuffer::TPtr ev);
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);

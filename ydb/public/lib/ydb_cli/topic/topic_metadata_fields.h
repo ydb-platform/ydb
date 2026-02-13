@@ -5,9 +5,10 @@
 namespace NYdb::NConsoleClient {
     enum class ETopicMetadataField {
         Body /* "body" */,
+        PartitionID /* "partition_id" */,
         WriteTime /* "write_time" */,
         CreateTime /* "create_time" */,
-        MessageGroupID /* "message_group_id" */,
+        ProducerID /* "producer_id" */,
         Offset /* "offset" */,
         SeqNo /* "seq_no" */,
         Meta /* meta */,

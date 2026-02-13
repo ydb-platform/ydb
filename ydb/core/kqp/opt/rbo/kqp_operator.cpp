@@ -760,18 +760,18 @@ TOpRoot::TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos, const TV
 
 TVector<TInfoUnit> TOpRoot::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
-void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent, int parentChildIndex) {
+void TOpRoot::ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent, int parentChildIndex) const {
     if (parent) {
-        auto parentEntry = std::make_pair(std::weak_ptr<IOperator>(parent), parentChildIndex);
-        auto f = std::find_if(op->Parents.begin(), op->Parents.end(),
-                              [&parentEntry](const std::pair<std::weak_ptr<IOperator>,int> &p) 
-                              { return p.first.lock() == parentEntry.first.lock() && p.second == parentEntry.second; });
-        if (f == op->Parents.end()) {
+        const auto parentEntry = std::make_pair(std::weak_ptr<IOperator>(parent), parentChildIndex);
+        const auto it = std::find_if(op->Parents.begin(), op->Parents.end(), [&parentEntry](const std::pair<std::weak_ptr<IOperator>, int>& opParent) {
+            return opParent.first.lock() == parentEntry.first.lock() && opParent.second == parentEntry.second;
+        });
+        if (it == op->Parents.end()) {
             op->Parents.push_back(parentEntry);
         }
     }
-    for (size_t i=0; i<op->Children.size(); i++) {
-        ComputeParentsRec(op->Children[i], op, i);
+    for (size_t childIndex = 0; childIndex < op->Children.size(); ++childIndex) {
+        ComputeParentsRec(op->Children[childIndex], op, childIndex);
     }
 }
 
@@ -802,7 +802,7 @@ TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
     return builder;
 }
 
-void TOpRoot::PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int tabs, ui32 printOptions) {
+void TOpRoot::PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int tabs, ui32 printOptions) const {
     TStringBuilder tabString;
     for (int i = 0; i < tabs; i++) {
         tabString << "  ";

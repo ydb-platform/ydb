@@ -13,23 +13,23 @@ using namespace NOpt;
 
 class TRBOContext {
 public:
-    TRBOContext(TKqpOptimizeContext& kqpCtx, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx,
-                TAutoPtr<NYql::IGraphTransformer>&& typeAnnTransformer, TAutoPtr<NYql::IGraphTransformer>&& peepholeTypeAnnTransformer,
-                const NMiniKQL::IFunctionRegistry& funcRegistry)
+    TRBOContext(TKqpOptimizeContext& kqpCtx, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, NYql::IGraphTransformer& typeAnnTransformer,
+                NYql::IGraphTransformer& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry)
         : KqpCtx(kqpCtx)
         , ExprCtx(ctx)
         , TypeCtx(typeCtx)
-        , TypeAnnTransformer(std::move(typeAnnTransformer))
-        , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
+        , TypeAnnTransformer(typeAnnTransformer)
+        , PeepholeTypeAnnTransformer(peepholeTypeAnnTransformer)
         , FuncRegistry(funcRegistry)
-        , CBOCtx(TKqpProviderContext(kqpCtx, kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()))) {
+        , CBOCtx(
+              TKqpProviderContext(kqpCtx, kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()))) {
     }
 
     TKqpOptimizeContext& KqpCtx;
     NYql::TExprContext& ExprCtx;
     NYql::TTypeAnnotationContext& TypeCtx;
-    TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
-    TAutoPtr<NYql::IGraphTransformer> PeepholeTypeAnnTransformer;
+    NYql::IGraphTransformer& TypeAnnTransformer;
+    NYql::IGraphTransformer& PeepholeTypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TKqpProviderContext CBOCtx;
 };

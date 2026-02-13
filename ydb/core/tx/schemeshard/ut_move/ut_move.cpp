@@ -28,8 +28,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Reject) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -51,6 +54,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
               Name: "Table2"
@@ -71,9 +76,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(10),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(6)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
@@ -157,8 +164,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(10),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(6)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
@@ -203,8 +210,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                                 NLs::CheckColumns("Moved2", {"key", "value0", "value1"}, {}, {"key"})});
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                               {NLs::ChildrenCount(2),
-                                NLs::PathsInsideDomain(10),
+                               {NLs::ChildrenCount(3),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomain(6)});
         }
     }
@@ -267,8 +274,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(TwoTables) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
               Name: "Table1"
@@ -278,6 +288,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 1;
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
               Name: "Table2"
               Columns { Name: "key"   Type: "Uint64" }
@@ -286,9 +298,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(2),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(2)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
@@ -326,15 +340,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("TableMove2", {"key", "value"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(2),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(2)});
     }
 
     Y_UNIT_TEST(Replace) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -355,6 +372,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths += 5;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -376,11 +395,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(10),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(6)});
 
+        TLocalPathId movedTablePathId = GetNextLocalPathId(runtime, txId);
         {
             ++txId;
             auto first = DropTableRequest(txId,  "/MyRoot", "Dst");
@@ -389,6 +411,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             AsyncSend(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId);
             env.TestWaitNotification(runtime, txId);
+
+            expectedDomainPaths -= 5;
         }
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+6));
@@ -399,14 +423,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
                            {NLs::IsTable,
-                            NLs::PathIdEqual(12),
+                            NLs::PathIdEqual(movedTablePathId),
                             NLs::PathVersionEqual(5),
                             NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -429,6 +453,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
+        movedTablePathId = GetNextLocalPathId(runtime, txId);
         {
             ++txId;
             auto first = DropTableRequest(txId,  "/MyRoot", "Dst");
@@ -437,6 +464,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             AsyncSend(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId);
             env.TestWaitNotification(runtime, txId);
+
+            expectedDomainPaths -= 5;
         }
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+3));
@@ -446,21 +475,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
                            {NLs::IsTable,
-                            NLs::PathIdEqual(22),
+                            NLs::PathIdEqual(movedTablePathId),
                             NLs::PathVersionEqual(5),
                             NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
     }
 
     Y_UNIT_TEST(Chain) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -483,6 +515,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
               Name: "table2"
@@ -503,9 +537,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(10),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(6)});
 
         ++txId;
@@ -530,15 +566,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("table3", {"key", "value0", "value1"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(10),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(6)});
     }
 
     Y_UNIT_TEST(OneTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
               Name: "Table"
@@ -549,16 +588,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(1),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(1)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::IsTable,
                             NLs::PathVersionEqual(3),
                             NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(1)});
 
 
@@ -572,12 +613,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::IsTable,
                             NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableMove", {"key", "value"}, {}, {"key"}),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(1)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(1),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(1)});
 
         TestAlterTable(runtime, ++txId, "/MyRoot",
@@ -588,12 +629,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::IsTable,
                             NLs::PathVersionEqual(6),
                             NLs::CheckColumns("TableMove", {"key", "value", "add"}, {}, {"key"}),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(1)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(1),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(1)});
 
         TestMoveTable(runtime, ++txId, "/MyRoot/TableMove", "/MyRoot/TableMoveTwice");
@@ -603,27 +644,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::IsTable,
                             NLs::PathVersionEqual(8),
                             NLs::CheckColumns("TableMoveTwice", {"key", "value", "add"}, {}, {"key"}),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(1)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(1),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(1)});
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "TableCopy", "/MyRoot/TableMoveTwice");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
                            {NLs::IsTable,
                             NLs::PathVersionEqual(3),
                             NLs::CheckColumns("TableCopy", {"key", "value", "add"}, {}, {"key"}),
-                            NLs::PathsInsideDomain(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(2)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(2),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(2)});
 
         TestMoveTable(runtime, ++txId, "/MyRoot/TableCopy", "/MyRoot/TableCopyMove");
@@ -633,30 +676,34 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::IsTable,
                             NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableCopyMove", {"key", "value", "add"}, {}, {"key"}),
-                            NLs::PathsInsideDomain(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(2)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(2),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(2)});
 
         TestDropTable(runtime, ++txId, "/MyRoot", "TableCopyMove");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths -= 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(1),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomainOneOf({1, 2})});
 
         TestDropTable(runtime, ++txId, "/MyRoot", "TableMoveTwice");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths -= 1;
+
         env.TestWaitTabletDeletion(runtime, {72075186233409546, 72075186233409547});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(0),
-                            NLs::PathsInsideDomain(0),
+                           {NLs::ChildrenCount(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
@@ -703,8 +750,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Index) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -726,9 +776,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -749,8 +801,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("TableMove", {"key", "value0", "value1", "valueFloat"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove/Sync", true, true, true),
@@ -768,8 +820,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(MoveIndex) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -791,9 +846,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -821,8 +878,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/MovedSync", true, true, true),
@@ -840,8 +897,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(MoveIndexSameDst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true).EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -863,9 +923,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -886,8 +948,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/Sync", true, true, true),
@@ -905,8 +967,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(MoveIndexDoesNonExisted) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true).EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -928,9 +993,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 5;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -951,8 +1018,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1),
-                            NLs::PathsInsideDomain(5),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/Sync", true, true, true),

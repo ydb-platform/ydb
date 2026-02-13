@@ -28,8 +28,8 @@ class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
     void Rewind() override;
 
   private:
-    TTypeAnnotationContext &TypeCtx;
-    const TKqpOptimizeContext &KqpCtx;
+    TTypeAnnotationContext& TypeCtx;
+    const TKqpOptimizeContext& KqpCtx;
     ui64 UniqueSourceIdCounter = 0;
 };
 
@@ -49,13 +49,20 @@ public:
     void Rewind() override;
 
 private:
-    TStatus RequestColumnStatistics();
+    TStatus RequestColumnStatistics(TExprContext& ctx);
     TStatus ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx);
     bool IsSuitableToRequestStatistics();
+    void CollectTablesAndColumnsNames(TExprContext& ctx);
+    void CollectTablesAndColumnsNames(const std::shared_ptr<IOperator>& op);
+    void CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props);
+    bool IsSuitableToCollectStatistics(const std::shared_ptr<IOperator>& op) const;
+    void ApplyColumnStatistics();
 
     TTypeAnnotationContext& TypeCtx;
     TKqpOptimizeContext& KqpCtx;
-    TRuleBasedOptimizer RBO;
+    TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
+    TAutoPtr<IGraphTransformer> PeepholeTypeAnnTransformer;
+    const NMiniKQL::IFunctionRegistry& FuncRegistry;
 
     // Special fields to request column statistics.
     TKikimrTablesData& Tables;
@@ -68,6 +75,7 @@ private:
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
     std::shared_ptr<TOpRoot> OpRoot;
+    TRuleBasedOptimizer RBO;
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,

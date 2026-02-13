@@ -70,7 +70,12 @@ auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolic
         }
 
         return ERetryErrorClass::ShortRetry;
-    });
+    },
+    TDuration::MilliSeconds(10),
+    TDuration::MilliSeconds(200),
+    TDuration::Seconds(10),
+    std::numeric_limits<size_t>::max(),
+    TDuration::Seconds(60));
 
 struct TDqSolomonWriteParams {
     NSo::NProto::TDqSolomonShard Shard;
@@ -524,7 +529,7 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServ
                 args.TxId,
                 args.SecureParams,
                 args.Callback,
-                counters,
+                args.TaskCounters ? args.TaskCounters : counters,
                 credentialsFactory);
         });
 }

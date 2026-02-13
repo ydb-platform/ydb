@@ -20,10 +20,25 @@ char ldapNoAttribute[] = LDAP_NO_ATTRS;
 char* noAttributes[] = {ldapNoAttribute, nullptr};
 const TString LDAPS_SCHEME = "ldaps";
 
+<<<<<<< HEAD
 int Bind(LDAP* ld, const TString& dn, const TString& password) {
     char* bindDn = const_cast<char*>(dn.c_str());
     char* bindPassword = const_cast<char*>(password.c_str());
     return ldap_simple_bind_s(ld, bindDn, bindPassword);
+=======
+int Bind(LDAP* ld, const TString& dn, const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism, std::vector<char>* credentials) {
+    static char initBvVal[] = "";
+    static constexpr BerValue defaultCredentials {.bv_len = 0, .bv_val = initBvVal};
+    BerValue cred = defaultCredentials;
+    BerValue* credPtr = &cred;
+    if (credentials) {
+        cred.bv_len = credentials->size();
+        cred.bv_val = credentials->data();
+    }
+    struct berval* servercredp = nullptr;
+    char* bindDn = (dn.empty() ? nullptr : const_cast<char*>(dn.c_str()));
+    return ldap_sasl_bind_sA(ld, bindDn, const_cast<char*>(ConvertSaslMechanism(mechanism)), credPtr, nullptr, nullptr, &servercredp);
+>>>>>>> 5d579ddf895 (Add fixes for import 878 (#34102))
 }
 
 int Unbind(LDAP* ld) {
@@ -176,4 +191,28 @@ int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRe
     return LDAP_SUCCESS;
 }
 
+<<<<<<< HEAD
+=======
+namespace {
+
+const char* ConvertSaslMechanism(const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism) {
+    switch (mechanism) {
+    case NLoginProto::ESaslAuthMech::Simple: {
+        return nullptr;
+    }
+    case NLoginProto::ESaslAuthMech::Plain: {
+        return "PLAIN";
+    }
+    case NLoginProto::ESaslAuthMech::External: {
+        return "EXTERNAL";
+    }
+    default: {
+        return "UNKNOWN";
+    }
+    }
+}
+
+} // namespace
+
+>>>>>>> 5d579ddf895 (Add fixes for import 878 (#34102))
 }

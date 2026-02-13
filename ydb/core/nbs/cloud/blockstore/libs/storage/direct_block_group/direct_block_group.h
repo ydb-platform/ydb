@@ -10,6 +10,28 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+// Abstract base interface for DirectBlockGroup implementations
+class IDirectBlockGroup
+{
+public:
+    virtual ~IDirectBlockGroup() = default;
+
+    virtual void EstablishConnections() = 0;
+
+    virtual NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
+        TCallContextPtr callContext,
+        std::shared_ptr<TReadBlocksLocalRequest> request,
+        NWilson::TTraceId traceId) = 0;
+
+    virtual NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
+        TCallContextPtr callContext,
+        std::shared_ptr<TWriteBlocksLocalRequest> request,
+        NWilson::TTraceId traceId) = 0;
+
+    virtual void SetWriteBlocksReplyCallback(std::function<void(bool)> callback) = 0;
+    virtual void SetReadBlocksReplyCallback(std::function<void(bool)> callback) = 0;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // BlocksCount in one vChunk - current limitation
@@ -17,7 +39,7 @@ constexpr size_t BlocksCount = 128 * 1024 * 1024 / 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDirectBlockGroup
+class TDirectBlockGroup : public IDirectBlockGroup
 {
 private:
     struct TBlockMeta {
@@ -100,25 +122,25 @@ public:
         ui32 blockSize,
         ui64 blocksCount);
 
-    void SetWriteBlocksReplyCallback(std::function<void(bool)> callback) {
+    void SetWriteBlocksReplyCallback(std::function<void(bool)> callback) override {
         WriteBlocksReplyCallback = std::move(callback);
     }
 
-    void SetReadBlocksReplyCallback(std::function<void(bool)> callback) {
+    void SetReadBlocksReplyCallback(std::function<void(bool)> callback) override {
         ReadBlocksReplyCallback = std::move(callback);
     }
 
-    void EstablishConnections();
+    void EstablishConnections() override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        NWilson::TTraceId traceId) override;
 
 private:
     void HandleConnectResult(

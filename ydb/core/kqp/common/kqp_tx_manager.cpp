@@ -57,10 +57,8 @@ public:
         shardInfo.Flags |= action;
         if (action & EAction::WRITE) {
             ReadOnly = false;
-            // Track the QuerySpanId of the query that wrote to this shard
-            if (querySpanId != 0 && shardInfo.BreakerQuerySpanId == 0) {
-                shardInfo.BreakerQuerySpanId = querySpanId;
-            }
+            // Track all QuerySpanIds of queries that wrote to this shard
+            AddBreakerQuerySpanId(shardInfo, querySpanId);
         }
         ++ActionsCount;
     }
@@ -362,28 +360,15 @@ public:
         if (it == ShardsInfo.end()) {
             return;
         }
-        // Store the first BreakerQuerySpanId for this shard (the query that created the conflict)
-        if (it->second.BreakerQuerySpanId == 0) {
-            it->second.BreakerQuerySpanId = querySpanId;
-        }
+        AddBreakerQuerySpanId(it->second, querySpanId);
     }
 
-    std::optional<ui64> GetShardBreakerQuerySpanId(ui64 shardId) const override {
+    TVector<ui64> GetShardBreakerQuerySpanIds(ui64 shardId) const override {
         auto it = ShardsInfo.find(shardId);
-        if (it != ShardsInfo.end() && it->second.BreakerQuerySpanId != 0) {
-            return it->second.BreakerQuerySpanId;
+        if (it != ShardsInfo.end() && !it->second.BreakerQuerySpanIds.empty()) {
+            return it->second.BreakerQuerySpanIds;
         }
-        return std::nullopt;
-    }
-
-    void SetFirstQuerySpanId(ui64 querySpanId) override {
-        if (FirstQuerySpanId_ == 0 && querySpanId != 0) {
-            FirstQuerySpanId_ = querySpanId;
-        }
-    }
-
-    ui64 GetFirstQuerySpanId() const override {
-        return FirstQuerySpanId_;
+        return {};
     }
 
     const THashSet<ui64>& GetShards() const override {
@@ -608,8 +593,16 @@ private:
         bool Reattaching = false;
         TReattachState ReattachState;
 
-        ui64 BreakerQuerySpanId = 0;  // QuerySpanId of the query that created conflicts on this shard
+        // All QuerySpanIds of queries that wrote to this shard in insertion order.
+        TVector<ui64> BreakerQuerySpanIds;
+        THashSet<ui64> BreakerQuerySpanIdsSet;
     };
+
+    static void AddBreakerQuerySpanId(TShardInfo& shardInfo, ui64 querySpanId) {
+        if (querySpanId != 0 && shardInfo.BreakerQuerySpanIdsSet.emplace(querySpanId).second) {
+            shardInfo.BreakerQuerySpanIds.push_back(querySpanId);
+        }
+    }
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {
         TStringBuilder message;
@@ -646,9 +639,6 @@ private:
     bool HasOlapTableShard = false;
     std::optional<NYql::TIssue> LocksIssue;
     std::optional<ui64> VictimQuerySpanId_;
-    // First query's QuerySpanId. Used for TLI victim attribution in deferred lock scenarios
-    // where the commit-time QuerySpanId differs from the snapshot-establishing query.
-    ui64 FirstQuerySpanId_ = 0;
 
     THashSet<ui64> SendingShards;
     THashSet<ui64> ReceivingShards;

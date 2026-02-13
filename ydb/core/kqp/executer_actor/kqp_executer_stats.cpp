@@ -862,8 +862,10 @@ ui64 TQueryExecutionStats::EstimateFinishMem() {
 void TQueryExecutionStats::CollectLockStats(const NKikimrQueryStats::TTxStats& txStats) {
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
-    if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.HasBreakerQuerySpanId() && txStats.GetBreakerQuerySpanId() != 0) {
-        BreakerQuerySpanIds.push_back(txStats.GetBreakerQuerySpanId());
+    if (txStats.GetLocksBrokenAsBreaker() > 0) {
+        for (ui64 id : txStats.GetBreakerQuerySpanIds()) {
+            BreakerQuerySpanIds.push_back(id);
+        }
     }
 }
 

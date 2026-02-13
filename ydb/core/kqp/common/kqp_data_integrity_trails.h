@@ -125,12 +125,15 @@ public:
         return QueryTexts.size();
     }
 
-    // Get the first QuerySpanId
-    TMaybe<ui64> GetFirstQuerySpanId() const {
-        if (QueryTexts.empty() || QueryTexts.front().first == 0) {
-            return Nothing();
+    // Get all non-zero QuerySpanIds from all queries in this transaction
+    TVector<ui64> GetAllQuerySpanIds() const {
+        TVector<ui64> result;
+        for (const auto& [spanId, _] : QueryTexts) {
+            if (spanId != 0) {
+                result.push_back(spanId);
+            }
         }
-        return QueryTexts.front().first;
+        return result;
     }
 
     // Get the first query text

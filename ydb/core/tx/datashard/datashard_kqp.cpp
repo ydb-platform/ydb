@@ -832,11 +832,10 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
     }
 
     if (NeedCommitLocks(kqpLocks->GetOp())) {
-        // Default BreakerQuerySpanId from FirstQuerySpanId (the query that wrote to this shard).
-        // CommitLock may override with a more specific ID from stored conflict info.
-        ui64 firstQuerySpanId = kqpLocks->GetFirstQuerySpanId();
-        if (firstQuerySpanId != 0) {
-            sysLocks.SetBreakerQuerySpanId(firstQuerySpanId);
+        // Set BreakerQuerySpanId from the first SpanId in AllQuerySpanIds for the lock
+        // conflict path (which tracks a single BreakerQuerySpanId per TLocksUpdate).
+        if (kqpLocks->AllQuerySpanIdsSize() > 0) {
+            sysLocks.SetBreakerQuerySpanId(kqpLocks->GetAllQuerySpanIds(0));
         }
 
         for (const auto& lockProto : kqpLocks->GetLocks()) {

@@ -757,7 +757,7 @@ struct TLocksUpdate {
     ui32 LockNodeId = 0;
     // The current query's SpanId. Used as VictimQuerySpanId on the lock and as initial BreakerQuerySpanId on conflicts.
     ui64 QuerySpanId = 0;
-    // Only set explicitly: overridden by FirstQuerySpanId from KQP commit, or restored from conflict in CommitLock.
+    // Optional explicit override for breaker attribution, otherwise resolved from conflict data or QuerySpanId.
     ui64 BreakerQuerySpanId = 0;
     bool BreakerQuerySpanIdExplicitlySet = false;
     TLockInfo::TPtr Lock;
@@ -1041,7 +1041,7 @@ public:
         return Nothing();
     }
 
-    // Override BreakerQuerySpanId (e.g., from FirstQuerySpanId in KQP commit)
+    // Override BreakerQuerySpanId for the current update.
     void SetBreakerQuerySpanId(ui64 querySpanId) {
         if (Update && querySpanId != 0) {
             Update->BreakerQuerySpanId = querySpanId;

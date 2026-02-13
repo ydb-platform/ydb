@@ -247,7 +247,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             if (!locksBrokenByTx.empty()) {
                 auto breakerQuerySpanId = sysLocks.GetCurrentBreakerQuerySpanId();
                 ui64 effectiveBreakerQuerySpanId = breakerQuerySpanId ? *breakerQuerySpanId : op->QuerySpanId();
-                tx->Result()->Record.MutableTxStats()->SetBreakerQuerySpanId(effectiveBreakerQuerySpanId);
+                tx->Result()->Record.MutableTxStats()->AddBreakerQuerySpanIds(effectiveBreakerQuerySpanId);
             }
             NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
             DataShard.SubscribeNewLocks(ctx);
@@ -514,7 +514,7 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
     if (!locksBrokenByTx.empty()) {
         auto breakerQuerySpanId = DataShard.SysLocksTable().GetCurrentBreakerQuerySpanId();
         ui64 effectiveBreakerQuerySpanId = breakerQuerySpanId ? *breakerQuerySpanId : op->QuerySpanId();
-        op->Result()->Record.MutableTxStats()->SetBreakerQuerySpanId(effectiveBreakerQuerySpanId);
+        op->Result()->Record.MutableTxStats()->AddBreakerQuerySpanIds(effectiveBreakerQuerySpanId);
     }
 
     LOG_T("add locks to result: " << locks.size());

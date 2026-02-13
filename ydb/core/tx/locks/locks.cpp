@@ -1361,7 +1361,7 @@ void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
         for (auto& pr : lock->ConflictLocks) {
             if (!!(pr.second.Flags & ELockConflictFlags::BreakThemOnOurCommit) && !pr.first->IsRemoved()) {
                 Update->AddBreakLock(pr.first);
-                // Prefer the conflict-stored ID (actual query) over the default (FirstQuerySpanId)
+                // Prefer the conflict-stored ID (actual breaker query) over the default.
                 if (pr.second.BreakerQuerySpanId != 0 && !foundStoredBreakerQuerySpanId) {
                     Update->BreakerQuerySpanId = pr.second.BreakerQuerySpanId;
                     foundStoredBreakerQuerySpanId = true;

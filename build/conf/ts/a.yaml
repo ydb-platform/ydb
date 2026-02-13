@@ -60,5 +60,8 @@ ci:
                 redirect_stderr_to_stdout: true
                 stdout_ci_badge: true
               cmd_line: |
-                set -ex
-                grep -r 'TS_USE_PREBUILT_NOTS_TOOL=yes' $ARCADIA_PATH/build/conf/ts/ts.conf
+                set -x
+                if grep -r 'TS_USE_PREBUILT_NOTS_TOOL=no' $ARCADIA_PATH/build/conf/ts/ts.conf; then
+                  echo "TS_USE_PREBUILT_NOTS_TOOL=no found in ts.conf"
+                  exit 1
+                fi

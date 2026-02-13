@@ -52,7 +52,7 @@ std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
 
 class TArrowType: public NUdf::IArrowType {
 public:
-    TArrowType(const std::shared_ptr<arrow::DataType>& type)
+    explicit TArrowType(const std::shared_ptr<arrow::DataType>& type)
         : Type_(type)
     {
     }
@@ -228,6 +228,8 @@ private:
 
 class TTypeInfoHelper: public NUdf::ITypeInfoHelper {
 public:
+    using TNotConsumedLinearCallback = std::function<void(const NUdf::TSourcePosition&)>;
+
     NUdf::ETypeKind GetTypeKind(const NUdf::TType* type) const override;
     void VisitType(const NUdf::TType* type, NUdf::ITypeVisitor* visitor) const override;
     bool IsSameType(const NUdf::TType* type1, const NUdf::TType* type2) const override;
@@ -236,6 +238,9 @@ public:
     NUdf::IArrowType::TPtr ImportArrowType(ArrowSchema* schema) const override;
     ui64 GetMaxBlockLength(const NUdf::TType* type) const override;
     ui64 GetMaxBlockBytes() const override;
+    void NotifyNotConsumedLinear(const NUdf::TSourcePosition& pos) const override;
+
+    void SetNotConsumedLinearCallback(const TNotConsumedLinearCallback& callback);
 
 private:
     static void DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v);
@@ -252,6 +257,8 @@ private:
     static void DoPg(const NMiniKQL::TPgType* tt, NUdf::ITypeVisitor* v);
     static void DoBlock(const NMiniKQL::TBlockType* tt, NUdf::ITypeVisitor* v);
     static void DoLinear(const NMiniKQL::TLinearType* tt, NUdf::ITypeVisitor* v);
+
+    TNotConsumedLinearCallback NotConsumedLinearCallback_;
 };
 
 bool CanHash(const NMiniKQL::TType* type);
@@ -273,7 +280,7 @@ ui64 CalcMaxBlockLength(T beginIt, T endIt, const NUdf::ITypeInfoHelper& helper)
 
 class TTypeBuilder: public TMoveOnly {
 public:
-    TTypeBuilder(const TTypeEnvironment& env)
+    explicit TTypeBuilder(const TTypeEnvironment& env)
         : Env_(env)
         , Env(env)
         , UseNullType(UseNullType_)

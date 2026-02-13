@@ -2,7 +2,6 @@
 
 #include <library/cpp/yt/error/error.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_client.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -19,10 +18,10 @@ public:
         const TYtPartitionerSettings& settings
     ) override {
         auto getTablePartitionsOptions = NYT::TGetTablePartitionsOptions()
-            .PartitionMode(NYT::ETablePartitionMode::Unordered)
+            .PartitionMode(settings.PartitionMode)
             .DataWeightPerPartition(settings.MaxDataWeightPerPart)
             .MaxPartitionCount(settings.MaxParts)
-            .AdjustDataWeightPerPartition(false); // TODO - add adjust data weight into partitioner settings
+            .AdjustDataWeightPerPartition(false);
 
         std::vector<TYtTableTaskRef> ytPartitions;
         auto groupedYtTables = GroupYtTables(ytTables, clusterConnections);
@@ -36,7 +35,14 @@ public:
                 richPaths.emplace_back(richPath);
             }
             try {
+                YQL_CLOG(TRACE, FastMapReduce) << "Calling YT API GetTablePartitions with DataWeightPerPartition="
+                << settings.MaxDataWeightPerPart << ", MaxParts=" << settings.MaxParts
+                << ", AdjustDataWeightPerPartition=true";
                 NYT::TMultiTablePartitions partitions = transaction->GetTablePartitions(richPaths, getTablePartitionsOptions);
+
+                YQL_CLOG(TRACE, FastMapReduce) << "YT API returned " << partitions.Partitions.size()
+                << " partitions for DataWeightPerPartition=" << settings.MaxDataWeightPerPart;
+
 
                 for (const auto& partition : partitions.Partitions) {
                     TYtTableTaskRef ytTableTaskRef{};
@@ -46,7 +52,7 @@ public:
                     ytPartitions.emplace_back(ytTableTaskRef);
                 }
             } catch (NYT::TErrorException& ex) {
-                YQL_CLOG(INFO, FastMapReduce) << "Failed to partition yt tables with message: " << CurrentExceptionMessage();
+                YQL_CLOG(ERROR, FastMapReduce) << "Failed to partition yt tables with message: " << CurrentExceptionMessage();
                 return {{}, false};
             }
         }

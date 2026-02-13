@@ -11,6 +11,25 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DEFINE_ENUM(EPeerPriority,
+    ((LocalDc)     (0))
+    ((ForeignDc)   (1))
+);
+
+//! Provides peers selection priority for the given peer address.
+/*!
+ *  Thread affinity: any.
+ */
+struct IPeerPriorityProvider
+    : public virtual TRefCounted
+{
+    virtual EPeerPriority GetPeerPriority(const std::string& address) const = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IPeerPriorityProvider)
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! A registry maintaining a set of viable peers.
 //! Maintains no more than a configured number of channels, keeping the remaining addresses in a backlog.
 //! When peers with active channels are unregistered, their places are filled with addresses from the backlog.
@@ -43,6 +62,7 @@ struct IViablePeerRegistry
     virtual std::optional<std::string> MaybeRotateRandomPeer() = 0;
 
     virtual std::vector<IChannelPtr> GetActiveChannels() const = 0;
+
     virtual void Clear() = 0;
 
     //! If registry is non-empty, returns void future.
@@ -63,6 +83,7 @@ using TCreateChannelCallback = TCallback<IChannelPtr(const std::string& address)
 IViablePeerRegistryPtr CreateViablePeerRegistry(
     TViablePeerRegistryConfigPtr config,
     TCreateChannelCallback createChannel,
+    IPeerPriorityProviderPtr peerPriorityProvider,
     const NLogging::TLogger& logger);
 
 ////////////////////////////////////////////////////////////////////////////////

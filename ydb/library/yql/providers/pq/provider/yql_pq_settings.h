@@ -15,6 +15,7 @@ struct TPqSettings {
 private:
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
 public:
+    NCommon::TConfSetting<TString, Static> Auth;
     NCommon::TConfSetting<TString, Static> Consumer;
     NCommon::TConfSetting<TString, Static> Database; // It is needed in case of Cloud.LB for external users, but can be taken from config for internal LB.
     NCommon::TConfSetting<TString, Static> PqReadByRtmrCluster_;

@@ -22,8 +22,7 @@ namespace numpy
      * Implementation with long as first argument
      **********************************************************/
     template <class pS, class P>
-    types::ndarray<long, pS> choice(long max, pS const &shape, bool replace,
-                                    P const &p)
+    types::ndarray<long, pS> choice(long max, pS const &shape, bool replace, P const &p)
     {
       if (!replace)
         throw pythonic::builtins::NotImplementedError(
@@ -38,16 +37,13 @@ namespace numpy
     }
 
     template <class P>
-    types::ndarray<long, types::pshape<long>> choice(long max, long size,
-                                                     bool replace, P &&p)
+    types::ndarray<long, types::pshape<long>> choice(long max, long size, bool replace, P &&p)
     {
-      return choice(max, types::pshape<long>{size}, replace,
-                    std::forward<P>(p));
+      return choice(max, types::pshape<long>{size}, replace, std::forward<P>(p));
     }
 
     template <class T>
-    auto choice(long max,
-                T &&size) -> decltype(randint(0, max, std::forward<T>(size)))
+    auto choice(long max, T &&size) -> decltype(randint(0, max, std::forward<T>(size)))
     {
       return randint(0, max, std::forward<T>(size));
     }
@@ -84,15 +80,14 @@ namespace numpy
     }
 
     template <class T>
-    types::ndarray<typename T::dtype, types::pshape<long>> choice(T &&a,
-                                                                  long size)
+    types::ndarray<typename T::dtype, types::pshape<long>> choice(T &&a, long size)
     {
       return choice(std::forward<T>(a), types::pshape<long>{size});
     }
 
     template <class T, class pS, class P>
-    types::ndarray<typename T::dtype, pS> choice(T const &a, pS const &shape,
-                                                 bool replace, P const &p)
+    types::ndarray<typename T::dtype, pS> choice(T const &a, pS const &shape, bool replace,
+                                                 P const &p)
     {
       // This is a numpy constraint
       static_assert(T::value == 1, "ValueError: a must be 1-dimensional");
@@ -110,11 +105,10 @@ namespace numpy
     }
 
     template <class T, class P>
-    types::ndarray<typename T::dtype, types::pshape<long>>
-    choice(T &&a, long size, bool replace, P &&p)
+    types::ndarray<typename T::dtype, types::pshape<long>> choice(T &&a, long size, bool replace,
+                                                                  P &&p)
     {
-      return choice(std::forward<T>(a), types::pshape<long>{size}, replace,
-                    std::forward<P>(p));
+      return choice(std::forward<T>(a), types::pshape<long>{size}, replace, std::forward<P>(p));
     }
   } // namespace random
 } // namespace numpy

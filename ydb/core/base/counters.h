@@ -4,6 +4,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/hash_set.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr {
     constexpr char DATABASE_LABEL[] = "database";
@@ -22,7 +23,8 @@ namespace NKikimr {
     const THashSet<TString> &GetDatabaseSensorServices();
     // Get list of services which use top-level database attribute labels for own sensors.
     const THashSet<TString> &GetDatabaseAttributeSensorServices();
-    const THashSet<TString> &GetDatabaseAttributeLabels();
+    // Get a list of attribute labels (order is important)
+    const TVector<TString> &GetDatabaseAttributeLabels();
     // Drop all extra labels.
     void ReplaceSubgroup(TIntrusivePtr<::NMonitoring::TDynamicCounters> root, const TString &service);
 } // namespace NKikimr

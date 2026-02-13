@@ -3,3 +3,6 @@
 {%- else -%}
 {%-     set common_dir_classpath = false -%}
 {%- endif -%}
+
+{%- set project_dir = project_root|replace(arcadia_root + "/", "") -%}
+{%- set project_dir_classpath = '":' + project_dir|replace("/", ":") -%}

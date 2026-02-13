@@ -15,7 +15,7 @@
                     "args":
                       [
                         {
-                          "op_name":"LeftJoin (Grace)",
+                          "op_name":"LeftOnlyJoin (Grace)",
                           "args":
                             [
                               {
@@ -23,7 +23,7 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (MapJoin)",
+                                      "op_name":"InnerJoin (Map)",
                                       "args":
                                         [
                                           {
@@ -57,11 +57,11 @@
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (MapJoin)",
+                          "op_name":"InnerJoin (Map)",
                           "args":
                             [
                               {
-                                "op_name":"LeftJoin (Grace)",
+                                "op_name":"LeftOnlyJoin (Grace)",
                                 "args":
                                   [
                                     {
@@ -101,11 +101,11 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Map)",
                     "args":
                       [
                         {
-                          "op_name":"LeftJoin (Grace)",
+                          "op_name":"LeftOnlyJoin (Grace)",
                           "args":
                             [
                               {

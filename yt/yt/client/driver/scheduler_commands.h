@@ -216,6 +216,40 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TListJobTracesCommand
+    : public TSimpleOperationCommandBase<NApi::TListJobTracesOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TListJobTracesCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NJobTrackerClient::TJobId JobId;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCheckOperationPermissionCommand
+    : public TSimpleOperationCommandBase<NApi::TCheckOperationPermissionOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TCheckOperationPermissionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NJobTrackerClient::TJobId JobId;
+    std::string User;
+    NYTree::EPermission Permission;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TGetJobCommand
     : public TSimpleOperationCommandBase<NApi::TGetJobOptions>
 {
@@ -259,9 +293,29 @@ public:
 private:
     NJobTrackerClient::TJobId JobId;
     NYTree::INodePtr Parameters;
+    // TODO(bystrovserg): Move ShellName to options parameter.
     std::optional<TString> ShellName;
 
     void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRunJobShellCommandCommand
+    : public TTypedCommand<NApi::TRunJobShellCommandOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRunJobShellCommandCommand);
+
+    static void Register(TRegistrar registrar);
+
+    void DoExecute(ICommandContextPtr context) override;
+
+private:
+    NJobTrackerClient::TJobId JobId;
+    // TODO(bystrovserg): Move ShellName to options parameter.
+    std::optional<std::string> ShellName;
+    std::string Command;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

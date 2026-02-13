@@ -9,7 +9,10 @@ class TestYdbWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
-            extra_feature_flags=['enable_add_colums_with_defaults'],
+            extra_feature_flags=[
+                "enable_add_colums_with_defaults",
+                "enable_table_cache_modes",
+            ],
             table_service_config={
                 "allow_olap_data_query": True,
                 "enable_oltp_sink": True,

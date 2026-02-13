@@ -3,6 +3,7 @@
 #include <library/cpp/yt/error/error.h>
 #include <library/cpp/yt/error/error_helpers.h>
 
+#include <util/generic/noncopyable.h>
 #include <util/stream/str.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
@@ -108,6 +109,29 @@ private:
     static inline int CopyConstructorCalls = 0;
     static inline int MoveConstructorCalls = 0;
 };
+
+// legacy class without move constructor
+class TCopyOnly
+{
+public:
+    explicit TCopyOnly(int val = 0)
+        : Value_(val)
+    { }
+
+    TCopyOnly(const TCopyOnly&) = default;
+    TCopyOnly(TCopyOnly&&) = delete;
+    TCopyOnly& operator=(const TCopyOnly&) = default;
+    TCopyOnly& operator=(TCopyOnly&&) = delete;
+
+    int Value() const
+    {
+        return Value_;
+    }
+
+private:
+    int Value_;
+};
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -317,9 +341,19 @@ TEST(TErrorTest, WrapRValue)
     EXPECT_EQ(wrapped.InnerErrors()[0], error);
 
     TError anotherErrorCopy = error;
-    auto trviallyWrapped = std::move(anotherErrorCopy).Wrap();
+    auto triviallyWrapped = std::move(anotherErrorCopy).Wrap();
     EXPECT_TRUE(anotherErrorCopy.IsOK());
-    EXPECT_EQ(trviallyWrapped, error);
+    EXPECT_EQ(triviallyWrapped, error);
+}
+
+TEST(TErrorTest, WrapOKError)
+{
+    TError error;
+
+    auto wrapped = error.Wrap("Wrapped OK error");
+    EXPECT_EQ(wrapped.GetCode(), NYT::EErrorCode::Generic);
+    EXPECT_EQ(wrapped.GetMessage(), "Wrapped OK error");
+    EXPECT_EQ(wrapped.InnerErrors().size(), 0u);
 }
 
 TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroJustWorks)
@@ -842,6 +876,200 @@ TEST(TErrorTest, Enrichers)
 
         testFromExceptionEnricherEnabled = false;
     }
+}
+
+TEST(TErrorOrConstructionTraitsTest, ValueTraits)
+{
+    using TMoveOnlyError = TErrorOr<TMoveOnly>;
+    static_assert(!std::is_copy_constructible_v<TMoveOnly>);
+    static_assert(std::is_move_constructible_v<TMoveOnlyError>);
+    static_assert(!std::is_copy_constructible_v<TMoveOnlyError>);
+    static_assert(std::is_move_assignable_v<TMoveOnlyError>);
+    static_assert(!std::is_copy_assignable_v<TMoveOnlyError>);
+}
+
+TEST(TErrorOrConstructionTraitsTest, FromError)
+{
+    {
+        TError error1("string: copy from error");
+        TErrorOr<std::string> errorOr1(error1);
+        EXPECT_FALSE(errorOr1.IsOK());
+        EXPECT_EQ(errorOr1.GetMessage(), "string: copy from error");
+        EXPECT_FALSE(error1.IsOK());
+
+        TError error2("string: move from error");
+        TErrorOr<std::string> errorOr2(std::move(error2));
+        EXPECT_FALSE(errorOr2.IsOK());
+        EXPECT_EQ(errorOr2.GetMessage(), "string: move from error");
+        EXPECT_TRUE(error2.IsOK());
+    }
+    {
+        TError error("unique_ptr: move from error");
+        TErrorOr<std::unique_ptr<int>> errorOr(std::move(error));
+        EXPECT_FALSE(errorOr.IsOK());
+        EXPECT_EQ(errorOr.GetMessage(), "unique_ptr: move from error");
+        EXPECT_TRUE(error.IsOK());
+
+        static_assert(std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, const TError&>);
+        static_assert(std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, TError&&>);
+    }
+    {
+        TError error("copy_only: copy from error");
+        TErrorOr<TCopyOnly> errorOr(error);
+        EXPECT_FALSE(errorOr.IsOK());
+        EXPECT_EQ(errorOr.GetMessage(), "copy_only: copy from error");
+        EXPECT_FALSE(error.IsOK());
+
+        static_assert(std::is_constructible_v<TErrorOr<TCopyOnly>, const TError&>);
+        static_assert(std::is_constructible_v<TErrorOr<TCopyOnly>, TError&&>);
+    }
+}
+
+TEST(TErrorOrConstructionTraitsTest, FromValue)
+{
+    {
+        std::string str = "value copy";
+        TErrorOr<std::string> errorOr1(str);
+        EXPECT_TRUE(errorOr1.IsOK());
+        EXPECT_EQ(errorOr1.Value(), "value copy");
+        EXPECT_EQ(str, "value copy");
+
+        TErrorOr<std::string> errorOr2(std::string("value move"));
+        EXPECT_TRUE(errorOr2.IsOK());
+        EXPECT_EQ(errorOr2.Value(), "value move");
+    }
+    {
+        auto ptr = std::make_unique<int>(42);
+        TErrorOr<std::unique_ptr<int>> errorOr(std::move(ptr));
+        EXPECT_TRUE(errorOr.IsOK());
+        EXPECT_EQ(*errorOr.Value(), 42);
+        EXPECT_EQ(ptr, nullptr);
+    }
+
+    static_assert(std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, std::unique_ptr<int>&&>);
+    static_assert(!std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, const std::unique_ptr<int>&>);
+
+    {
+        TCopyOnly obj(123);
+        TErrorOr<TCopyOnly> errorOr(obj);
+        EXPECT_TRUE(errorOr.IsOK());
+        EXPECT_EQ(errorOr.Value().Value(), 123);
+        EXPECT_EQ(obj.Value(), 123);
+    }
+
+    static_assert(std::is_constructible_v<TErrorOr<TCopyOnly>, const TCopyOnly&>);
+    static_assert(std::is_constructible_v<TErrorOr<TCopyOnly>, TCopyOnly&&>);
+}
+
+TEST(TErrorOrConstructionTraitsTest, FromSameSpecialization)
+{
+    {
+        TErrorOr<std::string> source1(TError("string: error copy"));
+        TErrorOr<std::string> dest1(source1);
+        EXPECT_FALSE(dest1.IsOK());
+        EXPECT_EQ(dest1.GetMessage(), "string: error copy");
+        EXPECT_FALSE(source1.IsOK());
+
+        TErrorOr<std::string> source2(TError("string: error move"));
+        TErrorOr<std::string> dest2(std::move(source2));
+        EXPECT_FALSE(dest2.IsOK());
+        EXPECT_EQ(dest2.GetMessage(), "string: error move");
+    }
+    {
+        TErrorOr<std::string> source1(std::string("value copy"));
+        TErrorOr<std::string> dest1(source1);
+        EXPECT_TRUE(dest1.IsOK());
+        EXPECT_EQ(dest1.Value(), "value copy");
+        EXPECT_EQ(source1.Value(), "value copy");
+
+        TErrorOr<std::string> source2(std::string("value move"));
+        TErrorOr<std::string> dest2(std::move(source2));
+        EXPECT_TRUE(dest2.IsOK());
+        EXPECT_EQ(dest2.Value(), "value move");
+    }
+    {
+        TErrorOr<std::unique_ptr<int>> source(TError("unique_ptr: error"));
+        TErrorOr<std::unique_ptr<int>> dest(std::move(source));
+        EXPECT_FALSE(dest.IsOK());
+        EXPECT_EQ(dest.GetMessage(), "unique_ptr: error");
+    }
+    {
+        TErrorOr<std::unique_ptr<int>> source(std::make_unique<int>(42));
+        TErrorOr<std::unique_ptr<int>> dest(std::move(source));
+        EXPECT_TRUE(dest.IsOK());
+        EXPECT_EQ(*dest.Value(), 42);
+    }
+    {
+        TErrorOr<TCopyOnly> source(TError("copy_only: error"));
+        TErrorOr<TCopyOnly> dest(source);
+        EXPECT_FALSE(dest.IsOK());
+        EXPECT_EQ(dest.GetMessage(), "copy_only: error");
+        EXPECT_FALSE(source.IsOK());
+    }
+    {
+        TErrorOr<TCopyOnly> source(TCopyOnly(123));
+        TErrorOr<TCopyOnly> dest(source);
+        EXPECT_TRUE(dest.IsOK());
+        EXPECT_EQ(dest.Value().Value(), 123);
+        EXPECT_EQ(source.Value().Value(), 123);
+    }
+
+    static_assert(!std::is_copy_constructible_v<TErrorOr<std::unique_ptr<int>>>);
+    static_assert(std::is_move_constructible_v<TErrorOr<std::unique_ptr<int>>>);
+    static_assert(std::is_copy_constructible_v<TErrorOr<TCopyOnly>>);
+    static_assert(std::is_move_constructible_v<TErrorOr<TCopyOnly>>);
+    static_assert(std::is_copy_constructible_v<TErrorOr<std::string>>);
+    static_assert(std::is_move_constructible_v<TErrorOr<std::string>>);
+}
+
+TEST(TErrorOrConstructionTraitsTest, FromDifferentSpecialization)
+{
+    {
+        TErrorOr<int> sourceInt(TError("int→long: error copy"));
+        TErrorOr<long> destLong1(sourceInt);
+        EXPECT_FALSE(destLong1.IsOK());
+        EXPECT_EQ(destLong1.GetMessage(), "int→long: error copy");
+        EXPECT_FALSE(sourceInt.IsOK());
+
+        TErrorOr<int> sourceInt2(TError("int→long: error move"));
+        TErrorOr<long> destLong2(std::move(sourceInt2));
+        EXPECT_FALSE(destLong2.IsOK());
+        EXPECT_EQ(destLong2.GetMessage(), "int→long: error move");
+    }
+    {
+        TErrorOr<int> sourceInt(42);
+        TErrorOr<long> destLong1(sourceInt);
+        EXPECT_TRUE(destLong1.IsOK());
+        EXPECT_EQ(destLong1.Value(), 42L);
+        EXPECT_EQ(sourceInt.Value(), 42);
+
+        TErrorOr<int> sourceInt2(84);
+        TErrorOr<long> destLong2(std::move(sourceInt2));
+        EXPECT_TRUE(destLong2.IsOK());
+        EXPECT_EQ(destLong2.Value(), 84L);
+    }
+    {
+        TErrorOr<const char*> sourceStr(TError("cstr→string: error"));
+        TErrorOr<std::string> destStr(sourceStr);
+        EXPECT_FALSE(destStr.IsOK());
+        EXPECT_EQ(destStr.GetMessage(), "cstr→string: error");
+        EXPECT_FALSE(sourceStr.IsOK());
+    }
+    {
+        const char* cstr = "value copy";
+        TErrorOr<const char*> sourceStr(cstr);
+        TErrorOr<std::string> destStr(sourceStr);
+        EXPECT_TRUE(destStr.IsOK());
+        EXPECT_EQ(destStr.Value(), "value copy");
+        EXPECT_TRUE(sourceStr.IsOK());
+    }
+
+    static_assert(!std::is_constructible_v<TErrorOr<std::string>, const TErrorOr<int*>&>);
+    static_assert(!std::is_constructible_v<TErrorOr<std::string>, TErrorOr<int*>&&>);
+    static_assert(!std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, const TErrorOr<int>&>);
+    static_assert(!std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, TErrorOr<int>&&>);
+    static_assert(!std::is_constructible_v<TErrorOr<TCopyOnly>, const TErrorOr<std::string>&>);
+    static_assert(!std::is_constructible_v<TErrorOr<TCopyOnly>, TErrorOr<std::string>&&>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

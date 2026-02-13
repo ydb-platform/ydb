@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -9,6 +10,7 @@
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -18,6 +20,7 @@ namespace NKikimrTxDataShard {
     class TEvRecomputeKMeansResponse;
     class TEvSampleKResponse;
     class TEvValidateUniqueIndexResponse;
+    class TEvFilterKMeansResponse;
 }
 
 namespace NKikimr {
@@ -43,10 +46,15 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
 
 bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 
-NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig indexCreation);
+NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation);
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType);
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
+NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
 
-std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);
+std::span<const std::string_view> GetImplTables(
+    NKikimrSchemeOp::EIndexType indexType,
+    std::span<const TString> indexKeys);
+std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
 
@@ -69,12 +77,20 @@ inline constexpr const char* PostingTable = "indexImplPostingTable";
 
 inline constexpr const char* BuildSuffix0 = "0build";
 inline constexpr const char* BuildSuffix1 = "1build";
+inline constexpr auto IsForeignType = Ydb::Type::BOOL;
+inline constexpr auto IsForeignTypeName = "Bool";
+inline constexpr const char* IsForeignColumn = "__ydb_foreign";
+inline constexpr auto DistanceType = Ydb::Type::DOUBLE;
+inline constexpr auto DistanceTypeName = "Double";
+inline constexpr const char* DistanceColumn = "__ydb_distance";
 
 // Prefix table
 inline constexpr const char* PrefixTable = "indexImplPrefixTable";
 inline constexpr const char* IdColumnSequence = "__ydb_id_sequence";
 
 inline constexpr const int DefaultKMeansRounds = 3;
+inline constexpr const int DefaultOverlapClusters = 1;
+inline constexpr const double DefaultOverlapRatio = 0;
 
 inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
 
@@ -85,7 +101,39 @@ TClusterId SetPostingParentFlag(TClusterId parent);
 }
 
 namespace NFulltext {
+    // Type for token frequency within a document - uint32 is OK
+    using TTokenCount = ui32;
+    inline constexpr auto TokenCountType = Ydb::Type::UINT32;
+    inline constexpr const char* TokenCountTypeName = "Uint32";
+
+    // Type for the global number of documents / number of documents with token
+    using TDocCount = ui64;
+    inline constexpr auto DocCountType = Ydb::Type::UINT64;
+    inline constexpr const char* DocCountTypeName = "Uint64";
+
     inline constexpr const char* TokenColumn = "__ydb_token";
+    inline constexpr const char* FreqColumn = "__ydb_freq";
+    inline constexpr const char* IdColumn = "__ydb_id";
+
+    inline constexpr const char* DocsTable = "indexImplDocsTable";
+    inline constexpr const char* DocLengthColumn = "__ydb_length";
+
+    inline constexpr const char* DictTable = "indexImplDictTable";
+
+    inline constexpr const char* StatsTable = "indexImplStatsTable";
+    inline constexpr const char* DocCountColumn = "__ydb_doc_count";
+    inline constexpr const char* SumDocLengthColumn = "__ydb_sum_doc_length";
+
+    inline constexpr const char* FullTextRelevanceColumn = "__ydb_full_text_relevance";
+
+    enum class EQueryMode {
+        Invalid,
+        And,
+        Or
+    };
+
+    EQueryMode QueryModeFromString(const TString& mode, TString& explain);
+    ui32 MinimumShouldMatchFromString(i32 wordsCount, EQueryMode queryMode, const TString& minimumShouldMatch, TString& explain);
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);
@@ -93,6 +141,7 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvFilterKMeansResponse& record);
 
 }
 }

@@ -2,12 +2,12 @@
  * Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
- *
- * Linux-specific functions.
  */
 
+// Linux-specific functions.
+
 #ifndef _GNU_SOURCE
-    #define _GNU_SOURCE 1
+#define _GNU_SOURCE 1
 #endif
 #include <Python.h>
 #include <linux/ethtool.h>  // DUPLEX_*
@@ -17,11 +17,11 @@
 // May happen on old RedHat versions, see:
 // https://github.com/giampaolo/psutil/issues/607
 #ifndef DUPLEX_UNKNOWN
-    #define DUPLEX_UNKNOWN 0xff
+#define DUPLEX_UNKNOWN 0xff
 #endif
 
 static PyMethodDef mod_methods[] = {
-    // --- per-process functions
+// --- per-process functions
 #ifdef PSUTIL_HAS_IOPRIO
     {"proc_ioprio_get", psutil_proc_ioprio_get, METH_VARARGS},
     {"proc_ioprio_set", psutil_proc_ioprio_set, METH_VARARGS},
@@ -33,6 +33,13 @@ static PyMethodDef mod_methods[] = {
     // --- system related functions
     {"disk_partitions", psutil_disk_partitions, METH_VARARGS},
     {"net_if_duplex_speed", psutil_net_if_duplex_speed, METH_VARARGS},
+#ifdef PSUTIL_HAS_HEAP_INFO
+    {"heap_info", psutil_heap_info, METH_VARARGS},
+#endif
+#ifdef PSUTIL_HAS_HEAP_TRIM
+    {"heap_trim", psutil_heap_trim, METH_VARARGS},
+#endif
+
     // --- linux specific
     {"linux_sysinfo", psutil_linux_sysinfo, METH_VARARGS},
     // --- others

@@ -17,6 +17,17 @@ message THeartbeatResponse {
     bool NeedToRestart = 3;
 }
 
+message TPrepareOperationRequest {
+    TOperationParams OperationParams = 1;
+    map<string, TClusterConnection> ClusterConnections = 2;
+    optional string FmrOperationSpec = 3;
+}
+
+message TPrepareOperationResponse {
+    string PartitionId = 1;
+    uint64 TasksNum = 2;
+}
+
 message TStartOperationRequest {
     ETaskType TaskType = 1;
     TOperationParams OperationParams = 2;
@@ -25,6 +36,9 @@ message TStartOperationRequest {
     uint32 NumRetries = 5;
     map<string, TClusterConnection> ClusterConnections = 6;
     optional string FmrOperationSpec = 7;
+    repeated TFileInfo Files = 8;
+    repeated TYtResourceInfo YtResources = 9;
+    repeated TFmrResourceOperationInfo FmrResources = 10;
 }
 
 message TStartOperationResponse {
@@ -36,6 +50,7 @@ message TGetOperationResponse {
     EOperationStatus Status = 1;
     repeated TFmrError ErrorMessages = 2;
     repeated TTableStats TableStats = 3;
+    repeated string OperationResultsYson = 4;
 }
 
 message TDeleteOperationResponse {

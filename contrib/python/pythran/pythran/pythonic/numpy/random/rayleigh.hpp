@@ -23,8 +23,7 @@ namespace numpy
     types::ndarray<double, pS> rayleigh(double scale, pS const &array_shape)
     {
       types::ndarray<double, pS> result{array_shape, types::none_type()};
-      std::generate(result.fbegin(), result.fend(),
-                    [&]() { return rayleigh(scale); });
+      std::generate(result.fbegin(), result.fend(), [&]() { return rayleigh(scale); });
       return result;
     }
 
@@ -36,9 +35,8 @@ namespace numpy
 
     inline double rayleigh(double scale, types::none_type d)
     {
-      return scale *
-             sqrt(-2.0 * log(1.0 - std::uniform_real_distribution<double>{
-                                       0., 1.}(details::generator)));
+      return scale * sqrt(-2.0 * log(1.0 - std::uniform_real_distribution<double>{0., 1.}(
+                                               details::generator)));
     }
   } // namespace random
 } // namespace numpy

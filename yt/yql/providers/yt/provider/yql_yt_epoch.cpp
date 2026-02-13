@@ -373,38 +373,24 @@ private:
                     }
                 }
             }
-            else if (auto maybePublish = TMaybeNode<TYtPublish>(node)) {
-                auto cluster = TString{maybePublish.Cast().DataSink().Cluster().Value()};
-                auto table = maybePublish.Cast().Publish();
-                if (auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
+            else if (const auto maybePublish = TMaybeNode<TYtPublish>(node)) {
+                const auto cluster = maybePublish.Cast().DataSink().Cluster().StringValue();
+                const auto table = maybePublish.Cast().Publish();
+                if (const auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
                     State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
                 }
             }
-            else if (auto maybeDrop = TMaybeNode<TYtDropTable>(node)) {
-                auto cluster = TString{maybeDrop.Cast().DataSink().Cluster().Value()};
-                auto table = maybeDrop.Cast().Table();
-                if (auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
+            else if (const auto maybeScheme = TMaybeNode<TYtReadTableScheme>(node)) {
+                const auto cluster = maybeScheme.Cast().DataSource().Cluster().StringValue();
+                const auto table = maybeScheme.Cast().Table();
+                if (const auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
                     State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
                 }
             }
-            else if (auto maybeCreate = TMaybeNode<TYtCreateTable>(node)) {
-                auto cluster = TString{maybeCreate.Cast().DataSink().Cluster().Value()};
-                auto table = maybeCreate.Cast().Table();
-                if (auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
-                    State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
-                }
-            }
-            else if (auto maybeScheme = TMaybeNode<TYtReadTableScheme>(node)) {
-                auto cluster = TString{maybeScheme.Cast().DataSource().Cluster().Value()};
-                auto table = maybeScheme.Cast().Table();
-                if (auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
-                    State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
-                }
-            }
-            else if (auto maybeWrite = TMaybeNode<TYtWriteTable>(node)) {
-                auto cluster = TString{maybeWrite.Cast().DataSink().Cluster().Value()};
-                auto table = maybeWrite.Cast().Table();
-                if (auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
+            else if (const auto maybeOpBase = TMaybeNode<TYtIsolatedOpBase>(node)) {
+                const auto cluster = maybeOpBase.Cast().DataSink().Cluster().StringValue();
+                const auto table = maybeOpBase.Cast().Table();
+                if (const auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
                     State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
                 }
             }

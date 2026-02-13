@@ -1,0 +1,10 @@
+select
+    Yson::AsBool('<a=1>%true'y),
+    Yson::AsInt64('<a=1>1'y),
+    Yson::AsUint64('<a=1>2u'y),
+    Yson::AsDouble('<a=1>3.4'y),
+    Yson::AsString('<a=1>foo'y),
+    Yson::AsList('<a=1>[]'y),
+    Yson::AsList('<a=1>[1;foo]'y),
+    Yson::AsDict('<a=1>{}'y),
+    ListSort(DictItems(Yson::AsDict('<a=1>{a=1;b=foo}'y)),($x)->($x.0));

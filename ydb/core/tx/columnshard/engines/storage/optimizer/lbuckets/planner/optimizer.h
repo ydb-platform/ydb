@@ -1231,9 +1231,9 @@ protected:
         return Buckets.IsLocked(dataLocksManager);
     }
 
-    virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         const TInstant now = TInstant::Now();
-        for (auto&& [_, i] : remove) {
+        for (auto&& i : remove) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
                 continue;
             }
@@ -1242,7 +1242,7 @@ protected:
                 Counters->OptimizersCount->Sub(1);
             }
         }
-        for (auto&& [_, i] : add) {
+        for (auto&& i : add) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
                 continue;
             }

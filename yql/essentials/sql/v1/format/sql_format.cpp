@@ -48,6 +48,25 @@ TTokenIterator SkipWSOrCommentBackward(TTokenIterator curr, TTokenIterator begin
     return curr;
 }
 
+ui32 LeadingNLsCount(TStringBuf str) {
+    ui32 count = 0;
+    for (ui32 i = 0; i < str.size(); ++i) {
+        char c = str[i];
+
+        if (c == '\n') {
+            count++;
+        } else if (c == '\r') {
+            count++;
+            if (i + 1 < str.size() && str[i + 1] == '\n') {
+                i++;
+            }
+        } else if (!IsAsciiSpace(c)) {
+            break;
+        }
+    }
+    return count;
+}
+
 void SkipForValidate(
     TTokenIterator& in,
     TTokenIterator& out,
@@ -513,6 +532,24 @@ private:
         }
     }
 
+    bool HasCommentBetweenTokens(ui32 prevTokenIndex, ui32 curTokenIndex) const {
+        return curTokenIndex < ParsedTokens_.size() &&
+               prevTokenIndex < ParsedTokens_.size() &&
+               LastComment_ < Comments_.size() &&
+               Comments_[LastComment_].Line > ParsedTokens_[prevTokenIndex].Line &&
+               Comments_[LastComment_].Line < ParsedTokens_[curTokenIndex].Line;
+    }
+
+    void AddNewlineBetweenStatementsIfNeeded(bool curIsSimpleStatement, bool prevIsSimpleStatement) {
+        bool hasCommentAfterPrevStatement = TokenIndex_ > 0 && HasCommentBetweenTokens(TokenIndex_ - 1, TokenIndex_);
+        bool hasNewlinesAfterPrevStatement = TokenIndex_ > 0 && TokenIndex_ < ParsedTokens_.size() &&
+                                             ParsedTokens_[TokenIndex_].Line - ParsedTokens_[TokenIndex_ - 1].Line > 1;
+        if (!curIsSimpleStatement || hasNewlinesAfterPrevStatement &&
+                                         !hasCommentAfterPrevStatement && prevIsSimpleStatement) {
+            Out('\n');
+        }
+    }
+
     void MarkTokens(const NProtoBuf::Message& msg) {
         const NProtoBuf::Descriptor* descr = msg.GetDescriptor();
         auto scopePtr = StaticData_.ScopeDispatch.FindPtr(descr);
@@ -693,6 +730,12 @@ private:
         }
     }
 
+    bool HasSelectInRHS(const TRule_named_nodes_stmt& stmt) {
+        return ((stmt.GetBlock3().HasAlt1() &&
+                 IsSelect(stmt.GetBlock3().GetAlt1().GetRule_expr1())) ||
+                (stmt.GetBlock3().HasAlt2()));
+    }
+
     TMaybe<bool> IsSimpleStatement(const TRule_sql_stmt_core& msg) {
         switch (msg.Alt_case()) {
             case TRule_sql_stmt_core::kAltSqlStmtCore1:  // pragma
@@ -713,11 +756,7 @@ private:
             case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
                 const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();
 
-                const bool isSelect = ((stmt.GetBlock3().HasAlt1() &&
-                                        IsSelect(stmt.GetBlock3().GetAlt1().GetRule_expr1())) ||
-                                       (stmt.GetBlock3().HasAlt2()));
-
-                if (!isSelect) {
+                if (!HasSelectInRHS(stmt)) {
                     return true;
                 }
                 break;
@@ -737,6 +776,16 @@ private:
         }
 
         return {};
+    }
+
+    bool IsSimpleLambdaStatement(const TRule_lambda_stmt& msg) {
+        if (msg.HasAlt_lambda_stmt1()) {
+            const auto& stmt = msg.GetAlt_lambda_stmt1().GetRule_named_nodes_stmt1();
+            if (HasSelectInRHS(stmt)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     template <typename T>
@@ -813,13 +862,14 @@ private:
         SkipSemicolons(msg.GetBlock1());
         if (msg.HasBlock2()) {
             const auto& b = msg.GetBlock2();
+            bool prevIsSimpleStatement = IsSimpleStatement(b.GetRule_sql_stmt_core1()).GetOrElse(false);
             Visit(b.GetRule_sql_stmt_core1());
             for (auto block : b.GetBlock2()) {
                 SkipSemicolons(block.GetBlock1(), /* printOne = */ true);
-                if (!IsSimpleStatement(block.GetRule_sql_stmt_core2()).GetOrElse(false)) {
-                    Out('\n');
-                }
+                bool curIsSimpleStatement = IsSimpleStatement(block.GetRule_sql_stmt_core2()).GetOrElse(false);
+                AddNewlineBetweenStatementsIfNeeded(curIsSimpleStatement, prevIsSimpleStatement);
                 Visit(block.GetRule_sql_stmt_core2());
+                prevIsSimpleStatement = curIsSimpleStatement;
             }
             SkipSemicolons(b.GetBlock3(), /* printOne = */ true);
         }
@@ -963,6 +1013,11 @@ private:
     void VisitAlterDatabase(const TRule_alter_database_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_alter_database_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitTruncateTable(const TRule_truncate_table_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_truncate_table_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateTable(const TRule_create_table_stmt& msg) {
@@ -1361,6 +1416,10 @@ private:
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_values_source_row2());
+        }
+
+        if (rowList.HasBlock3()) {
+            Visit(rowList.GetBlock3().GetToken1());
         }
 
         PopCurrentIndent();
@@ -1854,9 +1913,13 @@ private:
                         Visit(block.GetRule_an_id2());
                     }
 
+                    if (columns.HasBlock4()) {
+                        Visit(columns.GetBlock4().GetToken1());
+                    }
+
                     PopCurrentIndent();
                     NewLine();
-                    Visit(columns.GetToken4());
+                    Visit(columns.GetToken5());
                     NewLine();
                 }
 
@@ -2292,9 +2355,13 @@ private:
                     Visit(block.GetRule_an_id2());
                 }
 
+                if (columns.HasBlock4()) {
+                    Visit(columns.GetBlock4().GetToken1());
+                }
+
                 NewLine();
                 PopCurrentIndent();
-                Visit(columns.GetToken4());
+                Visit(columns.GetToken5());
             }
         }
 
@@ -2357,9 +2424,13 @@ private:
                 Visit(block.GetRule_an_id2());
             }
 
+            if (columns.HasBlock4()) {
+                Visit(columns.GetBlock4().GetToken1());
+            }
+
             PopCurrentIndent();
             NewLine();
-            Visit(columns.GetToken4());
+            Visit(columns.GetToken5());
             PopCurrentIndent();
         }
     }
@@ -2588,10 +2659,22 @@ private:
         PushCurrentIndent();
         NewLine();
         SkipSemicolons(msg.GetBlock1());
-        for (const auto& block : msg.GetBlock2()) {
+
+        if (msg.Block2Size() != 0) {
+            const auto& block = msg.GetBlock2(0);
+            bool prevIsSimpleStatement = IsSimpleLambdaStatement(block.GetRule_lambda_stmt1());
             Visit(block.GetRule_lambda_stmt1());
             SkipSemicolons(block.GetBlock2(), /* printOne = */ true);
             NewLine();
+            for (ui32 i = 1; i < msg.Block2Size(); ++i) {
+                const auto& block = msg.GetBlock2(i);
+                bool curIsSimpleStatement = IsSimpleLambdaStatement(block.GetRule_lambda_stmt1());
+                AddNewlineBetweenStatementsIfNeeded(curIsSimpleStatement, prevIsSimpleStatement);
+                Visit(block.GetRule_lambda_stmt1());
+                SkipSemicolons(block.GetBlock2(), /* printOne = */ true);
+                NewLine();
+                prevIsSimpleStatement = curIsSimpleStatement;
+            }
         }
 
         Visit(msg.GetToken3());
@@ -3170,6 +3253,7 @@ TStaticData::TStaticData()
           {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
           {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
           {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
+          {TRule_truncate_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTruncateTable)},
           {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
           {TRule_streaming_query_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitStreamingQuerySettings)},
           {TRule_create_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateStreamingQuery)},
@@ -3233,7 +3317,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers_, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -3242,16 +3326,22 @@ public:
             return Format(visitor.Process(*message), formattedQuery, issues, EFormatMode::Pretty);
         }
 
-        auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+        auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer);
         TVector<TString> statements;
-        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File)) {
+        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File, false)) {
             return false;
         }
 
         TStringBuilder finalFormattedQuery;
         bool prevAddLine = false;
         TMaybe<ui32> prevStmtCoreAltCase;
-        for (const TString& currentQuery : statements) {
+        for (const TString& stmt : statements) {
+            bool hasNewlinesBefore = LeadingNLsCount(stmt) > 1;
+            TString currentQuery = StripStringLeft(stmt);
+            if (AllOf(currentQuery, [](char x) { return x == ';'; })) {
+                continue;
+            }
+
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
@@ -3268,7 +3358,7 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -3282,6 +3372,7 @@ public:
             bool addLineBefore = false;
             bool addLineAfter = false;
             TMaybe<ui32> stmtCoreAltCase;
+            bool hasCommentBefore = !comments.empty() && !parsedTokens.empty() && comments.front().Line < parsedTokens.front().Line;
             auto currentFormattedQuery = visitor.Process(*message, addLineBefore, addLineAfter, stmtCoreAltCase);
 
             TParsedTokenList stmtFormattedTokens;
@@ -3299,7 +3390,7 @@ public:
             }
 
             const bool differentStmtAltCase = prevStmtCoreAltCase.Defined() && stmtCoreAltCase != prevStmtCoreAltCase;
-            if ((addLineBefore || prevAddLine || differentStmtAltCase) && !finalFormattedQuery.empty()) {
+            if ((addLineBefore || prevAddLine || differentStmtAltCase || (hasNewlinesBefore && !hasCommentBefore)) && !finalFormattedQuery.empty()) {
                 finalFormattedQuery << "\n";
             }
             prevAddLine = addLineAfter;
@@ -3337,7 +3428,7 @@ TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
         throw yexception() << issues.ToString();
     }
 
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer);
     TVector<NSQLTranslation::TParsedToken> allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         if (token.Name != "EOF") {

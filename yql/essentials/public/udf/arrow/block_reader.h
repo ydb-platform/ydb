@@ -342,7 +342,7 @@ public:
 template <bool Nullable>
 class TTupleBlockReader final: public TTupleBlockReaderBase<Nullable, TTupleBlockReader<Nullable>> {
 public:
-    TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
+    explicit TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
         : Children_(std::move(children))
         , Items_(Children_.size())
     {
@@ -547,7 +547,7 @@ public:
 
 class TExternalOptionalBlockReader final: public TBlockReaderBase {
 public:
-    TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
+    explicit TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
         : Inner_(std::move(inner))
     {
     }

@@ -82,7 +82,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     auto newWrite = CompactionBlobEncoder.PartitionedBlob.Add(std::move(blob));
 
     if (newWrite && !newWrite->Value.empty()) {
-        AddCmdWrite(newWrite, request, blobCreationUnixTime, ctx);
+        AddCmdWrite(newWrite, request, blobCreationUnixTime, ctx, false);
 
         LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<
@@ -279,10 +279,9 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
 
     ui64 offset = requestedBlob.Key.GetOffset();
 
-    for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
-        TBatch batch = it.GetBatch();
-        batch.Unpack();
-
+    auto batches = requestedBlob.GetBatches();
+    AFL_ENSURE(batches != nullptr);
+    for (const auto& batch : *batches) {
         for (const auto& blob : batch.Blobs) {
             LOG_D("Try append part " << offset << "." << blob.GetPartNo() << "/" << blob.GetTotalParts());
 
@@ -400,7 +399,7 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
     auto write = CompactionBlobEncoder.PartitionedBlob.Add(k.Key, size, k.Timestamp, false);
     if (write && !write->Value.empty()) {
         // надо записать содержимое головы перед первым большим блобом
-        AddCmdWrite(write, compactionRequest, k.Timestamp, ctx);
+        AddCmdWrite(write, compactionRequest, k.Timestamp, ctx, false);
         CompactionBlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
     }
 
@@ -470,7 +469,6 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
     TInstant blobCreationUnixTime = TInstant::Zero();
-
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
         auto& [k, pos] = KeysForCompaction[i];
         bool needToCompactHead = (parameters.CurOffset < k.Key.GetOffset());
@@ -551,8 +549,7 @@ void TPartition::BlobsForCompactionWereWrite()
     AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= KeysForCompaction.size());
 
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
-        BlobEncoder.BodySize -= BlobEncoder.DataKeysBody.front().Size;
-        BlobEncoder.DataKeysBody.pop_front();
+        BlobEncoder.pop_front();
 
         if (BlobEncoder.DataKeysBody.empty()) {
             if (BlobEncoder.HeadKeys.empty()) {

@@ -6,17 +6,20 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/utils/string/trim_indent.h>
 
 #include <google/protobuf/arena.h>
 #include <util/string/subst.h>
 #include <util/string/join.h>
+
+using NYql::TrimIndent;
 
 namespace {
 
 using TCases = TVector<std::pair<TString, TString>>;
 
 struct TSetup {
-    TSetup(bool ansiLexer = false) {
+    explicit TSetup(bool ansiLexer = false) {
         NSQLTranslationV1::TLexers lexers;
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
         lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
@@ -26,7 +29,6 @@ struct TSetup {
 
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &Arena;
-        settings.Antlr4Parser = true;
         settings.AnsiLexer = ansiLexer;
         Formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
     }
@@ -52,7 +54,6 @@ struct TSetup {
 
             if (mode == NSQLFormat::EFormatMode::Pretty) {
                 NSQLTranslation::TTranslationSettings settings;
-                settings.Antlr4Parser = true;
                 auto mutatedQuery = NSQLFormat::MutateQuery(lexers, c.first, settings);
                 auto res3 = Formatter->Format(mutatedQuery, formatted, issues);
                 UNIT_ASSERT_C(res3, issues.ToString());

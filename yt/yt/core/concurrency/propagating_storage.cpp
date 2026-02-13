@@ -90,7 +90,7 @@ TPropagatingStorage::TPropagatingStorage(TIntrusivePtr<TImpl> impl)
 TPropagatingStorage::~TPropagatingStorage() = default;
 
 TPropagatingStorage::TPropagatingStorage(const TPropagatingStorage& other) = default;
-TPropagatingStorage::TPropagatingStorage(TPropagatingStorage&& other) = default;
+TPropagatingStorage::TPropagatingStorage(TPropagatingStorage&& other) noexcept = default;
 
 TPropagatingStorage& TPropagatingStorage::operator=(const TPropagatingStorage& other) = default;
 TPropagatingStorage& TPropagatingStorage::operator=(TPropagatingStorage&& other) = default;

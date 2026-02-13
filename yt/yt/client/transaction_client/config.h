@@ -28,12 +28,29 @@ struct TRemoteTimestampProviderConfig
     TDuration TimestampProviderDiscoveryPeriod;
     TDuration TimestampProviderDiscoveryPeriodSplay;
 
+    TRemoteTimestampProviderConfigPtr ApplyDynamic(
+        const TRemoteTimestampProviderDynamicConfigPtr& dynamicConfig) const;
+
     REGISTER_YSON_STRUCT(TRemoteTimestampProviderConfig);
 
     static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TRemoteTimestampProviderConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TRemoteTimestampProviderDynamicConfig
+    : public virtual NYTree::TYsonStruct
+{
+    std::optional<TDuration> BatchPeriod;
+
+    REGISTER_YSON_STRUCT(TRemoteTimestampProviderDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TRemoteTimestampProviderDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -81,7 +81,8 @@ namespace NYql::NDq {
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            const size_t maxKeysInRequest)
+            const size_t maxKeysInRequest,
+            bool isMultiMatches = false)
             : Connector(connectorClient)
             , CredentialsProvider(std::move(credentialsProvider))
             , ParentId(std::move(parentId))
@@ -94,6 +95,7 @@ namespace NYql::NDq {
             , HolderFactory(holderFactory)
             , ColumnDestinations(CreateColumnDestination())
             , MaxKeysInRequest(std::min(maxKeysInRequest, size_t{100}))
+            , IsMultiMatches(isMultiMatches)
             , RetryPolicy(
                     ILookupRetryPolicy::GetExponentialBackoffPolicy(
                         /* retryClassFunction */
@@ -401,7 +403,11 @@ namespace NYql::NDq {
                     (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
                 }
                 if (auto* v = Request->FindPtr(key)) {
-                    *v = std::move(output); // duplicates will be overwritten
+                    if (IsMultiMatches) {
+                        *v = HolderFactory.CreateDirectListHolder((*v ? *NKikimr::NMiniKQL::GetDefaultListRepresentation(*v) : NKikimr::NMiniKQL::TDefaultListRepresentation{}).Append(std::move(output)));
+                    } else {
+                        *v = std::move(output); // duplicates will be overwritten
+                    }
                 }
             }
             if (CpuTime) {
@@ -533,6 +539,7 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
+        const bool IsMultiMatches;
         std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> Request;
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; // TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
@@ -562,7 +569,8 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const size_t maxKeysInRequest,
-        const THashMap<TString, TString>& secureParams
+        const THashMap<TString, TString>& secureParams,
+        const bool isMultiMatches
     )
     {
         auto credentialsProvider = NYql::NDq::CreateGenericCredentialsProvider(
@@ -581,7 +589,8 @@ namespace NYql::NDq {
             payloadType,
             typeEnv,
             holderFactory,
-            maxKeysInRequest);
+            maxKeysInRequest,
+            isMultiMatches);
         return {actor, actor};
     }
 

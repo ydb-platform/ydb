@@ -19,8 +19,7 @@ namespace operator_
   {
     auto where = std::find(a.begin(), a.end(), b);
     if (where == a.end())
-      throw types::ValueError(builtins::anonymous::str(b) +
-                              " is not in this sequence");
+      throw types::ValueError(builtins::anonymous::str(b) + " is not in this sequence");
     return where - a.begin();
   }
 } // namespace operator_

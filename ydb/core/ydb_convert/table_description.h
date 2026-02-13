@@ -128,6 +128,8 @@ void FillPartitioningSettings(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
 
 // in
 bool CopyExplicitPartitions(NKikimrSchemeOp::TTableDescription& out,
@@ -151,6 +153,8 @@ void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
     Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable = false);
+bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
+    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 
 // out

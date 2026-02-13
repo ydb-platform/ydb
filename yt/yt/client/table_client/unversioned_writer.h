@@ -32,6 +32,8 @@ struct IUnversionedRowsetWriter
     [[nodiscard]] virtual bool Write(TRange<TUnversionedRow> rows) = 0;
 
     /*!
+     * TODO(apollo1321): Should be removed from base class and implemented as wrapper.
+     *
      * Returns the digest of the written rows.
      *
      * Useful for checking the determinism of user jobs.
@@ -39,7 +41,7 @@ struct IUnversionedRowsetWriter
      *
      * Must not be called concurrently with Write method.
      */
-    virtual std::optional<NCrypto::TMD5Hash> GetDigest() const = 0;
+    virtual std::optional<TRowsDigest> GetDigest() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IUnversionedRowsetWriter)

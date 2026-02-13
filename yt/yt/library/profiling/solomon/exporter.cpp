@@ -643,11 +643,13 @@ void TSolomonExporter::DoHandleShard(
         if (Config_->EnableHistogramCompat && outputEncodingContext.IsSolomonPull) {
             options.EnableHistogramCompat = true;
         }
+        options.SplitRateHistogramIntoGauges = Config_->SplitRateHistogramIntoGauges;
 
         options.EnableSolomonAggregationWorkaround = outputEncodingContext.IsSolomonPull;
         options.Times = readWindow;
         options.SummaryPolicy = Config_->GetSummaryPolicy();
         options.MarkAggregates = Config_->MarkAggregates;
+        options.EnableSolomonAggregates = Config_->EnableSolomonAggregates;
         options.ReportTimestampsForRateMetrics = Config_->ReportTimestampsForRateMetrics;
         options.StripSensorsNamePrefix = Config_->StripSensorsNamePrefix;
         options.LingerWindowSize = Config_->LingerTimeout / gridStep;

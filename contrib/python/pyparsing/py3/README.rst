@@ -60,6 +60,16 @@ documentation resources and project info are listed in the online
 `GitHub wiki <https://github.com/pyparsing/pyparsing/wiki>`__. An
 entire directory of examples can be found `here <https://github.com/pyparsing/pyparsing/tree/master/examples>`__.
 
+AI Instructions
+===============
+
+There are also instructions for AI agents to use when helping you to create your parser. They can
+be pulled from the GitHub project repository, at pyparsing/ai/best_practices.md. You can also tell
+the AI to access them programmatically after installing pyparsing, either from the CLI with
+`python -m pyparsing.ai.show_best_practices` or within python with
+`import pyparsing; pyparsing.show_best_practices()`.
+
+
 License
 =======
 
@@ -69,6 +79,13 @@ History
 =======
 
 See `CHANGES <https://github.com/pyparsing/pyparsing/blob/master/CHANGES>`__ file.
+
+
+Performance benchmarks
+======================
+
+For usage instructions and details on the performance benchmark suite, see
+``tests/README.md`` in this repository.
 
 .. |Build Status| image:: https://github.com/pyparsing/pyparsing/actions/workflows/ci.yml/badge.svg
    :target: https://github.com/pyparsing/pyparsing/actions/workflows/ci.yml

@@ -66,14 +66,14 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         THashMap<ui32, ui64> weightByNode;
         THashSet<ui32> nextNodeIds;
         for (auto&& i : currentNodes) {
-            for (auto&& near : i->GetOutputEdges()) {
-                if (!nextNodeIds.emplace(near->GetIdentifier()).second) {
+            for (auto&& neighbor : i->GetOutputEdges()) {
+                if (!nextNodeIds.emplace(neighbor->GetIdentifier()).second) {
                     continue;
                 }
-                AFL_VERIFY(!near->HasWeight());
+                AFL_VERIFY(!neighbor->HasWeight());
                 bool hasWeight = true;
                 ui64 sumWeight = 0;
-                for (auto&& test : near->GetInputEdges()) {
+                for (auto&& test : neighbor->GetInputEdges()) {
                     if (!test->HasWeight()) {
                         hasWeight = false;
                         break;
@@ -81,8 +81,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                     sumWeight += test->GetWeight();
                 }
                 if (hasWeight) {
-                    weightByNode[near->GetIdentifier()] = sumWeight;
-                    nextNodes.emplace_back(near);
+                    weightByNode[neighbor->GetIdentifier()] = sumWeight;
+                    nextNodes.emplace_back(neighbor);
                 }
             }
         }

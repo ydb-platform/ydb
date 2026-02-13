@@ -7,6 +7,10 @@ namespace NFq {
 
 using namespace NYdb;
 
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+constexpr TDeadline::Duration PERIODIC_REBALANCE_INTERVAL = std::chrono::seconds(300);
+#endif
+
 class TPrivateClient::TImpl : public TClientImplCommon<TPrivateClient::TImpl> {
 public:
     TImpl(
@@ -21,11 +25,34 @@ public:
         , NodesHealthCheckTime(Counters->GetHistogram("NodesHealthCheckMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
         , CreateRateLimiterResourceTime(Counters->GetHistogram("CreateRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
         , DeleteRateLimiterResourceTime(Counters->GetHistogram("DeleteRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
-    {}
+    {
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+        auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections_);
+        auto channelPoolUpdateWrapper = [weakConnections, knownEndpoints = KnownEndpoints]
+            (NYdb::NIssue::TIssues&&, EStatus status) mutable {
+                if (status != EStatus::SUCCESS) {
+                    return false;
+                }
+            auto connections = weakConnections.lock();
+            if (!connections) {
+                return false;
+            }
+            std::vector<std::string> endpoints;
+            {
+                std::lock_guard lock(knownEndpoints->Lock);
+                endpoints.assign(knownEndpoints->Endpoints.begin(), knownEndpoints->Endpoints.end());
+                knownEndpoints->Endpoints.clear();
+            }
+            connections->DeleteChannels(endpoints);
+            return true;
+        };
+        Connections_->AddPeriodicTask(channelPoolUpdateWrapper, PERIODIC_REBALANCE_INTERVAL);
+#endif
+    }
 
     template<class TProtoResult, class TResultWrapper>
     auto MakeResultExtractor(NThreading::TPromise<TResultWrapper> promise, const NMonitoring::THistogramPtr& hist, TInstant startedAt) {
-        return [=, promise = std::move(promise)]
+        return [promise = std::move(promise), startedAt, hist, knownEndpoints=KnownEndpoints]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::unique_ptr<TProtoResult> result;
                 if (any) {
@@ -35,6 +62,7 @@ public:
 
                 hist->Collect((TInstant::Now() - startedAt).MilliSeconds());
 
+                UpdateKnownEndpoints(status.Endpoint, knownEndpoints);
                 promise.SetValue(
                     TResultWrapper(
                         TStatus(std::move(status)),
@@ -87,7 +115,6 @@ public:
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
                 TRpcRequestSettings::Make(settings));
-
         return future;
     }
 
@@ -188,6 +215,21 @@ public:
 
         return future;
     }
+
+private:
+struct TKnownEndpoints {
+    std::unordered_set<std::string> Endpoints;
+    std::mutex Lock;
+};
+
+private:
+    static void UpdateKnownEndpoints([[maybe_unused]] const std::string& endpoint, [[maybe_unused]] const std::shared_ptr<TKnownEndpoints>& knownEndpoints) {
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+        std::lock_guard lock(knownEndpoints->Lock);
+        knownEndpoints->Endpoints.emplace(endpoint);
+#endif
+    }
+
 private:
     const NMonitoring::TDynamicCounterPtr Counters;
     const NMonitoring::THistogramPtr PingTaskTime;
@@ -196,6 +238,7 @@ private:
     const NMonitoring::THistogramPtr NodesHealthCheckTime;
     const NMonitoring::THistogramPtr CreateRateLimiterResourceTime;
     const NMonitoring::THistogramPtr DeleteRateLimiterResourceTime;
+    std::shared_ptr<TKnownEndpoints> KnownEndpoints = std::make_shared<TKnownEndpoints>();
 };
 
 TPrivateClient::TPrivateClient(

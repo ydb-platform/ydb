@@ -55,7 +55,7 @@ public:
         : Ptr_(static_cast<TByte*>(ptr))
     { }
 
-    bool operator [] (size_t index) const
+    bool operator[](size_t index) const
     {
         return Ptr_[NBitmapDetail::GetWordIndex(index)] & NBitmapDetail::GetBitMask(index);
     }
@@ -99,7 +99,7 @@ public:
         : Ptr_(static_cast<const TByte*>(ptr))
     { }
 
-    bool operator [] (size_t index) const
+    bool operator[](size_t index) const
     {
         return Ptr_[NBitmapDetail::GetWordIndex(index)] & NBitmapDetail::GetBitMask(index);
     }
@@ -149,6 +149,16 @@ public:
         TMutableBitmap(Chunks_.data()).Set(BitSize_++, value);
     }
 
+    void Set(size_t bitIndex, bool value = true)
+    {
+        if (Chunks_.size() * NBitmapDetail::Bits < bitIndex + 1) {
+            Chunks_.resize(NBitmapDetail::GetByteSize(bitIndex + 1), 0);
+            BitSize_ = bitIndex + 1;
+        }
+
+        TMutableBitmap(Chunks_.data()).Set(bitIndex, value);
+    }
+
     bool operator[](size_t bitIndex) const
     {
         YT_ASSERT(bitIndex < BitSize_);
@@ -175,6 +185,11 @@ public:
     size_t GetByteSize() const
     {
         return AlignUp(Chunks_.size() * sizeof(TByte), NBitmapDetail::SerializationAlignment);
+    }
+
+    size_t GetMemoryUsage() const
+    {
+        return Chunks_.capacity() * sizeof(TByte);
     }
 
 private:
@@ -234,13 +249,13 @@ public:
     TCompactBitmap(const TCompactBitmap& other) = delete;
     TCompactBitmap& operator=(const TCompactBitmap& other) = delete;
 
-    TCompactBitmap(TCompactBitmap&& other);
+    TCompactBitmap(TCompactBitmap&& other) noexcept;
     TCompactBitmap& operator=(TCompactBitmap&& other);
 
     void Initialize(int bitSize);
     void CopyFrom(const TCompactBitmap& other, int bitSize);
 
-    bool operator[] (size_t index) const;
+    bool operator[](size_t index) const;
 
     void Set(size_t index);
 

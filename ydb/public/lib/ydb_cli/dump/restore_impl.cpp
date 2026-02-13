@@ -13,8 +13,11 @@
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/common/sys.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/log.h>
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -415,8 +418,8 @@ TRestoreResult TDelayedRestoreManager::Restore(const TDelayedRestoreCall& call) 
             return Client->RestoreView(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings);
         }
         case ESchemeEntryType::ExternalTable: {
-            const auto& dbPath = std::get<TDelayedRestoreCall::TSimplePath>(call.DbPath);
-            return Client->RestoreExternalTable(call.FsPath, dbPath, call.Settings);
+            const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
+            return Client->RestoreExternalTable(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings);
         }
         case ESchemeEntryType::Replication: {
             const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
@@ -1188,14 +1191,8 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             return RestoreTopic(fsPath, dbPath, settings);
         case ESchemeEntryType::CoordinationNode:
             return RestoreCoordinationNode(fsPath, dbPath, settings);
-        case ESchemeEntryType::ExternalTable:
-            if (delay) {
-                DelayedRestoreManager.Add(ESchemeEntryType::ExternalTable, fsPath, dbPath, settings);
-                return Result<TRestoreResult>();
-            }
-            return RestoreExternalTable(fsPath, dbPath, settings);
         case ESchemeEntryType::ExternalDataSource:
-            return RestoreExternalDataSource(fsPath, dbPath, settings);
+            return RestoreExternalDataSource(fsPath, dbRestoreRoot, dbPath, settings);
         case ESchemeEntryType::SysView:
             return RestoreSysView(fsPath, dbPath, settings);
 
@@ -1213,6 +1210,11 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             if (!delay) {
                 return RestoreTransfer(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
             }
+            [[fallthrough]];
+        case ESchemeEntryType::ExternalTable:
+            if (!delay) {
+                return RestoreExternalTable(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            }
 
             DelayedRestoreManager.Add(type, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
             return Result<TRestoreResult>();
@@ -1222,7 +1224,9 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
     }
 }
 
-TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources, const THashMap<TString, size_t>& externalTables, const TRestoreSettings& settings) {
+TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources,
+    const THashMap<TString, size_t>& externalTables, const TString& dbRestoreRoot, const TRestoreSettings& settings)
+{
     for (size_t i : externalDataSources) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
         if (!ExistingEntries.contains(dbPath)) {
@@ -1255,13 +1259,13 @@ TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEn
                 return result;
             }
         }
-        if (auto result = RestoreExternalDataSource(fsPath, dbPath, settings); !result.IsSuccess()) {
+        if (auto result = RestoreExternalDataSource(fsPath, dbRestoreRoot, dbPath, settings); !result.IsSuccess()) {
             return result;
         }
     }
     for (const auto& [dbPath, i] : externalTables) {
         const auto& fsPath = backupEntries[i].FsPath;
-        auto result = RestoreExternalTable(fsPath, dbPath, settings);
+        auto result = RestoreExternalTable(fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings);
         if (!result.IsSuccess()) {
             return result;
         }
@@ -1434,7 +1438,7 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
         }
     }
 
-    if (auto result = DropAndRestoreExternals(backupEntries, externalDataSources, externalTables, settings); !result.IsSuccess()) {
+    if (auto result = DropAndRestoreExternals(backupEntries, externalDataSources, externalTables, dbRestoreRoot, settings); !result.IsSuccess()) {
         return result;
     }
     
@@ -1523,23 +1527,30 @@ TRestoreResult TRestoreClient::RestoreTopic(
     return Result<TRestoreResult>(dbPath, std::move(result));
 }
 
-TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName) {
-    LOG_D("Check existence of the secret " << secretName.Quote());
+TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName, const TLog* log, NQuery::TQueryClient& queryClient) {
+    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Check existence of the secret " << secretName.Quote());
 
     const auto tmpUser = CreateGuidAsString();
-    const auto create = std::format("CREATE OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
-    const auto drop = std::format("DROP OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
+    TString createAccessQuery;
+    TString dropAccessQuery;
+    if (IsSchemaSecret(secretName)) {
+        createAccessQuery = std::format("GRANT describe schema ON `{}` TO `{}`;", secretName.c_str(), tmpUser.c_str());
+        dropAccessQuery = std::format("REVOKE describe schema ON `{}` FROM `{}`;", secretName.c_str(), tmpUser.c_str());
+    } else {
+        createAccessQuery = std::format("CREATE OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
+        dropAccessQuery = std::format("DROP OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
+    }
 
-    auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
-        return session.ExecuteQuery(create, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    auto result = queryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(createAccessQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
     });
     if (!result.IsSuccess()) {
         return Result<TRestoreResult>(EStatus::PRECONDITION_FAILED, TStringBuilder()
             << "Secret " << secretName.Quote() << " does not exist or you do not have access permissions");
     }
 
-    result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
-        return session.ExecuteQuery(drop, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    result = queryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(dropAccessQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
     });
     if (!result.IsSuccess()) {
         return Result<TRestoreResult>(EStatus::INTERNAL_ERROR, TStringBuilder()
@@ -1547,6 +1558,24 @@ TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName) {
     }
 
     return result;
+}
+
+TRestoreResult TRestoreClient::CheckSecretsAndRewriteTheirPathsIfNeeded(TString& query, const TString& dbRestoreRoot,
+    const TFsPath& fsPath, const TLog* log, NQuery::TQueryClient& queryClient)
+{
+    auto secretSettings = GetSecretSettings(query);
+    RewriteSecretSettings(secretSettings, GetDatabase(query), dbRestoreRoot);
+    for (const auto& secretSetting : secretSettings) {
+        if (auto result = CheckSecretExistence(secretSetting.Value, log, queryClient); !result.IsSuccess()) {
+            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
+        }
+    }
+    NYql::TIssues issues;
+    if (!RewriteQuerySecrets(query, secretSettings, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    }
+
+    return Result<TRestoreResult>();
 }
 
 TRestoreResult TRestoreClient::RestoreReplication(
@@ -1565,17 +1594,12 @@ TRestoreResult TRestoreClient::RestoreReplication(
     }
 
     auto query = ReadAsyncReplicationQuery(fsPath, Log.get());
-    if (const auto secretName = GetSecretName(query)) {
-        if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
-            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
-        }
+    if (const auto result = CheckSecretsAndRewriteTheirPathsIfNeeded(query, dbRestoreRoot, fsPath, Log.get(), QueryClient); !result.IsSuccess()) {
+        return result;
     }
 
     NYql::TIssues issues;
-    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
-        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
-    }
-    if (!RewriteCreateQuery(query, "CREATE ASYNC REPLICATION `{}`", dbPath, issues)) {
+    if (!RewriteCreateAsyncReplicationQueryNoSecrets(query, dbRestoreRoot, dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
@@ -1608,17 +1632,12 @@ TRestoreResult TRestoreClient::RestoreTransfer(
     }
 
     auto query = ReadTransferQuery(fsPath, Log.get());
-    if (const auto secretName = GetSecretName(query)) {
-        if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
-            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
-        }
+    if (const auto result = CheckSecretsAndRewriteTheirPathsIfNeeded(query, dbRestoreRoot, fsPath,  Log.get(), QueryClient); !result.IsSuccess()) {
+        return result;
     }
 
     NYql::TIssues issues;
-    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
-        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
-    }
-    if (!RewriteCreateQuery(query, "CREATE TRANSFER `{}`", dbPath, issues)) {
+    if (!RewriteCreateTransferQueryNoSecrets(query, dbRestoreRoot, dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
@@ -1722,6 +1741,7 @@ TRestoreResult TRestoreClient::RestoreCoordinationNode(
 
 TRestoreResult TRestoreClient::RestoreExternalDataSource(
     const TFsPath& fsPath,
+    const TString& dbRestoreRoot,
     const TString& dbPath,
     const TRestoreSettings& settings)
 {
@@ -1734,14 +1754,12 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
     }
 
     TString query = ReadExternalDataSourceQuery(fsPath, Log.get());
-    if (const auto secretName = GetSecretName(query)) {
-        if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
-            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
-        }
+    if (const auto result = CheckSecretsAndRewriteTheirPathsIfNeeded(query, dbRestoreRoot, fsPath,  Log.get(), QueryClient); !result.IsSuccess()) {
+        return result;
     }
 
     NYql::TIssues issues;
-    if (!RewriteCreateQuery(query, "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`", dbPath, issues)) {
+    if (!RewriteCreateExternalDataSourceQueryNoSecrets(query, dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
@@ -1760,10 +1778,12 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
 
 TRestoreResult TRestoreClient::RestoreExternalTable(
     const TFsPath& fsPath,
-    const TString& dbPath,
+    const TString& dbRestoreRoot,
+    const TString& dbPathRelativeToRestoreRoot,
     const TRestoreSettings& settings)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
+    const auto dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
 
     LOG_I("Restore external table " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
@@ -1774,7 +1794,7 @@ TRestoreResult TRestoreClient::RestoreExternalTable(
     TString query = ReadExternalTableQuery(fsPath, Log.get());
 
     NYql::TIssues issues;
-    if (!RewriteCreateQuery(query, "CREATE EXTERNAL TABLE IF NOT EXISTS `{}`", dbPath, issues)) {
+    if (!RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 

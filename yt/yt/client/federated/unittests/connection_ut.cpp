@@ -30,7 +30,7 @@ TEST(TFederatedConnectionTest, CreateClient)
     auto mockClientVla = New<TStrictMockClient>();
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     // To identify best (closest) cluster.
     NYson::TYsonString nodesYsonSas(TStringBuf(R"(["a-rpc-proxy-a.sas.yp-c.yandex.net:9013"])"));
@@ -50,9 +50,9 @@ TEST(TFederatedConnectionTest, CreateClient)
         });
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     NApi::TClientOptions clientOptions;
     EXPECT_CALL(*mockConnectionSas, CreateClient(::testing::Ref(clientOptions)))
@@ -61,9 +61,9 @@ TEST(TFederatedConnectionTest, CreateClient)
         .WillOnce(Return(mockClientVla));
 
     EXPECT_CALL(*mockConnectionSas, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("sas")));
+        .WillOnce(ReturnRefOfCopy(std::string("sas")));
     EXPECT_CALL(*mockConnectionVla, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("vla")));
+        .WillOnce(ReturnRefOfCopy(std::string("vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);
@@ -115,9 +115,9 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
         });
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     NApi::TClientOptions clientOptions;
     EXPECT_CALL(*mockConnectionSas, CreateClient(::testing::Ref(clientOptions)))
@@ -126,9 +126,9 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
         .WillOnce(Return(mockClientVla));
 
     EXPECT_CALL(*mockConnectionSas, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("sas")));
+        .WillOnce(ReturnRefOfCopy(std::string("sas")));
     EXPECT_CALL(*mockConnectionVla, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("vla")));
+        .WillOnce(ReturnRefOfCopy(std::string("vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);

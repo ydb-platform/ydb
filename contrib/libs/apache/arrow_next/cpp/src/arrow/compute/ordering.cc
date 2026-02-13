@@ -17,8 +17,8 @@
 
 #include <sstream>
 
-#include "arrow/compute/ordering.h"
-#include "arrow/util/unreachable.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/ordering.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/unreachable.h"
 
 namespace arrow20 {
 namespace compute {

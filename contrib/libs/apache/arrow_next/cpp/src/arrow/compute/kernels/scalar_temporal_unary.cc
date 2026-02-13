@@ -19,14 +19,14 @@
 #include <initializer_list>
 #include <sstream>
 
-#include "arrow/builder.h"
-#include "arrow/compute/api_scalar.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/temporal_internal.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/time.h"
-#include "arrow/util/value_parsing.h"
-#include "arrow/vendored/datetime.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/temporal_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/time.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/datetime.h"
 
 namespace arrow20 {
 

@@ -11,6 +11,7 @@
 
 #include <yt/yt/client/api/file_reader.h>
 #include <yt/yt/client/api/file_writer.h>
+#include <yt/yt/client/api/formatted_table_reader.h>
 
 #include <yt/yt/client/api/rpc_proxy/client_base.h>
 #include <yt/yt/client/api/rpc_proxy/row_stream.h>
@@ -20,9 +21,13 @@
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/row_buffer.h>
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/transaction_client/timestamp_provider.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
+
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <library/cpp/iterator/enumerate.h>
 
@@ -38,7 +43,7 @@ using namespace NYT::NConcurrency;
 // This timeout exceeds some timeouts in server code:
 //   - "replication_reader_failure_timeout"
 //   - "session_timeout"
-const TDuration TableReaderTimeout = TDuration::Minutes(35);
+[[maybe_unused]] const TDuration TableReaderTimeout = TDuration::Minutes(35);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -175,6 +180,11 @@ EJobState FromApiJobState(NJobTrackerClient::EJobState state)
         case NJobTrackerClient::EJobState::None:
             return EJobState::None;
     }
+}
+
+NYTree::INodePtr ToApiNode(const TNode& node)
+{
+    return NYTree::ConvertToNode(NYson::TYsonString(NodeToYsonString(node, NYson::EYsonFormat::Binary)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1048,8 +1058,7 @@ void TRpcRawClient::ReshardTableByPivotKeys(
         }
 
         NTableClient::TLegacyOwningKey pivotKey;
-        Deserialize(pivotKey, NYTree::ConvertToNode(NYson::TYsonString(
-            NodeToYsonString(keysNodesList, NYson::EYsonFormat::Binary))));
+        Deserialize(pivotKey, ToApiNode(keysNodesList));
 
         pivotKeys.emplace_back(std::move(pivotKey));
     }
@@ -1219,89 +1228,35 @@ std::unique_ptr<IOutputStream> TRpcRawClient::WriteTable(
 std::unique_ptr<IInputStream> TRpcRawClient::ReadTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTableReaderOptions& options)
 {
-    auto* clientBase = VerifyDynamicCast<NApi::NRpcProxy::TClientBase*>(Client_.Get());
-
+    auto apiPath = ToApiRichPath(path);
+    auto apiFormat = NYson::TYsonString(NodeToYsonString(format.Config, NYson::EYsonFormat::Text));
     auto apiOptions = SerializeOptionsForReadTable(transactionId, options);
 
-    auto proxy = clientBase->CreateApiServiceProxy();
+    auto future = Client_->CreateFormattedTableReader(apiPath, apiFormat, apiOptions);
 
-    auto req = proxy.ReadTable();
-    clientBase->InitStreamingRequest(*req);
-    req->ClientAttachmentsStreamingParameters().ReadTimeout = TableReaderTimeout;
-    req->ClientAttachmentsStreamingParameters().WriteTimeout = TableReaderTimeout;
+    auto formatStream = WaitAndProcess(future);
 
-    ToProto(req->mutable_path(), ToApiRichPath(path));
-
-    req->set_unordered(apiOptions.Unordered);
-    req->set_omit_inaccessible_columns(apiOptions.OmitInaccessibleColumns);
-    req->set_enable_table_index(apiOptions.EnableTableIndex);
-    req->set_enable_row_index(apiOptions.EnableRowIndex);
-    req->set_enable_range_index(apiOptions.EnableRangeIndex);
-    req->set_enable_any_unpacking(apiOptions.EnableAnyUnpacking);
-
-    if (apiOptions.Config) {
-        req->set_config(NYson::ConvertToYsonString(*apiOptions.Config).ToString());
-    }
-
-    if (format) {
-        req->set_desired_rowset_format(NApi::NRpcProxy::NProto::RF_FORMAT);
-        req->set_format(NYson::TYsonString(NodeToYsonString(format->Config, NYson::EYsonFormat::Text)).ToString());
-    }
-
-    ToProto(req->mutable_transactional_options(), apiOptions);
-    ToProto(req->mutable_suppressable_access_tracking_options(), apiOptions);
-
-    auto future = NRpc::CreateRpcClientInputStream(std::move(req));
-    auto stream = WaitAndProcess(future);
-
-    auto metaRef = WaitAndProcess(stream->Read());
-
-    NApi::NRpcProxy::NProto::TRspReadTableMeta meta;
-    if (!TryDeserializeProto(&meta, metaRef)) {
-        THROW_ERROR_EXCEPTION("Failed to deserialize table reader meta information");
-    }
-
-    auto rowStream = New<TDeserializingRowStream>(std::move(stream));
-    auto syncAdapter = CreateSyncAdapter(CreateCopyingAdapter(std::move(rowStream)));
+    auto syncAdapter = CreateSyncAdapter(CreateCopyingAdapter(std::move(formatStream)));
     return std::make_unique<TSyncRpcInputStream>(std::move(syncAdapter));
 }
 
 std::unique_ptr<IInputStream> TRpcRawClient::ReadTablePartition(
     const TString& cookie,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTablePartitionReaderOptions& options)
 {
-    auto* clientBase = VerifyDynamicCast<NApi::NRpcProxy::TClientBase*>(Client_.Get());
-
-    auto proxy = clientBase->CreateApiServiceProxy();
-
-    auto req = proxy.ReadTablePartition();
-    clientBase->InitStreamingRequest(*req);
-
-    req->set_cookie(cookie);
-
+    auto apiCookie = NYTree::ConvertTo<NApi::TTablePartitionCookiePtr>(NYson::TYsonString(cookie));
+    auto apiFormat = NYson::TYsonString(NodeToYsonString(format.Config, NYson::EYsonFormat::Text));
     auto apiOptions = SerializeOptionsForReadTablePartition(options);
 
-    if (format) {
-        req->set_desired_rowset_format(NApi::NRpcProxy::NProto::RF_FORMAT);
-        req->set_format(NYson::TYsonString(NodeToYsonString(format->Config, NYson::EYsonFormat::Text)).ToString());
-    }
+    auto future = Client_->CreateFormattedTablePartitionReader(apiCookie, apiFormat, apiOptions);
 
-    auto future = NRpc::CreateRpcClientInputStream(std::move(req));
-    auto stream = WaitAndProcess(future);
+    auto formatStream = WaitAndProcess(future);
 
-    auto metaRef = WaitAndProcess(stream->Read());
-
-    NApi::NRpcProxy::NProto::TRspReadTablePartitionMeta meta;
-    if (!TryDeserializeProto(&meta, metaRef)) {
-        THROW_ERROR_EXCEPTION("Failed to deserialize table reader meta information");
-    }
-
-    auto rowStream = New<TDeserializingRowStream>(std::move(stream));
-    auto syncAdapter = CreateSyncAdapter(CreateCopyingAdapter(std::move(rowStream)));
+    auto syncAdapter = CreateSyncAdapter(CreateCopyingAdapter(std::move(formatStream)));
     return std::make_unique<TSyncRpcInputStream>(std::move(syncAdapter));
 }
 
@@ -1319,8 +1274,7 @@ std::unique_ptr<IInputStream> TRpcRawClient::ReadBlobTable(
     lowerLimitKeyNode.Add(lowerKeyNode);
 
     NTableClient::TOwningKeyBound lowerKeyBound;
-    Deserialize(lowerKeyBound, NYTree::ConvertToNode(NYson::TYsonString(
-        NodeToYsonString(lowerLimitKeyNode, NYson::EYsonFormat::Binary))));
+    Deserialize(lowerKeyBound, ToApiNode(lowerLimitKeyNode));
 
     auto upperKeyNode = TNode::CreateList(key.Parts_);
     upperKeyNode.Add(std::numeric_limits<i64>::max());
@@ -1330,8 +1284,7 @@ std::unique_ptr<IInputStream> TRpcRawClient::ReadBlobTable(
     upperLimitKeyNode.Add(upperKeyNode);
 
     NTableClient::TOwningKeyBound upperKeyBound;
-    Deserialize(upperKeyBound, NYTree::ConvertToNode(NYson::TYsonString(
-        NodeToYsonString(upperLimitKeyNode, NYson::EYsonFormat::Binary))));
+    Deserialize(upperKeyBound, ToApiNode(upperLimitKeyNode));
 
     auto richPath = ToApiRichPath(path);
     richPath.SetRanges({
@@ -1424,6 +1377,281 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const NApi::TCheckPermissi
         }
     }
     return result;
+}
+
+TDistributedWriteTableSessionWithCookies TRpcRawClient::StartDistributedWriteTableSession(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    auto future = Client_->StartDistributedWriteSession(
+        ToApiRichPath(richPath),
+        SerializeOptionsForStartDistributedTableSession(mutationId, transactionId, cookieCount, options));
+
+    auto apiSession = WaitAndProcess(future);
+
+    TNode session;
+    TNodeBuilder builder(&session);
+    NYTree::Serialize(apiSession.Session, &builder);
+
+    TVector<TDistributedWriteTableCookie> cookies;
+    cookies.reserve(apiSession.Cookies.size());
+    for (const auto& cookie : apiSession.Cookies) {
+        TNode cookieNode;
+        TNodeBuilder cookieNodeBuilder(&cookieNode);
+        NYTree::Serialize(cookie, &cookieNodeBuilder);
+        cookies.push_back(TDistributedWriteTableCookie(std::move(cookieNode)));
+    }
+
+    TDistributedWriteTableSessionWithCookies result;
+    result.Session(TDistributedWriteTableSession(std::move(session)));
+    result.Cookies(std::move(cookies));
+    return result;
+}
+
+void TRpcRawClient::PingDistributedWriteTableSession(
+    const TDistributedWriteTableSession& session,
+    const TPingDistributedWriteTableOptions& /*options*/)
+{
+    auto apiSession = NYTree::ConvertTo<NApi::TSignedDistributedWriteSessionPtr>(ToApiNode(session.Underlying()));
+
+    auto future = Client_->PingDistributedWriteSession(apiSession);
+    WaitAndProcess(future);
+}
+
+void TRpcRawClient::FinishDistributedWriteTableSession(
+    TMutationId& mutationId,
+    const TDistributedWriteTableSession& session,
+    const TVector<TWriteTableFragmentResult>& results,
+    const TFinishDistributedWriteTableOptions& options)
+{
+    auto apiSession = NYTree::ConvertTo<NApi::TSignedDistributedWriteSessionPtr>(ToApiNode(session.Underlying()));
+
+    std::vector<NApi::TSignedWriteFragmentResultPtr> apiResults;
+    apiResults.reserve(results.size());
+
+    for (const auto& writeFragment : results) {
+        apiResults.push_back(NYTree::ConvertTo<NApi::TSignedWriteFragmentResultPtr>(ToApiNode(writeFragment.Underlying())));
+    }
+
+    NApi::TDistributedWriteSessionWithResults sessionWithResults;
+    sessionWithResults.Session = std::move(apiSession);
+    sessionWithResults.Results = std::move(apiResults);
+
+    auto future = Client_->FinishDistributedWriteSession(
+        sessionWithResults,
+        SerializeOptionsForFinishDistributedTableSession(mutationId, options));
+
+    WaitAndProcess(future);
+}
+
+class TTableFragmentStreamWithResponse
+    : public IOutputStreamWithResponse
+{
+    using TPromise = TPromise<NApi::TSignedWriteFragmentResultPtr>;
+
+public:
+    TTableFragmentStreamWithResponse(std::unique_ptr<IOutputStream> underlying, TPromise promise)
+        : Underlying_(std::move(underlying))
+        , ResponsePromise_(std::move(promise))
+    { }
+
+    TString GetResponse() const override
+    {
+        if (!ResponsePromise_.IsSet()) {
+            ythrow TApiUsageError() << "Can't get response before stream is closed.";
+        }
+        return Response_;
+    }
+
+private:
+    const std::unique_ptr<IOutputStream> Underlying_;
+    TPromise ResponsePromise_;
+    TString Response_;
+
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Response_ = ParseResponse();
+    }
+
+    TString ParseResponse() const
+    {
+        auto rsp = ResponsePromise_.Get().ValueOrThrow();
+        TNode writeResult;
+        TNodeBuilder builder(&writeResult);
+        NYTree::Serialize(rsp, &builder);
+        return NodeToYsonString(writeResult, NYson::EYsonFormat::Binary);
+    }
+};
+
+std::unique_ptr<IOutputStreamWithResponse> TRpcRawClient::WriteTableFragment(
+    const TDistributedWriteTableCookie& cookie,
+    const TMaybe<TFormat>& format,
+    const TTableFragmentWriterOptions& /*options*/)
+{
+    using TRspPtr = TIntrusivePtr<NRpc::TTypedClientResponse<NApi::NRpcProxy::NProto::TRspWriteTableFragment>>;
+
+    auto* clientBase = VerifyDynamicCast<NApi::NRpcProxy::TClientBase*>(Client_.Get());
+
+    auto proxy = clientBase->CreateApiServiceProxy();
+
+    auto req = proxy.WriteTableFragment();
+    clientBase->InitStreamingRequest(*req);
+
+    req->set_signed_cookie(NYson::TYsonString(NodeToYsonString(cookie.Underlying(), NYson::EYsonFormat::Text)).ToString());
+
+    if (format) {
+        req->set_format(NYson::TYsonString(NodeToYsonString(format->Config, NYson::EYsonFormat::Text)).ToString());
+    }
+
+    auto promise = NewPromise<NApi::TSignedWriteFragmentResultPtr>();
+
+    auto future = CreateRpcClientOutputStream(
+        std::move(req),
+        BIND ([=] (const TSharedRef& metaRef) {
+            NApi::NRpcProxy::NProto::TWriteTableMeta meta;
+            if (!TryDeserializeProto(&meta, metaRef)) {
+                THROW_ERROR_EXCEPTION("Failed to deserialize schema for table fragment writer");
+            }
+        }),
+        BIND([=] (TRspPtr&& rsp)  {
+            promise.Set(ConvertTo<NApi::TSignedWriteFragmentResultPtr>(NYson::TYsonString(rsp->signed_write_result())));
+        }));
+
+    auto stream = WaitAndProcess(future);
+
+    auto rowStream = New<TSerializingRowStream>(std::move(stream));
+    auto syncStream = std::make_unique<TSyncRpcOutputStream>(std::move(rowStream));
+
+    return std::make_unique<TTableFragmentStreamWithResponse>(std::move(syncStream), std::move(promise));
+}
+
+TDistributedWriteFileSessionWithCookies TRpcRawClient::StartDistributedWriteFileSession(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    auto future = Client_->StartDistributedWriteFileSession(
+        ToApiRichPath(richPath),
+        SerializeOptionsForStartDistributedFileSession(mutationId, transactionId, cookieCount, options));
+
+    auto apiSession = WaitAndProcess(future);
+
+    TNode session;
+    TNodeBuilder builder(&session);
+    NYTree::Serialize(apiSession.Session, &builder);
+
+    TVector<TDistributedWriteFileCookie> cookies;
+    cookies.reserve(apiSession.Cookies.size());
+    for (const auto& cookie : apiSession.Cookies) {
+        TNode cookieNode;
+        TNodeBuilder cookieNodeBuilder(&cookieNode);
+        NYTree::Serialize(cookie, &cookieNodeBuilder);
+        cookies.push_back(TDistributedWriteFileCookie(std::move(cookieNode)));
+    }
+
+    TDistributedWriteFileSessionWithCookies result;
+    result.Session(TDistributedWriteFileSession(std::move(session)));
+    result.Cookies(std::move(cookies));
+    return result;
+}
+
+void TRpcRawClient::PingDistributedWriteFileSession(
+    const TDistributedWriteFileSession& session,
+    const TPingDistributedWriteFileOptions& /*options*/)
+{
+    auto apiSession = NYTree::ConvertTo<NApi::TSignedDistributedWriteFileSessionPtr>(ToApiNode(session.Underlying()));
+
+    auto future = Client_->PingDistributedWriteFileSession(apiSession);
+    WaitAndProcess(future);
+}
+
+void TRpcRawClient::FinishDistributedWriteFileSession(
+    TMutationId& mutationId,
+    const TDistributedWriteFileSession& session,
+    const TVector<TWriteFileFragmentResult>& results,
+    const TFinishDistributedWriteFileOptions& options)
+{
+    auto apiSession = NYTree::ConvertTo<NApi::TSignedDistributedWriteFileSessionPtr>(ToApiNode(session.Underlying()));
+
+    std::vector<NApi::TSignedWriteFileFragmentResultPtr> apiResults;
+    apiResults.reserve(results.size());
+
+    for (const auto& writeFragment : results) {
+        apiResults.push_back(NYTree::ConvertTo<NApi::TSignedWriteFileFragmentResultPtr>(ToApiNode(writeFragment.Underlying())));
+    }
+
+    NApi::TDistributedWriteFileSessionWithResults sessionWithResults;
+    sessionWithResults.Session = std::move(apiSession);
+    sessionWithResults.Results = std::move(apiResults);
+
+    auto future = Client_->FinishDistributedWriteFileSession(
+        sessionWithResults,
+        SerializeOptionsForFinishDistributedFileSession(mutationId, options));
+
+    WaitAndProcess(future);
+}
+
+class TFileFragmentStreamWithResponse
+    : public IOutputStreamWithResponse
+{
+public:
+    explicit TFileFragmentStreamWithResponse(NApi::IFileFragmentWriterPtr fileWriter)
+        : Underlying_(std::move(fileWriter))
+    {
+        WaitAndProcess(Underlying_->Open());
+    }
+
+    TString GetResponse() const override
+    {
+        if (!Response_) {
+            ythrow TApiUsageError() << "Can't get response before stream is closed.";
+        }
+        return *Response_;
+    }
+
+private:
+    NApi::IFileFragmentWriterPtr Underlying_;
+    TMaybe<TString> Response_;
+
+    void DoWrite(const void* buf, size_t len) override
+    {
+        WaitAndProcess(Underlying_->Write(TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len))));
+    }
+
+    void DoFinish() override
+    {
+        WaitAndProcess(Underlying_->Close());
+        Response_ = ParseResponse();
+    }
+
+    TString ParseResponse() const
+    {
+        TNode writeResult;
+        TNodeBuilder builder(&writeResult);
+        NYTree::Serialize(Underlying_->GetWriteFragmentResult(), &builder);
+        return NodeToYsonString(writeResult, NYson::EYsonFormat::Binary);
+    }
+};
+
+std::unique_ptr<IOutputStreamWithResponse> TRpcRawClient::WriteFileFragment(
+    const TDistributedWriteFileCookie& cookie,
+    const TFileFragmentWriterOptions& /*options*/)
+{
+    auto apiCookie = NYTree::ConvertTo<NApi::TSignedWriteFileFragmentCookiePtr>(ToApiNode(cookie.Underlying()));
+    auto fileWriter = Client_->CreateFileFragmentWriter(apiCookie);
+
+    return std::make_unique<TFileFragmentStreamWithResponse>(std::move(fileWriter));
 }
 
 TCheckPermissionResponse TRpcRawClient::CheckPermission(
@@ -1533,6 +1761,10 @@ TMultiTablePartitions TRpcRawClient::GetTablePartitions(
             .DataWeight = statistics.DataWeight,
             .RowCount = statistics.RowCount,
         };
+
+        if (entry.Cookie) {
+            partition.Cookie = NYson::ConvertToYsonString(entry.Cookie).ToString();
+        }
 
         result.Partitions.emplace_back(std::move(partition));
     }

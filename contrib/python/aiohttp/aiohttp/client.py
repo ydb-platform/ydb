@@ -174,11 +174,11 @@ class _RequestOptions(TypedDict, total=False):
     read_until_eof: bool
     proxy: Union[StrOrURL, None]
     proxy_auth: Union[BasicAuth, None]
-    timeout: "Union[ClientTimeout, _SENTINEL, int, float, None]"
+    timeout: "Union[ClientTimeout, _SENTINEL, None]"
     ssl: Union[SSLContext, bool, Fingerprint]
     server_hostname: Union[str, None]
     proxy_headers: Union[LooseHeaders, None]
-    trace_request_ctx: Any #Union[Mapping[str, str], None]
+    trace_request_ctx: Union[Mapping[str, Any], None]
     read_bufsize: Union[int, None]
     auto_decompress: Union[bool, None]
     max_line_size: Union[int, None]

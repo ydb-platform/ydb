@@ -25,16 +25,13 @@ PYTHONIC_NS_END
 namespace std
 {
   template <size_t I, class T>
-  typename pythonic::types::pointer<T>::reference
-  get(pythonic::types::pointer<T> &t);
+  typename pythonic::types::pointer<T>::reference get(pythonic::types::pointer<T> &t);
 
   template <size_t I, class T>
-  typename pythonic::types::pointer<T>::value_type
-  get(pythonic::types::pointer<T> const &t);
+  typename pythonic::types::pointer<T>::value_type get(pythonic::types::pointer<T> const &t);
 
   template <size_t I, class T>
-  typename pythonic::types::pointer<T>::value_type
-  get(pythonic::types::pointer<T> &&t);
+  typename pythonic::types::pointer<T>::value_type get(pythonic::types::pointer<T> &&t);
 
   template <size_t I, class T>
   struct tuple_element<I, pythonic::types::pointer<T>> {

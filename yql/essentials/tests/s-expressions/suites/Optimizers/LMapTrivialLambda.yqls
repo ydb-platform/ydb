@@ -1,0 +1,8 @@
+(
+(let res_sink (DataSink 'result))
+(let data (OrderedLMap (AsList (Int32 '1) (Int32 '2)) (lambda '(x) x)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)
+

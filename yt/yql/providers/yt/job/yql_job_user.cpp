@@ -11,10 +11,6 @@ void TYqlUserJob::Load(IInputStream& stream) {
     TYqlUserJobBase::Load(stream);
 }
 
-TString TYqlUserJob::GetJobFactoryPrefix() const {
-    return "Yt";
-}
-
 TIntrusivePtr<NYT::IReaderImplBase> TYqlUserJob::MakeMkqlJobReader() {
     if (YamrInput) {
         return MakeIntrusive<NYT::TYaMRTableReader>(MakeIntrusive<NYT::TJobReader>(InputFile_));

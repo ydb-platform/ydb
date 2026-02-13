@@ -18,6 +18,7 @@ from inspect import signature
 from operator import attrgetter, itemgetter
 from collections import defaultdict
 from itertools import cycle, islice
+from types import SimpleNamespace
 import ydb.core.protos.grpc_pb2_grpc as kikimr_grpc
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
@@ -25,7 +26,10 @@ import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.cms_pb2 as kikimr_cms
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
+from ydb.public.api.grpc.draft import ydb_nbs_v1_pb2_grpc as nbs_grpc_server
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.apps.dstool.lib.arg_parser import print_error_with_usage
+import ydb.apps.dstool.lib.table as table
 import typing
 
 
@@ -290,8 +294,6 @@ def get_vslot_extended_id(vslot):
 def get_pdisk_inferred_settings(pdisk):
     if (pdisk.PDiskMetrics.HasField('SlotCount')):
         return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
-    elif (pdisk.InferPDiskSlotCountFromUnitSize != 0):
-        return 0, 0
     else:
         return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
 
@@ -394,7 +396,7 @@ def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_r
             if isinstance(e, urllib.error.URLError):
                 bad_hosts.add(endpoint.host_with_port)
             if not connection_params.quiet:
-                print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e}', file=sys.stderr)
+                print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e} ({type(e).__module__}.{type(e).__name__})', file=sys.stderr)
                 if request_type == 'http' and try_index == max_retries:
                     print('HINT: consider trying different protocol for endpoints when experiencing massive fetch failures from different hosts', file=sys.stderr)
             if try_index == max_retries:
@@ -727,6 +729,16 @@ def create_readonly_request(args, vslot, value):
 
 def invoke_wipe_request(request):
     return invoke_bsc_request(request)
+
+
+def invoke_nbs_request(request_type, request):
+    return invoke_grpc(request_type, request, stub_factory=nbs_grpc_server.NbsServiceStub)
+
+
+def print_nbs_request_result(args, request, response):
+    success = response.operation.ready and response.operation.status == StatusIds.SUCCESS
+    error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
+    print_status_if_verbose(args, success, error_reason)
 
 
 @inmemcache('base_config_and_storage_pools', cache_enable_param='cache')
@@ -1266,14 +1278,18 @@ def flush_cache():
     cache.clear()
 
 
-def print_json_result(status: str, description: str = None, file=sys.stdout):
+def print_json_result(status: str, description: str = None, file=None):
+    if file is None:
+        file = sys.stdout
     d = {'status': status}
     if description is not None:
         d['description'] = description
     print(json.dumps(d), file=file)
 
 
-def print_result(format: str, status: str, description: str = None, file=sys.stderr):
+def print_result(format: str, status: str, description: str = None, file=None):
+    if file is None:
+        file = sys.stderr
     if format == 'json':
         print_json_result(status, description)
     else:
@@ -1335,3 +1351,58 @@ def is_dynamic_group(groupId):
 
 def is_successful_bsc_response(response):
     return response.Success or 'transaction rollback' in response.ErrorDescription
+
+
+def dump_group_mapper_error(response: kikimr_bsconfig.TConfigResponse, args):
+    verbose = getattr(args, 'verbose', False)
+    err: kikimr_bsconfig.TGroupMapperError | None = None
+
+    if (len(response.Status) == 1) and verbose:
+        for fail_param in response.Status[0].FailParam:
+            if fail_param.HasField("GroupMapperError"):
+                err = fail_param.GroupMapperError
+
+    if err is None:
+        return
+
+    table_args = SimpleNamespace(sort_by=None, columns=None, format=args.format, no_header=None)
+
+    def table_generator(data: typing.Iterable[kikimr_bsconfig.TGroupMapperError.TStats], print_domain: bool = True):
+        all_columns = []
+        if print_domain:
+            all_columns += ['Domain']
+        all_columns += [
+            'All slots are occupied',
+            'Not enough space',
+            'Not accepting new slots',
+            'Not operational',
+            'Decommission',
+        ]
+        table_output = table.TableOutput(all_columns)
+        rows = []
+        for st in data:
+            row = {}
+            if print_domain:
+                row['Domain'] = f"{st.Domain}"
+            row['All slots are occupied'] = str(st.AllSlotsAreOccupied)
+            row['Not enough space'] = str(st.NotEnoughSpace)
+            row['Not accepting new slots'] = str(st.NotAcceptingNewSlots)
+            row['Not operational'] = str(st.NotOperational)
+            row['Decommission'] = str(st.Decommission)
+            rows.append(row)
+
+        table_output.dump(rows, table_args)
+
+    print("Total stats")
+    table_generator([err.TotalStats], print_domain=False)
+    if len(err.MatchingDomainsStats) > 0:
+        print("Matching domains")
+        table_generator(err.MatchingDomainsStats)
+    else:
+        print("No matching domains")
+    print(f"OK Discs Count: {err.OkDisksCount}")
+    print(
+        f"Missing {err.RealmLocationKey}s Count: {err.MissingFailRealmsCount}\n"
+        f"{err.RealmLocationKey}s With Missing {err.DomainLocationKey}s Count: {err.FailRealmsWithMissingDomainsCount}\n"
+        f"{err.DomainLocationKey}s With Missing Disks Count: {err.DomainsWithMissingDisksCount}"
+    )

@@ -287,7 +287,7 @@ class BodyPartReader:
         self._content_eof = 0
         self._cache: Dict[str, Any] = {}
 
-    def __aiter__(self: Self):
+    def __aiter__(self: Self) -> Self:
         return self
 
     async def __anext__(self) -> bytes:
@@ -593,7 +593,7 @@ class MultipartReader:
     response_wrapper_cls = MultipartResponseWrapper
     #: Multipart reader class, used to handle multipart/* body parts.
     #: None points to type(self)
-    multipart_reader_cls = None
+    multipart_reader_cls: Optional[Type["MultipartReader"]] = None
     #: Body part reader class for non multipart/* content types.
     part_reader_cls = BodyPartReader
 
@@ -614,7 +614,7 @@ class MultipartReader:
         self._at_bof = True
         self._unread: List[bytes] = []
 
-    def __aiter__(self: Self):
+    def __aiter__(self: Self) -> Self:
         return self
 
     async def __anext__(

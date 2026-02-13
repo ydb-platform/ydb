@@ -20,7 +20,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
         LOG_I("Change state from " << buildInfo.State << " to " << state);
         if (state == TIndexBuildInfo::EState::Rejected ||
             state == TIndexBuildInfo::EState::Cancelled ||
@@ -91,7 +91,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
         auto& processed = buildInfo.Processed;
         auto& billed = buildInfo.Billed;
 
@@ -209,7 +209,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
 
     for (const auto& item: indexInfo.Shards) {
         const TShardIdx& shardIdx = item.first;
-        const TIndexBuildInfo::TShardStatus& status = item.second;
+        const TIndexBuildShardStatus& status = item.second;
 
         if (status.Status != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
             if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
@@ -302,14 +302,17 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext:
-            *index.mutable_global_fulltext_index() = Ydb::Table::GlobalFulltextIndex();
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
+            *index.mutable_global_fulltext_plain_index() = Ydb::Table::GlobalFulltextPlainIndex();
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
+            *index.mutable_global_fulltext_relevance_index() = Ydb::Table::GlobalFulltextRelevanceIndex();
             break;
         default:
             Y_ENSURE(false, InvalidIndexType(info.IndexType));
         }
     } else if (info.IsBuildColumns()) {
-        for(const auto& column : info.BuildColumns) {
+        for (const auto& column : info.BuildColumns) {
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
             columnProto->SetColumnName(column.ColumnName);
             columnProto->mutable_default_from_literal()->CopyFrom(column.DefaultFromLiteral);
@@ -345,6 +348,17 @@ void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBui
     }
 }
 
+void TSchemeShard::AddIndexBuild(const std::shared_ptr<TIndexBuildInfo>& buildInfo) {
+    Y_ASSERT(!IndexBuilds.contains(buildInfo->Id));
+    IndexBuilds[buildInfo->Id] = buildInfo;
+    IndexBuildsByTime.emplace(buildInfo->StartTime, buildInfo->Id);
+
+    if (buildInfo->Uid) {
+        Y_ASSERT(!IndexBuildsByUid.contains(buildInfo->Uid));
+        IndexBuildsByUid[buildInfo->Uid] = buildInfo;
+    }
+}
+
 void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo) {
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.LockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.InitiateTxId);
@@ -354,6 +368,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo&
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.DropColumnsTxId);
 
     Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);
+    Self->IndexBuildsByTime.erase(std::make_pair(indexBuildInfo.StartTime, indexBuildInfo.Id));
     Self->IndexBuilds.erase(indexBuildInfo.Id);
 }
 
@@ -452,7 +467,7 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
     try {
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         TIndexBuildInfo* buildInfo = buildInfoPtr
-            ? buildInfoPtr->Get()
+            ? buildInfoPtr->get()
             : nullptr;
 
         LOG_E("Unhandled exception, id#"

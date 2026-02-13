@@ -46,6 +46,7 @@ END()
 
 RECURSE_FOR_TESTS(
     inside_ydb_ut
+    sqs_topic_ut
 )
 
 RECURSE(

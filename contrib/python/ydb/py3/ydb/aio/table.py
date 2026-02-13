@@ -571,8 +571,9 @@ class SessionPool:
         try:
             done, _ = await asyncio.wait((task_wait, task_should_stop), return_when=asyncio.FIRST_COMPLETED)
         except asyncio.CancelledError:
+            task_should_stop.cancel()
             cancelled = task_wait.cancel()
-            if not cancelled:
+            if not cancelled and not task_wait.exception():
                 priority, session = task_wait.result()
                 self._active_queue.put_nowait((priority, session))
             raise

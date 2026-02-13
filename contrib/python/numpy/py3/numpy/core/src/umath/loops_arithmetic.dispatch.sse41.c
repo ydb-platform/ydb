@@ -9,4 +9,4 @@
 #define NPY__CPU_TARGET_SSE3
 #define NPY__CPU_TARGET_SSSE3
 #define NPY__CPU_TARGET_SSE41
-#include "numpy/core/src/umath/loops_arithmetic.dispatch.c"
+#include "contrib/python/numpy/py3/numpy/core/src/umath/loops_arithmetic.dispatch.c"

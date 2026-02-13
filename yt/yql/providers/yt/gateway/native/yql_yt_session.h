@@ -3,7 +3,6 @@
 #include "yql_yt_op_tracker.h"
 
 #include <yt/yql/providers/yt/gateway/lib/session.h>
-#include <yt/yql/providers/yt/gateway/lib/transaction_cache.h>
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
 #include <yql/essentials/core/yql_execution.h>
@@ -35,16 +34,12 @@ struct TSession: public TSessionBase {
     ~TSession() = default;
 
     void Close();
-    NYT::TNode CreateSpecWithDesc(const TVector<std::pair<TString, TString>>& code = {}) const;
     NYT::TNode CreateTableAttrs() const;
 
     void EnsureInitializedSemaphore(const TYtSettings::TConstPtr& settings);
     void InitLocalCalcSemaphore(const TYtSettings::TConstPtr& settings);
 
-    const TOperationProgressWriter ProgressWriter_;
     const TStatWriter StatWriter_;
-    const TYqlOperationOptions OperationOptions_;
-    const TIntrusivePtr<ITimeProvider> TimeProvider_;
     const bool DeterministicMode_;
     TAsyncQueue::TPtr Queue_;
     TOperationTracker::TPtr OpTracker_;

@@ -14,9 +14,6 @@ TSchedulableTask::TSchedulableTask(const TQueryPtr& query)
 }
 
 TSchedulableTask::~TSchedulableTask() {
-    if (Iterator) {
-        Query->RemoveTask(*Iterator);
-    }
     --Query->Demand;
 }
 
@@ -30,39 +27,47 @@ void TSchedulableTask::Resume() {
     NActors::TActivationContext::Send(ActorId, GetResumeEvent());
 }
 
-// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
+// TODO: referring to the pool's usage - to support all-equal fair-share query mode.
 bool TSchedulableTask::TryIncreaseUsage() {
-    const auto snapshot = Query->GetSnapshot();
-    auto pool = Query->GetParent();
-    ui64 newUsage = pool->Usage.load();
     bool increased = false;
+    ui64 fairShare = 0;
+    NHdrf::NDynamic::TTreeElement* poolOrQuery = nullptr;
 
-    while (!increased && newUsage < snapshot->GetParent()->FairShare) {
-        increased = pool->Usage.compare_exchange_weak(newUsage, newUsage + 1);
+    if (const auto snapshot = Query->GetSnapshot()) {
+        fairShare = snapshot->FairShare;
+        poolOrQuery = Query->GetParent();
+    } else { // TODO: check directly for the pool snapshot - even if there is no query snapshot yet.
+        fairShare = Query->AllowMinFairShare;
+        poolOrQuery = Query.get();
+    }
+
+    ui64 newUsage = poolOrQuery->Usage.load();
+
+    while (!increased && newUsage < fairShare) {
+        increased = poolOrQuery->Usage.compare_exchange_weak(newUsage, newUsage + 1);
     }
 
     if (!increased) {
         return false;
     }
 
-    Query->UpdateActualDemand();
-
-    ++Query->Usage;
-    for (TTreeElement* parent = pool->GetParent(); parent; parent = parent->GetParent()) {
-        ++parent->Usage;
+    for (TTreeElement* parent = poolOrQuery; parent; parent = parent->GetParent()) {
+        if (parent != poolOrQuery) {
+            ++parent->Usage;
+        }
     }
+
+    Query->UpdateActualDemand();
 
     return true;
 }
 
-// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
 void TSchedulableTask::IncreaseUsage() {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         ++parent->Usage;
     }
 }
 
-// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
 void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedResume) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         --parent->Usage;
@@ -76,8 +81,8 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedRes
 
 size_t TSchedulableTask::GetSpareUsage() const {
     if (const auto snapshot = Query->GetSnapshot()) {
-        auto usage = Query->GetParent()->Usage.load();
-        auto fairShare = snapshot->GetParent()->FairShare;
+        auto usage = Query->GetParent()->Usage.load(std::memory_order_relaxed);
+        auto fairShare = snapshot->FairShare;
         return fairShare >= usage ? (fairShare - usage) : 0;
     }
 

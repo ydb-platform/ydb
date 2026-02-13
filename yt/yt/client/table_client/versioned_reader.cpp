@@ -18,7 +18,7 @@ public:
 
     TFuture<void> Open() override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     IVersionedRowBatchPtr Read(const TRowBatchReadOptions& options) override
@@ -41,7 +41,7 @@ public:
 
     TFuture<void> GetReadyEvent() const override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     NChunkClient::NProto::TDataStatistics GetDataStatistics() const override

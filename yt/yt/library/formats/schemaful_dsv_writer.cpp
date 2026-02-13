@@ -10,6 +10,7 @@
 #include <yt/yt/core/yson/format.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <limits>
 
@@ -153,9 +154,9 @@ private:
                 }
             }
             WriteRaw(Config_->RecordSeparator);
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     void WriteRaw(TStringBuf str)
@@ -194,7 +195,7 @@ public:
     TFuture<void> Close() override
     {
         DoFlushBuffer();
-        return VoidFuture;
+        return OKFuture;
     }
 
     bool Write(TRange<TUnversionedRow> rows) override
@@ -247,7 +248,7 @@ public:
         return Result_;
     }
 
-    std::optional<NCrypto::TMD5Hash> GetDigest() const override
+    std::optional<TRowsDigest> GetDigest() const override
     {
         return std::nullopt;
     }

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h"
 
 #include <mutex>
 #include <sstream>
@@ -25,14 +25,14 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/compute/cast_internal.h"
-#include "arrow/compute/exec.h"
-#include "arrow/compute/function_internal.h"
-#include "arrow/compute/kernel.h"
-#include "arrow/compute/kernels/codegen_internal.h"
-#include "arrow/compute/registry.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/reflection_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/reflection_internal.h"
 
 namespace arrow20 {
 

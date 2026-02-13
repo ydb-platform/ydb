@@ -57,6 +57,7 @@ struct TSchemaOperation {
         ETypeCreateIncrementalRestoreSrc = 17,
         ETypeCreateIncrementalBackupSrc = 18,
         ETypeRotateCdcStream = 19,
+        ETypeTruncate = 20,
 
         ETypeUnknown = Max<ui32>()
     };
@@ -115,6 +116,7 @@ struct TSchemaOperation {
     bool IsRotateCdcStream() const { return Type == ETypeRotateCdcStream; }
     bool IsCreateIncrementalRestoreSrc() const { return Type == ETypeCreateIncrementalRestoreSrc; }
     bool IsCreateIncrementalBackupSrc() const { return Type == ETypeCreateIncrementalBackupSrc; }
+    bool IsTruncate() const { return Type == ETypeTruncate; }
 
     bool IsReadOnly() const { return ReadOnly; }
 };

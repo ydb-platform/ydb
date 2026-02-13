@@ -18,4 +18,6 @@ GENERATE_ENUM_SERIALIZATION(yql_yt_request_options.h)
 
 END()
 
-RECURSE(proto_helpers)
+RECURSE(
+    proto_helpers
+)

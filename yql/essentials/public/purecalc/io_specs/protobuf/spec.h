@@ -17,7 +17,7 @@ class TProtobufInputSpec: public TProtobufRawInputSpec {
                   "should be derived from google::protobuf::Message");
 
 public:
-    TProtobufInputSpec(
+    explicit TProtobufInputSpec(
         const TMaybe<TString>& timestampColumn = Nothing(),
         const TProtoSchemaOptions& options = {})
         : TProtobufRawInputSpec(*T::descriptor(), timestampColumn, options)
@@ -36,7 +36,7 @@ class TProtobufOutputSpec: public TProtobufRawOutputSpec {
                   "should be derived from google::protobuf::Message");
 
 public:
-    TProtobufOutputSpec(
+    explicit TProtobufOutputSpec(
         const TProtoSchemaOptions& options = {},
         google::protobuf::Arena* arena = nullptr)
         : TProtobufRawOutputSpec(*T::descriptor(), nullptr, options, arena)
@@ -54,7 +54,7 @@ class TProtobufMultiOutputSpec: public TProtobufRawMultiOutputSpec {
         "all types should be derived from google::protobuf::Message");
 
 public:
-    TProtobufMultiOutputSpec(
+    explicit TProtobufMultiOutputSpec(
         const TProtoSchemaOptions& options = {},
         TMaybe<TVector<google::protobuf::Arena*>> arenas = {})
         : TProtobufRawMultiOutputSpec({T::descriptor()...}, Nothing(), options, std::move(arenas))

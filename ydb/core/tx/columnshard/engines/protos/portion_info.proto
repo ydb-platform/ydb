@@ -1,4 +1,3 @@
-import "ydb/library/formats/arrow/protos/ssa.proto";
 import "ydb/core/tx/columnshard/common/protos/blob_range.proto";
 
 package NKikimrTxColumnShard;
@@ -33,6 +32,7 @@ message TIndexPortionMeta {
         optional bytes Last = 2;
     }
     optional TPKBordersV1 PrimaryKeyBordersV1 = 18;
+    optional uint32 NumSlices = 19;
 
     message TWrittenPortion {
     }
@@ -51,8 +51,7 @@ message TIndexPortionMeta {
 message TIndexColumnMeta {
     optional uint32 NumRows = 1;
     optional uint32 RawBytes = 2;
-    optional NKikimrSSA.TProgram.TConstant MinValue = 3;
-    optional NKikimrSSA.TProgram.TConstant MaxValue = 4;
+    reserved 3, 4; // deprecated
     optional TIndexPortionMeta PortionMeta = 5[deprecated = true]; // First PK column could contain portion info
 }
 

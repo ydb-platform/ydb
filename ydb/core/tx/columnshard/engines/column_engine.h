@@ -127,6 +127,19 @@ public:
         }
     };
 
+    class TSelectedPortionInfo {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
+        YDB_READONLY_DEF(bool, IsVisible);
+
+    public:
+        TSelectedPortionInfo(const std::shared_ptr<TPortionInfo> portion, const bool isVisible)
+            : Portion(portion)
+            , IsVisible(isVisible)
+        {
+        }
+    };
+
     void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const;
 
     static ui64 GetMetadataLimit();
@@ -146,8 +159,8 @@ public:
         return DoRegisterTable(pathId);
     }
     virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
-    virtual std::vector<std::shared_ptr<TPortionInfo>> Select(
-        TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const = 0;
+    virtual std::vector<TSelectedPortionInfo> Select(
+        TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions) const = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
         const std::optional<ui64> waitingPriority) const noexcept = 0;

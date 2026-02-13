@@ -9,6 +9,7 @@ TEST_SRCS(
     test_distconf_self_heal.py
     test_distconf_sentinel_node_status.py
     test_generate_dynamic_config.py
+    test_module_parameter.py
     test_pdisk_metadata_cli.py
 )
 
@@ -25,7 +26,7 @@ ELSE()
 ENDIF()
 
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(IAM_TOKEN="")
 DEPENDS(

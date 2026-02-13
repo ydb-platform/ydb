@@ -15,11 +15,13 @@ SRCS(
     ydb_dynamic_config_v1.proto
     ydb_logstore_v1.proto
     ydb_maintenance_v1.proto
+    ydb_nbs_v1.proto
     ydb_persqueue_v1.proto
     ydb_object_storage_v1.proto
     ydb_replication_v1.proto
     ydb_sqs_topic_v1.proto
     ydb_tablet_v1.proto
+    ydb_test_shard_v1.proto
     ydb_view_v1.proto
     ydb_ymq_v1.proto
 )

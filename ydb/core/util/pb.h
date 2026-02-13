@@ -40,7 +40,7 @@ template<typename TProto>
 struct TProtoBox : public TProto {
     TProtoBox(TArrayRef<const char> plain) {
         bool ok = ParseFromStringNoSizeLimit(*this, plain);
-        Y_ABORT_UNLESS(ok, "Cannot parse proto %s", TypeName<TProto>().c_str());
+        Y_ENSURE(ok, "Cannot parse proto " << TypeName<TProto>());
     }
 };
 
@@ -57,7 +57,7 @@ inline TString SingleLineProto(const NProtoBuf::Message& message) {
     p.SetSingleLineMode(true);
     TString res;
     const bool success = p.PrintToString(message, &res);
-    Y_ABORT_UNLESS(success);
+    Y_ENSURE(success);
     return res;
 }
 

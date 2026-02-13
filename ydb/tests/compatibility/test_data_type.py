@@ -13,7 +13,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
     format_sql_value,
     types_not_supported_yet_in_columnshard,
     non_comparable_types,
-    primitive_type,
+    string_to_ydb_type,
 )
 
 
@@ -29,6 +29,10 @@ class TestDataType(RestartToAnotherVersionFixture):
         columns_in_pk_limit = 20
         self.count_rows = 30
         self.store_type = store_type
+
+        if store_type == "COLUMN" and min(self.versions) < (26, 1):
+            types_not_supported_yet_in_columnshard.add("Bool")
+
         # not all the types are supported for column tables
         supported_pk_types = pk_types if store_type == "ROW" else {k: v for k, v in pk_types.items() if k not in types_not_supported_yet_in_columnshard}
         supported_non_pk_types = non_pk_types if store_type == "ROW" else {k: v for k, v in non_pk_types.items() if k not in types_not_supported_yet_in_columnshard}
@@ -52,12 +56,17 @@ class TestDataType(RestartToAnotherVersionFixture):
                 }
             )
             self.table_names.append(f"table_{i}_{self.store_type}")
+
+        extra_feature_flags = {
+            "enable_parameterized_decimal": True,
+            "enable_table_datetime64": True,
+        }
+
+        if min(self.versions) >= (25, 4):
+            extra_feature_flags["enable_columnshard_bool"] = True
+
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_parameterized_decimal": True,
-                "enable_table_datetime64": True,
-                "enable_columnshard_bool": True,
-            },
+            extra_feature_flags=extra_feature_flags,
             column_shard_config={
                 "disabled_on_scheme_shard": False,
             },
@@ -174,12 +183,12 @@ class TestDataType(RestartToAnotherVersionFixture):
             prec, scale = type_name.replace("Decimal(", "").replace(")", "").split(",")
             return ydb.TypedValue(Decimal(value), ydb.DecimalType(int(prec), int(scale)))
         if type_name == "String" or type_name == "Yson":
-            return ydb.TypedValue(value.encode(), primitive_type[type_name])
+            return ydb.TypedValue(value.encode(), string_to_ydb_type[type_name])
         if type_name == "DyNumber":
-            return ydb.TypedValue(str(value), primitive_type[type_name])
+            return ydb.TypedValue(str(value), string_to_ydb_type[type_name])
         if type_name == "Datetime64" or type_name == "Datetime":
-            return ydb.TypedValue(int(value.timestamp()), primitive_type[type_name])
-        return ydb.TypedValue(value, primitive_type[type_name])
+            return ydb.TypedValue(int(value.timestamp()), string_to_ydb_type[type_name])
+        return ydb.TypedValue(value, string_to_ydb_type[type_name])
 
     def parametrized_write_data(self):
         queries_with_parameters = []
@@ -259,10 +268,6 @@ class TestDataType(RestartToAnotherVersionFixture):
             if (min(self.versions) < (25, 1)):
                 types_not_supported_yet_in_columnshard.add("Decimal")
 
-        if any("Bool" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
-            if (min(self.versions) < (26, 1)):
-                types_not_supported_yet_in_columnshard.add("Bool")
-
         self.create_table()
 
         self.write_data()
@@ -279,10 +284,6 @@ class TestDataType(RestartToAnotherVersionFixture):
         if any("Decimal" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
             if (min(self.versions) < (25, 1)):
                 types_not_supported_yet_in_columnshard.add("Decimal")
-
-        if any("Bool" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
-            if (min(self.versions) < (26, 1)):
-                types_not_supported_yet_in_columnshard.add("Bool")
 
         self.create_table()
 

@@ -246,7 +246,7 @@ public:
         return FixedHeader_.PacketId;
     }
 
-    TSharedRefArray GrabMessage() const override
+    TSharedRefArray GrabMessage() override
     {
         return std::move(Message_);
     }
@@ -367,7 +367,7 @@ private:
             } else if (partSize == 0) {
                 Parts_.push_back(TSharedRef::MakeEmpty());
             } else {
-                auto part = TSharedMutableRef::Allocate<TPacketDecoderTag>(partSize);
+                auto part = TSharedMutableRef::Allocate<TPacketDecoderTag>(partSize, TSharedMutableRefAllocateOptions{.InitializeStorage = false});
                 BeginPhase(EPacketPhase::MessagePart, part.Begin(), part.Size());
                 Parts_.push_back(std::move(part));
                 break;

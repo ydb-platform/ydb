@@ -1,0 +1,34 @@
+--- contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_coordination.py	(index)
++++ contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_coordination.py	(working tree)
+@@ -3,10 +3,10 @@ from dataclasses import dataclass
+
+ from .ydb_coordination_public_types import NodeConfig
+
+-if typing.TYPE_CHECKING:
+-    from ..v4.protos import ydb_coordination_pb2
+-else:
+-    from ..common.protos import ydb_coordination_pb2
++try:
++    from ydb.public.api.protos import ydb_coordination_pb2
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_coordination_pb2
+
+ from .common_utils import IToProto
+
+--- contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_coordination_public_types.py	(index)
++++ contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_coordination_public_types.py	(working tree)
+@@ -2,10 +2,10 @@ from dataclasses import dataclass
+ from enum import IntEnum
+ import typing
+
+-if typing.TYPE_CHECKING:
+-    from ..v4.protos import ydb_coordination_pb2
+-else:
+-    from ..common.protos import ydb_coordination_pb2
++try:
++    from ydb.public.api.protos import ydb_coordination_pb2
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_coordination_pb2
+
+
+ class ConsistencyMode(IntEnum):

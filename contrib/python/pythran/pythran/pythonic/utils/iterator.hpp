@@ -35,8 +35,7 @@ namespace utils
   }
 
   template <class T, class... Others>
-  iterator_reminder<true, T, Others...>::iterator_reminder(
-      T const &v, Others const &...others)
+  iterator_reminder<true, T, Others...>::iterator_reminder(T const &v, Others const &...others)
       : values(v, others...)
   {
   }

@@ -11,6 +11,8 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:32)
+ELSE()
+    REQUIREMENTS(ram:16)
 ENDIF()
 
 DEPENDS(

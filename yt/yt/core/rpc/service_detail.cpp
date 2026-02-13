@@ -1421,7 +1421,13 @@ void TRequestQueue::ConfigureWeightThrottler(const TThroughputThrottlerConfigPtr
 
 bool TRequestQueue::IsQueueSizeLimitExceeded() const
 {
-    return QueueSize_.load(std::memory_order::relaxed) >
+    auto queueSizeLimit = QueueSizeLimit_.load(std::memory_order::relaxed);
+    if (queueSizeLimit >= 0 &&
+        QueueSize_.load(std::memory_order::relaxed) > queueSizeLimit) {
+        return true;
+    }
+
+    return RuntimeInfo_->QueueSize.load(std::memory_order::relaxed) >
         RuntimeInfo_->QueueSizeLimit.load(std::memory_order::relaxed);
 }
 
@@ -1434,6 +1440,12 @@ bool TRequestQueue::IsQueueByteSizeLimitExceeded() const
 int TRequestQueue::GetQueueSize() const
 {
     return QueueSize_.load(std::memory_order::relaxed);
+}
+
+std::optional<int> TRequestQueue::GetQueueSizeLimit() const
+{
+    auto queueSizeLimit = QueueSizeLimit_.load(std::memory_order::relaxed);
+    return queueSizeLimit >= 0 ? std::optional(queueSizeLimit) : std::nullopt;
 }
 
 i64 TRequestQueue::GetQueueByteSize() const
@@ -1449,6 +1461,16 @@ int TRequestQueue::GetConcurrency() const
 i64 TRequestQueue::GetConcurrencyByte() const
 {
     return ConcurrencyByte_.load(std::memory_order::relaxed);
+}
+
+void TRequestQueue::SetQueueSizeLimit(std::optional<int> limit)
+{
+    YT_ASSERT(!limit || *limit >= 0);
+
+    if (!limit) {
+        limit = -1;
+    }
+    QueueSizeLimit_.store(*limit, std::memory_order::relaxed);
 }
 
 void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
@@ -1578,12 +1600,14 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
 void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 {
     ++QueueSize_;
+    RuntimeInfo_->QueueSize.fetch_add(1, std::memory_order::relaxed);
     QueueByteSize_.fetch_add(requestTotalSize);
 }
 
 void TRequestQueue::DecrementQueueSize(i64 requestTotalSize)
 {
     auto newQueueSize = --QueueSize_;
+    RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
     auto oldQueueByteSize = QueueByteSize_.fetch_sub(requestTotalSize);
 
     YT_ASSERT(newQueueSize >= 0);
@@ -1796,7 +1820,8 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
         incomingRequest.RuntimeInfo->RequestQueueSizeLimitErrorCounter.Increment();
         ReplyError(
             TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue size limit exceeded")
-                << TErrorAttribute("limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load())
+                << TErrorAttribute("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
+                << TErrorAttribute("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
                 << TErrorAttribute("queue", incomingRequest.RequestQueue->GetName())
                 << incomingRequest.ThrottledError,
             std::move(incomingRequest));
@@ -1905,11 +1930,16 @@ void TServiceBase::OnRequestAuthenticated(
     }
 
     const auto& authResult = authResultOrError.Value();
-    const auto& Logger = RpcServerLogger;
-    YT_LOG_DEBUG("Request authenticated (RequestId: %v, User: %v, Realm: %v)",
+    auto Logger = RpcServerLogger().WithTag("RequestId: %v, User: %v, Realm: %v",
         incomingRequest.RequestId,
         authResult.User,
         authResult.Realm);
+
+    if (authResult.Warning.IsOK()) {
+        YT_LOG_DEBUG("Request authenticated");
+    } else {
+        YT_LOG_DEBUG(authResult.Warning, "Request authenticated with warning");
+    }
     const auto& authenticatedUser = authResult.User;
     if (incomingRequest.Header->has_user()) {
         const auto& user = incomingRequest.Header->user();
@@ -1940,9 +1970,10 @@ void TServiceBase::OnRequestAuthenticated(
 
 bool TServiceBase::IsAuthenticationNeeded(const TIncomingRequest& incomingRequest)
 {
+    // incomingRequest.RuntimeInfo is null if unknown method is called.
     return
         Authenticator_.operator bool() &&
-        !incomingRequest.RuntimeInfo->Descriptor.System;
+        !(incomingRequest.RuntimeInfo && incomingRequest.RuntimeInfo->Descriptor.System);
 }
 
 void TServiceBase::HandleAuthenticatedRequest(TIncomingRequest&& incomingRequest)
@@ -2442,7 +2473,7 @@ void TServiceBase::ProfileRequest(TIncomingRequest* incomingRequest)
         methodPerformanceCounters->RemoteWaitTimeCounter.Record(incomingRequest->ArriveInstant - retryStart);
     }
 
-    if (!incomingRequest->ReplyBus->IsEndpointLocal()) {
+    if (!incomingRequest->ReplyBus->IsEndpointLocal() && IsAuthenticationNeeded(*incomingRequest)) {
         bool authenticated = incomingRequest->Header->HasExtension(NRpc::NProto::TCredentialsExt::credentials_ext) &&
             incomingRequest->Header->GetExtension(NRpc::NProto::TCredentialsExt::credentials_ext).has_service_ticket();
         if (!authenticated && incomingRequest->RuntimeInfo) {

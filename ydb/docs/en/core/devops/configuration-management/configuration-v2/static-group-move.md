@@ -2,7 +2,7 @@
 
 {% cut "Article under development" %}
 
-{% include [new](../_includes/configuration-version-note.md) %}
+{% include [_](../_includes/experimental_v2.md) %}
 
 When using Configuration V2, static group management is performed automatically and the Self Heal mechanism will perform reconfiguration when one static group node fails.
 

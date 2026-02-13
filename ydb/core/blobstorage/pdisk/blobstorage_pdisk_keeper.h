@@ -150,6 +150,24 @@ public:
         return ChunkTracker.EstimateSpaceColor(owner, allocationSize, occupancy);
     }
 
+    double GetPDiskUsage() const {
+        i64 totalUsed = ChunkTracker.GetTotalUsed();
+        i64 totalHardLimit = ChunkTracker.GetTotalHardLimit();
+        return 100.0 * (totalHardLimit ? (double)totalUsed / totalHardLimit : 1.0);
+    }
+
+    double GetVDiskSlotUsage(TOwner owner) const {
+        i64 used = ChunkTracker.GetOwnerUsed(owner);
+        ui32 lightYellowLimit = ChunkTracker.ColorFlagLimit(owner, NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW);
+        return 100.0 * (lightYellowLimit ? (double)used / lightYellowLimit : 1.0);
+    }
+
+    double GetVDiskRawUsage(TOwner owner) const {
+        i64 used = ChunkTracker.GetOwnerUsed(owner);
+        i64 hardLimit = ChunkTracker.GetOwnerHardLimit(owner);
+        return 100.0 * (hardLimit ? (double)used / hardLimit : 1.0);
+    }
+
     //
     // Trimming
     //

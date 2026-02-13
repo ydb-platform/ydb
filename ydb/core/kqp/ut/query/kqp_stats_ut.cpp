@@ -1,3 +1,4 @@
+#include <ydb/core/base/hive.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -665,7 +666,6 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
     TKikimrRunner kikimr(TKikimrSettings(app).SetNodeCount(2));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
-    auto monPort = kikimr.GetTestServer().GetRuntime()->GetMonPort();
 
     auto firstNodeId = kikimr.GetTestServer().GetRuntime()->GetFirstNodeId();
 
@@ -674,22 +674,15 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
     auto expectedTotalSingleNodeReqCount = counters.TotalSingleNodeReqCount->Val();
     auto expectedNonLocalSingleNodeReqCount = counters.NonLocalSingleNodeReqCount->Val();
 
-    auto drainNode = [monPort](size_t nodeId, bool undrain = false) {
-        TNetworkAddress addr("localhost", monPort);
-        TSocket s(addr);
-        TString url;
+    auto drainNode = [runtime = kikimr.GetTestServer().GetRuntime()](size_t nodeId, bool undrain = false) {
+        auto sender = runtime->AllocateEdgeActor();
+        IEventBase* ev = nullptr;
         if (undrain) {
-            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=SetDown&down=0";
+            ev = new TEvHive::TEvSetDown(nodeId, false);
         } else {
-            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=DrainNode";
+            ev = new TEvHive::TEvDrainNode(nodeId);
         }
-        SendMinimalHttpRequest(s, "localhost", url);
-        TSocketInput si(s);
-        THttpInput input(&si);
-        TString firstLine = input.FirstLine();
-
-        const auto httpCode = ParseHttpRetCode(firstLine);
-        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200);
+        runtime->SendToPipe(72057594037968897, sender, ev, 0, GetPipeConfigWithRetries());
     };
 
     auto waitTablets = [&session](size_t nodeId) mutable {
@@ -700,7 +693,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
                 .WithShardNodesInfo(true);
 
         bool done = false;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             std::unordered_set<ui32> nodeIds;
             auto res = session.DescribeTable("Root/EightShard", describeTableSettings)
                 .ExtractValueSync();
@@ -716,7 +709,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
                 done = true;
                 break;
             }
-            Sleep(TDuration::Seconds(1));
+            Sleep(TDuration::Seconds(5));
         }
         UNIT_ASSERT_C(done, "unable to wait tablets move on specific node");
     };

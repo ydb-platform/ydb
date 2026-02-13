@@ -15,13 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
 
 #include <algorithm>
 #include <cctype>
 #include <memory>
 
-#include "arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
 
 namespace arrow20 {
 

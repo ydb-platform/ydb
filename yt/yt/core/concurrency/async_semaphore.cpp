@@ -168,7 +168,7 @@ TFuture<void> TAsyncSemaphore::GetReadyEvent()
     auto guard = WriterGuard(SpinLock_);
 
     if (FreeSlots_ > 0) {
-        return VoidFuture;
+        return OKFuture;
     } else if (!ReadyEvent_) {
         ReadyEvent_ = NewPromise<void>();
     }

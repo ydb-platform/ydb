@@ -43,7 +43,7 @@ public:
 
     TNodePtr BuildUdf(bool forReduce);
 
-    TNodePtr BuildCall();
+    TNodeResult BuildCall();
 
     TPosition GetPos() const {
         return Pos_;
@@ -73,8 +73,8 @@ public:
 
 private:
     bool ExtractCallParam(const TRule_external_call_param& node);
-    bool FillArg(const TString& module, const TString& func, size_t& idx, const TRule_named_expr& node);
-    bool FillArgs(const TRule_named_expr_list& node);
+    TSQLStatus FillArg(const TString& module, const TString& func, size_t& idx, const TRule_named_expr& node);
+    TSQLStatus FillArgs(const TRule_named_expr_list& node);
 
 private:
     TPosition Pos_;

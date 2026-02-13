@@ -35,6 +35,8 @@ using TMKQLVector = std::vector<Type, TMKQLAllocator<Type, MemoryPool>>;
 template <typename Key, typename T, typename Hash = std::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, EMemorySubPool MemoryPool = EMemorySubPool::Default>
 using TMKQLHashMap = std::unordered_map<Key, T, Hash, KeyEqual, TMKQLAllocator<std::pair<const Key, T>, MemoryPool>>;
+template <typename Key, typename T, typename TComp = std::less<Key>, EMemorySubPool MemoryPool = EMemorySubPool::Default>
+using TMKQLMap = std::map<Key, T, TComp, TMKQLAllocator<std::pair<const Key, T>, MemoryPool>>;
 
 using TKeyTypes = std::vector<std::pair<NUdf::EDataSlot, bool>>;
 using TUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
@@ -653,7 +655,7 @@ private:
     mutable THashMap<TString, TValuePtr> Registry_;
 };
 
-class TDirectArrayHolderInplace: public TComputationValue<TDirectArrayHolderInplace> {
+class TDirectArrayHolderInplace final: public TComputationValue<TDirectArrayHolderInplace> {
 public:
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;
@@ -671,10 +673,12 @@ public:
     {
         MKQL_ENSURE(Size_ > 0U, "Can't create empty array holder.");
         MKQL_MEM_TAKE(GetMemInfo(), GetPtr(), Size_ * sizeof(NUdf::TUnboxedValue));
-        std::memset(GetPtr(), 0, Size_ * sizeof(NUdf::TUnboxedValue));
+        for (ui64 i = 0U; i < Size_; ++i) {
+            new (GetPtr() + i) NUdf::TUnboxedValue();
+        }
     }
 
-    ~TDirectArrayHolderInplace() {
+    ~TDirectArrayHolderInplace() override {
         for (ui64 i = 0U; i < Size_; ++i) {
             (GetPtr() + i)->~TUnboxedValue();
         }
@@ -692,7 +696,7 @@ public:
 private:
     class TIterator: public TTemporaryComputationValue<TIterator> {
     public:
-        TIterator(const TDirectArrayHolderInplace* parent)
+        explicit TIterator(const TDirectArrayHolderInplace* parent)
             : TTemporaryComputationValue(parent->GetMemInfo())
             , Parent_(const_cast<TDirectArrayHolderInplace*>(parent))
         {
@@ -725,7 +729,7 @@ private:
 
     class TKeysIterator: public TTemporaryComputationValue<TKeysIterator> {
     public:
-        TKeysIterator(const TDirectArrayHolderInplace& parent)
+        explicit TKeysIterator(const TDirectArrayHolderInplace& parent)
             : TTemporaryComputationValue(parent.GetMemInfo())
             , Size_(parent.GetSize())
         {
@@ -1081,7 +1085,7 @@ template <bool SupportEqual, bool SupportHash, bool SupportLess>
 class TKeyTypeContanerHelper {
 public:
     TKeyTypeContanerHelper() = default;
-    TKeyTypeContanerHelper(const TType* type) {
+    explicit TKeyTypeContanerHelper(const TType* type) {
         bool encoded;
         bool useIHash;
         GetDictionaryKeyTypes(type, KeyTypes_, IsTuple_, encoded, useIHash);
@@ -1142,7 +1146,7 @@ private:
 template <class TObject>
 class TMutableObjectOverBoxedValue {
 public:
-    TMutableObjectOverBoxedValue(TComputationMutables& mutables)
+    explicit TMutableObjectOverBoxedValue(TComputationMutables& mutables)
         : ObjectIndex_(mutables.CurValueIndex++)
     {
     }

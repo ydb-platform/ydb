@@ -1,0 +1,30 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    l_orderkey,
+    Sum(l_extendedprice * (1 - l_discount)) AS revenue,
+    o_orderdate,
+    o_shippriority
+FROM
+    `/Root/customer` as customer
+,
+    `/Root/orders` as orders
+,
+    `/Root/lineitem` as lineitem
+WHERE
+    c_mktsegment == 'BUILDING'
+    AND c_custkey == o_custkey
+    AND l_orderkey == o_orderkey
+    AND o_orderdate < Date('1995-03-15')
+    AND l_shipdate > Date('1995-03-15')
+GROUP BY
+    l_orderkey,
+    o_orderdate,
+    o_shippriority
+ORDER BY
+    revenue DESC,
+    o_orderdate
+LIMIT 10;

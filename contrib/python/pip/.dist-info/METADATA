@@ -1,13 +1,11 @@
 Metadata-Version: 2.4
 Name: pip
-Version: 25.2
+Version: 25.3
 Summary: The PyPA recommended tool for installing Python packages.
 Author-email: The pip developers <distutils-sig@python.org>
+Requires-Python: >=3.9
+Description-Content-Type: text/x-rst
 License-Expression: MIT
-Project-URL: Homepage, https://pip.pypa.io/
-Project-URL: Documentation, https://pip.pypa.io
-Project-URL: Source, https://github.com/pypa/pip
-Project-URL: Changelog, https://pip.pypa.io/en/stable/news/
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Topic :: Software Development :: Build Tools
@@ -22,17 +20,15 @@ Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
-Requires-Python: >=3.9
-Description-Content-Type: text/x-rst
 License-File: AUTHORS.txt
 License-File: LICENSE.txt
-License-File: src/pip/_vendor/msgpack/COPYING
 License-File: src/pip/_vendor/cachecontrol/LICENSE.txt
 License-File: src/pip/_vendor/certifi/LICENSE
 License-File: src/pip/_vendor/dependency_groups/LICENSE.txt
 License-File: src/pip/_vendor/distlib/LICENSE.txt
 License-File: src/pip/_vendor/distro/LICENSE
 License-File: src/pip/_vendor/idna/LICENSE.md
+License-File: src/pip/_vendor/msgpack/COPYING
 License-File: src/pip/_vendor/packaging/LICENSE
 License-File: src/pip/_vendor/packaging/LICENSE.APACHE
 License-File: src/pip/_vendor/packaging/LICENSE.BSD
@@ -44,11 +40,13 @@ License-File: src/pip/_vendor/requests/LICENSE
 License-File: src/pip/_vendor/resolvelib/LICENSE
 License-File: src/pip/_vendor/rich/LICENSE
 License-File: src/pip/_vendor/tomli/LICENSE
-License-File: src/pip/_vendor/tomli/LICENSE-HEADER
 License-File: src/pip/_vendor/tomli_w/LICENSE
 License-File: src/pip/_vendor/truststore/LICENSE
 License-File: src/pip/_vendor/urllib3/LICENSE.txt
-Dynamic: license-file
+Project-URL: Changelog, https://pip.pypa.io/en/stable/news/
+Project-URL: Documentation, https://pip.pypa.io
+Project-URL: Homepage, https://pip.pypa.io/
+Project-URL: Source, https://github.com/pypa/pip
 
 pip - The Python Package Installer
 ==================================
@@ -110,3 +108,4 @@ rooms, and mailing lists is expected to follow the `PSF Code of Conduct`_.
 .. _User IRC: https://kiwiirc.com/nextclient/#ircs://irc.libera.chat:+6697/pypa
 .. _Development IRC: https://kiwiirc.com/nextclient/#ircs://irc.libera.chat:+6697/pypa-dev
 .. _PSF Code of Conduct: https://github.com/pypa/.github/blob/main/CODE_OF_CONDUCT.md
+

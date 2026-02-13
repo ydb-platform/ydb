@@ -3,7 +3,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"
 
 #include <algorithm>
 
@@ -54,7 +53,11 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
         if (!streamPath || streamPath->Dropped()) {
             continue;
         }
-        
+
+        if (cdcStreamInfo->Format != NKikimrSchemeOp::ECdcStreamFormatProto) {
+            continue;
+        }
+
         if (streamPath->Name.EndsWith("_continuousBackupImpl")) {
             if (!context.SS->PathsById.contains(streamPath->ParentPathId)) {
                 continue;
@@ -580,7 +583,8 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
     
     // Check for active incremental restore operations in IncrementalRestoreStates
     for (const auto& [opId, restoreState] : context.SS->IncrementalRestoreStates) {
-        if (restoreState.BackupCollectionPathId == pathId) {
+        if (restoreState.BackupCollectionPathId == pathId && 
+            restoreState.State != TIncrementalRestoreState::EState::Completed) {
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
                 "Cannot drop backup collection while incremental restore operations are active. Please wait for them to complete.")};
         }

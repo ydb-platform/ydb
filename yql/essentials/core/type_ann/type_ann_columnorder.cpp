@@ -46,7 +46,7 @@ IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprN
     if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) {
         return IGraphTransformer::TStatus::Ok;
     }
-    
+
     TColumnOrder columnOrder;
     auto result = GetSetting(node->Tail(), "result");
     auto emitPgStar = GetSetting(node->Tail(), "emit_pg_star");

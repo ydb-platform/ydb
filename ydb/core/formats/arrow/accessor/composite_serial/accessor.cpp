@@ -17,10 +17,16 @@ IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChu
             "buffer", DataBuffer.size());
     }
     if (!!Data) {
-        return TLocalChunkedArrayAddress(Loader->ApplyVerified(Data, GetRecordsCount()), 0, 0);
+        auto result = Loader->ApplyConclusion(Data, GetRecordsCount());
+        Y_ABORT_UNLESS(result.IsSuccess(), "Incorrect object for result request. internal path id: %s error: %s ", InternalPathId.data(),
+            result.GetErrorMessage().data());
+        return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     } else {
         AFL_VERIFY(!!DataBuffer);
-        return TLocalChunkedArrayAddress(Loader->ApplyVerified(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount()), 0, 0);
+        auto result = Loader->ApplyConclusion(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount());
+        Y_ABORT_UNLESS(result.IsSuccess(), "Incorrect object for result request. internal path id: %s error: %s ", InternalPathId.data(),
+            result.GetErrorMessage().data());
+        return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     }
 }
 

@@ -10,6 +10,12 @@ class TStreamingQueryProperties;
 
 } // namespace NKikimrSchemeOp
 
+namespace NYql::NPq::NProto {
+
+class StreamingDisposition;
+
+} // namespace NYql::NPq::NProto
+
 namespace NKikimr::NKqp {
 
 class TStreamingQueryMeta {
@@ -27,10 +33,17 @@ public:
         static inline constexpr char Run[] = "run";
         static inline constexpr char ResourcePool[] = "resource_pool";
         static inline constexpr char Force[] = "force";
+        static inline constexpr char StreamingDisposition[] = "streaming_disposition";
+        static inline constexpr char StreamingDispositionFromTime[] = "from_time";
+        static inline constexpr char StreamingDispositionTimeAgo[] = "time_ago";
 
         // Internal query info
         static inline constexpr char QueryTextRevision[] = "__query_text_revision";
     };
+
+    static inline constexpr char InternalTablesPath[] = "streaming/queries";
+
+    static TString GetTablesPath();
 };
 
 // Used for properties parsing after describing streaming query
@@ -43,6 +56,7 @@ public:
     bool Run = false;
     TString ResourcePool;
     ui64 QueryTextRevision = 0;
+    std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
 };
 
 }  // namespace NKikimr::NKqp

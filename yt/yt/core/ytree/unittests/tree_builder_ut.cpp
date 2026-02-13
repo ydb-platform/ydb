@@ -25,6 +25,14 @@ public:
     StrictMock<TMockYsonConsumer> Mock;
 };
 
+TString NodeToYsonString(const INodePtr& node)
+{
+    TStringStream stringStream;
+    TYsonWriter writer(&stringStream, EYsonFormat::Text);
+    VisitTree(node, &writer, true);
+    return stringStream.Str();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST_F(TTreeBuilderTest, EmptyMap)
@@ -190,6 +198,24 @@ TEST_F(TTreeBuilderTest, SkipEntityMapChildren)
     auto root = builder->EndTree();
 
     VisitTree(root, &Mock, false, TAttributeFilter(), true);
+}
+
+TEST_F(TTreeBuilderTest, TestTreeLimitResets)
+{
+    auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory(), 10);
+
+    for (int i = 0; i < 100; ++i) {
+        builder->BeginTree();
+            builder->OnBeginMap();
+
+                builder->OnKeyedItem("a");
+                builder->OnEntity();
+
+            builder->OnEndMap();
+        auto root = builder->EndTree();
+        ASSERT_EQ(NodeToYsonString(root), "{\"a\"=#;}");
+    }
+    // We expect no exceptions here.
 }
 
 ////////////////////////////////////////////////////////////////////////////////

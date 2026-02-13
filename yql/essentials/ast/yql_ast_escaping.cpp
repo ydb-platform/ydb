@@ -56,13 +56,13 @@ static void EscapedPrintChar(ui8 c, IOutputStream* out)
 
 static void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
 {
-    static const int MAX_ESCAPE_LEN = 10;
+    static const int MaxEscapeLen = 10;
 
     if (rune < 0x80) {
         EscapedPrintChar(static_cast<ui8>(rune & 0xff), out);
     } else {
         int i = 0;
-        char buf[MAX_ESCAPE_LEN];
+        char buf[MaxEscapeLen];
 
         if (rune < 0x10000) {
             buf[i++] = '\\';

@@ -1,8 +1,10 @@
-# coding: utf-8
+
+from __future__ import annotations
 
 from ruamel.yaml.compat import nprintf  # NOQA
 
-from typing import Text, Any, Dict, Optional, List  # NOQA
+if False:  # MYPY
+    from typing import Text, Any, Dict, Optional, List  # NOQA
 from .error import StreamMark  # NOQA
 
 SHOW_LINES = True
@@ -124,7 +126,7 @@ class Token:
         # don't push beyond last element
         if isinstance(target, (StreamEndToken, DocumentStartToken)):
             return
-        delattr(self, '_comment')
+        delattr(self, '_comment')  # NOQA
         tc = target.comment
         if not tc:  # target comment, just insert
             # special for empty value in key: value issue 25
@@ -134,7 +136,10 @@ class Token:
             # nprint('mco2:', self, target, target.comment, empty)
             return self
         if c[0] and tc[0] or c[1] and tc[1]:
-            raise NotImplementedError(f'overlap in comment {c!r} {tc!r}')
+            if isinstance(c[1], list) and isinstance(tc[1], list):
+                c[1].extend(tc[1])
+            else:
+                raise NotImplementedError(f'overlap in comment {c!r} {tc!r}')
         if c[0]:
             tc[0] = c[0]
         if c[1]:
@@ -153,7 +158,7 @@ class Token:
             return None  # nothing to do
         ret_val = [comment[0], None]
         if comment[1] is None:
-            delattr(self, '_comment')
+            delattr(self, '_comment')  # NOQA
         return ret_val
 
     def move_new_comment(self, target: Any, empty: bool = False) -> Any:
@@ -168,7 +173,7 @@ class Token:
         # don't push beyond last element
         if isinstance(target, (StreamEndToken, DocumentStartToken)):
             return
-        delattr(self, '_comment')
+        delattr(self, '_comment')  # NOQA
         tc = target.comment
         if not tc:  # target comment, just insert
             # special for empty value in key: value issue 25
@@ -336,7 +341,7 @@ class CommentToken(Token):
         if start_mark is None:
             assert column is not None
             self._column = column
-        Token.__init__(self, start_mark, None)  # type: ignore
+        Token.__init__(self, start_mark, end_mark)
         self._value = value
 
     @property
@@ -351,7 +356,7 @@ class CommentToken(Token):
 
     def reset(self) -> None:
         if hasattr(self, 'pre_done'):
-            delattr(self, 'pre_done')
+            delattr(self, 'pre_done')  # NOQA
 
     def __repr__(self) -> Any:
         v = f'{self.value!r}'

@@ -1,6 +1,6 @@
 # Comparing {{ ydb-short-name }} Cluster Configurations: V1 and V2
 
-In {{ ydb-short-name }}, there are two main approaches to cluster configuration management: [V1](../configuration-management/configuration-v1/index.md) and [V2](../configuration-management/configuration-v2/index.md). Starting from {{ ydb-short-name }} version 25.1, configuration V2 is supported, which unifies {{ ydb-short-name }} cluster management, allows working with configuration entirely through [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md), and also automates the most complex aspects of configuration (managing [static group](../../reference/configuration/index.md#blob_storage_config) and [State Storage](../../reference/configuration/index.md#domains-state)).
+In {{ ydb-short-name }}, there are two main approaches to cluster configuration management: [V1](../configuration-management/configuration-v1/index.md) and [V2](../configuration-management/configuration-v2/index.md). Starting from {{ ydb-short-name }} version 25.1, configuration V2 is supported, which unifies {{ ydb-short-name }} cluster management, allows working with configuration entirely through the [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md), and also automates the most complex aspects of configuration (managing [static group](../../reference/configuration/index.md#blob_storage_config) and [State Storage](../../reference/configuration/index.md#domains-state)). Configuration V2 is currently experimental and is not recommended for use in production environments.
 
 {% include [_](_includes/configuration-version-note.md) %}
 
@@ -12,7 +12,7 @@ This article describes the key differences between these two approaches.
 | **File management**         | Static: manual file placement on each node.<br>Dynamic: centralized upload via CLI. | Unified: [centralized upload](../configuration-management/configuration-v2/update-config.md) via CLI, automatic delivery to all nodes. |
 | **Delivery and application mechanism** | Static: read and applied from a local file at startup.<br>Dynamic: through [`Console` tablet](../../concepts/glossary.md#console). | Fully automatic via the [distributed configuration](../../concepts/glossary.md#distributed-configuration) mechanism. |
 | **State Storage and static group management** | **Manual**: mandatory [`domains_config`](../../reference/configuration/domains_config.md#domains-state) and [`blob_storage_config`](../../reference/configuration/blob_storage_config.md#blob_storage_config) sections in static configuration. | **Automatic**: managed by the [distributed configuration](../../concepts/glossary.md#distributed-configuration) system. |
-| **Recommended for {{ ydb-short-name }} versions** | All versions before 25.1.1.                             | Version 25.1 and above.                                |
+| **Recommended for {{ ydb-short-name }} versions** | Production use for all {{ ydb-short-name }} versions. | Experimental use on clusters version 25.1 and above. |
 
 ## Configuration V1
 

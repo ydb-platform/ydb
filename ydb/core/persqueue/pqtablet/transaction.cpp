@@ -359,7 +359,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
     }
 }
 
-void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event)
+void TDistributedTransaction::OnTxDone(const TEvPQ::TEvTxDone& event)
 {
     TX_ENSURE(Step == event.Step);
     TX_ENSURE(TxId == event.TxId);
@@ -367,6 +367,12 @@ void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event
     TX_ENSURE(Partitions.contains(event.Partition.OriginalPartitionId));
 
     ++PartitionRepliesCount;
+}
+
+void TDistributedTransaction::SendPlanStepAcksAfterCompletion(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event)
+{
+    PlanStepSender = sender;
+    PlanStepEvent = std::move(event);
 }
 
 auto TDistributedTransaction::GetDecision() const -> EDecision
@@ -405,7 +411,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
                                           EState state)
 {
     auto tx = Serialize(state);
-    PQ_LOG_TX_D("save tx " << tx.ShortDebugString());
+    PQ_LOG_TX_D("Save tx " << tx.ShortDebugString());
 
     TString value;
     TX_ENSURE(tx.SerializeToString(&value));
@@ -413,6 +419,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     auto command = request.AddCmdWrite();
     command->SetKey(GetKey());
     command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
 NKikimrPQ::TTransaction TDistributedTransaction::Serialize() {

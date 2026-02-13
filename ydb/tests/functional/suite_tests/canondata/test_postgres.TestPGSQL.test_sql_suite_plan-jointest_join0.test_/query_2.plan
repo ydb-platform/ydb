@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-Filter",
+                                        "Node Type": "Limit-CrossJoin-InnerJoin (Map)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -85,7 +85,7 @@
                                                         "ExternalPlanNodeId": 10
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (MapJoin)"
+                                                "Name": "InnerJoin (Map)"
                                             },
                                             {
                                                 "Inputs": [

@@ -5,6 +5,7 @@ import ydb
 import configparser
 import time
 import json
+import argparse
 from datetime import datetime, timezone, timedelta
 import requests
 from typing import List, Dict, Any, Optional
@@ -60,6 +61,89 @@ def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[d
 
 
 
+def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Optional[Dict[str, Any]]:
+    """Fetch a single issue by number from GitHub repository"""
+    print(f"Debug mode: Fetching issue #{issue_number} from repository {org_name}/{repo_name}...")
+    start_time = time.time()
+    
+    issue_query = """
+    {
+      organization(login: "%s") {
+        repository(name: "%s") {
+          issue(number: %d) {
+            id
+            number
+            title
+            url
+            state
+            stateReason
+            body
+            bodyText
+            createdAt
+            updatedAt
+            closedAt
+            author {
+              login
+              url
+            }
+            assignees(first: 10) {
+              nodes {
+                login
+                url
+              }
+            }
+            labels(first: 20) {
+              nodes {
+                id
+                name
+                color
+                description
+              }
+            }
+            milestone {
+              id
+              title
+              url
+              state
+              dueOn
+            }
+            reactions {
+              totalCount
+            }
+            comments {
+              totalCount
+            }
+            repository {
+              id
+              name
+              url
+            }
+            participants(first: 10) {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+    """
+    
+    query = issue_query % (org_name, repo_name, issue_number)
+    result = run_query(query)
+    
+    if result and 'data' in result:
+        repository = result['data']['organization']['repository']
+        issue = repository.get('issue')
+        
+        if issue is None:
+            print(f"Issue #{issue_number} not found")
+            return None
+        
+        elapsed = time.time() - start_time
+        print(f"Fetched issue #{issue_number} (took {elapsed:.2f}s)")
+        return issue
+    
+    return None
+
 def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME, since: Optional[datetime] = None) -> List[Dict[str, Any]]:
     """Fetch all issues from GitHub repository with comprehensive information"""
     if since:
@@ -89,6 +173,7 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               title
               url
               state
+              stateReason
               body
               bodyText
               createdAt
@@ -407,6 +492,9 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         # Issue type from project fields
         issue_type = issue_project_fields.get('type') or issue_project_fields.get('Type')
         
+        # Extract state reason (e.g., COMPLETED, DUPLICATE, NOT_PLANNED)
+        state_reason = issue.get('stateReason')
+        
         # Extract assignees
         assignees = []
         for assignee in issue.get('assignees', {}).get('nodes', []):
@@ -464,6 +552,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             'title': issue.get('title', ''),
             'url': issue.get('url', ''),
             'state': issue.get('state', ''),
+            'state_reason': state_reason,
             'body': issue.get('body', '') or '',
             'body_text': issue.get('bodyText', ''),
             
@@ -528,6 +617,7 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
             `title` Utf8,
             `url` Utf8,
             `state` Utf8,
+            `state_reason` Utf8,  -- Reason for closing (COMPLETED, DUPLICATE, NOT_PLANNED)
             `body` Utf8,
             `body_text` Utf8,
             
@@ -588,13 +678,17 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
 
 def main():
     """Main function to export GitHub issues to YDB"""
+    parser = argparse.ArgumentParser(description='Export GitHub issues to YDB')
+    parser.add_argument('--full', action='store_true', 
+                        help='Perform full export of all issues (default: incremental update)')
+    parser.add_argument('--issue', type=int, metavar='NUMBER',
+                        help='Debug mode: fetch only specific issue by number (e.g., --issue 26344)')
+    args = parser.parse_args()
+    
     print("Starting GitHub issues export to YDB")
     script_start_time = time.time()
     
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         
         # Check credentials
         if not ydb_wrapper.check_credentials():
@@ -606,27 +700,50 @@ def main():
             print("Error: Environment variable GITHUB_TOKEN is missing")
             return 1
         
-        table_path = "github_data/issues"
-        full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
+        # Get table path from config
+        table_path = ydb_wrapper.get_table_path("issues")
         batch_size = 100
         
         try:
             # Create table if needed
             create_issues_table(ydb_wrapper, table_path)
             
-            # Check if this is an incremental update
-            last_update_time = get_last_update_time(ydb_wrapper, table_path)
+            # Initialize issues variable
+            issues = None
             
-            if last_update_time:
-                print(f"Incremental update: fetching issues updated since {last_update_time.isoformat()}")
-                # Add a small buffer to avoid missing issues due to timing issues
-                since_time = last_update_time - timedelta(minutes=5)
+            # Check if debug mode (single issue) is requested
+            if args.issue:
+                print(f"Debug mode: fetching only issue #{args.issue}")
+                single_issue = fetch_single_issue(ORG_NAME, REPO_NAME, args.issue)
+                
+                if single_issue is None:
+                    print(f"Issue #{args.issue} not found")
+                    return 1
+                
+                issues = [single_issue]
             else:
-                print("Full export: fetching all issues")
-                since_time = None
+                # Check if this is an incremental update
+                if args.full:
+                    print("Full export: fetching all issues (--full flag specified)")
+                    since_time = None
+                else:
+                    last_update_time = get_last_update_time(ydb_wrapper, table_path)
+                    
+                    if last_update_time:
+                        print(f"Incremental update: fetching issues updated since {last_update_time.isoformat()}")
+                        # Add a small buffer to avoid missing issues due to timing issues
+                        since_time = last_update_time - timedelta(minutes=5)
+                    else:
+                        print("Full export: fetching all issues (no previous data found)")
+                        since_time = None
+                
+                # Fetch issues from GitHub
+                issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since_time)
             
-            # Fetch issues from GitHub
-            issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since_time)
+            # Validate that issues were fetched
+            if issues is None:
+                print("Error: Failed to fetch issues from GitHub")
+                return 1
             
             if not issues:
                 print("No issues fetched from GitHub")
@@ -650,6 +767,33 @@ def main():
             print(f"Uploading {len(transformed_issues)} issues in batches of {batch_size}")
             upload_start_time = time.time()
             
+            # Debug: print issue data before bulk upsert 
+            debug_issue_number = args.issue
+            debug_issue = None
+            for issue in transformed_issues:
+                if issue.get('issue_number') == debug_issue_number:
+                    debug_issue = issue
+                    break
+            
+            if debug_issue:
+                print(f"\n=== DEBUG: Issue #{debug_issue_number} before bulk upsert ===")
+                print(f"Issue number: {debug_issue.get('issue_number')}")
+                print(f"Title: {debug_issue.get('title')}")
+                print(f"State: {debug_issue.get('state')}")
+                print(f"State reason: {debug_issue.get('state_reason')}")
+                print(f"URL: {debug_issue.get('url')}")
+                print(f"\nAll fields for issue #{debug_issue_number}:")
+                for key, value in sorted(debug_issue.items()):
+                    # Truncate long values for readability
+                    if isinstance(value, str) and len(value) > 100:
+                        display_value = value[:100] + "..."
+                    else:
+                        display_value = value
+                    print(f"  {key}: {display_value}")
+                print("=" * 60 + "\n")
+            elif args.issue:
+                print(f"\n=== DEBUG: Issue #{debug_issue_number} not found in transformed_issues ===\n")
+            
             # Подготавливаем column_types один раз
             column_types = (
                 ydb.BulkUpsertColumns()
@@ -662,6 +806,7 @@ def main():
                 .add_column("title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("state_reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("body", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("body_text", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 
@@ -703,18 +848,7 @@ def main():
                 .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
             )
             
-            # Используем bulk_upsert_batches для агрегированной статистики
-            ydb_wrapper.bulk_upsert_batches(full_table_path, transformed_issues, column_types, batch_size)
-            
-            upload_elapsed = time.time() - upload_start_time
-            print(f"All issues uploaded (total upload time: {upload_elapsed:.2f}s)")
-            
-            # Show cluster info
-            cluster_info = ydb_wrapper.get_cluster_info()
-            print(f"\n📊 Export Summary:")
-            print(f"   Session ID: {cluster_info.get('session_id')}")
-            print(f"   Cluster Version: {cluster_info.get('version')}")
-            print(f"   Statistics Status: {cluster_info.get('statistics_status')}")
+            ydb_wrapper.bulk_upsert_batches(table_path, transformed_issues, column_types, batch_size)
             
             script_elapsed = time.time() - script_start_time
             print(f"Script completed successfully (total time: {script_elapsed:.2f}s)")

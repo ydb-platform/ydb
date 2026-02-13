@@ -182,8 +182,10 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
     if (srcPath->IsTable()) {
         context.SS->Tables.at(srcPath->PathId)->DetachShardsStats();
+        context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
+    } else if (srcPath->IsColumnTable()) {
+        context.SS->PersistColumnTableRemove(db, srcPath->PathId, context.Ctx);
     }
-    context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
     context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
 
     IncParentDirAlterVersionWithRepublish(operationId, srcPath, context);
@@ -279,11 +281,13 @@ public:
             context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
             context.SS->PersistTable(db, dstPath.Base()->PathId);
             context.SS->PersistTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
+            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo, TVector<TTableShardInfo>(tableInfo->GetPartitions()));
         } else if (srcPath->IsColumnTable()) {
             auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
             auto tableInfo = context.SS->ColumnTables.BuildNew(dstPath.Base()->PathId, srcTable.GetPtr());
             tableInfo->AlterVersion += 1;
             context.SS->PersistColumnTable(db, dstPath.Base()->PathId, *tableInfo, false);
+            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         } else {
             Y_ABORT();
         }
@@ -529,6 +533,131 @@ public:
     }
 };
 
+// Must be in sync with NTableState::TProposedWaitParts
+class TMoveTableProposedWaitParts : public TSubOperationState {
+private:
+    const TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder() << "TMoveTable TProposedWaitParts"
+                                << " operationId# " << OperationId;
+    }
+
+    template <typename TEvent>
+    bool HandleReplyImpl(const TEvent& ev, TOperationContext& context) {
+        TTabletId ssId = context.SS->SelfTabletId();
+        const auto& evRecord = ev->Get()->Record;
+
+        LOG_INFO_S(
+            context.Ctx,
+            NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName() << " at tablet: " << ssId
+        );
+        LOG_DEBUG_S(
+            context.Ctx,
+            NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName() << " at tablet: " << ssId
+                        << " message: " << evRecord.ShortDebugString()
+        );
+
+        if (!NTableState::CollectSchemaChanged(OperationId, ev, context)) {
+            LOG_DEBUG_S(
+                context.Ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
+                            << " CollectSchemaChanged: false"
+            );
+            return false;
+        }
+
+        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
+        TTxState& txState = *context.SS->FindTx(OperationId);
+
+        if (!txState.ReadyForNotifications) {
+            LOG_DEBUG_S(
+                context.Ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
+                            << " ReadyForNotifications: false"
+            );
+            return false;
+        }
+
+        return true;
+    }
+
+public:
+    TMoveTableProposedWaitParts(TOperationId id) : OperationId(id) {
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed");
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+                TEvDataShard::TEvProposeTransactionResult::EventType,
+                TEvColumnShard::TEvProposeTransactionResult::EventType,
+                TEvPrivate::TEvOperationPlan::EventType}
+        );
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(
+            context.Ctx,
+            NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << " ProgressState"
+                        << " at tablet: " << ssId
+        );
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        txState->ClearShardsInProgress();
+        for (TTxState::TShardOperation& shard : txState->Shards) {
+            if (shard.Operation < TTxState::ProposedWaitParts) {
+                shard.Operation = TTxState::ProposedWaitParts;
+                context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
+            }
+
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
+            TTabletId tablet = context.SS->ShardInfos.at(shard.Idx).TabletID;
+
+            const TShardInfo& shardInfo = context.SS->ShardInfos.at(shard.Idx);
+
+            if (shardInfo.TabletType == ETabletType::ColumnShard) {
+                auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+                context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
+            }
+
+            context.OnComplete.RouteByTablet(OperationId, tablet);
+        }
+
+        txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
+
+        // Move all notifications that were already received
+        // NOTE: SchemeChangeNotification is sent form DS after it has got PlanStep from coordinator and the schema tx has completed
+        // At that moment the SS might not have received PlanStep from coordinator yet (this message might be still on its way to SS)
+        // So we are going to accumulate SchemeChangeNotification that are received before this Tx switches to WaitParts state
+        txState->AcceptPendingSchemeNotification();
+
+        if (txState->ShardsInProgress.empty()) {
+            NTableState::AckAllSchemaChanges(OperationId, *txState, context);
+            context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+};    
+    
 class TDone: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -636,7 +765,7 @@ class TMoveTable: public TSubOperation {
         case TTxState::DeletePathBarrier:
             return MakeHolder<TDeleteTableBarrier>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return MakeHolder<TMoveTableProposedWaitParts>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:

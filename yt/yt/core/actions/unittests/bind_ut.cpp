@@ -2,8 +2,13 @@
 
 #include <yt/yt/core/actions/bind.h>
 #include <yt/yt/core/actions/callback.h>
+#include <yt/yt/core/actions/current_invoker.h>
+
+#include <yt/yt/core/concurrency/action_queue.h>
 
 #include <yt/yt/core/misc/public.h>
+
+#include <yt/yt/core/tracing/trace_context.h>
 
 namespace NYT {
 namespace {
@@ -1167,6 +1172,21 @@ TEST_F(TBindTest, MoveOnlyLambdaSupport)
     // Call twice just in case
     EXPECT_EQ(5u, f());
     EXPECT_EQ(5u, f());
+}
+
+TEST_F(TBindTest, TraceContextPropagation)
+{
+    auto actionQueue = New<NConcurrency::TActionQueue>();
+    auto context = NTracing::TTraceContext::NewRoot("root");
+    NTracing::TTraceContextGuard guard(context);
+
+    NConcurrency::WaitFor(
+        BIND([context] () {
+            EXPECT_EQ(NTracing::GetCurrentTraceContext()->GetTraceId(), context->GetTraceId());
+        })
+        .AsyncVia(actionQueue->GetInvoker())
+        .Run())
+        .ThrowOnError();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

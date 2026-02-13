@@ -60,7 +60,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
             for (auto path: section.Paths()) {
                 updatedPaths.push_back(path);
 
-                bool hasRanges = false;
+                bool hasRangesOrQLFilter = false;
                 if (!path.Ranges().Maybe<TCoVoid>()) {
                     bool pathLimits = false;
                     for (auto range: path.Ranges().Cast<TExprList>()) {
@@ -69,12 +69,15 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                             break;
                         }
                         if (range.Maybe<TYtRangeItemBase>()) {
-                            hasRanges = true;
+                            hasRangesOrQLFilter = true;
                         }
                     }
                     if (pathLimits) {
                         continue;
                     }
+                }
+                if (!path.QLFilter().Maybe<TCoVoid>()) {
+                    hasRangesOrQLFilter = true;
                 }
                 auto maybeInnerMerge = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtMerge>();
                 if (!maybeInnerMerge) {
@@ -126,7 +129,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                 if (hasTakeSkip && sortedMerge && NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
                     continue;
                 }
-                if ((hasTakeSkip || hasRanges) && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
+
+                if ((hasTakeSkip || hasRangesOrQLFilter) && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>() || !path.QLFilter().template Maybe<TCoVoid>(); })) {
                     continue;
                 }
 
@@ -177,7 +181,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                     columns = ToAtomList(items, op.Pos(), ctx);
                 }
 
-                if (!columns.IsValid() && path.Ranges().Maybe<TCoVoid>() && !unordered) {
+                if (!columns.IsValid() && path.Ranges().Maybe<TCoVoid>() && path.QLFilter().Maybe<TCoVoid>() && !unordered) {
                     for (auto mergePath: innerMergeSection.Paths()) {
                         updatedPaths.push_back(mergePath);
                     }
@@ -297,6 +301,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMergeBeforePublis
                 return path.Table().Maybe<TYtOutput>()
                     && path.Columns().Maybe<TCoVoid>()
                     && path.Ranges().Maybe<TCoVoid>()
+                    && path.QLFilter().Maybe<TCoVoid>()
                     && !TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic;
             })) {
                 continue;
@@ -416,7 +421,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MapToMerge(TExprBase no
         .Input()
             .Add(section)
         .Build()
-        .Settings(NYql::KeepOnlySettings(map.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::QLFilter, ctx))
+        .Settings(NYql::KeepOnlySettings(map.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::KeepSorted, ctx))
         .Done();
 }
 
@@ -436,7 +441,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MergeToCopy(TExprBase n
         return node;
     }
 
-    if (NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::QLFilter)) {
+    if (NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks)) {
         return node;
     }
 
@@ -447,7 +452,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MergeToCopy(TExprBase n
 
     TYtSection section = merge.Input().Item(0);
     TYtPath path = section.Paths().Item(0);
-    if (!path.Ranges().Maybe<TCoVoid>() || !path.Ref().GetTypeAnn()->Equals(*path.Table().Ref().GetTypeAnn())) {
+    if (!path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || !path.Ref().GetTypeAnn()->Equals(*path.Table().Ref().GetTypeAnn())) {
         return node;
     }
     if (path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtEquiJoin>()) {
@@ -545,7 +550,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToS
         return node;
     }
 
-    if (TYtMerge::Match(node.Raw())) {
+    if (TYtMerge::Match(node.Raw()) || TYtMap::Match(node.Raw())) {
         // To not get stuck in a loop
         return node;
     }
@@ -605,7 +610,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToS
                     .Paths()
                         .Add(otherInputs)
                     .Build()
-                    .Settings(section.Settings())
+                    .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::SysColumns, ctx))
                     .Done());
             hasChanges = true;
         } else {

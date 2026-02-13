@@ -212,6 +212,18 @@ public:
     }
 };
 
+class TConflictDetector: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(
+        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TConflictDetector()
+        : TBase("CONFLICT_DETECTOR") {
+    }
+};
+
 class TSnapshotFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

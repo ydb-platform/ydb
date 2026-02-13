@@ -179,7 +179,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
     void ResolveKeys() {
         auto request = MakeHolder<TResolve>();
-        request->DatabaseName = NKikimr::CanonizePath(GetDatabaseName());
+        request->DatabaseName = GetDatabaseName();
 
         request->ResultSet.emplace_back(std::move(KeyDesc));
         request->ResultSet.back().Access = NACLib::UpdateRow;

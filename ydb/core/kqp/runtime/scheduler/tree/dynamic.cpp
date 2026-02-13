@@ -16,11 +16,12 @@ TPool* TTreeElement::GetParent() const {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStaticAttributes& attrs)
+TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare, const TStaticAttributes& attrs)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
     , TTreeElement(id, attrs)
     , NHdrf::TQuery<ETreeType::DYNAMIC>(id, attrs)
     , DelayParams(delayParams)
+    , AllowMinFairShare(allowMinFairShare)
 {
 }
 
@@ -54,28 +55,32 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
 }
 
 TSchedulableTaskList::iterator TQuery::AddTask(const TSchedulableTaskPtr& task) {
-    TWriteGuard lock(TasksMutex);
+    TGuard lock(TasksMutex);
     return SchedulableTasks.emplace(SchedulableTasks.end(), task, false);
 }
 
-void TQuery::RemoveTask(const TSchedulableTaskList::iterator& it) {
-    TWriteGuard lock(TasksMutex);
-    SchedulableTasks.erase(it);
-}
-
 ui32 TQuery::ResumeTasks(ui32 count) {
-    TReadGuard lock(TasksMutex);
+    TTryGuard lock(TasksMutex);
     ui32 run = 0;
+
+    if (!lock) {
+        // Either tasks are resumed somewhere else - which is ok, or we're adding new task - which is infrequent event.
+        return run;
+    }
 
     count = std::min<ui32>(count, SchedulableTasks.size());
     count = std::min<ui32>(count, Throttle);
 
-    for (auto it = SchedulableTasks.begin(); run < count && it != SchedulableTasks.end(); ++it) {
-        if (it->second) {
-            if (auto task = it->first.lock()) {
+    for (auto it = SchedulableTasks.begin(); run < count && it != SchedulableTasks.end();) {
+        if (auto task = it->first.lock()) {
+            if (it->second) {
                 task->Resume();
                 ++run;
             }
+            ++it;
+        } else {
+            // Lazy removal is acceptable since the query initially has constant number of tasks.
+            it = SchedulableTasks.erase(it);
         }
     }
 
@@ -112,6 +117,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
     Counters->InFlight     = group->GetCounter("InFlight",     false);
     Counters->Waiting      = group->GetCounter("Waiting",      false);
+    Counters->Queries      = group->GetCounter("Queries",      false);
     Counters->Usage        = group->GetCounter("Usage",        true);
     Counters->UsageResume  = group->GetCounter("UsageResume",  true);
     Counters->Throttle     = group->GetCounter("Throttle",     true);
@@ -143,6 +149,9 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     }
 
     if (IsLeaf()) {
+        if (Counters) {
+            Counters->Queries->Set(ChildrenSize());
+        }
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
             newPool->AddQuery(NSnapshot::TQueryPtr(query->TakeSnapshot()));
         });

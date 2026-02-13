@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             TTestEnvCompDefragIndependent env(0.01);
             ui32 N = 50000;
             ui32 batchSize = 1000;
-            
+
             env.WriteData(N, batchSize);
             env.RunFullCompaction();
 
@@ -805,7 +805,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             TTestEnvCompDefragIndependent env(0.01);
             ui32 N = 50000;
             ui32 batchSize = 1000;
-            
+
             env.WriteData(N, batchSize);
             env.RunFullCompaction();
 

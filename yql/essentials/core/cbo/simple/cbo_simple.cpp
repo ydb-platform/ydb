@@ -9,7 +9,7 @@ namespace {
 
 class TSimpleOptimizerFactory: public IOptimizerFactory {
 public:
-    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TNativeSettings& settings) const override {
+    IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TCBOSettings& settings) const override {
         Y_UNUSED(pctx);
         Y_UNUSED(ctx);
         Y_UNUSED(settings);
@@ -17,7 +17,7 @@ public:
         Y_UNREACHABLE();
     }
 
-    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerPG(IProviderContext& pctx, TExprContext& ctx, const TPGSettings& settings) const override {
+    IOptimizerNew::TPtr MakeJoinCostBasedOptimizerPG(IProviderContext& pctx, TExprContext& ctx, const TPGSettings& settings) const override {
         return IOptimizerNew::TPtr(MakePgOptimizerNew(pctx, ctx, settings.Logger));
     }
 };

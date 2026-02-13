@@ -106,18 +106,21 @@ private:
     class TTxStoreWalleTask;
     class TTxUpdateConfig;
     class TTxUpdateDowntimes;
+    class TTxStoreFirstBootTimestamp;
 
     struct TActionOptions {
         TDuration PermissionDuration;
         NKikimrCms::ETenantPolicy TenantPolicy;
         NKikimrCms::EAvailabilityMode AvailabilityMode;
         bool PartialPermissionAllowed;
+        i32 Priority;
 
         TActionOptions(TDuration dur)
             : PermissionDuration(dur)
             , TenantPolicy(NKikimrCms::DEFAULT)
             , AvailabilityMode(NKikimrCms::MODE_MAX_AVAILABILITY)
             , PartialPermissionAllowed(false)
+            , Priority(0)
         {}
     };
 
@@ -150,6 +153,7 @@ private:
     ITransaction *CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
+    ITransaction *CreateTxStoreFirstBootTimestamp();
 
     static void AuditLog(const TActorContext &ctx, const TString &message) {
         NCms::AuditLog("CMS tablet", message, ctx);
@@ -226,10 +230,10 @@ private:
     #define HFuncChecked(TEvType, HandleFunc) \
         case TEvType::EventType: { \
             typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-            if (State->Config.Enable) { \
-                HandleFunc(*x, this->ActorContext()); \
+            if (State->Config.DisableMaintenance) { \
+                ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "Maintenance is disabled", this->ActorContext()); \
             } else { \
-                ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "CMS is disabled", this->ActorContext()); \
+                HandleFunc(*x, this->ActorContext()); \
             } \
             break; \
         } Y_SEMICOLON_GUARD
@@ -360,7 +364,7 @@ private:
         TErrorInfo &error,
         const TActorContext &ctx) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,
-        const TString &owner, const TActorContext &ctx, bool check = false);
+        const TString &owner, i32 priority, const TActorContext &ctx, bool check = false);
     void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false);
     void ScheduleCleanup(TInstant time, const TActorContext &ctx);
     void SchedulePermissionsCleanup(const TActorContext &ctx);

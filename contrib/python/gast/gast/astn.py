@@ -15,15 +15,18 @@ def _generate_translators(to):
                 return node
 
         def generic_visit(self, node):
-            cls = type(node).__name__
-            try:
-                new_node = getattr(to, cls)()
-            except AttributeError:
+            class_name = type(node).__name__
+            if not hasattr(to, class_name):
                 # handle nodes that are not part of the AST
                 return
-
-            for field in node._fields:
-                setattr(new_node, field, self._visit(getattr(node, field)))
+            cls = getattr(to, class_name)
+            new_node = cls(
+                **{
+                    field: self._visit(getattr(node, field))
+                    for field in node._fields
+                    if hasattr(node, field)
+                }
+            )
 
             for attr in node._attributes:
                 try:

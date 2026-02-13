@@ -22,8 +22,6 @@
 #include "table_commands.h"
 #include "transaction_commands.h"
 
-#include <yt/yt/library/formats/format.h>
-
 #include <yt/yt/client/api/client_cache.h>
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/sticky_transaction_pool.h>
@@ -31,6 +29,10 @@
 #include <yt/yt/core/yson/null_consumer.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
+#include <yt/yt/library/formats/format.h>
 
 #include <yt/yt/library/tvm/tvm_base.h>
 
@@ -297,6 +299,7 @@ public:
 
         REGISTER    (TTransferAccountResourcesCommand,     "transfer_account_resources",      Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TTransferPoolResourcesCommand,        "transfer_pool_resources",         Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TTransferBundleResourcesCommand,      "transfer_bundle_resources",       Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TWriteJournalCommand,                 "write_journal",                   Tabular,    Null,       true,  true,  ApiVersion3);
         REGISTER    (TWriteJournalCommand,                 "write_journal",                   Tabular,    Structured, true,  true,  ApiVersion4);
@@ -307,6 +310,8 @@ public:
         REGISTER_ALL(TGetJobInputPathsCommand,             "get_job_input_paths",             Null,       Structured, false, true );
         REGISTER_ALL(TGetJobStderrCommand,                 "get_job_stderr",                  Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Binary,     false, true );
+        REGISTER_ALL(TListJobTracesCommand,                "list_job_traces",                 Null,       Structured, false, false );
+        REGISTER_ALL(TCheckOperationPermissionCommand,     "check_operation_permission",      Null,       Structured, false, false );
         REGISTER_ALL(TGetJobFailContextCommand,            "get_job_fail_context",            Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobSpecCommand,                   "get_job_spec",                    Null,       Structured, false, true );
         REGISTER_ALL(TListOperationEventsCommand,          "list_operation_events",           Null,       Structured, false, false);
@@ -314,6 +319,7 @@ public:
         REGISTER_ALL(TListJobsCommand,                     "list_jobs",                       Null,       Structured, false, false);
         REGISTER_ALL(TGetJobCommand,                       "get_job",                         Null,       Structured, false, false);
         REGISTER_ALL(TPollJobShellCommand,                 "poll_job_shell",                  Null,       Structured, true,  false);
+        REGISTER_ALL(TRunJobShellCommandCommand,           "run_job_shell_command",           Null,       Binary,     true,  true );
         REGISTER_ALL(TGetOperationCommand,                 "get_operation",                   Null,       Structured, false, false);
 
         REGISTER    (TDumpJobContextCommand,               "dump_job_context",                Null,       Null,       true,  false, ApiVersion3);
@@ -337,6 +343,7 @@ public:
         REGISTER_ALL(TGetMasterConsistentStateCommand,     "get_master_consistent_state",     Null,       Structured, true,  false);
         REGISTER_ALL(TExitReadOnlyCommand,                 "exit_read_only",                  Null,       Structured, true,  false);
         REGISTER_ALL(TMasterExitReadOnlyCommand,           "master_exit_read_only",           Null,       Structured, true,  false);
+        REGISTER_ALL(TResetDynamicallyPropagatedMasterCellsCommand,          "reset_dynamically_propagated_master_cells",          Null,       Structured, true,  false);
         REGISTER_ALL(TDiscombobulateNonvotingPeersCommand, "discombobulate_nonvoting_peers",  Null,       Structured, true,  false);
         REGISTER_ALL(TSwitchLeaderCommand,                 "switch_leader",                   Null,       Structured, true,  false);
         REGISTER_ALL(TResetStateHashCommand,               "reset_state_hash",                Null,       Structured, true,  false);
@@ -404,6 +411,7 @@ public:
         REGISTER    (TGetPipelineStateCommand,             "get_pipeline_state",              Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TFlowExecuteCommand,                  "flow_execute",                    Structured, Structured, true,  true,  ApiVersion4);
+        REGISTER    (TFlowExecutePlaintextCommand,         "flow_execute_plaintext",          Null,       Binary,     true,  true,  ApiVersion4);
 
         REGISTER    (TStartShuffleCommand,                 "start_shuffle",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReadShuffleDataCommand,              "read_shuffle_data",               Null,       Tabular,    false,  true, ApiVersion4);
@@ -431,6 +439,7 @@ public:
             REGISTER_ALL(TUnreferenceLeaseCommand,          "unreference_lease",                      Null,       Structured, true,  false);
             REGISTER_ALL(TForsakeChaosCoordinator,          "forsake_chaos_coordinator",              Null,       Null,       true,  true );
             REGISTER_ALL(TGetOrderedTabletSafeTrimRowCount, "get_ordered_tablet_safe_trim_row_count", Null,       Structured, false, false);
+            REGISTER_ALL(TGetConnectionOrchidValue,         "get_connection_orchid_value",            Null,       Structured, false, false);
         }
 
 #undef REGISTER
@@ -450,9 +459,10 @@ public:
         }
 
         const auto& entry = it->second;
-        TAuthenticationIdentity identity(
+        TClientAuthenticationIdentity identity(
             request.AuthenticatedUser,
-            request.UserTag.value_or(""));
+            request.UserTag.value_or(""),
+            request.ServiceTicket.value_or(""));
 
         YT_VERIFY(entry.Descriptor.InputType == EDataType::Null || request.InputStream);
         YT_VERIFY(entry.Descriptor.OutputType == EDataType::Null || request.OutputStream);

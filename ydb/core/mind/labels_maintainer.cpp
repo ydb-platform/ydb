@@ -168,14 +168,8 @@ private:
 
     void RemoveLabels(const TActorContext &ctx)
     {
-        RemoveDatabaseLabels(ctx);
-        RemoveAttributeLabels(ctx);
-    }
-
-    void RemoveDatabaseLabels(const TActorContext &ctx)
-    {
         auto root = AppData(ctx)->Counters;
-        for (auto &service : DatabaseSensorServices) {
+        for (auto &service : AllSensorServices) {
             LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
                         "Removing database labels from " << service << " counters");
 
@@ -192,97 +186,99 @@ private:
         }
     }
 
-    void RemoveAttributeLabels(const TActorContext &ctx)
-    {
-        auto root = AppData(ctx)->Counters;
-        for (auto &service : DatabaseAttributeSensorServices) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                        "Removing database attribute labels from " << service << " counters");
-
-            ReplaceSubgroup(root, service);
-        }
-    }
-
     void AddLabels(const TActorContext &ctx)
     {
-        AddDatabaseLabels(ctx);
-        AddAttributeLabels(ctx);
-    }
+        // NOTE: order of labels should match skip order in GetServiceCounters
+        TSmallVec<std::pair<TString, TString>> dbLabels;
+        TSmallVec<std::pair<TString, TString>> attrLabels;
 
-    void AddDatabaseLabels(const TActorContext &ctx)
-    {
-        if (!DatabaseLabelsEnabled)
-            return;
+        if (DatabaseLabelsEnabled && CurrentDatabaseLabel) {
+            if (GroupAllMetrics) {
+                dbLabels.push_back({DATABASE_LABEL, ""});
+            } else {
+                dbLabels.push_back({DATABASE_LABEL, CurrentDatabaseLabel});
+            }
 
-        if (!CurrentDatabaseLabel)
-            return;
-
-        auto root = AppData(ctx)->Counters;
-        TSmallVec<std::pair<TString, TString>> labels;
-        if (GroupAllMetrics) {
-            labels.push_back({DATABASE_LABEL, ""});
-        } else {
-            labels.push_back({DATABASE_LABEL, CurrentDatabaseLabel});
-        }
-
-        labels.push_back({SLOT_LABEL, "static"});
-        if (!CurrentHostLabel.empty()) {
-            labels.push_back({"host", CurrentHostLabel});
-        }
-
-        AddLabelsToServices(ctx, labels, DatabaseSensorServices);
-    }
-
-    void AddLabelsToServices(const TActorContext& ctx, const TSmallVec<std::pair<TString, TString>> &labels, const THashSet<TString> &services) {
-        if (!labels.empty()) {
-            auto root = AppData(ctx)->Counters;
-            for(auto &service: services) {
-                LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                            "Add labels to service " << service << " counters"
-                            << " labels=" << PrintLabels(labels));
-                const auto &[svc, subSvc] = ExtractSubServiceName(service);
-                auto oldGroup = root->GetSubgroup("counters", svc);
-                if (!subSvc.empty())
-                    oldGroup = oldGroup->GetSubgroup("subsystem", subSvc);
-                TIntrusivePtr<::NMonitoring::TDynamicCounters> serviceGroup = new ::NMonitoring::TDynamicCounters;
-                TIntrusivePtr<::NMonitoring::TDynamicCounters> curGroup = serviceGroup;
-
-                const auto* actualLabels = &labels;
-
-                TSmallVec<std::pair<TString, TString>> ydbLabels;
-                if (DatabaseAttributeSensorServices.contains(service)) {
-                    // explicitly remove "slot" label for external services ("ydb")
-                    ydbLabels = labels;
-                    if (auto it = std::find_if(ydbLabels.begin(), ydbLabels.end(), [](auto& el){ return el.first == SLOT_LABEL; });
-                        it != ydbLabels.end())
-                    {
-                        ydbLabels.erase(it);
-                        actualLabels = &ydbLabels;
-                    }
-                }
-
-                for (size_t i = 0; i < actualLabels->size() - 1; ++i) {
-                    curGroup = curGroup->GetSubgroup((*actualLabels)[i].first, (*actualLabels)[i].second);
-                }
-                curGroup->RegisterSubgroup(actualLabels->back().first, actualLabels->back().second, oldGroup);
-
-                auto rt = GetServiceCountersRoot(root, service);
-                rt->ReplaceSubgroup(subSvc.empty() ? "counters" : "subsystem", subSvc.empty() ? svc : subSvc, serviceGroup);
+            dbLabels.push_back({SLOT_LABEL, "static"});
+            if (!CurrentHostLabel.empty()) {
+                dbLabels.push_back({HOST_LABEL, CurrentHostLabel});
             }
         }
+
+        if (DatabaseAttributeLabelsEnabled) {
+            for (auto &attr : GetDatabaseAttributeLabels()) {
+                if (CurrentAttributes.contains(attr)) {
+                    attrLabels.push_back(*CurrentAttributes.find(attr));
+                }
+            }
+        }
+
+        if (!dbLabels.empty() || !attrLabels.empty()) {
+            AddLabelsToServices(ctx, AllSensorServices, dbLabels, attrLabels);
+        }
     }
 
-    void AddAttributeLabels(const TActorContext &ctx)
+    void AddLabelsToServices(const TActorContext& ctx,
+            const THashSet<TString>& services,
+            const TSmallVec<std::pair<TString, TString>>& dbLabels,
+            const TSmallVec<std::pair<TString, TString>>& attrLabels)
     {
-        if (!DatabaseAttributeLabelsEnabled)
-            return;
+        auto root = AppData(ctx)->Counters;
+        for (const auto& service : services) {
+            bool needDbLabels = DatabaseSensorServices.contains(service) && !dbLabels.empty();
+            bool needAttrLabels = DatabaseAttributeSensorServices.contains(service) && !attrLabels.empty();
+            if (!needDbLabels && !needAttrLabels) {
+                continue;
+            }
 
-        TSmallVec<std::pair<TString, TString>> labels;
-        for (auto &attr : GetDatabaseAttributeLabels())
-            if (CurrentAttributes.contains(attr))
-                labels.push_back(*CurrentAttributes.find(attr));
+            const auto [svc, subSvc] = ExtractSubServiceName(service);
 
-        AddLabelsToServices(ctx, labels, DatabaseAttributeSensorServices);
+            // Find current subgroup and corresponding root and label
+            auto serviceRoot = root;
+            std::pair<TString, TString> serviceLabel = { "counters", svc };
+            auto oldGroup = serviceRoot->GetSubgroup(serviceLabel.first, serviceLabel.second);
+            if (!subSvc.empty()) {
+                serviceRoot = oldGroup;
+                serviceLabel = { "subsystem", subSvc };
+                oldGroup = serviceRoot->GetSubgroup(serviceLabel.first, serviceLabel.second);
+            }
+
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> newGroup = new ::NMonitoring::TDynamicCounters;
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> curGroup = newGroup;
+
+            std::pair<TString, TString> lastLabel;
+            auto processLabel = [&](const auto& label) {
+                // Explicitly remove "slot" label for external services ("ydb")
+                if (DatabaseAttributeSensorServices.contains(service) && label.first == SLOT_LABEL) {
+                    return;
+                }
+
+                if (!lastLabel.first.empty()) {
+                    curGroup = curGroup->GetSubgroup(lastLabel.first, lastLabel.second);
+                }
+                lastLabel = label;
+            };
+
+            if (needDbLabels) {
+                for (const auto& label : dbLabels) {
+                    processLabel(label);
+                }
+            }
+
+            if (needAttrLabels) {
+                for (const auto& label : attrLabels) {
+                    processLabel(label);
+                }
+            }
+
+            if (lastLabel.first.empty()) {
+                // No labels to add
+                continue;
+            }
+
+            curGroup->RegisterSubgroup(lastLabel.first, lastLabel.second, oldGroup);
+            serviceRoot->ReplaceSubgroup(serviceLabel.first, serviceLabel.second, newGroup);
+        }
     }
 
     void ApplyConfig(const NKikimrConfig::TMonitoringConfig &config,
@@ -321,6 +317,10 @@ private:
                 DatabaseAttributeSensorServices.insert(service);
         if (DatabaseAttributeSensorServices.empty())
             DatabaseAttributeSensorServices = GetDatabaseAttributeSensorServices();
+
+        AllSensorServices.clear();
+        AllSensorServices.insert(DatabaseSensorServices.begin(), DatabaseSensorServices.end());
+        AllSensorServices.insert(DatabaseAttributeSensorServices.begin(), DatabaseAttributeSensorServices.end());
 
         if (!InitializedLocalOptions) {
             InitializedLocalOptions = true;
@@ -376,6 +376,7 @@ private:
 
     THashSet<TString> DatabaseSensorServices;
     THashSet<TString> DatabaseAttributeSensorServices;
+    THashSet<TString> AllSensorServices;
 
     TString NoneDatabasetLabelValue;
     TString MultipleDatabaseLabelValue;

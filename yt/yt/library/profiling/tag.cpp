@@ -6,14 +6,14 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTagIdList operator + (const TTagIdList& a, const TTagIdList& b)
+TTagIdList operator+(const TTagIdList& a, const TTagIdList& b)
 {
     auto result = a;
     result += b;
     return result;
 }
 
-TTagIdList& operator += (TTagIdList& a, const TTagIdList& b)
+TTagIdList& operator+=(TTagIdList& a, const TTagIdList& b)
 {
     a.insert(a.end(), b.begin(), b.end());
     return a;

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import ydb
+from ydb.tests.stress.common.instrumented_pools import InstrumentedSessionPool
 import json
 import logging
 import time
@@ -43,7 +44,7 @@ class Workload(object):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(f"{host}:{port}", database))
         self.kikimr_client = kikimr_client_factory(host, port)
-        self.pool = ydb.SessionPool(self.driver, size=200)
+        self.pool = InstrumentedSessionPool(self.driver, size=200)
         self.duration = duration
         self.batch_size = batch_size
         self.batch_count = batch_count

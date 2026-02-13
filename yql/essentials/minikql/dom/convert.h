@@ -394,7 +394,7 @@ private:
         return TUnboxedValuePod(new TIterator<true>(Original_.GetKeysIterator(), Converter_));
     }
 
-    TUnboxedValue GetPayloadsIterator() const {
+    TUnboxedValue GetPayloadsIterator() const override {
         return TUnboxedValuePod(new TIterator<false>(Original_.GetPayloadsIterator(), Converter_));
     }
 

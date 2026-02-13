@@ -27,6 +27,17 @@ public:
         NODE_STATE_DOWN /* "Down" */
     };
 
+    struct TLock {
+        TLock(i32 priority);
+
+        i32 Priority = 0;
+    };
+
+    struct TNodeInfo {
+        ENodeState State = NODE_STATE_UNSPECIFIED;
+        std::list<TLock> Locks;
+    };
+
 protected:
     static ENodeState NodeState(NKikimrCms::EState state);
 
@@ -36,11 +47,11 @@ public:
     virtual void AddNode(ui32 nodeId) = 0;
     virtual void UpdateNode(ui32 nodeId, NKikimrCms::EState) = 0;
 
-    virtual bool IsNodeLocked(ui32 nodeId) const = 0;
-    virtual void LockNode(ui32 nodeId) = 0;
-    virtual void UnlockNode(ui32 nodeId) = 0;
+    virtual bool IsNodeLocked(ui32 nodeId, i32 priority) const = 0;
+    virtual void LockNode(ui32 nodeId, i32 priority) = 0;
+    virtual void UnlockNode(ui32 nodeId, i32 priority) = 0;
 
-    virtual bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const = 0;
+    virtual bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, TReason& reason) const = 0;
 };
 
 /**
@@ -48,7 +59,7 @@ public:
  */
 class TNodesCounterBase : public INodesChecker {
 protected:
-    THashMap<ui32, ENodeState> NodeToState;
+    THashMap<ui32, TNodeInfo> Nodes;
     ui32 LockedNodesCount;
     ui32 DownNodesCount;
 
@@ -62,11 +73,11 @@ public:
     void AddNode(ui32 nodeId) override;
     void UpdateNode(ui32 nodeId, NKikimrCms::EState) override;
 
-    bool IsNodeLocked(ui32 nodeId) const override;
-    void LockNode(ui32 nodeId) override;
-    void UnlockNode(ui32 nodeId) override;
+    bool IsNodeLocked(ui32 nodeId, i32 priority) const override;
+    void LockNode(ui32 nodeId, i32 priority) override;
+    void UnlockNode(ui32 nodeId, i32 priority) override;
 
-    const THashMap<ui32, ENodeState>& GetNodeToState() const;
+    const THashMap<ui32, TNodeInfo>& GetNodes() const;
 };
 
 /**
@@ -101,7 +112,7 @@ public:
         DisabledNodesRatioLimit = ratioLimit;
     }
 
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const override final;
+    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, TReason& reason) const override final;
 };
 
 class TTenantLimitsCounter : public TNodesLimitsCounterBase {
@@ -149,7 +160,7 @@ public:
     {
     }
 
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const override final;
+    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, TReason& reason) const override final;
 };
 
 } // namespace NKikimr::NCms

@@ -6,10 +6,11 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSlruCacheConfigPtr TSlruCacheConfig::CreateWithCapacity(i64 capacity)
+TSlruCacheConfigPtr TSlruCacheConfig::CreateWithCapacity(i64 capacity, int shardCount)
 {
     auto result = New<TSlruCacheConfig>();
     result->Capacity = capacity;
+    result->ShardCount = shardCount;
     return result;
 }
 

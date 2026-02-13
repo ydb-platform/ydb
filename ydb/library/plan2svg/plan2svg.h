@@ -84,17 +84,29 @@ public:
     TAggregation LastMessage;
 };
 
+class TScalarMetric {
+public:
+    TScalarMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value);
+
+    std::shared_ptr<TSummaryMetric> Summary;
+    ui64 Value = 0;
+};
+
 class TConnection {
 
 public:
-    TConnection(TStage& stage, const TString& nodeType, ui32 planNodeId) : Stage(stage), NodeType(nodeType), PlanNodeId(planNodeId) {
+    TConnection(ui32 groupId, TStage& stage, const TString& nodeType, ui32 planNodeId) : GroupId(groupId), Stage(stage), NodeType(nodeType), PlanNodeId(planNodeId) {
     }
 
+    const ui32 GroupId;
     TStage& Stage;
     TString NodeType;
     std::shared_ptr<TStage> FromStage;
     std::shared_ptr<TSingleMetric> InputBytes;
     std::shared_ptr<TSingleMetric> InputRows;
+    ui64 InputChunks = 0;
+    ui64 InputLocalBytes = 0;
+    std::shared_ptr<TScalarMetric> InputChunkSize;
     std::vector<std::string> KeyColumns;
     std::vector<std::string> SortColumns;
     TString HashFunc;
@@ -104,9 +116,14 @@ public:
     ui32 CteOffsetY = 0;
     std::shared_ptr<TSingleMetric> CteOutputBytes;
     std::shared_ptr<TSingleMetric> CteOutputRows;
+    std::shared_ptr<TSingleMetric> CteOperatorOutputRows;
+    ui64 CteOutputChunks = 0;
+    ui64 CteOutputLocalBytes = 0;
+    std::shared_ptr<TScalarMetric> CteOutputChunkSize;
     const NJson::TJsonValue* StatsNode = nullptr;
     const ui32 PlanNodeId;
-    TStringBuilder Builder;
+    TStringBuilder _Builder;
+    TStringBuilder _CteBuilder;
     bool Blocks = false;
 };
 
@@ -148,9 +165,10 @@ class TPlan;
 class TStage {
 
 public:
-    TStage(TPlan* plan, const TString& nodeType) : Plan(plan), NodeType(nodeType) {
+    TStage(ui32 groupId, TPlan* plan, const TString& nodeType) : GroupId(groupId), Plan(plan), NodeType(nodeType) {
     }
 
+    const ui32 GroupId;
     TPlan* Plan;
     TString NodeType;
     std::vector<std::shared_ptr<TConnection>> Connections;
@@ -164,6 +182,9 @@ public:
     std::shared_ptr<TSingleMetric> MaxMemoryUsage;
     std::shared_ptr<TSingleMetric> OutputBytes;
     std::shared_ptr<TSingleMetric> OutputRows;
+    ui64 OutputChunks = 0;
+    ui64 OutputLocalBytes = 0;
+    std::shared_ptr<TScalarMetric> OutputChunkSize;
     std::shared_ptr<TSingleMetric> SpillingComputeTime;
     std::shared_ptr<TSingleMetric> SpillingComputeBytes;
     std::shared_ptr<TSingleMetric> SpillingChannelTime;
@@ -188,7 +209,7 @@ public:
     ui64 MaxTime = 0;
     ui64 UpdateTime = 0;
     bool External = false;
-    TStringBuilder Builder;
+    TStringBuilder _Builder;
     TConnection* IngressConnection = nullptr;
 };
 
@@ -253,8 +274,8 @@ class TPlanVisualizer;
 class TPlan {
 
 public:
-    TPlan(const TString& nodeType, TPlanViewConfig& config, TPlanVisualizer& viz)
-        : NodeType(nodeType), Config(config), Viz(viz) {
+    TPlan(ui32 groupId, const TString& nodeType, TPlanViewConfig& config, TPlanVisualizer& viz)
+        : GroupId(groupId), NodeType(nodeType), Config(config), Viz(viz) {
         CpuTime = std::make_shared<TSummaryMetric>();
         ExternalCpuTime = std::make_shared<TSummaryMetric>();
         WaitInputTime = std::make_shared<TSummaryMetric>();
@@ -264,10 +285,12 @@ public:
         EgressRows = std::make_shared<TSummaryMetric>();
         OutputBytes = std::make_shared<TSummaryMetric>();
         OutputRows = std::make_shared<TSummaryMetric>();
+        OutputChunkSize = std::make_shared<TSummaryMetric>();
         InputBytes = std::make_shared<TSummaryMetric>();
         InputRows = std::make_shared<TSummaryMetric>();
         IngressBytes = std::make_shared<TSummaryMetric>();
         IngressRows = std::make_shared<TSummaryMetric>();
+        InputChunkSize = std::make_shared<TSummaryMetric>();
         ExternalBytes = std::make_shared<TSummaryMetric>();
         ExternalRows = std::make_shared<TSummaryMetric>();
         SpillingComputeTime = std::make_shared<TSummaryMetric>();
@@ -294,9 +317,11 @@ public:
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor);
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
-    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "");
+    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "", ui64 split = 0, const std::shared_ptr<TScalarMetric>& scalar = nullptr);
     void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
     void PrintSvg(TStringBuilder& builder);
+    void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);
+    const ui32 GroupId;
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
     std::shared_ptr<TSummaryMetric> CpuTime;
@@ -308,8 +333,10 @@ public:
     std::shared_ptr<TSummaryMetric> EgressRows;
     std::shared_ptr<TSummaryMetric> OutputBytes;
     std::shared_ptr<TSummaryMetric> OutputRows;
+    std::shared_ptr<TSummaryMetric> OutputChunkSize;
     std::shared_ptr<TSummaryMetric> InputBytes;
     std::shared_ptr<TSummaryMetric> InputRows;
+    std::shared_ptr<TSummaryMetric> InputChunkSize;
     std::shared_ptr<TSummaryMetric> IngressBytes;
     std::shared_ptr<TSummaryMetric> IngressRows;
     std::shared_ptr<TSummaryMetric> ExternalBytes;
@@ -330,6 +357,7 @@ public:
     ui64 BaseTime = 0;
     ui64 TimeOffset = 0;
     ui32 OffsetY = 0;
+    ui32 Height = 0;
     ui32 Tasks = 0;
     ui64 UpdateTime = 0;
     std::vector<std::pair<std::string, std::shared_ptr<TConnection>>> CteRefs;
@@ -340,7 +368,7 @@ public:
     std::unordered_map<ui32, TConnection*> NodeToConnection;
     std::unordered_map<TStage*, TConnection*> StageToExternalConnection;
     std::unordered_set<ui32> NodeToSource;
-    TStringBuilder Builder;
+    TStringBuilder _Builder;
 };
 
 class TPlanVisualizer {
@@ -353,6 +381,7 @@ public:
     void PostProcessPlans();
     TString PrintSvg();
     TString PrintSvgSafe();
+    ui32 NextGroupId() { return ++GroupId; }
 
     std::vector<std::shared_ptr<TPlan>> Plans;
     ui64 MaxTime = 1000;
@@ -361,4 +390,5 @@ public:
     TPlanViewConfig Config;
     std::map<std::string, std::shared_ptr<TStage>> CteStages;
     std::map<std::string, TPlan*> CteSubPlans;
+    ui32 GroupId = 0;
 };

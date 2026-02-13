@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/federated_query
+    ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/actors
     ydb/core/kqp/gateway/utils
 

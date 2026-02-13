@@ -8,6 +8,8 @@
 
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/lib/url_mapper/yql_yt_url_mapper.h>
+#include <yt/yql/providers/yt/gateway/lib/user_files.h>
 #include <yt/yql/providers/yt/provider/yql_yt_table.h>
 
 namespace NYql {
@@ -23,6 +25,7 @@ struct TYtBaseServices: public TThrRefBase {
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     TYtGatewayConfigPtr Config;
     bool NeedToTransformTmpTablePaths = true;
+    TFileStoragePtr FileStorage;
 };
 
 struct TInputInfo {
@@ -71,9 +74,11 @@ struct TOutputInfo {
 struct TExecContextBaseSimple: public TThrRefBase {
 protected:
     TExecContextBaseSimple(
+        const IYtGateway::TPtr& gateway,
         const TYtBaseServices::TPtr& services,
         const TConfigClusters::TPtr& clusters,
         TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> mkqlCompiler,
+        std::shared_ptr<TYtUrlMapper> urlMapper,
         const TString& cluster,
         const TSessionBase::TPtr& session
     );
@@ -85,9 +90,14 @@ public:
 
     TString GetSessionId() const;
 
+    TString GetAuth(const TYtSettings::TConstPtr& config) const;
+    TMaybe<TString> GetImpersonationUser(const TYtSettings::TConstPtr& config) const;
+    NYT::IClientPtr CreateYtClient(const TYtSettings::TConstPtr& config) const;
+
     virtual ~TExecContextBaseSimple() = default;
 
 protected:
+    void MakeUserFiles(const TUserDataTable& userDataBlocks);
 
     void SetInput(NNodes::TExprBase input, bool forcePathColumns, const THashSet<TString>& extraSysColumns, const TYtSettings::TConstPtr& settings);
 
@@ -108,10 +118,16 @@ protected:
     TString GetTransformedPath(const TString& path, const TString& cluster, bool isTemp, const TYtSettings::TConstPtr& config);
 
 public:
+    IYtGateway::TPtr Gateway;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_ = nullptr;
     TYtGatewayConfigPtr Config_;
     TConfigClusters::TPtr Clusters_;
     TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;
+    TString YtServer_;
+    TUserFiles::TPtr UserFiles_;
+    std::pair<TString, TString> LogCtx_;
+    std::shared_ptr<TYtUrlMapper> UrlMapper_;
+    TFileStoragePtr FileStorage_;
 
     TString Cluster_;
     TVector<TInputInfo> InputTables_;
@@ -130,16 +146,22 @@ public:
     using TOptions = T;
 
     TExecContextSimple(
+        const IYtGateway::TPtr& gateway,
         const TYtBaseServices::TPtr services,
         const TConfigClusters::TPtr& clusters,
         const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
         TOptions&& options,
+        std::shared_ptr<TYtUrlMapper> urlMapper,
         const TString& cluster,
         TSessionBase::TPtr session
     )
-        : TExecContextBaseSimple(services, clusters, mkqlCompiler, cluster, session)
+        : TExecContextBaseSimple(gateway, services, clusters, mkqlCompiler, urlMapper, cluster, session)
         , Options_(options)
     {
+    }
+
+    void MakeUserFiles() {
+        TExecContextBaseSimple::MakeUserFiles(Options_.UserDataBlocks());
     }
 
     void SetInput(NNodes::TExprBase input, bool forcePathColumns, const THashSet<TString>& extraSysColumns) {

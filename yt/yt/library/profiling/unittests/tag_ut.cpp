@@ -7,13 +7,13 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TTagSet, Api)
+TEST(TTagSetTest, Api)
 {
     TTagSet s1{{TTag{"foo", "bar"}}};
     TTagSet s2{{TTag{"foo", "zog"}}};
 }
 
-TEST(TTagSet, Subsets)
+TEST(TTagSetTest, Subsets)
 {
     TTagIdList tags{1, 2, 3};
 

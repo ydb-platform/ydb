@@ -75,18 +75,8 @@ message TExtendedHostConfigDrive {
     optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6 [(NMarkers.CopyTo) = "THostConfigDrive"];
     optional uint64 ExpectedSlotCount = 7;
     optional uint32 SlotSizeInUnits = 8;
-    optional uint64 InferPDiskSlotCountFromUnitSize = 9 [(NMarkers.CopyTo) = "THostConfigDrive"];
-    optional uint32 InferPDiskSlotCountMax = 10 [(NMarkers.CopyTo) = "THostConfigDrive"];
-}
-
-message TInferPDiskSlotCountFromUnitSize {
-    optional uint64 Rot = 1;
-    optional uint64 Ssd = 2; // Implies both ssd and nvme
-}
-
-message TInferPDiskSlotCountMax {
-    optional uint32 Rot = 1;
-    optional uint32 Ssd = 2; // Implies both ssd and nvme
+    reserved 9; // optional uint64 InferPDiskSlotCountFromUnitSize = 9 [(NMarkers.CopyTo) = "THostConfigDrive"]; // deprecated
+    reserved 10; // optional uint32 InferPDiskSlotCountMax = 10 [(NMarkers.CopyTo) = "THostConfigDrive"]; // deprecated
 }
 
 message THosts {
@@ -101,7 +91,6 @@ message THosts {
     optional string Address = 9;
     optional string Name = 10;
     repeated TExtendedHostConfigDrive Drive = 11;
-    optional string BridgePileName = 12;
 }
 
 message TTls {
@@ -154,8 +143,8 @@ message TExtendedDefineHostConfig {
     repeated string Ssd = 6 [(NMarkers.CopyTo) = "TDefineHostConfig"];
     repeated string Nvme = 7 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 
-    optional TInferPDiskSlotCountFromUnitSize InferPDiskSlotCountFromUnitSize = 8;
-    optional TInferPDiskSlotCountMax InferPDiskSlotCountMax = 9;
+    reserved 8; // optional TInferPDiskSlotCountFromUnitSize InferPDiskSlotCountFromUnitSize = 8; // deprecated
+    reserved 9; // optional TInferPDiskSlotCountMax InferPDiskSlotCountMax = 9; // deprecated
 
     optional uint64 ItemConfigGeneration = 100 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 }

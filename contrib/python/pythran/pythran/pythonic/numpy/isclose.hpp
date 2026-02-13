@@ -16,8 +16,7 @@ namespace numpy
   namespace wrapper
   {
     template <class T0, class T1>
-    bool isclose(T0 const &u, T1 const &v, double rtol, double atol,
-                 bool equal_nan)
+    bool isclose(T0 const &u, T1 const &v, double rtol, double atol, bool equal_nan)
     {
       if (functor::isfinite()(u) && functor::isfinite()(v))
         return functor::abs()(u - v) <= (atol + rtol * functor::abs()(v));

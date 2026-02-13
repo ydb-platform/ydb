@@ -44,6 +44,10 @@
 #  include "opentelemetry/sdk/metrics/exemplar/reservoir_utils.h"
 #endif
 
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+#  include "opentelemetry/metrics/meter.h"
+#endif
+
 namespace
 {
 
@@ -662,6 +666,21 @@ std::vector<MetricData> Meter::Collect(CollectorHandle *collector,
   }
   return metric_data_list;
 }
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+uintptr_t Meter::RegisterCallback(
+    opentelemetry::metrics::MultiObservableCallbackPtr callback,
+    void *state,
+    nostd::span<opentelemetry::metrics::ObservableInstrument *> instruments) noexcept
+{
+  return observable_registry_->AddCallback(callback, state, instruments);
+}
+
+void Meter::DeregisterCallback(uintptr_t callback_id) noexcept
+{
+  observable_registry_->RemoveCallback(callback_id);
+}
+#endif
 
 // Implementation of the log message recommended by the SDK specification for duplicate instruments.
 // See

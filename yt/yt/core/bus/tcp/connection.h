@@ -388,6 +388,7 @@ private:
     bool CheckTcpReadError(ssize_t result);
     bool CheckTcpWriteError(ssize_t result);
     bool DoSslHandshake();
+    void DoSslShutdown();
     size_t GetSslAckPacketSize();
     void TryEstablishSslSession();
 

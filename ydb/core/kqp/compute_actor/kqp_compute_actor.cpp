@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 #include <ydb/core/kqp/runtime/kqp_vector_actor.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
+#include <ydb/core/kqp/runtime/kqp_full_text_source.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
@@ -74,6 +75,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapDqHashCombine(callable, ctx);
             }
 
+            if (name == "DqHashAggregate"sv) {
+                return WrapDqHashAggregate(callable, ctx);
+            }
+
             if (name == "FulltextAnalyze"sv) {
                 return WrapFulltextAnalyze(callable, ctx);
             }
@@ -96,6 +101,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     RegisterKqpWriteActor(*factory, counters);
     RegisterSequencerActorFactory(*factory, counters);
     RegisterKqpVectorResolveActor(*factory, counters);
+    RegisterKqpFullTextSource(*factory, counters);
     NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);
 
     if (federatedQuerySetup) {
@@ -109,8 +115,9 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
 
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
         NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
-        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, nullptr);
-        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, nullptr);
+        bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
+        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
+        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
     }
 
     return factory;
@@ -152,19 +159,17 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
 }
 
 TConclusionStatus TCPULimits::DeserializeFromProto(const NKikimrKqp::TEvStartKqpTasksRequest& config) {
+    const static auto maxThreadsCount = TActivationContext::ActorSystem()->GetPoolMaxThreadsCount(TActivationContext::AsActorContext().SelfID.PoolID());
     const auto share = config.GetPoolMaxCpuShare();
     if (share <= 0 || 1 < share) {
         return TConclusionStatus::Fail("cpu share have to be in (0, 1] interval");
     }
-    NActors::TExecutorPoolStats poolStats;
-    TVector<NActors::TExecutorThreadStats> threadsStats;
-    TActivationContext::ActorSystem()->GetPoolStats(TActivationContext::AsActorContext().SelfID.PoolID(), poolStats, threadsStats);
-    CPUGroupThreadsLimit = Max<ui64>(poolStats.MaxThreadCount, 1) * share;
+    CPUGroupThreadsLimit = Max<ui64>(1, maxThreadsCount) * share;
     CPUGroupName = config.GetPoolId();
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKqp
 } // namespace NKikimr
 
 namespace NKikimr::NKqp {
@@ -183,11 +188,12 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
 }
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
-    const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings, const ui64 txId,
-    TMaybe<ui64> lockTxId, ui32 lockNodeId, TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
+    const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
+    const TString& database, const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
+    TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits) {
-    return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode, meta,
-        shardsScanningPolicy, counters, std::move(traceId), cpuLimits);
+    return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode,
+        database, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits);
 }
 
 } // namespace NKikimr::NKqp

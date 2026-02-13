@@ -1,0 +1,9 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+/* custom error: Setting compression_codec is not supported for dynamic tables*/
+use plato;
+
+replace into Output with compression_codec=lz4
+select "x" as key;

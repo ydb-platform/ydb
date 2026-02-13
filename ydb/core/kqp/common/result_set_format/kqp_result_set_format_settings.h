@@ -27,8 +27,22 @@ struct TArrowFormatSettings {
 
     void ExportToProto(Ydb::Formats::ArrowFormatSettings* proto) const {
         if (CompressionCodec) {
-            auto codec = proto->mutable_compression_codec();
-            codec->set_type(static_cast<Ydb::Formats::ArrowFormatSettings::CompressionCodec::Type>(CompressionCodec->Type));
+            auto* codec = proto->mutable_compression_codec();
+            switch (CompressionCodec->Type) {
+                case TCompressionCodec::EType::UNSPECIFIED:
+                    codec->set_type(Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_UNSPECIFIED);
+                    break;
+                case TCompressionCodec::EType::NONE:
+                    codec->set_type(Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_NONE);
+                    break;
+                case TCompressionCodec::EType::ZSTD:
+                    codec->set_type(Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_ZSTD);
+                    break;
+                case TCompressionCodec::EType::LZ4_FRAME:
+                    codec->set_type(Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_LZ4_FRAME);
+                    break;
+            }
+
             if (CompressionCodec->Level) {
                 codec->set_level(*CompressionCodec->Level);
             }
@@ -39,7 +53,23 @@ struct TArrowFormatSettings {
         auto settings = TArrowFormatSettings{};
         if (proto.has_compression_codec()) {
             auto codec = TCompressionCodec{};
-            codec.Type = TCompressionCodec::EType(proto.compression_codec().type());
+            switch (proto.compression_codec().type()) {
+                case Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_UNSPECIFIED:
+                    codec.Type = TCompressionCodec::EType::UNSPECIFIED;
+                    break;
+                case Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_NONE:
+                    codec.Type = TCompressionCodec::EType::NONE;
+                    break;
+                case Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_ZSTD:
+                    codec.Type = TCompressionCodec::EType::ZSTD;
+                    break;
+                case Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_LZ4_FRAME:
+                    codec.Type = TCompressionCodec::EType::LZ4_FRAME;
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unknown compression codec type");
+                    break;
+            }
             if (proto.compression_codec().has_level()) {
                 codec.Level = proto.compression_codec().level();
             }

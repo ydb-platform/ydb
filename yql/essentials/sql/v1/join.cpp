@@ -146,8 +146,8 @@ public:
     TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) override {
         const size_t n = JoinOps_.size();
         TString what(Sources_[n]->GetLabel());
-        static const TSet<TString> noRightSourceJoinOps = {"LeftOnly", "LeftSemi"};
-        for (size_t nn = n; nn > 0 && noRightSourceJoinOps.contains(JoinOps_[nn - 1]); --nn) {
+        static const TSet<TString> NoRightSourceJoinOps = {"LeftOnly", "LeftSemi"};
+        for (size_t nn = n; nn > 0 && NoRightSourceJoinOps.contains(JoinOps_[nn - 1]); --nn) {
             what = Sources_[nn - 1]->GetLabel();
         }
         const TString with(Sources_[n + 1]->GetLabel());
@@ -232,12 +232,8 @@ protected:
                 ctx.Error(source->GetPos()) << "JOIN: missing correlation name for source";
                 return false;
             }
-            sources.insert({source->GetLabel(), idx});
+            sources.insert({label, idx});
             ++idx;
-        }
-        if (sources.size() != Sources_.size()) {
-            ctx.Error(expr ? expr->GetPos() : Pos_) << "JOIN: all correlation names must be different";
-            return false;
         }
 
         ui32 pos = 0;

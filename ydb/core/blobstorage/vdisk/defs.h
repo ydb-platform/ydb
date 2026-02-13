@@ -5,4 +5,4 @@
 // define to turn on latency optimization
 //#define UNPACK_LOCALSYNCDATA
 
-
+//#define USE_NEW_FULL_SYNC_SCHEME

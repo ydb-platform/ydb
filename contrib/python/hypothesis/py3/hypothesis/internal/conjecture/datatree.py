@@ -9,11 +9,10 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 import math
-from collections.abc import Generator
+from collections.abc import Generator, Set
+from dataclasses import dataclass, field
 from random import Random
-from typing import TYPE_CHECKING, AbstractSet, Final, Optional, Union, cast
-
-import attr
+from typing import TYPE_CHECKING, Final, TypeAlias, cast
 
 from hypothesis.errors import (
     FlakyReplay,
@@ -43,11 +42,9 @@ from hypothesis.internal.floats import (
 )
 
 if TYPE_CHECKING:
-    from typing import TypeAlias
-
     from hypothesis.vendor.pretty import RepresentationPrinter
 
-ChildrenCacheValueT: "TypeAlias" = tuple[
+ChildrenCacheValueT: TypeAlias = tuple[
     Generator[ChoiceT, None, None], list[ChoiceT], set[ChoiceT]
 ]
 
@@ -66,14 +63,14 @@ _FLAKY_STRAT_MSG = (
 EMPTY: frozenset[int] = frozenset()
 
 
-@attr.s(slots=True)
+@dataclass(slots=True, frozen=True)
 class Killed:
     """Represents a transition to part of the tree which has been marked as
     "killed", meaning we want to treat it as not worth exploring, so it will
     be treated as if it were completely explored for the purposes of
     exhaustion."""
 
-    next_node: "TreeNode" = attr.ib()
+    next_node: "TreeNode"
 
     def _repr_pretty_(self, p: "RepresentationPrinter", cycle: bool) -> None:
         assert cycle is False
@@ -91,14 +88,14 @@ def _node_pretty(
     return f"{choice_type} {value!r}{forced_marker} {constraints}"
 
 
-@attr.s(slots=True)
+@dataclass(slots=True, frozen=False)
 class Branch:
     """Represents a transition where multiple choices can be made as to what
     to drawn."""
 
-    constraints: ChoiceConstraintsT = attr.ib()
-    choice_type: ChoiceTypeT = attr.ib()
-    children: dict[ChoiceT, "TreeNode"] = attr.ib(repr=False)
+    constraints: ChoiceConstraintsT
+    choice_type: ChoiceTypeT
+    children: dict[ChoiceT, "TreeNode"] = field(repr=False)
 
     @property
     def max_children(self) -> int:
@@ -119,12 +116,12 @@ class Branch:
                 p.pretty(child)
 
 
-@attr.s(slots=True, frozen=True)
+@dataclass(slots=True, frozen=True)
 class Conclusion:
     """Represents a transition to a finished state."""
 
-    status: Status = attr.ib()
-    interesting_origin: Optional[InterestingOrigin] = attr.ib()
+    status: Status
+    interesting_origin: InterestingOrigin | None
 
     def _repr_pretty_(self, p: "RepresentationPrinter", cycle: bool) -> None:
         assert cycle is False
@@ -158,31 +155,47 @@ class Conclusion:
 # The one case where this may be detrimental is fuzzing, where the throughput of
 # examples is so high that it really may saturate important nodes. We'll cross
 # that bridge when we come to it.
-MAX_CHILDREN_EFFECTIVELY_INFINITE: Final[int] = 100_000
+MAX_CHILDREN_EFFECTIVELY_INFINITE: Final[int] = 10_000_000
 
 
 def _count_distinct_strings(*, alphabet_size: int, min_size: int, max_size: int) -> int:
     # We want to estimate if we're going to have more children than
     # MAX_CHILDREN_EFFECTIVELY_INFINITE, without computing a potentially
-    # extremely expensive pow. We'll check if the number of strings in
-    # the largest string size alone is enough to put us over this limit.
-    # We'll also employ a trick of estimating against log, which is cheaper
-    # than computing a pow.
-    #
-    # x = max_size
-    # y = alphabet_size
-    # n = MAX_CHILDREN_EFFECTIVELY_INFINITE
-    #
-    #     x**y > n
-    # <=> log(x**y)  > log(n)
-    # <=> y * log(x) > log(n)
-    definitely_too_large = max_size * math.log(alphabet_size) > math.log(
-        MAX_CHILDREN_EFFECTIVELY_INFINITE
-    )
-    if definitely_too_large:
-        return MAX_CHILDREN_EFFECTIVELY_INFINITE
+    # extremely expensive pow. We'll check the two extreme cases - if the
+    # number of strings in the largest string size alone is enough to put us
+    # over this limit (at alphabet_size >= 2), and if the variation in sizes
+    # (at alphabet_size == 1) is enough. If neither result in an early return,
+    # the exact result should be reasonably cheap to compute.
+    if alphabet_size == 0:
+        # Special-case the empty string, avoid error in math.log(0).
+        return 1
+    elif alphabet_size == 1:
+        # Special-case the constant alphabet, invalid in the geom-series sum.
+        return max_size - min_size + 1
+    else:
+        # Estimate against log, which is cheaper than computing a pow.
+        #
+        #   m = max_size
+        #   a = alphabet_size
+        #   N = MAX_CHILDREN_EFFECTIVELY_INFINITE
+        #
+        #           a**m > N
+        # <=> m * log(a) > log(N)
+        log_max_sized_children = max_size * math.log(alphabet_size)
+        if log_max_sized_children > math.log(MAX_CHILDREN_EFFECTIVELY_INFINITE):
+            return MAX_CHILDREN_EFFECTIVELY_INFINITE
 
-    return sum(alphabet_size**k for k in range(min_size, max_size + 1))
+    # The sum of a geometric series is given by (ref: wikipedia):
+    #     ᵐ∑ₖ₌₀ aᵏ = (aᵐ⁺¹ - 1) / (a - 1)
+    #               = S(m) / S(0)
+    # assuming a != 1 and using the definition
+    #         S(m) := aᵐ⁺¹ - 1.
+    # The sum we want, starting from a number n [0 <= n <= m] rather than zero, is
+    #     ᵐ∑ₖ₌ₙ aᵏ = ᵐ∑ₖ₌₀ aᵏ - ⁿ⁻¹∑ₖ₌₀ aᵏ = S(m) / S(0) - S(n - 1) / S(0)
+    def S(n):
+        return alphabet_size ** (n + 1) - 1
+
+    return (S(max_size) - S(min_size - 1)) // S(0)
 
 
 def compute_max_children(
@@ -204,7 +217,7 @@ def compute_max_children(
         # or downwards with our full 128 bit generation, but only half of these
         # (plus one for the case of generating zero) result in a probe in the
         # direction we want. ((2**128 - 1) // 2) + 1 == 2 ** 127
-        assert (min_value is None) ^ (max_value is None)
+        assert (min_value is None) != (max_value is None)
         return 2**127
     elif choice_type == "boolean":
         constraints = cast(BooleanConstraints, constraints)
@@ -225,16 +238,6 @@ def compute_max_children(
         min_size = constraints["min_size"]
         max_size = constraints["max_size"]
         intervals = constraints["intervals"]
-
-        if len(intervals) == 0:
-            # Special-case the empty alphabet to avoid an error in math.log(0).
-            # Only possibility is the empty string.
-            return 1
-
-        # avoid math.log(1) == 0 and incorrectly failing our effectively_infinite
-        # estimate, even when we definitely are too large.
-        if len(intervals) == 1 and max_size > MAX_CHILDREN_EFFECTIVELY_INFINITE:
-            return MAX_CHILDREN_EFFECTIVELY_INFINITE
 
         return _count_distinct_strings(
             alphabet_size=len(intervals), min_size=min_size, max_size=max_size
@@ -330,7 +333,7 @@ def all_children(
             yield from _floats_between(min_point, max_value)
 
 
-@attr.s(slots=True)
+@dataclass(slots=True, frozen=False)
 class TreeNode:
     """
     A node, or collection of directly descended nodes, in a DataTree.
@@ -396,15 +399,15 @@ class TreeNode:
 
     # The constraints, value, and choice_types of the nodes stored here. These always
     # have the same length. The values at index i belong to node i.
-    constraints: list[ChoiceConstraintsT] = attr.ib(factory=list)
-    values: list[ChoiceT] = attr.ib(factory=list)
-    choice_types: list[ChoiceTypeT] = attr.ib(factory=list)
+    constraints: list[ChoiceConstraintsT] = field(default_factory=list)
+    values: list[ChoiceT] = field(default_factory=list)
+    choice_types: list[ChoiceTypeT] = field(default_factory=list)
 
     # The indices of nodes which had forced values.
     #
     # Stored as None if no indices have been forced, purely for space saving
     # reasons (we force quite rarely).
-    __forced: Optional[set[int]] = attr.ib(default=None, init=False)
+    __forced: set[int] | None = field(default=None, init=False)
 
     # What happens next after drawing these nodes. (conceptually, "what is the
     # child/children of the last node stored here").
@@ -415,17 +418,17 @@ class TreeNode:
     # - Conclusion (ConjectureData.conclude_test was called here)
     # - Killed (this branch is valid and may even have children, but should not
     #   be explored when generating novel prefixes)
-    transition: Union[None, Branch, Conclusion, Killed] = attr.ib(default=None)
+    transition: None | Branch | Conclusion | Killed = None
 
     # A tree node is exhausted if every possible sequence of draws below it has
     # been explored. We only update this when performing operations that could
     # change the answer.
     #
     # See also TreeNode.check_exhausted.
-    is_exhausted: bool = attr.ib(default=False, init=False)
+    is_exhausted: bool = field(default=False, init=False)
 
     @property
-    def forced(self) -> AbstractSet[int]:
+    def forced(self) -> Set[int]:
         if not self.__forced:
             return EMPTY
         return self.__forced
@@ -522,7 +525,7 @@ class TreeNode:
         assert cycle is False
         indent = 0
         for i, (choice_type, constraints, value) in enumerate(
-            zip(self.choice_types, self.constraints, self.values)
+            zip(self.choice_types, self.constraints, self.values, strict=True)
         ):
             with p.indent(indent):
                 if i > 0:
@@ -701,7 +704,7 @@ class DataTree:
 
     def generate_novel_prefix(self, random: Random) -> tuple[ChoiceT, ...]:
         """Generate a short random string that (after rewriting) is not
-        a prefix of any buffer previously added to the tree.
+        a prefix of any choice sequence previously added to the tree.
 
         The resulting prefix is essentially arbitrary - it would be nice
         for it to be uniform at random, but previous attempts to do that
@@ -724,6 +727,7 @@ class DataTree:
                     current_node.choice_types,
                     current_node.constraints,
                     current_node.values,
+                    strict=True,
                 )
             ):
                 if i in current_node.forced:
@@ -763,55 +767,55 @@ class DataTree:
                     # We've now found a value that is allowed to
                     # vary, so what follows is not fixed.
                     return tuple(prefix)
-            else:
-                assert not isinstance(current_node.transition, (Conclusion, Killed))
-                if current_node.transition is None:
-                    return tuple(prefix)
-                branch = current_node.transition
-                assert isinstance(branch, Branch)
 
-                attempts = 0
-                while True:
-                    if attempts <= 10:
-                        try:
-                            node_value = self._draw(
-                                branch.choice_type, branch.constraints, random=random
-                            )
-                        except StopTest:  # pragma: no cover
-                            attempts += 1
-                            continue
-                    else:
-                        node_value = self._draw_from_cache(
-                            branch.choice_type,
-                            branch.constraints,
-                            key=id(branch),
-                            random=random,
-                        )
+            assert not isinstance(current_node.transition, (Conclusion, Killed))
+            if current_node.transition is None:
+                return tuple(prefix)
+            branch = current_node.transition
+            assert isinstance(branch, Branch)
+
+            attempts = 0
+            while True:
+                if attempts <= 10:
                     try:
-                        child = branch.children[node_value]
-                    except KeyError:
-                        append_choice(branch.choice_type, node_value)
-                        return tuple(prefix)
-                    if not child.is_exhausted:
-                        append_choice(branch.choice_type, node_value)
-                        current_node = child
-                        break
-                    attempts += 1
-                    self._reject_child(
+                        node_value = self._draw(
+                            branch.choice_type, branch.constraints, random=random
+                        )
+                    except StopTest:  # pragma: no cover
+                        attempts += 1
+                        continue
+                else:
+                    node_value = self._draw_from_cache(
                         branch.choice_type,
                         branch.constraints,
-                        child=node_value,
                         key=id(branch),
+                        random=random,
                     )
+                try:
+                    child = branch.children[node_value]
+                except KeyError:
+                    append_choice(branch.choice_type, node_value)
+                    return tuple(prefix)
+                if not child.is_exhausted:
+                    append_choice(branch.choice_type, node_value)
+                    current_node = child
+                    break
+                attempts += 1
+                self._reject_child(
+                    branch.choice_type,
+                    branch.constraints,
+                    child=node_value,
+                    key=id(branch),
+                )
 
-                    # We don't expect this assertion to ever fire, but coverage
-                    # wants the loop inside to run if you have branch checking
-                    # on, hence the pragma.
-                    assert (  # pragma: no cover
-                        attempts != 1000
-                        or len(branch.children) < branch.max_children
-                        or any(not v.is_exhausted for v in branch.children.values())
-                    )
+                # We don't expect this assertion to ever fire, but coverage
+                # wants the loop inside to run if you have branch checking
+                # on, hence the pragma.
+                assert (  # pragma: no cover
+                    attempts != 1000
+                    or len(branch.children) < branch.max_children
+                    or any(not v.is_exhausted for v in branch.children.values())
+                )
 
     def rewrite(self, choices):
         """Use previously seen ConjectureData objects to return a tuple of
@@ -846,7 +850,7 @@ class DataTree:
         try:
             while True:
                 for i, (choice_type, constraints, previous) in enumerate(
-                    zip(node.choice_types, node.constraints, node.values)
+                    zip(node.choice_types, node.constraints, node.values, strict=True)
                 ):
                     v = draw(
                         choice_type,
@@ -893,8 +897,9 @@ class DataTree:
         # entails some bookkeeping such that we're careful about when the
         # float key is in its bits form (as a key into branch.children) and
         # when it is in its float form (as a value we want to write to the
-        # buffer), and converting between the two forms as appropriate.
+        # choice sequence), and converting between the two forms as appropriate.
         if choice_type == "float":
+            assert isinstance(value, float)
             value = float_to_int(value)
         return value
 
@@ -986,9 +991,13 @@ class DataTree:
 
 class TreeRecordingObserver(DataObserver):
     def __init__(self, tree: DataTree):
-        self.__current_node: TreeNode = tree.root
-        self.__index_in_current_node: int = 0
-        self.__trail: list[TreeNode] = [self.__current_node]
+        # this attr isn't read, but is very useful for local debugging flaky
+        # errors, with
+        # `from hypothesis.vendor import pretty; print(pretty.pretty(self._root))`
+        self._root = tree.root
+        self._current_node: TreeNode = tree.root
+        self._index_in_current_node: int = 0
+        self._trail: list[TreeNode] = [self._current_node]
         self.killed: bool = False
 
     def draw_integer(
@@ -1028,9 +1037,9 @@ class TreeRecordingObserver(DataObserver):
         was_forced: bool,
         constraints: ChoiceConstraintsT,
     ) -> None:
-        i = self.__index_in_current_node
-        self.__index_in_current_node += 1
-        node = self.__current_node
+        i = self._index_in_current_node
+        self._index_in_current_node += 1
+        node = self._current_node
 
         if isinstance(value, float):
             value = float_to_int(value)
@@ -1056,8 +1065,8 @@ class TreeRecordingObserver(DataObserver):
                 new_node = TreeNode()
                 assert isinstance(node.transition, Branch)
                 node.transition.children[value] = new_node
-                self.__current_node = new_node
-                self.__index_in_current_node = 0
+                self._current_node = new_node
+                self._index_in_current_node = 0
         else:
             trans = node.transition
             if trans is None:
@@ -1088,8 +1097,8 @@ class TreeRecordingObserver(DataObserver):
                 ):
                     node.split_at(i)
                     assert isinstance(node.transition, Branch)
-                    self.__current_node = node.transition.children[value]
-                    self.__index_in_current_node = 0
+                    self._current_node = node.transition.children[value]
+                    self._index_in_current_node = 0
             elif isinstance(trans, Conclusion):
                 assert trans.status != Status.OVERRUN
                 # We tried to draw where history says we should have
@@ -1100,12 +1109,12 @@ class TreeRecordingObserver(DataObserver):
                 if choice_type != trans.choice_type or constraints != trans.constraints:
                     raise FlakyStrategyDefinition(_FLAKY_STRAT_MSG)
                 try:
-                    self.__current_node = trans.children[value]
+                    self._current_node = trans.children[value]
                 except KeyError:
-                    self.__current_node = trans.children.setdefault(value, TreeNode())
-                self.__index_in_current_node = 0
-        if self.__trail[-1] is not self.__current_node:
-            self.__trail.append(self.__current_node)
+                    self._current_node = trans.children.setdefault(value, TreeNode())
+                self._index_in_current_node = 0
+        if self._trail[-1] is not self._current_node:
+            self._trail.append(self._current_node)
 
     def kill_branch(self) -> None:
         """Mark this part of the tree as not worth re-exploring."""
@@ -1114,29 +1123,29 @@ class TreeRecordingObserver(DataObserver):
 
         self.killed = True
 
-        if self.__index_in_current_node < len(self.__current_node.values) or (
-            self.__current_node.transition is not None
-            and not isinstance(self.__current_node.transition, Killed)
+        if self._index_in_current_node < len(self._current_node.values) or (
+            self._current_node.transition is not None
+            and not isinstance(self._current_node.transition, Killed)
         ):
             raise FlakyStrategyDefinition(_FLAKY_STRAT_MSG)
 
-        if self.__current_node.transition is None:
-            self.__current_node.transition = Killed(TreeNode())
+        if self._current_node.transition is None:
+            self._current_node.transition = Killed(TreeNode())
             self.__update_exhausted()
 
-        self.__current_node = self.__current_node.transition.next_node
-        self.__index_in_current_node = 0
-        self.__trail.append(self.__current_node)
+        self._current_node = self._current_node.transition.next_node
+        self._index_in_current_node = 0
+        self._trail.append(self._current_node)
 
     def conclude_test(
-        self, status: Status, interesting_origin: Optional[InterestingOrigin]
+        self, status: Status, interesting_origin: InterestingOrigin | None
     ) -> None:
         """Says that ``status`` occurred at node ``node``. This updates the
         node if necessary and checks for consistency."""
         if status == Status.OVERRUN:
             return
-        i = self.__index_in_current_node
-        node = self.__current_node
+        i = self._index_in_current_node
+        node = self._current_node
 
         if i < len(node.values) or isinstance(node.transition, Branch):
             raise FlakyStrategyDefinition(_FLAKY_STRAT_MSG)
@@ -1162,7 +1171,7 @@ class TreeRecordingObserver(DataObserver):
         else:
             node.transition = new_transition
 
-        assert node is self.__trail[-1]
+        assert node is self._trail[-1]
         node.check_exhausted()
         assert len(node.values) > 0 or node.check_exhausted()
 
@@ -1170,7 +1179,7 @@ class TreeRecordingObserver(DataObserver):
             self.__update_exhausted()
 
     def __update_exhausted(self) -> None:
-        for t in reversed(self.__trail):
+        for t in reversed(self._trail):
             # Any node we've traversed might have now become exhausted.
             # We check from the right. As soon as we hit a node that
             # isn't exhausted, this automatically implies that all of

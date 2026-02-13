@@ -9,6 +9,7 @@ SRCS(
     configs_config.h
     configs_dispatcher.cpp
     configs_dispatcher.h
+    configs_dispatcher_observer.h
     configs_dispatcher_proxy.h
     configs_dispatcher_proxy.cpp
     console.cpp
@@ -115,5 +116,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    ut
+    ut_configs_dispatcher
+    ut_console
 )

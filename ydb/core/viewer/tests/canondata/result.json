@@ -174,6 +174,15 @@
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
+                    "name": ".sys",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
                     "name": "table1",
                     "owner": "root@builtin",
                     "type": "TABLE"
@@ -186,11 +195,6 @@
                     "name": "topic1",
                     "owner": "root@builtin",
                     "type": "TOPIC"
-                },
-                {
-                    "created_at": {},
-                    "name": ".sys",
-                    "type": "DIRECTORY"
                 }
             ],
             "self": {
@@ -309,6 +313,15 @@
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
+                    "name": ".sys",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
                     "name": "table1",
                     "owner": "root@builtin",
                     "type": "TABLE"
@@ -330,11 +343,6 @@
                     "name": "topic1",
                     "owner": "root@builtin",
                     "type": "TOPIC"
-                },
-                {
-                    "created_at": {},
-                    "name": ".sys",
-                    "type": "DIRECTORY"
                 }
             ],
             "self": {
@@ -453,6 +461,15 @@
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
+                    "name": ".sys",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
                     "name": "table1",
                     "owner": "root@builtin",
                     "type": "TABLE"
@@ -465,11 +482,6 @@
                     "name": "topic1",
                     "owner": "root@builtin",
                     "type": "TOPIC"
-                },
-                {
-                    "created_at": {},
-                    "name": ".sys",
-                    "type": "DIRECTORY"
                 }
             ],
             "self": {
@@ -575,8 +587,8 @@
             "text": "<html><body><h1>403 Forbidden</h1></body></html>"
         },
         "cluster_nodes_monitoring": {
-            "FieldsAvailable": "10000000000000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "0000010000000000000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -592,8 +604,8 @@
             "TotalNodes": "3"
         },
         "cluster_nodes_root": {
-            "FieldsAvailable": "10000000000000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "0000010000000000000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -609,8 +621,8 @@
             "TotalNodes": "3"
         },
         "cluster_nodes_viewer": {
-            "FieldsAvailable": "10000000000000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "0000010000000000000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -626,8 +638,8 @@
             "TotalNodes": "3"
         },
         "database_nodes_database": {
-            "FieldsAvailable": "10000000010000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "0000010000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -637,8 +649,8 @@
             "TotalNodes": "1"
         },
         "database_nodes_monitoring": {
-            "FieldsAvailable": "10000000010000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "0000010000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -648,8 +660,8 @@
             "TotalNodes": "1"
         },
         "database_nodes_root": {
-            "FieldsAvailable": "10000000010000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "0000010000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -659,8 +671,8 @@
             "TotalNodes": "1"
         },
         "database_nodes_viewer": {
-            "FieldsAvailable": "10000000010000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "0000010000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -689,22 +701,41 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
-        "restart_pdisk_monitoring": {
+        "restart_pdisk_database_force": {
             "status_code": 403,
-            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+            "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
+        },
+        "restart_pdisk_monitoring": {
+            "debugMessage": "text",
+            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
+            "result": false
+        },
+        "restart_pdisk_monitoring_force": {
+            "debugMessage": "text",
+            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
+            "result": false
         },
         "restart_pdisk_root": {
             "debugMessage": "text",
-            "error": "Calling this operation could cause at least 4 groups (2181038080, 2181038081, 2181038082, ...2181038083) to go into a dead state",
+            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
+            "forceRetryPossible": true,
             "result": false
+        },
+        "restart_pdisk_root_force": {
+            "debugMessage": "text",
+            "result": true
         },
         "restart_pdisk_viewer": {
             "status_code": 403,
-            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+            "text": "Access denied"
+        },
+        "restart_pdisk_viewer_force": {
+            "status_code": 403,
+            "text": "Access denied"
         },
         "storage_nodes_database": {
-            "FieldsAvailable": "10000000110011000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000011",
+            "FieldsAvailable": "0000010000000110011000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000011",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -716,8 +747,8 @@
             "TotalNodes": "1"
         },
         "storage_nodes_monitoring": {
-            "FieldsAvailable": "10000000110011000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000011",
+            "FieldsAvailable": "0000010000000110011000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000011",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -729,8 +760,8 @@
             "TotalNodes": "1"
         },
         "storage_nodes_root": {
-            "FieldsAvailable": "10000000110011000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000011",
+            "FieldsAvailable": "0000010000000110011000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000011",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -742,8 +773,8 @@
             "TotalNodes": "1"
         },
         "storage_nodes_viewer": {
-            "FieldsAvailable": "10000000110011000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000011",
+            "FieldsAvailable": "0000010000000110011000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000011",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -756,13 +787,14 @@
         }
     },
     "test.TestViewer.test_storage_groups": {
-        "FieldsAvailable": "0111111111111111111111",
-        "FieldsRequired": "1111111111111111111111",
+        "FieldsAvailable": "111110111111111111111111111",
+        "FieldsRequired": "111111111111111111111111111",
         "FoundGroups": 5,
         "StorageGroups": [
             {
                 "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
+                "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -772,6 +804,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": "not-zero-number",
+                "MaxPDiskUsage": "not-zero-number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MissingDisks": "0",
                 "Overall": "Green",
                 "PoolName": "static",
@@ -807,6 +843,7 @@
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
                                 "PDiskId": 1,
+                                "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
@@ -820,6 +857,7 @@
                         "Whiteboard": {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -828,6 +866,7 @@
                             "IncarnationGuid": "not-zero-number-text",
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "SatisfactionRank": {
@@ -846,7 +885,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -855,6 +896,7 @@
             {
                 "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
+                "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -865,6 +907,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": "not-zero-number",
+                "MaxPDiskUsage": "not-zero-number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MediaType": "ROT,Kind:0",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -901,6 +947,7 @@
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
                                 "PDiskId": 1,
+                                "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
@@ -914,6 +961,7 @@
                         "Whiteboard": {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -922,6 +970,7 @@
                             "IncarnationGuid": "not-zero-number-text",
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "SatisfactionRank": {
@@ -940,7 +989,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -949,6 +1000,7 @@
             {
                 "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
+                "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -959,6 +1011,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": "not-zero-number",
+                "MaxPDiskUsage": "not-zero-number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MediaType": "ROT,Kind:0",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -995,6 +1051,7 @@
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
                                 "PDiskId": 1,
+                                "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
@@ -1008,6 +1065,7 @@
                         "Whiteboard": {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -1016,6 +1074,7 @@
                             "IncarnationGuid": "not-zero-number-text",
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "SatisfactionRank": {
@@ -1034,7 +1093,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -1043,6 +1104,7 @@
             {
                 "AllocationUnits": "32",
                 "Available": "not-zero-number-text",
+                "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -1053,6 +1115,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": "not-zero-number",
+                "MaxPDiskUsage": "not-zero-number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MediaType": "ROT",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -1089,6 +1155,7 @@
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
                                 "PDiskId": 1,
+                                "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
@@ -1102,6 +1169,7 @@
                         "Whiteboard": {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -1110,6 +1178,7 @@
                             "IncarnationGuid": "not-zero-number-text",
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "SatisfactionRank": {
@@ -1128,7 +1197,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -1137,6 +1208,7 @@
             {
                 "AllocationUnits": "52",
                 "Available": "not-zero-number-text",
+                "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -1147,6 +1219,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": "not-zero-number",
+                "MaxPDiskUsage": "not-zero-number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MediaType": "ROT",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -1183,6 +1259,7 @@
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
                                 "PDiskId": 1,
+                                "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
@@ -1196,6 +1273,7 @@
                         "Whiteboard": {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -1204,6 +1282,7 @@
                             "IncarnationGuid": "not-zero-number-text",
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "SatisfactionRank": {
@@ -1222,7 +1301,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -1230,6 +1311,38 @@
             }
         ],
         "TotalGroups": 5
+    },
+    "test.TestViewer.test_storage_stats": {
+        "Paths": [
+            {
+                "FullPath": "/Root/dedicated_db",
+                "Groups": 1,
+                "Media": 1,
+                "Path": ".",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": 10
+            },
+            {
+                "DataSize": "not-zero-number",
+                "FullPath": "/Root/dedicated_db/table1",
+                "Groups": 1,
+                "Media": 1,
+                "Path": "table1",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": 1
+            },
+            {
+                "FullPath": "/Root/dedicated_db/topic1",
+                "Groups": 1,
+                "Media": 1,
+                "Path": "topic1",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": 2
+            }
+        ]
     },
     "test.TestViewer.test_topic_data": {
         "both_offset_and_ts": {
@@ -2980,6 +3093,10 @@
             "Result": {
                 "Entities": [
                     {
+                        "Name": ".sys",
+                        "Type": "dir"
+                    },
+                    {
                         "Name": ".metadata",
                         "Type": "dir"
                     },
@@ -2996,7 +3113,7 @@
                         "Type": "ext_sub_domain"
                     }
                 ],
-                "Total": 4
+                "Total": 5
             },
             "Success": true,
             "Version": 2
@@ -3005,6 +3122,10 @@
             "Result": {
                 "Entities": [
                     {
+                        "Name": ".sys",
+                        "Type": "dir"
+                    },
+                    {
                         "Name": "table1",
                         "Type": "table"
                     },
@@ -3013,7 +3134,7 @@
                         "Type": "dir"
                     }
                 ],
-                "Total": 2
+                "Total": 3
             },
             "Success": true,
             "Version": 2
@@ -3022,11 +3143,15 @@
             "Result": {
                 "Entities": [
                     {
+                        "Name": ".sys",
+                        "Type": "dir"
+                    },
+                    {
                         "Name": "table1",
                         "Type": "table"
                     }
                 ],
-                "Total": 1
+                "Total": 2
             },
             "Success": true,
             "Version": 2
@@ -3034,6 +3159,10 @@
         "/Root/shared_db": {
             "Result": {
                 "Entities": [
+                    {
+                        "Name": ".sys",
+                        "Type": "dir"
+                    },
                     {
                         "Name": "table1",
                         "Type": "table"
@@ -3043,7 +3172,7 @@
                         "Type": "dir"
                     }
                 ],
-                "Total": 2
+                "Total": 3
             },
             "Success": true,
             "Version": 2
@@ -3291,6 +3420,20 @@
                         "Owner": "metadata@system",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
+                        "PathState": 3,
+                        "PathType": 1,
+                        "SchemeshardId": "72057594046678944"
+                    },
+                    {
+                        "ACL": "",
+                        "ChildrenExist": true,
+                        "CreateFinished": true,
+                        "CreateStep": "not-zero-number-text",
+                        "CreateTxId": "not-zero-number-text",
+                        "Name": ".sys",
+                        "Owner": "metadata@system",
+                        "ParentPathId": "1",
+                        "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 1,
                         "SchemeshardId": "72057594046678944"
@@ -3317,7 +3460,7 @@
                         "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
-                        "PathState": 3,
+                        "PathState": 2,
                         "PathType": 10,
                         "SchemeshardId": "72057594046678944"
                     },
@@ -3333,14 +3476,6 @@
                         "PathState": 2,
                         "PathType": 10,
                         "SchemeshardId": "72057594046678944"
-                    },
-                    {
-                        "CreateFinished": true,
-                        "CreateStep": "0",
-                        "CreateTxId": "0",
-                        "Name": ".sys",
-                        "PathType": 1,
-                        "SchemeshardId": "72057594046678944"
                     }
                 ],
                 "DomainDescription": {
@@ -3352,7 +3487,7 @@
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "1",
-                    "PathsInside": "7",
+                    "PathsInside": "43",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3394,10 +3529,12 @@
                         "PublicKeys": "not-empty-array",
                         "Sids": [
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "monitoring",
                                 "Type": 1
                             },
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "viewer",
                                 "Type": 1
                             },
@@ -3419,6 +3556,7 @@
                                 "Type": 2
                             },
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "database",
                                 "Type": 1
                             },
@@ -3473,6 +3611,7 @@
                                 "Type": 2
                             },
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "root",
                                 "Type": 1
                             }
@@ -3501,7 +3640,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 1,
-                    "PathVersion": "16",
+                    "PathVersion": "19",
                     "SchemeshardId": "72057594046678944"
                 }
             },
@@ -3531,6 +3670,20 @@
                     },
                     {
                         "ACL": "",
+                        "ChildrenExist": true,
+                        "CreateFinished": true,
+                        "CreateStep": "not-zero-number-text",
+                        "CreateTxId": "not-zero-number-text",
+                        "Name": ".sys",
+                        "Owner": "metadata@system",
+                        "ParentPathId": "1",
+                        "PathId": "not-zero-number-text",
+                        "PathState": 2,
+                        "PathType": 1,
+                        "SchemeshardId": "72075186224037897"
+                    },
+                    {
+                        "ACL": "",
                         "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
@@ -3542,14 +3695,6 @@
                         "PathState": 3,
                         "PathType": 2,
                         "SchemeshardId": "72075186224037897"
-                    },
-                    {
-                        "CreateFinished": true,
-                        "CreateStep": "0",
-                        "CreateTxId": "0",
-                        "Name": ".sys",
-                        "PathType": 1,
-                        "SchemeshardId": "72075186224037897"
                     }
                 ],
                 "DomainDescription": {
@@ -3560,8 +3705,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "6",
-                    "PathsInside": "5",
+                    "PathId_Depricated": "38",
+                    "PathsInside": "35",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3631,7 +3776,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "16",
+                    "PathVersion": "19",
                     "SchemeshardId": "72075186224037897"
                 }
             },
@@ -3647,6 +3792,20 @@
                 "Children": [
                     {
                         "ACL": "",
+                        "ChildrenExist": true,
+                        "CreateFinished": true,
+                        "CreateStep": "not-zero-number-text",
+                        "CreateTxId": "not-zero-number-text",
+                        "Name": ".sys",
+                        "Owner": "metadata@system",
+                        "ParentPathId": "1",
+                        "PathId": "not-zero-number-text",
+                        "PathState": 2,
+                        "PathType": 1,
+                        "SchemeshardId": "72075186224038899"
+                    },
+                    {
+                        "ACL": "",
                         "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
@@ -3658,14 +3817,6 @@
                         "PathState": 3,
                         "PathType": 2,
                         "SchemeshardId": "72075186224038899"
-                    },
-                    {
-                        "CreateFinished": true,
-                        "CreateStep": "0",
-                        "CreateTxId": "0",
-                        "Name": ".sys",
-                        "PathType": 1,
-                        "SchemeshardId": "72075186224038899"
                     }
                 ],
                 "DomainDescription": {
@@ -3676,8 +3827,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "8",
-                    "PathsInside": "1",
+                    "PathId_Depricated": "40",
+                    "PathsInside": "31",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3745,7 +3896,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "6",
+                    "PathVersion": "9",
                     "SchemeshardId": "72075186224038899"
                 }
             },
@@ -3775,6 +3926,20 @@
                     },
                     {
                         "ACL": "",
+                        "ChildrenExist": true,
+                        "CreateFinished": true,
+                        "CreateStep": "not-zero-number-text",
+                        "CreateTxId": "not-zero-number-text",
+                        "Name": ".sys",
+                        "Owner": "metadata@system",
+                        "ParentPathId": "1",
+                        "PathId": "not-zero-number-text",
+                        "PathState": 2,
+                        "PathType": 1,
+                        "SchemeshardId": "72075186224038898"
+                    },
+                    {
+                        "ACL": "",
                         "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
@@ -3786,14 +3951,6 @@
                         "PathState": 3,
                         "PathType": 2,
                         "SchemeshardId": "72075186224038898"
-                    },
-                    {
-                        "CreateFinished": true,
-                        "CreateStep": "0",
-                        "CreateTxId": "0",
-                        "Name": ".sys",
-                        "PathType": 1,
-                        "SchemeshardId": "72075186224038898"
                     }
                 ],
                 "DomainDescription": {
@@ -3804,8 +3961,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "7",
-                    "PathsInside": "5",
+                    "PathId_Depricated": "39",
+                    "PathsInside": "35",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3875,7 +4032,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "10",
+                    "PathVersion": "13",
                     "SchemeshardId": "72075186224038898"
                 }
             },
@@ -3885,6 +4042,106 @@
             "Status": "StatusSuccess"
         }
     },
+    "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
+        {
+            "FieldsAvailable": "111110111111011111011110001",
+            "FieldsRequired": "100000000010000000000000001",
+            "FoundGroups": 5,
+            "StorageGroupGroups": [
+                {
+                    "Available": "not-zero-number-text",
+                    "DiskSpaceUsage": "not-zero-number",
+                    "GroupCount": "5",
+                    "GroupName": "GREEN",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value",
+                    "Limit": "not-zero-number-text",
+                    "Usage": "number",
+                    "Used": "0"
+                }
+            ],
+            "TotalGroups": 5
+        },
+        {
+            "FieldsAvailable": "111110111111011111011110001",
+            "FieldsRequired": "100000000010000000000000001",
+            "FoundGroups": 5,
+            "StorageGroups": [
+                {
+                    "CapacityAlert": "GREEN",
+                    "GroupId": "0"
+                },
+                {
+                    "CapacityAlert": "GREEN",
+                    "GroupId": "2181038080"
+                },
+                {
+                    "CapacityAlert": "GREEN",
+                    "GroupId": "2181038081"
+                },
+                {
+                    "CapacityAlert": "GREEN",
+                    "GroupId": "2181038082"
+                },
+                {
+                    "CapacityAlert": "GREEN",
+                    "GroupId": "2181038083"
+                }
+            ],
+            "TotalGroups": 5
+        }
+    ],
+    "test.TestViewer.test_viewer_groups_group_by_pool_name": [
+        {
+            "FieldsAvailable": "000000100000000000100011111",
+            "FieldsRequired": "000000000000000000000000011",
+            "FoundGroups": 5,
+            "StorageGroupGroups": [
+                {
+                    "GroupCount": "1",
+                    "GroupName": "/Root/dedicated_db:hdd",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value"
+                },
+                {
+                    "GroupCount": "1",
+                    "GroupName": "/Root/shared_db:hdd",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value"
+                },
+                {
+                    "GroupCount": "2",
+                    "GroupName": "dynamic_storage_pool:1",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value"
+                },
+                {
+                    "GroupCount": "1",
+                    "GroupName": "static",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value"
+                }
+            ],
+            "TotalGroups": 5
+        },
+        {
+            "FieldsAvailable": "000000100000000000100011111",
+            "FieldsRequired": "000000000000000000000000011",
+            "FoundGroups": 1,
+            "StorageGroups": [
+                {
+                    "GroupId": "0",
+                    "PoolName": "static"
+                }
+            ],
+            "TotalGroups": 5
+        }
+    ],
     "test.TestViewer.test_viewer_healthcheck": {
         "/Root": {
             "location": {
@@ -4046,8 +4303,8 @@
     },
     "test.TestViewer.test_viewer_nodes": {
         "/Root": {
-            "FieldsAvailable": "10000000010000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000101",
+            "FieldsAvailable": "0000010000000010000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -4124,8 +4381,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "10000000010000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000101",
+            "FieldsAvailable": "0000010000000010000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -4200,8 +4457,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "10000000010000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000101",
+            "FieldsAvailable": "0000010000000010000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -4279,8 +4536,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "10000000010000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000101",
+            "FieldsAvailable": "0000010000000010000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -4355,8 +4612,8 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "10000000010100110111111100000111",
-            "FieldsRequired": "00000000000100000000000000000101",
+            "FieldsAvailable": "0000010000000010100110111111100000111",
+            "FieldsRequired": "0000000000000000100000000000000000101",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -4571,13 +4828,14 @@
     },
     "test.TestViewer.test_viewer_nodes_all": {
         "/Root": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -4586,6 +4844,10 @@
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxNormalizedOccupancy": "not-zero-number",
+                    "MaxPDiskUsage": "not-zero-number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -4603,6 +4865,7 @@
                             "NodeId": 1,
                             "NumActiveSlots": 5,
                             "PDiskId": 1,
+                            "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
@@ -4625,7 +4888,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -4642,7 +4905,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -4718,6 +4981,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -4763,6 +5027,7 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4772,6 +5037,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -4792,12 +5058,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4807,6 +5076,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -4827,12 +5097,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4842,6 +5115,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -4862,12 +5136,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4877,6 +5154,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -4897,12 +5175,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4912,6 +5193,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -4932,7 +5214,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -4941,13 +5225,14 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -4955,6 +5240,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/dedicated_db",
+                    "MaxNormalizedOccupancy": 0,
+                    "MaxPDiskUsage": 0,
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -4990,7 +5279,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -5014,7 +5303,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -5031,7 +5320,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -5061,6 +5350,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50000,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -5147,13 +5437,14 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -5161,6 +5452,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/shared_db",
+                    "MaxNormalizedOccupancy": 0,
+                    "MaxPDiskUsage": 0,
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -5196,7 +5491,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -5220,7 +5515,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         },
@@ -5237,7 +5532,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -5267,6 +5562,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -5343,13 +5639,14 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -5357,6 +5654,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/shared_db",
+                    "MaxNormalizedOccupancy": 0,
+                    "MaxPDiskUsage": 0,
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -5392,7 +5693,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -5416,7 +5717,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         },
@@ -5433,7 +5734,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -5463,6 +5764,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -5549,13 +5851,14 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -5563,6 +5866,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxNormalizedOccupancy": "not-zero-number",
+                    "MaxPDiskUsage": "not-zero-number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -5580,6 +5887,7 @@
                             "NodeId": 1,
                             "NumActiveSlots": 5,
                             "PDiskId": 1,
+                            "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
@@ -5602,7 +5910,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -5619,7 +5927,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -5695,6 +6003,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -5792,6 +6101,7 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5801,6 +6111,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -5821,12 +6132,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5836,6 +6150,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -5856,12 +6171,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5871,6 +6189,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -5891,12 +6210,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5906,6 +6228,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -5926,12 +6249,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5941,6 +6267,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -5961,12 +6288,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
                 },
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -5974,6 +6304,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/shared_db",
+                    "MaxNormalizedOccupancy": 0,
+                    "MaxPDiskUsage": 0,
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -6009,7 +6343,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -6033,7 +6367,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         },
@@ -6050,7 +6384,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -6080,6 +6414,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -6163,6 +6498,7 @@
                     "UptimeSeconds": "number"
                 },
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -6170,6 +6506,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/dedicated_db",
+                    "MaxNormalizedOccupancy": 0,
+                    "MaxPDiskUsage": 0,
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -6205,7 +6545,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -6229,7 +6569,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -6246,7 +6586,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -6276,6 +6616,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50000,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -6362,10 +6703,243 @@
             "TotalNodes": "3"
         }
     },
+    "test.TestViewer.test_viewer_nodes_group": [
+        {
+            "FieldsAvailable": "1111010000000110100110111111100010111",
+            "FieldsRequired": "1000000000000000100000000000000010101",
+            "FoundNodes": "3",
+            "MaximumSlotsPerDisk": "5",
+            "NodeGroups": [
+                {
+                    "GroupName": "GREEN",
+                    "NodeCount": "3"
+                }
+            ],
+            "TotalNodes": "3"
+        },
+        {
+            "FieldsAvailable": "1111010000000110100110111111100010111",
+            "FieldsRequired": "1000000000000000100000000000000010101",
+            "FoundNodes": "3",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "CapacityAlert": "GREEN",
+                    "NodeId": 1,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    }
+                },
+                {
+                    "CapacityAlert": "GREEN",
+                    "NodeId": 50001,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50001,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/shared_db"
+                        ],
+                        "TotalSessions": "number"
+                    }
+                },
+                {
+                    "CapacityAlert": "GREEN",
+                    "NodeId": 50000,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50000,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/dedicated_db"
+                        ],
+                        "TotalSessions": "number"
+                    }
+                }
+            ],
+            "TotalNodes": "3"
+        }
+    ],
     "test.TestViewer.test_viewer_nodes_issue_14992": {
         "response_group": {
-            "FieldsAvailable": "10000000110111110111111100000111",
-            "FieldsRequired": "00000000001100000010000000000101",
+            "FieldsAvailable": "0000010000000110111110111111100000111",
+            "FieldsRequired": "0000000000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "Nodes": [
@@ -6582,8 +7156,8 @@
             "TotalNodes": "3"
         },
         "response_group_by": {
-            "FieldsAvailable": "10000000110111110111111100000111",
-            "FieldsRequired": "00000000001100000010000000000101",
+            "FieldsAvailable": "0000010000000110111110111111100000111",
+            "FieldsRequired": "0000000000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "NodeGroups": [
@@ -6619,6 +7193,139 @@
         ],
         "ResponseDuration": "not-zero-number",
         "ResponseTime": "not-zero-number-text"
+    },
+    "test.TestViewer.test_viewer_peers": {
+        "FoundPeers": "2",
+        "NoDC": true,
+        "Peers": [
+            {
+                "Forward": {
+                    "BytesWritten": "text",
+                    "ChangeTime": "not-zero-number-text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "ConnectTime": "not-zero-number-text",
+                    "Connected": true,
+                    "PeerName": "text",
+                    "PeerNodeId": 50000,
+                    "PingTimeUs": "text",
+                    "SameScope": false,
+                    "SessionState": "CONNECTED",
+                    "Utilization": "number"
+                },
+                "Reverse": {
+                    "BytesWritten": "text",
+                    "ChangeTime": "not-zero-number-text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "ConnectTime": "not-zero-number-text",
+                    "Connected": true,
+                    "PeerName": "text",
+                    "PeerNodeId": 1,
+                    "PingTimeUs": "text",
+                    "SessionState": "CONNECTED",
+                    "Utilization": "number"
+                },
+                "SystemState": {
+                    "ChangeTime": "not-zero-number-text",
+                    "CoresTotal": "not-zero-number",
+                    "CoresUsed": "not-zero-number",
+                    "Endpoints": [
+                        {
+                            "Address": "text",
+                            "Name": "grpc"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "http-mon"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "ic"
+                        }
+                    ],
+                    "Host": "text",
+                    "LoadAverage": "not-empty-array",
+                    "Location": {},
+                    "MemoryLimit": "not-zero-number-text",
+                    "NetworkUtilization": "number",
+                    "NodeId": 50000,
+                    "NumberOfCpus": "not-zero-number",
+                    "RealNumberOfCpus": "not-zero-number",
+                    "Roles": "not-empty-array",
+                    "StartTime": "not-zero-number-text",
+                    "SystemState": "Green",
+                    "Tenants": [
+                        "/Root/dedicated_db"
+                    ],
+                    "TotalSessions": "number"
+                }
+            },
+            {
+                "Forward": {
+                    "BytesWritten": "text",
+                    "ChangeTime": "not-zero-number-text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "ConnectTime": "not-zero-number-text",
+                    "Connected": true,
+                    "PeerName": "text",
+                    "PeerNodeId": 50001,
+                    "PingTimeUs": "text",
+                    "SameScope": false,
+                    "SessionState": "CONNECTED",
+                    "Utilization": "number"
+                },
+                "Reverse": {
+                    "BytesWritten": "text",
+                    "ChangeTime": "not-zero-number-text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "ConnectTime": "not-zero-number-text",
+                    "Connected": true,
+                    "PeerName": "text",
+                    "PeerNodeId": 1,
+                    "PingTimeUs": "text",
+                    "SessionState": "CONNECTED",
+                    "Utilization": "number"
+                },
+                "SystemState": {
+                    "ChangeTime": "not-zero-number-text",
+                    "CoresTotal": "not-zero-number",
+                    "CoresUsed": "not-zero-number",
+                    "Endpoints": [
+                        {
+                            "Address": "text",
+                            "Name": "grpc"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "http-mon"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "ic"
+                        }
+                    ],
+                    "Host": "text",
+                    "LoadAverage": "not-empty-array",
+                    "Location": {},
+                    "MemoryLimit": "not-zero-number-text",
+                    "NetworkUtilization": "number",
+                    "NodeId": 50001,
+                    "NumberOfCpus": "not-zero-number",
+                    "RealNumberOfCpus": "not-zero-number",
+                    "Roles": "not-empty-array",
+                    "StartTime": "not-zero-number-text",
+                    "SystemState": "Green",
+                    "Tenants": [
+                        "/Root/shared_db"
+                    ],
+                    "TotalSessions": "number"
+                }
+            }
+        ],
+        "TotalPeers": "2"
     },
     "test.TestViewer.test_viewer_query": {
         "/Root": {
@@ -7421,8 +8128,8 @@
     },
     "test.TestViewer.test_viewer_storage_nodes": {
         "/Root": {
-            "FieldsAvailable": "10000000110011110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "0000010000000110011110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -7501,8 +8208,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "10000000110011110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "0000010000000110011110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -7581,8 +8288,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "10000000110011110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "0000010000000110011110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -7664,8 +8371,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "10000000110011110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "0000010000000110011110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -7744,8 +8451,8 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "10000000110111110111111100000111",
-            "FieldsRequired": "00000000000100000000000000000111",
+            "FieldsAvailable": "0000010000000110111110111111100000111",
+            "FieldsRequired": "0000000000000000100000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "Nodes": [
@@ -7825,13 +8532,14 @@
     },
     "test.TestViewer.test_viewer_storage_nodes_all": {
         "/Root": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -7840,6 +8548,10 @@
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxNormalizedOccupancy": "not-zero-number",
+                    "MaxPDiskUsage": "not-zero-number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -7857,6 +8569,7 @@
                             "NodeId": 1,
                             "NumActiveSlots": 5,
                             "PDiskId": 1,
+                            "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
@@ -7879,7 +8592,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -7896,7 +8609,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -7972,6 +8685,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -8017,6 +8731,7 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8026,6 +8741,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8046,12 +8762,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8061,6 +8780,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8081,12 +8801,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8096,6 +8819,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8116,12 +8840,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8131,6 +8858,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8151,12 +8879,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8166,6 +8897,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8186,7 +8918,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -8195,13 +8929,14 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -8209,6 +8944,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxNormalizedOccupancy": "not-zero-number",
+                    "MaxPDiskUsage": "not-zero-number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -8226,6 +8965,7 @@
                             "NodeId": 1,
                             "NumActiveSlots": 5,
                             "PDiskId": 1,
+                            "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
@@ -8248,7 +8988,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -8265,7 +9005,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -8341,6 +9081,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -8386,6 +9127,7 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8395,6 +9137,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8415,12 +9158,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8430,6 +9176,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8450,12 +9197,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8465,6 +9215,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8485,12 +9236,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8500,6 +9254,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8520,12 +9275,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8535,6 +9293,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8555,7 +9314,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -8564,13 +9325,14 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -8578,6 +9340,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxNormalizedOccupancy": "not-zero-number",
+                    "MaxPDiskUsage": "not-zero-number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -8595,6 +9361,7 @@
                             "NodeId": 1,
                             "NumActiveSlots": 5,
                             "PDiskId": 1,
+                            "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
@@ -8617,7 +9384,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -8634,7 +9401,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -8710,6 +9477,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -8755,6 +9523,7 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8764,6 +9533,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8784,12 +9554,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8799,6 +9572,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8819,12 +9593,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8834,6 +9611,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8854,12 +9632,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8869,6 +9650,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8889,12 +9671,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8904,6 +9689,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -8924,7 +9710,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -8933,13 +9721,14 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -8947,6 +9736,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxNormalizedOccupancy": "not-zero-number",
+                    "MaxPDiskUsage": "not-zero-number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -8964,6 +9757,7 @@
                             "NodeId": 1,
                             "NumActiveSlots": 5,
                             "PDiskId": 1,
+                            "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
@@ -8986,7 +9780,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -9003,7 +9797,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -9079,6 +9873,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -9124,6 +9919,7 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9133,6 +9929,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9153,12 +9950,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9168,6 +9968,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9188,12 +9989,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9203,6 +10007,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9223,12 +10028,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9238,6 +10046,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9258,12 +10067,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9273,6 +10085,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9293,7 +10106,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -9302,13 +10117,14 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlert": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -9316,6 +10132,10 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxNormalizedOccupancy": "not-zero-number",
+                    "MaxPDiskUsage": "not-zero-number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -9333,6 +10153,7 @@
                             "NodeId": 1,
                             "NumActiveSlots": 5,
                             "PDiskId": 1,
+                            "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
@@ -9355,7 +10176,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -9372,7 +10193,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -9448,6 +10269,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -9545,6 +10367,7 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9554,6 +10377,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9574,12 +10398,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9589,6 +10416,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9609,12 +10437,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9624,6 +10455,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9644,12 +10476,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9659,6 +10494,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9679,12 +10515,15 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9694,6 +10533,7 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Replicated": true,
                             "ReplicationProgress": 1,
@@ -9714,7 +10554,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -9724,8 +10566,8 @@
         }
     },
     "test.TestViewer.test_viewer_storage_nodes_no_database": {
-        "FieldsAvailable": "10000000110111110111111100000111",
-        "FieldsRequired": "00000000000100000000000000000111",
+        "FieldsAvailable": "0000010000000110111110111111100000111",
+        "FieldsRequired": "0000000000000000100000000000000000111",
         "FoundNodes": "1",
         "MaximumDisksPerNode": "1",
         "Nodes": [
@@ -9803,8 +10645,8 @@
         "TotalNodes": "1"
     },
     "test.TestViewer.test_viewer_storage_nodes_no_database_filter_node_id": {
-        "FieldsAvailable": "10000000110111110111111100000111",
-        "FieldsRequired": "00000000000100000000000000000111",
+        "FieldsAvailable": "0000010000000110111110111111100000111",
+        "FieldsRequired": "0000000000000000100000000000000000111",
         "FoundNodes": "1",
         "MaximumDisksPerNode": "1",
         "Nodes": [
@@ -11519,7 +12361,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "6",
+                "Id": "38",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11586,12 +12428,12 @@
             {
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "8",
+                "Id": "40",
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
                 "Owner": "root",
-                "ResourceId": "7",
+                "ResourceId": "39",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -11606,7 +12448,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "7",
+                "Id": "39",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11724,7 +12566,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "6",
+                    "Id": "38",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11795,11 +12637,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "8",
+                    "Id": "40",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "7",
+                    "ResourceId": "39",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11818,7 +12660,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "7",
+                    "Id": "39",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11931,7 +12773,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "6",
+                    "Id": "38",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11998,12 +12840,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "8",
+                    "Id": "40",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "7",
+                    "ResourceId": "39",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -12018,7 +12860,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "7",
+                    "Id": "39",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",

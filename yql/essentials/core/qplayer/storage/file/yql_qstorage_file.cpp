@@ -111,7 +111,7 @@ public:
         DataFile_->Write(&WrittenAt_, sizeof(WrittenAt_));
     }
 
-    ~TUnbufferedWriter() {
+    ~TUnbufferedWriter() override {
         if (!Committed_) {
             DataFile_.Clear();
             NFs::Remove(Path_.GetPath() + ".dat");
@@ -208,7 +208,7 @@ public:
         return memory->MakeReader("", {});
     }
 
-    IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& iteratorSettings) const {
+    IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& iteratorSettings) const override {
         auto memory = MakeMemoryQStorage();
         LoadFile(operationId, memory);
         return memory->MakeIterator("", iteratorSettings);

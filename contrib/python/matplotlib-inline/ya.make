@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.1.7)
+VERSION(0.2.1)
 
 LICENSE(BSD-3-Clause)
 
@@ -28,6 +28,7 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    matplotlib_inline/py.typed
 )
 
 END()

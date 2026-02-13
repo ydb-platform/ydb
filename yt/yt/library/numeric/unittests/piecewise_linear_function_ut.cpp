@@ -162,7 +162,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestInterpolationProperties)
 TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         std::vector<double> Input;
         int ExpectedNumberOfPivots;
         std::vector<double> ExpectedOutput;
@@ -179,7 +179,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
             /* Name */ "twoSortedSegments",
             /* Input */ {
                 4, 5, 6, 7, 8, 9,
-                0, 1, 2, 3
+                0, 1, 2, 3,
             },
             /* ExpectedNumberOfPivots */ 3,
             /* ExpectedOutput */ {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -189,7 +189,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
             /* Input */ {
                 8, 9,
                 4, 5, 6, 7,
-                0, 1, 2, 3
+                0, 1, 2, 3,
             },
             /* ExpectedNumberOfPivots */ 4,
             /* ExpectedOutput */ {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -200,7 +200,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 8, 9,
                 6, 7,
                 3, 4, 5,
-                0, 1, 2
+                0, 1, 2,
             },
             /* ExpectedNumberOfPivots */ 5,
             /* ExpectedOutput */ {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -212,7 +212,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 3, 3.1,
                 2, 2.1,
                 1, 1.1, 1.2,
-                0, 0.1
+                0, 0.1,
             },
             /* ExpectedNumberOfPivots */ 6,
             /* ExpectedOutput */ {
@@ -231,7 +231,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 3, 3.1,
                 2, 2.1,
                 1, 1.1, 1.2,
-                0, 0.1
+                0, 0.1,
             },
             /* ExpectedNumberOfPivots */ 7,
             /* ExpectedOutput */ {
@@ -252,7 +252,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 3, 3.1,
                 2, 2.1,
                 1, 1.1, 1.2,
-                0, 0.1
+                0, 0.1,
             },
             /* ExpectedNumberOfPivots */ 8,
             /* ExpectedOutput */ {
@@ -275,7 +275,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 3, 3.1,
                 2, 2.1,
                 1, 1.1, 1.2,
-                0, 0.1
+                0, 0.1,
             },
             /* ExpectedNumberOfPivots */ 9,
             /* ExpectedOutput */ {
@@ -313,7 +313,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
 TEST_F(TPiecewiseLinearFunctionTest, TestSum)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         std::vector<TPiecewiseLinearFunction<double>> Functions;
         double ExpectedLeftBound;
         double ExpectedRightBound;
@@ -506,7 +506,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSum)
 TEST_F(TPiecewiseLinearFunctionTest, TestPointwiseMin)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         std::vector<TPiecewiseLinearFunction<double>> Functions;
         double ExpectedLeftBound;
         double ExpectedRightBound;
@@ -755,7 +755,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPointwiseMin)
 TEST_F(TPiecewiseLinearFunctionTest, TestCompose)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         TPiecewiseLinearFunction<double> Lhs;
         TPiecewiseLinearFunction<double> Rhs;
         std::vector<TSample> Samples;
@@ -1015,7 +1015,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestCompose)
 TEST_F(TPiecewiseLinearFunctionTest, TestTransformations)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         TPiecewiseLinearFunction<double> Function;
         TPiecewiseLinearFunction<double> ExpectedTransposedFunction;
     };
@@ -1062,7 +1062,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
     };
 
     struct TTestCase {
-        TString Name;
+        std::string Name;
         TPiecewiseSegment<double> Segment;
         std::pair<double, double> ExpectedBounds;
         std::pair<double, double> ExpectedValues;
@@ -1099,7 +1099,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             /* ExpectedIsVertical */ false,
             /* ExpectedIsHorizontal */ false,
             /* ExpectedIsPoint */ false,
-            /* ExpectedIsTilted */ true
+            /* ExpectedIsTilted */ true,
         },
         {
             /* Name */ "diagonalSegment",
@@ -1124,7 +1124,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             /* ExpectedIsVertical */ false,
             /* ExpectedIsHorizontal */ false,
             /* ExpectedIsPoint */ false,
-            /* ExpectedIsTilted */ true
+            /* ExpectedIsTilted */ true,
         },
         {
             /* Name */ "verticalSegment",
@@ -1143,7 +1143,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             /* ExpectedIsVertical */ true,
             /* ExpectedIsHorizontal */ false,
             /* ExpectedIsPoint */ false,
-            /* ExpectedIsTilted */ false
+            /* ExpectedIsTilted */ false,
         },
         {
             /* Name */ "horizontalSegment",
@@ -1168,7 +1168,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             /* ExpectedIsVertical */ false,
             /* ExpectedIsHorizontal */ true,
             /* ExpectedIsPoint */ false,
-            /* ExpectedIsTilted */ false
+            /* ExpectedIsTilted */ false,
         },
         {
             /* Name */ "pointSegment",
@@ -1241,7 +1241,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentTransformationsScalar)
     };
 
     struct TTestCase {
-        TString Name;
+        std::string Name;
         TPiecewiseSegment<double> Segment;
         TPiecewiseSegment<double> ExpectedTransposedSegment;
         std::vector<TScaledSegment> ExpectedScaledSegments;

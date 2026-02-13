@@ -2,7 +2,7 @@
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/tx/schemeshard/schemeshard_index_utils.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         for (ui32 reboot = 0; reboot < 2; reboot++) {
             TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 
                 NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalFulltext),
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain),
                 NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                 NLs::IndexKeys({"text"}),
                 NLs::IndexDataColumns({"covered"}),
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: [ "another", "text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text1", "text2"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s

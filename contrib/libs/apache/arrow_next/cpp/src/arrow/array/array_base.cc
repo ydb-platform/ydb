@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
 
 #include <cstdint>
 #include <memory>
@@ -24,24 +24,24 @@
 #include <type_traits>
 #include <utility>
 
-#include "arrow/array/array_binary.h"
-#include "arrow/array/array_dict.h"
-#include "arrow/array/array_nested.h"
-#include "arrow/array/array_primitive.h"
-#include "arrow/array/util.h"
-#include "arrow/array/validate.h"
-#include "arrow/buffer.h"
-#include "arrow/compare.h"
-#include "arrow/pretty_print.h"
-#include "arrow/scalar.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/type_fwd.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/ree_util.h"
-#include "arrow/visit_array_inline.h"
-#include "arrow/visitor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_dict.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/validate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compare.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/pretty_print.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ree_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_array_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visitor.h"
 
 namespace arrow20 {
 

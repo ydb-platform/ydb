@@ -4,6 +4,7 @@ SRCS(
     background_controller.cpp
     blob.cpp
     blob_cache.cpp
+    columnshard.cpp
     columnshard__init.cpp
     columnshard__locks.cpp
     columnshard__notify_tx_completion.cpp
@@ -14,19 +15,19 @@ SRCS(
     columnshard__propose_transaction.cpp
     columnshard__scan.cpp
     columnshard__statistics.cpp
-    columnshard_subdomain_path_id.cpp
+    columnshard__tx_abort.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp
-    columnshard.cpp
     columnshard_impl.cpp
     columnshard_private_events.cpp
     columnshard_schema.cpp
+    columnshard_subdomain_path_id.cpp
     columnshard_view.cpp
     counters.cpp
     defs.cpp
     inflight_request_tracker.cpp
-    write_actor.cpp
     tables_manager.cpp
+    write_actor.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)
@@ -41,6 +42,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/columnshard/backup
     ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/columnshard/blobs_action/storages_manager
     ydb/core/tx/columnshard/blobs_reader
@@ -97,6 +99,7 @@ RECURSE(
     engines
     splitter
     tools/visualize_portions
+    tools/memory_tests
 )
 
 RECURSE_FOR_TESTS(

@@ -2855,9 +2855,12 @@ void TOperation::TOperationImpl::SyncFinishOperationImpl(const TOperationAttribu
             // so we call `GetJobStatistics' in order to get it from server
             // and cache inside object.
             GetJobStatistics();
-        } catch (const TErrorResponse& ) {
+        } catch (const std::exception& e) {
             // But if for any reason we failed to get attributes
             // we complete operation using what we have.
+            YT_LOG_ERROR("Failed to get job statistics for operation %v: %v",
+                *Id_,
+                e.what());
             auto g = Guard(Lock_);
             Attributes_ = attributes;
         }

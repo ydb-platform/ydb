@@ -1,0 +1,67 @@
+# Git and version control
+.git
+.gitignore
+.github
+.gitattributes
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts and cache
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.out
+*.log
+*.pyc
+__pycache__/
+*.egg-info/
+.pytest_cache/
+node_modules/
+
+# Documentation
+*.md
+docs/
+*.txt
+!requirements.txt
+
+# CI/CD
+.circleci
+.travis.yml
+azure-pipelines.yml
+
+# Test files
+*_test.cpp
+*_test.py
+*_ut.cpp
+test_*
+tests/
+!ydb/public/sdk/cpp/tests/slo_workloads/
+
+# Large directories not needed for SDK builds
+ydb/core/
+ydb/apps/
+ydb/services/
+ydb/tools/
+
+# Keep only what's needed (specified in Dockerfile COPY commands):
+# - build/
+# - certs/
+# - contrib/
+# - library/cpp/
+# - tools/
+# - util/
+# - ydb/library/yverify_stream/
+# - ydb/public/api/
+# - ydb/public/lib/protobuf/
+# - ydb/public/lib/validation/
+# - ydb/public/sdk/cpp/
+# - ya
+

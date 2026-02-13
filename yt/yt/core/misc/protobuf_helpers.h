@@ -156,14 +156,14 @@ void FromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TSerialized, class T, class TTag>
-void FromProto(TStrongTypedef<T, TTag>* original, const TSerialized& serialized);
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void FromProto(TStrongTypedef<T, TTag, Options>* original, const TSerialized& serialized);
 
-template <class TSerialized, class T, class TTag>
-void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag>& original);
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag, Options>& original);
 
-template <class T, class TTag>
-struct TProtoTraits<TStrongTypedef<T, TTag>>
+template <class T, class TTag, TStrongTypedefOptions Options>
+struct TProtoTraits<TStrongTypedef<T, TTag, Options>>
 {
     using TSerialized = T;
 };
@@ -385,7 +385,7 @@ struct IProtobufExtensionRegistry
 };
 
 #define REGISTER_PROTO_EXTENSION(type, tag, name) \
-    YT_STATIC_INITIALIZER( \
+    YT_STATIC_INITIALIZER({ \
         NYT::IProtobufExtensionRegistry::Get()->AddAction([] { \
             const auto* descriptor = type::default_instance().GetDescriptor(); \
             ::NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
@@ -393,7 +393,8 @@ struct IProtobufExtensionRegistry
                 .Tag = tag, \
                 .Name = #name, \
             });\
-        }));
+        }); \
+    })
 
 //! Finds and deserializes an extension of the given type. Fails if no matching
 //! extension is found.

@@ -86,7 +86,7 @@ NPY_NO_EXPORT int NPY_NUMUSERTYPES = 0;
  *****************************************************************************
  */
 /* __ufunc_api.c define is the PyUFunc_API table: */
-#include "__ufunc_api.c"
+#include "contrib/python/numpy/py3/numpy/core/include/numpy/__ufunc_api.c"
 
 NPY_NO_EXPORT int initscalarmath(PyObject *);
 NPY_NO_EXPORT int set_matmul_flags(PyObject *d); /* in ufunc_object.c */
@@ -4772,7 +4772,7 @@ static struct PyMethodDef array_module_methods[] = {
     {NULL, NULL, 0, NULL}                /* sentinel */
 };
 
-#include "__multiarray_api.c"
+#include "contrib/python/numpy/py3/numpy/core/include/numpy/__multiarray_api.c"
 #include "array_method.h"
 
 /* Establish scalar-type hierarchy

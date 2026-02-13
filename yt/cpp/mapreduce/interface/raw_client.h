@@ -10,6 +10,17 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Interface for HTTP/RPC output streams that provide a response after the stream is closed.
+class IOutputStreamWithResponse
+    : public TThrRefBase
+    , public IOutputStream
+{
+public:
+    virtual TString GetResponse() const = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class IRawClient
     : public virtual TThrRefBase
 {
@@ -291,12 +302,12 @@ public:
     virtual std::unique_ptr<IInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
-        const TMaybe<TFormat>& format,
+        const TFormat& format,
         const TTableReaderOptions& options = {}) = 0;
 
     virtual std::unique_ptr<IInputStream> ReadTablePartition(
         const TString& cookie,
-        const TMaybe<TFormat>& format,
+        const TFormat& format,
         const TTablePartitionReaderOptions& options = {}) = 0;
 
     virtual std::unique_ptr<IInputStream> ReadBlobTable(
@@ -322,6 +333,51 @@ public:
     virtual void UnfreezeTable(
         const TYPath& path,
         const TUnfreezeTableOptions& options = {}) = 0;
+
+    // Distributed API
+
+    virtual TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) = 0;
+
+    virtual void PingDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TPingDistributedWriteTableOptions& options = {}) = 0;
+
+    virtual void FinishDistributedWriteTableSession(
+        TMutationId& mutationId,
+        const TDistributedWriteTableSession& session,
+        const TVector<TWriteTableFragmentResult>& results,
+        const TFinishDistributedWriteTableOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IOutputStreamWithResponse> WriteTableFragment(
+        const TDistributedWriteTableCookie& cookie,
+        const TMaybe<TFormat>& format,
+        const TTableFragmentWriterOptions& options = {}) = 0;
+
+    virtual TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) = 0;
+
+    virtual void PingDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TPingDistributedWriteFileOptions& options = {}) = 0;
+
+    virtual void FinishDistributedWriteFileSession(
+        TMutationId& mutationId,
+        const TDistributedWriteFileSession& session,
+        const TVector<TWriteFileFragmentResult>& results,
+        const TFinishDistributedWriteFileOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IOutputStreamWithResponse> WriteFileFragment(
+        const TDistributedWriteFileCookie& cookie,
+        const TFileFragmentWriterOptions& options = {}) = 0;
 
     // Misc
 

@@ -19,6 +19,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
+#include <yt/yt/core/rpc/dispatcher.h>
+
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
@@ -474,7 +476,7 @@ TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOpti
     return result.Flush();
 }
 
-bool operator == (const TNetworkAddress& lhs, const TNetworkAddress& rhs)
+bool operator==(const TNetworkAddress& lhs, const TNetworkAddress& rhs)
 {
     auto lhsAddr = lhs.GetSockAddr();
     auto lhsSize = lhs.GetLength();
@@ -766,7 +768,7 @@ void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStrin
     }
 }
 
-bool operator == (const TIP6Address& lhs, const TIP6Address& rhs)
+bool operator==(const TIP6Address& lhs, const TIP6Address& rhs)
 {
     return ::memcmp(lhs.GetRawBytes(), rhs.GetRawBytes(), TIP6Address::ByteSize) == 0;
 }
@@ -987,6 +989,7 @@ public:
     explicit TImpl(TAddressResolverConfigPtr config)
         : TAsyncExpiringCache(
             config,
+            NRpc::TDispatcher::Get()->GetHeavyInvoker(),
             /*logger*/ {},
             DnsProfiler().WithPrefix("/resolve_cache"))
     {

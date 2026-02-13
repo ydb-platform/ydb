@@ -50,6 +50,7 @@ private:
     bool ParseTableStoreFeatures(std::map<TString, TDeferredAtom>& result, const TRule_alter_table_store_action& actions);
     bool AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_column_drop_not_null& node, TAlterTableParameters& params);
     bool AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetCompression(const TRule_alter_table_alter_column_set_compression& node, TAlterTableParameters& params);
 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 
@@ -65,13 +66,7 @@ private:
         humanStatementName.clear();
         const auto& descr = AltDescription(node);
         TVector<TString> parts;
-        if (!Ctx_.Settings.Antlr4Parser) {
-            const auto pos = descr.find(": ");
-            Y_DEBUG_ABORT_UNLESS(pos != TString::npos);
-            Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);
-        } else {
-            Split(descr, "_", parts);
-        }
+        Split(descr, "_", parts);
         Y_DEBUG_ABORT_UNLESS(parts.size() > 1);
         parts.pop_back();
         for (auto& part : parts) {

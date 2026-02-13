@@ -9,8 +9,8 @@ namespace numpy
 {
 
   template <class E>
-  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
-  sort(E const &expr, long axis)
+  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>> sort(E const &expr,
+                                                                             long axis)
   {
     auto out = functor::array{}(expr);
     ndarray::sort(out, axis);
@@ -18,8 +18,8 @@ namespace numpy
   }
 
   template <class E>
-  types::ndarray<typename E::dtype, types::array_tuple<long, 1>>
-  sort(E const &expr, types::none_type)
+  types::ndarray<typename E::dtype, types::array_tuple<long, 1>> sort(E const &expr,
+                                                                      types::none_type)
   {
     auto out = functor::array{}(expr).flat();
     ndarray::sort(out, types::none_type{});

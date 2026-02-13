@@ -21,7 +21,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxKillNode(" << NodeId << ")::Execute");
         SideEffects.Reset(Self->SelfId());
-        TInstant now = TInstant::Now();
+        TInstant now = TActivationContext::Now();
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
             Local = node->Local;

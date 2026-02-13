@@ -1,5 +1,6 @@
 #include "file_log_writer.h"
 
+#include "appendable_compressed_file.h"
 #include "log_writer_detail.h"
 #include "config.h"
 #include "private.h"
@@ -7,9 +8,8 @@
 #include "random_access_gzip.h"
 #include "stream_output.h"
 #include "system_log_event_provider.h"
-#include "compression.h"
 #include "log_writer_factory.h"
-#include "zstd_compression.h"
+#include "zstd_log_codec.h"
 #include "formatter.h"
 
 #include <yt/yt/core/misc/fs.h>
@@ -186,11 +186,13 @@ private:
             if (Config_->EnableCompression) {
                 switch (Config_->CompressionMethod) {
                     case ECompressionMethod::Zstd:
-                        OutputStream_ = New<TAppendableCompressedFile>(
+                        OutputStream_ = CreateAppendableCompressedFile(
                             *File_,
-                            CreateZstdCompressionCodec(Config_->CompressionLevel),
+                            CreateZstdLogCodec(Config_->CompressionLevel),
                             Host_->GetCompressionInvoker(),
-                            /*writeTruncateMessage*/ true);
+                            {
+                                .WriteTruncateMessage = true,
+                            });
                         break;
 
                     case ECompressionMethod::Gzip:
@@ -269,11 +271,11 @@ private:
         }
     }
 
-    std::vector<TString> ListFiles() const
+    std::vector<std::string> ListFiles() const
     {
         auto files = NFS::EnumerateFiles(DirectoryName_, /*depth*/ 1, /*sortByName*/ true);
-        std::erase_if(files, [&] (const TString& s) {
-            return !s.StartsWith(FileNamePrefix_);
+        std::erase_if(files, [&] (const std::string& s) {
+            return !s.starts_with(FileNamePrefix_);
         });
         if (Config_->UseTimestampSuffix) {
             // Rotated files are suffixed with the date, decreasing with the age of file.
@@ -285,7 +287,7 @@ private:
         return files;
     }
 
-    int GetFileCountToKeep(const std::vector<TString>& fileNames) const
+    int GetFileCountToKeep(const std::vector<std::string>& fileNames) const
     {
         const auto& rotationPolicy = Config_->RotationPolicy;
         int filesToKeep = 0;
@@ -303,7 +305,7 @@ private:
         return fileNames.size();
     }
 
-    void RenameFiles(const std::vector<TString>& fileNames)
+    void RenameFiles(const std::vector<std::string>& fileNames)
     {
         if (Config_->UseTimestampSuffix || fileNames.empty()) {
             return;

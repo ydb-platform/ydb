@@ -12,6 +12,8 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 class TRoamingRequestControl
     : public TClientRequestControlThunk
 {
@@ -194,6 +196,8 @@ private:
     const IRoamingChannelProviderPtr Provider_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 };
+
+} // namespace
 
 IChannelPtr CreateRoamingChannel(IRoamingChannelProviderPtr provider)
 {

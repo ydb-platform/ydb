@@ -132,7 +132,9 @@ PEERDIR(
     yt/yql/providers/yt/lib/row_spec
     yt/yql/providers/yt/lib/schema
     yt/yql/providers/yt/lib/skiff
+    yt/yql/providers/yt/lib/temp_files
     yt/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/lib/yt_token_resolver
     yt/yql/providers/yt/opt
     yt/yql/providers/yt/gateway/qplayer
     yt/yql/providers/yt/proto

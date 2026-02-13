@@ -2,6 +2,7 @@
 #include "header.h"
 #include "others_storage.h"
 
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 
 namespace NKikimr::NArrow::NAccessor {
@@ -119,8 +120,8 @@ public:
     const TSubColumnsHeader& GetHeader() const {
         return Header;
     }
-    
-    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
+
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
 
     bool NeedFetch(const std::string_view colName) const {
         if (auto idx = Header.GetColumnStats().GetKeyIndexOptional(colName)) {

@@ -14,9 +14,9 @@ struct THistogramSnapshot
     std::vector<i64> Values;
     std::vector<double> Bounds;
 
-    THistogramSnapshot& operator += (const THistogramSnapshot& other);
+    THistogramSnapshot& operator+=(const THistogramSnapshot& other);
 
-    bool operator == (const THistogramSnapshot& other) const;
+    bool operator==(const THistogramSnapshot& other) const;
     bool IsEmpty() const;
 };
 

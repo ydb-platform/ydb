@@ -21,8 +21,8 @@
 #include <cstdint>
 #include <utility>
 
-#include "arrow/array/data.h"
-#include "arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
 
 namespace arrow20 {
 namespace list_util {

@@ -4,12 +4,12 @@
 namespace NKikimr {
 
     TEvNodeWardenStorageConfig::TEvNodeWardenStorageConfig(std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> config,
-            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> proposedConfig, bool selfManagementEnabled,
-            TBridgeInfo::TPtr bridgeInfo)
+            bool selfManagementEnabled, TBridgeInfo::TPtr bridgeInfo,
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> committedConfig)
         : Config(std::move(config))
-        , ProposedConfig(std::move(proposedConfig))
         , SelfManagementEnabled(selfManagementEnabled)
         , BridgeInfo(std::move(bridgeInfo))
+        , CommittedConfig(std::move(committedConfig))
     {}
 
     TEvNodeWardenStorageConfig::~TEvNodeWardenStorageConfig()

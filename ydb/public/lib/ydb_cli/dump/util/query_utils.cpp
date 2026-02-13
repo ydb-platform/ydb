@@ -257,19 +257,40 @@ TString GetDatabase(const TString& query) {
     return GetToken(query, R"(-- database: ")");
 }
 
-TString GetSecretName(const TString& query) {
-    TString secretName;
-    if (auto pwd = GetToken(query, R"(PASSWORD_SECRET_NAME = ')")) {
-        secretName = std::move(pwd);
-    } else if (auto token = GetToken(query, R"(TOKEN_SECRET_NAME = ')")) {
-        secretName = std::move(token);
+TVector<TSecretSetting> GetSecretSettings(const TString& query) {
+    static const TVector<TString> SECRET_SETTING_NAMES = [] {
+        static const TVector<TString> settings = {
+            "TOKEN_SECRET",
+            "PASSWORD_SECRET",
+            "SERVICE_ACCOUNT_SECRET",
+            "AWS_ACCESS_KEY_ID_SECRET",
+            "AWS_SECRET_ACCESS_KEY_SECRET",
+        };
+        TVector<TString> result;
+        for (const auto& name : settings) {
+            result.push_back(name + "_NAME");
+            result.push_back(name + "_PATH");
+        }
+
+        return result;
+    }();
+
+    TVector<TSecretSetting> result;
+    for (const auto& settingName : SECRET_SETTING_NAMES) {
+        auto secretSettingValue = GetToken(query, settingName + " = '");
+        if (!secretSettingValue) {
+            continue;
+        }
+        if (secretSettingValue.EndsWith("'")) {
+            secretSettingValue.resize(secretSettingValue.size() - 1);
+        }
+        result.push_back(TSecretSetting{
+            .Name = settingName,
+            .Value = secretSettingValue,
+        });
     }
 
-    if (secretName.EndsWith("'")) {
-        secretName.resize(secretName.size() - 1);
-    }
-
-    return secretName;
+    return result;
 }
 
 bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::TIssues& issues) {
@@ -288,7 +309,7 @@ bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::T
 
     google::protobuf::Arena arena;
     const auto* parserProto = NSQLTranslationV1::SqlAST(
-        parsers, queryStr, "query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, settings.Antlr4Parser, &arena
+        parsers, queryStr, "query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, &arena
     );
     if (!parserProto) {
         return false;
@@ -344,7 +365,7 @@ bool RewriteRefs(TString& queryStr, TStringBuf db, TStringBuf backupRoot, TStrin
 }
 
 bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_table_ref>(query, "", backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix, issues);
+    return RewriteRefs<TRule_an_id_table>(query, "", backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix, issues);
 }
 
 bool RewriteObjectRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {
@@ -359,6 +380,55 @@ bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::str
 
     issues.AddIssue(TStringBuilder() << "Pattern: \"" << pattern << "\" was not found: " << query.Quote());
     return false;
+}
+
+std::string KeyValueToString(std::string_view key, std::string_view value) {
+    // indented to follow the default YQL formatting
+    return std::format("  {} = '{}'", key, value);
+}
+
+bool IsSchemaSecret(TStringBuf secretName) {
+    return secretName.StartsWith('/');
+}
+
+void RewriteSecretSettings(
+    TVector<TSecretSetting>& secretSettings,
+    const TString& database,
+    const TString& dbRestoreRoot)
+{
+    for (auto& secretSetting : secretSettings) {
+        if (IsSchemaSecret(secretSetting.Value)) {
+            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, database, dbRestoreRoot);
+        }
+    }
+}
+
+bool RewriteQuerySecrets(
+    TString& query,
+    TVector<TSecretSetting>& secretSettings,
+    NYql::TIssues issues)
+{
+    for (auto& secretSetting : secretSettings) {
+        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
+           return false;
+        }
+    }
+
+    return true;
+}
+
+bool RewriteQuerySecretsNoCheck(
+    TString& query,
+    const TString& dbRestoreRoot,
+    NYql::TIssues& issues)
+{
+    auto secretSettings = GetSecretSettings(query);
+    RewriteSecretSettings(secretSettings, GetDatabase(query), dbRestoreRoot);
+    if (!RewriteQuerySecrets(query, secretSettings, issues)) {
+        return false;
+    }
+
+    return true;
 }
 
 } // NYdb::NDump

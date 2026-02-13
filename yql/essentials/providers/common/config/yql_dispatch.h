@@ -110,7 +110,7 @@ public:
     public:
         using TPtr = TIntrusivePtr<TSettingHandler>;
 
-        TSettingHandler(const TString& name)
+        explicit TSettingHandler(const TString& name)
             : Name_(name)
         {
         }
@@ -346,7 +346,7 @@ public:
         bool IgnoreInFullReplay_ = false;
     };
 
-    TSettingDispatcher(const TQContext& qContext = {})
+    explicit TSettingDispatcher(const TQContext& qContext = {})
         : QContext_(qContext)
     {
     }
@@ -354,7 +354,7 @@ public:
     TSettingDispatcher(const TSettingDispatcher&) = delete;
 
     template <class TContainer>
-    TSettingDispatcher(const TContainer& validClusters)
+    explicit TSettingDispatcher(const TContainer& validClusters)
         : ValidClusters(validClusters.begin(), validClusters.end())
     {
     }
@@ -368,6 +368,12 @@ public:
     void AddValidCluster(const TString& cluster) {
         ValidClusters.insert(cluster);
     }
+
+    bool IsValidCluster(const TString& cluster) const {
+        return ValidClusters.contains(cluster);
+    }
+
+    const THashSet<TString>& GetValidClusters() const;
 
     template <typename TType, EConfSettingType SettingType>
     TSettingHandlerImpl<TType, SettingType>& AddSetting(const TString& name, TConfSetting<TType, SettingType>& setting) {
@@ -422,9 +428,6 @@ public:
     void Enumerate(std::function<void(std::string_view)> callback);
 
 protected:
-    // FIXME switch usages to an acesssor
-    const THashSet<TString>& GetValidClusters() const;
-
     THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
     THashMap<TString, TSettingHandler::TPtr> Handlers_;
     TSet<TString> Names_;

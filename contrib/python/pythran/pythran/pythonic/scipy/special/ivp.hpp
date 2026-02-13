@@ -22,8 +22,7 @@ namespace scipy
       double ivp(T0 x, T1 y)
       {
         using namespace boost::math::policies;
-        return boost::math::cyl_bessel_i_prime(
-            x, y, make_policy(promote_double<true>()));
+        return boost::math::cyl_bessel_i_prime(x, y, make_policy(promote_double<true>()));
       }
     } // namespace details
 

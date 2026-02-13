@@ -298,6 +298,7 @@ void TSensorSet::ReadSensors(
     readOptions.DisableDefault = Options_.DisableDefault;
     readOptions.MemOnly = Options_.MemOnly;
     if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
+        // Use summary option from sensor if specified.
         readOptions.SummaryPolicy = Options_.SummaryPolicy;
     }
 

@@ -316,6 +316,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node,
                 return node;
             }
         }
+        if (!path.QLFilter().Maybe<TCoVoid>()) {
+            return node;
+        }
         size += tableSize;
         rows += tableRows;
     }

@@ -11,8 +11,8 @@ namespace numpy
 {
 
   template <class... Args>
-  auto prod(Args &&...args) -> decltype(reduce<operator_::functor::imul>(
-                                std::forward<Args>(args)...));
+  auto prod(Args &&...args)
+      -> decltype(reduce<operator_::functor::imul>(std::forward<Args>(args)...));
 
   DEFINE_FUNCTOR(pythonic::numpy, prod);
 } // namespace numpy

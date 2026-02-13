@@ -25,11 +25,11 @@ using TJsonNodes = TSmallVec<TValue>;
 
 class TResult {
 public:
-    TResult(TJsonNodes&& nodes);
+    TResult(TJsonNodes&& nodes); // NOLINT(google-explicit-constructor)
 
-    TResult(const TJsonNodes& nodes);
+    TResult(const TJsonNodes& nodes); // NOLINT(google-explicit-constructor)
 
-    TResult(TIssue&& issue);
+    TResult(TIssue&& issue); // NOLINT(google-explicit-constructor)
 
     const TJsonNodes& GetNodes() const;
 

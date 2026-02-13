@@ -26,8 +26,10 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions Execute");
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Param>().Key(1).Update(NIceDb::TUpdate<Schema::Param::NextPermissionID>(NextPermissionId),
-                                                NIceDb::TUpdate<Schema::Param::NextRequestID>(NextRequestId));
+        db.Table<Schema::Param>().Key(Schema::Param::Key).Update(
+            NIceDb::TUpdate<Schema::Param::NextPermissionID>(NextPermissionId),
+            NIceDb::TUpdate<Schema::Param::NextRequestID>(NextRequestId)
+        );
 
         const auto &rec = Response->Get<TEvCms::TEvPermissionResponse>()->Record;
 
@@ -65,6 +67,7 @@ public:
         for (const auto &permission : rec.GetPermissions()) {
             const auto &id = permission.GetId();
             const auto &requestId = Scheduled ? Scheduled->RequestId : "";
+            i32 priority = Scheduled ? Scheduled->Priority : 0;
             ui64 deadline = permission.GetDeadline();
             TString actionStr;
             google::protobuf::TextFormat::PrintToString(permission.GetAction(), &actionStr);
@@ -73,7 +76,8 @@ public:
             row.Update(NIceDb::TUpdate<Schema::Permission::Owner>(Owner),
                        NIceDb::TUpdate<Schema::Permission::Action>(actionStr),
                        NIceDb::TUpdate<Schema::Permission::Deadline>(deadline),
-                       NIceDb::TUpdate<Schema::Permission::RequestID>(requestId));
+                       NIceDb::TUpdate<Schema::Permission::RequestID>(requestId),
+                       NIceDb::TUpdate<Schema::Permission::Priority>(priority));
 
             if (MaintenanceTaskId) {
                 Y_ABORT_UNLESS(Self->State->MaintenanceTasks.contains(*MaintenanceTaskId));

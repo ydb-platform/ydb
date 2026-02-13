@@ -1,10 +1,4 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
-#include <format>
-#include <ydb/core/kqp/counters/kqp_counters.h>
-
-#include <library/cpp/json/json_reader.h>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -13,18 +7,26 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-NKikimrConfig::TAppConfig GetAppConfig(size_t maxBatchSize = 10000, size_t partitionLimit = 10) {
+TKikimrSettings GetTestSettings(size_t maxBatchSize = 10000, size_t partitionLimit = 10,
+    bool enableOltpSink = true, bool enableBatchUpdates = true)
+{
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
-    app.MutableTableServiceConfig()->SetEnableOltpSink(true);
-    app.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+    app.MutableTableServiceConfig()->SetEnableOltpSink(enableOltpSink);
+    app.MutableTableServiceConfig()->SetEnableBatchUpdates(enableBatchUpdates);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(maxBatchSize);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetPartitionExecutionLimit(partitionLimit);
-    return app;
+
+    auto logConfig = TTestLogSettings()
+        .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_EXECUTER, NLog::EPriority::PRI_TRACE)
+        .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPUTE, NLog::EPriority::PRI_INFO);
+
+    logConfig.DefaultLogPriority = NLog::EPriority::PRI_CRIT;
+    return TKikimrSettings(std::move(app)).SetLogSettings(std::move(logConfig));
 }
 
 void TestSimpleOnePartition(size_t maxBatchSize) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
+    TKikimrRunner kikimr(GetTestSettings(maxBatchSize));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -98,7 +100,7 @@ void TestSimpleOnePartition(size_t maxBatchSize) {
 }
 
 void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize, partitionLimit));
+    TKikimrRunner kikimr(GetTestSettings(maxBatchSize, partitionLimit));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -230,7 +232,7 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
 }
 
 void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards, size_t partitionLimit) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize, partitionLimit));
+    TKikimrRunner kikimr(GetTestSettings(maxBatchSize, partitionLimit));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -266,7 +268,7 @@ void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards, si
 }
 
 void TestLarge(size_t maxBatchSize, size_t rowsPerShard) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
+    TKikimrRunner kikimr(GetTestSettings(maxBatchSize));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -366,7 +368,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(TableWithIndex) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
 
         {
             auto db = kikimr.GetTableClient();
@@ -465,7 +467,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(NotIdempotent) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -502,7 +504,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(MultiStatement) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -568,7 +570,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(Returning) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -586,7 +588,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(UpdateOn) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -603,7 +605,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(ColumnTable) {
-        TKikimrRunner kikimr(TKikimrSettings(GetAppConfig()).SetWithSampleTables(false));
+        TKikimrRunner kikimr(GetTestSettings().SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -649,7 +651,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(TableNotExists) {
-        TKikimrRunner kikimr(TKikimrSettings(GetAppConfig()).SetWithSampleTables(false));
+        TKikimrRunner kikimr(GetTestSettings().SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -677,7 +679,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(UnknownColumn) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -706,7 +708,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(HasTxControl) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -717,8 +719,30 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operation can be executed only in the implicit transaction mode.", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(DisableFlags, UseSink, UseBatchUpdates) {
+        TKikimrRunner kikimr(GetTestSettings(10000, 10, UseSink, UseBatchUpdates));
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE KeyValue
+                    SET Value = "None"
+                    WHERE Key IN [1, 3, 5];
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            if (UseSink && UseBatchUpdates) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operations are not supported at the current time.", result.GetIssues().ToString());
+            }
         }
     }
 }

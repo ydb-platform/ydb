@@ -38,8 +38,7 @@ namespace numpy
         return result;
       }
       template <size_t K, size_t S, class T, size_t N, class V>
-      types::array_base<T, N, V> const &
-      normalize_axes(types::array_base<T, N, V> const &axes)
+      types::array_base<T, N, V> const &normalize_axes(types::array_base<T, N, V> const &axes)
       {
         return axes;
       }
@@ -48,22 +47,20 @@ namespace numpy
     // without shape
 
     template <class T, class pS, class Axes, class Norm>
-    types::ndarray<typename std::enable_if<std::is_integral<T>::value,
-                                           std::complex<double>>::type,
+    types::ndarray<std::enable_if_t<std::is_integral<T>::value, std::complex<double>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    fftn(types::ndarray<T, pS> const &in_array, types::none_type s,
-         Axes const &axes, Norm const &norm)
+    fftn(types::ndarray<T, pS> const &in_array, types::none_type s, Axes const &axes,
+         Norm const &norm)
     {
       auto tmp_array = _copy_to_double(in_array);
       return fftn(tmp_array, s, axes, norm);
     }
 
     template <class T, class pS, class Axes, class Norm>
-    types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
-                                           std::complex<T>>::type,
+    types::ndarray<std::enable_if_t<std::is_floating_point<T>::value, std::complex<T>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    fftn(types::ndarray<T, pS> const &in_array, types::none_type s,
-         Axes const &axes, Norm const &norm)
+    fftn(types::ndarray<T, pS> const &in_array, types::none_type s, Axes const &axes,
+         Norm const &norm)
     {
       auto naxes = details::normalize_axes<std::tuple_size<pS>::value, 1>(axes);
       auto nnorm = details::normalize_norm(norm);
@@ -74,11 +71,10 @@ namespace numpy
     }
 
     template <class T, class pS, class Axes, class Norm>
-    types::ndarray<
-        typename std::enable_if<types::is_complex<T>::value, T>::type,
-        types::array_tuple<long, std::tuple_size<pS>::value>>
-    fftn(types::ndarray<T, pS> const &in_array, types::none_type s,
-         Axes const &axes, Norm const &norm)
+    types::ndarray<std::enable_if_t<types::is_complex<T>::value, T>,
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
+    fftn(types::ndarray<T, pS> const &in_array, types::none_type s, Axes const &axes,
+         Norm const &norm)
     {
       auto naxes = details::normalize_axes<std::tuple_size<pS>::value, 1>(axes);
       auto nnorm = details::normalize_norm(norm);
@@ -89,25 +85,21 @@ namespace numpy
     }
 
     // with shape
-    template <class T, class pS, class I, size_t N, class V, class Axes,
-              class Norm>
-    types::ndarray<typename std::enable_if<std::is_integral<T>::value,
-                                           std::complex<double>>::type,
+    template <class T, class pS, class I, size_t N, class V, class Axes, class Norm>
+    types::ndarray<std::enable_if_t<std::is_integral<T>::value, std::complex<double>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s,
-         Axes const &axes, Norm const &norm)
+    fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s, Axes const &axes,
+         Norm const &norm)
     {
       auto tmp_array = _copy_to_double(a);
       return fftn(tmp_array, s, axes, norm);
     }
 
-    template <class T, class pS, class I, size_t N, class V, class Axes,
-              class Norm>
-    types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
-                                           std::complex<T>>::type,
+    template <class T, class pS, class I, size_t N, class V, class Axes, class Norm>
+    types::ndarray<std::enable_if_t<std::is_floating_point<T>::value, std::complex<T>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s,
-         Axes const &axes, Norm const &norm)
+    fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s, Axes const &axes,
+         Norm const &norm)
     {
       auto nnorm = details::normalize_norm(norm);
       auto naxes = details::normalize_axes<std::tuple_size<pS>::value, N>(axes);
@@ -119,13 +111,11 @@ namespace numpy
       return out;
     }
 
-    template <class T, class pS, class I, size_t N, class V, class Axes,
-              class Norm>
-    types::ndarray<
-        typename std::enable_if<types::is_complex<T>::value, T>::type,
-        types::array_tuple<long, std::tuple_size<pS>::value>>
-    fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s,
-         Axes const &axes, Norm const &norm)
+    template <class T, class pS, class I, size_t N, class V, class Axes, class Norm>
+    types::ndarray<std::enable_if_t<types::is_complex<T>::value, T>,
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
+    fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s, Axes const &axes,
+         Norm const &norm)
     {
       auto nnorm = details::normalize_norm(norm);
       auto naxes = details::normalize_axes<std::tuple_size<pS>::value, N>(axes);

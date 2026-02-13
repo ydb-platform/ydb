@@ -16,6 +16,11 @@ struct TTransferPoolResourcesOptions
     , public TMutatingOptions
 { };
 
+struct TTransferBundleResourcesOptions
+    : public TTimeoutOptions
+    , public TMutatingOptions
+{ };
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IAccountingClient
@@ -29,11 +34,17 @@ struct IAccountingClient
         const TTransferAccountResourcesOptions& options = {}) = 0;
 
     virtual TFuture<void> TransferPoolResources(
-        const TString& srcPool,
-        const TString& dstPool,
-        const TString& poolTree,
+        const std::string& srcPool,
+        const std::string& dstPool,
+        const std::string& poolTree,
         NYTree::INodePtr resourceDelta,
         const TTransferPoolResourcesOptions& options = {}) = 0;
+
+    virtual TFuture<void> TransferBundleResources(
+        const std::string& srcBundle,
+        const std::string& dstBundle,
+        NYTree::INodePtr resourceDelta,
+        const TTransferBundleResourcesOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

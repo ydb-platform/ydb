@@ -15,7 +15,7 @@ TString ToLower(TString s) {
 
 class TOptimizerHintsParser {
 public:
-    TOptimizerHintsParser(const TString& text)
+    explicit TOptimizerHintsParser(const TString& text)
         : Pos_(-1)
         , Size_(static_cast<i32>(text.size()) - 1)
         , Text_(text)

@@ -35,8 +35,7 @@ namespace builtins
     }
 
     template <class Iterable>
-    typename reversed<Iterable>::const_iterator
-    reversed<Iterable>::begin() const
+    typename reversed<Iterable>::const_iterator reversed<Iterable>::begin() const
     {
       return iterable.rbegin();
     }

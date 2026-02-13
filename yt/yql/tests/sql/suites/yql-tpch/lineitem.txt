@@ -1,0 +1,1 @@
+{"l_orderkey"=1;"l_linenumber"=1;"l_discount"=0.04;"l_extendedprice"=21168.23;"l_comment"="egular courts above the";"l_shipdate"=9568u;"l_returnflag"="N";"l_partkey"=155190;"l_tax"=0.02;"l_shipinstruct"="DELIVER IN PERSON";"l_commitdate"=9538u;"l_receiptdate"=9577u;"l_quantity"=17.;"l_suppkey"=7706;"l_shipmode"="TRUCK";"l_linestatus"="O";};

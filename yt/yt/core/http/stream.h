@@ -31,14 +31,14 @@ DEFINE_ENUM(EParserState,
 class THttpParser
 {
 public:
-    explicit THttpParser(http_parser_type parserType);
+    THttpParser(http_parser_type parserType, std::optional<EMethod> requestMethod);
 
     static http_parser_settings GetParserSettings();
 
     std::pair<int, int> GetVersion() const;
     EMethod GetMethod() const;
     EStatusCode GetStatusCode() const;
-    TString GetFirstLine();
+    std::string GetFirstLine();
 
     const THeadersPtr& GetHeaders() const;
     const THeadersPtr& GetTrailers() const;
@@ -52,6 +52,7 @@ public:
 
 private:
     const http_parser_type ParserType_{};
+    const std::optional<EMethod> RequestMethod_;
 
     http_parser Parser_{};
 
@@ -93,6 +94,7 @@ public:
         const NNet::TNetworkAddress& remoteAddress,
         IInvokerPtr readInvoker,
         EMessageType messageType,
+        std::optional<EMethod> requestMethod,
         THttpIOConfigPtr config);
 
     EMethod GetMethod() override;
@@ -130,12 +132,13 @@ public:
     int GetPort() const override;
     void SetPort(int port);
 
-    std::optional<TString> TryGetRedirectUrl();
+    std::optional<std::string> TryGetRedirectUrl();
 
 private:
     const NNet::IConnectionPtr Connection_;
     const NNet::TNetworkAddress RemoteAddress_;
     const EMessageType MessageType_;
+    const std::optional<EMethod> RequestMethod_;
     const THttpIOConfigPtr Config_;
     const IInvokerPtr ReadInvoker_;
 
@@ -145,7 +148,7 @@ private:
     bool HeadersReceived_ = false;
     THttpParser Parser_;
 
-    TString RawUrl_;
+    std::string RawUrl_;
     TUrlRef Url_;
     int Port_;
     THeadersPtr Headers_;
@@ -201,7 +204,7 @@ public:
 
     void Flush100Continue();
 
-    void WriteRequest(EMethod method, const TString& path);
+    void WriteRequest(EMethod method, const std::string& path);
     std::optional<EStatusCode> GetStatus() const override;
     void SetStatus(EStatusCode status) override;
 
@@ -234,7 +237,7 @@ private:
     bool HeadersLogged_ = false;
     TInstant LastProgressLogTime_;
 
-    static const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualComparer> FilteredHeaders_;
+    static const THashSet<std::string, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualComparer> FilteredHeaders_;
 
     bool ConnectionClose_ = false;
 
@@ -242,8 +245,8 @@ private:
     THeadersPtr Headers_;
     std::optional<EStatusCode> Status_;
     std::optional<EMethod> Method_;
-    std::optional<TString> HostHeader_;
-    TString Path_;
+    std::optional<std::string> HostHeader_;
+    std::string Path_;
     bool HeadersFlushed_ = false;
     bool MessageFinished_ = false;
 

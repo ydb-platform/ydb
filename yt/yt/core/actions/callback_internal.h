@@ -60,12 +60,12 @@ public:
 
 #ifndef __cpp_impl_three_way_comparison
     //! Returns |true| iff this callback is equal to the other (which may be null).
-    bool operator == (const TCallbackBase& other) const;
+    bool operator==(const TCallbackBase& other) const;
 
     //! Returns |true| iff this callback is not equal to the other (which may be null).
-    bool operator != (const TCallbackBase& other) const;
+    bool operator!=(const TCallbackBase& other) const;
 #else
-    bool operator== (const TCallbackBase& other) const = default;
+    bool operator==(const TCallbackBase& other) const = default;
 #endif
 
 protected:

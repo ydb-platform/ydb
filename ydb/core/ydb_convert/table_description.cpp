@@ -421,6 +421,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
     } else if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision() && column.GetTypeInfo().HasDecimalScale()) {
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
+            newColumn->set_not_null(column.GetNotNull());
         } else {
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
@@ -436,6 +437,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         }
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
+            newColumn->set_not_null(column.GetNotNull());
         } else {
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
@@ -825,6 +827,43 @@ bool FillColumnFamily(
     return true;
 }
 
+
+bool FillColumnCompression(
+    const Ydb::Table::ColumnMeta& from, NKikimrSchemeOp::TOlapColumnDiff* to, Ydb::StatusIds::StatusCode& status, TString& error) {
+    to->SetName(from.name());
+    if (from.has_compression()) {
+        const auto fromCompression = from.compression();
+        auto toSerializer = to->MutableSerializer();
+
+        if (from.compression().algorithm()) {
+            toSerializer->SetClassName("ARROW_SERIALIZER");
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            switch (fromCompression.algorithm()) {
+                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
+                    break;
+
+                default:
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.Getalgorithm() << " in compression settings";
+                    return false;
+            }
+        }
+
+        if (from.compression().has_compression_level()) {
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            arrowCompression->SetLevel(fromCompression.compression_level());
+        }
+    }
+    return true;
+}
+
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error) {
     const auto ops = GetAlterOperationKinds(req);
@@ -873,6 +912,12 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
             if (!alter.family().empty()) {
                 alterColumn->SetColumnFamilyName(alter.family());
+            }
+
+            if (alter.has_compression()) {
+                if (!FillColumnCompression(alter, alterColumn, status, error)) {
+                    return false;
+                }
             }
         }
 
@@ -1013,6 +1058,17 @@ void FillPartitioningSettingsImpl(TYdbProto& out,
     FillPartitioningSettings(outPartSettings, partConfig.GetPartitioningPolicy());
 }
 
+template <typename TYdbProto>
+void FillPartitioningSettingsImpl(TYdbProto& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+
+    auto& outPartSettings = *out.mutable_partitioning_settings();
+
+    if (in.HasColumnShardCount()) {
+        outPartSettings.set_min_partitions_count(in.GetColumnShardCount());
+    }
+}
+
 void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     const NKikimrSchemeOp::TTableDescription& indexImplTableDescription
 ) {
@@ -1089,18 +1145,27 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             FillGlobalIndexSettings(
-                *index->mutable_global_fulltext_index()->mutable_settings(),
+                *index->mutable_global_fulltext_plain_index()->mutable_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
 
-            *index->mutable_global_fulltext_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+            *index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+
+            *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
 
             break;
         default:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(tableIndex.GetType()));
- 
+
             break;
         };
 
@@ -1170,10 +1235,15 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             break;
-            
-        case Ydb::Table::TableIndex::kGlobalFulltextIndex:
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext);
-            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_index().fulltext_settings();
+
+        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain);
+            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
+            break;
+
+        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance);
+            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
             break;
 
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
@@ -1605,6 +1675,11 @@ void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
     FillPartitioningSettingsImpl(out, in);
 }
 
+void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillPartitioningSettingsImpl(out, in);
+}
+
 bool CopyExplicitPartitions(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::ExplicitPartitions& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
@@ -1737,6 +1812,33 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
     TList<TString> warnings;
     if (!FillCreateTableSettingsDesc(*tableDesc, in, status, error, warnings, false)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
+        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    NKikimrSchemeOp::TColumnTableDescription& tableDesc = *out.MutableCreateColumnTable();
+
+    if (!FillColumnDescription(tableDesc, in.columns(), status, error)) {
+        return false;
+    }
+    
+    tableDesc.MutableSchema()->MutableKeyColumnNames()->CopyFrom(in.primary_key());
+    
+    // NOTICE: TTableProfiles aren't supported for column tables
+    // NOTICE: ColumnFamilies aren't supported for column tables
+
+    for (auto [key, value] : in.attributes()) {
+        auto& attr = *out.MutableAlterUserAttributes()->AddUserAttributes();
+        attr.SetKey(key);
+        attr.SetValue(value);
+    }
+
+    if (!FillCreateTableSettingsDesc(tableDesc, in, status, error)) {
         return false;
     }
 

@@ -69,7 +69,7 @@ TFuture<void> TParallelRunner<T>::Run(F func)
         for (auto& item : CurrentBatch_) {
             func(item);
         }
-        return VoidFuture;
+        return OKFuture;
     }
 }
 

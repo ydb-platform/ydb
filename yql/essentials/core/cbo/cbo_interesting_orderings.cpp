@@ -661,7 +661,7 @@ i64 TOrderingsStateMachine::TLogicalOrderings::GetState() const {
     return State_;
 }
 
-bool TOrderingsStateMachine::TLogicalOrderings::IsSubset(const std::bitset<EMaxNFSMStates>& lhs, const std::bitset<EMaxNFSMStates>& rhs) {
+bool TOrderingsStateMachine::TLogicalOrderings::IsSubset(const std::bitset<MaxNFSMStates>& lhs, const std::bitset<MaxNFSMStates>& rhs) {
     return (lhs & rhs) == lhs;
 }
 
@@ -779,7 +779,7 @@ TString TOrderingsStateMachine::TNFSM::TEdge::ToString() const {
     TStringBuilder ss;
     ss << "Edge{src=" << SrcNodeIdx
        << ", dst=" << DstNodeIdx
-       << ", fdIdx=" << (FdIdx == EPSILON ? "EPSILON" : std::to_string(FdIdx))
+       << ", fdIdx=" << (FdIdx == Epsilon ? "EPSILON" : std::to_string(FdIdx))
        << "}";
     return ss;
 }
@@ -859,7 +859,7 @@ void TOrderingsStateMachine::TNFSM::PrefixClosure() {
 
             if (k == iItems.size()) {
                 if (Nodes_[i].Ordering.Type == TOrdering::EShuffle) {
-                    AddEdge(i, j, TNFSM::TEdge::EPSILON);
+                    AddEdge(i, j, TNFSM::TEdge::Epsilon);
                 }
 
                 Y_ENSURE(Nodes_[i].Ordering.Directions.size() <= Nodes_[j].Ordering.Directions.size());
@@ -868,7 +868,7 @@ void TOrderingsStateMachine::TNFSM::PrefixClosure() {
                     Nodes_[i].Ordering.Directions.end(),
                     Nodes_[j].Ordering.Directions.begin());
                 if (Nodes_[i].Ordering.Type == TOrdering::ESorting && areDirsCompatable) {
-                    AddEdge(j, i, TNFSM::TEdge::EPSILON);
+                    AddEdge(j, i, TNFSM::TEdge::Epsilon);
                 }
             }
         }
@@ -889,8 +889,8 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                 ->Items.size();
     }
 
-    for (std::size_t nodeIdx = 0; nodeIdx < Nodes_.size() && Nodes_.size() < EMaxNFSMStates; ++nodeIdx) {
-        for (std::size_t fdIdx = 0; fdIdx < fds.size() && Nodes_.size() < EMaxNFSMStates; ++fdIdx) {
+    for (std::size_t nodeIdx = 0; nodeIdx < Nodes_.size() && Nodes_.size() < MaxNFSMStates; ++nodeIdx) {
+        for (std::size_t fdIdx = 0; fdIdx < fds.size() && Nodes_.size() < MaxNFSMStates; ++fdIdx) {
             if (Nodes_[nodeIdx].Ordering.Items.empty()) {
                 continue;
             }
@@ -898,7 +898,7 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
             TFunctionalDependency fd = fds[fdIdx];
 
             auto applyFD = [this, &itemInfo, nodeIdx, maxInterestingOrderingSize](const TFunctionalDependency& fd, std::size_t fdIdx) {
-                if (Nodes_.size() >= EMaxNFSMStates) {
+                if (Nodes_.size() >= MaxNFSMStates) {
                     return;
                 }
 
@@ -970,7 +970,7 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                 }
 
                 if (fd.IsImplication() || fd.IsEquivalence()) {
-                    for (std::size_t i = antecedentItemIdx + fd.AntecedentItems.size(); i <= Nodes_[nodeIdx].Ordering.Items.size() && Nodes_.size() < EMaxNFSMStates; ++i) {
+                    for (std::size_t i = antecedentItemIdx + fd.AntecedentItems.size(); i <= Nodes_[nodeIdx].Ordering.Items.size() && Nodes_.size() < MaxNFSMStates; ++i) {
                         std::vector<std::size_t> newOrdering = Nodes_[nodeIdx].Ordering.Items;
                         newOrdering.insert(newOrdering.begin() + i, fd.ConsequentItem);
 
@@ -1074,7 +1074,7 @@ void TOrderingsStateMachine::TDFSM::Build(
         }
     }
 
-    for (std::size_t nodeIdx = 0; nodeIdx < Nodes_.size() && Nodes_.size() < EMaxDFSMStates; ++nodeIdx) {
+    for (std::size_t nodeIdx = 0; nodeIdx < Nodes_.size() && Nodes_.size() < MaxDFSMStates; ++nodeIdx) {
         std::unordered_set<i64> outgoingDFSMNodeFDs;
         for (std::size_t nfsmNodeIdx : Nodes_[nodeIdx].NFSMNodes) {
             for (std::size_t nfsmEdgeIdx : nfsm.Nodes_[nfsmNodeIdx].OutgoingEdges) {
@@ -1083,7 +1083,7 @@ void TOrderingsStateMachine::TDFSM::Build(
         }
 
         for (i64 fdIdx : outgoingDFSMNodeFDs) {
-            if (fdIdx == TNFSM::TEdge::EPSILON) {
+            if (fdIdx == TNFSM::TEdge::Epsilon) {
                 continue;
             }
 
@@ -1132,7 +1132,7 @@ std::vector<std::size_t> TOrderingsStateMachine::TDFSM::CollectNodesWithEpsOrFdE
 
         for (std::size_t edgeIdx : nfsm.Nodes_[nodeIdx].OutgoingEdges) {
             const TNFSM::TEdge& edge = nfsm.Edges_[edgeIdx];
-            if (edge.FdIdx == fdIdx || edge.FdIdx == TNFSM::TEdge::EPSILON || fds[edge.FdIdx].AlwaysActive) {
+            if (edge.FdIdx == fdIdx || edge.FdIdx == TNFSM::TEdge::Epsilon || fds[edge.FdIdx].AlwaysActive) {
                 DFS(edge.DstNodeIdx);
             }
         }
@@ -1194,7 +1194,7 @@ std::vector<TFunctionalDependency> TOrderingsStateMachine::PruneFDs(
             }
         }
 
-        if (canLeadToInteresting && filteredFds.size() < EMaxFDCount) {
+        if (canLeadToInteresting && filteredFds.size() < MaxFDCount) {
             filteredFds.push_back(std::move(fds[i]));
             FdMapping_[i] = filteredFds.size() - 1;
         } else {

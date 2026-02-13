@@ -57,6 +57,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UseSystemColumns_(options.UseSystemColumns)
     , UseWorkerPool_(options.UseWorkerPool)
     , LangVer_(options.LangVer)
+    , IssueReportTarget_(options.IssueReportTarget)
 {
     HandleInternalSettings(options.InternalSettings);
 
@@ -71,13 +72,13 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     const auto inputsCount = inputSchemas.size();
 
     for (ui32 i = 0; i < inputsCount; ++i) {
-        const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_);
+        const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_, IssueReportTarget_);
         if (!ValidateInputSchema(originalInputType, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid schema for #" << i << " input";
         }
 
         const auto* originalStructType = originalInputType->template Cast<TStructExprType>();
-        const auto* structType = ExtendStructType(originalStructType, allVirtualColumns[i], ExprContext_);
+        const auto* structType = ExtendStructType(originalStructType, allVirtualColumns[i], ExprContext_, IssueReportTarget_);
 
         InputTypes_.push_back(structType);
         OriginalInputTypes_.push_back(originalStructType);
@@ -99,7 +100,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 
     auto outputSchema = options.OutputSpec.GetSchema();
     if (!outputSchema.IsNull()) {
-        OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_);
+        OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_, IssueReportTarget_);
         if (!ValidateOutputSchema(OutputType_, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid output schema";
         }
@@ -116,7 +117,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode,
                             options.SyntaxVersion, options.Modules,
-                            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode, typeCtx.Get());
+                            options.InputSpec, options.OutputSpec, processorMode, typeCtx.Get());
 
         RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
 
@@ -175,6 +176,7 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
 
     if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
         modules->AttachUserData(typeContext->UserDataStorage);
+        modules->SetUseCanonicalLibrarySuffix(true);
     }
 
     return typeContext;
@@ -188,10 +190,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     const THashMap<TString, TString>& modules,
     const TInputSpecBase& inputSpec,
     const TOutputSpecBase& outputSpec,
-    bool useAntlr4,
     EProcessorMode processorMode,
     TTypeAnnotationContext* typeContext) {
-    Y_ENSURE(useAntlr4, "Antlr3 support is dropped");
     if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
         ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
     }
@@ -219,7 +219,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         settings.EmitReadsForExists = true;
-        settings.Antlr4Parser = useAntlr4;
+        settings.Antlr4Parser = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
         settings.ClusterMapping[settings.DefaultCluster] = PurecalcDefaultService;
@@ -258,7 +258,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
         astRes = SqlToYql(translators, TString(query), settings);
     } else {
-        astRes = ParseAst(TString(query));
+        astRes = ParseAst(query);
     }
 
     if (verIssue) {
@@ -518,7 +518,7 @@ const THashSet<TString>& TWorkerFactory<TBase>::GetUsedColumns() const {
 template <typename TBase>
 TIssues TWorkerFactory<TBase>::GetIssues() const {
     auto issues = ExprContext_.IssueManager.GetCompletedIssues();
-    CheckFatalIssues(issues);
+    CheckFatalIssues(issues, IssueReportTarget_);
     return issues;
 }
 

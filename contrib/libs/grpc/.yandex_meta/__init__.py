@@ -98,9 +98,17 @@ def post_install(self):
         if addincls and source_addincl in addincls:
             addincls.add(build_addincl)
 
-    xxhash = os.path.join(self.dstdir, "third_party/xxhash")
-    if os.path.exists(xxhash) and os.path.isdir(xxhash):
-        shutil.rmtree(xxhash, ignore_errors=True)
+    # unbundle third_party/utf_range manually merged into upb library
+    with self.yamakes["third_party/upb"] as upb:
+        # fmt: off
+        upb.SRCS = [
+            src
+            for src in upb.SRCS
+            if "utf8_range" not in src
+        ]
+        # fmt: on
+        upb.PEERDIR.add("contrib/restricted/google/utf8_range")
+        upb.ADDINCL.add("contrib/restricted/google/utf8_range")
 
     with self.yamakes["."] as m:
         # fmt: off
@@ -162,6 +170,7 @@ grpc = CMakeNinjaNixProject(
     },
     unbundle_from={
         "xxhash": "third_party/xxhash",
+        "utf8_validity": "third_party/upb/third_party/utf8_range",
     },
     copy_sources=[
         "include/**/*.h",

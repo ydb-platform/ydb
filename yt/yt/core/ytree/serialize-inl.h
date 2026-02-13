@@ -506,8 +506,8 @@ void Serialize(
     consumer->OnStringScalar(message.SerializeAsStringOrThrow());
 }
 
-template <class T, class TTag>
-void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer)
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Serialize(const TStrongTypedef<T, TTag, Options>& value, NYson::IYsonConsumer* consumer)
 {
     Serialize(value.Underlying(), consumer);
 }
@@ -732,8 +732,8 @@ void Deserialize(
     message.ParseFromStringOrThrow(string);
 }
 
-template <class T, class TTag>
-void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node)
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Deserialize(TStrongTypedef<T, TTag, Options>& value, INodePtr node)
 {
     Deserialize(value.Underlying(), node);
 }

@@ -390,7 +390,7 @@ ISubOperation::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state);
 bool CreateDropTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 
-TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr DropBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
@@ -678,6 +678,10 @@ ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, TTxState::ETxState state);
 
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, TTxState::ETxState state);
+TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+
 // Resource Pool
 // Create
 ISubOperation::TPtr CreateNewResourcePool(TOperationId id, const TTxTransaction& tx);
@@ -755,6 +759,14 @@ ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, TTxState::ETxStat
 // Drop
 ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, TTxState::ETxState state);
+
+inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& workingDir, NKikimrSchemeOp::EOperationType type) {
+    NKikimrSchemeOp::TModifyScheme tx;
+    tx.SetWorkingDir(workingDir);
+    tx.SetOperationType(type);
+
+    return tx;
+}
 
 }
 }

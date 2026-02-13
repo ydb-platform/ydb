@@ -38,6 +38,7 @@ PY_SRCS(
     dstool_cmd_group_take_snapshot.py
     dstool_cmd_group_virtual_create.py
     dstool_cmd_group_virtual_cancel.py
+    dstool_cmd_group_virtual_reconfigure.py
 
     dstool_cmd_pool_create_virtual.py
     dstool_cmd_pool_list.py
@@ -59,5 +60,16 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
 )
+
+IF (OS_LINUX)
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/public/api/protos
+    )
+    PY_SRCS(
+        dstool_cmd_nbs_partition_create.py
+        dstool_cmd_nbs_partition_delete.py
+        dstool_cmd_nbs_partition_io.py
+    )
+ENDIF()
 
 END()

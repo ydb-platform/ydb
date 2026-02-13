@@ -78,6 +78,30 @@ TEST(TDelayedExecutorTest, SubmitZeroDelay)
     EXPECT_EQ(2, state->Destructors);
 }
 
+TEST(TDelayedExecutorTest, SubmitExpiredDeadline)
+{
+    auto fired = std::make_shared<std::atomic<int>>(0);
+    auto state = std::make_shared<TProbeState>();
+
+    auto cookie1 = TDelayedExecutor::Submit(
+        BIND([fired, state, probe = TProbe(state.get())] { ++*fired; }),
+        TInstant::Now() - TDuration::Days(1));
+
+    Sleep(TDuration::MilliSeconds(10));
+
+    EXPECT_EQ(1, *fired);
+
+    auto cookie2 = TDelayedExecutor::Submit(
+        BIND([fired, state, probe = TProbe(state.get())] { ++*fired; }),
+        TDuration::MilliSeconds(10));
+
+    Sleep(TDuration::MilliSeconds(50));
+
+    EXPECT_EQ(2, *fired);
+    EXPECT_EQ(2, state->Constructors);
+    EXPECT_EQ(2, state->Destructors);
+}
+
 TEST(TDelayedExecutorTest, StressTest)
 {
     auto fired = std::make_shared<std::atomic<int>>(0);

@@ -9,8 +9,7 @@ namespace __dispatch__
 {
 
   template <class Any, class... Arg0>
-  auto update(Any &&any, Arg0 &&...arg0)
-      -> decltype(any.update(std::forward<Arg0>(arg0)...));
+  auto update(Any &&any, Arg0 &&...arg0) -> decltype(any.update(std::forward<Arg0>(arg0)...));
 
   DEFINE_FUNCTOR(pythonic::__dispatch__, update);
 } // namespace __dispatch__

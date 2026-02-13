@@ -101,6 +101,20 @@ struct TPartitionBlobEncoder {
     std::deque<TDataKey> HeadKeys;
     ui64 FirstUncompactedOffset = 0;
 
+    void pop_front();
+    void ScheduleDelete(TDataKey& key);
+
+    struct TDeletedKey {
+        TString Key;
+        std::weak_ptr<TBlobKeyToken> Lock;
+
+        TDeletedKey(const TBlobKeyTokenPtr& token) {
+            Key = token->Key;
+            Lock = std::weak_ptr<TBlobKeyToken>(token);
+        }
+    };
+    std::deque<TDeletedKey> DeletedKeys;
+
     bool HaveData = false;
     bool HeadCleared = false;
 

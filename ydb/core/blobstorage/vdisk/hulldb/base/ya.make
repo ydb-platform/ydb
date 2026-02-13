@@ -20,6 +20,7 @@ SRCS(
     hullbase_barrier.h
     hullbase_block.h
     hullbase_logoblob.h
+    hullbase_rec.h
     hullds_arena.h
     hullds_generic_it.h
     hullds_heap_it.h

@@ -41,6 +41,10 @@ NProto::TTableStats TableStatsToProto(const TTableStats& tableStats);
 
 TTableStats TableStatsFromProto(const NProto::TTableStats& protoTableStats);
 
+NProto::TSortedChunkStats SortedChunkStatsToProto(const TSortedChunkStats& sortedChunkStats);
+
+TSortedChunkStats SortedChunkStatsFromProto(const NProto::TSortedChunkStats& protoSortedChunkStats);
+
 NProto::TChunkStats ChunkStatsToProto(const TChunkStats& chunkStats);
 
 TChunkStats ChunkStatsFromProto(const NProto::TChunkStats& protoChunkStats);
@@ -69,9 +73,17 @@ NProto::TUploadOperationParams UploadOperationParamsToProto(const TUploadOperati
 
 TUploadOperationParams UploadOperationParamsFromProto(const NProto::TUploadOperationParams& protoUploadOperationParams);
 
+NProto::TSortedUploadOperationParams SortedUploadOperationParamsToProto(const TSortedUploadOperationParams& SortedUploadOperationParams);
+
+TSortedUploadOperationParams SortedUploadOperationParamsFromProto(const NProto::TSortedUploadOperationParams& protoSortedUploadOperationParams);
+
 NProto::TUploadTaskParams UploadTaskParamsToProto(const TUploadTaskParams& uploadTaskParams);
 
 TUploadTaskParams UploadTaskParamsFromProto(const NProto::TUploadTaskParams& protoUploadTaskParams);
+
+NProto::TSortedUploadTaskParams SortedUploadTaskParamsToProto(const TSortedUploadTaskParams& SortedUploadTaskParams);
+
+TSortedUploadTaskParams SortedUploadTaskParamsFromProto(const NProto::TSortedUploadTaskParams& protoSortedUploadTaskParams);
 
 NProto::TDownloadOperationParams DownloadOperationParamsToProto(const TDownloadOperationParams& downloadOperationParams);
 
@@ -109,9 +121,49 @@ NProto::TClusterConnection ClusterConnectionToProto(const TClusterConnection& cl
 
 TClusterConnection ClusterConnectionFromProto(const NProto::TClusterConnection& protoClusterConnection);
 
+NProto::TFileInfo FileInfoToProto(const TFileInfo& fileInfo);
+
+TFileInfo FileInfoFromProto(const NProto::TFileInfo& protoFileInfo);
+
+NProto::TYtResourceInfo YtResourceInfoToProto(const TYtResourceInfo& ytResourceInfo);
+
+TYtResourceInfo YtResourceInfoFromProto(const NProto::TYtResourceInfo& protoYtResourceInfo);
+
+NProto::TFmrResourceOperationInfo FmrResourceOperationInfoToProto(const TFmrResourceOperationInfo& fmrResourceOperationInfo);
+
+TFmrResourceOperationInfo FmrResourceOperationInfoFromProto(const NProto::TFmrResourceOperationInfo& protoFmrResourceOperationInfo);
+
+NProto::TFmrResourceTaskInfo FmrResourceTaskInfoToProto(const TFmrResourceTaskInfo& fmrResourceTaskInfo);
+
+TFmrResourceTaskInfo FmrResourceTaskInfoFromProto(const NProto::TFmrResourceTaskInfo& protoFmrResourceTaskInfo);
+
 NProto::TTask TaskToProto(const TTask& task);
 
 TTask TaskFromProto(const NProto::TTask& protoTask);
+
+NProto::TTaskUploadResult TaskUploadResultToProto(const TTaskUploadResult& taskUploadResult);
+
+TTaskUploadResult TaskUploadResultFromProto(const NProto::TTaskUploadResult& protoTaskUploadResult);
+
+NProto::TTaskDownloadResult TaskDownloadResultToProto(const TTaskDownloadResult& taskDownloadResult);
+
+TTaskDownloadResult TaskDownloadResultFromProto(const NProto::TTaskDownloadResult& protoTaskDownloadResult);
+
+NProto::TTaskMergeResult TaskMergeResultToProto(const TTaskMergeResult& taskMergeResult);
+
+TTaskMergeResult TaskMergeResultFromProto(const NProto::TTaskMergeResult& protoTaskMergeResult);
+
+NProto::TTaskMapResult TaskMapResultToProto(const TTaskMapResult& taskMapResult);
+
+TTaskMapResult TaskMapResultFromProto(const NProto::TTaskMapResult& protoTaskMapResult);
+
+NProto::TTaskSortedUploadResult TaskSortedUploadResultToProto(const TTaskSortedUploadResult& taskSortedUploadResult);
+
+TTaskSortedUploadResult TaskSortedUploadResultFromProto(const NProto::TTaskSortedUploadResult& protoTaskSortedUploadResult);
+
+NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult);
+
+TTaskResult TaskResultFromProto(const NProto::TTaskResult& protoTaskResult);
 
 NProto::TTaskState TaskStateToProto(const TTaskState& taskState);
 

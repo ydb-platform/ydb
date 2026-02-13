@@ -12,8 +12,7 @@ namespace random
 {
   template <class Iterable>
   types::list<typename std::iterator_traits<
-      typename std::remove_cv<typename std::remove_reference<Iterable>::type>::
-          type::iterator>::value_type>
+      typename std::remove_cv_t<std::remove_reference_t<Iterable>>::iterator>::value_type>
   sample(Iterable &&s, size_t k);
 
   DEFINE_FUNCTOR(pythonic::random, sample);

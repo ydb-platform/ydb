@@ -1021,7 +1021,7 @@ public:
     THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers = {});
     THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers, TStringBuf body);
 
-    THttpIncomingRequestPtr Duplicate();
+    THttpIncomingRequestPtr Duplicate(const NHttp::THeaders& extraHeaders = {}) const;
     THttpOutgoingRequestPtr Forward(TStringBuf baseUrl) const;
 
 private:
@@ -1047,7 +1047,7 @@ public:
     static THttpOutgoingRequestPtr CreateRequestPost(TStringBuf host, TStringBuf uri, TStringBuf contentType, TStringBuf body); // http only
     static THttpOutgoingRequestPtr CreateRequest(TStringBuf method, TStringBuf url, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     static THttpOutgoingRequestPtr CreateHttpRequest(TStringBuf method, TStringBuf host, TStringBuf uri, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
-    THttpOutgoingRequestPtr Duplicate();
+    THttpOutgoingRequestPtr Duplicate(const THeaders& extraHeaders = {});
     THttpIncomingRequestPtr Reverse();
 
     bool IsConnectionClose() const {
@@ -1069,7 +1069,7 @@ public:
         return Request;
     }
 
-    THttpIncomingResponsePtr Duplicate(THttpOutgoingRequestPtr request);
+    THttpIncomingResponsePtr Duplicate(THttpOutgoingRequestPtr request, const THeaders& extraHeaders = {});
     THttpOutgoingResponsePtr Reverse(THttpIncomingRequestPtr request);
 
     bool IsConnectionClose() const {
@@ -1141,7 +1141,7 @@ public:
         return Request;
     }
 
-    THttpOutgoingResponsePtr Duplicate(THttpIncomingRequestPtr request);
+    THttpOutgoingResponsePtr Duplicate(THttpIncomingRequestPtr request, const THeaders& extraHeaders = {});
     THttpIncomingResponsePtr Reverse(THttpOutgoingRequestPtr request);
     THttpOutgoingDataChunkPtr CreateDataChunk(TStringBuf data = {}); // empty chunk means end of data
     THttpOutgoingDataChunkPtr CreateIncompleteDataChunk(); // to construct it later

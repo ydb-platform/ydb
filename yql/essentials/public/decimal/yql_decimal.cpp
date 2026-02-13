@@ -70,8 +70,8 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
 
     // log_{10}(2^120) ~= 36.12, 37 decimal places
     // plus dot, zero before dot, sign and zero byte at the end
-    static thread_local char str[40];
-    auto end = str + sizeof(str);
+    static thread_local char Str[40];
+    auto end = Str + sizeof(Str);
     *--end = 0;
 
     auto s = end;

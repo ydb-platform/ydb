@@ -344,7 +344,7 @@ public:
     using TPtr = TUniquePtr<IFunctionArgTypesBuilder>;
 
 public:
-    IFunctionArgTypesBuilder(IFunctionTypeInfoBuilder& parent)
+    explicit IFunctionArgTypesBuilder(IFunctionTypeInfoBuilder& parent)
         : Parent_(parent)
     {
     }
@@ -489,26 +489,6 @@ template <typename... TArgs>
 struct TCallableArgsHelper;
 
 } // namespace NImpl
-
-struct TSourcePosition {
-    TSourcePosition(ui32 row = 0, ui32 column = 0, TStringRef file = {})
-        : Row(row)
-        , Column(column)
-        , File(file)
-    {
-    }
-
-    ui32 Row;
-    ui32 Column;
-    TStringRef File;
-};
-
-UDF_ASSERT_TYPE_SIZE(TSourcePosition, 24);
-
-inline IOutputStream& operator<<(IOutputStream& os, const TSourcePosition& pos) {
-    os << (pos.File.Size() ? TStringBuf(pos.File) : TStringBuf("<main>")) << ':' << pos.Row << ':' << pos.Column << ':';
-    return os;
-}
 
 class IFunctionTypeInfoBuilder1 {
 public:

@@ -38,11 +38,11 @@ public:
 
     TFuture<void> Flush() override;
 
-    std::optional<NCrypto::TMD5Hash> GetDigest() const override;
+    std::optional<NTableClient::TRowsDigest> GetDigest() const override;
 
 protected:
     const NTableClient::TNameTablePtr NameTable_;
-    const NConcurrency::IAsyncOutputStreamPtr Output_;
+    const NConcurrency::IAsyncZeroCopyOutputStreamPtr Output_;
     const bool EnableContextSaving_;
     const TControlAttributesConfigPtr ControlAttributesConfig_;
     const int KeyColumnCount_;
@@ -61,7 +61,7 @@ protected:
 
     TBlobOutput* GetOutputStream();
 
-    void TryFlushBuffer(bool force);
+    void MaybeFlushBuffer(bool force);
     virtual void FlushWriter();
 
     virtual void DoWrite(TRange<NTableClient::TUnversionedRow> rows) = 0;
@@ -91,7 +91,7 @@ protected:
 
     bool HasError() const;
     const TError& GetError() const;
-    void RegisterError(const TError& error);
+    void SetError(TError error);
 
 private:
     TBlobOutput CurrentBuffer_;
@@ -109,6 +109,7 @@ private:
 
     bool EnableRowControlAttributes_;
 
+    std::queue<TFuture<void>> WriteFutures_;
     TError Error_;
 
     i64 WrittenSize_ = 0;
@@ -116,6 +117,10 @@ private:
     bool Closed_ = false;
 
     void DoFlushBuffer();
+
+    void EnqueueWriteFuture(TFuture<void> future);
+    void ProcessWriteFutures();
+    bool CheckWritable();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

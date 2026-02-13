@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/services/ydb)
 FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -29,6 +29,7 @@ SRCS(
     ydb_ldap_login_ut.cpp
     ydb_login_ut.cpp
     ydb_object_storage_ut.cpp
+    ydb_whoami_ut.cpp
 )
 
 PEERDIR(
@@ -43,6 +44,7 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/testlib
     ydb/core/security
+    ydb/core/security/ldap_auth_provider/test_utils
     yql/essentials/minikql/dom
     yql/essentials/minikql/jsonpath
     ydb/library/testlib/service_mocks/ldap_mock
@@ -51,6 +53,7 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/lib/ut_helpers
     ydb/public/lib/ydb_cli/commands
+    ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/export

@@ -32,7 +32,7 @@ private:
 
 class TStatelessInputConsumer: public IConsumer<const NYql::NUdf::TUnboxedValue&> {
 public:
-    TStatelessInputConsumer(TWorkerHolder<IPushStreamWorker> worker)
+    explicit TStatelessInputConsumer(TWorkerHolder<IPushStreamWorker> worker)
         : Worker_(std::move(worker))
     {
     }

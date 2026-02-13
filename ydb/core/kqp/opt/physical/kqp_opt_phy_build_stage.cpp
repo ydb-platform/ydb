@@ -100,6 +100,10 @@ bool IsLiteralNothing(TExprBase node) {
                 auto slot = type->Cast<TDataExprType>()->GetSlot();
                 auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
+                if (NKikimr::NScheme::NTypeIds::IsParametrizedType(typeId)) {
+                    return false;
+                }
+
                 return (
                     NKikimr::NScheme::NTypeIds::IsYqlType(typeId)
                     && NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId))
@@ -240,6 +244,35 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         .Settings(TDqStageSettings::New()
             .SetPartitionMode(singleKey && UseSource(kqpCtx, tableDesc) ? TDqStageSettings::EPartitionMode::Single : TDqStageSettings::EPartitionMode::Default)
             .BuildNode(ctx, read.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, read.Pos())
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
+TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    Y_UNUSED(kqpCtx);
+
+    if (!node.Maybe<TKqlReadTableFullTextIndex>()) {
+        return node;
+    }
+
+    const TKqlReadTableFullTextIndex& read = node.Cast<TKqlReadTableFullTextIndex>();
+
+    auto phyRead = ctx.RenameNode(*node.Raw(), TKqpReadTableFullTextIndex::CallableName());
+
+    auto stage = Build<TDqStage>(ctx, read.Pos())
+        .Inputs()
+            .Build()
+        .Program()
+            .Args({})
+            .Body(phyRead)
+            .Build()
+        .Settings().Build()
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, read.Pos())
@@ -508,7 +541,9 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
         << KqpExprToPrettyString(lookupKeys, ctx));
 
     TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    settings.Strategy = lookupTable.IsUnique()
+        ? EStreamLookupStrategyType::LookupUniqueRows
+        : EStreamLookupStrategyType::LookupRows;
     TNodeOnNodeOwnedMap replaceMap;
     TVector<TExprBase> newInputs;
     TVector<TCoArgument> newArgs;
@@ -600,12 +635,66 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
         .Done();
 }
 
+NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NYql::TExprContext& ctx) {
+    auto* type = param.Raw()->GetTypeAnn();
+    YQL_ENSURE(type);
+    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+        param = Build<TCoUnwrap>(ctx, param.Pos())
+            .Optional(param)
+            .Done();
+    }
+    return Build<TDqPhyPrecompute>(ctx, param.Pos())
+        .Connection<TDqCnValue>()
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Build()
+                    .Program()
+                        .Args({})
+                        .Body<TCoToStream>()
+                            .Input<TCoAsList>()
+                                .Add(param)
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Settings().Build()
+                    .Build()
+                .Index().Build("0")
+                .Build()
+            .Build()
+        .Done();
+}
+
 NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {
     if (!node.Maybe<TKqlStreamLookupTable>()) {
         return node;
     }
 
     const auto& lookup = node.Cast<TKqlStreamLookupTable>();
+
+    const auto& settingsSrc = lookup.Settings();
+    auto settings = TKqpStreamLookupSettings::Parse(settingsSrc);
+
+    // Target and/or limit may be expressions (usually very simple ones), in this case
+    // we wrap them in a PhyPrecompute, and let kqp_opt_build_txs.cpp handle them
+    // by scanning the whole query for Precomputes in stage inputs AND in KqpCnStreamLookup
+    // parameters, and replacing them with KqpTxResultBindings, and then, in a more pass,
+    // replacing KqpTxResultBindings with KqpParameterBindings. Then kqp_query_data.cpp
+    // can materialize values with MaterializeParamValue(). That's how dynamic limit/target
+    // values work.
+    bool rebuild = false;
+    if (settings.VectorTopTarget || settings.VectorTopLimit) {
+        auto exprTop = TExprBase(settings.VectorTopTarget);
+        if (!exprTop.Maybe<TCoString>() && !exprTop.Maybe<TCoParameter>()) {
+            settings.VectorTopTarget = KqpPrecomputeParameter(exprTop, ctx).Ptr();
+            rebuild = true;
+        }
+        auto exprLimit = TExprBase(settings.VectorTopLimit);
+        if (!exprLimit.Maybe<TCoUint64>() && !exprLimit.Maybe<TCoParameter>()) {
+            settings.VectorTopLimit = KqpPrecomputeParameter(exprLimit, ctx).Ptr();
+            rebuild = true;
+        }
+    }
 
     TMaybeNode<TKqpCnStreamLookup> cnStreamLookup;
     if (IsDqPureExpr(lookup.LookupKeys())) {
@@ -632,7 +721,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Table(lookup.Table())
             .Columns(lookup.Columns())
             .InputType(ExpandType(lookup.Pos(), *lookup.LookupKeys().Ref().GetTypeAnn(), ctx))
-            .Settings(lookup.Settings())
+            .Settings(rebuild ? settings.BuildNode(ctx, lookup.Pos()) : lookup.Settings())
             .Done();
 
     } else if (lookup.LookupKeys().Maybe<TDqCnUnionAll>()) {
@@ -643,7 +732,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Table(lookup.Table())
             .Columns(lookup.Columns())
             .InputType(ExpandType(lookup.Pos(), *output.Ref().GetTypeAnn(), ctx))
-            .Settings(lookup.Settings())
+            .Settings(rebuild ? settings.BuildNode(ctx, lookup.Pos()) : lookup.Settings())
             .Done();
     } else {
         return node;

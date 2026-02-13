@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <yt/yt/core/rpc/authenticator.h>
 #include <yt/yt/core/rpc/service_detail.h>
 #include <yt/yt/core/rpc/stream.h>
 
@@ -31,6 +32,23 @@ static YT_DEFINE_GLOBAL(std::atomic<int>, ConcurrentCalls);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TFakeAutenticator
+    : public IAuthenticator
+{
+public:
+    bool CanAuthenticate(const TAuthenticationContext& /*context*/) override
+    {
+        return true;
+    }
+
+    TFuture<TAuthenticationResult> AsyncAuthenticate(const TAuthenticationContext& /*context*/) override
+    {
+        return MakeFuture(TAuthenticationResult());
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TTestService
     : public ITestService
     , public TServiceBase
@@ -40,13 +58,15 @@ public:
         IInvokerPtr invoker,
         bool secure,
         TTestCreateChannelCallback createChannel,
-        IMemoryUsageTrackerPtr memoryUsageTracker)
+        IMemoryUsageTrackerPtr memoryUsageTracker,
+        bool useAuthenticator)
         : TServiceBase(
             invoker,
             TTestProxy::GetDescriptor(),
             NLogging::TLogger("Main"),
             TServiceOptions{
                 .MemoryUsageTracker = std::move(memoryUsageTracker),
+                .Authenticator = useAuthenticator ? New<TFakeAutenticator>() : nullptr,
             })
         , Secure_(secure)
         , CreateChannel_(createChannel)
@@ -430,13 +450,15 @@ ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
     TTestCreateChannelCallback createChannel,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IMemoryUsageTrackerPtr memoryUsageTracker,
+    bool useAuthenticator)
 {
     return New<TTestService>(
         invoker,
         secure,
         createChannel,
-        std::move(memoryUsageTracker));
+        std::move(memoryUsageTracker),
+        useAuthenticator);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

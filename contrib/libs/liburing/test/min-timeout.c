@@ -205,5 +205,27 @@ int main(int argc, char *argv[])
 	if (ret == T_EXIT_FAIL)
 		return T_EXIT_FAIL;
 
+	ret = test(IORING_SETUP_SQPOLL, 1, 0, 2000, NWRITES, WAIT_USEC / 1000);
+	if (ret == T_EXIT_FAIL)
+		return T_EXIT_FAIL;
+
+	ret = test(IORING_SETUP_SQPOLL, 1, 50000, 2000, NWRITES, 50);
+	if (ret == T_EXIT_FAIL)
+		return T_EXIT_FAIL;
+
+	ret = test(IORING_SETUP_SQPOLL, 1, 500000, 2000, NWRITES, 500);
+	if (ret == T_EXIT_FAIL)
+		return T_EXIT_FAIL;
+
+	/* no writes within min timeout, but it's given. expect 1 cqe */
+	ret = test(IORING_SETUP_SQPOLL, 1, 10000, 20000, 1, 20);
+	if (ret == T_EXIT_FAIL)
+		return T_EXIT_FAIL;
+
+	/* same as above, but no min timeout. should time out and we get 6 */
+	ret = test(IORING_SETUP_SQPOLL, 1, 0, 20000, NWRITES, WAIT_USEC / 1000);
+	if (ret == T_EXIT_FAIL)
+		return T_EXIT_FAIL;
+
 	return ret;
 }

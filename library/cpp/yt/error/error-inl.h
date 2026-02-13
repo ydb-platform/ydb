@@ -246,29 +246,36 @@ inline void TError::ThrowOnError() &&
 
 template <class T>
 TErrorOr<T>::TErrorOr()
+    requires std::is_default_constructible_v<T>
 {
     Value_.emplace();
 }
 
 template <class T>
 TErrorOr<T>::TErrorOr(T&& value) noexcept
+    requires std::is_move_constructible_v<T>
     : Value_(std::move(value))
 { }
 
 template <class T>
 TErrorOr<T>::TErrorOr(const T& value)
+    requires std::is_copy_constructible_v<T>
     : Value_(value)
 { }
 
 template <class T>
-TErrorOr<T>::TErrorOr(const TError& other)
+template <class TErrorLike>
+TErrorOr<T>::TErrorOr(const TErrorLike& other)
+    requires std::is_same_v<TErrorLike, TError>
     : TError(other)
 {
     YT_VERIFY(!IsOK());
 }
 
 template <class T>
-TErrorOr<T>::TErrorOr(TError&& other) noexcept
+template <class TErrorLike>
+TErrorOr<T>::TErrorOr(TErrorLike&& other) noexcept
+    requires std::is_same_v<TErrorLike, TError>
     : TError(std::move(other))
 {
     YT_VERIFY(!IsOK());
@@ -276,6 +283,7 @@ TErrorOr<T>::TErrorOr(TError&& other) noexcept
 
 template <class T>
 TErrorOr<T>::TErrorOr(const TErrorOr<T>& other)
+    requires std::is_copy_constructible_v<T>
     : TError(other)
 {
     if (IsOK()) {
@@ -284,7 +292,8 @@ TErrorOr<T>::TErrorOr(const TErrorOr<T>& other)
 }
 
 template <class T>
-TErrorOr<T>::TErrorOr(TErrorOr<T>&& other) noexcept
+TErrorOr<T>::TErrorOr(TErrorOr<T>&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
+    requires std::is_move_constructible_v<T>
     : TError(std::move(other))
 {
     if (IsOK()) {
@@ -295,6 +304,7 @@ TErrorOr<T>::TErrorOr(TErrorOr<T>&& other) noexcept
 template <class T>
 template <class U>
 TErrorOr<T>::TErrorOr(const TErrorOr<U>& other)
+    requires std::is_constructible_v<T, const U&>
     : TError(other)
 {
     if (IsOK()) {
@@ -305,6 +315,7 @@ TErrorOr<T>::TErrorOr(const TErrorOr<U>& other)
 template <class T>
 template <class U>
 TErrorOr<T>::TErrorOr(TErrorOr<U>&& other) noexcept
+    requires std::is_constructible_v<T, U&&>
     : TError(other)
 {
     if (IsOK()) {

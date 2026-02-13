@@ -67,9 +67,6 @@ __all__ = [
     'SetupRequirementsError',
 ]
 
-SETUPTOOLS_ENABLE_FEATURES = os.getenv("SETUPTOOLS_ENABLE_FEATURES", "").lower()
-LEGACY_EDITABLE = "legacy-editable" in SETUPTOOLS_ENABLE_FEATURES.replace("_", "-")
-
 
 class SetupRequirementsError(BaseException):
     def __init__(self, specifiers) -> None:
@@ -457,37 +454,30 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
         assert len(dist_info_candidates) <= 1
         return str(dist_info_candidates[0]) if dist_info_candidates else None
 
-    if not LEGACY_EDITABLE:
-        # PEP660 hooks:
-        # build_editable
-        # get_requires_for_build_editable
-        # prepare_metadata_for_build_editable
-        def build_editable(
-            self,
-            wheel_directory: StrPath,
-            config_settings: _ConfigSettings = None,
-            metadata_directory: StrPath | None = None,
-        ):
-            # XXX can or should we hide our editable_wheel command normally?
-            info_dir = self._get_dist_info_dir(metadata_directory)
-            opts = ["--dist-info-dir", info_dir] if info_dir else []
-            cmd = ["editable_wheel", *opts, *self._editable_args(config_settings)]
-            with suppress_known_deprecation():
-                return self._build_with_temp_dir(
-                    cmd, ".whl", wheel_directory, config_settings
-                )
-
-        def get_requires_for_build_editable(
-            self, config_settings: _ConfigSettings = None
-        ):
-            return self.get_requires_for_build_wheel(config_settings)
-
-        def prepare_metadata_for_build_editable(
-            self, metadata_directory: StrPath, config_settings: _ConfigSettings = None
-        ):
-            return self.prepare_metadata_for_build_wheel(
-                metadata_directory, config_settings
+    def build_editable(
+        self,
+        wheel_directory: StrPath,
+        config_settings: _ConfigSettings = None,
+        metadata_directory: StrPath | None = None,
+    ):
+        # XXX can or should we hide our editable_wheel command normally?
+        info_dir = self._get_dist_info_dir(metadata_directory)
+        opts = ["--dist-info-dir", info_dir] if info_dir else []
+        cmd = ["editable_wheel", *opts, *self._editable_args(config_settings)]
+        with suppress_known_deprecation():
+            return self._build_with_temp_dir(
+                cmd, ".whl", wheel_directory, config_settings
             )
+
+    def get_requires_for_build_editable(self, config_settings: _ConfigSettings = None):
+        return self.get_requires_for_build_wheel(config_settings)
+
+    def prepare_metadata_for_build_editable(
+        self, metadata_directory: StrPath, config_settings: _ConfigSettings = None
+    ):
+        return self.prepare_metadata_for_build_wheel(
+            metadata_directory, config_settings
+        )
 
 
 class _BuildMetaLegacyBackend(_BuildMetaBackend):
@@ -549,11 +539,9 @@ get_requires_for_build_sdist = _BACKEND.get_requires_for_build_sdist
 prepare_metadata_for_build_wheel = _BACKEND.prepare_metadata_for_build_wheel
 build_wheel = _BACKEND.build_wheel
 build_sdist = _BACKEND.build_sdist
-
-if not LEGACY_EDITABLE:
-    get_requires_for_build_editable = _BACKEND.get_requires_for_build_editable
-    prepare_metadata_for_build_editable = _BACKEND.prepare_metadata_for_build_editable
-    build_editable = _BACKEND.build_editable
+get_requires_for_build_editable = _BACKEND.get_requires_for_build_editable
+prepare_metadata_for_build_editable = _BACKEND.prepare_metadata_for_build_editable
+build_editable = _BACKEND.build_editable
 
 
 # The legacy backend

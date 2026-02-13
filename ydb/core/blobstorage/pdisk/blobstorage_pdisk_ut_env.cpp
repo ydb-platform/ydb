@@ -13,8 +13,11 @@ void RecreateOwner(TActorTestContext& testCtx, TVDiskIDOwnerRound& vdisk) {
     vdisk.OwnerRound =  evInitRes->PDiskParams->OwnerRound;
 }
 
-void TestChunkWriteReleaseRun() {
-    TActorTestContext testCtx{{}};
+void TestChunkWriteReleaseRun(bool encryption) {
+    TActorTestContext::TSettings settings{};
+    settings.EnableFormatEncryption = encryption;
+    settings.EnableSectorEncryption = encryption;
+    TActorTestContext testCtx(settings);
 
     const TVDiskID vDiskID(0, 1, 0, 0, 0);
     const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(

@@ -1,6 +1,5 @@
 # Configuration V1 Overview
 
-{% include [deprecated](_includes/deprecated.md) %}
 
 To start a {{ ydb-short-name }} node, configuration is required. There are two types of configuration:
 

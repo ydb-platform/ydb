@@ -1,4 +1,3 @@
-import abc
 import asyncio
 import enum
 import functools
@@ -12,6 +11,7 @@ from typing import (
 from .._grpc.grpcwrapper import ydb_query
 from .._grpc.grpcwrapper.ydb_query_public_types import (
     BaseQueryTxMode,
+    ArrowFormatSettings,
 )
 from ..connection import _RpcState as RpcState
 from .. import convert
@@ -55,9 +55,33 @@ class QueryStatsMode(enum.IntEnum):
     PROFILE = 40
 
 
+class QuerySchemaInclusionMode(enum.IntEnum):
+    UNSPECIFIED = 0
+    ALWAYS = 1
+    FIRST_ONLY = 2
+
+
+class QueryResultSetFormat(enum.IntEnum):
+    UNSPECIFIED = 0
+    VALUE = 1
+    ARROW = 2
+
+
 class SyncResponseContextIterator(_utilities.SyncResponseIterator):
+    def __init__(self, it, wrapper, on_error=None):
+        super().__init__(it, wrapper)
+        self._on_error = on_error
+
     def __enter__(self) -> "SyncResponseContextIterator":
         return self
+
+    def _next(self):
+        try:
+            return super()._next()
+        except Exception as e:
+            if self._on_error:
+                self._on_error(e)
+            raise e
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         #  To close stream on YDB it is necessary to scroll through it to the end
@@ -94,42 +118,6 @@ class QueryClientSettings:
         return self
 
 
-class IQuerySessionState(abc.ABC):
-    def __init__(self, settings: Optional[QueryClientSettings] = None):
-        pass
-
-    @abc.abstractmethod
-    def reset(self) -> None:
-        pass
-
-    @property
-    @abc.abstractmethod
-    def session_id(self) -> Optional[str]:
-        pass
-
-    @abc.abstractmethod
-    def set_session_id(self, session_id: str) -> "IQuerySessionState":
-        pass
-
-    @property
-    @abc.abstractmethod
-    def node_id(self) -> Optional[int]:
-        pass
-
-    @abc.abstractmethod
-    def set_node_id(self, node_id: int) -> "IQuerySessionState":
-        pass
-
-    @property
-    @abc.abstractmethod
-    def attached(self) -> bool:
-        pass
-
-    @abc.abstractmethod
-    def set_attached(self, attached: bool) -> "IQuerySessionState":
-        pass
-
-
 def create_execute_query_request(
     query: str,
     session_id: str,
@@ -139,6 +127,9 @@ def create_execute_query_request(
     syntax: Optional[QuerySyntax],
     exec_mode: Optional[QueryExecMode],
     stats_mode: Optional[QueryStatsMode],
+    schema_inclusion_mode: Optional[QuerySchemaInclusionMode],
+    result_set_format: Optional[QueryResultSetFormat],
+    arrow_format_settings: Optional[ArrowFormatSettings],
     parameters: Optional[dict],
     concurrent_result_sets: Optional[bool],
 ) -> ydb_query.ExecuteQueryRequest:
@@ -146,6 +137,10 @@ def create_execute_query_request(
         syntax = QuerySyntax.YQL_V1 if not syntax else syntax
         exec_mode = QueryExecMode.EXECUTE if not exec_mode else exec_mode
         stats_mode = QueryStatsMode.NONE if stats_mode is None else stats_mode
+        schema_inclusion_mode = (
+            QuerySchemaInclusionMode.ALWAYS if schema_inclusion_mode is None else schema_inclusion_mode
+        )
+        result_set_format = QueryResultSetFormat.VALUE if result_set_format is None else result_set_format
 
         tx_control = None
         if not tx_id and not tx_mode:
@@ -176,6 +171,9 @@ def create_execute_query_request(
             parameters=parameters,
             concurrent_result_sets=concurrent_result_sets,
             stats_mode=stats_mode,
+            schema_inclusion_mode=schema_inclusion_mode,
+            result_set_format=result_set_format,
+            arrow_format_settings=arrow_format_settings,
         )
     except BaseException as e:
         raise issues.ClientInternalError("Unable to prepare execute request") from e
@@ -183,11 +181,11 @@ def create_execute_query_request(
 
 def bad_session_handler(func):
     @functools.wraps(func)
-    def decorator(rpc_state, response_pb, session_state: IQuerySessionState, *args, **kwargs):
+    def decorator(rpc_state, response_pb, session: "BaseQuerySession", *args, **kwargs):
         try:
-            return func(rpc_state, response_pb, session_state, *args, **kwargs)
+            return func(rpc_state, response_pb, session, *args, **kwargs)
         except issues.BadSession:
-            session_state.reset()
+            session._invalidate()
             raise
 
     return decorator
@@ -197,9 +195,8 @@ def bad_session_handler(func):
 def wrap_execute_query_response(
     rpc_state: RpcState,
     response_pb: _apis.ydb_query.ExecuteQueryResponsePart,
-    session_state: IQuerySessionState,
+    session: "BaseQuerySession",
     tx: Optional["BaseQueryTxContext"] = None,
-    session: Optional["BaseQuerySession"] = None,
     commit_tx: Optional[bool] = False,
     settings: Optional[QueryClientSettings] = None,
 ) -> convert.ResultSet:

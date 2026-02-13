@@ -12,7 +12,8 @@ namespace NKafka {
 class TKafkaSaslHandshakeActor: public NActors::TActorBootstrapped<TKafkaSaslHandshakeActor> {
 
 const TVector<TString> SUPPORTED_SASL_MECHANISMS = {
-    "PLAIN"
+    "PLAIN",
+    "SCRAM-SHA-256",
 };
 
 public:

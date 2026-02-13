@@ -105,7 +105,8 @@ class YQLRun(object):
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
-                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None, attrs={}):
+                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None,
+                 attrs={}):
         del pretty_plan, attrs
 
         res_dir = self.res_dir
@@ -190,7 +191,7 @@ class YQLRun(object):
         if prov != 'pure':
             cmd += '--tmp-dir=%(res_dir)s ' % locals()
 
-        if self.udfs_path is not None:
+        if self.udfs_path is not None and "--test-partial-typecheck" not in self.extra_args:
             cmd += '--udfs-dir=%(udfs_dir)s ' % locals()
 
         if ansi_lexer:
@@ -270,7 +271,9 @@ class YQLRun(object):
             for name in self.tables:
                 cmd += '--table=yt.%s@%s ' % (name, self.tables[name].yqlrun_file)
 
-        if "--lineage" not in self.extra_args and "--peephole" not in self.extra_args:
+        if "--lineage" not in self.extra_args and \
+           "--test-partial-typecheck" not in self.extra_args and \
+           "--peephole" not in self.extra_args:
             if optimize_only:
                 cmd += '-O '
             else:

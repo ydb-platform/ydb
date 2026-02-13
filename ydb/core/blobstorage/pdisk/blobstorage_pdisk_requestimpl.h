@@ -39,6 +39,7 @@ public:
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     EOwnerGroupType OwnerGroupType;
+    ui64 Cookie = 0;
 
     // Classification
     ui64 TotalCost = 0; // Total request cost in nanoseconds
@@ -76,6 +77,10 @@ public:
 
     void SetOwnerGroupType(bool isStaticGroupOwner) {
         OwnerGroupType = (isStaticGroupOwner ? EOwnerGroupType::Static : EOwnerGroupType::Dynamic);
+    }
+
+    void SetCookie(ui64 cookie) {
+        Cookie = cookie;
     }
 
     virtual void Abort(TActorSystem* /*actorSystem*/) {
@@ -1292,6 +1297,48 @@ public:
             << " SlotSizeInUnits# " << SlotSizeInUnits
             << " }";
         return str.Str();
+    }
+};
+
+class TChunkReadRaw : public TRequestBase {
+public:
+    TChunkIdx ChunkIdx;
+    ui32 Offset;
+    ui32 Size;
+
+public:
+    TChunkReadRaw(const NPDisk::TEvChunkReadRaw& ev, const TActorId& sender, ui64 cookie, TAtomicBase reqIdx, NWilson::TSpan span)
+        : TRequestBase(sender, TReqId(TReqId::ChunkReadRaw, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other, std::move(span))
+        , ChunkIdx(ev.ChunkIdx)
+        , Offset(ev.Offset)
+        , Size(ev.Size)
+    {
+        SetCookie(cookie);
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkReadRaw;
+    }
+};
+
+class TChunkWriteRaw : public TRequestBase {
+public:
+    TChunkIdx ChunkIdx;
+    ui32 Offset;
+    TRope Data;
+
+public:
+    TChunkWriteRaw(NPDisk::TEvChunkWriteRaw& ev, const TActorId& sender, ui64 cookie, TAtomicBase reqIdx, NWilson::TSpan span)
+        : TRequestBase(sender, TReqId(TReqId::ChunkWriteRaw, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other, std::move(span))
+        , ChunkIdx(ev.ChunkIdx)
+        , Offset(ev.Offset)
+        , Data(std::move(ev.Data))
+    {
+        SetCookie(cookie);
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkWriteRaw;
     }
 };
 

@@ -149,3 +149,62 @@ Y_UNIT_TEST(BadToPythonJson) {
         yexception, "Failed to export Json given as args[0]");
 }
 } // Y_UNIT_TEST_SUITE(TPyCastTest)
+
+Y_UNIT_TEST_SUITE(TPyBigDateTest) {
+template <typename CppType, class YqlType>
+void FromPyTest(CppType v) {
+    TPythonTestEngine engine;
+    engine.ToMiniKQL<YqlType>(
+        TString(R"(
+def Test():
+    return )") += ToString(v) += '\n',
+        [v](const NUdf::TUnboxedValuePod& value) {
+            UNIT_ASSERT(value);
+            UNIT_ASSERT_VALUES_EQUAL(value.Get<CppType>(), v);
+        });
+}
+
+template <typename CppType, class YqlType>
+void ToPyTest(CppType v) {
+    TPythonTestEngine engine;
+    engine.ToPython<YqlType>(
+        [v](const TType*, const NUdf::IValueBuilder&) {
+            return NUdf::TUnboxedValuePod(v);
+        },
+        TString(R"(
+def Test(value):
+    assert value == )") += ToString(v) += '\n');
+}
+
+Y_UNIT_TEST(FromDate) {
+    FromPyTest<i32, NUdf::TDate32>(-7);
+}
+
+Y_UNIT_TEST(FromDatetime) {
+    FromPyTest<i64, NUdf::TDatetime64>(-7631);
+}
+
+Y_UNIT_TEST(FromTimestamp) {
+    FromPyTest<i64, NUdf::TTimestamp64>(-643563564);
+}
+
+Y_UNIT_TEST(FromInterval) {
+    FromPyTest<i64, NUdf::TInterval64>(9223339708799999999ll);
+}
+
+Y_UNIT_TEST(ToDate) {
+    ToPyTest<i32, NUdf::TDate32>(-7);
+}
+
+Y_UNIT_TEST(ToDatetime) {
+    ToPyTest<i64, NUdf::TDatetime64>(-7631);
+}
+
+Y_UNIT_TEST(ToTimestamp) {
+    ToPyTest<i64, NUdf::TTimestamp64>(-643563564);
+}
+
+Y_UNIT_TEST(ToInterval) {
+    ToPyTest<i64, NUdf::TInterval64>(123456789);
+}
+} // Y_UNIT_TEST_SUITE(TPyBigDateTest)

@@ -118,6 +118,13 @@ const std::vector<TLogicalTypePtr>& TTupleLogicalTypeBase::GetElements() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const std::vector<std::string>& TStructLogicalType::GetRemovedFieldStableNames() const
+{
+    return RemovedFieldStableNames_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 const TLogicalTypePtr& TDictLogicalType::GetKey() const
 {
     return Key_;
@@ -164,7 +171,7 @@ const TLogicalTypePtr& TTaggedLogicalType::GetElement() const
 
 #undef XX
 
-template<ESimpleLogicalValueType type>
+template <ESimpleLogicalValueType type>
 constexpr ESimpleLogicalValueType GetUnderlyingDateType()
 {
     return TUnderlyingTzTypeImpl<type>::TValue;

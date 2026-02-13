@@ -1,11 +1,12 @@
 PY3TEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     conftest.py
     test_secrets.py
     test_secrets_usage.py
+    test_secrets_monitoring.py
 )
 
 SPLIT_FACTOR(20)

@@ -228,12 +228,35 @@ ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
 
 bool TPartitionBlobEncoder::PositionInBody(ui64 offset, ui32 partNo) const
 {
-    return offset < Head.Offset || ((Head.Offset == offset) && (partNo < Head.PartNo));
+    if (HeadKeys.empty()) {
+        if (DataKeysBody.empty()) {
+            return false;
+        }
+
+        const auto required = std::make_pair(offset, partNo);
+        const auto& firstKey = DataKeysBody.front().Key;
+        auto pos = std::make_pair(firstKey.GetOffset(), firstKey.GetPartNo());
+
+        if (required < pos) {
+            return false;
+        }
+
+        const auto& lastKey = DataKeysBody.back().Key;
+        pos = std::make_pair(lastKey.GetOffset() + lastKey.GetCount(), 0);
+
+        return required <= pos;
+    }
+
+    return (offset < Head.Offset) || ((Head.Offset == offset) && (partNo < Head.PartNo));
 }
 
 bool TPartitionBlobEncoder::PositionInHead(ui64 offset, ui32 partNo) const
 {
-    return Head.Offset < offset || ((Head.Offset == offset) && (Head.PartNo < partNo));
+    if (HeadKeys.empty()) {
+        return false;
+    }
+
+    return Head.Offset < offset || ((Head.Offset == offset) && (Head.PartNo <= partNo));
 }
 
 bool TPartitionBlobEncoder::IsEmpty() const
@@ -370,6 +393,10 @@ void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId
 void TPartitionBlobEncoder::SyncHeadKeys()
 {
     if (!CompactedKeys.empty()) {
+        for (auto& k : HeadKeys) {
+            ScheduleDelete(k);
+        }
+
         HeadKeys.clear();
     }
 }
@@ -392,6 +419,7 @@ void TPartitionBlobEncoder::SyncNewHeadKey()
 
     while (!HeadKeys.empty() && !isLess(HeadKeys.back().Key, NewHeadKey.Key)) {
         // HeadKeys.back >= NewHeadKey
+        ScheduleDelete(HeadKeys.back());
         HeadKeys.pop_back();
     }
 
@@ -552,6 +580,19 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     AFL_ENSURE(res.second >= size);
     AFL_ENSURE(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
     return res;
+}
+
+void TPartitionBlobEncoder::pop_front() {
+    auto& key = DataKeysBody.front();
+    ScheduleDelete(key);
+    BodySize -= key.Size;
+    DataKeysBody.pop_front();
+}
+
+void TPartitionBlobEncoder::ScheduleDelete(TDataKey& key) {
+    if (key.BlobKeyToken->NeedDelete) {
+        DeletedKeys.emplace_back(key.BlobKeyToken);
+    }
 }
 
 //void TPartitionBlobEncoder::Dump() const

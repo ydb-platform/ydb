@@ -11,6 +11,7 @@
 // We do this so that all .c files have to include only one header
 // (ourselves, init.h).
 
+// clang-format off
 #if defined(PSUTIL_POSIX)
     #include "../../arch/posix/init.h"
 #endif
@@ -38,6 +39,7 @@
 extern int PSUTIL_DEBUG;
 // a signaler for connections without an actual status
 extern int PSUTIL_CONN_NONE;
+extern int PSUTIL_TESTING;
 
 #ifdef Py_GIL_DISABLED
     extern PyMutex utxent_lock;
@@ -47,28 +49,8 @@ extern int PSUTIL_CONN_NONE;
     #define UTXENT_MUTEX_LOCK()
     #define UTXENT_MUTEX_UNLOCK()
 #endif
+// clang-format on
 
-// Print a debug message on stderr.
-#define psutil_debug(...) do { \
-    if (! PSUTIL_DEBUG) \
-        break; \
-    fprintf(stderr, "psutil-debug [%s:%d]> ", __FILE__, __LINE__); \
-    fprintf(stderr, __VA_ARGS__); \
-    fprintf(stderr, "\n");} while(0)
-
-
-// strncpy() variant which appends a null terminator.
-#define PSUTIL_STRNCPY(dst, src, n) \
-    strncpy(dst, src, n - 1); \
-    dst[n - 1] = '\0'
-
-// ====================================================================
-// --- Custom exceptions
-// ====================================================================
-
-PyObject *AccessDenied(const char *msg);
-PyObject *NoSuchProcess(const char *msg);
-PyObject *psutil_PyErr_SetFromOSErrnoWithSyscall(const char *syscall);
 
 // ====================================================================
 // --- Backward compatibility with missing Python.h APIs
@@ -76,6 +58,7 @@ PyObject *psutil_PyErr_SetFromOSErrnoWithSyscall(const char *syscall);
 
 // --- _Py_PARSE_PID
 
+// clang-format off
 // SIZEOF_INT|LONG is missing on Linux + PyPy (only?).
 // In this case we guess it from setup.py. It's not 100% bullet proof,
 // If wrong we'll probably get compiler warnings.
@@ -117,9 +100,40 @@ PyObject *psutil_PyErr_SetFromOSErrnoWithSyscall(const char *syscall);
                "sizeof(long) or sizeof(long long)"
     #endif
 #endif
+// clang-format on
+
+// ====================================================================
+// --- Internal utils
+// ====================================================================
+
+// Print a debug message to stderr, including where it originated from
+// within the C code (file path + lineno).
+#define psutil_debug(...)                                              \
+    do {                                                               \
+        if (!PSUTIL_DEBUG)                                             \
+            break;                                                     \
+        fprintf(stderr, "psutil-debug [%s:%d]> ", __FILE__, __LINE__); \
+        fprintf(stderr, __VA_ARGS__);                                  \
+        fprintf(stderr, "\n");                                         \
+    } while (0)
+
+
+PyObject *psutil_oserror(void);
+PyObject *psutil_oserror_ad(const char *msg);
+PyObject *psutil_oserror_nsp(const char *msg);
+PyObject *psutil_oserror_wsyscall(const char *syscall);
+PyObject *psutil_runtime_error(const char *msg, ...);
+
+int str_append(char *dst, size_t dst_size, const char *src);
+int str_copy(char *dst, size_t dst_size, const char *src);
+int str_format(char *buf, size_t size, const char *fmt, ...);
 
 int psutil_badargs(const char *funcname);
 int psutil_setup(void);
+
+// ====================================================================
+// --- Exposed to Python
+// ====================================================================
 
 #if defined(PSUTIL_WINDOWS) || defined(PSUTIL_BSD) || defined(PSUTIL_OSX)
 PyObject *psutil_pids(PyObject *self, PyObject *args);

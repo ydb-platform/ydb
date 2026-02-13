@@ -43,10 +43,10 @@ ALTER TABLE series_with_families
 
 {% endif %}
 
-Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `hdd`:
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `rot`:
 
 ```yql
-ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
+ALTER TABLE series_with_families ALTER FAMILY default SET DATA "rot";
 ```
 
 {% note info %}
@@ -81,6 +81,24 @@ ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 5;
+```
+
+### Изменение режима кэширования
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
+При переключении режима кэширования на `in_memory` для существующей таблицы через команду `ALTER TABLE`, все страницы, которые ещё не находятся в памяти, будут подгружены автоматически.
+
+Если для таблицы ранее был активирован режим `in_memory`, а затем через `ALTER TABLE` установлен режим кэширования `regular`, все находящиеся в памяти страницы сохраняются, но впоследствии могут вытесняться из памяти согласно общей политике кэширования.
+
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит [режим кэширования](../../../../concepts/datamodel/table.md#cache-modes) на `in_memory`:
+
+```yql
+ALTER TABLE series_with_families ALTER FAMILY default SET CACHE_MODE "in_memory";
 ```
 
 Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](../create_table/secondary_index.md)

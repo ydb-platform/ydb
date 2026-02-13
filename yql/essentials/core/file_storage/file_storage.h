@@ -17,8 +17,9 @@ namespace NYql {
 
 class TFileStorageConfig;
 
-struct IFileStorage: public TThrRefBase {
-    virtual ~IFileStorage() = default;
+class IFileStorage: public TThrRefBase {
+public:
+    ~IFileStorage() override = default;
     virtual TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) = 0;
     virtual TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) = 0;
     virtual TFileLinkPtr PutInline(const TString& data) = 0;

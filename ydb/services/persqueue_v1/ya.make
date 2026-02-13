@@ -19,7 +19,9 @@ PEERDIR(
     ydb/library/grpc/server
     ydb/core/base
     ydb/core/grpc_services
-    ydb/core/kqp
+    ydb/core/kqp/common
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/persqueue/events
     ydb/core/persqueue/public/codecs
     ydb/core/persqueue/writer

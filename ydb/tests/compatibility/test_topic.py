@@ -3,7 +3,7 @@ import pytest
 import time
 import uuid
 
-from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture, RollingDowngradeAndUpgradeFixture, string_version_to_tuple
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -16,10 +16,14 @@ class Workload:
         self.message_count = 0
         self.processed_message_count = 0
 
-    def create_topic(self):
+    def create_topic(self, *, availability_period=None):
+        consumer_extra_options = []
+        if availability_period:
+            consumer_extra_options.append(f"availability_period=Interval('{availability_period}')")
+        consumer_extra_options_str = f"WITH ({', '.join(consumer_extra_options)})" if consumer_extra_options else ""
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(
-                f"CREATE TOPIC {self.topic_name} (CONSUMER `test-consumer`);"
+                f"CREATE TOPIC {self.topic_name} (CONSUMER `test-consumer` {consumer_extra_options_str});"
             )
 
     def write_to_topic(self):
@@ -80,6 +84,28 @@ class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
         utils = Workload(self.driver, self.endpoint)
 
         utils.create_topic()
+
+        utils.write_to_topic()
+        for _ in self.roll():
+            utils.read_from_topic()
+            utils.write_to_topic()
+
+        utils.read_from_topic()
+
+
+class TestTopicRollingDowngrade(RollingDowngradeAndUpgradeFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster()
+
+    def test_write_and_read_with_availability_period(self):
+        MIN_SUPPORTED_VERSION = "stable-25-4"
+        if self.versions[0] < string_version_to_tuple(MIN_SUPPORTED_VERSION):
+            pytest.skip(f"Only available since {MIN_SUPPORTED_VERSION}")
+
+        utils = Workload(self.driver, self.endpoint)
+
+        utils.create_topic(availability_period='PT2H')
 
         utils.write_to_topic()
         for _ in self.roll():

@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/core/cms)
 
+FORK_SUBTESTS()
+
 SIZE(MEDIUM)
 
 PEERDIR(

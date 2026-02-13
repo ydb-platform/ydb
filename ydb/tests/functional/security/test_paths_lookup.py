@@ -15,9 +15,6 @@ CLUSTER_CONFIG = dict(
         'TX_PROXY': LogLevels.DEBUG,
         'TX_PROXY_SCHEME_CACHE': LogLevels.DEBUG,
     },
-    extra_feature_flags=[
-        'enable_real_system_view_paths',
-    ],
     # do not clutter logs with resource pools auto creation
     enable_resource_pools=False
 )

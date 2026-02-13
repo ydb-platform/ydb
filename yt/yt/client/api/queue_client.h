@@ -28,6 +28,8 @@ struct TPullRowsOptions
     NTransactionClient::TTimestamp UpperTimestamp = NTransactionClient::NullTimestamp;
     NTableClient::TTableSchemaPtr TableSchema;
     i64 MaxDataWeight = 20_MB;
+    // Used for throttling, has different logic than UpperTimestamp
+    TInstant MaxTransactionCommitInstant = TInstant::Max();
     IReservingMemoryUsageTrackerPtr MemoryTracker;
     NTabletClient::TTabletId SelfTabletId = NObjectClient::NullObjectId;
 };

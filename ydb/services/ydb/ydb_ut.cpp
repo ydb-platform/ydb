@@ -1087,12 +1087,13 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
                 "  type: DIRECTORY\n"
                 "}\n"
                 "children {\n"
-                "  name: \"TheDirectory\"\n"
-                "  owner: \"root@builtin\"\n"
+                "  name: \".sys\"\n"
+                "  owner: \"metadata@system\"\n"
                 "  type: DIRECTORY\n"
                 "}\n"
-                 "children {\n"
-                "  name: \".sys\"\n"
+                "children {\n"
+                "  name: \"TheDirectory\"\n"
+                "  owner: \"root@builtin\"\n"
                 "  type: DIRECTORY\n"
                 "}\n";
             UNIT_ASSERT_NO_DIFF(tmp, expected);

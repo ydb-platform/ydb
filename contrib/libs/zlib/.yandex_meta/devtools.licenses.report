@@ -65,7 +65,7 @@ BELONGS ya.make
         Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
     Files with this license:
         LICENSE [5:22]
-        README [88:105]
+        README [86:103]
         zlib.h [6:23]
 
 KEEP     Zlib                 f105e95eefda9be95681307aa51879f0

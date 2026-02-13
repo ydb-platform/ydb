@@ -52,19 +52,28 @@ static inline __m256i translate_exact(__m256i in, uint8_t match, uint8_t decode)
  * on decode failure, returns false, else returns true on success.
  */
 static inline bool decode_vec(__m256i *in) {
-    __m256i tmp1, tmp2, tmp3;
+    __m256i tmp1, tmp2, tmp3, tmp4, tmp5;
 
     /*
      * Base64 decoding table, see RFC4648
      *
      * Note that we use multiple vector registers to try to allow the CPU to
-     * paralellize the merging ORs
+     * parallelize the merging ORs
      */
     tmp1 = translate_range(*in, 'A', 'Z', 0 + 1);
     tmp2 = translate_range(*in, 'a', 'z', 26 + 1);
     tmp3 = translate_range(*in, '0', '9', 52 + 1);
-    tmp1 = _mm256_or_si256(tmp1, translate_exact(*in, '+', 62 + 1));
-    tmp2 = _mm256_or_si256(tmp2, translate_exact(*in, '/', 63 + 1));
+    // Handle both '+' and '-' for value 62
+    tmp4 = translate_exact(*in, '+', 62 + 1);
+    tmp4 = _mm256_or_si256(tmp4, translate_exact(*in, '-', 62 + 1));
+
+    // Handle both '/' and '_' for value 63
+    tmp5 = translate_exact(*in, '/', 63 + 1);
+    tmp5 = _mm256_or_si256(tmp5, translate_exact(*in, '_', 63 + 1));
+
+    // Combine all results
+    tmp1 = _mm256_or_si256(tmp1, tmp4);
+    tmp2 = _mm256_or_si256(tmp2, tmp5);
     tmp3 = _mm256_or_si256(tmp3, _mm256_or_si256(tmp1, tmp2));
 
     /*

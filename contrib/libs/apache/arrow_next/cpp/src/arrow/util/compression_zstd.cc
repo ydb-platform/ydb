@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/compression_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression_internal.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -23,10 +23,10 @@
 
 #include <zstd.h>
 
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
 using std::size_t;
 

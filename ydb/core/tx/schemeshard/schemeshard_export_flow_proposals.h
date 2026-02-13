@@ -45,7 +45,6 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
 );
 
 TString ExportItemPathName(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
-TString ExportItemPathName(const TString& exportPathName, ui32 itemIdx);
 
 void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db,
     TExportInfo::EState droppingState, std::function<void(ui64)> func);

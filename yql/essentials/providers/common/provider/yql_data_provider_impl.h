@@ -10,7 +10,7 @@ namespace NYql {
 class TPlanFormatterBase: public IPlanFormatter {
 public:
     TPlanFormatterBase() = default;
-    ~TPlanFormatterBase() = default;
+    ~TPlanFormatterBase() override = default;
 
     bool HasCustomPlan(const TExprNode& node) override;
     void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
@@ -42,13 +42,15 @@ protected:
 class TDataProviderBase: public IDataProvider, public TPlanFormatterBase {
 public:
     TDataProviderBase() = default;
-    ~TDataProviderBase() = default;
+    ~TDataProviderBase() override = default;
 
     bool Initialize(TExprContext& ctx) override;
     IGraphTransformer& GetConfigurationTransformer() override;
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override;
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override;
     const THashMap<TString, TString>* GetClusterTokens() override;
+    TMaybe<TString> ResolveClusterToken(const TString& cluster) override;
+    const THashSet<TString>& GetValidClusters() override;
     IGraphTransformer& GetIODiscoveryTransformer() override;
     IGraphTransformer& GetEpochsTransformer() override;
     IGraphTransformer& GetIntentDeterminationTransformer() override;
@@ -102,6 +104,9 @@ protected:
     THolder<IGraphTransformer> DefConstraintTransformer_;
     TNullTransformer NullTransformer_;
     TTrackableNodeProcessorBase NullTrackableNodeProcessor_;
+
+    // TODO: remove after overriding GetValidClusters method in all descendants
+    THashSet<TString> ValidClusters_;
 };
 
 TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx);

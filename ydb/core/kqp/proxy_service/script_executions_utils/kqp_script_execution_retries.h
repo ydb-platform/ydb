@@ -8,35 +8,64 @@
 
 namespace NKikimr::NKqp {
 
+class TRetryPolicyState {
+public:
+    TRetryPolicyState() = default;
+
+    TRetryPolicyState(ui64 retryCount, TInstant retryCounterUpdatedAt, double retryRate);
+
+    TRetryPolicyState(const NKikimrKqp::TScriptExecutionRetryState& retryState);
+
+    void SaveToProto(NKikimrKqp::TScriptExecutionRetryState& retryState) const;
+
+    ui64 RetryCount = 0;
+    TInstant RetryCounterUpdatedAt;
+    double RetryRate = 0.0;
+};
+
 class TRetryPolicyItem {
 public:
-    TRetryPolicyItem() = default;
+    struct TRetryResult {
+        bool Retry = false;
+        TDuration Backoff;
+        TString LastError;
+    };
+
+    class IPolicy {
+    public:
+        using TPtr = std::shared_ptr<IPolicy>;
+
+        virtual ~IPolicy() = default;
+
+        virtual bool IsInitialized() const = 0;
+
+        virtual TRetryResult Update(TInstant startedAt, TInstant lastSeenAt, TInstant now, TRetryPolicyState& state) const = 0;
+    };
+
+    TRetryPolicyItem();
 
     TRetryPolicyItem(ui64 retryCount, ui64 retryLimit, TDuration retryPeriod, TDuration backoffPeriod);
 
+    explicit TRetryPolicyItem(IPolicy::TPtr policy);
+
     static std::optional<TRetryPolicyItem> FromProto(Ydb::StatusIds::StatusCode status, const NKikimrKqp::TScriptExecutionRetryState& mapping);
 
-    ui64 RetryCount = 0;
-    ui64 RetryLimit = 0;
-    TDuration RetryPeriod = TDuration::Seconds(1);
-    TDuration BackoffPeriod;
+    IPolicy::TPtr Policy;
+    bool PolicyInitialized = false;
 };
 
-class TRetryLimiter {
-public:
-    TRetryLimiter() = default;
+class TRetryLimiter final : public TRetryPolicyState {
+    using TBase = TRetryPolicyState;
 
-    TRetryLimiter(ui64 retryCount, TInstant retryCounterUpdatedAt, double retryRate);
+public:
+    using TBase::TBase;
 
     void Assign(ui64 retryCount, TInstant retryCounterUpdatedAt, double retryRate);
 
     bool UpdateOnRetry(TInstant lastSeenAt, const TRetryPolicyItem& policy, TInstant now = Now());
 
-    TDuration GetBackoff() const;
+    bool UpdateOnRetry(TInstant startedAt, TInstant lastSeenAt, const TRetryPolicyItem& policy, TInstant now = Now());
 
-    ui64 RetryCount = 0;
-    TInstant RetryCounterUpdatedAt;
-    double RetryRate = 0.0;
     TDuration Backoff;
     TString LastError;
 };

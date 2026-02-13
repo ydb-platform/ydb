@@ -20,11 +20,11 @@
 #include <cstdint>
 #include <vector>
 
-#include "arrow/buffer.h"
-#include "arrow/compute/light_array_internal.h"
-#include "arrow/memory_pool.h"
-#include "arrow/status.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/light_array_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace compute {

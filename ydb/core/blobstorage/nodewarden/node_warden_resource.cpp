@@ -83,7 +83,7 @@ void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
         return;
     }
 
-    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled, BridgeInfo));
+    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
     if (ev->Get()->Subscribe) {
         StorageConfigSubscribers.insert(ev->Sender);
     }
@@ -92,36 +92,27 @@ void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
 void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto *msg = ev->Get();
     StorageConfig = std::move(msg->Config);
+    CommittedStorageConfig = std::move(msg->CommittedConfig);
     SelfManagementEnabled = msg->SelfManagementEnabled;
     BridgeInfo = std::move(msg->BridgeInfo);
 
     if (StorageConfig->HasBlobStorageConfig()) {
         const auto& bsConfig = StorageConfig->GetBlobStorageConfig();
         if (bsConfig.HasServiceSet()) {
-            const NKikimrBlobStorage::TNodeWardenServiceSet *proposed = nullptr;
-            if (const auto& proposedConfig = ev->Get()->ProposedConfig) {
-                Y_VERIFY_S(StorageConfig->GetGeneration() < proposedConfig->GetGeneration(),
-                    "StorageConfig.Generation# " << StorageConfig->GetGeneration()
-                    << " ProposedConfig.Generation# " << proposedConfig->GetGeneration());
-                Y_ABORT_UNLESS(proposedConfig->HasBlobStorageConfig()); // must have the BlobStorageConfig and the ServiceSet
-                const auto& proposedBsConfig = proposedConfig->GetBlobStorageConfig();
-                Y_ABORT_UNLESS(proposedBsConfig.HasServiceSet());
-                proposed = &proposedBsConfig.GetServiceSet();
-            }
-            ApplyStorageConfig(bsConfig.GetServiceSet(), proposed);
+            ApplyStorageConfig(bsConfig.GetServiceSet());
         }
         SyncRateQuoter->UpdateBytesPerSecond(bsConfig.GetBridgeSyncRateBytesPerSecond());
     }
 
     if (StorageConfig->HasStateStorageConfig() && StorageConfig->HasStateStorageBoardConfig() && StorageConfig->HasSchemeBoardConfig()) {
-        ApplyStateStorageConfig(ev->Get()->ProposedConfig.get());
+        ApplyStateStorageConfig();
     } else {
         Y_ABORT_UNLESS(!StorageConfig->HasStateStorageConfig() && !StorageConfig->HasStateStorageBoardConfig() &&
             !StorageConfig->HasSchemeBoardConfig());
     }
 
     for (const TActorId& subscriber : StorageConfigSubscribers) {
-        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled, BridgeInfo));
+        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo, CommittedStorageConfig));
     }
 
     if (StorageConfig->HasConfigComposite()) {
@@ -131,17 +122,10 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (error) {
             STLOG_DEBUG_FAIL(BS_NODE, NW49, "failed to decompose yaml configuration", (Error, error));
         } else if (mainConfigYaml) {
-            std::optional<TString> storageConfigYaml;
-            std::optional<ui64> storageConfigYamlVersion;
-            if (StorageConfig->HasCompressedStorageYaml()) {
-                try {
-                    TStringInput s(StorageConfig->GetCompressedStorageYaml());
-                    storageConfigYaml.emplace(TZstdDecompress(&s).ReadAll());
-                    storageConfigYamlVersion.emplace(NYamlConfig::GetStorageMetadata(*storageConfigYaml).Version.value_or(0));
-                } catch (const std::exception& ex) {
-                    Y_ABORT("CompressedStorageYaml format incorrect: %s", ex.what());
-                }
-            }
+            std::optional<TString> storageConfigYaml = GetStorageYaml(*StorageConfig);
+            std::optional<ui64> storageConfigYamlVersion = storageConfigYaml
+                ? std::make_optional(NYamlConfig::GetStorageMetadata(*storageConfigYaml).Version.value_or(0))
+                : std::nullopt;
 
             // TODO(alexvru): make this blocker for confirmation?
             PersistConfig(std::move(mainConfigYaml), mainConfigYamlVersion, std::move(storageConfigYaml),
@@ -159,12 +143,6 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             TAutoPtr<IEventHandle> temp(ev.Release());
             Receive(temp);
         }
-
-        using TEvBridgeInfoUpdate = NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoUpdate;
-        std::unique_ptr<TEvBridgeInfoUpdate> update(new TEvBridgeInfoUpdate);
-        update->Record.MutableClusterState()->CopyFrom(StorageConfig->GetClusterState());
-
-        Send(WhiteboardId, update.release());
     }
 }
 
@@ -172,17 +150,11 @@ void TNodeWarden::HandleUnsubscribe(STATEFN_SIG) {
     StorageConfigSubscribers.erase(ev->Sender);
 }
 
-void TNodeWarden::ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
-        const NKikimrBlobStorage::TNodeWardenServiceSet *proposed) {
-    if (!proposed) { // just start the required services
-        // wipe out obsolete VSlots from running PDisks from current.Prev; however, it is not synchronous
-        return ApplyStaticServiceSet(current);
-    }
-
+void TNodeWarden::ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current) {
     ApplyStaticServiceSet(current);
 }
 
-void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig* /*proposed*/) {
+void TNodeWarden::ApplyStateStorageConfig() {
     if (!Cfg->DomainsConfig) {
         return; // no state storage management
     }

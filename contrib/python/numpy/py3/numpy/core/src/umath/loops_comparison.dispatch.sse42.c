@@ -11,4 +11,4 @@
 #define NPY__CPU_TARGET_SSE41
 #define NPY__CPU_TARGET_POPCNT
 #define NPY__CPU_TARGET_SSE42
-#include "numpy/core/src/umath/loops_comparison.dispatch.c"
+#include "contrib/python/numpy/py3/numpy/core/src/umath/loops_comparison.dispatch.c"

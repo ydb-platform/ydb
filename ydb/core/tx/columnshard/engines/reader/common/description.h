@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/metadata_accessor.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/operations/manager.h>
 #include <ydb/core/tx/program/program.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
@@ -33,10 +34,16 @@ public:
     // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
+    std::optional<ui32> LockNodeId;
+    std::optional<NKikimrDataEvents::ELockMode> LockMode;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
+    bool readNonconflictingPortions;
+    bool readConflictingPortions;
+    // portions that the current tx has written
+    std::optional<THashSet<TInsertWriteId>> ownPortions;
 
     bool IsReverseSort() const {
         return Sorting == ERequestSorting::DESC;
@@ -53,6 +60,40 @@ public:
     void SetScanCursor(const std::shared_ptr<IScanCursor>& cursor) {
         AFL_VERIFY(!ScanCursor);
         ScanCursor = cursor;
+    }
+
+    void SetLock(
+        std::optional<ui64> lockId, 
+        std::optional<ui32> lockNodeId,
+        std::optional<NKikimrDataEvents::ELockMode> lockMode, 
+        const NColumnShard::TLockFeatures* lock,
+        const bool readOnlyConflicts
+    ) {
+        LockId = lockId;
+        LockNodeId = lockNodeId;
+        LockMode = lockMode;
+        auto snapshotIsolation = lockId.has_value() && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+
+        readNonconflictingPortions = !readOnlyConflicts;
+
+        // do not check conflicts for Snapshot isolated txs or txs with no lock
+        readConflictingPortions = (LockId.has_value() && !snapshotIsolation) || readOnlyConflicts;
+
+        if (lock != nullptr && lock->GetWriteOperations().size() > 0) {
+            ownPortions = THashSet<TInsertWriteId>();
+            for (auto& writeOperation : lock->GetWriteOperations()) {
+                for (auto insertWriteId : writeOperation->GetInsertWriteIds()) {
+                    ownPortions->emplace(insertWriteId);
+                }
+            }
+        }
+
+        // we want to read something, don't we?
+        AFL_VERIFY(readNonconflictingPortions || readConflictingPortions);
+        // we do not have cases (at the moment) when we need to read only conflicts for a scan with no transaction
+        if (!LockId.has_value()) {
+            AFL_VERIFY(!readOnlyConflicts);
+        }
     }
 
     TReadDescription(const ui64 tabletId, const TSnapshot& snapshot, const ERequestSorting sorting)

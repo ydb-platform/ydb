@@ -426,7 +426,7 @@ private:
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
 private:
-    bool AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc);
+    bool AbortTx(const TPlanQueueItem planQueueItem);
 
     TTxInfo RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
         NTabletFlatExecutor::TTransactionContext& txc);
@@ -504,7 +504,7 @@ public:
     TTxInfo GetTxInfoVerified(const ui64 txId) const;
     NEvents::TDataEvents::TCoordinatorInfo BuildCoordinatorInfo(const TTxInfo& txInfo) const;
 
-    size_t CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& txc);
+    size_t CleanExpiredTxs();
     TDuration GetTxCompleteLag(ui64 timecastStep) const;
 
     enum class EPlanResult {

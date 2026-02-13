@@ -1,0 +1,27 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+--ignore runonopt plan diff
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    o_orderpriority,
+    Count(*) AS order_count
+FROM
+    `/Root/orders` as orders
+WHERE
+    o_orderdate >= Date('1993-07-01')
+    AND o_orderdate < DateTime::MakeDate(DateTime::ShiftMonths(Date('1993-07-01'), 3))
+    AND EXISTS (
+        SELECT
+            *
+        FROM
+            `/Root/lineitem` as lineitem
+        WHERE
+            l_orderkey == o_orderkey
+            AND l_commitdate < l_receiptdate
+    )
+GROUP BY
+    o_orderpriority
+ORDER BY
+    o_orderpriority
+;

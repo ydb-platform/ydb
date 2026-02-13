@@ -156,14 +156,14 @@ template <size_t Size>
 class TLogContext: public NImpl::TLogContextListItem {
 public:
     template <typename... TArgs>
-    TLogContext(TArgs... args)
+    explicit TLogContext(TArgs... args)
         : TLogContextListItem(Size)
         , Names_{{TString{std::forward<TArgs>(args)}...}}
     {
         LinkBefore(NImpl::GetLogContextList());
     }
 
-    ~TLogContext() {
+    ~TLogContext() override {
         Unlink();
     }
 
@@ -183,7 +183,7 @@ template <size_t Size>
 class TRootLogContext: public NImpl::TLogContextSessionItem {
 public:
     template <typename... TArgs>
-    TRootLogContext(const TString& sessionId, TArgs... args)
+    explicit TRootLogContext(const TString& sessionId, TArgs... args)
         : TLogContextSessionItem(Size, !sessionId.empty())
         , Names_{{sessionId, TString{std::forward<TArgs>(args)}...}}
     {
@@ -194,7 +194,7 @@ public:
         LinkBefore(ctxList);
     }
 
-    ~TRootLogContext() {
+    ~TRootLogContext() override {
         Unlink();
         NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
         ctxList->Prev = PrevLogContextHead_.Prev;
@@ -258,7 +258,7 @@ void OutputLogCtx(IOutputStream* out, bool withBraces, bool skipSessionId = fals
  */
 class TYqlLogContextLocation {
 public:
-    TYqlLogContextLocation(const TSourceLocation& location)
+    explicit TYqlLogContextLocation(const TSourceLocation& location)
         : Location_(location.File, location.Line)
     {
     }

@@ -98,6 +98,7 @@ END()
 
 RECURSE(
     compatibility
+    stability
     clients
     flavours
     serializability

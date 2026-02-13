@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import typing
 from typing import Optional
 
-
 try:
     from ydb.public.api.protos import ydb_query_pb2
 except ImportError:
@@ -70,6 +69,8 @@ class TransactionSettings(IFromPublic, IToProto):
         return TransactionSettings(tx_mode=tx_mode)
 
     def to_proto(self) -> ydb_query_pb2.TransactionSettings:
+        if self.tx_mode.name == "snapshot_read_write":
+            return ydb_query_pb2.TransactionSettings(snapshot_read_write=self.tx_mode.to_proto())
         if self.tx_mode.name == "snapshot_read_only":
             return ydb_query_pb2.TransactionSettings(snapshot_read_only=self.tx_mode.to_proto())
         if self.tx_mode.name == "serializable_read_write":
@@ -167,15 +168,24 @@ class ExecuteQueryRequest(IToProto):
     exec_mode: int
     parameters: dict
     stats_mode: int
+    schema_inclusion_mode: int
+    result_set_format: int
+    arrow_format_settings: Optional[public_types.ArrowFormatSettings]
 
     def to_proto(self) -> ydb_query_pb2.ExecuteQueryRequest:
         tx_control = self.tx_control.to_proto() if self.tx_control is not None else self.tx_control
+        arrow_format_settings = (
+            self.arrow_format_settings.to_proto() if self.arrow_format_settings is not None else None
+        )
         return ydb_query_pb2.ExecuteQueryRequest(
             session_id=self.session_id,
             tx_control=tx_control,
             query_content=self.query_content.to_proto(),
             exec_mode=self.exec_mode,
             stats_mode=self.stats_mode,
+            schema_inclusion_mode=self.schema_inclusion_mode,
+            result_set_format=self.result_set_format,
+            arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=self.concurrent_result_sets,
             parameters=convert.query_parameters_to_pb(self.parameters),
         )

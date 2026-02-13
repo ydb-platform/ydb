@@ -110,7 +110,7 @@ public:
         EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
-            LOG_I("Resource pools was enanbled");
+            LOG_I("Resource pools was enabled");
             InitializeWorkloadService();
         } else {
             LOG_I("Resource pools was disabled");
@@ -129,7 +129,7 @@ public:
         NodeCount = ev->Get()->AssignedNodes.size();
         ScheduleNodeInfoRequest();
 
-        LOG_T("Updated node info, noode count: " << NodeCount);
+        LOG_T("Updated node info, node count: " << NodeCount);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) const {
@@ -161,7 +161,7 @@ public:
             return;
         }
 
-        LOG_D("Recieved subscription request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
+        LOG_D("Received subscription request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
         GetOrCreateDatabaseState(databaseId)->DoSubscribeRequest(std::move(ev));
     }
 
@@ -173,7 +173,7 @@ public:
         }
 
         const TString& databaseId = ev->Get()->DatabaseId;
-        LOG_D("Recieved new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
+        LOG_D("Received new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
         GetOrCreateDatabaseState(databaseId)->DoPlaceRequest(std::move(ev));
     }
 

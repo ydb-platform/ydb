@@ -21,7 +21,8 @@ public:
             * new read with applied new members
     */
     virtual TExprNode::TPtr ApplyExtractMembers(
-        const TExprNode::TPtr& read, const TExprNode::TPtr& members,
+        const TExprNode::TPtr& read,
+        const TExprNode::TPtr& members,
         TExprContext& ctx) = 0;
 
     /**
@@ -35,7 +36,8 @@ public:
             * new read with applied setting
     */
     virtual TExprNode::TPtr ApplyUnordered(
-        const TExprNode::TPtr& read, TExprContext& ctx) = 0;
+        const TExprNode::TPtr& read,
+        TExprContext& ctx) = 0;
 
     /**
         Rewrite YtflowWriteWrap's underlying provider specific write callable
@@ -48,7 +50,27 @@ public:
             * new write with trimmed content
     */
     virtual TExprNode::TPtr TrimWriteContent(
-        const TExprNode::TPtr& write, TExprContext& ctx) = 0;
+        const TExprNode::TPtr& write,
+        TExprContext& ctx) = 0;
+};
+
+// Non-operational base which enables descendants to provide only partial functionality
+class TEmptyYtflowOptimization
+    : public IYtflowOptimization
+{
+public:
+    TExprNode::TPtr ApplyExtractMembers(
+        const TExprNode::TPtr& read,
+        const TExprNode::TPtr& members,
+        TExprContext& ctx) override;
+
+    TExprNode::TPtr ApplyUnordered(
+        const TExprNode::TPtr& read,
+        TExprContext& ctx) override;
+
+    TExprNode::TPtr TrimWriteContent(
+        const TExprNode::TPtr& write,
+        TExprContext& ctx) override;
 };
 
 } // namespace NYql

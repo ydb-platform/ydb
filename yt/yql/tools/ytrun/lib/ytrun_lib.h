@@ -34,11 +34,11 @@ protected:
     bool KeepTemp_ = false;
     TString DefYtServer_;
     NFmr::IFmrWorker::TPtr FmrWorker_;
-    TString FmrCoordinatorServerUrl_;
     bool DisableLocalFmrWorker_ = false;
     TString FmrOperationSpecFilePath_;
     TString TableDataServiceDiscoveryFilePath_;
     TString FmrJobBin_;
+    TString FmrPoolName_;
 };
 
 } // NYql

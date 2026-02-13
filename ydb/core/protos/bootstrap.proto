@@ -43,7 +43,7 @@ message TBootstrap {
         FAKE_DATASHARD = 700;
     }
 
-    enum EBootMode {
+    enum EBootType {
         NORMAL = 0;
         RECOVERY = 1;
     }
@@ -55,8 +55,8 @@ message TBootstrap {
         optional bool StandBy = 4;
         optional uint64 WatchThreshold = 5;
         optional bool StartFollowers = 6;
-        optional bool AllowDynamicConfiguration = 7 [default = false];
-        optional EBootMode BootMode = 8;
+        optional bool AllowDynamicConfiguration = 7 [default = true];
+        optional EBootType BootType = 8;
     }
 
     repeated TTablet Tablet = 1;

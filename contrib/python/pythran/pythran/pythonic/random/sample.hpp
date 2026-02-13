@@ -15,13 +15,11 @@ namespace random
 {
   template <class Iterable>
   types::list<typename std::iterator_traits<
-      typename std::remove_cv<typename std::remove_reference<Iterable>::type>::
-          type::iterator>::value_type>
+      typename std::remove_cv_t<std::remove_reference_t<Iterable>>::iterator>::value_type>
   sample(Iterable &&s, size_t k)
   {
-    using value_type = typename std::iterator_traits<typename std::remove_cv<
-        typename std::remove_reference<Iterable>::type>::type::iterator>::
-        value_type;
+    using value_type = typename std::iterator_traits<
+        typename std::remove_cv_t<std::remove_reference_t<Iterable>>::iterator>::value_type;
     types::list<value_type> tmp(s.begin(), s.end());
     std::vector<size_t, utils::allocator<size_t>> indices(tmp.size());
     std::iota(indices.begin(), indices.end(), 0);

@@ -259,7 +259,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/adaptive_po
 
 KEEP     BSL-1.0              4ebf5547dee6ab6b8aeb6b822352227b
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp at line 5, include/boost/container/detail/flat_tree.hpp at line 5, include/boost/container/detail/tree.hpp at line 5, include/boost/container/list.hpp at line 5, include/boost/container/string.hpp at line 5, include/boost/container/vector.hpp at line 5
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/flat_tree.hpp at line 5, include/boost/container/detail/tree.hpp at line 5, include/boost/container/list.hpp at line 5, include/boost/container/string.hpp at line 5, include/boost/container/vector.hpp at line 5
     License text:
         // (C) Copyright Ion Gaztanaga 2005-2015. Distributed under the Boost
         // Software License, Version 1.0. (See accompanying file
@@ -270,7 +270,6 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp a
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        include/boost/container/deque.hpp [3:5]
         include/boost/container/detail/flat_tree.hpp [3:5]
         include/boost/container/detail/tree.hpp [3:5]
         include/boost/container/list.hpp [3:5]
@@ -514,6 +513,22 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/allocator.h
         include/boost/container/allocator.hpp [3:5]
         include/boost/container/detail/auto_link.hpp [3:5]
         include/boost/container/detail/singleton.hpp [14:16]
+
+KEEP     BSL-1.0              e6c1b8875419d26f70968fbe28d861a6
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp at line 5, include/boost/container/detail/operator_new_helpers.hpp at line 5
+    License text:
+        // (C) Copyright Ion Gaztanaga 2025-2025. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/container/deque.hpp [3:5]
+        include/boost/container/detail/operator_new_helpers.hpp [3:5]
 
 KEEP     BSL-1.0              f328b5d41ed9ab62066d53579e348e68
 BELONGS ya.make

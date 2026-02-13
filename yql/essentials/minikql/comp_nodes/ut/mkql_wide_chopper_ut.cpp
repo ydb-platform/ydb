@@ -1,5 +1,7 @@
 #include "mkql_computation_node_ut.h"
 #include <yql/essentials/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -423,6 +425,162 @@ Y_UNIT_TEST_LLVM(TestThinAllLambdas) {
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }
+
+class TTestProxyFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TTestProxyFlowWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TTestProxyFlowWrapper>;
+
+public:
+    TTestProxyFlowWrapper(TComputationMutables& mutables,
+                          IComputationWideFlowNode* flow,
+                          size_t width)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
+        , Flow_(flow)
+        , Width_(width)
+    {
+    }
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state,
+                             TComputationContext& ctx,
+                             NUdf::TUnboxedValue* const* output) const {
+        return GetState(state, ctx)->ProxyFetch(ctx, output);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
+        // Call GetState.
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto getStateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTestProxyFlowWrapper::GetState>());
+        const auto getStateType = FunctionType::get(ptrType, {self->getType(), statePtr->getType(), ctx.Ctx->getType()}, false);
+        const auto getStateFuncPtr = CastInst::Create(Instruction::IntToPtr, getStateFunc, PointerType::getUnqual(getStateType), "GetState", block);
+        const auto state = CallInst::Create(getStateType, getStateFuncPtr, {self, statePtr, ctx.Ctx}, "", block);
+
+        // Initialize temporary storage.
+        const auto statusType = Type::getInt32Ty(context);
+        const auto indexType = Type::getInt64Ty(context);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto arrayValueType = ArrayType::get(valueType, Width_);
+        const auto ptrValueType = PointerType::getUnqual(valueType);
+        const auto arrayPtrValueType = ArrayType::get(ptrValueType, Width_);
+
+        const auto values = new AllocaInst(arrayValueType, 0, "storage", block);
+        const auto output = new AllocaInst(arrayPtrValueType, 0, "output", block);
+        for (size_t idx = 0; idx < Width_; idx++) {
+            const auto storagePtr = GetElementPtrInst::CreateInBounds(arrayValueType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, "storagePtr", block);
+            const auto outputPtr = GetElementPtrInst::CreateInBounds(arrayPtrValueType, output, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, "outputPtr", block);
+            new StoreInst(storagePtr, outputPtr, block);
+        }
+
+        // Call ProxyFetch.
+        const auto proxyFetchFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTestProxyFlowState::ProxyFetch>());
+        const auto proxyFetchType = FunctionType::get(statusType, {state->getType(), ctx.Ctx->getType(), output->getType()}, false);
+        const auto proxyFetchFuncPtr = CastInst::Create(Instruction::IntToPtr, proxyFetchFunc, PointerType::getUnqual(proxyFetchType), "ProxyFetch", block);
+        const auto result = CallInst::Create(proxyFetchType, proxyFetchFuncPtr, {state, ctx.Ctx, output}, "", block);
+
+        // Return the result.
+        ICodegeneratorInlineWideNode::TGettersList getters(Width_);
+        for (size_t idx = 0; idx < getters.size(); idx++) {
+            getters[idx] = [idx, values, arrayValueType, indexType, valueType](const TCodegenContext& ctx, BasicBlock*& block) {
+                const auto valuePtr = GetElementPtrInst::CreateInBounds(arrayValueType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, "valuePtr", block);
+                const auto value = new LoadInst(valueType, valuePtr, "value", block);
+                // XXX: As a result of <ProxyFetch> call, a vector
+                // of unboxed values is obtained. Hence, if these
+                // values are not released here, no code later
+                // will do it, leading to UV payload leakage.
+                ValueRelease(EValueRepresentation::Any, value, ctx, block);
+                return value;
+            };
+        }
+        return {result, getters};
+    }
+#endif
+
+private:
+    class TTestProxyFlowState: public TComputationValue<TTestProxyFlowState> {
+    public:
+        TTestProxyFlowState(TMemoryUsageInfo* memInfo, IComputationWideFlowNode* flow)
+            : TComputationValue(memInfo)
+            , Flow_(flow)
+        {
+        }
+        EFetchResult ProxyFetch(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
+            return Flow_->FetchValues(ctx, output);
+        }
+
+    private:
+        IComputationWideFlowNode* const Flow_;
+    };
+
+    TTestProxyFlowState* GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+        if (state.IsInvalid()) {
+            state = ctx.HolderFactory.Create<TTestProxyFlowState>(Flow_);
+        }
+        return static_cast<TTestProxyFlowState*>(state.AsBoxed().Get());
+    }
+
+    void RegisterDependencies() const final {
+        FlowDependsOn(Flow_);
+    }
+
+    IComputationWideFlowNode* const Flow_;
+    const size_t Width_;
+};
+
+IComputationNode* WrapTestProxyFlow(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType()));
+    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+    return new TTestProxyFlowWrapper(ctx.Mutables, wideFlow, wideComponents.size());
+}
+
+constexpr std::string_view TestProxyFlowName = "TestProxyFlow";
+
+TComputationNodeFactory GetNodeFactory() {
+    return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+        if (callable.GetType()->GetName() == TestProxyFlowName) {
+            return WrapTestProxyFlow(callable, ctx);
+        }
+        return GetBuiltinFactory()(callable, ctx);
+    };
+}
+
+template <bool LLVM>
+TRuntimeNode MakeTestProxyFlow(TSetup<LLVM>& setup, TRuntimeNode inputWideFlow) {
+    TCallableBuilder callableBuilder(*setup.Env, TestProxyFlowName, inputWideFlow.GetStaticType());
+    callableBuilder.Add(inputWideFlow);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+Y_UNIT_TEST_LLVM(TestCodegenWithProxyFlow) {
+    TSetup<LLVM> setup(GetNodeFactory());
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({dataType, dataType});
+
+    const auto key = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
+    const auto value = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 1");
+    const auto list = pb.NewList(tupleType, {pb.NewTuple(tupleType, {key, value})});
+
+    const auto wideFlow = pb.ExpandMap(pb.ToFlow(list), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+    const auto wideChoppedFlow = pb.WideChopper(wideFlow,
+                                                [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
+                                                [&](TRuntimeNode::TList, TRuntimeNode::TList) { return pb.NewDataLiteral<bool>(true); },
+                                                [&](TRuntimeNode::TList keys, TRuntimeNode input) { return pb.ToFlow(pb.FromFlow(pb.WideMap(input, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+                                                                                                        return {pb.AggrConcat(pb.AggrConcat(keys.front(), pb.NewDataLiteral<NUdf::EDataSlot::String>(": ")), items.back())};
+                                                                                                    }))); });
+    const auto wideProxyFlow = MakeTestProxyFlow(setup, wideChoppedFlow);
+    const auto root = pb.Collect(pb.NarrowMap(wideProxyFlow, [&](TRuntimeNode::TList items) { return items.front(); }));
+
+    const auto graph = setup.BuildGraph(root);
+    const auto iterator = graph->GetValue().GetListIterator();
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(iterator.Next(item));
+    UNBOXED_VALUE_STR_EQUAL(item, "key one: very long value 1");
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
+}
+
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideChopperTest)
 
 } // namespace NMiniKQL

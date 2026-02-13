@@ -17,12 +17,13 @@ from ..._grpc.grpcwrapper import common_utils
 from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
 from ...query import base
-from ...query.session import (
-    BaseQuerySession,
-    QuerySessionStateEnum,
-)
+from ...query.session import BaseQuerySession
 
 from ..._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class QuerySession(BaseQuerySession):
@@ -54,62 +55,60 @@ class QuerySession(BaseQuerySession):
                 self._status_stream,
                 DEFAULT_INITIAL_RESPONSE_TIMEOUT,
             )
-            if first_response.status != issues.StatusCode.SUCCESS:
-                raise RuntimeError("Failed to attach session")
+            issues._process_response(first_response)
         except Exception as e:
-            self._state.reset()
-            self._status_stream.cancel()
+            self._invalidate()
             raise e
-
-        self._state.set_attached(True)
-        self._state._change_state(QuerySessionStateEnum.CREATED)
 
         self._loop.create_task(self._check_session_status_loop(), name="check session status task")
 
     async def _check_session_status_loop(self) -> None:
         try:
             async for status in self._status_stream:
-                if status.status != issues.StatusCode.SUCCESS:
-                    self._state.reset()
-                    self._state._change_state(QuerySessionStateEnum.CLOSED)
-        except Exception:
-            if not self._state._already_in(QuerySessionStateEnum.CLOSED):
-                self._state.reset()
-                self._state._change_state(QuerySessionStateEnum.CLOSED)
+                issues._process_response(status)
+            logger.debug("Attach stream closed, session_id: %s", self._session_id)
+        except Exception as e:
+            logger.debug("Attach stream error: %s, session_id: %s", e, self._session_id)
+            self._invalidate()
 
     async def delete(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Deletes a Session of Query Service on server side and releases resources.
 
         :return: None
         """
-        if self._state._already_in(QuerySessionStateEnum.CLOSED):
+        if self._closed:
             return
 
-        self._state._check_invalid_transition(QuerySessionStateEnum.CLOSED)
-        await self._delete_call(settings=settings)
-        self._stream.cancel()
+        if self._session_id:
+            try:
+                await self._delete_call(settings=settings)
+            except Exception:
+                pass
+
+        self._invalidate()
 
     async def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
         """Creates a Session of Query Service on server side and attaches it.
 
         :return: QuerySession object.
         """
-        if self._state._already_in(QuerySessionStateEnum.CREATED):
-            return
+        if self.is_active:
+            return self
 
-        self._state._check_invalid_transition(QuerySessionStateEnum.CREATED)
+        if self._closed:
+            raise RuntimeError("Session is already closed")
+
         await self._create_call(settings=settings)
         await self._attach()
 
         return self
 
     def transaction(self, tx_mode=None) -> QueryTxContext:
-        self._state._check_session_ready_to_use()
+        self._check_session_ready_to_use()
         tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
 
         return QueryTxContext(
             self._driver,
-            self._state,
             self,
             tx_mode,
         )
@@ -124,6 +123,9 @@ class QuerySession(BaseQuerySession):
         settings: Optional[BaseRequestSettings] = None,
         *,
         stats_mode: Optional[base.QueryStatsMode] = None,
+        schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
+        result_set_format: Optional[base.QueryResultSetFormat] = None,
+        arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
     ) -> AsyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -138,10 +140,17 @@ class QuerySession(BaseQuerySession):
          2) QueryStatsMode.BASIC;
          3) QueryStatsMode.FULL;
          4) QueryStatsMode.PROFILE;
+        :param schema_inclusion_mode: Schema inclusion mode for result sets:
+         1) QuerySchemaInclusionMode.ALWAYS, which is default;
+         2) QuerySchemaInclusionMode.FIRST_ONLY.
+        :param result_set_format: Format of the result sets:
+         1) QueryResultSetFormat.VALUE, which is default;
+         2) QueryResultSetFormat.ARROW.
+        :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
 
         :return: Iterator with result sets
         """
-        self._state._check_session_ready_to_use()
+        self._check_session_ready_to_use()
 
         stream_it = await self._execute_call(
             query=query,
@@ -150,6 +159,9 @@ class QuerySession(BaseQuerySession):
             syntax=syntax,
             exec_mode=exec_mode,
             stats_mode=stats_mode,
+            schema_inclusion_mode=schema_inclusion_mode,
+            result_set_format=result_set_format,
+            arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=concurrent_result_sets,
             settings=settings,
         )
@@ -159,10 +171,10 @@ class QuerySession(BaseQuerySession):
             wrapper=lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
-                session_state=self._state,
                 session=self,
                 settings=self._settings,
             ),
+            on_error=self._on_execute_stream_error,
         )
 
     async def explain(

@@ -27,6 +27,7 @@ struct TFmrJobSettings {
     TFmrWriterSettings FmrWriterSettings = TFmrWriterSettings();
     TYtReaderSettings YtReaderSettings = TYtReaderSettings();
     TYtWriterSettings YtWriterSettings = TYtWriterSettings();
+    TFmrUserJobSettings FmrUserJobSettings = TFmrUserJobSettings();
     ui64 NumThreads = 0;
 };
 
@@ -51,6 +52,7 @@ void FillMapFmrJob(
     const TMapTaskParams& mapTaskParams,
     const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
     const TString& tableDataServiceDiscoveryFilePath,
+    const TFmrUserJobSettings& userJobSettings,
     IYtJobService::TPtr jobService
 );
 

@@ -12,7 +12,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<TString> YPathList(
+std::vector<std::string> YPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit = {})
@@ -296,8 +296,8 @@ TEST(TLazyYPathServiceTest, ListVerb)
                 .EndMap();
         }));
 
-    EXPECT_EQ((std::vector<TString> {"key1", "key2"}), YPathList(service, ""));
-    EXPECT_EQ((std::vector<TString> {"subkey1", "subkey2"}), YPathList(service, "/key2"));
+    EXPECT_EQ((std::vector<std::string> {"key1", "key2"}), YPathList(service, ""));
+    EXPECT_EQ((std::vector<std::string> {"subkey1", "subkey2"}), YPathList(service, "/key2"));
 }
 
 TEST(TLazyYPathServiceTest, RootAttributes)
@@ -321,7 +321,7 @@ TEST(TLazyYPathServiceTest, RootAttributes)
 
     EXPECT_EQ(expectedAttrs, YPathGet(service, "/@"));
     EXPECT_EQ(FluentString().Value(12), YPathGet(service, "/@attr1"));
-    EXPECT_EQ((std::vector<TString>{"attr1", "attr2"}), YPathList(service, "/@"));
+    EXPECT_EQ((std::vector<std::string>{"attr1", "attr2"}), YPathList(service, "/@"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

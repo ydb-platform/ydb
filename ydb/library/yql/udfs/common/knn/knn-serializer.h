@@ -74,6 +74,7 @@ public:
             case EFormat::Uint8Vector:
                 return TKnnVectorSerializer<ui8, float>::Deserialize(valueBuilder, str);
             case EFormat::BitVector:
+                return TKnnVectorSerializer<bool, float>::Deserialize(valueBuilder, str);
             default:
                 return {};
         }

@@ -19,7 +19,7 @@ namespace NKikimr {
         }
 
         TEventsQuoter(ui64 bytesPerSecond)
-            : DefaultBytesPerSecond(bytesPerSecond) 
+            : DefaultBytesPerSecond(bytesPerSecond)
         {
             NextQueueItemTimestamp = TMonotonic::Zero();
         }
@@ -74,7 +74,7 @@ namespace NKikimr {
             return bytesPerSecond ? bytesPerSecond : DefaultBytesPerSecond.load();
         }
     };
-    
+
     using TReplQuoter = TEventsQuoter;
 
 } // NKikimr

@@ -19,20 +19,18 @@ namespace itertools
 
     template <typename... Iters>
     template <size_t... I>
-    product_iterator<Iters...>::product_iterator(
-        std::tuple<Iters...> &_iters, utils::index_sequence<I...> const &)
-        : it_begin(std::get<I>(_iters).begin()...),
-          it_end(std::get<I>(_iters).end()...),
+    product_iterator<Iters...>::product_iterator(std::tuple<Iters...> &_iters,
+                                                 std::index_sequence<I...> const &)
+        : it_begin(std::get<I>(_iters).begin()...), it_end(std::get<I>(_iters).end()...),
           it(std::get<I>(_iters).begin()...), end(it_begin == it_end)
     {
     }
 
     template <typename... Iters>
     template <size_t... I>
-    product_iterator<Iters...>::product_iterator(
-        npos, std::tuple<Iters...> &_iters, utils::index_sequence<I...> const &)
-        : it_begin(std::get<I>(_iters).end()...),
-          it_end(std::get<I>(_iters).end()...),
+    product_iterator<Iters...>::product_iterator(npos, std::tuple<Iters...> &_iters,
+                                                 std::index_sequence<I...> const &)
+        : it_begin(std::get<I>(_iters).end()...), it_end(std::get<I>(_iters).end()...),
           it(std::get<I>(_iters).end()...), end(true)
     {
     }
@@ -40,17 +38,15 @@ namespace itertools
     template <typename... Iters>
     template <size_t... I>
     types::make_tuple_t<typename Iters::value_type...>
-    product_iterator<Iters...>::get_value(
-        utils::index_sequence<I...> const &) const
+    product_iterator<Iters...>::get_value(std::index_sequence<I...> const &) const
     {
       return types::make_tuple(*std::get<I>(it)...);
     }
 
     template <typename... Iters>
-    types::make_tuple_t<typename Iters::value_type...>
-    product_iterator<Iters...>::operator*() const
+    types::make_tuple_t<typename Iters::value_type...> product_iterator<Iters...>::operator*() const
     {
-      return get_value(utils::make_index_sequence<sizeof...(Iters)>{});
+      return get_value(std::make_index_sequence<sizeof...(Iters)>{});
     }
 
     template <typename... Iters>
@@ -78,22 +74,19 @@ namespace itertools
     }
 
     template <typename... Iters>
-    bool product_iterator<Iters...>::operator==(
-        product_iterator<Iters...> const &other) const
+    bool product_iterator<Iters...>::operator==(product_iterator<Iters...> const &other) const
     {
       return end == other.end;
     }
 
     template <typename... Iters>
-    bool product_iterator<Iters...>::operator!=(
-        product_iterator<Iters...> const &other) const
+    bool product_iterator<Iters...>::operator!=(product_iterator<Iters...> const &other) const
     {
       return end != other.end;
     }
 
     template <typename... Iters>
-    bool product_iterator<Iters...>::operator<(
-        product_iterator<Iters...> const &other) const
+    bool product_iterator<Iters...>::operator<(product_iterator<Iters...> const &other) const
     {
       return end != other.end;
     }
@@ -105,10 +98,8 @@ namespace itertools
     template <typename... Iters>
     product<Iters...>::product(Iters const &..._iters)
         : utils::iterator_reminder<true, Iters...>(_iters...),
-          iterator(this->values,
-                   utils::make_index_sequence<sizeof...(Iters)>{}),
-          end_iter(npos(), this->values,
-                   utils::make_index_sequence<sizeof...(Iters)>{})
+          iterator(this->values, std::make_index_sequence<sizeof...(Iters)>{}),
+          end_iter(npos(), this->values, std::make_index_sequence<sizeof...(Iters)>{})
     {
     }
 
@@ -132,9 +123,7 @@ namespace itertools
   } // namespace details
 
   template <typename... Iter>
-  details::product<typename std::remove_cv<
-      typename std::remove_reference<Iter>::type>::type...>
-  product(Iter &&...iters)
+  details::product<std::remove_cv_t<std::remove_reference_t<Iter>>...> product(Iter &&...iters)
   {
     return {std::forward<Iter>(iters)...};
   }

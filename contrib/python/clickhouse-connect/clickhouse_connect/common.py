@@ -2,13 +2,12 @@ import getpass
 import sys
 from dataclasses import dataclass
 from typing import Any, Sequence, Optional, Dict
+
 from clickhouse_connect import __version__
-
-
 from clickhouse_connect.driver.exceptions import ProgrammingError
 
 
-def version():
+def version() -> str:
     return __version__.version
 
 
@@ -30,7 +29,7 @@ class CommonSetting:
 _common_settings: Dict[str, CommonSetting] = {}
 
 
-def build_client_name(client_name: str):
+def build_client_name(client_name: str) -> str:
     product_name = get_setting('product_name')
     product_name = product_name.strip() + ' ' if product_name else ''
     client_name = client_name.strip() + ' ' if client_name else ''
@@ -46,14 +45,14 @@ def build_client_name(client_name: str):
     return full_name.encode('ascii', 'ignore').decode()
 
 
-def get_setting(name: str):
+def get_setting(name: str) -> Any:
     setting = _common_settings.get(name)
     if setting is None:
         raise ProgrammingError(f'Unrecognized common setting {name}')
     return setting.value if setting.value is not None else setting.default
 
 
-def set_setting(name: str, value: Any):
+def set_setting(name: str, value: Any) -> None:
     setting = _common_settings.get(name)
     if setting is None:
         raise ProgrammingError(f'Unrecognized common setting {name}')
@@ -65,7 +64,7 @@ def set_setting(name: str, value: Any):
         setting.value = value
 
 
-def _init_common(name: str, options: Sequence[Any], default: Any):
+def _init_common(name: str, options: Sequence[Any], default: Any) -> None:
     _common_settings[name] = CommonSetting(name, options, default)
 
 

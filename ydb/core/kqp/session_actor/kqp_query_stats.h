@@ -15,6 +15,8 @@ struct TKqpQueryStats {
     ui64 ReadSetsCount = 0;
     ui64 MaxShardProgramSize = 0;
     ui64 MaxShardReplySize = 0;
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
 
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 

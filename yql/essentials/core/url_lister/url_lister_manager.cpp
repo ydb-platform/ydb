@@ -13,7 +13,7 @@ namespace NYql::NPrivate {
 
 class TUrlListerManager: public IUrlListerManager {
 public:
-    TUrlListerManager(
+    explicit TUrlListerManager(
         TVector<IUrlListerPtr> urlListers)
         : UrlListers_(std::move(urlListers))
     {
@@ -22,7 +22,7 @@ public:
     TVector<TUrlListEntry> ListUrl(const TString& url, const TString& tokenName) const override {
         auto [preprocessedUrl, alias] = GetPreparedUrlAndAlias(url);
 
-        TString token = GetToken(tokenName, alias);
+        TString token = GetToken(tokenName, preprocessedUrl, alias);
 
         for (const auto& urlLister : UrlListers_) {
             if (urlLister->Accept(preprocessedUrl)) {
@@ -36,7 +36,7 @@ public:
     TVector<TUrlListEntry> ListUrlRecursive(const TString& url, const TString& tokenName, const TString& separator, ui32 foldersLimit) const override {
         auto [preprocessedUrl, alias] = GetPreparedUrlAndAlias(url);
 
-        TString token = GetToken(tokenName, alias);
+        TString token = GetToken(tokenName, preprocessedUrl, alias);
 
         for (const auto& urlLister : UrlListers_) {
             if (urlLister->Accept(preprocessedUrl)) {
@@ -64,6 +64,10 @@ public:
         Credentials_ = std::move(credentials);
     }
 
+    void SetTokenResolver(std::function<TString(const TString&, const TString&)> tokenResolver) override {
+        TokenResolver_ = std::move(tokenResolver);
+    }
+
     void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing) override {
         UrlPreprocessing_ = std::move(urlPreprocessing);
     }
@@ -85,7 +89,7 @@ private:
         return {preprocessedUrl, alias};
     }
 
-    TString GetToken(const TString& tokenName, const TString& alias) const {
+    TString GetToken(const TString& tokenName, const TString& preprocessedUrl, const TString& alias) const {
         TMaybe<TString> token;
 
         if (tokenName) {
@@ -101,10 +105,12 @@ private:
             token = credential->Content;
         }
 
-        if (!token && alias && Credentials_) {
-            if (auto credential = Credentials_->FindCredential("default_" + alias)) {
-                token = credential->Content;
+        if (!token && preprocessedUrl && alias) {
+            if (!TokenResolver_) {
+                throw yexception() << "Missing token resolver";
             }
+
+            token = TokenResolver_(preprocessedUrl, alias);
         }
 
         return *token.OrElse("");
@@ -156,6 +162,7 @@ private:
     TVector<IUrlListerPtr> UrlListers_;
 
     TCredentials::TPtr Credentials_;
+    std::function<TString(const TString&, const TString&)> TokenResolver_;
     IUrlPreprocessing::TPtr UrlPreprocessing_;
     TMaybe<NYT::TNode> Parameters_;
 };

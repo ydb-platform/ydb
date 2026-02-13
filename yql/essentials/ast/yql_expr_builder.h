@@ -120,7 +120,7 @@ private:
     struct TBuildAdapter {
         typedef TExprNodeReplaceBuilder& ResultType;
 
-        TBuildAdapter(TExprNodeReplaceBuilder& builder)
+        explicit TBuildAdapter(TExprNodeReplaceBuilder& builder)
             : Builder(builder)
         {
         }

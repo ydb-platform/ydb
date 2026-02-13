@@ -229,7 +229,7 @@ namespace NKikimr {
                     NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::ReplJob, 0), "ReplicationDonor",
                     ReplCtx->VDiskCfg->ReplInterconnectChannel, vdiskActorId.NodeId() == SelfId().NodeId(),
                     TDuration::Minutes(1), flowRecord, NMonitoring::TCountableBase::EVisibility::Private));
-                
+
                 const TActorId fastReadQueueActorId = Register(CreateVDiskBackpressureClient(info, vdiskId,
                     NKikimrBlobStorage::EVDiskQueueId::GetFastRead, ReplCtx->MonGroup.GetGroup(), ReplCtx->VCtx,
                     NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::ReplJob, 0), "OnlineReadDonor",
@@ -519,7 +519,7 @@ namespace NKikimr {
             LastReplQuantumStart = TAppData::TimeProvider->Now();
             Y_VERIFY_S(!ReplJobActorId, ReplCtx->VCtx->VDiskLogPrefix);
 
-            // Iterate through the donor queue, moving "NotReady" donors to the end  
+            // Iterate through the donor queue, moving "NotReady" donors to the end
             // until a ready donor or an empty optional (indicating the use of the group's other disks instead of a donor) is found.
             auto donorIt = DonorQueue.begin();
             while (donorIt != DonorQueue.end() && (*donorIt && (*donorIt)->NotReady)) {

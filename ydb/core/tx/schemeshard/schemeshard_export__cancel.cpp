@@ -91,6 +91,7 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistExportState(db, *exportInfo);
+        Self->EraseEncryptionKey(db, *exportInfo);
 
         Send(Request->Sender, std::move(response), 0, Request->Cookie);
         SendNotificationsIfFinished(exportInfo);
@@ -179,6 +180,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
             exportInfo->State = TExportInfo::EState::Cancelled;
             exportInfo->EndTime = TAppData::TimeProvider->Now();
             Self->PersistExportState(db, *exportInfo);
+            Self->EraseEncryptionKey(db, *exportInfo);
         }
 
         SendNotificationsIfFinished(exportInfo);

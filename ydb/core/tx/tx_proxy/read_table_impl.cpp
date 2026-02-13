@@ -697,6 +697,7 @@ private:
         Y_ABORT_UNLESS(!ResolveInProgress, "Only one resolve request may be active at a time");
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Settings.DatabaseName;
         request->DomainOwnerId = DomainInfo->ExtractSchemeShard();
         request->ResultSet.emplace_back(std::move(KeyDesc));
 

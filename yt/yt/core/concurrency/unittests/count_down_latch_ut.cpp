@@ -17,7 +17,7 @@ void WaitForLatch(const TCountDownLatch& latch)
     EXPECT_EQ(0, latch.GetCount());
 }
 
-TEST(TCountDownLatch, TwoThreads)
+TEST(TCountDownLatchTest, TwoThreads)
 {
     TCountDownLatch latch(2);
 
@@ -34,7 +34,7 @@ TEST(TCountDownLatch, TwoThreads)
     t2.join();
 }
 
-TEST(TCountDownLatch, TwoThreadsPredecremented)
+TEST(TCountDownLatchTest, TwoThreadsPredecremented)
 {
     TCountDownLatch latch(2);
 
@@ -51,7 +51,7 @@ TEST(TCountDownLatch, TwoThreadsPredecremented)
     t2.join();
 }
 
-TEST(TCountDownLatch, TwoThreadsTwoLatches)
+TEST(TCountDownLatchTest, TwoThreadsTwoLatches)
 {
     TCountDownLatch first(1);
     TCountDownLatch second(1);

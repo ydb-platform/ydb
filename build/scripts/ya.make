@@ -23,7 +23,6 @@ IF (PYTHON2)
         pack_jcoverage_resources.py
         python_yndexer.py
         run_ios_simulator.py
-        run_msvc_wine.py
         symlink.py
         touch.py
         unpacking_jtest_runner.py
@@ -62,6 +61,7 @@ ELSEIF (PYTHON3)
         copy_to_dir.py
         cpp_flatc_wrapper.py
         decimal_md5.py
+        docs_manifest.py
         docs_proto_wrapper.py
         error.py
         extract_asrc.py
@@ -124,6 +124,7 @@ ELSEIF (PYTHON3)
         run_junit.py
         run_llvm_dsymutil.py
         run_tool.py
+        run_msvc_wine.py
         setup_java_tmpdir.py
         sky.py
         stderr2stdout.py

@@ -110,6 +110,7 @@ TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input, const TExprNode::TPtr& value, TExprContext& ctx);
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeBool(TPositionHandle position, bool value, TExprContext& ctx);
+TExprNode::TPtr MakeString(TPositionHandle position, TStringBuf buf, TExprContext& ctx);
 TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprContext& ctx);
 template <bool Bool>
 TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx);
@@ -224,8 +225,11 @@ TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr r
 bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap);
 bool IsNormalizedDependsOn(const TExprNode& node);
 
+bool IsForbidConstantDependsEnabled(const TTypeAnnotationContext& types);
 bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types);
 
 bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types);
+
+bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types);
 
 }

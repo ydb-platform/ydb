@@ -7,9 +7,6 @@
 
 #include <yt/yt/core/logging/log.h>
 
-// TODO(cherepashka): remove dependency.
-#include <yt/yt/core/rpc/dispatcher.h>
-
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -38,12 +35,11 @@ public:
         bool RequestInitialized;
     };
 
-    explicit TAsyncExpiringCache(
+    TAsyncExpiringCache(
         TAsyncExpiringCacheConfigPtr config,
+        IInvokerPtr invoker,
         NLogging::TLogger logger = {},
-        NProfiling::TProfiler profiler = {},
-        // TODO(cherepashka): remove default value and move upper.
-        const IInvokerPtr& invoker = NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
+        NProfiling::TProfiler profiler = {});
 
     TFuture<TValue> Get(const TKey& key);
     TExtendedGetResult GetExtended(const TKey& key);
@@ -76,7 +72,11 @@ public:
         ForcedUpdate,
     };
 
+    int GetSize() const;
+
 protected:
+    const NLogging::TLogger Logger_;
+
     TAsyncExpiringCacheConfigPtr GetConfig() const;
 
     virtual TFuture<TValue> DoGet(
@@ -104,10 +104,15 @@ protected:
     void Ping(const TKey& key);
 
 private:
-    const NLogging::TLogger Logger_;
     const NConcurrency::TPeriodicExecutorPtr ExpirationExecutor_;
     const NConcurrency::TPeriodicExecutorPtr RefreshExecutor_;
     const int ShardCount_ = 1;
+    const IInvokerPtr Invoker_;
+    //! Hash for determining shard index for each key.
+    //!
+    //! \note We use a hash separate from that of TEntry's hash map to ensure that for a random key, its shard index is independent
+    //! from the bucket index in the shard's hash map.
+    const TRandomizedHash<TKey> ShardKeyHash_;
 
     std::atomic<bool> Started_ = false;
 
@@ -126,8 +131,11 @@ private:
         //! Uncancelable version of #Promise.
         TFuture<TValue> Future;
 
-        //! Corresponds to a future probation request.
-        NConcurrency::TDelayedExecutorCookie ProbationCookie;
+        //! Corresponds to a future refresh request.
+        NConcurrency::TDelayedExecutorCookie RefreshCookie;
+
+        //! Corresponds to a future expiration request.
+        NConcurrency::TDelayedExecutorCookie ExpirationCookie;
 
         //! Constructs a fresh entry.
         explicit TEntry(NProfiling::TCpuInstant accessDeadline);
@@ -192,8 +200,18 @@ private:
     void DeleteExpiredItems();
     void RefreshAllItems();
 
+    void ScheduleAllEntriesUpdate(const TAsyncExpiringCacheConfigPtr& config);
+
     // Schedules entry expiration and refresh.
     void ScheduleEntryUpdate(
+        const TEntryPtr& entry,
+        const TKey& key,
+        const TAsyncExpiringCacheConfigPtr& config);
+    void ScheduleEntryRefresh(
+        const TEntryPtr& entry,
+        const TKey& key,
+        const TAsyncExpiringCacheConfigPtr& config);
+    void ScheduleEntryExpiration(
         const TEntryPtr& entry,
         const TKey& key,
         const TAsyncExpiringCacheConfigPtr& config);
@@ -224,4 +242,3 @@ private:
 #define EXPIRING_CACHE_INL_H_
 #include "async_expiring_cache-inl.h"
 #undef EXPIRING_CACHE_INL_H_
-

@@ -15,9 +15,12 @@ YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/library/yql/udfs/statistics_internal
     ydb/core/protos
     ydb/core/testlib/default
     ydb/core/statistics/ut_common
+    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/hyperloglog
 )
 
 SRCS(

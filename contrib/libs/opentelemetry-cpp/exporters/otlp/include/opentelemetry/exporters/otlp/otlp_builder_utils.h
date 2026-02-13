@@ -8,6 +8,7 @@
 #include "opentelemetry/exporters/otlp/otlp_environment.h"  // For OtlpHeaders
 #include "opentelemetry/exporters/otlp/otlp_http.h"
 #include "opentelemetry/exporters/otlp/otlp_preferred_temporality.h"
+#include "opentelemetry/sdk/configuration/grpc_tls_configuration.h"
 #include "opentelemetry/sdk/configuration/headers_configuration.h"
 #include "opentelemetry/sdk/configuration/otlp_http_encoding.h"
 #include "opentelemetry/sdk/configuration/temporality_preference.h"
@@ -31,6 +32,9 @@ public:
 
   static PreferredAggregationTemporality ConvertTemporalityPreference(
       opentelemetry::sdk::configuration::TemporalityPreference model);
+
+  static bool GrpcUseSsl(const std::string &endpoint,
+                         const opentelemetry::sdk::configuration::GrpcTlsConfiguration *tls);
 };
 
 }  // namespace otlp

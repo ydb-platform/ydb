@@ -91,7 +91,7 @@ class IOptimizationContext;
 
 class IDataProvider : public TThrRefBase {
 public:
-    virtual ~IDataProvider() {}
+    ~IDataProvider() override {}
 
     virtual TStringBuf GetName() const = 0;
 
@@ -116,6 +116,8 @@ public:
     virtual IGraphTransformer& GetConfigurationTransformer() = 0;
     virtual TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) = 0;
     virtual const THashMap<TString, TString>* GetClusterTokens() = 0;
+    virtual TMaybe<TString> ResolveClusterToken(const TString& cluster) = 0;
+    virtual const THashSet<TString>& GetValidClusters() = 0;
     virtual void AddCluster(const TString& name, const THashMap<TString, TString>& properties) = 0;
 
     //-- discovery & rewrite

@@ -144,7 +144,7 @@ private:
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(tableInfo->Cluster).GetOrElse(false);
             const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
-            if ((info.Ranges || tableInfo->Meta->IsDynamic) && !canUseYtPartitioningApi) {
+            if ((info.Ranges || info.QLFilter || tableInfo->Meta->IsDynamic) && !canUseYtPartitioningApi) {
                 return false;
             }
             if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
@@ -199,6 +199,16 @@ private:
                 if (TCoScriptUdf::Match(node.Get()) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node->Head().Content()))) {
                     return true;
                 }
+
+                if ((TCoScriptUdf::Match(node.Get()) && node->ChildrenSize() > 4) || (TCoUdf::Match(node.Get()) && node->ChildrenSize() == 8)) {
+                    for (const auto& setting: node->Child(TCoScriptUdf::Match(node.Get()) ? 4 : 7)->Children()) {
+                        YQL_ENSURE(setting->Head().IsAtom());
+                        if (setting->Head().Content() == "layers") {
+                            return true;
+                        }
+                    }
+                }
+
 
                 if (const auto& tableContent = TMaybeNode<TYtTableContent>(node)) {
                     if (!flow)
@@ -718,6 +728,7 @@ private:
     }
 
     void PushSkipStat(const TStringBuf& statName, const TStringBuf& nodeName) const {
+        State_->FullHybridExecution = false;
         PushHybridStat(statName, nodeName, "SkipReasons");
         PushHybridStat("Skip", nodeName);
     }

@@ -81,6 +81,24 @@ static constexpr const char *kAppScreenCoordinateX = "app.screen.coordinate.x";
 static constexpr const char *kAppScreenCoordinateY = "app.screen.coordinate.y";
 
 /**
+  An identifier that uniquely differentiates this screen from other screens in the same application.
+  <p>
+  A screen represents only the part of the device display drawn by the app. It typically contains
+  multiple widgets or UI components and is larger in scope than individual widgets. Multiple screens
+  can coexist on the same display simultaneously (e.g., split view on tablets).
+ */
+static constexpr const char *kAppScreenId = "app.screen.id";
+
+/**
+  The name of an application screen.
+  <p>
+  A screen represents only the part of the device display drawn by the app. It typically contains
+  multiple widgets or UI components and is larger in scope than individual widgets. Multiple screens
+  can coexist on the same display simultaneously (e.g., split view on tablets).
+ */
+static constexpr const char *kAppScreenName = "app.screen.name";
+
+/**
   An identifier that uniquely differentiates this widget from other widgets in the same application.
   <p>
   A widget is an application component, typically an on-screen visual GUI element.

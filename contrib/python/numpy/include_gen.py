@@ -24,7 +24,7 @@ def include_gen(root, subpaths):
         out = join('include', path)
         py2 = join('py2', path)
         py3 = join('py3', path)
-        makedir(dirname(out))
+        os.makedirs(dirname(out), exist_ok=True)
         with open(out, 'w') as f:
             f.write(template.format(
                 '' if exists(py3) else 'error #',
@@ -47,18 +47,7 @@ def list_subpaths(subpaths, roots=('py2', 'py3'), test=is_header):
                 for filename in filenames:
                     if test(filename):
                         seen.add(join(rootrel, filename))
-                    if dirpath.endswith('numpy/core/src/umath') and filename == 'funcs.inc':
-                        seen.add(join(rootrel, filename))
-                    if dirpath.endswith('numpy/core/include/numpy') and filename in ('__multiarray_api.c', '__ufunc_api.c', '__umath_generated.c'):
-                        seen.add(join(rootrel, filename))
-                    if filename.endswith(('.dispatch.c', '.dispatch.cpp')):
-                        seen.add(join(rootrel, filename))
     return seen
-
-
-def makedir(path):
-    if not exists(path):
-        os.makedirs(path)
 
 
 if __name__ == '__main__':

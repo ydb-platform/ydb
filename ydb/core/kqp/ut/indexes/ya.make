@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -16,6 +16,7 @@ SRCS(
     kqp_indexes_prefixed_vector_ut.cpp
     kqp_indexes_ut.cpp
     kqp_indexes_vector_ut.cpp
+    kqp_stream_indexes_ut.cpp
 )
 
 PEERDIR(

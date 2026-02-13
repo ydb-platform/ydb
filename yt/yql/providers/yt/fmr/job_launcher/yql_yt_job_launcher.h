@@ -19,9 +19,23 @@ public:
 
     TFmrUserJobLauncher(const TFmrUserJobLauncherOptions& jobLauncherOptions);
 
-    std::variant<TError, TStatistics> LaunchJob(TFmrUserJob& job);
+    std::variant<TError, TStatistics> LaunchJob(
+        TFmrUserJob& job,
+        const TMaybe<TString>& jobEnvironmentDir = Nothing(),
+        const std::vector<TFileInfo>& jobFiles = {},
+        const std::vector<TYtResourceInfo>& jobYtResources = {},
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources = {}
+    );
 
     bool RunInSeperateProcess() const;
+
+private:
+    void InitializeJobEnvironment(
+        const TString& jobEnvironmentDir,
+        const std::vector<TFileInfo>& jobFiles,
+        const std::vector<TYtResourceInfo>& jobYtResources,
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources
+    );
 
 private:
     const bool RunInSeparateProcess_;

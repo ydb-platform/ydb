@@ -124,7 +124,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
     appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
-    appConfig.MutableFeatureFlags()->SetEnableViews(true);
     if (!useCBO) {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
     } else {
@@ -407,7 +406,6 @@ private:
 
 void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
     auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
-    kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
     auto db = kikimr.GetQueryClient();
     auto result = db.GetSession().GetValueSync();
     NStatusHelpers::ThrowOnError(result);
@@ -434,7 +432,6 @@ void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TStr
 
 void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& statsPath) {
     auto kikimr = GetKikimrWithJoinSettings(false, GetStatic(statsPath));
-    kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
     auto db = kikimr.GetQueryClient();
     auto result = db.GetSession().GetValueSync();
     NStatusHelpers::ThrowOnError(result);
@@ -574,7 +571,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         const TExecuteParams& params = {}
     ) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, params);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);
@@ -615,7 +611,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     void CheckJoinCardinality(const TString& queryPath, const TString& statsPath, const TString& joinKind, double card, bool useStreamLookupJoin, bool useColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), true);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);
@@ -853,7 +848,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_TWIN(TestJoinHint2, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, false, ColumnStore);
+        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (Map)", 1, false, ColumnStore);
     }
 
     Y_UNIT_TEST(BytesHintForceGraceJoin) {
@@ -954,11 +949,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"customer", "customer_address"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Map)");
         }
         {
             auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Map)");
         }
         {
             auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address", "store_sales"});
@@ -977,16 +972,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto [plan, _] =  ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch9.sql", "stats/tpch100s.json", false, true);
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"nation"}, TFindJoinWithLabels::PartialMatch);
-        UNIT_ASSERT_C(join.Join == "InnerJoin (MapJoin)", join.Join);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (Map)", join.Join);
     }
 
     Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
         auto joinFinder = TFindJoinWithLabels(plan);
         UNIT_ASSERT(joinFinder.Find({"R", "S"}).Join == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (MapJoin)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (Map)");
         UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}).Join == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (MapJoin)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (Map)");
     }
 
     Y_UNIT_TEST_TWIN(TestJoinOrderHintsSimple, ColumnStore) {

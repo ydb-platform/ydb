@@ -28,9 +28,7 @@ class MulticlusterTestBase():
     @classmethod
     def build_cluster(cls):
         cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
-                                               extra_feature_flags=["enable_resource_pools",
-                                                                    "enable_external_data_sources",
-                                                                    "enable_tiering_in_column_shard"],
+                                               extra_feature_flags=cls.get_extra_feature_flags(),
                                                column_shard_config={
             'disabled_on_scheme_shard': False,
             'lag_for_compaction_before_tierings_ms': 0,
@@ -56,6 +54,14 @@ class MulticlusterTestBase():
         return "%s:%s" % (
             cluster.nodes[1].host, cluster.nodes[1].port
         )
+
+    @classmethod
+    def get_extra_feature_flags(cls):
+        return [
+            "enable_resource_pools",
+            "enable_external_data_sources",
+            "enable_tiering_in_column_shard",
+        ]
 
     @classmethod
     def teardown_class(cls):

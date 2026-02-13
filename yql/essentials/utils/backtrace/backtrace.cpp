@@ -80,6 +80,7 @@ namespace {
 std::vector<std::function<void(int)>> Before, After;
 TMutex FatalCallbackMutex;
 bool KikimrSymbolize = false;
+bool DoNotUnwind = false;
 NYql::NBacktrace::TCollectedFrame Frames[NYql::NBacktrace::Limit];
 
 void CallCallbacks(decltype(Before)& where, int signum) {
@@ -105,7 +106,7 @@ void DoBacktrace(IOutputStream* out, void** stack, size_t cnt) {
 void SignalHandler(int signum) {
     CallCallbacks(Before, signum);
 
-    if (!NMalloc::IsAllocatorCorrupted) {
+    if (!NMalloc::IsAllocatorCorrupted && !DoNotUnwind) {
         if (!AtomicTryLock(&BacktraceStarted)) {
             return;
         }
@@ -123,7 +124,7 @@ void SignalAction(int signum, siginfo_t*, void* context) {
     Y_UNUSED(SignalHandler);
     CallCallbacks(Before, signum);
 
-    if (!NMalloc::IsAllocatorCorrupted) {
+    if (!NMalloc::IsAllocatorCorrupted && !DoNotUnwind) {
         if (!AtomicTryLock(&BacktraceStarted)) {
             return;
         }
@@ -172,6 +173,10 @@ void EnableKikimrSymbolize() {
 
 void KikimrBackTrace() {
     FormatBackTrace(&Cerr);
+}
+
+void DisableBacktraceUnwinding() {
+    DoNotUnwind = true;
 }
 
 void KikimrBackTraceFormatImpl(IOutputStream* out) {

@@ -10,9 +10,8 @@ namespace builtins
 {
   namespace
   {
-    struct range_iterator
-        : std::iterator<std::random_access_iterator_tag, long, ptrdiff_t,
-                        long *, long /*no ref here*/> {
+    struct range_iterator : std::iterator<std::random_access_iterator_tag, long, ptrdiff_t, long *,
+                                          long /*no ref here*/> {
       long value_;
       long step_;
 
@@ -28,6 +27,7 @@ namespace builtins
       bool operator!=(range_iterator const &other) const;
       bool operator==(range_iterator const &other) const;
       bool operator<(range_iterator const &other) const;
+      bool operator<=(range_iterator const &other) const;
       long operator-(range_iterator const &other) const;
     };
   } // namespace

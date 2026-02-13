@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(34.1.0)
+VERSION(35.0.0)
 
 LICENSE(Apache-2.0)
 
@@ -10,7 +10,6 @@ PEERDIR(
     contrib/python/PyYAML
     contrib/python/certifi
     contrib/python/durationpy
-    contrib/python/google-auth
     contrib/python/python-dateutil
     contrib/python/requests
     contrib/python/requests-oauthlib
@@ -83,12 +82,12 @@ PY_SRCS(
     kubernetes/client/api/resource_v1beta2_api.py
     kubernetes/client/api/scheduling_api.py
     kubernetes/client/api/scheduling_v1_api.py
+    kubernetes/client/api/scheduling_v1alpha1_api.py
     kubernetes/client/api/storage_api.py
     kubernetes/client/api/storage_v1_api.py
-    kubernetes/client/api/storage_v1alpha1_api.py
     kubernetes/client/api/storage_v1beta1_api.py
     kubernetes/client/api/storagemigration_api.py
-    kubernetes/client/api/storagemigration_v1alpha1_api.py
+    kubernetes/client/api/storagemigration_v1beta1_api.py
     kubernetes/client/api/version_api.py
     kubernetes/client/api/well_known_api.py
     kubernetes/client/api_client.py
@@ -291,6 +290,7 @@ PY_SRCS(
     kubernetes/client/models/v1_git_repo_volume_source.py
     kubernetes/client/models/v1_glusterfs_persistent_volume_source.py
     kubernetes/client/models/v1_glusterfs_volume_source.py
+    kubernetes/client/models/v1_group_resource.py
     kubernetes/client/models/v1_group_subject.py
     kubernetes/client/models/v1_group_version_for_discovery.py
     kubernetes/client/models/v1_grpc_action.py
@@ -628,15 +628,15 @@ PY_SRCS(
     kubernetes/client/models/v1_webhook_conversion.py
     kubernetes/client/models/v1_weighted_pod_affinity_term.py
     kubernetes/client/models/v1_windows_security_context_options.py
+    kubernetes/client/models/v1_workload_reference.py
     kubernetes/client/models/v1alpha1_apply_configuration.py
     kubernetes/client/models/v1alpha1_cluster_trust_bundle.py
     kubernetes/client/models/v1alpha1_cluster_trust_bundle_list.py
     kubernetes/client/models/v1alpha1_cluster_trust_bundle_spec.py
-    kubernetes/client/models/v1alpha1_group_version_resource.py
+    kubernetes/client/models/v1alpha1_gang_scheduling_policy.py
     kubernetes/client/models/v1alpha1_json_patch.py
     kubernetes/client/models/v1alpha1_match_condition.py
     kubernetes/client/models/v1alpha1_match_resources.py
-    kubernetes/client/models/v1alpha1_migration_condition.py
     kubernetes/client/models/v1alpha1_mutating_admission_policy.py
     kubernetes/client/models/v1alpha1_mutating_admission_policy_binding.py
     kubernetes/client/models/v1alpha1_mutating_admission_policy_binding_list.py
@@ -647,31 +647,26 @@ PY_SRCS(
     kubernetes/client/models/v1alpha1_named_rule_with_operations.py
     kubernetes/client/models/v1alpha1_param_kind.py
     kubernetes/client/models/v1alpha1_param_ref.py
-    kubernetes/client/models/v1alpha1_pod_certificate_request.py
-    kubernetes/client/models/v1alpha1_pod_certificate_request_list.py
-    kubernetes/client/models/v1alpha1_pod_certificate_request_spec.py
-    kubernetes/client/models/v1alpha1_pod_certificate_request_status.py
+    kubernetes/client/models/v1alpha1_pod_group.py
+    kubernetes/client/models/v1alpha1_pod_group_policy.py
     kubernetes/client/models/v1alpha1_server_storage_version.py
     kubernetes/client/models/v1alpha1_storage_version.py
     kubernetes/client/models/v1alpha1_storage_version_condition.py
     kubernetes/client/models/v1alpha1_storage_version_list.py
-    kubernetes/client/models/v1alpha1_storage_version_migration.py
-    kubernetes/client/models/v1alpha1_storage_version_migration_list.py
-    kubernetes/client/models/v1alpha1_storage_version_migration_spec.py
-    kubernetes/client/models/v1alpha1_storage_version_migration_status.py
     kubernetes/client/models/v1alpha1_storage_version_status.py
+    kubernetes/client/models/v1alpha1_typed_local_object_reference.py
     kubernetes/client/models/v1alpha1_variable.py
-    kubernetes/client/models/v1alpha1_volume_attributes_class.py
-    kubernetes/client/models/v1alpha1_volume_attributes_class_list.py
+    kubernetes/client/models/v1alpha1_workload.py
+    kubernetes/client/models/v1alpha1_workload_list.py
+    kubernetes/client/models/v1alpha1_workload_spec.py
     kubernetes/client/models/v1alpha2_lease_candidate.py
     kubernetes/client/models/v1alpha2_lease_candidate_list.py
     kubernetes/client/models/v1alpha2_lease_candidate_spec.py
-    kubernetes/client/models/v1alpha3_cel_device_selector.py
-    kubernetes/client/models/v1alpha3_device_selector.py
     kubernetes/client/models/v1alpha3_device_taint.py
     kubernetes/client/models/v1alpha3_device_taint_rule.py
     kubernetes/client/models/v1alpha3_device_taint_rule_list.py
     kubernetes/client/models/v1alpha3_device_taint_rule_spec.py
+    kubernetes/client/models/v1alpha3_device_taint_rule_status.py
     kubernetes/client/models/v1alpha3_device_taint_selector.py
     kubernetes/client/models/v1beta1_allocated_device_status.py
     kubernetes/client/models/v1beta1_allocation_result.py
@@ -727,6 +722,10 @@ PY_SRCS(
     kubernetes/client/models/v1beta1_param_kind.py
     kubernetes/client/models/v1beta1_param_ref.py
     kubernetes/client/models/v1beta1_parent_reference.py
+    kubernetes/client/models/v1beta1_pod_certificate_request.py
+    kubernetes/client/models/v1beta1_pod_certificate_request_list.py
+    kubernetes/client/models/v1beta1_pod_certificate_request_spec.py
+    kubernetes/client/models/v1beta1_pod_certificate_request_status.py
     kubernetes/client/models/v1beta1_resource_claim.py
     kubernetes/client/models/v1beta1_resource_claim_consumer_reference.py
     kubernetes/client/models/v1beta1_resource_claim_list.py
@@ -743,6 +742,10 @@ PY_SRCS(
     kubernetes/client/models/v1beta1_service_cidr_list.py
     kubernetes/client/models/v1beta1_service_cidr_spec.py
     kubernetes/client/models/v1beta1_service_cidr_status.py
+    kubernetes/client/models/v1beta1_storage_version_migration.py
+    kubernetes/client/models/v1beta1_storage_version_migration_list.py
+    kubernetes/client/models/v1beta1_storage_version_migration_spec.py
+    kubernetes/client/models/v1beta1_storage_version_migration_status.py
     kubernetes/client/models/v1beta1_variable.py
     kubernetes/client/models/v1beta1_volume_attributes_class.py
     kubernetes/client/models/v1beta1_volume_attributes_class_list.py

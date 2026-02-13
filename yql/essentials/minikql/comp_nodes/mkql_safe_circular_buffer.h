@@ -1,8 +1,10 @@
 #pragma once
+
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <util/system/yassert.h>
 #include <util/generic/maybe.h>
+
 #include <vector>
 
 namespace NKikimr {
@@ -12,97 +14,130 @@ template <class T>
 class TSafeCircularBuffer {
 public:
     TSafeCircularBuffer(TMaybe<size_t> size, T emptyValue, size_t initSize = 0)
-        : Buffer(size ? *size : initSize, emptyValue)
-        , EmptyValue(emptyValue)
-        , Unbounded(!size.Defined())
-        , Count(initSize)
+        : Buffer_(size ? *size : initSize, emptyValue)
+        , EmptyValue_(emptyValue)
+        , Unbounded_(!size.Defined())
+        , Size_(initSize)
     {
-        if (!Unbounded) {
+        if (!Unbounded_) {
             Y_ABORT_UNLESS(initSize <= *size);
         }
     }
 
     bool IsUnbounded() const {
-        return Unbounded;
+        return Unbounded_;
     }
 
     void PushBack(T&& data) {
-        if (Unbounded) {
-            Y_ABORT_UNLESS(Head + Count == Size());
-            Buffer.emplace_back(std::move(data));
-        } else {
-            YQL_ENSURE(!IsFull());
-            Buffer[RealIndex(Head + Count)] = std::move(data);
+        MutationCount_++;
+        if (IsFull()) {
+            Grow();
         }
-        Count++;
-        MutationCount++;
+        Size_++;
+        Buffer_[RealIndex(Size_ - 1)] = std::move(data);
     }
 
     const T& Get(size_t index) const {
-        if (index < Count) {
-            return Buffer[RealIndex(Head + index)];
+        if (index < Size_) {
+            return Buffer_[RealIndex(index)];
         } else {
             // Circular buffer out of bounds
-            return EmptyValue;
+            return EmptyValue_;
         }
     }
 
     void PopFront() {
-        if (!Count) {
-            // Circular buffer not have elements for pop, no elements, no problem
-        } else {
-            Buffer[Head] = EmptyValue;
-            Head = RealIndex(Head + 1);
-            Count--;
+        MutationCount_++;
+        if (!Size_) {
+            // Circular buffer not have elements for pop, no elements, no problem.
+            return;
         }
-        MutationCount++;
+        Buffer_[RealIndex(0)] = EmptyValue_;
+        Head_ = RealIndex(1, /*mayOutOfBounds=*/true);
+        Size_--;
     }
 
+    // Returns the actual allocated size of the underlying buffer vector.
+    // This is the total capacity that can hold elements including empty slots.
+    size_t Capacity() const {
+        return Buffer_.size();
+    }
+
+    // Returns the number of elements currently stored in the circular buffer.
+    // These are the active elements between push and pop operations.
     size_t Size() const {
-        return Buffer.size();
+        return Size_;
     }
 
-    size_t UsedSize() const {
-        return Count;
-    }
-
+    // Return current generation of a queue.
+    // Generation grows each time some modification happens.
     ui64 Generation() const {
-        return MutationCount;
+        return MutationCount_;
     }
 
+    // Set all values to the |EmptyValue_|.
     void Clean() {
-        const auto usedSize = UsedSize();
-        for (size_t index = 0; index < usedSize; ++index) {
-            Buffer[RealIndex(Head + index)] = EmptyValue;
+        MutationCount_++;
+        for (size_t index = 0; index < Size(); ++index) {
+            Buffer_[RealIndex(index)] = EmptyValue_;
         }
     }
 
+    // Clear all queue. Reset size to 0. Free buffer allocated resources.
+    // Queue in general not usable after that.
     void Clear() {
-        Head = Count = 0;
-        Buffer.clear();
-        Buffer.shrink_to_fit();
+        MutationCount_++;
+        Head_ = Size_ = 0;
+        Buffer_.clear();
+        Buffer_.shrink_to_fit();
+    }
+
+    void Reserve(size_t capacity) {
+        if (capacity <= Capacity()) {
+            return;
+        }
+        Grow(capacity);
     }
 
 private:
+    static inline constexpr size_t GrowFactor = 2;
+
     bool IsFull() const {
-        if (Unbounded) {
-            return false;
+        return Size() == Capacity();
+    }
+
+    void Grow(size_t to) {
+        YQL_ENSURE(Unbounded_, "Cannot reallocate buffer in Bounded mode");
+        // Rotate elements so that logical first element is at position 0.
+        std::rotate(Buffer_.begin(), Buffer_.begin() + Head_, Buffer_.end());
+        Buffer_.resize(to, EmptyValue_);
+        // Reset Head since elements now start at position 0.
+        Head_ = 0;
+    }
+
+    void Grow() {
+        if (Capacity() == 0) {
+            Grow(1);
         }
-        return UsedSize() == Size();
+        // Double buffer size.
+        Grow(Capacity() * GrowFactor);
     }
 
-    size_t RealIndex(size_t index) const {
-        auto size = Size();
-        Y_ABORT_UNLESS(size);
-        return index % size;
+    size_t RealIndex(size_t index, bool mayOutOfBounds = false) const {
+        auto capacity = Capacity();
+        Y_ABORT_UNLESS(capacity);
+        if (!mayOutOfBounds) {
+            Y_ABORT_UNLESS(index < Size());
+        }
+        return (Head_ + index) % capacity;
     }
 
-    std::vector<T> Buffer;
-    const T EmptyValue;
-    const bool Unbounded;
-    size_t Head = 0;
-    size_t Count;
-    ui64 MutationCount = 0;
+    std::vector<T> Buffer_;
+    const T EmptyValue_;
+    const bool Unbounded_;
+    size_t Head_ = 0;
+    size_t Size_;
+    ui64 MutationCount_ = 0;
 };
 
 } // namespace NMiniKQL

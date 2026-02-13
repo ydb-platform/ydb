@@ -361,12 +361,13 @@ namespace NKikimr::NBlobDepot {
 
                 LocatorInFlight.emplace(TS3Locator::FromProto(*locator));
 
-                TString key = TS3Locator::FromProto(*locator).MakeObjectName(Agent.S3BasePath);
+                const TS3Locator temp = TS3Locator::FromProto(*locator);
+                TString key = temp.MakeObjectName(Agent.S3BasePath);
 
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA54, "starting WriteActor", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Key, key));
 
-                WriterActorId = IssueWriteS3(std::move(key), std::move(Request.Buffer), Request.Id);
+                WriterActorId = IssueWriteS3(std::move(key), std::move(Request.Buffer), Request.Id, temp);
 
                 ConnectionInstanceOnStart = Agent.ConnectionInstance;
 #else

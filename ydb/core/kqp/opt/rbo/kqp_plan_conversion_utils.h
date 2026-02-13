@@ -29,8 +29,9 @@ class PlanConverter {
     std::shared_ptr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
+    std::shared_ptr<IOperator> ConvertTKqpInfuseDependents(TExprNode::TPtr node);
 
-    TExprNode::TPtr RemoveScalarSubplans(TExprNode::TPtr lambda);
+    TExprNode::TPtr RemoveSubplans(TExprNode::TPtr lambda);
 
     TTypeAnnotationContext &TypeCtx;
     TExprContext &Ctx;

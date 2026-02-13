@@ -24,7 +24,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TStructAdaptor {
         const TStructExprType* Type;
 
-        TStructAdaptor(const TStructExprType* type)
+        explicit TStructAdaptor(const TStructExprType* type)
             : Type(type)
         {
         }
@@ -84,7 +84,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TTupleAdaptor {
         const TTupleExprType* Type;
 
-        TTupleAdaptor(const TTupleExprType* type)
+        explicit TTupleAdaptor(const TTupleExprType* type)
             : Type(type)
         {
         }
@@ -101,7 +101,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TCallableAdaptor {
         const TCallableExprType* Type;
 
-        TCallableAdaptor(const TCallableExprType* type)
+        explicit TCallableAdaptor(const TCallableExprType* type)
             : Type(type)
         {
         }
@@ -199,6 +199,12 @@ public:
             case ETypeAnnotationKind::Unit:
                 TBase::SaveUnitType();
                 break;
+            case ETypeAnnotationKind::Universal:
+                TBase::SaveUniversalType();
+                break;
+            case ETypeAnnotationKind::UniversalStruct:
+                TBase::SaveUniversalStructType();
+                break;
             case ETypeAnnotationKind::EmptyList:
                 TBase::SaveEmptyListType();
                 break;
@@ -228,6 +234,12 @@ public:
                 break;
             case ETypeAnnotationKind::DynamicLinear:
                 TBase::SaveDynamicLinearType(*type->Cast<TDynamicLinearExprType>());
+                break;
+            case ETypeAnnotationKind::Block:
+                TBase::SaveBlockType(*type->Cast<TBlockExprType>());
+                break;
+            case ETypeAnnotationKind::Scalar:
+                TBase::SaveScalarType(*type->Cast<TScalarExprType>());
                 break;
             default:
                 YQL_ENSURE(false, "Unsupported type annotation kind: " << type->GetKind());
@@ -278,7 +290,7 @@ struct TExprTypeLoader {
     TExprContext& Ctx;
     TPosition Pos;
 
-    TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
+    explicit TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
         : Ctx(ctx)
         , Pos(pos)
     {
@@ -291,6 +303,12 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         return Ctx.MakeType<TUnitExprType>();
+    }
+    TMaybe<TType> LoadUniversalType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalExprType>();
+    }
+    TMaybe<TType> LoadUniversalStructType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalStructExprType>();
     }
     TMaybe<TType> LoadGenericType(ui32 /*level*/) {
         return Ctx.MakeType<TGenericExprType>();
@@ -376,6 +394,12 @@ struct TExprTypeLoader {
         auto ret = Ctx.MakeType<TVariantExprType>(underlyingType);
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
+    }
+    TMaybe<TType> LoadBlockType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TBlockExprType>(itemType);
+    }
+    TMaybe<TType> LoadScalarType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TScalarExprType>(itemType);
     }
     void Error(const TString& info) {
         Ctx.AddError(TIssue(Pos, info));

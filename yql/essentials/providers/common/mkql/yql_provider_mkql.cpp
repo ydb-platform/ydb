@@ -204,6 +204,15 @@ NUdf::TDataTypeId ParseDataType(const TExprNode& owner, const std::string_view& 
     ythrow TNodeException(owner) << "Unsupported data type: " << type;
 }
 
+template <typename TLayout>
+std::pair<TLayout, ui16> CutTimezone(const std::string_view& atom) {
+    const auto pos = atom.find(',');
+    MKQL_ENSURE(std::string_view::npos != pos, "Expected two components.");
+    return std::make_pair(::FromString<TLayout>(atom.substr(0, pos)), GetTimezoneId(atom.substr(pos + 1)));
+}
+
+} // namespace
+
 EJoinKind GetJoinKind(const TExprNode& owner, const std::string_view& content) {
     if (content == "Inner") {
         return EJoinKind::Inner;
@@ -229,15 +238,6 @@ EJoinKind GetJoinKind(const TExprNode& owner, const std::string_view& content) {
         ythrow TNodeException(owner) << "Unexpected join kind: " << content;
     }
 }
-
-template <typename TLayout>
-std::pair<TLayout, ui16> CutTimezone(const std::string_view& atom) {
-    const auto pos = atom.find(',');
-    MKQL_ENSURE(std::string_view::npos != pos, "Expected two components.");
-    return std::make_pair(::FromString<TLayout>(atom.substr(0, pos)), GetTimezoneId(atom.substr(pos + 1)));
-}
-
-} // namespace
 
 bool TMkqlCallableCompilerBase::HasCallable(const std::string_view& name) const {
     return Callables_.contains(name);
@@ -471,8 +471,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"DictPayloads", &TProgramBuilder::DictPayloads},
 
         {"QueuePop", &TProgramBuilder::QueuePop},
-
-        {"ToDynamicLinear", &TProgramBuilder::ToDynamicLinear},
     });
 
     AddSimpleCallables({
@@ -578,6 +576,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"ListFromRange", &TProgramBuilder::ListFromRange},
 
         {"PreserveStream", &TProgramBuilder::PreserveStream},
+        {"WinFramesCollector", &TProgramBuilder::WinFramesCollector},
 
         {"BlockIf", &TProgramBuilder::BlockIf},
     });
@@ -762,6 +761,23 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish);
         }
         return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
+    });
+
+    AddCallable("WinFrame", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto queue = MkqlBuildExpr(*node.Child(0), ctx);
+        auto handle = MkqlBuildExpr(*node.Child(1), ctx);
+        auto isIncremental = MkqlBuildExpr(*node.Child(2), ctx);
+        auto isRange = MkqlBuildExpr(*node.Child(3), ctx);
+        auto isSingleElement = MkqlBuildExpr(*node.Child(4), ctx);
+        const auto& args = GetArgumentsFrom<5U>(node, ctx);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
+        return ctx.ProgramBuilder.WinFrame(queue,
+                                           handle,
+                                           isIncremental,
+                                           isRange,
+                                           isSingleElement,
+                                           args,
+                                           returnType);
     });
 
     AddCallable("WideChopper", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -1382,6 +1398,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.Unwrap(opt, message, pos.File, pos.Row, pos.Column);
     });
 
+    AddCallable("ToDynamicLinear", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto input = MkqlBuildExpr(node.Head(), ctx);
+        const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
+        return ctx.ProgramBuilder.ToDynamicLinear(input, pos.File, pos.Row, pos.Column);
+    });
+
     AddCallable("FromDynamicLinear", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto input = MkqlBuildExpr(node.Head(), ctx);
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
@@ -1920,10 +1942,26 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         };
 
         const auto watermarksMode = ctx.ProgramBuilder.NewDataLiteral(FromString<bool>(*node.Child(13), NUdf::EDataSlot::Bool));
-
+        TRuntimeNode sizeLimit;
+        if (NNodes::TCoMultiHoppingCore::idx_SizeLimit < node.ChildrenSize()) {
+            sizeLimit = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_SizeLimit), ctx);
+        }
+        TRuntimeNode timeLimit;
+        if (NNodes::TCoMultiHoppingCore::idx_TimeLimit < node.ChildrenSize()) {
+            timeLimit = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_TimeLimit), ctx);
+        }
+        TRuntimeNode earlyPolicy;
+        if (NNodes::TCoMultiHoppingCore::idx_EarlyPolicy < node.ChildrenSize()) {
+            earlyPolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_EarlyPolicy), ctx);
+        }
+        TRuntimeNode latePolicy;
+        if (NNodes::TCoMultiHoppingCore::idx_LatePolicy < node.ChildrenSize()) {
+            latePolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_LatePolicy), ctx);
+        }
         return ctx.ProgramBuilder.MultiHoppingCore(
             stream, keyExtractor, timeExtractor, init, update, save, load, merge, finish,
-            hop, interval, delay, dataWatermarks, watermarksMode);
+            hop, interval, delay, dataWatermarks, watermarksMode,
+            sizeLimit, timeLimit, earlyPolicy, latePolicy);
     });
 
     AddCallable("ToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {

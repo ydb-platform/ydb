@@ -35,5 +35,8 @@ expat = GNUMakeNixProject(
     install_targets=[
         "expat",
     ],
+    platform_dispatchers=[
+        "expat_config.h",
+    ],
     post_build=post_build,
 )

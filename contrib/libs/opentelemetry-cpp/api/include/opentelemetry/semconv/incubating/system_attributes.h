@@ -21,8 +21,13 @@ namespace system
 
 /**
   Deprecated, use @code cpu.logical_number @endcode instead.
+
+  @deprecated
+  {"note": "Replaced by @code cpu.logical_number @endcode.", "reason": "renamed", "renamed_to":
+  "cpu.logical_number"}
  */
-static constexpr const char *kSystemCpuLogicalNumber = "system.cpu.logical_number";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kSystemCpuLogicalNumber =
+    "system.cpu.logical_number";
 
 /**
   Deprecated, use @code cpu.mode @endcode instead.
@@ -77,28 +82,40 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kSystemNetworkState = "sys
 static constexpr const char *kSystemPagingDirection = "system.paging.direction";
 
 /**
+  The paging fault type
+ */
+static constexpr const char *kSystemPagingFaultType = "system.paging.fault.type";
+
+/**
   The memory paging state
  */
 static constexpr const char *kSystemPagingState = "system.paging.state";
 
 /**
-  The memory paging type
- */
-static constexpr const char *kSystemPagingType = "system.paging.type";
-
-/**
-  The process state, e.g., <a
-  href="https://man7.org/linux/man-pages/man1/ps.1.html#PROCESS_STATE_CODES">Linux Process State
-  Codes</a>
- */
-static constexpr const char *kSystemProcessStatus = "system.process.status";
-
-/**
-  Deprecated, use @code system.process.status @endcode instead.
+  Deprecated, use @code system.paging.fault.type @endcode instead.
 
   @deprecated
-  {"note": "Replaced by @code system.process.status @endcode.", "reason": "renamed", "renamed_to":
-  "system.process.status"}
+  {"note": "Replaced by @code system.paging.fault.type @endcode.", "reason": "renamed",
+  "renamed_to": "system.paging.fault.type"}
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kSystemPagingType = "system.paging.type";
+
+/**
+  Deprecated, use @code process.state @endcode instead.
+
+  @deprecated
+  {"note": "Replaced by @code process.state @endcode.", "reason": "renamed", "renamed_to":
+  "process.state"}
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kSystemProcessStatus =
+    "system.process.status";
+
+/**
+  Deprecated, use @code process.state @endcode instead.
+
+  @deprecated
+  {"note": "Replaced by @code process.state @endcode.", "reason": "renamed", "renamed_to":
+  "process.state"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kSystemProcessesStatus =
     "system.processes.status";
@@ -209,6 +226,15 @@ static constexpr const char *kIn = "in";
 static constexpr const char *kOut = "out";
 
 }  // namespace SystemPagingDirectionValues
+
+namespace SystemPagingFaultTypeValues
+{
+
+static constexpr const char *kMajor = "major";
+
+static constexpr const char *kMinor = "minor";
+
+}  // namespace SystemPagingFaultTypeValues
 
 namespace SystemPagingStateValues
 {

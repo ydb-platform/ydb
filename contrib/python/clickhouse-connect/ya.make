@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.9.2)
+VERSION(0.10.0)
 
 LICENSE(Apache-2.0)
 
@@ -40,6 +40,7 @@ PY_SRCS(
     clickhouse_connect/cc_sqlalchemy/dialect.py
     clickhouse_connect/cc_sqlalchemy/inspector.py
     clickhouse_connect/cc_sqlalchemy/sql/__init__.py
+    clickhouse_connect/cc_sqlalchemy/sql/clauses.py
     clickhouse_connect/cc_sqlalchemy/sql/compiler.py
     clickhouse_connect/cc_sqlalchemy/sql/ddlcompiler.py
     clickhouse_connect/cc_sqlalchemy/sql/preparer.py

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
 
 #include <algorithm>
 #include <atomic>
@@ -26,23 +26,23 @@
 #include <string>
 #include <utility>
 
-#include "arrow/array.h"
-#include "arrow/array/builder_binary.h"
-#include "arrow/array/builder_dict.h"
-#include "arrow/array/builder_nested.h"
-#include "arrow/array/builder_union.h"
-#include "arrow/array/concatenate.h"
-#include "arrow/array/validate.h"
-#include "arrow/c/abi.h"
-#include "arrow/pretty_print.h"
-#include "arrow/status.h"
-#include "arrow/table.h"
-#include "arrow/tensor.h"
-#include "arrow/type.h"
-#include "arrow/util/iterator.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/vector.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_dict.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_union.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/concatenate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/validate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/c/abi.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/pretty_print.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/tensor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/iterator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 namespace arrow20 {
 

@@ -104,13 +104,13 @@ public:
     {
     }
 
-    TQContext(IQReaderPtr reader, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
+    explicit TQContext(IQReaderPtr reader, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
         : CaptureMode_(captureMode)
         , Reader_(reader)
     {
     }
 
-    TQContext(IQWriterPtr writer, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
+    explicit TQContext(IQWriterPtr writer, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
         : CaptureMode_(captureMode)
         , Writer_(writer)
     {
@@ -119,7 +119,7 @@ public:
     TQContext(const TQContext&) = default;
     TQContext& operator=(const TQContext&) = default;
 
-    operator bool() const {
+    explicit operator bool() const {
         return CanRead() || CanWrite();
     }
 

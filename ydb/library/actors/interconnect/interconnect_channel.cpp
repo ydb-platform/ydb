@@ -1,17 +1,37 @@
 #include "interconnect_channel.h"
 #include "interconnect_zc_processor.h"
+#include "rdma/mem_pool.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/probes.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
+static void AddFakeCredRecord(NActorsInterconnect::TRdmaCreds& creds) noexcept {
+    NActorsInterconnect::TRdmaCred* cred = creds.AddCreds();
+    // fixed64, fixed32 - any value
+    cred->SetAddress(0);
+    cred->SetRkey(12345);
+    // uint64 - protobuf uses VLC - max possible value 
+    cred->SetSize(Max<ui64>());
+}
+
+// Calculate min size required to save one cred
+static ui32 CalcRdmaCredsMinSizeSerialized() noexcept {
+    NActorsInterconnect::TRdmaCreds tmp;
+    AddFakeCredRecord(tmp);
+    return tmp.ByteSizeLong();
+}
+
 namespace NActors {
+    const ui32 TEventOutputChannel::RdmaCredsMinSizeSerialized = CalcRdmaCredsMinSizeSerialized();
+
     bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event) {
         const size_t amount = sizeof(TChannelPart) + sizeof(TEventDescr2);
         if (task.GetInternalFreeAmount() < amount) {
@@ -63,7 +83,7 @@ namespace NActors {
         }
     }
 
-    bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial) {
+    bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial, ssize_t rdmaDeviceIndex) {
         for (;;) {
             Y_ABORT_UNLESS(!Queue.empty());
             TEventHolder& event = Queue.front();
@@ -76,6 +96,7 @@ namespace NActors {
                         Metrics->UpdateIcQueueTimeHistogram(duration.MicroSeconds());
                     }
                     event.Span && event.Span.Event("FeedBuf:INITIAL");
+                    SendViaRdma.reset();
                     if (event.Buffer) {
                         State = EState::BODY;
                         Iter = event.Buffer->GetBeginIter();
@@ -88,7 +109,7 @@ namespace NActors {
                         if (event.EventSerializedSize) {
                             Chunker.SetSerializingEvent(base);
                         }
-                        SerializationInfoContainer = base->CreateSerializationInfo();
+                        SerializationInfoContainer = base->CreateSerializationInfo(Params.UseExternalDataChannel);
                         SerializationInfo = &SerializationInfoContainer;
                         SectionIndex = 0;
                         PartLenRemain = 0;
@@ -102,11 +123,30 @@ namespace NActors {
                     } else if (Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
                         State = EState::SECTIONS;
                         SectionIndex = 0;
+
+                        size_t totalSize = 0;
+                        // It is possible to have event without payload. Such events has only one section.
+                        // We do not send such events via rdma.
+                        bool sendViaRdma = Params.UseRdma && RdmaMemPool && SerializationInfo->Sections.size() > 2;
+                        // Check each section can be send via rdma
+                        for (const auto& section : SerializationInfo->Sections) {
+                            sendViaRdma &= section.IsRdmaCapable;
+                            totalSize += section.Size;
+                        }
+                        if (sendViaRdma) {
+                            Y_ABORT_UNLESS(totalSize, "got empty sz, sections: %d type: %d ", SerializationInfo->Sections.size(),  event.Event->Type());
+                            NActorsInterconnect::TRdmaCreds rdmaCreds;
+                            ui32 checkSum = 0;
+                            if (SerializeEventRdma(event, rdmaCreds, task.Params.ChecksumRdmaEvent ? &checkSum : nullptr, rdmaDeviceIndex)) {
+                                SendViaRdma.emplace(TRdmaSerializationArtifacts{std::move(rdmaCreds), checkSum});
+                                Chunker.DiscardEvent();
+                            }
+                        }
                     }
                     break;
 
                 case EState::BODY:
-                    if (FeedPayload(task, event)) {
+                    if (FeedPayload(task, event, rdmaDeviceIndex)) {
                         State = EState::DESCRIPTOR;
                     } else {
                         return false;
@@ -146,6 +186,9 @@ namespace NActors {
                         p += NInterconnect::NDetail::SerializeNumber(section.Alignment, p);
                         if (section.IsInline && Params.UseXdcShuffle) {
                             type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_INLINE);
+                        }
+                        if (SendViaRdma) {
+                            type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_RDMA);
                         }
                         Y_ABORT_UNLESS(p <= std::end(sectionInfo));
 
@@ -229,13 +272,13 @@ namespace NActors {
             Y_ABORT();
         }
         Y_ABORT_UNLESS(!complete || event.EventActuallySerialized == event.EventSerializedSize,
-            "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32,
-            event.EventActuallySerialized, event.EventSerializedSize, event.Descr.Type);
+            "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32 " External# %" PRIi32,
+            event.EventActuallySerialized, event.EventSerializedSize, event.Descr.Type, (ui32)External);
 
         return complete;
     }
 
-    bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event) {
+    bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex) {
         for (;;) {
             // calculate inline or external part size (it may cover a few sections, not just single one)
             while (!PartLenRemain) {
@@ -244,8 +287,9 @@ namespace NActors {
                     // all data goes inline
                     IsPartInline = true;
                     PartLenRemain = Max<size_t>();
-                } else if (!Params.UseXdcShuffle) {
+                } else if (!Params.UseXdcShuffle || SendViaRdma) {
                     // when UseXdcShuffle feature is not supported by the remote side, we transfer whole event over XDC
+                    // also when we use RDMA, we transfer whole over RDMA
                     IsPartInline = false;
                     PartLenRemain = Max<size_t>();
                 } else {
@@ -259,9 +303,15 @@ namespace NActors {
             }
 
             // serialize bytes
-            const auto complete = IsPartInline
-                ? FeedInlinePayload(task, event)
-                : FeedExternalPayload(task, event);
+            std::optional<bool> complete = false;
+            if (IsPartInline) {
+                complete = FeedInlinePayload(task, event);
+            } else if (SendViaRdma) {
+                Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
+                complete = FeedRdmaPayload(task, event);
+            } else {
+                complete = FeedExternalPayload(task, event);
+            }
             if (!complete) { // no space to serialize
                 return false;
             } else if (*complete) { // event serialized
@@ -292,6 +342,168 @@ namespace NActors {
         OutputQueueSize -= part.Size;
 
         return complete;
+    }
+
+    bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds,
+        ui32* checksum, ssize_t rdmaDeviceIndex)
+    {
+        if (!event.Buffer && event.Event) {
+            std::optional<TRope> rope = event.Event->SerializeToRope(RdmaMemPool.get());
+            if (!rope) {
+                return false; // serialization failed
+            }
+            event.Buffer = MakeIntrusive<TEventSerializedData>(
+                std::move(*rope), event.Event->CreateSerializationInfo(Params.UseExternalDataChannel)
+            );
+            Iter = event.Buffer->GetBeginIter();
+        }
+
+        XXH3_state_t state;
+        if (checksum) {
+            XXH3_64bits_reset(&state);
+        }
+
+        if (event.Buffer) {
+            for (; Iter.Valid(); ++Iter) {
+                TRcBuf buf = Iter.GetChunk();
+                auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
+                if (memReg.Empty()) {
+                    // TODO: may be copy to RDMA buffer ?????
+                    Iter = event.Buffer->GetBeginIter();
+                    return false;
+                }
+                if (checksum) {
+                    XXH3_64bits_update(&state, buf.GetData(), buf.GetSize());
+                }
+                auto cred = rdmaCreds.AddCreds();
+                cred->SetAddress(reinterpret_cast<ui64>(memReg.GetAddr()));
+                cred->SetSize(memReg.GetSize());
+                cred->SetRkey(memReg.GetRKey(rdmaDeviceIndex));
+            }
+        }
+
+        if (checksum) {
+            *checksum = XXH3_64bits_digest(&state);
+        }
+        return true;
+    }
+
+    std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event) {
+        // The part layout is:
+        // Part = | TChannelPart | EXdcCommand::RDMA_READ (ui8)| rdmaCreds.Size (ui16) | seialized rdmaCreds | checkSum (ui32) |
+        const size_t fixedPartSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + sizeof(ui32);
+        const ui32 minThreshold = fixedPartSize + RdmaCredsMinSizeSerialized;
+        // No free amount even for one rdma cred - we need new packet
+        if (task.GetInternalFreeAmount() < minThreshold) {
+            return std::nullopt;
+        }
+
+        auto calcPartCredLen = [] (size_t freeAmount, float credsPerByteAvg) -> size_t {
+            return (freeAmount - fixedPartSize) * credsPerByteAvg;
+        };
+
+        const NActorsInterconnect::TRdmaCreds* rdmaCreds = &SendViaRdma->RdmaCreds;
+
+        NActorsInterconnect::TRdmaCreds tmpCreds; 
+
+        bool lastPart = true;
+
+        size_t partSize;
+        size_t credsSerializedSize;
+
+        size_t curPartCredLen = 0;
+        /*
+         * Split rdma creds in to multiple parts if serialized credential data doesn't fit in to one IC packets.
+         * Prerequisites:
+         * - We assume this situation should be quite rare, so do not perform any additional copy in happy path
+         * - If we need to split (and credential copy to perform serialization of its part) we want to reduce number of itterations
+         * - There is no guarantee to get task with well known ammount of free space
+         */
+        for (;;) {
+            if (Y_UNLIKELY(curPartCredLen || SendViaRdma->PartCredPos)) {
+                // First iteration for non first part
+                if (!curPartCredLen) {
+                    curPartCredLen = calcPartCredLen(task.GetInternalFreeAmount(), SendViaRdma->CredsPerByteAvg);
+                    if (!curPartCredLen) {
+                        return std::nullopt;
+                    }
+                }
+                // Check is it a last part?
+                if (SendViaRdma->PartCredPos + curPartCredLen >= SendViaRdma->RdmaCreds.CredsSize()) {
+                    curPartCredLen = SendViaRdma->RdmaCreds.CredsSize() - SendViaRdma->PartCredPos; 
+                    lastPart = true;
+                } else {
+                    lastPart = false;
+                }
+
+                //TODO: Find the way to perform partial serialzation of repeated field
+                tmpCreds.Clear();
+                for (size_t i = 0, j = SendViaRdma->PartCredPos; i < curPartCredLen; i++, j++) {
+                    tmpCreds.AddCreds()->CopyFrom(SendViaRdma->RdmaCreds.GetCreds(j));
+                }
+                rdmaCreds = &tmpCreds;
+            }
+
+            credsSerializedSize = rdmaCreds->ByteSizeLong();
+
+            partSize = fixedPartSize + credsSerializedSize;
+
+            if (Y_UNLIKELY(partSize > task.GetInternalFreeAmount())) {
+                SendViaRdma->CredsPerByteAvg = rdmaCreds->CredsSize() / (double)credsSerializedSize; 
+                size_t newLen = calcPartCredLen(task.GetInternalFreeAmount(), SendViaRdma->CredsPerByteAvg);
+
+                // Guarantee progress even in case of huge error of average calculation
+                if (newLen >= curPartCredLen) {
+                    curPartCredLen--;
+                } else {
+                    curPartCredLen = newLen;
+                }
+
+                if (!curPartCredLen) {
+                    return std::nullopt;
+                }
+            } else {
+                // Report to mon if it is first part of multipart rdma events
+                // huge number of multipart events may be a reason of some additional latency
+                if (Y_UNLIKELY(SendViaRdma->PartCredPos == 0 && curPartCredLen != 0)) {
+                    Metrics->IncRdmaMultipartEvents();
+                }
+                // Shift start position for the next packet
+                SendViaRdma->PartCredPos += curPartCredLen; 
+                break;
+            }
+        }
+
+        const ui32 checkSum = SendViaRdma->CheckSum;
+        char buffer[partSize];
+        TChannelPart *part = reinterpret_cast<TChannelPart*>(buffer);
+        *part = {
+            .ChannelFlags = static_cast<ui16>(ChannelId | TChannelPart::XdcFlag),
+            .Size = static_cast<ui16>(partSize - sizeof(TChannelPart))
+        };
+        char *ptr = reinterpret_cast<char*>(part + 1);
+        *ptr++ = static_cast<ui8>(EXdcCommand::RDMA_READ);
+        WriteUnaligned<ui16>(ptr, credsSerializedSize);
+        ptr += sizeof(ui16);
+
+        ui32 payloadSz = 0;
+        for (const auto& rdmaCred : rdmaCreds->GetCreds()) {
+            payloadSz += rdmaCred.GetSize();
+        }
+
+        Y_ABORT_UNLESS(rdmaCreds->SerializePartialToArray(ptr, credsSerializedSize));
+        ptr += credsSerializedSize;
+        WriteUnaligned<ui32>(ptr, checkSum);
+
+        if (lastPart) {
+            OutputQueueSize -= event.EventSerializedSize;
+        }
+
+        task.Write<false>(buffer, partSize);
+
+        task.AttachRdmaPayloadSize(payloadSz);
+
+        return lastPart;
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
@@ -366,5 +578,4 @@ namespace NActors {
         }
         pool.Release(Queue);
     }
-
 }

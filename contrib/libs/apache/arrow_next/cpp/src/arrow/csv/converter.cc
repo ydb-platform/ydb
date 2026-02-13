@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/csv/converter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/converter.h"
 
 #include <array>
 #include <cstring>
@@ -25,20 +25,20 @@
 #include <type_traits>
 #include <vector>
 
-#include "arrow/array/builder_binary.h"
-#include "arrow/array/builder_decimal.h"
-#include "arrow/array/builder_dict.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/csv/parser.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/type_fwd.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/decimal.h"
-#include "arrow/util/trie.h"
-#include "arrow/util/utf8_internal.h"
-#include "arrow/util/value_parsing.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_dict.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/parser.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/trie.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/utf8_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"  // IWYU pragma: keep
 
 namespace arrow20 {
 namespace csv {

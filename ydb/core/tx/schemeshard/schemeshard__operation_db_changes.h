@@ -45,6 +45,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> SysViews;
 
+    TDeque<std::pair<TPathId, TBackupCollectionInfo::TPtr>> BackupCollections;
+
     // Can we have multiple long incremental restore operations?
     TDeque<NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
@@ -150,6 +152,10 @@ public:
 
     void PersistSysView(const TPathId& pathId) {
         SysViews.emplace_back(pathId);
+    }
+
+    void PersistBackupCollection(const TPathId& pathId, const TBackupCollectionInfo::TPtr& info) {
+        BackupCollections.emplace_back(pathId, info);
     }
 
     void PersistLongIncrementalRestoreOp(const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {

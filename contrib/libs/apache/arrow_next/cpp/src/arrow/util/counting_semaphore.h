@@ -21,7 +21,7 @@
 
 #include <memory>
 
-#include "arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
 
 namespace arrow20 {
 namespace util {

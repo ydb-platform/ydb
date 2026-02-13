@@ -151,9 +151,6 @@ public:
             ListTenantsResponse = MakeRequestConsoleListTenants();
             NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
         } else {
-            if (Database != DomainPath) {
-                TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
-            }
             NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
         }
 
@@ -345,6 +342,8 @@ public:
         request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkUtilizationFieldNumber);
         request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkWriteThroughputFieldNumber);
         request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kRealNumberOfCpusFieldNumber);
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kGrpcRequestBytesFieldNumber);
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kGrpcResponseBytesFieldNumber);
     }
 
     void SendWhiteboardSystemStateRequest(const TNodeId nodeId) {
@@ -1060,6 +1059,12 @@ public:
                         }
                         if (nodeInfo.HasNetworkWriteThroughput()) {
                             tenant.SetNetworkWriteThroughput(tenant.GetNetworkWriteThroughput() + nodeInfo.GetNetworkWriteThroughput());
+                        }
+                        if (nodeInfo.HasGrpcRequestBytes()) {
+                            tenant.SetGrpcRequestBytes(tenant.GetGrpcRequestBytes() + nodeInfo.GetGrpcRequestBytes());
+                        }
+                        if (nodeInfo.HasGrpcResponseBytes()) {
+                            tenant.SetGrpcResponseBytes(tenant.GetGrpcResponseBytes() + nodeInfo.GetGrpcResponseBytes());
                         }
                         overall = Max(overall, GetViewerFlag(nodeInfo.GetSystemState()));
                     }

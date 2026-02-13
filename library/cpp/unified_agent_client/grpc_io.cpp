@@ -1,5 +1,7 @@
 #include "grpc_io.h"
 
+#include <contrib/libs/grpc/include/grpc/grpc.h>
+#include <contrib/libs/grpc/src/core/lib/config/core_configuration.h>
 #include <contrib/libs/grpc/src/core/lib/event_engine/thread_pool.h>
 #include <contrib/libs/grpc/src/core/lib/iomgr/exec_ctx.h>
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
@@ -15,7 +17,7 @@
 namespace NUnifiedAgent {
     namespace {
         std::once_flag GrpcConfigured{};
-    }
+    } // namespace
 
     TGrpcNotification::TGrpcNotification(grpc::CompletionQueue& completionQueue, THolder<IIOCallback>&& ioCallback)
         : CompletionQueue(completionQueue)
@@ -142,6 +144,7 @@ namespace NUnifiedAgent {
 
     void EnsureGrpcConfigured() {
         std::call_once(GrpcConfigured, []() {
+            // Set thread limits before any gRPC activity (these are static parameters)
             const auto limitStr = GetEnv("UA_GRPC_EXECUTOR_THREADS_LIMIT");
             ui64 limit;
             if (limitStr.empty() || !TryFromString(limitStr, limit)) {
@@ -149,6 +152,12 @@ namespace NUnifiedAgent {
             }
             grpc_core::Executor::SetThreadsLimit(limit);
             grpc_event_engine::experimental::ThreadPool::SetThreadsLimit(limit);
+
+            // Force CoreConfiguration initialization to register all service config parsers
+            // This fixes UNIFIEDAGENT-1341 without forcing full grpc_init() which would
+            // interfere with other library initializations (e.g., Arrow in YDB)
+            // Let grpc_init() happen naturally when first channel is created
+            grpc_core::CoreConfiguration::Get();
         });
     }
 
@@ -161,4 +170,4 @@ namespace NUnifiedAgent {
         grpc_tracer_set_enabled("all", false);
         gpr_set_log_verbosity(GPR_LOG_SEVERITY_ERROR);
     }
-}
+} // namespace NUnifiedAgent

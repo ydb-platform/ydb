@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 import re
 import typing
+import unittest
 
 
 from .core import (
@@ -12,6 +13,7 @@ from .core import (
     __diag__,
     __compat__,
 )
+from . import core_builtin_exprs
 
 
 class pyparsing_test:
@@ -105,7 +107,7 @@ class pyparsing_test:
             ParserElement.verbose_stacktrace = self._save_context["verbose_stacktrace"]
 
             Keyword.DEFAULT_KEYWORD_CHARS = self._save_context["default_keyword_chars"]
-            ParserElement.inlineLiteralsUsing(
+            ParserElement.inline_literals_using(
                 self._save_context["literal_string_class"]
             )
 
@@ -120,6 +122,10 @@ class pyparsing_test:
             ParserElement._left_recursion_enabled = self._save_context[
                 "recursion_enabled"
             ]
+
+            # clear debug flags on all builtins
+            for expr in core_builtin_exprs:
+                expr.set_debug(False)
 
             __compat__.collect_all_And_tokens = self._save_context["__compat__"]
 
@@ -136,7 +142,7 @@ class pyparsing_test:
         def __exit__(self, *args):
             self.restore()
 
-    class TestParseResultsAsserts:
+    class TestParseResultsAsserts(unittest.TestCase):
         """
         A mixin class to add parse results assertion methods to normal unittest.TestCase classes.
         """
@@ -174,7 +180,7 @@ class pyparsing_test:
             Convenience wrapper assert to test a parser element and input string, and assert that
             the resulting :meth:`ParseResults.as_dict` is equal to the ``expected_dict``.
             """
-            result = expr.parse_string(test_string, parseAll=True)
+            result = expr.parse_string(test_string, parse_all=True)
             if verbose:
                 print(result.dump())
             else:
@@ -294,7 +300,7 @@ class pyparsing_test:
         :param mark_spaces: special character to display in place of spaces
         :param mark_control: convert non-printing control characters to a placeholding
                              character; valid values:
-                                 
+
                              - ``"unicode"`` - replaces control chars with Unicode symbols, such as "␍" and "␊"
                              - any single character string - replace control characters with given string
                              - ``None`` (default) - string is displayed as-is
@@ -339,15 +345,16 @@ class pyparsing_test:
         if start_line is None:
             start_line = 0
         if end_line is None:
-            end_line = len(s)
-        end_line = min(end_line, len(s))
+            end_line = len(s.splitlines())
+        end_line = min(end_line, len(s.splitlines()))
         start_line = min(max(0, start_line), end_line)
 
         if mark_control != "unicode":
-            s_lines = s.splitlines()[start_line - base_1 : end_line]
+            s_lines = s.splitlines()[max(start_line - base_1, 0) : end_line]
         else:
             s_lines = [
-                line + "␊" for line in s.split("␊")[start_line - base_1 : end_line]
+                line + "␊"
+                for line in s.split("␊")[max(start_line - base_1, 0) : end_line]
             ]
         if not s_lines:
             return ""
@@ -355,18 +362,20 @@ class pyparsing_test:
         lineno_width = len(str(end_line))
         max_line_len = max(len(line) for line in s_lines)
         lead = indent + " " * (lineno_width + 1)
+
         if max_line_len >= 99:
             header0 = (
                 lead
                 + ("" if base_1 else " ")
                 + "".join(
                     f"{' ' * 99}{(i + 1) % 100}"
-                    for i in range(1 if base_1 else 0, max(max_line_len // 100, 1))
+                    for i in range(max(max_line_len // 100, 1))
                 )
                 + "\n"
             )
         else:
             header0 = ""
+
         header1 = (
             ("" if base_1 else " ")
             + lead
@@ -378,7 +387,8 @@ class pyparsing_test:
             lead + ("" if base_1 else "0") + digits * (-(-max_line_len // 10)) + "\n"
         )
         return (
-            header1
+            header0
+            + header1
             + header2
             + "\n".join(
                 f"{indent}{i:{lineno_width}d}:{line}{eol_mark}"

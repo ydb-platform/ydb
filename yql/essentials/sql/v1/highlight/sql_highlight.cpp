@@ -19,7 +19,7 @@ namespace NSQLHighlight {
 using NSQLTranslationV1::Merged;
 using NSQLTranslationV1::TRegexPattern;
 
-struct Syntax {
+struct TSyntax {
     const NSQLReflect::TLexerGrammar* Grammar;
     THashMap<TString, TString> RegexesDefault;
     THashMap<TString, TString> RegexesANSI;
@@ -51,10 +51,10 @@ NSQLTranslationV1::TRegexPattern CaseInsensitive(TStringBuf text) {
 }
 
 template <EUnitKind K>
-TUnit MakeUnit(Syntax& syntax);
+TUnit MakeUnit(TSyntax& syntax);
 
 template <>
-TUnit MakeUnit<EUnitKind::Keyword>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::Keyword>(TSyntax& s) {
     using NSQLReflect::TLexerGrammar;
 
     TUnit unit = {.Kind = EUnitKind::Keyword};
@@ -73,7 +73,7 @@ TUnit MakeUnit<EUnitKind::Keyword>(Syntax& s) {
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::Punctuation>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::Punctuation>(TSyntax& s) {
     TUnit unit = {.Kind = EUnitKind::Punctuation};
     for (const auto& name : s.Grammar->PunctuationNames) {
         const TString content = s.Get(name);
@@ -87,18 +87,22 @@ TUnit MakeUnit<EUnitKind::Punctuation>(Syntax& s) {
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::QuotedIdentifier>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::QuotedIdentifier>(TSyntax& s) {
     return {
         .Kind = EUnitKind::QuotedIdentifier,
+        .RangePatterns = {
+            {R"(`)", R"(`)", R"re(\\.)re"},
+        },
         .Patterns = {
             {s.Get("ID_QUOTED")},
-            {s.Concat({"COMMAT", "ID_PLAIN"})}},
+            {s.Concat({"COMMAT", "ID_PLAIN"})},
+        },
         .IsPlain = false,
     };
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(TSyntax& s) {
     return {
         .Kind = EUnitKind::BindParameterIdentifier,
         .Patterns = {
@@ -109,7 +113,7 @@ TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(Syntax& s) {
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::OptionIdentifier>(TSyntax& s) {
     return {
         .Kind = EUnitKind::OptionIdentifier,
         .Patterns = {
@@ -124,7 +128,7 @@ TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::TypeIdentifier>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::TypeIdentifier>(TSyntax& s) {
     TVector<NSQLTranslationV1::TRegexPattern> types;
     for (const TString& type : LoadTypes()) {
         types.emplace_back(CaseInsensitive(type));
@@ -140,19 +144,26 @@ TUnit MakeUnit<EUnitKind::TypeIdentifier>(Syntax& s) {
     };
 }
 
-template <>
-TUnit MakeUnit<EUnitKind::FunctionIdentifier>(Syntax& s) {
+TUnit MakeUnitUDF(TSyntax& s) {
     return {
         .Kind = EUnitKind::FunctionIdentifier,
         .Patterns = {
             {s.Concat({"ID_PLAIN", "NAMESPACE", "ID_PLAIN"})},
+        },
+    };
+}
+
+TUnit MakeUnitBuiltin(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::FunctionIdentifier,
+        .Patterns = {
             {s.Get("ID_PLAIN"), s.Get("LPAREN")},
         },
     };
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::Identifier>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::Identifier>(TSyntax& s) {
     return {
         .Kind = EUnitKind::Identifier,
         .Patterns = {
@@ -162,7 +173,7 @@ TUnit MakeUnit<EUnitKind::Identifier>(Syntax& s) {
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::Literal>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::Literal>(TSyntax& s) {
     return {
         .Kind = EUnitKind::Literal,
         .Patterns = {
@@ -176,7 +187,7 @@ TUnit MakeUnit<EUnitKind::Literal>(Syntax& s) {
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::StringLiteral>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::StringLiteral>(TSyntax& s) {
     return {
         .Kind = EUnitKind::StringLiteral,
         .RangePatterns = {
@@ -195,7 +206,7 @@ TUnit MakeUnit<EUnitKind::StringLiteral>(Syntax& s) {
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::Comment>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::Comment>(TSyntax& s) {
     return {
         .Kind = EUnitKind::Comment,
         .RangePatterns = {{R"(/*)", R"(*/)"}},
@@ -206,7 +217,7 @@ TUnit MakeUnit<EUnitKind::Comment>(Syntax& s) {
 }
 
 template <>
-TUnit MakeUnit<EUnitKind::Whitespace>(Syntax& s) {
+TUnit MakeUnit<EUnitKind::Whitespace>(TSyntax& s) {
     return {
         .Kind = EUnitKind::Whitespace,
         .Patterns = {
@@ -217,10 +228,10 @@ TUnit MakeUnit<EUnitKind::Whitespace>(Syntax& s) {
     };
 }
 
-Syntax MakeSyntax(const NSQLReflect::TLexerGrammar& grammar) {
+TSyntax MakeSyntax(const NSQLReflect::TLexerGrammar& grammar) {
     using NSQLTranslationV1::MakeRegexByOtherName;
 
-    Syntax syntax;
+    TSyntax syntax;
     syntax.Grammar = &grammar;
     for (auto& [k, v] : MakeRegexByOtherName(*syntax.Grammar, /* ansi = */ false)) {
         syntax.RegexesDefault.emplace(std::move(k), std::move(v));
@@ -236,14 +247,15 @@ THighlighting MakeHighlighting() {
 }
 
 THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
-    Syntax s = MakeSyntax(grammar);
+    TSyntax s = MakeSyntax(grammar);
 
     THighlighting h;
     h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Punctuation>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::OptionIdentifier>(s));
+    h.Units.emplace_back(MakeUnitUDF(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
-    h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
+    h.Units.emplace_back(MakeUnitBuiltin(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Literal>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));

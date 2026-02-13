@@ -18,6 +18,7 @@ message TImport {
     repeated Ydb.Import.ImportItemProgress ItemsProgress = 5;
     oneof Settings {
         Ydb.Import.ImportFromS3Settings ImportFromS3Settings = 6;
+        Ydb.Import.ImportFromFsSettings ImportFromFsSettings = 10;
     }
     optional string UserSID = 9;
 }
@@ -26,6 +27,7 @@ message TCreateImportRequest {
     optional Ydb.Operations.OperationParams OperationParams = 1;
     oneof Settings {
         Ydb.Import.ImportFromS3Settings ImportFromS3Settings = 2;
+        Ydb.Import.ImportFromFsSettings ImportFromFsSettings = 3;
     }
 }
 

@@ -93,7 +93,7 @@ ELockType GetStrongestLock(ELockType lhs, ELockType rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TLockMask& lhs, const TLockMask& rhs)
+bool operator==(const TLockMask& lhs, const TLockMask& rhs)
 {
     int lockCount = std::max(lhs.GetSize(), rhs.GetSize());
     for (int index = 0; index < lockCount; ++index) {
@@ -766,14 +766,20 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
-bool TTableSchema::IsCGComparatorApplicable() const
+bool TTableSchema::IsCGComparatorApplicable(std::optional<int> keyColumnCount) const
 {
-    if (GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
+    auto keyTypes = GetKeyColumnTypes();
+    auto checkCount = keyColumnCount.value_or(std::ssize(keyTypes));
+
+    if (checkCount > std::ssize(keyTypes)) {
         return false;
     }
 
-    auto keyTypes = GetKeyColumnTypes();
-    return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
+    if (checkCount > MaxKeyColumnCountInDynamicTable) {
+        return false;
+    }
+
+    return std::none_of(keyTypes.begin(), keyTypes.begin() + checkCount, [](const auto& type) {
         return type == EValueType::Any || type == EValueType::Null;
     });
 }
@@ -1275,7 +1281,7 @@ TTableSchemaPtr TTableSchema::ToSorted(const TKeyColumns& keyColumns) const
     for (const auto& keyColumn : keyColumns) {
         sortColumns.push_back(TColumnSortSchema{
             .Name = keyColumn,
-            .SortOrder = ESortOrder::Ascending
+            .SortOrder = ESortOrder::Ascending,
         });
     }
 
@@ -1997,10 +2003,11 @@ void ValidateColumnSchema(
                 options);
         }
 
-        {
-            TComplexTypeFieldDescriptor descriptor(name, columnSchema.LogicalType());
-            ValidateLogicalType(descriptor, MaxSchemaDepth);
-        }
+        ValidateLogicalType(
+            TComplexTypeFieldDescriptor(name, columnSchema.LogicalType()),
+            TLogicalTypeValidationOptions{
+                .DepthLimit = MaxSchemaDepth,
+            });
 
         if (!IsComparable(columnSchema.LogicalType()) &&
             columnSchema.SortOrder() &&

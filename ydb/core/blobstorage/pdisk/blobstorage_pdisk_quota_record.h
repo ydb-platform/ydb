@@ -78,8 +78,8 @@ public:
             str << " VDiskId# " << *VDiskId;
         }
         str << "\n";
-        str << " HardLimit# " << HardLimit;
-        str << " Free# " << Free;
+        str << " HardLimit# " << AtomicGet(HardLimit);
+        str << " Free# " << AtomicGet(Free);
         str << " Used# " << GetUsed();
         str << " Weight# " << GetWeight();
         double occupancy;
@@ -150,8 +150,13 @@ public:
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(i64 count, double *occupancy) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         const i64 newFree = AtomicGet(Free) - count;
+        const i64 hardLimit = AtomicGet(HardLimit);
 
-        *occupancy = HardLimit ? (double)(HardLimit - newFree) / HardLimit : 1.0;
+        if (hardLimit) {
+            *occupancy = (double)(std::max(static_cast<i64>(0), hardLimit - newFree)) / hardLimit;
+        } else {
+            *occupancy = 1.0;
+        }
 
         if (newFree > AtomicGet(Cyan)) {
             return TColor::GREEN;
@@ -174,7 +179,7 @@ public:
         }
     }
 
-    ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
         switch (color) {

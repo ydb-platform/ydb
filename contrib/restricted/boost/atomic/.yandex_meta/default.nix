@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_atomic = stdenv.mkDerivation rec {
     pname = "boost_atomic";
-    version = "1.89.0";
+    version = "1.90.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "atomic";
       rev = "boost-${version}";
-      hash = "sha256-3OjP8NRc6Y7tDbxUC0jupZPAY2+r1SL3nIoNaJP09FA=";
+      hash = "sha256-slm3tKEBvVCG2COochBvg4jn4hPw8uk6Vevnz0dRRZU=";
     };
   };
 }

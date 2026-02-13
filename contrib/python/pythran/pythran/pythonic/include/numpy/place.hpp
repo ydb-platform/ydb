@@ -11,12 +11,11 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T, class pS, class Tp, class pSp, class F>
-  types::none_type place(types::ndarray<T, pS> &expr,
-                         types::ndarray<Tp, pSp> const &mask, F const &values);
+  types::none_type place(types::ndarray<T, pS> &expr, types::ndarray<Tp, pSp> const &mask,
+                         F const &values);
 
   template <class T, class pS, class M, class F>
-  types::none_type place(types::ndarray<T, pS> &expr, M const &mask,
-                         F const &values);
+  types::none_type place(types::ndarray<T, pS> &expr, M const &mask, F const &values);
 
   template <class E, class M, class F>
   types::none_type place(E &, M const &, F const &);

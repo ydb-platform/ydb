@@ -505,14 +505,14 @@ void FillSpec(NYT::TNode& spec,
     if (layerPaths.size()) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
-            for (auto& path: layerPaths) {
-                layersNode.Add(path); // already snapshoted files, no prefix needed
+            for (auto it = layerPaths.rbegin(); it != layerPaths.rend(); ++it) {
+                layersNode.Add(*it); // already snapshoted files, no prefix needed
             }
         }
         if (opProps.HasFlags(EYtOpProp::WithReducer)) {
             NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
-            for (auto& path: layerPaths) {
-                layersNode.Add(path); // already snapshoted files, no prefix needed
+            for (auto it = layerPaths.rbegin(); it != layerPaths.rend(); ++it) {
+                layersNode.Add(*it); // already snapshoted files, no prefix needed
             }
         }
     }

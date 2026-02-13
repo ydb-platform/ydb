@@ -4,6 +4,7 @@ RECURSE(
     dml
     dump_restore
     copy_table
+    knn
     lib
     partitioning
     parametrized_queries

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/arrow/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/writer.h"
 
 #include <algorithm>
 #include <deque>
@@ -25,26 +25,26 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/extension_type.h"
-#include "arrow/ipc/writer.h"
-#include "arrow/record_batch.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
-#include "arrow/util/base64.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/parallel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/base64.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/parallel.h"
 
-#include "parquet/arrow/path_internal.h"
-#include "parquet/arrow/reader_internal.h"
-#include "parquet/arrow/schema.h"
-#include "parquet/column_writer.h"
-#include "parquet/exception.h"
-#include "parquet/file_writer.h"
-#include "parquet/platform.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/path_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 using arrow20::Array;
 using arrow20::BinaryArray;

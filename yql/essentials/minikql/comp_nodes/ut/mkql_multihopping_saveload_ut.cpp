@@ -16,6 +16,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
+using TWatermarksPattern = std::vector<std::tuple<ui32, TInstant>>;
 TComputationNodeFactory GetAuxCallableFactory(TWatermark& watermark) {
     return [&watermark](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         if (callable.GetType()->GetName() == "OneYieldStream") {
@@ -28,10 +29,13 @@ TComputationNodeFactory GetAuxCallableFactory(TWatermark& watermark) {
     };
 }
 struct TStreamWithYield: public NUdf::TBoxedValue {
-    TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index)
+    TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index, TWatermark& watermark, const TWatermarksPattern& watermarksPattern)
         : Items(items)
         , YieldPos(yieldPos)
         , Index(index)
+        , Watermark(watermark)
+        , WatermarksPattern(watermarksPattern)
+        , WatermarkIndex(0)
     {
     }
 
@@ -39,6 +43,9 @@ private:
     TUnboxedValueVector Items;
     ui32 YieldPos;
     ui32 Index;
+    TWatermark& Watermark;
+    TWatermarksPattern WatermarksPattern;
+    ui32 WatermarkIndex;
 
     ui32 GetTraverseCount() const override {
         return 0;
@@ -60,13 +67,22 @@ private:
         if (Index == YieldPos) {
             return NUdf::EFetchStatus::Yield;
         }
+        if (WatermarkIndex < WatermarksPattern.size()) {
+            auto [patternIndex, patternValue] = WatermarksPattern[WatermarkIndex];
+            if (Index >= patternIndex) {
+                Watermark.WatermarkIn = patternValue;
+                return NUdf::EFetchStatus::Yield;
+            }
+        }
         result = Items[Index++];
         return NUdf::EFetchStatus::Ok;
     }
 };
 
 THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<std::tuple<ui32, i64, ui32>> items,
-                                      ui32 yieldPos, ui32 startIndex, bool dataWatermarks) {
+                                      ui32 yieldPos, ui32 startIndex, bool dataWatermarks,
+                                      bool withWatermarks, TWatermark& watermark,
+                                      const TWatermarksPattern& watermarksPattern) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
     auto structType = pgmBuilder.NewEmptyStructType();
@@ -125,17 +141,22 @@ THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<st
             return pgmBuilder.NewStruct(members);
         },
         [&](TRuntimeNode key, TRuntimeNode state, TRuntimeNode time) { // finish
-            Y_UNUSED(time);
             std::vector<std::pair<std::string_view, TRuntimeNode>> members;
             members.emplace_back("key", key);
             members.emplace_back("sum", pgmBuilder.Member(state, "sum"));
+            members.emplace_back("time", time);
             return pgmBuilder.NewStruct(members);
         },
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&hop, sizeof(hop))),           // hop
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&interval, sizeof(interval))), // interval
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&delay, sizeof(delay))),       // delay
-        pgmBuilder.NewDataLiteral<bool>(dataWatermarks),                                                                  // dataWatermarks
-        pgmBuilder.NewDataLiteral<bool>(false));
+        pgmBuilder.NewDataLiteral<bool>(dataWatermarks),
+        pgmBuilder.NewDataLiteral<bool>(withWatermarks),
+        {}, // SizeLimit
+        {}, // TimeLimit
+        {}, // EarlyPolicy
+        {}  // LatePolicy
+    );
 
     auto graph = setup.BuildGraph(pgmReturn, {streamNode});
 
@@ -149,7 +170,7 @@ THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<st
         streamItems.push_back(std::move(structValues));
     }
 
-    auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
+    auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex, watermark, watermarksPattern));
     graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
     return graph;
 }
@@ -158,16 +179,19 @@ THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<st
 Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingSaveLoadTest) {
 void TestWithSaveLoadImpl(
     const std::vector<std::tuple<ui32, i64, ui32>> input,
-    const std::vector<std::tuple<ui32, ui32>> expected,
+    const std::vector<std::tuple<ui32, ui32, ui64>> expected,
     bool withTraverse,
-    bool dataWatermarks)
+    bool dataWatermarks,
+    bool withWatermarks = false,
+    const TWatermarksPattern& watermarksPattern = {})
 {
     TWatermark watermark;
+    UNIT_ASSERT(!dataWatermarks || !withWatermarks);
     for (ui32 yieldPos = 0; yieldPos < input.size(); ++yieldPos) {
-        std::vector<std::tuple<ui32, ui32>> result;
+        std::vector<std::tuple<ui32, ui32, ui64>> result;
 
         TSetup<false> setup1(GetAuxCallableFactory(watermark));
-        auto graph1 = BuildGraph(setup1, input, yieldPos, 0, dataWatermarks);
+        auto graph1 = BuildGraph(setup1, input, yieldPos, 0, dataWatermarks, withWatermarks, watermark, watermarksPattern);
         auto root1 = graph1->GetValue();
 
         NUdf::EFetchStatus status = NUdf::EFetchStatus::Ok;
@@ -175,7 +199,7 @@ void TestWithSaveLoadImpl(
             NUdf::TUnboxedValue val;
             status = root1.Fetch(val);
             if (status == NUdf::EFetchStatus::Ok) {
-                result.emplace_back(val.GetElement(0).Get<ui32>(), val.GetElement(1).Get<ui32>());
+                result.emplace_back(val.GetElement(0).Get<ui32>(), val.GetElement(1).Get<ui32>(), val.GetElement(2).Get<ui64>());
             }
         }
         UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Yield);
@@ -188,7 +212,7 @@ void TestWithSaveLoadImpl(
         }
 
         TSetup<false> setup2(GetAuxCallableFactory(watermark));
-        auto graph2 = BuildGraph(setup2, input, -1, yieldPos, dataWatermarks);
+        auto graph2 = BuildGraph(setup2, input, -1, yieldPos, dataWatermarks, withWatermarks, watermark, watermarksPattern);
         NUdf::TUnboxedValue root2;
         if (withTraverse) {
             root2 = graph2->GetValue();
@@ -203,15 +227,16 @@ void TestWithSaveLoadImpl(
             NUdf::TUnboxedValue val;
             status = root2.Fetch(val);
             if (status == NUdf::EFetchStatus::Ok) {
-                result.emplace_back(val.GetElement(0).Get<ui32>(), val.GetElement(1).Get<ui32>());
+                result.emplace_back(val.GetElement(0).Get<ui32>(), val.GetElement(1).Get<ui32>(), val.GetElement(2).Get<ui64>());
             }
         }
         UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Finish);
 
+        auto copy = result;
         auto sortedExpected = expected;
         std::sort(result.begin(), result.end());
         std::sort(sortedExpected.begin(), sortedExpected.end());
-        UNIT_ASSERT_EQUAL(result, sortedExpected);
+        UNIT_ASSERT_EQUAL_C(result, sortedExpected, " withTraverse = " << withTraverse << " dataWatermarks = " << dataWatermarks << " withWatermarks = " << withWatermarks << " yieldPos = " << yieldPos);
     }
 }
 
@@ -240,22 +265,26 @@ const std::vector<std::tuple<ui32, i64, ui32>> input1 = {
     {2, 85, 8},
     {1, 85, 8}};
 
-const std::vector<std::tuple<ui32, ui32>> expected = {
-    {1, 8}, {1, 8}, {1, 8}, {1, 8},
-    {1, 11},
-    {1, 11},
-    {1, 21},
-    {1, 22},
-    {1, 27},
-    {2, 8},
-    {2, 8},
-    {2, 8},
-    {2, 8},
-    {2, 11},
-    {2, 11},
-    {2, 21},
-    {2, 22},
-    {2, 27}};
+const std::vector<std::tuple<ui32, ui32, ui64>> expected = {
+    {1, 8, 80},
+    {1, 8, 90},
+    {1, 8, 100},
+    {1, 8, 110},
+    {1, 11, 60},
+    {1, 11, 70},
+    {1, 21, 50},
+    {1, 22, 40},
+    {1, 27, 30},
+    {2, 8, 80},
+    {2, 8, 90},
+    {2, 8, 100},
+    {2, 8, 110},
+    {2, 11, 60},
+    {2, 11, 70},
+    {2, 21, 50},
+    {2, 22, 40},
+    {2, 27, 30},
+};
 
 Y_UNIT_TEST(Test1) {
     TestWithSaveLoadImpl(input1, expected, true, false);
@@ -263,6 +292,13 @@ Y_UNIT_TEST(Test1) {
 
 Y_UNIT_TEST(Test2) {
     TestWithSaveLoadImpl(input1, expected, false, false);
+}
+Y_UNIT_TEST(TestWatermark1) {
+    TestWithSaveLoadImpl(input1, expected, true, false, true);
+}
+
+Y_UNIT_TEST(TestWatermark2) {
+    TestWithSaveLoadImpl(input1, expected, false, false, true);
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingSaveLoadTest)
 

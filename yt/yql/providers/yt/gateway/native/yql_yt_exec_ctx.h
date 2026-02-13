@@ -42,7 +42,7 @@ protected:
         const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
         const TSession::TPtr& session,
         const TString& cluster,
-        const TYtUrlMapper& urlMapper,
+        std::shared_ptr<TYtUrlMapper> urlMapper,
         IMetricsRegistryPtr metrics
     );
 
@@ -62,8 +62,6 @@ public:
     TTransactionCache::TEntry::TPtr GetOrCreateEntry(const TYtSettings::TConstPtr& settings) const;
 
 protected:
-    void MakeUserFiles(const TUserDataTable& userDataBlocks);
-
     void SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
         const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash) override;
 
@@ -78,9 +76,6 @@ protected:
         return NThreading::MakeErrorFuture<void>(std::make_exception_ptr(yexception() << "Cannot run operations in session without operation tracker"));
     }
 
-    TString GetAuth(const TYtSettings::TConstPtr& config) const;
-    TMaybe<TString> GetImpersonationUser(const TYtSettings::TConstPtr& config) const;
-
     ui64 EstimateLLVMMem(size_t nodes, const TString& llvmOpt, const TYtSettings::TConstPtr& config) const;
 
     TExpressionResorceUsage ScanExtraResourceUsageImpl(const TExprNode& node, const TYtSettings::TConstPtr& config, bool withInput);
@@ -92,16 +87,10 @@ protected:
     }
 
 public:
-    IYtGateway::TPtr Gateway;
-    TFileStoragePtr FileStorage_;
     ISecretMasker::TPtr SecretMasker;
     TSession::TPtr Session_;
-    TString YtServer_;
-    TUserFiles::TPtr UserFiles_;
     TVector<std::pair<TString, TString>> CodeSnippets_;
-    std::pair<TString, TString> LogCtx_;
     THolder<TYtQueryCacheItem> QueryCacheItem;
-    const TYtUrlMapper& UrlMapper_;
     bool DisableAnonymousClusterAccess_;
     bool Hidden = false;
     IMetricsRegistryPtr Metrics;
@@ -124,7 +113,7 @@ public:
         TOptions&& options,
         const TSession::TPtr& session,
         const TString& cluster,
-        const TYtUrlMapper& urlMapper,
+        std::shared_ptr<TYtUrlMapper> urlMapper,
         IMetricsRegistryPtr metrics)
         : TExecContextBase(gateway, services, clusters, mkqlCompiler, session, cluster, urlMapper, std::move(metrics))
         , Options_(std::move(options))

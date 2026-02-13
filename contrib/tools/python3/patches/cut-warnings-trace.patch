@@ -1,5 +1,5 @@
---- contrib/tools/python3/Python/_warnings.c	(index)
-+++ contrib/tools/python3/Python/_warnings.c	(working tree)
+--- a/Python/_warnings.c	(index)
++++ b/Python/_warnings.c	(working tree)
 @@ -791,6 +791,10 @@ is_internal_filename(PyObject *filename)
          }
      }

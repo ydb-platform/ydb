@@ -16,7 +16,12 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     auto schema = std::make_shared<arrow::Schema>(fields);
     auto rbParsed = externalInfo.GetDefaultSerializer()->Deserialize(originalData, schema);
     if (!rbParsed.ok()) {
-        return TConclusionStatus::Fail(rbParsed.status().ToString());
+        return TConclusionStatus::Fail(TStringBuilder{}
+            << "Internal deserialization error. type: sparsed, schema: " << schema->ToString()
+            << " records count: " << externalInfo.GetRecordsCount()
+            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
+            << " reason: " << rbParsed.status().ToString()
+            << " original data: " << Base64Encode(originalData));
     }
     auto rb = *rbParsed;
     AFL_VERIFY(rb->num_columns() == 2)("count", rb->num_columns())("schema", rb->schema()->ToString());

@@ -20,9 +20,9 @@
 
 #include <cstdint>
 
-#include "parquet/hasher.h"
-#include "parquet/platform.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/hasher.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace parquet20 {
 

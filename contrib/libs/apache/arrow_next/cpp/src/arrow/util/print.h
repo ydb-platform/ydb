@@ -19,7 +19,7 @@
 #pragma once
 
 #include <tuple>
-#include "arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
 
 using arrow20::internal::ToChars;
 

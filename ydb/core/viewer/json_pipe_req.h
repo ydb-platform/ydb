@@ -340,6 +340,7 @@ protected:
     void BuildParamsFromJson(TStringBuf data);
     void BuildParamsFromFormData(TStringBuf data);
     void SetupTracing(const TString& handlerName);
+    void ApplyForceMode(TEvBlobStorage::TEvControllerConfigRequest& request);
 
     template<typename TJson>
     void Proto2Json(const NProtoBuf::Message& proto, TJson& json) {

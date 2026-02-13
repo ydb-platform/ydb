@@ -50,7 +50,7 @@ public:
         , Function_(function)
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
+    void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
         if constexpr (IsNullable) {
             ui8 tag = parser->ParseVariant8Tag();
@@ -107,7 +107,7 @@ TPrimitiveTypeConverter<IsNullable, TFunction> CreatePrimitiveTypeConverter(ui32
     return TPrimitiveTypeConverter<IsNullable, TFunction>(columnId, function);
 }
 
-template<bool isNullable>
+template <bool isNullable>
 class TYson32TypeConverterImpl
 {
 public:
@@ -325,7 +325,7 @@ TSkiffToUnversionedValueConverter CreateSimpleValueConverter(
                     EWireType::Boolean,
                     EWireType::String32,
                     EWireType::Nothing,
-                    EWireType::Yson32
+                    EWireType::Yson32,
                 });
             return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
 
@@ -386,7 +386,7 @@ public:
         , ColumnId_(columnId)
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
+    void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
         Buffer_.Clear();
         {

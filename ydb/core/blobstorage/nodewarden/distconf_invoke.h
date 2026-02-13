@@ -25,6 +25,7 @@ namespace NKikimr::NStorage {
 
         bool InvokedWithoutScepter = false;
         bool EnablingDistconf = false;
+        bool Detached = false;
 
     public: // Error handling
         struct TExError : yexception {
@@ -73,6 +74,7 @@ namespace NKikimr::NStorage {
         // Configuration update
 
         void UpdateConfig(TQuery::TUpdateConfig *request);
+        void DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Reassign group disk logic
@@ -107,13 +109,16 @@ namespace NKikimr::NStorage {
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
         void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
         void SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd);
-        void SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount, ui32 replicasSpecificVolume);
+        void SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal, bool pileupReplicas, ui32 overrideReplicasInRingCount,
+            ui32 overrideRingsCount, ui32 replicasSpecificVolume);
         void SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd);
         void GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd);
 
         void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool getNodesState);
-        bool GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount, ui32 replicasSpecificVolume);
+        bool GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas,
+            ui32 overrideReplicasInRingCount, ui32 overrideRingsCount, ui32 replicasSpecificVolume);
         void AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
 
@@ -133,10 +138,15 @@ namespace NKikimr::NStorage {
             OTHER,
         } ControllerOp = EControllerOp::UNSET;
 
-        void FetchStorageConfig(bool fetchMain, bool fetchStorage, bool addExplicitMgmtSections, bool addV1);
+        void FetchStorageConfig(const TQuery::TFetchStorageConfig& request);
+        void Handle(TEvNodeWardenStorageConfig::TPtr ev);
+        void HandleWakeup();
+        void ReplyToFetchStorageConfig(const std::optional<TString>& mainConfigYaml,
+            const std::optional<TString>& storageConfigYaml, bool transient);
         void ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request);
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
+        void ReplaceStorageConfigExecute();
         void TryEnableDistconf();
         void ConnectToController();
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
@@ -160,8 +170,7 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
-        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum = false,
-            bool requireScepter = true, bool mindPrev = true,
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev = true,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr, bool fromBootstrap = false);
         void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 
@@ -172,6 +181,8 @@ namespace NKikimr::NStorage {
 
         void Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
             const std::function<void(TResult*)>& callback = {});
+
+        void DetachQuery();
 
         void PassAway() override;
 

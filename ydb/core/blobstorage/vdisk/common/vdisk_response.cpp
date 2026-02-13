@@ -29,7 +29,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
                 ReportResponse(event->Record, handleClass, vCtx); \
                 break;                                            \
             }
-                
+
                 HANDLE_EVENT(TEvBlobStorage::TEvVPutResult)
                 HANDLE_EVENT(TEvBlobStorage::TEvVMultiPutResult)
                 HANDLE_EVENT(TEvBlobStorage::TEvVGetResult)

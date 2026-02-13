@@ -280,14 +280,14 @@ public:
     /// Reuse allocated workers
     bool UseWorkerPool;
 
-    /// Use Antlr4 parser (for migration)
-    bool UseAntlr4;
-
     /// Language version
     TLangVersion LangVer;
 
     /// Tweaks
     TInternalProgramSettings InternalSettings;
+
+    /// Issue report target
+    TString IssueReportTarget;
 
 public:
     TProgramFactoryOptions();
@@ -403,6 +403,20 @@ public:
      * @return reference to self, to allow method chaining.
      */
     TProgramFactoryOptions& SetUseWorkerPool(bool useWorkerPool);
+
+    /**
+     * Set internal program settings.
+     *
+     * @return reference to self, to allow method chaining.
+     */
+    TProgramFactoryOptions& SetInternalSettings(const TInternalProgramSettings& settings);
+
+    /**
+     * Set issue report target.
+     *
+     * @return reference to self, to allow method chaining.
+     */
+    TProgramFactoryOptions& SetIssueReportTarget(const TString& reportTarget);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -714,6 +728,11 @@ public:
      * Release all input data from worker state
      */
     virtual void Invalidate() = 0;
+
+    /**
+     * Check worker state. Should be called after finish of processing. Preliminary calls are allowed too to detect early errors.
+     */
+    virtual void CheckState(bool isFinished) = 0;
 };
 
 /**

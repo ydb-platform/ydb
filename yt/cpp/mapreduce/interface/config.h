@@ -270,7 +270,7 @@ struct TConfig
     bool RedirectStdoutToStderr = false;
 
     /// Append job and operation IDs as shell command options.
-    bool EnableDebugCommandLineArguments = false;
+    bool EnableDebugCommandLineArguments = true;
 
     /// Path to document node with cluster config for |IClient::GetDynamicConfiguration|.
     TString ConfigRemotePatchPath = "//sys/client_config";

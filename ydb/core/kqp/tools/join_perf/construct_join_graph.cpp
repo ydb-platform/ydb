@@ -1,13 +1,17 @@
 #include "construct_join_graph.h"
-#include <algorithm>
 #include <ydb/library/yql/dq/comp_nodes/type_utils.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
+NYql::NUdf::TUniquePtr<NYql::NUdf::ILogProvider> testLogProvider =
+    NYql::NUdf::MakeLogProvider(+[](std::string_view component, NYql::NUdf::ELogLevel level, std::string_view message) {
+        Cout << std::format("LOG: component: {}, level: {}, message: {}\n", component, static_cast<std::string_view>(LevelToString(level)),  message);
+    });
 
 TRuntimeNode BuildBlockJoin(TDqProgramBuilder& pgmBuilder, EJoinKind joinKind, TRuntimeNode leftList,
                             TArrayRef<const ui32> leftKeyColumns, const TVector<ui32>& leftKeyDrops,
@@ -66,8 +70,6 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
     TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
-
-    ;
     TGraceJoinRenames renames;
     if (descr.CustomRenames) {
         renames = TGraceJoinRenames::FromDq(*descr.CustomRenames);
@@ -151,6 +153,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
 
     auto scalarGraphFrom = [&](TRuntimeNode wideStreamJoin) {
         THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStreamJoin, args.Entrypoints);
+
         SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);
         return graph;
     };
@@ -238,7 +241,11 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             Y_ABORT("unreachable");
         }
     }();
-    return graphFrom(wideStream);
+    auto graph = graphFrom(wideStream);
+    graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+
+    graph->GetContext().LogProvider = testLogProvider.Get();
+    return graph;
 }
 
 i32 ResultColumnCount(ETestedJoinAlgo algo, TJoinDescription descr) {

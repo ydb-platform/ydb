@@ -15,9 +15,12 @@ ENDIF()
 IF (ARCH_X86_64 AND OS_LINUX)
 SRCS(
     accumulator_ut.cpp
+    scalar_layout_converter_ut.cpp
     block_layout_converter_ut.cpp
+    block_layout_converter_sliced_blocks_ut.cpp
     hash_table_ut.cpp
     packed_tuple_ut.cpp
+    deep_copy_ut.cpp
 )
 
 PEERDIR(

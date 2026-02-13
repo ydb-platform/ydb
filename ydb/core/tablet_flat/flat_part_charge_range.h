@@ -9,11 +9,11 @@ namespace {
     using TCells = NPage::TCells;
 }
 
-bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
+TPrechargeResult ChargeRange(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
             ui64 items, ui64 bytes, bool includeHistory);
 
-bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
+TPrechargeResult ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
             ui64 items, ui64 bytes, bool includeHistory);
 

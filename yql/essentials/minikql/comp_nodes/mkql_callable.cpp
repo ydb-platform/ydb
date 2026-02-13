@@ -20,6 +20,7 @@ private:
             , CompCtx(compCtx)
             , ResultNode(resultNode)
             , ArgNodes(argNodes)
+            , Upvalues(compCtx, resultNode, argNodes)
         {
         }
 
@@ -29,12 +30,23 @@ private:
                 node->SetValue(CompCtx, NUdf::TUnboxedValuePod(*args++));
             }
 
-            return ResultNode->GetValue(CompCtx);
+            if (!Upvalues) {
+                return ResultNode->GetValue(CompCtx);
+            }
+
+            Upvalues.SetUpvalues(CompCtx);
+
+            const auto result = ResultNode->GetValue(CompCtx);
+
+            Upvalues.RestoreUpvalues(CompCtx);
+
+            return result;
         }
 
         TComputationContext& CompCtx;
         IComputationNode* const ResultNode;
         const TComputationExternalNodePtrVector ArgNodes;
+        const TComputationUpvalues Upvalues;
     };
 
     class TCodegenValue: public TComputationValue<TCodegenValue> {
@@ -43,20 +55,32 @@ private:
 
         using TRunPtr = NUdf::TUnboxedValuePod (*)(TComputationContext*, const NUdf::TUnboxedValuePod*);
 
-        TCodegenValue(TMemoryUsageInfo* memInfo, TRunPtr run, TComputationContext* ctx)
+        TCodegenValue(TMemoryUsageInfo* memInfo, TRunPtr run, TComputationContext* ctx, IComputationNode* resultNode, const TComputationExternalNodePtrVector& argNodes)
             : TBase(memInfo)
             , RunFunc(run)
             , Ctx(ctx)
+            , Upvalues(*ctx, resultNode, argNodes)
         {
         }
 
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override {
-            return RunFunc(Ctx, args);
+            if (!Upvalues) {
+                return RunFunc(Ctx, args);
+            }
+
+            Upvalues.SetUpvalues(*Ctx);
+
+            const auto result = RunFunc(Ctx, args);
+
+            Upvalues.RestoreUpvalues(*Ctx);
+
+            return result;
         }
 
         const TRunPtr RunFunc;
         TComputationContext* const Ctx;
+        const TComputationUpvalues Upvalues;
     };
 
 public:
@@ -70,7 +94,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Run) {
-            return ctx.HolderFactory.Create<TCodegenValue>(Run, &ctx);
+            return ctx.HolderFactory.Create<TCodegenValue>(Run, &ctx, ResultNode, ArgNodes);
         }
 #endif
         return ctx.HolderFactory.Create<TValue>(ctx, ResultNode, ArgNodes);

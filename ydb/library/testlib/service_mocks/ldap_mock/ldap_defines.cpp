@@ -1,3 +1,4 @@
+#include <memory>
 #include <queue>
 #include "ldap_defines.h"
 

@@ -27,9 +27,8 @@ namespace builtins
       if (!count || !haystack_next) {
         return {haystack};
       } else {
-        size_t n =
-            1 + std::max(self.size(), self.size() * (1 + new_pattern.size()) /
-                                          (1 + old_pattern.size()));
+        size_t n = 1 + std::max(self.size(),
+                                self.size() * (1 + new_pattern.size()) / (1 + old_pattern.size()));
 
         char *buffer = utils::allocate<char>(n);
         char *iter = buffer;

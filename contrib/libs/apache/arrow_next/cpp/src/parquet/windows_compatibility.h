@@ -18,5 +18,5 @@
 
 #pragma once
 
-#include "arrow/util/windows_compatibility.h"
-#include "parquet/windows_fixup.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_compatibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/windows_fixup.h"

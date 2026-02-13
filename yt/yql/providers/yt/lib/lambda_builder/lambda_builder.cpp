@@ -156,6 +156,9 @@ public:
     void LoadGraphState(TStringBuf state) final {
         Graph->LoadGraphState(state);
     }
+    TMaybe<NUdf::TSourcePosition> GetNotConsumedLinear() final {
+        return Graph->GetNotConsumedLinear();
+    }
 private:
     IComputationPattern::TPtr Pattern;
     THolder<IComputationGraph> Graph;
@@ -253,7 +256,7 @@ TGatewayLambdaBuilder::TGatewayLambdaBuilder(
 {
 }
 
-TString TGatewayLambdaBuilder::BuildLambdaWithIO(const TString& prefix, const IMkqlCallableCompiler& compiler, TCoLambda lambda, TExprContext& exprCtx) {
+TString TGatewayLambdaBuilder::BuildLambdaWithIO(const IMkqlCallableCompiler& compiler, TCoLambda lambda, TExprContext& exprCtx) {
     TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry);
     TArgumentsMap arguments(1U);
     if (lambda.Args().Size() > 0) {
@@ -263,7 +266,7 @@ TString TGatewayLambdaBuilder::BuildLambdaWithIO(const TString& prefix, const IM
         switch (bool isStream = true; argType->GetKind()) {
         case ETypeAnnotationKind::Flow:
             if (ETypeAnnotationKind::Multi == argType->Cast<TFlowExprType>()->GetItemType()->GetKind()) {
-                arguments.emplace(arg.Raw(), TRuntimeNode(TCallableBuilder(GetTypeEnvironment(), prefix + "Input", pgmBuilder.NewFlowType(inputItemType)).Build(), false));
+                arguments.emplace(arg.Raw(), TRuntimeNode(TCallableBuilder(GetTypeEnvironment(), "YtInput", pgmBuilder.NewFlowType(inputItemType)).Build(), false));
                 break;
             }
             isStream = false;
@@ -274,7 +277,7 @@ TString TGatewayLambdaBuilder::BuildLambdaWithIO(const TString& prefix, const IM
 
             inputItemType = pgmBuilder.NewOptionalType(inputItemType);
             inputStream = pgmBuilder.Map(inputStream, [&] (TRuntimeNode item) {
-                TCallableBuilder inputCall(GetTypeEnvironment(), prefix + "Input", inputItemType);
+                TCallableBuilder inputCall(GetTypeEnvironment(), "YtInput", inputItemType);
                 inputCall.Add(item);
                 return TRuntimeNode(inputCall.Build(), false);
             });
@@ -296,12 +299,12 @@ TString TGatewayLambdaBuilder::BuildLambdaWithIO(const TString& prefix, const IM
     TMkqlBuildContext ctx(compiler, pgmBuilder, exprCtx, lambda.Ref().UniqueId(), std::move(arguments));
     TRuntimeNode outStream = MkqlBuildExpr(lambda.Body().Ref(), ctx);
     if (outStream.GetStaticType()->IsFlow()) {
-        TCallableBuilder outputCall(GetTypeEnvironment(), prefix + "Output", pgmBuilder.NewFlowType(GetTypeEnvironment().GetTypeOfVoidLazy()));
+        TCallableBuilder outputCall(GetTypeEnvironment(),"YtOutput", pgmBuilder.NewFlowType(GetTypeEnvironment().GetTypeOfVoidLazy()));
         outputCall.Add(outStream);
         outStream = TRuntimeNode(outputCall.Build(), false);
     } else {
         outStream = pgmBuilder.Map(outStream, [&] (TRuntimeNode item) {
-            TCallableBuilder outputCall(GetTypeEnvironment(), prefix + "Output", GetTypeEnvironment().GetTypeOfVoidLazy());
+            TCallableBuilder outputCall(GetTypeEnvironment(), "YtOutput", GetTypeEnvironment().GetTypeOfVoidLazy());
             outputCall.Add(item);
             return TRuntimeNode(outputCall.Build(), false);
         });

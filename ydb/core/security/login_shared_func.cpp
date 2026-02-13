@@ -1,64 +1,93 @@
-#include <util/generic/string.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include "login_shared_func.h"
+
+#include <util/generic/string.h>
+
+#include <ydb/core/protos/auth.pb.h>
+
 
 namespace NKikimr {
 
-THolder<NSchemeCache::TSchemeCacheNavigate> CreateNavigateKeySetRequest(const TString& pathToDatabase) {
-    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    request->DatabaseName = pathToDatabase;
-    auto& entry = request->ResultSet.emplace_back();
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-    entry.Path = ::NKikimr::SplitPath(pathToDatabase);
-    entry.RedirectRequired = false;
-    return request;
+bool IsLdapAuthenticationEnabled(const NKikimrProto::TAuthConfig& config) {
+    return config.HasLdapAuthentication();
 }
 
-TAuthCredentials PrepareCredentials(const TString& login, const TString& password, const NKikimrProto::TAuthConfig& config) {
+bool IsUsernameFromLdapAuthDomain(const TString& username, const NKikimrProto::TAuthConfig& config) {
     if (config.HasLdapAuthentication() && !config.GetLdapAuthenticationDomain().empty()) {
-        const TString domain = "@" + config.GetLdapAuthenticationDomain();
-        if (login.EndsWith(domain)) {
-            return {.AuthType = TAuthCredentials::EAuthType::Ldap, .Login = login.substr(0, login.size() - domain.size()), .Password = password};
-        }
+        const TString ldapDomain = "@" + config.GetLdapAuthenticationDomain();
+        return username.EndsWith(ldapDomain);
     }
-    return {.AuthType = TAuthCredentials::EAuthType::Internal, .Login = login, .Password = password};
+
+    return false;
 }
 
-NKikimrScheme::TEvLogin CreateLoginRequest(const TAuthCredentials& credentials, const NKikimrProto::TAuthConfig& config) {
+TString PrepareLdapUsername(const TString& username, const NKikimrProto::TAuthConfig& config) {
+    const TString ldapDomain = "@" + config.GetLdapAuthenticationDomain();
+    return username.substr(0, username.size() - ldapDomain.size());
+}
+
+NKikimrScheme::TEvLogin CreatePlainLoginRequest(const TString& username, NLoginProto::EHashType::HashType hashType,
+    const TString& hashToValidate, const TString& peerName, const NKikimrProto::TAuthConfig& config)
+{
     NKikimrScheme::TEvLogin record;
-    record.SetUser(credentials.Login);
-    record.SetPassword(credentials.Password);
-    switch (credentials.AuthType) {
-        case TAuthCredentials::EAuthType::Ldap: {
-            record.SetExternalAuth(config.GetLdapAuthenticationDomain());
-            break;
-        }
-        default: {}
-    }
+    record.SetUser(username);
+    record.MutableHashToValidate()->SetAuthMech(NLoginProto::ESaslAuthMech::Plain);
+    record.MutableHashToValidate()->SetHashType(hashType);
+    record.MutableHashToValidate()->SetHash(hashToValidate);
+
     if (config.HasLoginTokenExpireTime()) {
         record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());
     }
+
+    record.SetPeerName(peerName);
     return record;
 }
 
-TSendParameters GetSendParameters(const TAuthCredentials& credentials, const TString& pathToDatabase) {
-    switch (credentials.AuthType) {
-        case TAuthCredentials::EAuthType::Internal: {
-            return {
-                .Recipient = MakeSchemeCacheID(),
-                .Event = MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(CreateNavigateKeySetRequest(pathToDatabase).Release())
-            };
-        }
-        case TAuthCredentials::EAuthType::Ldap: {
-            return {
-                .Recipient = MakeLdapAuthProviderID(),
-                .Event = MakeHolder<TEvLdapAuthProvider::TEvAuthenticateRequest>(credentials.Login, credentials.Password)
-            };
-        }
+NKikimrScheme::TEvLogin CreatePlainLoginRequestOldFormat(const TString& username, const TString& password,
+    const TString& peerName, const NKikimrProto::TAuthConfig& config)
+{
+    NKikimrScheme::TEvLogin record;
+    record.SetUser(username);
+    record.SetPassword(password);
+
+    if (config.HasLoginTokenExpireTime()) {
+        record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());
     }
+
+    record.SetPeerName(peerName);
+    return record;
+}
+
+NKikimrScheme::TEvLogin CreatePlainLdapLoginRequest(const TString& username, const TString& peerName,
+    const NKikimrProto::TAuthConfig& config)
+{
+    NKikimrScheme::TEvLogin record;
+    record.SetUser(username);
+    record.SetExternalAuth(config.GetLdapAuthenticationDomain());
+
+    if (config.HasLoginTokenExpireTime()) {
+        record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());
+    }
+
+    record.SetPeerName(peerName);
+    return record;
+}
+
+NKikimrScheme::TEvLogin CreateScramLoginRequest(const TString& username, NLoginProto::EHashType::HashType hashType,
+    const TString& clientProof, const TString& authMessage,  const TString& peerName, const NKikimrProto::TAuthConfig& config)
+{
+    NKikimrScheme::TEvLogin record;
+    record.SetUser(username);
+    record.MutableHashToValidate()->SetAuthMech(NLoginProto::ESaslAuthMech::Scram);
+    record.MutableHashToValidate()->SetHashType(hashType);
+    record.MutableHashToValidate()->SetHash(clientProof);
+    record.MutableHashToValidate()->SetAuthMessage(authMessage);
+
+    if (config.HasLoginTokenExpireTime()) {
+        record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());
+    }
+
+    record.SetPeerName(peerName);
+    return record;
 }
 
 } // namespace NKikimr

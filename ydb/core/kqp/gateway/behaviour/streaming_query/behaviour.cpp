@@ -14,7 +14,7 @@ NMetadata::NInitializer::IInitializationBehaviour::TPtr TStreamingQueryBehaviour
 }
 
 TString TStreamingQueryBehaviour::GetInternalStorageTablePath() const {
-    return "streaming/queries";
+    return TStreamingQueryConfig::InternalTablesPath;
 }
 
 NMetadata::NModifications::IOperationsManager::TPtr TStreamingQueryBehaviour::ConstructOperationsManager() const {

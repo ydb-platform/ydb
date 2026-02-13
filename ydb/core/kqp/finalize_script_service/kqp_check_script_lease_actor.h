@@ -9,6 +9,6 @@ namespace NKikimrConfig {
 
 namespace NKikimr::NKqp {
 
-NActors::IActor* CreateScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters);
+NActors::IActor* CreateScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters);
 
 }  // namespace NKikimr::NKqp

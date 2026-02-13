@@ -80,7 +80,7 @@ class KqpRun(object):
 
         if var_templates is not None:
             for var_template in var_templates:
-                cmd += f'--var-template {var_template} '
+                cmd += f'--template {var_template} '
 
         for query in self.queries:
             cmd += f'--script-query={query} '
@@ -90,12 +90,12 @@ class KqpRun(object):
             cmd += f'--script-query={program_file} '
 
         for table in self.tables:
-            cmd += f'--table={table} '
+            cmd += f'--emulate-yt={table} '
 
         for table in yql_tables:
             if table.format != 'yson':
                 pytest.skip('skip tests containing tables with a non-yson attribute format')
-            cmd += f'--table=yt./Root/{table.full_name}@{table.yqlrun_file} '
+            cmd += f'--emulate-yt=yt./Root/{table.full_name}@{table.yqlrun_file} '
 
         proc_result = yatest.common.process.execute(cmd.strip().split(), check_exit_code=False, cwd=self.res_dir)
         if proc_result.exit_code != 0 and check_error:

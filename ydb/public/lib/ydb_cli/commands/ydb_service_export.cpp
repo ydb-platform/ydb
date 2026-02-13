@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
@@ -31,16 +32,48 @@ namespace {
         return IsIn({
             NScheme::ESchemeEntryType::Table,
             NScheme::ESchemeEntryType::View,
+            NScheme::ESchemeEntryType::Topic,
         }, entry.Type);
     }
 
-    TVector<std::pair<TString, TString>> ExpandItem(NScheme::TSchemeClient& client, TStringBuf srcPath, TStringBuf dstPath, const TFilterOp& filter) {
+    TStatus FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
+        auto isAsyncReplicaTable = [&session](const NScheme::TSchemeEntry& entry) {
+            if (entry.Type != NScheme::ESchemeEntryType::Table) {
+                return false;
+            }
+            auto describeResult = session.DescribeTable(entry.Name).ExtractValueSync();
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
+
+            const auto& attributes = describeResult.GetTableDescription().GetAttributes();
+            auto it = attributes.find("__async_replica");
+            return it != attributes.end() && it->second == "true";
+        };
+
+        try {
+            std::erase_if(entries, isAsyncReplicaTable);
+        } catch (NStatusHelpers::TYdbErrorException& e) {
+            return e.ExtractStatus();
+        }
+        return TStatus(EStatus::SUCCESS, {});
+    }
+
+    TVector<std::pair<TString, TString>> ExpandItem(
+        NScheme::TSchemeClient& schemeClient,
+        NTable::TTableClient tableClient,
+        TStringBuf srcPath,
+        TStringBuf dstPath,
+        const TFilterOp& filter)
+    {
         // cut trailing slash
         srcPath.ChopSuffix(slash);
         dstPath.ChopSuffix(slash);
 
-        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(filter));
+        auto ret = RecursiveList(schemeClient, TString{srcPath}, TRecursiveListSettings().Filter(filter));
         NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
+
+        tableClient.RetryOperationSync([&ret](NTable::TSession session) {
+            return FilterAsyncReplicaTables(session, ret.Entries);
+        });
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
             return {{TString{srcPath}, TString{dstPath}}};
@@ -59,10 +92,16 @@ namespace {
     }
 
     template <typename TSettings>
-    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusionPatterns, const TFilterOp& filter = FilterTables) {
+    void ExpandItems(
+        NScheme::TSchemeClient& schemeClient,
+        NTable::TTableClient tableClient,
+        TSettings& settings,
+        const TVector<TRegExMatch>& exclusionPatterns,
+        const TFilterOp& filter = FilterTables)
+    {
         auto items(std::move(settings.Item_));
         for (const auto& item : items) {
-            for (const auto& [src, dst] : ExpandItem(client, item.Src, item.Dst, filter)) {
+            for (const auto& [src, dst] : ExpandItem(schemeClient, tableClient, item.Src, item.Dst, filter)) {
                 settings.AppendItem({src, dst});
             }
         }
@@ -85,7 +124,7 @@ TCommandExport::TCommandExport(bool useExportToYt)
 TCommandExportToYt::TCommandExportToYt()
     : TYdbOperationCommand("yt", {}, "Create export to YT")
 {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
         {"Destination", {{"destination", "dst", "d"}, "Path to a table or a directory in YT", true}},
@@ -167,6 +206,7 @@ void TCommandExportToYt::ExtractParams(TConfig& config) {
 int TCommandExportToYt::Run(TConfig& config) {
     using namespace NExport;
     using namespace NScheme;
+    using namespace NTable;
 
     TExportToYtSettings settings = FillSettings(TExportToYtSettings());
 
@@ -188,7 +228,8 @@ int TCommandExportToYt::Run(TConfig& config) {
     const TDriver driver = CreateDriver(config);
 
     TSchemeClient schemeClient(driver);
-    ExpandItems(schemeClient, settings, ExclusionPatterns);
+    TTableClient tableClient(driver);
+    ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns);
 
     TExportClient client(driver);
     TExportToYtResponse response = client.ExportToYt(std::move(settings)).GetValueSync();
@@ -214,7 +255,7 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    auto colors = NColorizer::AutoColors(Cout);
+    auto colors = NConsoleClient::AutoColors(Cout);
     config.Opts->AddLongOption("scheme", TStringBuilder()
             << "S3 endpoint scheme - "
             << colors.BoldColor() << "http" << colors.OldColor()
@@ -315,6 +356,18 @@ void TCommandExportToS3::Config(TConfig& config) {
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
     {
+        TStringBuilder help;
+        help << "Include index data or not";
+        if (config.HelpCommandVerbosiltyLevel >= 2) {
+            help << Endl << "    By default, only index metadata is uploaded and indexes are built during import — it"
+                 << Endl << "    saves space and reduces export time, but it can potentially increase the import time."
+                 << Endl << "    Index data can be uploaded and downloaded back during import.";
+        }
+        config.Opts->AddLongOption("include-index-data", help)
+            .RequiredArgument("BOOL").StoreResult<bool>(&IncludeIndexData).DefaultValue("false");
+    }
+
+    {
         TStringBuilder encryptionAlgorithmHelp;
         encryptionAlgorithmHelp << "Encryption algorithm. Supported values: ";
         bool first = true;
@@ -397,6 +450,7 @@ int TCommandExportToS3::Run(TConfig& config) {
 
     using namespace NExport;
     using namespace NScheme;
+    using namespace NTable;
 
     TExportToS3Settings settings = FillSettings(TExportToS3Settings());
 
@@ -407,6 +461,7 @@ int TCommandExportToS3::Run(TConfig& config) {
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
     settings.UseVirtualAddressing(UseVirtualAddressing);
+    settings.IncludeIndexData(IncludeIndexData);
 
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});
@@ -445,17 +500,18 @@ int TCommandExportToS3::Run(TConfig& config) {
 
     TSchemeClient schemeClient(driver);
     TExportClient client(driver);
+    TTableClient tableClient(driver);
 
     auto originalItems = settings.Item_;
     if (expandItems) {
-        ExpandItems(schemeClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
     }
     TExportToS3Response response = client.ExportToS3(settings).ExtractValueSync();
     if (expandItems && response.Status().GetStatus() == EStatus::BAD_REQUEST) {
         // Retry the export operation limiting the scope to tables only.
         // This approach ensures compatibility with servers running an older version of YDB.
         settings.Item_ = std::move(originalItems);
-        ExpandItems(schemeClient, settings, ExclusionPatterns, FilterTables);
+        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterTables);
         response = client.ExportToS3(settings).ExtractValueSync();
     }
     ThrowOnError(response);

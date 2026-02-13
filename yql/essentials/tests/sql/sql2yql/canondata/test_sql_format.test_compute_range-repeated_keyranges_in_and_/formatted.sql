@@ -10,7 +10,7 @@ SELECT
         ($row) -> (
             $row.x == 1 AND (
                 $row.y == 2 AND $row.z > 0 AND $row.z < 10
-                OR $row.y == 2 AND $row.z > 8 AND $row.z < 20
+                OR $row.y == Opaque(2) AND $row.z > 8 AND $row.z < 20
             )
         ),
         AsTuple(AsAtom('x'), AsAtom('y'), AsAtom('z'))

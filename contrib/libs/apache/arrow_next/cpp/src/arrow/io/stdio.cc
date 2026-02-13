@@ -15,12 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/io/stdio.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/stdio.h"
 
 #include <iostream>
 
-#include "arrow/buffer.h"
-#include "arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
 
 namespace arrow20 {
 namespace io {

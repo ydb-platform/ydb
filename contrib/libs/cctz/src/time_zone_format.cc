@@ -18,12 +18,6 @@
 # endif
 #endif
 
-#if defined(HAS_STRPTIME) && HAS_STRPTIME
-# if !defined(_XOPEN_SOURCE) && !defined(__FreeBSD__) && !defined(__OpenBSD__)
-#  define _XOPEN_SOURCE 500  // Exposes definitions for SUSv2 (UNIX 98).
-# endif
-#endif
-
 #include "cctz/time_zone.h"
 
 // Include time.h directly since, by C++ standards, ctime doesn't have to

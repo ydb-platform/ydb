@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
         TString data1(4096, 'D');
         bool writeResult1 = sectorMap->Write((ui8*)data1.data(), 4096, 0);
         UNIT_ASSERT_EQUAL(writeResult1, true);
-        
+
         failureProbs->ReadReplayProbability.store(1.0);
 
         TString data2(4096, 'E');
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
 
     Y_UNIT_TEST(TestFakeErrorPDiskWriteProbability) {
         TActorTestContext testCtx({.DiskMode = NPDisk::NSectorMap::DM_HDD, .UseSectorMap = true});
-        
+
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
 
     Y_UNIT_TEST(TestFakeErrorPDiskReadProbability) {
         TActorTestContext testCtx({.DiskMode = NPDisk::NSectorMap::DM_HDD, .UseSectorMap = true});
-        
+
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
 
     Y_UNIT_TEST(TestSilentWriteFailPDisk) {
         TActorTestContext testCtx({.DiskMode = NPDisk::NSectorMap::DM_HDD, .UseSectorMap = true});
-        
+
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 
@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
 
     Y_UNIT_TEST(TestReadReplayPDisk) {
         TActorTestContext testCtx({.DiskMode = NPDisk::NSectorMap::DM_HDD, .UseSectorMap = true});
-        
+
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
                 new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                     reservedChunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(std::move(data2)), nullptr, false, NPriRead::HullOnlineOther),
                 NKikimrProto::OK);
- 
+
         auto* failureProbs = testCtx.TestCtx.SectorMap->GetFailureProbabilities();
         UNIT_ASSERT(failureProbs != nullptr);
 

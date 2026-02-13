@@ -353,6 +353,18 @@ void TWorker<TBase>::Invalidate() {
     Graph_.ComputationGraph->InvalidateCaches();
 }
 
+template <typename TBase>
+void TWorker<TBase>::CheckState(bool finish) {
+    PrepareCheckState(finish);
+    if (finish) {
+        Graph_.ComputationGraph->Invalidate();
+    }
+
+    if (auto pos = Graph_.ComputationGraph->GetNotConsumedLinear()) {
+        UdfTerminate((TStringBuilder() << pos << " Linear value is not consumed").c_str());
+    }
+}
+
 TPullStreamWorker::~TPullStreamWorker() {
     auto guard = Guard(GetScopedAlloc());
     Output_.Clear();
@@ -383,6 +395,7 @@ void TPullStreamWorker::SetInput(NKikimr::NUdf::TUnboxedValue&& value, ui32 inpu
     HasInput_[inputIndex] = true;
 
     if (CheckAllInputsSet()) {
+        NKikimr::NMiniKQL::TBindTerminator bind(Graph_.ComputationGraph->GetTerminator());
         Output_ = Graph_.ComputationGraph->GetValue();
     }
 }
@@ -393,6 +406,12 @@ NKikimr::NUdf::TUnboxedValue& TPullStreamWorker::GetOutput() {
     }
 
     return Output_;
+}
+
+void TPullStreamWorker::PrepareCheckState(bool finish) {
+    if (finish) {
+        Output_ = NKikimr::NUdf::TUnboxedValue::Invalid();
+    }
 }
 
 void TPullStreamWorker::Release() {
@@ -439,6 +458,7 @@ void TPullListWorker::SetInput(NKikimr::NUdf::TUnboxedValue&& value, ui32 inputI
     HasInput_[inputIndex] = true;
 
     if (CheckAllInputsSet()) {
+        NKikimr::NMiniKQL::TBindTerminator bind(Graph_.ComputationGraph->GetTerminator());
         Output_ = Graph_.ComputationGraph->GetValue();
         ResetOutputIterator();
     }
@@ -483,6 +503,13 @@ void TPullListWorker::Release() {
     TWorker<IPullListWorker>::Release();
 }
 
+void TPullListWorker::PrepareCheckState(bool finish) {
+    if (finish) {
+        Output_ = NKikimr::NUdf::TUnboxedValue::Invalid();
+        OutputIterator_ = NKikimr::NUdf::TUnboxedValue::Invalid();
+    }
+}
+
 namespace {
 class TPushStream final: public NKikimr::NMiniKQL::TCustomListValue {
 private:
@@ -525,6 +552,7 @@ public:
 } // namespace
 
 void TPushStreamWorker::FeedToConsumer() {
+    NKikimr::NMiniKQL::TBindTerminator bind(Graph_.ComputationGraph->GetTerminator());
     auto value = Graph_.ComputationGraph->GetValue();
 
     for (;;) {
@@ -609,6 +637,10 @@ void TPushStreamWorker::Release() {
     }
     Finished_ = false;
     TWorker<IPushStreamWorker>::Release();
+}
+
+void TPushStreamWorker::PrepareCheckState(bool finish) {
+    Y_UNUSED(finish);
 }
 
 namespace NYql {

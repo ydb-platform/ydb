@@ -964,7 +964,13 @@ void TTcpConnection::OnEvent(EPollControl control)
             // Client initiates a handshake.
             TryEnqueueHandshake();
         }
-        ProcessQueuedMessages();
+
+        // We should not process messages unless all handshakes have been performed.
+        bool sslHandshakeImminent = EstablishSslSession_ && SslState_ == ESslState::None;
+        if (HandshakeReceived_ && !sslHandshakeImminent) {
+            ProcessQueuedMessages();
+        }
+
         OnSocketWrite();
     }
 
@@ -1096,7 +1102,7 @@ void TTcpConnection::OnSocketRead()
 
 bool TTcpConnection::HasUnreadData() const
 {
-    return Decoder_->IsInProgress();
+    return Decoder_->IsInProgress() || !UnackedPackets_.empty();
 }
 
 ssize_t TTcpConnection::DoReadSocket(char* buffer, size_t size)
@@ -1107,9 +1113,7 @@ ssize_t TTcpConnection::DoReadSocket(char* buffer, size_t size)
         case ESslState::Established: {
             auto result = SSL_read(Ssl_.get(), buffer, size);
             if (PendingSslHandshake_ && result > 0) {
-                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_read");
-                PendingSslHandshake_ = false;
-                ReadyPromise_.TrySet();
+                PendingSslHandshake_ = DoSslHandshake();
             }
             return result;
         }
@@ -1202,6 +1206,23 @@ bool TTcpConnection::AdvanceDecoder(size_t size)
 
 bool TTcpConnection::OnPacketReceived() noexcept
 {
+    bool packetIsHandshake = Decoder_->GetPacketId() == HandshakePacketId;
+    if (HandshakeReceived_) {
+        YT_ASSERT(!packetIsHandshake, "Only the first packet can be a handshake");
+    } else if (!packetIsHandshake) {
+        if (EncryptionMode_ == EEncryptionMode::Required) {
+            Abort(TError(NBus::EErrorCode::TransportError, "Failed to negotiate TLS/SSL encryption")
+                << TErrorAttribute("mode", EncryptionMode_)
+                << TErrorAttribute("packet_id", Decoder_->GetPacketId())
+                << TErrorAttribute("packet_type", Decoder_->GetPacketType()));
+            return false;
+        }
+        // COMPAT(dann239): Java client apparently doesn't send handshakes, so let's
+        // consider the handshake performed if the client opens up with something else.
+        YT_ASSERT(ConnectionType_ == EConnectionType::Server);
+        HandshakeReceived_ = true;
+    }
+
     UpdateBusCounter(&TBusNetworkBandCounters::InPackets, 1);
     switch (Decoder_->GetPacketType()) {
         case EPacketType::Ack:
@@ -1318,7 +1339,6 @@ bool TTcpConnection::OnHandshakePacketReceived()
         if (EncryptionMode_ == EEncryptionMode::Disabled || otherEncryptionMode == EEncryptionMode::Disabled) {
             if (ConnectionType_ == EConnectionType::Server) {
                 // Send handshake response before abort to let client deduce reason.
-                ProcessQueuedMessages();
                 OnSocketWrite();
             }
             Abort(TError(NBus::EErrorCode::SslError, "TLS/SSL client/server encryption mode compatibility error")
@@ -1400,7 +1420,7 @@ TFuture<void> TTcpConnection::SendViaLocalBypass(TSharedRefArray message, const 
     LocalBypassHandler_->HandleMessage(std::move(message), LocalBypassReplyBus_);
 
     // No delivery tracking for local bypass.
-    return VoidFuture;
+    return OKFuture;
 }
 
 TTcpConnection::TPacket* TTcpConnection::EnqueuePacket(
@@ -1480,9 +1500,7 @@ ssize_t TTcpConnection::DoWriteFragments(const std::vector<struct iovec>& vec)
             YT_ASSERT(vec.size() == 1);
             auto result = SSL_write(Ssl_.get(), vec[0].iov_base, vec[0].iov_len);
             if (PendingSslHandshake_ && result > 0) {
-                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_write");
-                PendingSslHandshake_ = false;
-                ReadyPromise_.TrySet();
+                PendingSslHandshake_ = DoSslHandshake();
             }
             return result;
         }
@@ -1968,7 +1986,8 @@ void TTcpConnection::AbortSslSession()
 
 bool TTcpConnection::CheckSslReadError(ssize_t result)
 {
-    switch (SSL_get_error(Ssl_.get(), result)) {
+    auto sslError = SSL_get_error(Ssl_.get(), result);
+    switch (sslError) {
         case SSL_ERROR_NONE:
             return true;
         case SSL_ERROR_WANT_READ:
@@ -1976,6 +1995,8 @@ bool TTcpConnection::CheckSslReadError(ssize_t result)
             // Try again.
             break;
         case SSL_ERROR_SYSCALL:
+        case SSL_ERROR_ZERO_RETURN:
+            return CheckTcpReadError(result);
         case SSL_ERROR_SSL:
             // This check is probably unnecessary in new versions of openssl.
             if (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN) {
@@ -1986,6 +2007,7 @@ bool TTcpConnection::CheckSslReadError(ssize_t result)
         default:
             UpdateBusCounter(&TBusNetworkBandCounters::ReadErrors, 1);
             Abort(GetLastSslError("TLS/SSL read error")
+                << TErrorAttribute("ssl_error_code", sslError)
                 << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
             break;
     }
@@ -1995,7 +2017,8 @@ bool TTcpConnection::CheckSslReadError(ssize_t result)
 
 bool TTcpConnection::CheckSslWriteError(ssize_t result)
 {
-    switch (SSL_get_error(Ssl_.get(), result)) {
+    auto sslError = SSL_get_error(Ssl_.get(), result);
+    switch (sslError) {
         case SSL_ERROR_NONE:
             return true;
         case SSL_ERROR_WANT_READ:
@@ -2003,6 +2026,7 @@ bool TTcpConnection::CheckSslWriteError(ssize_t result)
             // Try again.
             break;
         case SSL_ERROR_SYSCALL:
+            return CheckTcpWriteError(result);
         case SSL_ERROR_SSL:
             // This check is probably unnecessary in new versions of openssl.
             if (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN) {
@@ -2013,6 +2037,7 @@ bool TTcpConnection::CheckSslWriteError(ssize_t result)
         default:
             UpdateBusCounter(&TBusNetworkBandCounters::WriteErrors, 1);
             Abort(GetLastSslError("TLS/SSL write error")
+                << TErrorAttribute("ssl_error_code", sslError)
                 << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
             break;
     }
@@ -2029,7 +2054,9 @@ void TTcpConnection::CloseSslSession(ESslState newSslState)
             // Nothing to do.
             return;
         case ESslState::Established:
-            SSL_shutdown(Ssl_.get());
+            if (!PendingSslHandshake_) {
+                DoSslShutdown();
+            }
             break;
         case ESslState::Error:
             break;
@@ -2080,6 +2107,33 @@ bool TTcpConnection::DoSslHandshake()
     Abort(GetLastSslError("Failed to establish TLS/SSL session")
         << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
     return false;
+}
+
+void TTcpConnection::DoSslShutdown()
+{
+    for (int i = 0;; ++i) {
+        YT_VERIFY(i < 2);
+
+        auto result = SSL_shutdown(Ssl_.get());
+        switch (result) {
+            case 0:
+                // SSL_shutdown may sometimes ask us to run itself a second time.
+                break;
+            case 1:
+                // Shutdown is finished.
+                YT_LOG_DEBUG("SSL_shutdown successful");
+                return;
+            default:
+                int error = SSL_get_error(Ssl_.get(), result);
+                YT_LOG_WARNING(
+                    GetLastSslError("TLS/SSL shutdown error"),
+                    "Could not perform SSL_shutdown (SslErrorCode: %v)",
+                    error);
+
+                // We did our best under the circumstances.
+                return;
+        }
+    }
 }
 
 size_t TTcpConnection::GetSslAckPacketSize()

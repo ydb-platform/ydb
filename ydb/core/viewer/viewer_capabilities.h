@@ -42,6 +42,7 @@ public:
         if (AppData()->BridgeModeEnabled) {
             json["Cluster"]["BridgeModeEnabled"] = true;
         }
+        json["Features"]["EnableShowCreate"] = AppData()->FeatureFlags.GetEnableShowCreate();
         return json;
     }
 

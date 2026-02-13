@@ -140,6 +140,9 @@ struct TEvKqp {
         bool DisableDefaultTimeout = false;
         i64 Generation = 1;
         TString CheckpointId;
+        TString StreamingQueryPath;
+        TString CustomerSuppliedId;
+        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

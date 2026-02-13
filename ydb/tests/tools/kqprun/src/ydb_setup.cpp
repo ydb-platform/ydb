@@ -3,10 +3,14 @@
 #include <library/cpp/colorizer/colors.h>
 
 #include <ydb/core/blob_depot/mon_main.h>
+#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
+
+#include <ydb/services/persqueue_v1/grpc_pq_schema.h>
+#include <ydb/services/persqueue_v1/services_initializer.h>
 
 #include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
@@ -19,6 +23,21 @@ using namespace NKikimrRun;
 namespace NKqpRun {
 
 namespace {
+
+class TKqprunServer : public NKikimr::Tests::TServer {
+    using TBase = NKikimr::Tests::TServer;
+
+public:
+    using TPtr = TIntrusivePtr<TKqprunServer>;
+
+    explicit TKqprunServer(const NKikimr::Tests::TServerSettings& settings)
+        : TBase(settings, /* defaultInit */ false)
+    {}
+
+    void Initialize() {
+        TBase::Initialize();
+    }
+};
 
 class TSessionState {
 public:
@@ -111,6 +130,13 @@ class TYdbSetup::TImpl : public TKikimrSetupBase {
         ui32 Port_;
     };
 
+    inline static NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
+    inline static NColorizer::TColors CerrColors_ = NColorizer::AutoColors(Cerr);
+    inline static std::terminate_handler TerminateHandler_;
+    inline static std::unordered_map<int, void (*)(int)> SignalHandlers_;
+    inline static std::unique_ptr<TFileHandle> StorageHolder_;
+    inline static std::atomic<int> CurrentSignal_ = 0;
+
 private:
     void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) {
         TFsPath diskPath;
@@ -155,6 +181,13 @@ private:
                 ythrow yexception() << "Cannot change domain name without formatting storage, current name " << StorageMeta_.GetDomainName() << ", please use --format-storage";
             }
 
+            if (!Settings_.NodeCount) {
+                Settings_.NodeCount = StorageMeta_.GetNodesCount();
+            }
+            if (!Settings_.StorageGroupCount) {
+                Settings_.StorageGroupCount = StorageMeta_.GetStorageGroupsCount();
+            }
+
             UpdateStorageMeta();
         }
 
@@ -167,32 +200,172 @@ private:
             .ChunkSize = Settings_.PDisksPath ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
             .DiskSize = Settings_.DiskSize ? *Settings_.DiskSize : 32_GB,
             .FormatDisk = formatDisk,
-            .DiskPath = storagePath
+            .DiskPath = storagePath,
+            .EventDispatchTimeout = TDuration::Max()
         };
 
         serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
         serverSettings.SetCustomDiskParams(storage);
+        serverSettings.SetStorageGeneration(0, /* fetchPoolsGeneration */ true);
+    }
 
-        const auto storageGeneration = StorageMeta_.GetStorageGeneration();
-        serverSettings.SetStorageGeneration(storageGeneration, storageGeneration > 0);
+    static void HandleFinalizeSignal(int signal) {
+        int expected = 0;
+        CurrentSignal_.compare_exchange_strong(expected, signal);
+    }
+
+    static void FlushStorageFileHolderOnTerminate() {
+        Finalize();
+
+        if (TerminateHandler_) {
+            TerminateHandler_();
+        }
+    }
+
+    void SetupStorageFileHolder(const TString& storagePath) {
+        StorageHolder_ = std::make_unique<TFileHandle>(TFsPath(storagePath).Child("pdisk_1.dat"), RdWr);
+        if (!StorageHolder_->IsOpen()) {
+            ythrow yexception() << "Failed to open storage file: " << storagePath;
+        }
+
+        std::atexit(&Finalize);
+        TerminateHandler_ = std::set_terminate(&FlushStorageFileHolderOnTerminate);
+
+        SignalHandlerPool_ = MakeHolder<TThreadPool>();
+        SignalHandlerPool_->Start(1);
+        Y_ENSURE(SignalHandlerPool_->AddFunc([]() {
+            while (true) {
+                const auto signal = CurrentSignal_.load();
+                if (!signal) {
+                    Sleep(TDuration::MilliSeconds(100));
+                    continue;
+                }
+
+                Finalize();
+                Cout << Endl << CoutColors_.Yellow() << "INTERRUPTED" << CoutColors_.Default() << Endl;
+
+                if (const auto it = SignalHandlers_.find(signal); it != SignalHandlers_.end()) {
+                    std::signal(signal, it->second);
+                    std::raise(signal);
+                }
+
+                std::exit(1);
+            }
+        }));
+
+        for (auto sig : {SIGTERM, SIGABRT, SIGINT}) {
+            const auto prevHandler = std::signal(sig, &HandleFinalizeSignal);
+            Y_ENSURE(prevHandler != SIG_ERR);
+            SignalHandlers_.emplace(sig, prevHandler);
+        }
+    }
+
+private:
+    void DistributeDefaultResources() {
+        static constexpr ui32 PDISKS_COUNT = 1;
+        static constexpr ui32 PDISKS_SLOTS_COUNT = 16; // Maximal number of VDisks in PDisk (in kqprun storage config 1 VDisks <=> 1 Storage group)
+
+        if (!Settings_.NodeCount) {
+            Settings_.NodeCount = 1;
+        }
+
+        ui64 usedSlots = 1 + Settings_.StorageGroupCount; // One PDisk slot is reserved for static storage group
+        ui64 tenantsToDistribute = !Settings_.StorageGroupCount;
+        for (auto& [_, tenant] : Settings_.Tenants) {
+            if (tenant.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+                if (!tenant.GetNodesCount()) {
+                    tenant.SetNodesCount(1);
+                }
+
+                usedSlots += tenant.GetStorageGroupsCount();
+                tenantsToDistribute += !tenant.GetStorageGroupsCount();
+            }
+        }
+
+        const auto totalSlots = PDISKS_COUNT * PDISKS_SLOTS_COUNT;
+        if (usedSlots + tenantsToDistribute > totalSlots) {
+            auto storageInfo = TStringBuilder() << ".\nMaximum number of storage groups is "
+                << totalSlots - 1 << ", number of PDisks: " << PDISKS_COUNT
+                << ", number of slots per PDisk: " << PDISKS_SLOTS_COUNT << ", one group is reserved for static storage group";
+
+            if (usedSlots > totalSlots) {
+                ythrow yexception() << "Too many storage groups requested: " << usedSlots - 1 << ", try to format storage" << storageInfo;
+            } else {
+                ythrow yexception() << "Too many tenants requested, can not allocate at least one storage group for " << tenantsToDistribute
+                    << " tenants" << (usedSlots - 1 ? TStringBuilder() << ", already used storage groups: " << usedSlots - 1 : TStringBuilder()) << ", try to format storage" << storageInfo;
+            }
+        }
+
+        auto freeSlots = totalSlots - usedSlots;
+        Y_ENSURE(freeSlots >= tenantsToDistribute);
+
+        const auto extractSlots = [&freeSlots, &tenantsToDistribute]() {
+            Y_ENSURE(tenantsToDistribute > 0);
+            auto slots = freeSlots / tenantsToDistribute;
+            freeSlots -= slots;
+            tenantsToDistribute--;
+            Y_ENSURE(freeSlots >= tenantsToDistribute);
+            return slots;
+        };
+
+        if (!Settings_.StorageGroupCount) {
+            if (Settings_.Tenants.empty()) {
+                Settings_.StorageGroupCount = extractSlots();
+            } else {
+                Y_ENSURE(tenantsToDistribute > 0);
+                Settings_.StorageGroupCount = 1;
+                freeSlots--;
+                tenantsToDistribute--;
+            }
+        }
+
+        for (auto& [_, tenant] : Settings_.Tenants) {
+            if (tenant.GetType() != TStorageMeta::TTenant::SERVERLESS && !tenant.GetStorageGroupsCount()) {
+                tenant.SetStorageGroupsCount(extractSlots());
+            }
+        }
+
+        StorageMeta_.SetNodesCount(Settings_.NodeCount);
+        StorageMeta_.SetStorageGroupsCount(Settings_.StorageGroupCount);
+        UpdateStorageMeta();
     }
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerbosityLevel >= EVerbosity::InitLogs);
-        serverSettings
-            .SetDataCenterCount(Settings_.DcCount)
-            .SetPqGateway(Settings_.PqGateway);
-
         SetStorageSettings(serverSettings);
 
         for (const auto& [tenantPath, tenantInfo] : StorageMeta_.GetTenants()) {
-            Settings_.Tenants.emplace(tenantPath, tenantInfo);
+            const auto [it, inserted] = Settings_.Tenants.emplace(tenantPath, tenantInfo);
+            if (inserted) {
+                continue;
+            }
+
+            if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+                auto& info = it->second;
+                if (!info.GetNodesCount()) {
+                    info.SetNodesCount(tenantInfo.GetNodesCount());
+                }
+                if (!info.GetStorageGroupsCount()) {
+                    info.SetStorageGroupsCount(tenantInfo.GetStorageGroupsCount());
+                } else if (info.GetStorageGroupsCount() < tenantInfo.GetStorageGroupsCount()) {
+                    ythrow yexception() << "Reducing number of storage groups is not allowed, number of storage groups in tenant " << tenantPath << " is " << tenantInfo.GetStorageGroupsCount();
+                }
+            }
         }
+
+        DistributeDefaultResources();
+        serverSettings
+            .SetNodeCount(Settings_.NodeCount)
+            .SetDataCenterCount(Settings_.DcCount)
+            .SetPqGateway(Settings_.PqGateway);
+
+        serverSettings.StoragePoolTypes.clear();
+        serverSettings.AddStoragePool("test", TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << ":test", Settings_.StorageGroupCount);
 
         ui32 dynNodesCount = 0;
         for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
             if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
-                serverSettings.AddStoragePool(tenantPath, TStringBuilder() << GetTenantPath(tenantPath) << ":" << tenantPath);
+                serverSettings.AddStoragePool(tenantPath, TStringBuilder() << GetTenantPath(tenantPath) << ":" << tenantPath, tenantInfo.GetStorageGroupsCount());
                 dynNodesCount += tenantInfo.GetNodesCount();
             }
         }
@@ -223,8 +396,9 @@ private:
             if (it->second.GetSharedTenant() != tenantInfo.GetSharedTenant()) {
                 ythrow yexception() << "Can not change tenant " << absolutePath << " shared resources without formatting storage from '" << it->second.GetSharedTenant() << "', please use --format-storage";
             }
-            if (it->second.GetNodesCount() != tenantInfo.GetNodesCount()) {
+            if (it->second.GetNodesCount() != tenantInfo.GetNodesCount() || it->second.GetStorageGroupsCount() != tenantInfo.GetStorageGroupsCount()) {
                 it->second.SetNodesCount(tenantInfo.GetNodesCount());
+                it->second.SetStorageGroupsCount(tenantInfo.GetStorageGroupsCount());
                 UpdateStorageMeta();
             }
             if (Settings_.VerbosityLevel >= EVerbosity::Info) {
@@ -236,9 +410,9 @@ private:
         }
     }
 
-    static void AddTenantStoragePool(Ydb::Cms::StorageUnits* storage, const TString& name) {
+    static void AddTenantStoragePool(Ydb::Cms::StorageUnits* storage, const TString& name, ui64 storageGroupsCount) {
         storage->set_unit_kind(name);
-        storage->set_count(1);
+        storage->set_count(storageGroupsCount);
     }
 
     void CreateTenants() {
@@ -250,13 +424,13 @@ private:
 
             switch (tenantInfo.GetType()) {
                 case TStorageMeta::TTenant::DEDICATED:
-                    AddTenantStoragePool(request.mutable_resources()->add_storage_units(), tenantPath);
+                    AddTenantStoragePool(request.mutable_resources()->add_storage_units(), tenantPath, tenantInfo.GetStorageGroupsCount());
                     CreateTenant(std::move(request), tenantPath, "dedicated", tenantInfo);
                     break;
 
                 case TStorageMeta::TTenant::SHARED:
                     sharedTenants.emplace(tenantPath);
-                    AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), tenantPath);
+                    AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), tenantPath, tenantInfo.GetStorageGroupsCount());
                     CreateTenant(std::move(request), tenantPath, "shared", tenantInfo);
                     break;
 
@@ -293,12 +467,13 @@ private:
         const ui32 domainGrpcPort = grpcPortGen.GetPort();
         NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(domainGrpcPort);
 
-        Server_ = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
-
-        StorageMeta_.SetStorageGeneration(StorageMeta_.GetStorageGeneration() + 1);
-        UpdateStorageMeta();
-
+        Server_ = MakeIntrusive<TKqprunServer>(serverSettings);
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
+        Server_->Initialize();
+
+        if (serverSettings.CustomDiskParams.UseDisk) {
+            SetupStorageFileHolder(serverSettings.CustomDiskParams.DiskPath);
+        }
 
         if (Settings_.GrpcEnabled) {
             Server_->EnableGRpc(GetGrpcSettings(domainGrpcPort, 0));
@@ -348,9 +523,14 @@ private:
                     // Port for first static node also used in cluster initialization
                     Server_->EnableGRpc(GetGrpcSettings(grpcPortGen.GetPort(), node), node, absolutePath);
                 }
-            } else if (Settings_.MonitoringEnabled) {
-                NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-                GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), node, GetRuntime()->GetAppData(node).UserPoolId);
+            } else {
+                NKikimr::NGRpcProxy::V1::IClustersCfgProvider* clustersCfgProvider = nullptr;
+                NKikimr::NGRpcService::V1::ServicesInitializer(GetRuntime()->GetActorSystem(node), NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeIntrusive<NMonitoring::TDynamicCounters>(), &clustersCfgProvider).Execute();
+
+                if (Settings_.MonitoringEnabled) {
+                    NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
+                    GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), node, GetRuntime()->GetAppData(node).UserPoolId);
+                }
             }
 
             if (systemStateInfo) {
@@ -386,7 +566,6 @@ private:
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
         : Settings_(settings)
-        , CoutColors_(NColorizer::AutoColors(Cout))
     {
         TPortGenerator grpcPortGen(PortManager, Settings_.FirstGrpcPort);
         InitializeYqlLogger();
@@ -537,6 +716,27 @@ public:
         NYql::NLog::YqlLogger().ResetBackend(NActors::CreateNullBackend());
     }
 
+    TString GetDefaultDatabase() const {
+        if (StorageMeta_.TenantsSize() > 1) {
+            ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
+        }
+        if (StorageMeta_.TenantsSize() == 1) {
+            return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
+        }
+        return Settings_.DomainName;
+    }
+
+    static void Finalize() try {
+        if (StorageHolder_) {
+            if (!StorageHolder_->Flush()) {
+                Cerr << CerrColors_.Red() << "Failed to flush storage data, errno: " << errno << CerrColors_.Default() << Endl;
+            }
+            StorageHolder_.reset();
+        }
+    } catch (...) {
+        Cerr << CerrColors_.Red() << "Failed to finalize: " << CurrentExceptionMessage() << CerrColors_.Default() << Endl;
+    }
+
 private:
     NActors::TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
@@ -560,21 +760,25 @@ private:
 private:
     void FillQueryRequest(const TRequestOptions& query, NKikimrKqp::EQueryType type, ui32 targetNodeIndex, NKikimrKqp::TEvQueryRequest& event) {
         event.SetTraceId(query.TraceId);
-        event.SetUserToken(NACLib::TUserToken(
-            Settings_.YqlToken,
-            query.UserSID,
-            query.GroupSIDs ? *query.GroupSIDs : TVector<NACLib::TSID>{GetRuntime()->GetAppData(targetNodeIndex).AllAuthenticatedUsers}
-        ).SerializeAsString());
+
+        if (query.UserSID) {
+            event.SetUserToken(NACLib::TUserToken(
+                Settings_.YqlToken,
+                query.UserSID,
+                query.GroupSIDs ? *query.GroupSIDs : TVector<NACLib::TSID>{GetRuntime()->GetAppData(targetNodeIndex).AllAuthenticatedUsers}
+            ).SerializeAsString());
+        }
 
         const auto& database = GetDatabasePath(query.Database);
         auto request = event.MutableRequest();
         request->SetQuery(query.Query);
         request->SetType(type);
         request->SetAction(query.Action);
-        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         request->SetDatabase(database);
         request->SetPoolId(query.PoolId);
         request->MutableYdbParameters()->insert(query.Params.begin(), query.Params.end());
+        request->MutableQueryCachePolicy()->set_keep_in_cache(IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}, type));
 
         if (query.Timeout) {
             request->SetTimeoutMs(query.Timeout.MilliSeconds());
@@ -631,16 +835,6 @@ private:
         ythrow yexception() << "Unknown tenant '" << canonizedPath << "'";
     }
 
-    TString GetDefaultDatabase() const {
-        if (StorageMeta_.TenantsSize() > 1) {
-            ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
-        }
-        if (StorageMeta_.TenantsSize() == 1) {
-            return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
-        }
-        return Settings_.DomainName;
-    }
-
     void UpdateStorageMeta() const {
         if (StorageMetaPath_) {
             TString storageMetaStr;
@@ -654,9 +848,8 @@ private:
 
 private:
     TYdbSetupSettings Settings_;
-    NColorizer::TColors CoutColors_;
 
-    NKikimr::Tests::TServer::TPtr Server_;
+    TKqprunServer::TPtr Server_;
     THolder<NKikimr::Tests::TClient> Client_;
     THolder<NKikimr::Tests::TTenants> Tenants_;
 
@@ -665,6 +858,7 @@ private:
     std::optional<TSessionState> SessionState_;
     TFsPath StorageMetaPath_;
     NKqpRun::TStorageMeta StorageMeta_;
+    THolder<TThreadPool> SignalHandlerPool_;
 };
 
 
@@ -702,6 +896,12 @@ TRequestResult TYdbSetup::QueryRequest(const TRequestOptions& query, TQueryMeta&
     FillQueryMeta(meta, responseRecord);
 
     return TRequestResult(queryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
+}
+
+TRequestResult TYdbSetup::QueryRequest(const TRequestOptions& query) const {
+    TQueryMeta meta;
+    std::vector<Ydb::ResultSet> resultSets;
+    return QueryRequest(query, meta, resultSets, nullptr);
 }
 
 TRequestResult TYdbSetup::YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
@@ -780,6 +980,10 @@ void TYdbSetup::StartTraceOpt() const {
 
 void TYdbSetup::StopTraceOpt() {
     TYdbSetup::TImpl::StopTraceOpt();
+}
+
+TString TYdbSetup::GetDefaultDatabase() const {
+    return Impl_->GetDefaultDatabase();
 }
 
 }  // namespace NKqpRun

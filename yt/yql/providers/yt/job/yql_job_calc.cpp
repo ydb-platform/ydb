@@ -104,6 +104,12 @@ void TYqlCalcJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
         } else {
             flush(value, outType, nullptr);
         }
+
+        value = {};
+        graph->Invalidate();
+        if (auto pos = graph->GetNotConsumedLinear()) {
+            UdfTerminate((TStringBuilder() << pos << " Linear value is not consumed").c_str());
+        }
     }
 }
 

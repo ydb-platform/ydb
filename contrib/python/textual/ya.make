@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.0.0)
+VERSION(2.1.2)
 
 LICENSE(MIT)
 
@@ -56,6 +56,7 @@ PY_SRCS(
     textual/_line_split.py
     textual/_log.py
     textual/_loop.py
+    textual/_markup_playground.py
     textual/_node_list.py
     textual/_on.py
     textual/_opacity.py
@@ -165,6 +166,7 @@ PY_SRCS(
     textual/lazy.py
     textual/logging.py
     textual/map_geometry.py
+    textual/markup.py
     textual/message.py
     textual/message_pump.py
     textual/messages.py
@@ -188,8 +190,10 @@ PY_SRCS(
     textual/screen.py
     textual/scroll_view.py
     textual/scrollbar.py
+    textual/selection.py
     textual/signal.py
     textual/strip.py
+    textual/style.py
     textual/suggester.py
     textual/suggestions.py
     textual/system_commands.py

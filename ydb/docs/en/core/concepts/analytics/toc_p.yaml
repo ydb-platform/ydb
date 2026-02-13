@@ -1,6 +1,9 @@
 items:
   - name: Overview
     href: index.md
+  - name: Detailed
+    include:
+      mode: link
+      path: concepts/toc_p.yaml
   - name: Key Features
     href: olap_features.md
-

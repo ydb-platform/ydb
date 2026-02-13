@@ -343,9 +343,9 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
 }
 
 Y_UNIT_TEST_SUITE(Replication) {
-//    Y_UNIT_TEST(Phantoms_mirror3dc) { DoTest(TBlobStorageGroupType::ErasureMirror3dc); }
-//    Y_UNIT_TEST(Phantoms_block4_2) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block); }
-//    Y_UNIT_TEST(Phantoms_mirror3of4) { DoTest(TBlobStorageGroupType::ErasureMirror3of4); }
+    Y_UNIT_TEST(Phantoms_mirror3dc) { DoTest(TBlobStorageGroupType::ErasureMirror3dc); }
+    Y_UNIT_TEST(Phantoms_block4_2) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(Phantoms_mirror3of4) { DoTest(TBlobStorageGroupType::ErasureMirror3of4); }
 
     using E = EState;
     Y_UNIT_TEST(Phantoms_mirror3dc_special) {
@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(ReplicationSpace) {
                 occupancy = 1 - res->Get()->Record.GetApproximateFreeSpaceShare();
                 isReplicated = res->Get()->Record.GetReplicated();
             });
-    
+
             return { occupancy, isReplicated };
         };
 
@@ -546,7 +546,7 @@ Y_UNIT_TEST_SUITE(ReplicationSpace) {
         }
 
         Ctest << "Evicting second VDisk" << Endl;
-    
+
         // wait for replication
         ctx.Env->Sim(TDuration::Hours(12));
 

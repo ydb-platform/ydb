@@ -22,8 +22,7 @@ namespace builtins
         return types::str();
       else
         return types::str(self.chars().begin() + first,
-                          self.chars().begin() + self.find_last_not_of(to_del) +
-                              1);
+                          self.chars().begin() + self.find_last_not_of(to_del) + 1);
     }
   } // namespace str
 } // namespace builtins

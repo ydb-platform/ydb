@@ -35,7 +35,7 @@ struct IPacketDecoder
     virtual EPacketFlags GetPacketFlags() const = 0;
     virtual TPacketId GetPacketId() const = 0;
     virtual size_t GetPacketSize() const = 0;
-    virtual TSharedRefArray GrabMessage() const = 0;
+    virtual TSharedRefArray GrabMessage() = 0;
 };
 
 struct IPacketEncoder

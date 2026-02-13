@@ -2,12 +2,16 @@
 
 #include "public.h"
 
+#include <yt/yt/client/complex_types/check_type_compatibility.h>
+
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTableSchemaCompatibilityOptions
 {
+    NComplexTypes::TTypeCompatibilityOptions TypeCompatibilityOptions;
+
     bool IgnoreSortOrder = false;
     bool ForbidExtraComputedColumns = true;
     bool IgnoreStableNamesDifference = false;

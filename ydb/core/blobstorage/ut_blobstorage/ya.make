@@ -17,6 +17,7 @@ SRCS(
     backpressure.cpp
     block_race.cpp
     bsc_cache.cpp
+    cancellation.cpp
     counting_events.cpp
     corrupted_reads.cpp
     deadlines.cpp
@@ -39,7 +40,6 @@ SRCS(
     monitoring.cpp
     multiget.cpp
     patch.cpp
-    phantom_blobs.cpp
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
@@ -71,11 +71,13 @@ RECURSE_FOR_TESTS(
     ut_bridge
     ut_check_integrity
     ut_comp_defrag
+    ut_ddisk
     ut_donor
     ut_group_reconfiguration
     ut_huge
     ut_read_only_vdisk
     ut_osiris
+    ut_phantom_blobs
     ut_replication
     ut_scrub
     ut_statestorage

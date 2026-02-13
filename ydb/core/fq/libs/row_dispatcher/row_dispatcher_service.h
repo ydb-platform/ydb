@@ -5,7 +5,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 
 #include <memory>
 
@@ -28,6 +28,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     NYdb::TDriver driver,
     NActors::TMon* monitoring = nullptr,
     ::NMonitoring::TDynamicCounterPtr countersRoot = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
-    NActors::TActorId nodesManagerId = {});
+    NActors::TActorId nodesManagerId = {},
+    bool enableStreamingQueriesCounters = false);
 
 } // namespace NFq

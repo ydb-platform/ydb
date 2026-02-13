@@ -245,12 +245,14 @@ namespace NKikimr {
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                         .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
+                        .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                     },
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStats,
                     .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                     .AccelerationParams = GetAccelerationParams(),
                     .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
+                    .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
                 }),
                 ev->Get()->Deadline
             );
@@ -563,6 +565,7 @@ namespace NKikimr {
             if (CurrentStateFunc() == &TThis::StateWork) {
                 TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
                 bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
+                TInstant now = TActivationContext::Now();
                 // TODO(alexvru): MinLatency support
                 auto process = [&](std::optional<ui32> forceGroupGeneration, TBatchedPutQueue& batch) {
                     if (batch.Queue.size() == 1) {
@@ -583,12 +586,14 @@ namespace NKikimr {
                                     .ExecutionRelay = ev->Get()->ExecutionRelay,
                                     .LatencyQueueKind = kind,
                                     .ForceGroupGeneration = forceGroupGeneration,
+                                    .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                                 },
                                 .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                                 .Stats = PerDiskStats,
                                 .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                                 .AccelerationParams = GetAccelerationParams(),
-                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
+                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
+                                .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
                             }),
                             ev->Get()->Deadline
                         );
@@ -612,7 +617,8 @@ namespace NKikimr {
                                 .Tactic = tactic,
                                 .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                                 .AccelerationParams = GetAccelerationParams(),
-                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
+                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
+                                .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
                             }),
                             TInstant::Max()
                         );
@@ -1060,7 +1066,7 @@ namespace NKikimr {
 
             if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> &&
                     !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
-                ev.MessageRelevanceTracker = MessageRelevanceTracker;
+                ev.MessageRelevanceTracker = TMessageRelevance(RelevanceOwner, ExternalRelevanceWatcher);
                 ui64 cost;
                 if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
                     bool internalQueue;
@@ -1122,6 +1128,14 @@ namespace NKikimr {
         }
         Y_VERIFY_S(!Info->Group || !Info->Group->HasBridgeProxyGroupId() || ForceGroupGeneration, "Type# " << TypeName(*this));
         return true;
+    }
+
+    bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() {
+        if (ExternalRelevanceWatcher && ExternalRelevanceWatcher->expired()) {
+            ReplyAndDie(NKikimrProto::ERROR);
+            return true;
+        }
+        return false;
     }
 
     void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {

@@ -2,6 +2,8 @@
 
 #include "yson_struct.h"
 
+#include "yson_schema.h"
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,7 +40,10 @@ constexpr bool AllDerived = (std::derived_from<TArgs, TBase> && ...);
 template <class TBase, class... TArgs>
 constexpr bool CHierarchy =
     AllDerived<TBase, TArgs...> &&
-    AllDifferent<TBase, TArgs...>;
+    AllDifferent<TArgs...>;
+
+template <class TEnum, TEnum Default, TEnum... TArgs>
+constexpr bool CIsThereDefaultInMapping = ((Default == TArgs) || ...);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -74,14 +79,19 @@ struct TOptionalValue<T, Value>
     static constexpr std::optional<T> OptionalValue = Value;
 };
 
-template <class TEnum, class TDefaultEnumValue, class... TLeafTags>
+template <class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags>
 struct TPolymorphicMapping;
 
-template <class TEnum, TEnum... DefaultValue, TEnum BaseValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
-    requires (CHierarchy<TBase, TDerived...>)
-struct TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TLeafTag<BaseValue, TBase>, TLeafTag<Values, TDerived>...>
-    : public TMappingLeaf<TEnum, BaseValue, TBase, TBase>
-    , public TMappingLeaf<TEnum, Values, TBase, TDerived>...
+template <class TEnum, TEnum... DefaultValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
+    requires (
+        CHierarchy<TBase, TDerived...> &&
+        // This check is needed to avoid compiling code for an enum that doesn't have a mapping.
+        (
+            !TOptionalValue<TEnum, DefaultValue...>::OptionalValue.has_value() ||
+            CIsThereDefaultInMapping<TEnum, DefaultValue..., Values...>)
+        )
+struct TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TBase, TLeafTag<Values, TDerived>...>
+    : public TMappingLeaf<TEnum, Values, TBase, TDerived>...
 {
     template <TEnum Value, class TConcrete>
     using TLeaf = TMappingLeaf<TEnum, Value, TBase, TConcrete>;
@@ -101,7 +111,7 @@ struct TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TLeafT
 
 template <class T>
 constexpr bool IsMapping = requires (T t) {
-    [] <class TEnum, class TDefaultEnumValue, class... TLeafTags> (TPolymorphicMapping<TEnum, TDefaultEnumValue, TLeafTags...>) {
+    [] <class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags> (TPolymorphicMapping<TEnum, TDefaultEnumValue, TBase, TLeafTags...>) {
     } (t);
 };
 
@@ -114,8 +124,8 @@ constexpr bool IsMapping = requires (T t) {
 template <class TBase, class... TDerived>
 concept CHierarchy = NDetail::CHierarchy<TBase, TDerived...>;
 
-template <class TEnum, class TDefaultEnumValue, class... TLeafTags>
-using TPolymorphicEnumMapping = NDetail::TPolymorphicMapping<TEnum, TDefaultEnumValue, TLeafTags...>;
+template <class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags>
+using TPolymorphicEnumMapping = NDetail::TPolymorphicMapping<TEnum, TDefaultEnumValue, TBase, TLeafTags...>;
 
 template <class T>
 concept CPolymorphicEnumMapping = NDetail::IsMapping<T>;
@@ -147,6 +157,7 @@ concept CPolymorphicEnumMapping = NDetail::IsMapping<T>;
 template <CPolymorphicEnumMapping TMapping>
 class TPolymorphicYsonStruct
 {
+public:
     // TODO(arkady-e1ppa): Support non refcounted hierarchies
     // e.g. shared_ptr<TYsonStructLite> or shared_ptr<TExternalizedYsonStruct>.
     // TODO(arkady-e1ppa): Support lookup by enum instead of concrete type.
@@ -156,8 +167,9 @@ class TPolymorphicYsonStruct
     // hierarchy.
     using TKey = typename TMapping::TKey;
     using TBase = typename TMapping::TBaseClass;
+    template <TKey key>
+    using TEnumToDerived = typename TMapping::template TDerivedToEnum<key>;
 
-public:
     using TImplementsYsonStructField = void;
 
     TPolymorphicYsonStruct();
@@ -206,6 +218,14 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void TraverseYsonStruct(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path);
+
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options);
+
 template <CPolymorphicEnumMapping TMapping>
 void Serialize(const TPolymorphicYsonStruct<TMapping>& value, NYson::IYsonConsumer* consumer);
 
@@ -216,13 +236,13 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
 
 //! Usage:
 /*
-    DEFINE_POLYMORPHIC_YSON_STRUCT(Struct,
+    DEFINE_POLYMORPHIC_YSON_STRUCT(Struct, TBaseStruct,
         ((Base)     (TBaseStruct))
         ((Derived1) (TDerivedStruct1))
         ((Derived2) (TDerivedStruct2))
     );
     or
-    DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(Struct, Derived1,
+    DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(Struct, Derived1, TBaseStruct,
         ((Base)     (TBaseStruct))
         ((Derived1) (TDerivedStruct1))
         ((Derived2) (TDerivedStruct2))
@@ -246,19 +266,19 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
         (Apple)
     );
 
-    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum,
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum, TBaseClass,
         ((Pear)  (TPearClass))
         ((Apple) (TAppleClass))
     )
     or
-    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(Struct, EMyEnum, Apple,
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(Struct, EMyEnum, Apple, TBaseClass,
         ((Pear)  (TPearClass))
         ((Apple) (TAppleClass))
     )
 
     // NB(arkady-e1ppa): enum names in the list must be unqualified! E.g.
 
-    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum,
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum, TBaseClass,
         ((EMyEnum::Pear)  (TPearClass))
         ((EMyEnum::Apple) (TAppleClass))
     )

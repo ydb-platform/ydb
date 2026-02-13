@@ -24,7 +24,8 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const size_t maxKeysInRequest,
-        const THashMap<TString, TString>& secureParams
+        const THashMap<TString, TString>& secureParams,
+        bool isMultiMatches = false
     );
 
 } // namespace NYql::NDq

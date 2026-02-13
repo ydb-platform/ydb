@@ -13,6 +13,7 @@ namespace NKikimr::NBlobDepot {
             record.MoveToTrash(this, it->second);
             records.insert(&record);
             InFlightTrashSize -= it->second.BlobSize();
+            AllInFlightTrashBlobs.erase(it->second);
         }
         InFlightTrashBlobs.erase(first, last);
 
@@ -263,7 +264,7 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         record.ClearInFlight(this);
     }
-    
+
     void TData::CollectTrashByHardBarrier(ui8 channel, ui32 groupId, TGenStep hardGenStep,
             const std::function<bool(TLogoBlobID)>& callback) {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);

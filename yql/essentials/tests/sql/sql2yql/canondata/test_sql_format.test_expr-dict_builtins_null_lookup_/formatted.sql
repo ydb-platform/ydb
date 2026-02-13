@@ -1,6 +1,7 @@
 /* postgres can not */
 $d2 = AsDict(AsTuple(1 / 1, 'bar'));
 $d3 = AsDict(AsTuple(1 / 0, 'baz'));
+
 $t1 = AsDict(AsTuple(AsTuple(1, 'key'), AsTuple(1, 'value')));
 $t2 = AsDict(AsTuple(AsTuple(1 / 1, 'key'), AsTuple(2 / 1, 'value')));
 $t3 = AsDict(AsTuple(AsTuple(1 / 0, 'key'), AsTuple(123, 'value')));

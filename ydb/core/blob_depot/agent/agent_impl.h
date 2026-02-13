@@ -449,7 +449,7 @@ namespace NKikimr::NBlobDepot {
             using TFinishCallback = std::function<void(std::optional<TString>, const char*)>;
             void IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId);
 
-            TActorId IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id);
+            TActorId IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator);
 
         protected: // reading logic
             struct TReadContext;

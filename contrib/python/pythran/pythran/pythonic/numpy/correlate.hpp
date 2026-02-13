@@ -24,8 +24,7 @@ namespace numpy
     long NA = shapeA[0];
     long NB = shapeB[0];
 
-    using out_type =
-        typename __combined<typename A::dtype, typename B::dtype>::type;
+    using out_type = typename __combined<typename A::dtype, typename B::dtype>::type;
     // At this point, handling views would slow things down tremendously
     auto inA_ = functor::asarray{}(inA);
     auto inB_ = functor::asarray{}(inB);
@@ -75,21 +74,18 @@ namespace numpy
     } else {
       // Incomplete overlap left
       for (int i = iLeft; i < 0; i++, out_ptr += out_inc) {
-        *out_ptr = wrapper::conjugate(
-            numpy::dot(inA_(types::fast_contiguous_slice(0, NB + i)),
-                       inB_(types::fast_contiguous_slice(-i, NB))));
+        *out_ptr = wrapper::conjugate(numpy::dot(inA_(types::fast_contiguous_slice(0, NB + i)),
+                                                 inB_(types::fast_contiguous_slice(-i, NB))));
       }
       // Complete overlap middle
       for (int i = 0; i <= NA - NB; i++, out_ptr += out_inc) {
-        *out_ptr = wrapper::conjugate(
-            numpy::dot(inA_(types::fast_contiguous_slice(i, i + NB)),
-                       inB_(types::fast_contiguous_slice(0, NB))));
+        *out_ptr = wrapper::conjugate(numpy::dot(inA_(types::fast_contiguous_slice(i, i + NB)),
+                                                 inB_(types::fast_contiguous_slice(0, NB))));
       }
       // Incomplete overlap right.
       for (int i = NA - NB + 1; i < iRight; i++, out_ptr += out_inc) {
-        *out_ptr = wrapper::conjugate(
-            numpy::dot(inA_(types::fast_contiguous_slice(i, NA)),
-                       inB_(types::fast_contiguous_slice(0, NA - i))));
+        *out_ptr = wrapper::conjugate(numpy::dot(inA_(types::fast_contiguous_slice(i, NA)),
+                                                 inB_(types::fast_contiguous_slice(0, NA - i))));
       }
     }
 
@@ -97,8 +93,8 @@ namespace numpy
   }
 
   template <class A, class B>
-  types::ndarray<typename A::dtype, types::pshape<long>>
-  correlate(A const &inA, B const &inB, types::str const &type)
+  types::ndarray<typename A::dtype, types::pshape<long>> correlate(A const &inA, B const &inB,
+                                                                   types::str const &type)
   {
     long NA = inA.template shape<0>();
     long NB = inB.template shape<0>();

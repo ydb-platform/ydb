@@ -33,8 +33,7 @@ namespace numpy
     {
       bool found = false;
       for (; begin != end; ++begin)
-        found |= _nanmin((*begin).begin(), (*begin).end(), min,
-                         utils::int_<N - 1>());
+        found |= _nanmin((*begin).begin(), (*begin).end(), min, utils::int_<N - 1>());
       return found;
     }
   } // namespace

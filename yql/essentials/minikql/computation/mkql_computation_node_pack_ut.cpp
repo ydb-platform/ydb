@@ -458,7 +458,7 @@ protected:
     }
 
     void TestOptionalStringValue(std::optional<std::string_view> value, TValuePackerType& packer, const TString& typeDesc, ui32 expectedLength) {
-        TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? *value : TString("null"));
+        TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? *value : "null");
         const auto v = value ? NUdf::TUnboxedValue(MakeString(*value)) : NUdf::TUnboxedValue();
         const auto uValue = TestPackUnpack(packer, v, additionalMsg, expectedLength);
         if (value) {
@@ -705,11 +705,11 @@ protected:
             UNIT_ASSERT_C(!choices.empty(), "Choices should not be empty");
         }
 
-        ui64 GetSize() const {
+        ui64 GetSize() const override {
             return Choices_.size();
         }
 
-        void Set(ui64 index) {
+        void Set(ui64 index) override {
             UNIT_ASSERT_LE_C(index + 1, Choices_.size(), "Invalid args dispatcher index");
             Dst_ = Choices_[index];
         }

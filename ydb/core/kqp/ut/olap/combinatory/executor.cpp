@@ -8,9 +8,7 @@
 
 namespace NKikimr::NKqp {
 
-void TScriptExecutor::Execute() {
-    auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+void TScriptExecutor::Execute(const TKikimrSettings& settings) {
     TKikimrRunner kikimr(settings);
     auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
     csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
@@ -24,6 +22,12 @@ void TScriptExecutor::Execute() {
                    "count", NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val());
     AFL_VERIFY(NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val() == 0)(
                    "count", NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val());
+}
+
+void TScriptExecutor::Execute() {
+    auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+    Execute(settings);
 }
 
 }   // namespace NKikimr::NKqp

@@ -26,6 +26,33 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+TComputationUpvalues::TComputationUpvalues(TComputationContext& ctx, IComputationNode* lambdaNode,
+                                           const TComputationExternalNodePtrVector& argNodes) {
+    std::set<const IComputationNode*> argSet(argNodes.cbegin(), argNodes.cend());
+    for (const auto uv : lambdaNode->GetUpvalues()) {
+        if (!argSet.contains(uv)) {
+            UpvalueNodes_.push_back(uv);
+        }
+    }
+    for (const auto uv : UpvalueNodes_) {
+        ClosedUpvalues_.push_back(uv->GetValue(ctx));
+    }
+    PreservedUpvalues_.resize(ClosedUpvalues_.size());
+}
+
+void TComputationUpvalues::SetUpvalues(TComputationContext& ctx) const {
+    for (size_t i = 0; i < UpvalueNodes_.size(); i++) {
+        PreservedUpvalues_[i] = UpvalueNodes_[i]->GetValue(ctx);
+        UpvalueNodes_[i]->SetValue(ctx, NUdf::TUnboxedValue(ClosedUpvalues_[i]));
+    }
+}
+
+void TComputationUpvalues::RestoreUpvalues(TComputationContext& ctx) const {
+    for (size_t i = 0; i < UpvalueNodes_.size(); i++) {
+        UpvalueNodes_[i]->SetValue(ctx, std::move(PreservedUpvalues_[i]));
+    }
+}
+
 std::unique_ptr<IArrowKernelComputationNode> IComputationNode::PrepareArrowKernelComputationNode(TComputationContext& ctx) const {
     Y_UNUSED(ctx);
     return {};
@@ -44,11 +71,23 @@ TDatumProvider MakeDatumProvider(const IComputationNode* node, TComputationConte
     };
 }
 
+NUdf::ITypeInfoHelper::TPtr TComputationContext::MakeTypeHelper(TMaybe<NUdf::TSourcePosition>& target) {
+    auto ret = MakeIntrusive<TTypeInfoHelper>();
+    ret->SetNotConsumedLinearCallback([&target](const NUdf::TSourcePosition& pos) {
+        if (!target) {
+            target = pos;
+        }
+    });
+
+    return ret.Release();
+}
+
 TComputationContext::TComputationContext(const THolderFactory& holderFactory,
                                          const NUdf::IValueBuilder* builder,
                                          const TComputationOptsFull& opts,
                                          const TComputationMutables& mutables,
-                                         arrow::MemoryPool& arrowMemoryPool)
+                                         arrow::MemoryPool& arrowMemoryPool,
+                                         TMaybe<NUdf::TSourcePosition>& notConsumedLinear)
     : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder}
     , RandomProvider(opts.RandomProvider)
     , TimeProvider(opts.TimeProvider)
@@ -56,11 +95,12 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     , WideFields(mutables.CurWideFieldsIndex, nullptr)
     , TypeEnv(opts.TypeEnv)
     , Mutables(mutables)
-    , TypeInfoHelper(new TTypeInfoHelper)
+    , TypeInfoHelper(MakeTypeHelper(notConsumedLinear))
     , CountersProvider(opts.CountersProvider)
     , SecureParamsProvider(opts.SecureParamsProvider)
     , LogProvider(opts.LogProvider)
     , LangVer(opts.LangVer)
+    , NotConsumedLinear(notConsumedLinear)
 {
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
 
@@ -128,7 +168,7 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
 
 class TSimpleSecureParamsProvider: public NUdf::ISecureParamsProvider {
 public:
-    TSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams)
+    explicit TSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams)
         : SecureParams_(secureParams)
     {
     }

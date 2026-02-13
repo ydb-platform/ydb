@@ -8,7 +8,7 @@ namespace NYT::NRpc {
 
 struct THedgingChannelOptions
 {
-    IHedgingManagerPtr HedgingManager;
+    TDuration HedgingDelay;
     bool CancelPrimaryOnHedging = false;
 };
 
@@ -16,7 +16,6 @@ struct THedgingChannelOptions
 //! if no response comes within delay, re-sends the request to #backupChannel
 //! (optionally canceling the initial request).
 //! Whatever underlying channel responds first is the winner.
-//! HedgingManager determines hedging delay and may restrain channel from sending backup request.
 IChannelPtr CreateHedgingChannel(
     IChannelPtr primaryChannel,
     IChannelPtr backupChannel,

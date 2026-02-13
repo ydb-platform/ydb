@@ -10,7 +10,6 @@ PEERDIR(
 )
 
 SRCS(
-    attributes_md5_ut.cpp
     infly_ut.cpp
     message_delay_stats_ut.cpp
     sha256_ut.cpp

@@ -3,7 +3,7 @@
 #include "command.h"
 #include "client_command_options.h"
 
-#include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -87,7 +87,7 @@ public:
     }
 
     static TString FormatHelp(const TStringBuf helpMessage, size_t verbosityLevel, size_t indentSize = 0, char indentC = ' ') {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
 
         TStringBuilder help;
         help << helpMessage;

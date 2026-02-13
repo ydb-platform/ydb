@@ -135,6 +135,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(500);
     registrar.Parameter("fetch_from_peers", &TThis::FetchFromPeers)
         .Default(true);
+    registrar.Parameter("fetch_node_descriptors", &TThis::FetchNodeDescriptors)
+        .Default(false);
     registrar.Parameter("peer_expiration_timeout", &TThis::PeerExpirationTimeout)
         .Default(TDuration::Seconds(300));
     registrar.Parameter("populate_cache", &TThis::PopulateCache)

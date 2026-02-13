@@ -11,6 +11,8 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
 #include "tls/tls.h"
 
@@ -28,7 +30,8 @@ public:
           ui32 numDynamicNodes = 0, ui32 numThreads = 1,
           TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = DefaultInflight(),
           ESocketSendOptimization sendOpt = ESocketSendOptimization::DISABLED,
-          bool withTls = false, std::function<IActor*(ui32)> checkerFactory = {}) {
+          bool withTls = false, std::function<IActor*(ui32)> checkerFactory = {},
+          NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -53,6 +56,10 @@ public:
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
         common->Settings.SocketSendOptimization = sendOpt;
         common->OutgoingHandshakeInflightLimit = 3;
+
+        #if !defined(_msan_enabled_)
+        common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+        #endif
 
         if (withTls) {
             common->Settings.Certificate = NInterconnect::GetCertificateForTest();
@@ -84,6 +91,9 @@ public:
         }
 
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(),
+            TMailboxType::ReadAsFilled, 0));
+        setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
+            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, 1024, rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

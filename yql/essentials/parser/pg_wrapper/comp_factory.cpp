@@ -3818,6 +3818,7 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(TPgType* type, char cmd, TInput
 }
 
 NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgTypeId) {
+    TOnlyThrowingBindTerminator exceptionGuard;
     if (!NPg::HasType(pgTypeId)) {
         return MakeString(binary);
     }
@@ -3866,6 +3867,7 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
 }
 
 NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId) {
+    TOnlyThrowingBindTerminator exceptionGuard;
     TString str{ text };
 
     TPAllocScope call;

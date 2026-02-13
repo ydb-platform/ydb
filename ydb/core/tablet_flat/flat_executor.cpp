@@ -2,6 +2,7 @@
 #include "flat_executor_bootlogic.h"
 #include "flat_executor_txloglogic.h"
 #include "flat_executor_borrowlogic.h"
+#include "flat_backup.h"
 #include "flat_bio_actor.h"
 #include "flat_executor_snapshot.h"
 #include "flat_scan_actor.h"
@@ -150,7 +151,7 @@ bool TExecutor::OnUnhandledException(const std::exception& e) {
             log << "Tablet " << TabletId() << " unhandled exception " << TypeName(e) << ": " << e.what()
                 << '\n' << TBackTrace::FromCurrentException().PrintToString();
         }
-        Broken();
+        Broken(EBrokenReason::Exception);
         return true;
     }
 
@@ -223,8 +224,20 @@ void TExecutor::PassAway() {
     return TActor::PassAway();
 }
 
-void TExecutor::Broken() {
-    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_broken", true)->Inc();
+static TString BrokenAlertNameException("alerts_exception");
+static TString BrokenAlertNameOther("alerts_broken");
+
+const TString& TExecutor::BrokenAlertName(EBrokenReason reason) {
+    switch (reason) {
+        case EBrokenReason::Exception:
+            return BrokenAlertNameException;
+        default:
+            return BrokenAlertNameOther;
+    }
+}
+
+void TExecutor::Broken(EBrokenReason reason) {
+    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter(BrokenAlertName(reason), true)->Inc();
 
     if (BootLogic)
         BootLogic->Cancel();
@@ -541,7 +554,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     PlanTransactionActivation();
 
-    StartBackup();
+    StartNewBackup();
 
     Owner->ActivateExecutor(OwnerCtx());
 
@@ -561,7 +574,7 @@ void TExecutor::TranscriptBootOpResult(ui32 res, const TActorContext &ctx) {
             logl << NFmt::Do(*this) << " Broken while booting";
         }
 
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     default:
         Y_TABLET_ERROR("unknown boot result");
     }
@@ -580,7 +593,7 @@ void TExecutor::TranscriptFollowerBootOpResult(ui32 res, const TActorContext &ct
             logl << NFmt::Do(*this) << " Broken while follower booting";
         }
 
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     default:
         Y_TABLET_ERROR("unknown boot result");
     }
@@ -1424,7 +1437,7 @@ void TExecutor::Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorConte
             logl << NFmt::Do(*this) << " Broken while loading blobs";
         }
 
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     }
 }
 
@@ -1967,13 +1980,6 @@ bool TExecutor::CancelTransaction(ui64 id) {
 
     TSeat* seat = it->second.get();
     switch (seat->State) {
-        case ESeatState::None:
-            // Transaction is not paused in any way
-            Y_DEBUG_ABORT_UNLESS(false,
-                "Tablet %" PRIu64 " CancelTransaction(%" PRIu64 ") from inside transaction?",
-                TabletId(), id);
-            return false;
-
         case ESeatState::Active:
             ActivationQueue.Remove(seat);
             Y_ENSURE(ActivateTransactionWaiting > 0);
@@ -2002,9 +2008,7 @@ bool TExecutor::CancelTransaction(ui64 id) {
             return true;
 
         default:
-            Y_DEBUG_ABORT_UNLESS(false,
-                "Tablet %" PRIu64 " CancelTransaction(% " PRIu64 ") for a finished transaction",
-                TabletId(), id);
+            // Transaction is either running right now or it has finished already
             return false;
     }
 
@@ -3000,7 +3004,7 @@ void TExecutor::Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorC
     Y_UNUSED(ctx);
     Y_ENSURE(BrokenTransaction);
 
-    return Broken();
+    return Broken(EBrokenReason::Transaction);
 }
 
 void TExecutor::Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext&) {
@@ -3051,7 +3055,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_req_nodata", true)->Inc();
                 }
 
-                return Broken();
+                return Broken(EBrokenReason::Storage);
             }
 
             if (requestType == ERequestTypeCookie::StickyPages) {
@@ -3105,7 +3109,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true)->Inc();
                 }
 
-                return Broken();
+                return Broken(EBrokenReason::Storage);
             }
 
             Y_ENSURE(msg->Cookie == 0);
@@ -3199,7 +3203,7 @@ void TExecutor::Handle(TEvTablet::TEvConfirmLeaderResult::TPtr &ev) {
         if (auto logl = Logger->Log(ELnLev::Error)) {
             logl << NFmt::Do(*this) << " Broken on lease confirmation";
         }
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     }
 
     LeaseConfirmed(ev->Cookie);
@@ -3212,7 +3216,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         if (auto logl = Logger->Log(ELnLev::Error)) {
             logl << NFmt::Do(*this) << " Broken on commit error for step " << msg->Step;
         }
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     }
 
     Y_ENSURE(msg->Generation == Generation());
@@ -3654,7 +3658,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         }
 
         CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels), /* terminal */ true);
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     }
 
     TActiveTransactionZone activeTransaction(this);
@@ -4077,6 +4081,12 @@ void TExecutor::ForceSendCounters() {
 }
 
 float TExecutor::GetRejectProbability() const {
+    float rejectProbability = CalcRejectProbability();
+    Counters->Simple()[TExecutorCounters::REJECT_PROBABILITY] = rejectProbability * 100;
+    return rejectProbability;
+}
+
+float TExecutor::CalcRejectProbability() const {
     // Limit number of in-flight TXs
     if (Stats->TxInFly > ui64(MaxTxInFly)) {
         HadRejectProbabilityByTxInFly = true;
@@ -4358,6 +4368,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
         hFunc(NBackup::TEvChangelogFailed, Handle);
+        cFunc(NBackup::TEvStartNewBackup::EventType, StartNewBackup);
     default:
         break;
     }
@@ -5122,40 +5133,57 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
-void TExecutor::StartBackup() {
+void TExecutor::StartNewBackup() {
     if (!Owner->NeedBackup()) {
         return;
     }
 
-    if (!CommitManager) {
+    if (!CommitManager || !LogicRedo) {
         return;
     }
 
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
-    TTabletTypes::EType tabletType = Owner->TabletType();
+    const auto& excludeTabletIds = backupConfig.GetExcludeTabletIds();
     ui64 tabletId = Owner->TabletID();
+
+    if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
+        return;
+    }
+
+    // Ensure that pending commits are flushed to the old backup changelog
+    LogicRedo->FlushBatchedLog();
+
+    TTabletTypes::EType tabletType = Owner->TabletType();
     const auto& scheme = Database->GetScheme();
     const auto& tables = scheme.Tables;
+    auto exclusion = Owner->BackupExclusion();
 
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
-        tabletId, Generation0, scheme.GetSnapshot());
+        tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
     auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
-        tabletId, Generation0, scheme);
+        tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
-        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
-
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
-           auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
-           QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns), 0, opts);
+            if (exclusion && exclusion->HasTable(tableId)) {
+                continue;
+            }
+
+            auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
+            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
         }
+        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
     }
 }
 
 void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
     Owner->BackupSnapshotComplete(OwnerCtx());
+
+    if (CommitManager) {
+        Forward(ev, CommitManager->GetBackupWriter());
+    }
 }
 
 void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {

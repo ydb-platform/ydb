@@ -353,9 +353,13 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
     appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
+    appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
+
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
     appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
     appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
+
+    appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
 
     if (enableMetering) {
         auto& sqsConfig = *appConfig.MutableSqsConfig();
@@ -709,6 +713,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
     config.MutableHttpConfig()->SetYmqEnabled(true);
     config.MutableHttpConfig()->SetSqsTopicEnabled(enableSqsTopic);
+    SqsTopicMode = enableSqsTopic;
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");
 
@@ -790,6 +795,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
 
     GRpcServer = MakeHolder<NYdbGrpc::TGRpcServer>(opts);
     GRpcServer->AddService(new NKikimr::NHttpProxy::TGRpcDiscoveryService(as, credentialsProvider, Counters));
+
     GRpcServer->Start();
 
     Sleep(TDuration::Seconds(1));

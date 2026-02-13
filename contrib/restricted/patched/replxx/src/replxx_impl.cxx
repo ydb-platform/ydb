@@ -576,7 +576,7 @@ void Replxx::ReplxxImpl::set_preload_buffer( std::string const& preloadText ) {
 		if ( whitespaceSeen > 0 ) {
 			it -= whitespaceSeen;
 			*it = ' ';
-			_preloadedBuffer.erase( it + 1, it + whitespaceSeen - 1 );
+			_preloadedBuffer.erase( it + 1, it + whitespaceSeen );
 		}
 		if ( is_control_code( c ) ) { // remove other control characters, flag for message
 			controlsStripped = true;
@@ -601,6 +601,10 @@ void Replxx::ReplxxImpl::set_preload_buffer( std::string const& preloadText ) {
 	if ( controlsStripped ) {
 		_errorMessage.assign( " [Edited line: control characters were converted to spaces]\n" );
 	}
+}
+
+void Replxx::ReplxxImpl::set_preload_buffer_without_changes( std::string const& preloadText ) {
+	_preloadedBuffer = preloadText;
 }
 
 char const* Replxx::ReplxxImpl::read_from_stdin( void ) {

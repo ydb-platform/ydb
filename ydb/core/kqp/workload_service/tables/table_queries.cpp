@@ -61,7 +61,7 @@ public:
         })
     {}
 
-    static TVector<TVector<TString>> GetTablePahs() {
+    static TVector<TVector<TString>> GetTablePaths() {
         return {GetTablePath(DelayedRequests), GetTablePath(RunningRequests)};
     }
 
@@ -162,7 +162,7 @@ class TCleanupTablesActor : public TSchemeActorBase<TCleanupTablesActor> {
 
 public:
     TCleanupTablesActor()
-        : TablePathsToCheck(TTablesCreator::GetTablePahs())
+        : TablePathsToCheck(TTablesCreator::GetTablePaths())
     {}
 
     void DoBootstrap() {

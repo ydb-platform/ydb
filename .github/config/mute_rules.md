@@ -186,3 +186,74 @@ This table shows all files created by the mute logic script, with descriptions o
 | `muted_ya-stable-deleted+flaky_debug.txt` | Details for tests muted_ya - stable - deleted + flaky | owner, success_rate, state, days_in_state, pass_count, fail_count |
 
 ---
+## Muted Tests Workflow Diagram
+
+### Main Workflow: Update Muted YA → PR Merge → Notifications
+
+```mermaid
+graph TB
+    Start([Schedule: Every 2h<br/>or Manual]) --> UpdateAnalytics[📊 Update Analytics<br/>flaky_tests_history<br/>upload_muted_tests<br/>tests_monitor]
+    
+    UpdateAnalytics --> GenerateFile[📝 Generate new muted_ya.txt<br/>create_new_muted_ya.py]
+    
+    GenerateFile --> CheckChanges{Changes?}
+    CheckChanges -->|No| End1([End])
+    CheckChanges -->|Yes| CreatePR[📦 Create PR<br/>with changes]
+    
+    CreatePR --> CommentPR[💬 Comment PR<br/>Add labels & reviewers]
+    CommentPR --> AutoMerge[🔄 Enable auto-merge]
+    AutoMerge --> WaitMerge[⏳ Wait for PR merge]
+    
+    WaitMerge --> PRMerged[✅ PR Merged<br/>Trigger: create_issues_for_muted_tests.yml]
+    
+    PRMerged --> CreateIssues[📋 Create GitHub Issues<br/>for new muted tests]
+    CreateIssues --> CommentMergedPR[💬 Comment merged PR<br/>Add issues info]
+    
+    CommentMergedPR --> UpdateAnalyticsAfterMerge[📊 Update Analytics<br/>upload_muted_tests<br/>flaky_tests_history<br/>tests_monitor<br/>export_issues<br/>github_issue_mapping<br/>test_muted_monitor_mart]
+    
+    UpdateAnalyticsAfterMerge --> SendTelegram[📨 Send Telegram Messages<br/>with trend plots<br/>to team channels]
+    
+    SendTelegram --> End2([End])
+    
+    style Start fill:#e1f5ff
+    style UpdateAnalytics fill:#ffe1ff
+    style UpdateAnalyticsAfterMerge fill:#ffe1ff
+    style CommentPR fill:#fff4e1
+    style CommentMergedPR fill:#fff4e1
+    style SendTelegram fill:#e1ffe1
+    style End1 fill:#ffe1e1
+    style End2 fill:#e1ffe1
+    style CheckChanges fill:#fff4e1
+    style PRMerged fill:#e1e1ff
+```
+
+### Analytics Update Sequence
+
+```mermaid
+sequenceDiagram
+    participant W as Workflow
+    participant YDB as YDB Database
+    participant GH as GitHub
+    participant TG as Telegram
+    
+    Note over W: update_muted_ya.yml (Periodic)
+    W->>YDB: 1. flaky_tests_history.py<br/>Collect test history
+    W->>YDB: 2. upload_muted_tests<br/>Update muted status
+    W->>YDB: 3. tests_monitor.py<br/>Update monitoring
+    W->>W: Generate new muted_ya.txt
+    W->>GH: Create PR (if changes)
+    
+    Note over W: PR Merged → create_issues_for_muted_tests.yml
+    W->>GH: Create issues
+    W->>GH: Comment PR
+    
+    W->>YDB: 4. upload_muted_tests<br/>Update muted status
+    W->>YDB: 5. flaky_tests_history.py<br/>Collect test history
+    W->>YDB: 6. tests_monitor.py<br/>Update monitoring
+    W->>YDB: 7. export_issues_to_ydb.py<br/>Export GitHub issues
+    W->>YDB: 8. github_issue_mapping.py<br/>Create issue mapping
+    W->>YDB: 9. test_muted_monitor_mart<br/>Update data mart
+    
+    W->>TG: Send messages with plots
+```
+

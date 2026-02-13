@@ -27,6 +27,8 @@
 
 namespace NYql {
 
+constexpr ui32 MaxGraphDepth = 1000U;
+
 const TStringBuf ZeroString = "";
 const char Dot = '.';
 const char Sep = '/';
@@ -106,6 +108,11 @@ void DumpNode(const TExprNode& node, IOutputStream& out, ui32 level, TNodeSet& v
 
     out << "\n";
     if (showChildren) {
+        if (level > MaxGraphDepth) {
+            out << node.ChildrenSize() << " children\n";
+            return;
+        }
+
         for (auto& child : node.Children()) {
             DumpNode(*child, out, level + 1, visited);
         }
@@ -133,7 +140,7 @@ struct TContext {
     TString File;
     ui16 SyntaxVersion = 0;
 
-    TContext(TExprContext& expr)
+    explicit TContext(TExprContext& expr)
         : Expr(expr)
     {
     }
@@ -654,6 +661,14 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
             return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Unit"), pool);
         }
 
+        case ETypeAnnotationKind::Universal: {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Universal"), pool);
+        }
+
+        case ETypeAnnotationKind::UniversalStruct: {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("UniversalStruct"), pool);
+        }
+
         case ETypeAnnotationKind::Tuple: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tuple"), pool);
             TSmallVec<TAstNode*> children;
@@ -935,7 +950,7 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx);
 
 TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) {
     if (node.IsAtom()) {
-        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), TString(node.GetContent()), node.GetFlags()));
+        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), node.GetContent(), node.GetFlags()));
     } else {
         TExprNode::TListType children;
         children.reserve(node.GetChildrenCount());
@@ -977,7 +992,7 @@ TExprNode::TListType CompileLambda(const TAstNode& node, TContext& ctx) {
     TExprNode::TListType argNodes;
     for (ui32 index = 0; index < params->GetChildrenCount(); ++index) {
         auto arg = params->GetChild(index);
-        auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), TString(arg->GetContent())));
+        auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), arg->GetContent()));
         argNodes.push_back(lambdaArg);
         auto& binding = ctx.Frames.back().Bindings[arg->GetContent()];
         if (!binding.empty()) {
@@ -1085,7 +1100,10 @@ TExprNode::TPtr CompileBind(const TAstNode& node, TContext& ctx) {
 
         return ctx.Expr.DeepCopy(*ex->second, exportsPtr->ExprCtx(), ctx.DeepClones, true, false);
     } else {
-        const auto stub = ctx.Expr.NewAtom(node.GetPosition(), "stub");
+        /* clang-format off */
+        const auto stub = ctx.Expr.NewCallable(node.GetPosition(), "InstanceOf",
+            {ctx.Expr.NewCallable(node.GetPosition(), "UniversalType", {})});
+        /* clang-format on */
         ctx.Frames.back().Bindings[name->GetContent()] = {stub};
         ctx.Cohesion.Imports[stub.Get()] = std::make_pair(import, TString(aliasValue));
         return stub;
@@ -1412,7 +1430,7 @@ TExprNode::TListType CompileFunction(const TAstNode& root, TContext& ctx, bool t
         return {};
     }
 
-    if (ctx.Frames.size() > 1000U) {
+    if (ctx.Frames.size() > MaxGraphDepth) {
         ctx.AddError(root, "Too deep graph!");
         return {};
     }
@@ -1681,7 +1699,7 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx) {
         std::move(r.begin(), r.end(), std::back_inserter(children));
     }
 
-    return {ctx.ProcessNode(node, ctx.Expr.NewCallable(node.GetPosition(), TString(function), std::move(children)))};
+    return {ctx.ProcessNode(node, ctx.Expr.NewCallable(node.GetPosition(), function, std::move(children)))};
 }
 
 template <typename T>
@@ -1694,7 +1712,7 @@ template <typename K, typename V>
 using TUnorderedMapIAllocator = std::unordered_map<K, V, std::hash<K>, std::equal_to<K>, TStdIAllocator<std::pair<const K, V>>>;
 
 struct TFrameContext {
-    TFrameContext(IAllocator* allocator)
+    explicit TFrameContext(IAllocator* allocator)
         : Nodes(std::less<size_t>(), allocator)
         , TopoSortedNodes(allocator)
         , Bindings(0, allocator)
@@ -1747,8 +1765,8 @@ struct TVisitNodeContext {
             }
         }
 
-        static const TString stub;
-        return stub;
+        static const TString Stub;
+        return Stub;
     }
 
     size_t FindCommonAncestor(size_t one, size_t two) const {
@@ -1799,7 +1817,11 @@ void RevisitNode(const TExprNode& node, TVisitNodeContext& ctx) {
     }
 }
 
-void VisitNode(const TExprNode& node, size_t neighbors, TVisitNodeContext& ctx) {
+void VisitNode(const TExprNode& node, size_t neighbors, TVisitNodeContext& ctx, ui32 depth) {
+    if (depth > MaxGraphDepth) {
+        throw TErrorException(0) << "Too deep graph!";
+    }
+
     if (TExprNode::Argument == node.Type()) {
         return;
     }
@@ -1823,13 +1845,13 @@ void VisitNode(const TExprNode& node, size_t neighbors, TVisitNodeContext& ctx) 
                 ctx.CurrentFrame->Parent = parentIndex;
                 VisitArguments(node.Head(), ctx);
                 for (ui32 i = 1U; i < node.ChildrenSize(); ++i) {
-                    VisitNode(*node.Child(i), node.ChildrenSize() - 1U, ctx);
+                    VisitNode(*node.Child(i), node.ChildrenSize() - 1U, ctx, depth + 1);
                 }
                 ctx.CurrentFrame = &ctx.Frames.front() + prevFrameIndex;
             }
         } else {
             node.ForEachChild([&](const TExprNode& child) {
-                VisitNode(child, node.ChildrenSize(), ctx);
+                VisitNode(child, node.ChildrenSize(), ctx, depth + 1);
             });
         }
 
@@ -2176,7 +2198,11 @@ TNodeSetPtr MergeUnresolvedArgs(const TNodeSetPtr& one, const TNodeSetPtr& two) 
     return inserted ? result : bigger;
 }
 
-TNodeSetPtr CollectUnresolvedArgs(const TExprNode& root, TNodeMap<TNodeSetPtr>& unresolvedArgs, TNodeSet& allArgs) {
+TNodeSetPtr CollectUnresolvedArgs(const TExprNode& root, TNodeMap<TNodeSetPtr>& unresolvedArgs, TNodeSet& allArgs, ui32 depth) {
+    if (depth > MaxGraphDepth) {
+        throw TErrorException(0) << "Too deep graph!";
+    }
+
     auto it = unresolvedArgs.find(&root);
     if (it != unresolvedArgs.end()) {
         return it->second;
@@ -2207,7 +2233,7 @@ TNodeSetPtr CollectUnresolvedArgs(const TExprNode& root, TNodeMap<TNodeSetPtr>& 
             });
 
             for (ui32 i = 1U; i < root.ChildrenSize(); ++i) {
-                const auto bodyUnresolvedArgs = CollectUnresolvedArgs(*root.Child(i), unresolvedArgs, allArgs);
+                const auto bodyUnresolvedArgs = CollectUnresolvedArgs(*root.Child(i), unresolvedArgs, allArgs, depth + 1);
                 result = ExcludeFromUnresolved(arguments, bodyUnresolvedArgs);
             }
             break;
@@ -2215,7 +2241,7 @@ TNodeSetPtr CollectUnresolvedArgs(const TExprNode& root, TNodeMap<TNodeSetPtr>& 
         case TExprNode::Callable:
         case TExprNode::List: {
             root.ForEachChild([&](const TExprNode& child) {
-                result = MergeUnresolvedArgs(result, CollectUnresolvedArgs(child, unresolvedArgs, allArgs));
+                result = MergeUnresolvedArgs(result, CollectUnresolvedArgs(child, unresolvedArgs, allArgs, depth + 1));
             });
             break;
         }
@@ -2696,7 +2722,7 @@ void CheckArguments(const TExprNode& root) {
     try {
         TNodeMap<TNodeSetPtr> unresolvedArgsMap;
         TNodeSet allArgs;
-        auto rootUnresolved = CollectUnresolvedArgs(root, unresolvedArgsMap, allArgs);
+        auto rootUnresolved = CollectUnresolvedArgs(root, unresolvedArgsMap, allArgs, 0);
         if (rootUnresolved && !rootUnresolved->empty()) {
             TVector<ui64> ids;
             for (auto& i : *rootUnresolved) {
@@ -2704,6 +2730,8 @@ void CheckArguments(const TExprNode& root) {
             }
             ythrow yexception() << "detected unresolved arguments at top level: #[" << JoinSeq(", ", ids) << "]";
         }
+    } catch (TErrorException&) {
+        throw;
     } catch (yexception& e) {
         e << "\n"
           << root.Dump();
@@ -2722,7 +2750,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     ctx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
     ctx.Frames.push_back(TFrameContext(settings.Allocator));
     ctx.CurrentFrame = &ctx.Frames.front();
-    VisitNode(root, 0ULL, ctx);
+    VisitNode(root, 0ULL, ctx, 0);
     ui32 uniqueNum = 0;
 
     for (auto& frame : ctx.Frames) {
@@ -2761,6 +2789,54 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, u
     settings.AnnotationFlags = annotationFlags;
     settings.RefAtoms = refAtoms;
     return ConvertToAst(root, exprContext, settings);
+}
+
+void TExprNode::DestroyNode(TExprNode::TPtr& node, TExprNode*& root) {
+    if (!node) {
+        return;
+    }
+
+    if (node->UseCount() == 1) {
+        auto p = node.Release();
+        p->MarkDead();
+        p->Link_ = root;
+        root = p;
+    } else {
+        node = nullptr;
+    }
+}
+
+void TExprNode::VisitNodePtrs(TExprNode*& root) {
+    for (auto& c : Children_) {
+        DestroyNode(c, root);
+    }
+
+    Children_.clear();
+    if (Result_) {
+        DestroyNode(Result_, root);
+    }
+
+    if (WorldLinks_) {
+        if (WorldLinks_.use_count() == 1) {
+            for (auto& c : *WorldLinks_) {
+                DestroyNode(c, root);
+            }
+        }
+
+        WorldLinks_.reset();
+    }
+}
+
+void TExprNode::DestroyPtrs() {
+    // we should avoid recursion here
+    TExprNode* root = nullptr;
+    VisitNodePtrs(root);
+
+    while (root) {
+        auto p = root;
+        root = root->Link_;
+        p->VisitNodePtrs(root);
+    }
 }
 
 TString TExprNode::Dump() const {
@@ -3354,6 +3430,30 @@ ui64 MakePgExtensionMask(ui32 extensionIndex) {
     return 1ull << (extensionIndex - 1);
 }
 
+TExprCycleDetector::TExprCycleDetector(ui64 maxQueueSize)
+    : MaxQueueSize_(maxQueueSize)
+{
+}
+
+void TExprCycleDetector::Reset() {
+    Queue_.clear();
+    Set_.clear();
+}
+
+void TExprCycleDetector::AddNode(const TExprNode& node) {
+    auto hash = MakeCacheKey(node);
+    if (!Set_.insert(hash).second) {
+        throw yexception() << "Graph cycle detected";
+    }
+
+    Queue_.push(hash);
+    if (Queue_.size() > MaxQueueSize_) {
+        auto prevHash = Queue_.front();
+        Set_.erase(prevHash);
+        Queue_.pop();
+    }
+}
+
 TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)
@@ -3387,7 +3487,7 @@ TPositionHandle TExprContext::AppendPosition(const TPosition& pos) {
     return *inserted.first;
 }
 
-TPosition TExprContext::GetPosition(TPositionHandle handle) const {
+const TPosition& TExprContext::GetPosition(TPositionHandle handle) const {
     YQL_ENSURE(handle.Handle_ < Positions_.size(), "Unknown PositionHandle");
     return Positions_[handle.Handle_];
 }
@@ -3420,6 +3520,7 @@ void TExprContext::Reset() {
     IssueManager.Reset();
     Step.Reset();
     RepeatTransformCounter = 0;
+    ResetCycleDetector();
 }
 
 bool TExprContext::IsEqual(TPositionHandle a, TPositionHandle b) const {
@@ -3475,6 +3576,14 @@ const TEmptyDictExprType* TMakeTypeImpl<TEmptyDictExprType>::Make(TExprContext& 
 
 const TUnitExprType* TMakeTypeImpl<TUnitExprType>::Make(TExprContext& ctx) {
     return MakeSinglethonType<TUnitExprType>(ctx);
+}
+
+const TUniversalExprType* TMakeTypeImpl<TUniversalExprType>::Make(TExprContext& ctx) {
+    return MakeSinglethonType<TUniversalExprType>(ctx);
+}
+
+const TUniversalStructExprType* TMakeTypeImpl<TUniversalStructExprType>::Make(TExprContext& ctx) {
+    return MakeSinglethonType<TUniversalStructExprType>(ctx);
 }
 
 const TWorldExprType* TMakeTypeImpl<TWorldExprType>::Make(TExprContext& ctx) {
@@ -3908,6 +4017,14 @@ const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type) {
 }
 
 void TDefaultTypeAnnotationVisitor::Visit(const TUnitExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TUniversalExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TUniversalStructExprType& type) {
     Y_UNUSED(type);
 }
 

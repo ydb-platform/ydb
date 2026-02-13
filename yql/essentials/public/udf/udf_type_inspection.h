@@ -94,13 +94,13 @@ public:
 class TStubTypeVisitor: public TStubTypeVisitor7 {
 public:
     using TBase = TStubTypeVisitor7;
-    TStubTypeVisitor(ui16 compatibilityVersion);
+    explicit TStubTypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 class TStubTypeVisitor: public TStubTypeVisitor6 {
 public:
     using TBase = TStubTypeVisitor6;
-    TStubTypeVisitor(ui16 compatibilityVersion);
+    explicit TStubTypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 class TStubTypeVisitor: public TStubTypeVisitor5 {

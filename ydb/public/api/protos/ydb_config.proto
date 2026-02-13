@@ -108,6 +108,14 @@ message ReplaceConfigResult {}
 message FetchConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
+    message SeedNodeFetchRequestor {
+        // Config requestor hostname options (any of them will do).
+        repeated string host = 1;
+
+        // Config requestor IC port.
+        int32 port = 2;
+    }
+
     // Settings for mode "all"
     // In this mode server will return all configs to user
     // There are additional settings allowing to transform configs in server answer
@@ -158,6 +166,10 @@ message FetchConfigRequest {
         // Fetch all configs with matching identities
         FetchModeByIdentity target = 3;
     }
+
+    // This is filled in when the config is being fetched from seed node. It will block until requestor is available
+    // in reported config node list.
+    SeedNodeFetchRequestor seed_node_fetch_requestor = 4;
 }
 
 message FetchConfigResponse {
@@ -174,6 +186,9 @@ message ConfigEntry {
 
 message FetchConfigResult {
     repeated ConfigEntry config = 1;
+
+    // if set to true, this config can not be persisted on the receiving node
+    bool transient = 2;
 }
 
 message BootstrapClusterRequest {

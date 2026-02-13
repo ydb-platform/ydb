@@ -134,14 +134,14 @@ using THyperLogLogResource = TBoxedResource<THybridHyperLogLog, HyperLogLogResou
 
 class THyperLogLogCreate: public TBoxedValue {
 public:
-    THyperLogLogCreate(TSourcePosition pos)
+    explicit THyperLogLogCreate(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("Create");
-        return nameRef;
+        static auto Name = TStringRef::Of("Create");
+        return Name;
     }
 
 private:
@@ -181,14 +181,14 @@ private:
 
 class THyperLogLogAddValue: public TBoxedValue {
 public:
-    THyperLogLogAddValue(TSourcePosition pos)
+    explicit THyperLogLogAddValue(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("AddValue");
-        return nameRef;
+        static auto Name = TStringRef::Of("AddValue");
+        return Name;
     }
 
 private:
@@ -230,15 +230,15 @@ private:
 
 class THyperLogLogSerialize: public TBoxedValue {
 public:
-    THyperLogLogSerialize(TSourcePosition pos)
+    explicit THyperLogLogSerialize(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
 public:
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("Serialize");
-        return nameRef;
+        static auto Name = TStringRef::Of("Serialize");
+        return Name;
     }
 
 private:
@@ -278,14 +278,14 @@ private:
 
 class THyperLogLogDeserialize: public TBoxedValue {
 public:
-    THyperLogLogDeserialize(TSourcePosition pos)
+    explicit THyperLogLogDeserialize(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("Deserialize");
-        return nameRef;
+        static auto Name = TStringRef::Of("Deserialize");
+        return Name;
     }
 
 private:
@@ -327,14 +327,14 @@ private:
 
 class THyperLogLogMerge: public TBoxedValue {
 public:
-    THyperLogLogMerge(TSourcePosition pos)
+    explicit THyperLogLogMerge(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("Merge");
-        return nameRef;
+        static auto Name = TStringRef::Of("Merge");
+        return Name;
     }
 
 private:
@@ -376,14 +376,14 @@ private:
 
 class THyperLogLogGetResult: public TBoxedValue {
 public:
-    THyperLogLogGetResult(TSourcePosition pos)
+    explicit THyperLogLogGetResult(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("GetResult");
-        return nameRef;
+        static auto Name = TStringRef::Of("GetResult");
+        return Name;
     }
 
 private:

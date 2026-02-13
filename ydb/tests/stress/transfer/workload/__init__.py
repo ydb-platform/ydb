@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import ydb
+from ydb.tests.stress.common.instrumented_pools import InstrumentedQuerySessionPool
 
 import time
 import unittest
@@ -11,7 +12,7 @@ class Workload(unittest.TestCase):
         self.database = database
         self.endpoint = endpoint
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        self.pool = ydb.QuerySessionPool(self.driver)
+        self.pool = InstrumentedQuerySessionPool(self.driver)
         self.duration = duration
         self.mode = mode
         self.topic = topic

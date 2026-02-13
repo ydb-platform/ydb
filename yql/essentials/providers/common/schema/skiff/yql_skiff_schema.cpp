@@ -14,7 +14,7 @@ namespace NCommon {
 struct TSkiffTypeLoader {
     typedef NYT::TNode TType;
 
-    TSkiffTypeLoader(ui64 nativeYTTypesFlags)
+    explicit TSkiffTypeLoader(ui64 nativeYTTypesFlags)
         : NativeYTTypesFlags(nativeYTTypesFlags)
     {
     }
@@ -27,6 +27,12 @@ struct TSkiffTypeLoader {
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Unit";
+    }
+    TMaybe<TType> LoadUniversalType(ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: Universal";
+    }
+    TMaybe<TType> LoadUniversalStructType(ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: UniversalStruct";
     }
     TMaybe<TType> LoadGenericType(ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Generic";
@@ -222,6 +228,12 @@ struct TSkiffTypeLoader {
         auto altCount = underlyingType["children"].AsList().size();
         underlyingType["wire_type"] = altCount < 256 ? "variant8" : "variant16";
         return underlyingType;
+    }
+    TMaybe<TType> LoadBlockType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: Block";
+    }
+    TMaybe<TType> LoadScalarType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: Scalar";
     }
     void Error(const TString& info) {
         ythrow yexception() << info;

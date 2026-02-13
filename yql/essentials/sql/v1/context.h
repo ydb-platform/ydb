@@ -112,6 +112,7 @@ public:
 
     TString MakeName(const TString& name);
 
+    IOutputStream& Fatal();
     IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
     IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
     bool Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
@@ -255,6 +256,17 @@ public:
 
     TScopedStatePtr CreateScopedState() const;
 
+    EYqlSelectMode GetYqlSelectMode() const {
+        return YqlSelectMode_;
+    }
+
+    void SetYqlSelectMode(EYqlSelectMode mode) {
+        YqlSelectMode_ = mode;
+        if (YqlSelectMode_ != EYqlSelectMode::Disable) {
+            DeriveColumnOrder = true;
+        }
+    }
+
 private:
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,
@@ -290,6 +302,7 @@ private:
     TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations_;
     TString NoColumnErrorContext_ = "in current scope";
     TVector<TBlocks*> CurrentBlocks_;
+    EYqlSelectMode YqlSelectMode_ = EYqlSelectMode::Disable;
 
 public:
     THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
@@ -398,10 +411,10 @@ public:
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
     bool StrictWarningAsError = false;
+    bool WindowNewPipeline = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;
-    EYqlSelectMode YqlSelectMode = EYqlSelectMode::Disable;
 };
 
 class TColumnRefScope {
@@ -453,7 +466,7 @@ protected:
     typedef TSet<ui32> TSetType;
 
 protected:
-    TTranslation(TContext& ctx);
+    explicit TTranslation(TContext& ctx);
 
 public:
     TContext& Context();

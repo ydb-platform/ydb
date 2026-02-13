@@ -249,7 +249,10 @@ private:
 using TState8 = ui64;
 static_assert(sizeof(TState8) == 8);
 
-using TState16 = std::pair<ui64, ui64>;
+struct TState16 {
+    ui64 FirstHalf;
+    ui64 SecondHalf;
+};
 static_assert(sizeof(TState16) == 16);
 
 using TStateArena = void*;
@@ -283,14 +286,8 @@ private:
 public:
     TSSOKey() = default;
 
-    TSSOKey(const TSSOKey& other) {
-        memcpy(U.A, other.U.A, SSO_Length + 1);
-    }
-
-    TSSOKey& operator=(const TSSOKey& other) {
-        memcpy(U.A, other.U.A, SSO_Length + 1);
-        return *this;
-    }
+    TSSOKey(const TSSOKey& other) = default;
+    TSSOKey& operator=(const TSSOKey& other) = default;
 
     static bool CanBeInplace(TStringBuf data) {
         return data.Size() + 1 <= sizeof(TSSOKey);

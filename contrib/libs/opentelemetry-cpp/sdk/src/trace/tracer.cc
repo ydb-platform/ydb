@@ -116,6 +116,10 @@ nostd::shared_ptr<opentelemetry::trace::Span> Tracer::StartSpan(
   {
     flags |= opentelemetry::trace::TraceFlags::kIsSampled;
   }
+  else
+  {
+    flags &= ~opentelemetry::trace::TraceFlags::kIsSampled;
+  }
 
 #if 1
   /* https://github.com/open-telemetry/opentelemetry-specification as of v1.29.0 */

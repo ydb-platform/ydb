@@ -22,7 +22,7 @@
 #include <utility>
 
 #ifdef _WIN32
-#  include "arrow/util/windows_compatibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_compatibility.h"
 #else
 #  include <fcntl.h>
 #  include <sys/stat.h>
@@ -30,18 +30,18 @@
 #  include <cstdio>
 #endif
 
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/filesystem/localfs.h"
-#include "arrow/filesystem/path_util.h"
-#include "arrow/filesystem/type_fwd.h"
-#include "arrow/filesystem/util_internal.h"
-#include "arrow/io/file.h"
-#include "arrow/io/type_fwd.h"
-#include "arrow/util/async_generator.h"
-#include "arrow/util/io_util.h"
-#include "arrow/util/string.h"
-#include "arrow/util/uri.h"
-#include "arrow/util/windows_fixup.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/path_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/file.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/async_generator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/io_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/uri.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_fixup.h"
 
 namespace arrow20::fs {
 

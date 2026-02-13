@@ -1,0 +1,19 @@
+PRAGMA yt.UseQLFilter;
+
+INSERT INTO plato.Output
+SELECT
+    a
+FROM
+    plato.Input
+WHERE
+    a > 5 AND a < 50
+;
+
+INSERT INTO plato.Output
+SELECT
+    a
+FROM
+    plato.Input2
+WHERE
+    f > 50
+;

@@ -5,6 +5,7 @@ namespace NYql {
 
 void RegisterCoSimpleCallables3(TCallableOptimizerMap& map) {
     map["PgGroupRef"] = ExpandPgGroupRef;
+    map["YqlGroupRef"] = ExpandPgGroupRef;
 }
 
 }

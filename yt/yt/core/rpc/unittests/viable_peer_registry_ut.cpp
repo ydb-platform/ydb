@@ -9,6 +9,7 @@
 #include <yt/yt/core/rpc/config.h>
 #include <yt/yt/core/rpc/client.h>
 #include <yt/yt/core/rpc/public.h>
+#include <yt/yt/core/rpc/peer_priority_provider.h>
 #include <yt/yt/core/rpc/viable_peer_registry.h>
 #include <yt/yt/core/rpc/indexed_hash_map.h>
 
@@ -164,7 +165,7 @@ private:
 };
 
 IViablePeerRegistryPtr CreateTestRegistry(
-    EPeerPriorityStrategy peerPriorityStrategy,
+    IPeerPriorityProviderPtr peerPriorityProvider,
     const IChannelFactoryPtr& channelFactory,
     int maxPeerCount,
     std::optional<int> hashesPerPeer = {},
@@ -179,12 +180,28 @@ IViablePeerRegistryPtr CreateTestRegistry(
         config->MinPeerCountForPriorityAwareness = *minPeerCountForPriorityAwareness;
     }
 
-    config->PeerPriorityStrategy = peerPriorityStrategy;
-
     return CreateViablePeerRegistry(
         config,
         BIND([=] (const std::string& address) { return channelFactory->CreateChannel(address); }),
+        peerPriorityProvider,
         Logger);
+}
+
+IViablePeerRegistryPtr CreateTestRegistry(
+    EPeerPriorityStrategy peerPriorityStrategy,
+    const IChannelFactoryPtr& channelFactory,
+    int maxPeerCount,
+    std::optional<int> hashesPerPeer = {},
+    std::optional<int> minPeerCountForPriorityAwareness = {})
+{
+    return CreateTestRegistry(
+        peerPriorityStrategy == EPeerPriorityStrategy::None
+            ? GetDummyPeerPriorityProvider()
+            : GetYPClusterMatchingPeerPriorityProvider(),
+        channelFactory,
+        maxPeerCount,
+        hashesPerPeer,
+        minPeerCountForPriorityAwareness);
 }
 
 std::vector<std::string> AddressesFromChannels(const std::vector<IChannelPtr>& channels)
@@ -323,6 +340,12 @@ IClientRequestPtr CreateRequest(bool enableStickiness = false)
     auto balancingHeaderExt = request->Header().MutableExtension(NRpc::NProto::TBalancingExt::balancing_ext);
     balancingHeaderExt->set_enable_stickiness(enableStickiness);
     return request;
+}
+
+void SetRequestStickyGroupSize(IClientRequestPtr& request, int stickyGroupSize)
+{
+    auto* balancingHeaderExt = request->Header().MutableExtension(NRpc::NProto::TBalancingExt::balancing_ext);
+    balancingHeaderExt->set_sticky_group_size(stickyGroupSize);
 }
 
 TEST_P(TParametrizedViablePeerRegistryTest, GetChannelBasic)
@@ -664,6 +687,75 @@ TEST(TPreferLocalViablePeerRegistryTest, DoNotCrashIfNoLocalPeers)
     EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("a.man.yp-c.yandex.net"));
     auto otherChannel = viablePeerRegistry->PickRandomChannel(req, /*hedgingOptions*/ {});
     EXPECT_EQ(otherChannel->GetEndpointDescription(), "b.sas.yp-c.yandex.net");
+}
+
+TEST(TPreferLocalViablePeerRegistryTest, StickyGroupSize)
+{
+    auto channelFactory = New<TFakeChannelFactory>();
+    auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 4);
+
+    auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
+        NNet::SetLocalHostName(oldLocalHostName);
+    });
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
+
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("a.man.yp-c.yandex.net"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.man.yp-c.yandex.net"));
+
+    auto req = CreateRequest();
+    SetRequestStickyGroupSize(req, 1);
+
+    for (int i = 0; i < 10; ++i) {
+        auto localChannel = viablePeerRegistry->PickStickyChannel(req);
+        EXPECT_TRUE(
+            localChannel->GetEndpointDescription() == "a.man.yp-c.yandex.net" ||
+            localChannel->GetEndpointDescription() == "c.man.yp-c.yandex.net");
+    }
+
+    EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("a.man.yp-c.yandex.net"));
+    for (int i = 0; i < 10; ++i) {
+        auto localChannel = viablePeerRegistry->PickStickyChannel(req);
+        EXPECT_EQ(localChannel->GetEndpointDescription(), "c.man.yp-c.yandex.net");
+    }
+
+    EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("c.man.yp-c.yandex.net"));
+    auto otherChannel = viablePeerRegistry->PickStickyChannel(req);
+    EXPECT_EQ(otherChannel->GetEndpointDescription(), "b.sas.yp-c.yandex.net");
+}
+
+TEST(TPreferLocalViablePeerRegistryTest, YpClusterOverride)
+{
+    auto channelFactory = New<TFakeChannelFactory>();
+    auto mapPeerPriorityProvider = CreateYPClusterMatchingPeerPriorityProviderWithOverrides();
+    auto viablePeerRegistry = CreateTestRegistry(mapPeerPriorityProvider, channelFactory, 4);
+
+    auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
+        NNet::SetLocalHostName(oldLocalHostName);
+    });
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
+
+    auto addressToClusterMapping = THashMap<std::string, std::string>{
+        {"abc", "sas"},
+        {"def", "man"},
+        {"efg", "sas"},
+    };
+
+    mapPeerPriorityProvider->SetAddressToClusterOverride(addressToClusterMapping);
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("abc"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("cde"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("def"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("efg"));
+
+    EXPECT_THAT(
+        channelFactory->GetChannelRegistry(),
+        UnorderedElementsAre("abc", "cde", "def", "efg"));
+
+    auto req = CreateRequest();
+    for (int iter = 0; iter < 100; ++iter) {
+        auto channel = viablePeerRegistry->PickRandomChannel(req, /*hedgingOptions*/ {});
+        EXPECT_EQ(channel->GetEndpointDescription(), "def");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

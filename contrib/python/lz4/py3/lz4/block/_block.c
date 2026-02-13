@@ -518,5 +518,9 @@ PyInit__block(void)
   Py_INCREF(LZ4BlockError);
   PyModule_AddObject(module, "LZ4BlockError", LZ4BlockError);
 
+  #ifdef Py_GIL_DISABLED
+    PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED);
+  #endif
+
   return module;
 }

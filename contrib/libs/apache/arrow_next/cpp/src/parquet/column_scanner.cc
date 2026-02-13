@@ -15,12 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/column_scanner.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_scanner.h"
 
 #include <cstdint>
 #include <memory>
 
-#include "parquet/column_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_reader.h"
 
 using arrow20::MemoryPool;
 

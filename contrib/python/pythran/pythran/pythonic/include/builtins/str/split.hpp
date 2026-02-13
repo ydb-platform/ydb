@@ -14,11 +14,9 @@ namespace builtins
   namespace str
   {
 
-    types::list<types::str> split(types::str const &in, types::str const &sep,
-                                  long maxsplit = -1);
+    types::list<types::str> split(types::str const &in, types::str const &sep, long maxsplit = -1);
 
-    types::list<types::str> split(types::str const &s,
-                                  types::none_type const & = {},
+    types::list<types::str> split(types::str const &s, types::none_type const & = {},
                                   long maxsplit = -1);
 
     DEFINE_FUNCTOR(pythonic::builtins::str, split);

@@ -135,7 +135,7 @@ public:
         const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
         TLangVersion langver = UnknownLangVersion);
 
-    TString BuildLambdaWithIO(const TString& prefix, const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda, TExprContext& exprCtx);
+    TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda, TExprContext& exprCtx);
 };
 
 } // namespace NYql

@@ -14,10 +14,8 @@ namespace numpy
       -> decltype(full(sutils::getshape(expr), fill_value, d));
 
   template <class E, class F>
-  auto full_like(E const &expr, F fill_value,
-                 types::none_type d = builtins::None)
-      -> decltype(full(sutils::getshape(expr), fill_value,
-                       types::dtype_t<typename E::dtype>()));
+  auto full_like(E const &expr, F fill_value, types::none_type d = builtins::None)
+      -> decltype(full(sutils::getshape(expr), fill_value, types::dtype_t<typename E::dtype>()));
 
   DEFINE_FUNCTOR(pythonic::numpy, full_like)
 } // namespace numpy

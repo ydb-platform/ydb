@@ -8,8 +8,6 @@ namespace NYql::NDq {
     TGenericCredentialsProvider::TGenericCredentialsProvider(
         const TString& structuredTokenJSON,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
-        Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
-
         if (IsStructuredTokenJson(structuredTokenJSON)) {
             TStructuredTokenParser parser = CreateStructuredTokenParser(structuredTokenJSON);
             if (parser.HasBasicAuth()) {

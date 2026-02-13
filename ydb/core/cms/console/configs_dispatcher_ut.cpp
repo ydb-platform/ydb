@@ -1,6 +1,7 @@
 #include "configs_dispatcher.h"
 #include "ut_helpers.h"
 
+#include <ydb/core/config/init/mock.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -921,4 +922,152 @@ config:
         UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
     }
 }
+
+Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
+    
+    TActorId GetRuntimeDispatcherId(TTenantTestRuntime& runtime) {
+        return MakeConfigsDispatcherID(runtime.GetNodeId(0));
+    }
+    
+    TConfigsDispatcherState QueryState(TTenantTestRuntime& runtime, TActorId dispatcherId) {
+        runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new TEvConfigsDispatcher::TEvGetStateRequest()));
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStateResponse>(handle);
+        return response->State;
+    }
+    
+    TString QueryStorageYaml(TTenantTestRuntime& runtime, TActorId dispatcherId) {
+        runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new TEvConfigsDispatcher::TEvGetStorageYamlRequest()));
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStorageYamlResponse>(handle);
+        return response->StorageYaml;
+    }
+    
+    TTenantTestConfig ConfigWithoutDispatcher() {
+        TTenantTestConfig cfg = DefaultConsoleTestConfig();
+        cfg.CreateConfigsDispatcher = false;
+        return cfg;
+    }
+    
+    Y_UNIT_TEST(TestGetStateRequestResponse) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        InitConfigsDispatcher(runtime);
+        
+        TActorId dispatcherId = GetRuntimeDispatcherId(runtime);
+        auto state = QueryState(runtime, dispatcherId);
+        
+        UNIT_ASSERT(!state.ConfigSourceLabel.empty() || state.ConfigSource != EConfigSource::Unknown);
+        UNIT_ASSERT(state.SubscriptionsCount >= 0);
+    }
+    
+    Y_UNIT_TEST(TestGetStorageYamlRequestResponse) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        InitConfigsDispatcher(runtime);
+        
+        TActorId dispatcherId = GetRuntimeDispatcherId(runtime);
+        TString storageYaml = QueryStorageYaml(runtime, dispatcherId);
+        
+        UNIT_ASSERT(storageYaml.empty());
+    }
+    
+    Y_UNIT_TEST(TestSeedNodesInitialization) {
+        NKikimrConfig::TAppConfig config;
+        TString storageYaml = "storage:\n  nodes:\n  - node1:2135\n  - node2:2135\n";
+        config.SetStartupStorageYaml(storageYaml);
+        
+        NConfig::TConfigsDispatcherInitInfo initInfo;
+        initInfo.InitialConfig = config;
+        initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
+        initInfo.StartupStorageYaml = storageYaml;
+        initInfo.Labels["config_source"] = "seed_nodes";
+        initInfo.Labels["configuration_version"] = "v2";
+        initInfo.DebugInfo = NConfig::TDebugInfo{};
+        
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
+        
+        auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
+        TActorId dispatcherId = runtime.Register(dispatcher);
+        runtime.EnableScheduleForActor(dispatcherId, true);
+        
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
+            runtime.DispatchEvents(options);
+        }
+        
+        auto state = QueryState(runtime, dispatcherId);
+        
+        UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::SeedNodes);
+        UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "seed_nodes");
+        UNIT_ASSERT_VALUES_EQUAL(state.ConfigurationVersion, "v2");
+        UNIT_ASSERT(state.HasStorageYaml);
+        UNIT_ASSERT(state.StorageYamlSize > 0);
+        
+        TString retrievedStorageYaml = QueryStorageYaml(runtime, dispatcherId);
+        UNIT_ASSERT_VALUES_EQUAL(retrievedStorageYaml, storageYaml);
+    }
+    
+    Y_UNIT_TEST(TestDynamicConfigInitialization) {
+        
+        NKikimrConfig::TAppConfig config;
+        
+        NConfig::TConfigsDispatcherInitInfo initInfo;
+        initInfo.InitialConfig = config;
+        initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
+        initInfo.Labels["config_source"] = "dynamic";
+        initInfo.Labels["configuration_version"] = "v1";
+        initInfo.DebugInfo = NConfig::TDebugInfo{};
+        
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
+        
+        auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
+        TActorId dispatcherId = runtime.Register(dispatcher);
+        runtime.EnableScheduleForActor(dispatcherId, true);
+        
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
+            runtime.DispatchEvents(options);
+        }
+        
+        auto state = QueryState(runtime, dispatcherId);
+        
+        UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
+        UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "dynamic");
+        UNIT_ASSERT_VALUES_EQUAL(state.ConfigurationVersion, "v1");
+        UNIT_ASSERT(!state.HasStorageYaml);
+        UNIT_ASSERT_VALUES_EQUAL(state.StorageYamlSize, 0);
+        
+        TString retrievedStorageYaml = QueryStorageYaml(runtime, dispatcherId);
+        UNIT_ASSERT(retrievedStorageYaml.empty());
+    }
+    
+    Y_UNIT_TEST(TestUnknownConfigSource) {
+        NKikimrConfig::TAppConfig config;
+        
+        NConfig::TConfigsDispatcherInitInfo initInfo;
+        initInfo.InitialConfig = config;
+        initInfo.StartupConfigYaml = "config: {}\n";
+        initInfo.DebugInfo = NConfig::TDebugInfo{};
+        
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
+        
+        auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
+        TActorId dispatcherId = runtime.Register(dispatcher);
+        runtime.EnableScheduleForActor(dispatcherId, true);
+        
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
+            runtime.DispatchEvents(options);
+        }
+        
+        auto state = QueryState(runtime, dispatcherId);
+        
+        UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
+        UNIT_ASSERT(state.ConfigSourceLabel.empty());
+        UNIT_ASSERT(!state.HasStorageYaml);
+    }
+}
+
 } // namespace NKikimr

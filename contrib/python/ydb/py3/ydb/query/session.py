@@ -1,5 +1,4 @@
 import abc
-import enum
 import json
 import logging
 import threading
@@ -16,7 +15,7 @@ from .base import QueryExplainResultFormat
 
 from .. import _apis, issues, _utilities
 from ..settings import BaseRequestSettings
-from ..connection import _RpcState as RpcState
+from ..connection import _RpcState as RpcState, EndpointKey
 from .._grpc.grpcwrapper import common_utils
 from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from .._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
@@ -29,120 +28,42 @@ from .._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT, DEFAULT_LONG_STREAM_T
 logger = logging.getLogger(__name__)
 
 
-class QuerySessionStateEnum(enum.Enum):
-    NOT_INITIALIZED = "NOT_INITIALIZED"
-    CREATED = "CREATED"
-    CLOSED = "CLOSED"
-
-
-class QuerySessionStateHelper(abc.ABC):
-    _VALID_TRANSITIONS = {
-        QuerySessionStateEnum.NOT_INITIALIZED: [QuerySessionStateEnum.CREATED],
-        QuerySessionStateEnum.CREATED: [QuerySessionStateEnum.CLOSED],
-        QuerySessionStateEnum.CLOSED: [],
-    }
-
-    _READY_TO_USE = [
-        QuerySessionStateEnum.CREATED,
-    ]
-
-    @classmethod
-    def valid_transition(cls, before: QuerySessionStateEnum, after: QuerySessionStateEnum) -> bool:
-        return after in cls._VALID_TRANSITIONS[before]
-
-    @classmethod
-    def ready_to_use(cls, state: QuerySessionStateEnum) -> bool:
-        return state in cls._READY_TO_USE
-
-
-class QuerySessionState(base.IQuerySessionState):
-    _session_id: Optional[str] = None
-    _node_id: Optional[int] = None
-    _attached: bool = False
-    _settings: Optional[base.QueryClientSettings] = None
-    _state: QuerySessionStateEnum = QuerySessionStateEnum.NOT_INITIALIZED
-
-    def __init__(self, settings: base.QueryClientSettings = None):
-        self._settings = settings
-
-    def reset(self) -> None:
-        self._session_id = None
-        self._node_id = None
-        self._attached = False
-
-    @property
-    def session_id(self) -> Optional[str]:
-        return self._session_id
-
-    def set_session_id(self, session_id: str) -> "QuerySessionState":
-        self._session_id = session_id
-        return self
-
-    @property
-    def node_id(self) -> Optional[int]:
-        return self._node_id
-
-    def set_node_id(self, node_id: int) -> "QuerySessionState":
-        self._node_id = node_id
-        return self
-
-    @property
-    def attached(self) -> bool:
-        return self._attached
-
-    def set_attached(self, attached: bool) -> "QuerySessionState":
-        self._attached = attached
-
-    def _check_invalid_transition(self, target: QuerySessionStateEnum) -> None:
-        if not QuerySessionStateHelper.valid_transition(self._state, target):
-            raise RuntimeError(f"Session could not be moved from {self._state.value} to {target.value}")
-
-    def _change_state(self, target: QuerySessionStateEnum) -> None:
-        self._check_invalid_transition(target)
-        self._state = target
-
-    def _check_session_ready_to_use(self) -> None:
-        if not QuerySessionStateHelper.ready_to_use(self._state):
-            raise RuntimeError(f"Session is not ready to use, current state: {self._state.value}")
-
-    def _already_in(self, target) -> bool:
-        return self._state == target
-
-
 def wrapper_create_session(
     rpc_state: RpcState,
     response_pb: _apis.ydb_query.CreateSessionResponse,
-    session_state: QuerySessionState,
     session: "BaseQuerySession",
 ) -> "BaseQuerySession":
     message = _ydb_query.CreateSessionResponse.from_proto(response_pb)
     issues._process_response(message.status)
-    session_state.set_session_id(message.session_id).set_node_id(message.node_id)
+    session._session_id = message.session_id
+    session._node_id = message.node_id
     return session
 
 
 def wrapper_delete_session(
     rpc_state: RpcState,
     response_pb: _apis.ydb_query.DeleteSessionResponse,
-    session_state: QuerySessionState,
     session: "BaseQuerySession",
 ) -> "BaseQuerySession":
     message = _ydb_query.DeleteSessionResponse.from_proto(response_pb)
     issues._process_response(message.status)
-    session_state.reset()
-    session_state._change_state(QuerySessionStateEnum.CLOSED)
+    session._closed = True
     return session
 
 
-class BaseQuerySession:
+class BaseQuerySession(abc.ABC):
     _driver: common_utils.SupportedDriverType
     _settings: base.QueryClientSettings
-    _state: QuerySessionState
+    _stream = None
+
+    # Session data
+    _session_id: Optional[str] = None
+    _node_id: Optional[int] = None
+    _closed: bool = False
 
     def __init__(self, driver: common_utils.SupportedDriverType, settings: Optional[base.QueryClientSettings] = None):
         self._driver = driver
         self._settings = self._get_client_settings(driver, settings)
-        self._state = QuerySessionState(settings)
         self._attach_settings: BaseRequestSettings = (
             BaseRequestSettings()
             .with_operation_timeout(DEFAULT_LONG_STREAM_TIMEOUT)
@@ -151,6 +72,28 @@ class BaseQuerySession:
         )
 
         self._last_query_stats = None
+
+    @property
+    def session_id(self) -> Optional[str]:
+        return self._session_id
+
+    @property
+    def node_id(self) -> Optional[int]:
+        return self._node_id
+
+    @property
+    def is_active(self) -> bool:
+        return self._session_id is not None and not self._closed
+
+    @property
+    def _endpoint_key(self) -> Optional[EndpointKey]:
+        if self._node_id is None:
+            return None
+        return EndpointKey(endpoint=None, node_id=self._node_id)
+
+    @property
+    def is_closed(self) -> bool:
+        return self._closed
 
     @property
     def last_query_stats(self):
@@ -167,32 +110,53 @@ class BaseQuerySession:
             return driver._driver_config.query_client_settings
         return base.QueryClientSettings()
 
+    def _check_session_ready_to_use(self) -> None:
+        if not self.is_active:
+            raise RuntimeError(f"Session is not active, session_id: {self._session_id}, closed: {self._closed}")
+
+    def _invalidate(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+
+        if self._stream is not None:
+            try:
+                self._stream.cancel()
+            except Exception:
+                pass
+
+    def _on_execute_stream_error(self, e: Exception) -> None:
+        if isinstance(e, issues.DeadlineExceed):
+            self._invalidate()
+
     def _create_call(self, settings: Optional[BaseRequestSettings] = None) -> "BaseQuerySession":
         return self._driver(
             _apis.ydb_query.CreateSessionRequest(),
             _apis.QueryService.Stub,
             _apis.QueryService.CreateSession,
             wrap_result=wrapper_create_session,
-            wrap_args=(self._state, self),
+            wrap_args=(self,),
             settings=settings,
         )
 
     def _delete_call(self, settings: Optional[BaseRequestSettings] = None) -> "BaseQuerySession":
         return self._driver(
-            _apis.ydb_query.DeleteSessionRequest(session_id=self._state.session_id),
+            _apis.ydb_query.DeleteSessionRequest(session_id=self._session_id),
             _apis.QueryService.Stub,
             _apis.QueryService.DeleteSession,
             wrap_result=wrapper_delete_session,
-            wrap_args=(self._state, self),
+            wrap_args=(self,),
             settings=settings,
+            preferred_endpoint=self._endpoint_key,
         )
 
     def _attach_call(self) -> Iterable[_apis.ydb_query.SessionState]:
         return self._driver(
-            _apis.ydb_query.AttachSessionRequest(session_id=self._state.session_id),
+            _apis.ydb_query.AttachSessionRequest(session_id=self._session_id),
             _apis.QueryService.Stub,
             _apis.QueryService.AttachSession,
             settings=self._attach_settings,
+            preferred_endpoint=self._endpoint_key,
         )
 
     def _execute_call(
@@ -203,6 +167,9 @@ class BaseQuerySession:
         syntax: base.QuerySyntax = None,
         exec_mode: base.QueryExecMode = None,
         stats_mode: Optional[base.QueryStatsMode] = None,
+        schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
+        result_set_format: Optional[base.QueryResultSetFormat] = None,
+        arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
     ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
@@ -212,12 +179,15 @@ class BaseQuerySession:
             query=query,
             parameters=parameters,
             commit_tx=commit_tx,
-            session_id=self._state.session_id,
+            session_id=self._session_id,
             tx_mode=None,
             tx_id=None,
             syntax=syntax,
             exec_mode=exec_mode,
             stats_mode=stats_mode,
+            schema_inclusion_mode=schema_inclusion_mode,
+            result_set_format=result_set_format,
+            arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=concurrent_result_sets,
         )
 
@@ -226,6 +196,7 @@ class BaseQuerySession:
             _apis.QueryService.Stub,
             _apis.QueryService.ExecuteQuery,
             settings=settings,
+            preferred_endpoint=self._endpoint_key,
         )
 
 
@@ -233,8 +204,6 @@ class QuerySession(BaseQuerySession):
     """Session object for Query Service. It is not recommended to control
     session's lifecycle manually - use a QuerySessionPool is always a better choise.
     """
-
-    _stream = None
 
     def _attach(self, first_resp_timeout: int = DEFAULT_INITIAL_RESPONSE_TIMEOUT) -> None:
         self._stream = self._attach_call()
@@ -248,15 +217,10 @@ class QuerySession(BaseQuerySession):
                 status_stream,
                 first_resp_timeout,
             )
-            if first_response.status != issues.StatusCode.SUCCESS:
-                raise RuntimeError("Failed to attach session")
+            issues._process_response(first_response)
         except Exception as e:
-            self._state.reset()
-            status_stream.cancel()
+            self._invalidate()
             raise e
-
-        self._state.set_attached(True)
-        self._state._change_state(QuerySessionStateEnum.CREATED)
 
         threading.Thread(
             target=self._check_session_status_loop,
@@ -268,35 +232,38 @@ class QuerySession(BaseQuerySession):
     def _check_session_status_loop(self, status_stream: _utilities.SyncResponseIterator) -> None:
         try:
             for status in status_stream:
-                if status.status != issues.StatusCode.SUCCESS:
-                    self._state.reset()
-                    self._state._change_state(QuerySessionStateEnum.CLOSED)
-        except Exception:
-            if not self._state._already_in(QuerySessionStateEnum.CLOSED):
-                self._state.reset()
-                self._state._change_state(QuerySessionStateEnum.CLOSED)
+                issues._process_response(status)
+            logger.debug("Attach stream closed, session_id: %s", self._session_id)
+        except Exception as e:
+            logger.debug("Attach stream error: %s, session_id: %s", e, self._session_id)
+            self._invalidate()
 
     def delete(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Deletes a Session of Query Service on server side and releases resources.
 
         :return: None
         """
-        if self._state._already_in(QuerySessionStateEnum.CLOSED):
+        if self._closed:
             return
 
-        self._state._check_invalid_transition(QuerySessionStateEnum.CLOSED)
-        self._delete_call(settings=settings)
-        self._stream.cancel()
+        if self._session_id:
+            try:
+                self._delete_call(settings=settings)
+            except Exception:
+                pass
+
+        self._invalidate()
 
     def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
         """Creates a Session of Query Service on server side and attaches it.
 
         :return: QuerySession object.
         """
-        if self._state._already_in(QuerySessionStateEnum.CREATED):
-            return
+        if self.is_active:
+            return self
 
-        self._state._check_invalid_transition(QuerySessionStateEnum.CREATED)
+        if self._closed:
+            raise RuntimeError("Session is already closed.")
 
         self._create_call(settings=settings)
         self._attach()
@@ -310,18 +277,18 @@ class QuerySession(BaseQuerySession):
          1) QuerySerializableReadWrite() which is default mode;
          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
          3) QuerySnapshotReadOnly();
-         4) QueryStaleReadOnly().
+         4) QuerySnapshotReadWrite();
+         5) QueryStaleReadOnly().
 
         :return transaction context manager.
 
         """
-        self._state._check_session_ready_to_use()
+        self._check_session_ready_to_use()
 
         tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
 
         return QueryTxContext(
             self._driver,
-            self._state,
             self,
             tx_mode,
         )
@@ -336,6 +303,9 @@ class QuerySession(BaseQuerySession):
         settings: Optional[BaseRequestSettings] = None,
         *,
         stats_mode: Optional[base.QueryStatsMode] = None,
+        schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
+        result_set_format: Optional[base.QueryResultSetFormat] = None,
+        arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
     ) -> base.SyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -350,10 +320,17 @@ class QuerySession(BaseQuerySession):
          2) QueryStatsMode.BASIC;
          3) QueryStatsMode.FULL;
          4) QueryStatsMode.PROFILE;
+        :param schema_inclusion_mode: Schema inclusion mode for result sets:
+         1) QuerySchemaInclusionMode.ALWAYS, which is default;
+         2) QuerySchemaInclusionMode.FIRST_ONLY.
+        :param result_set_format: Format of the result sets:
+         1) QueryResultSetFormat.VALUE, which is default;
+         2) QueryResultSetFormat.ARROW.
+        :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
 
         :return: Iterator with result sets
         """
-        self._state._check_session_ready_to_use()
+        self._check_session_ready_to_use()
 
         stream_it = self._execute_call(
             query=query,
@@ -362,6 +339,9 @@ class QuerySession(BaseQuerySession):
             syntax=syntax,
             exec_mode=exec_mode,
             stats_mode=stats_mode,
+            schema_inclusion_mode=schema_inclusion_mode,
+            result_set_format=result_set_format,
+            arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=concurrent_result_sets,
             settings=settings,
         )
@@ -371,10 +351,10 @@ class QuerySession(BaseQuerySession):
             lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
-                session_state=self._state,
                 session=self,
                 settings=self._settings,
             ),
+            on_error=self._on_execute_stream_error,
         )
 
     def explain(

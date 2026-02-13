@@ -130,7 +130,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                     function toggleButtonColor() {
                         var checkbox = document.getElementById("ignoreChecks");
                         var okButton = document.getElementById("restartOkButton");
-                        
+
                         if (checkbox.checked) {
                             okButton.classList.remove("btn-primary");
                             okButton.classList.add("btn-danger");
@@ -167,7 +167,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
             )___";
 
             str << R"___(
-                <button type="button" class="btn btn-default" style="background: LightGray; margin: 5px" 
+                <button type="button" class="btn btn-default" style="background: LightGray; margin: 5px"
                         data-toggle="modal" data-target="#restartModal">
                     Restart
                 </button>

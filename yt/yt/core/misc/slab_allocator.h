@@ -42,7 +42,7 @@ private:
 
     struct TLargeArenaDeleter
     {
-        void operator() (TLargeArena* arena);
+        void operator()(TLargeArena* arena);
     };
 
     static constexpr int SmallRankCount = 23;

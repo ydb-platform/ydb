@@ -84,7 +84,6 @@ private:
         std::string Predicate;
     };
 
-private:
     std::optional<std::string> Source_;
     bool SourceIsQuery_ = false;
     int SyntaxVersion_ = 1;
@@ -103,6 +102,11 @@ private:
 
     static void FormatEntryWithAlias(TStringBuilderBase* builder, const TEntryWithAlias& entry);
     static void FormatOrderByEntry(TStringBuilderBase* builder, const TOrderByEntry& entry);
+
+    static void AppendBalancedConjunction(
+        TStringBuilderBase* builder,
+        std::vector<std::string>::const_iterator begin,
+        std::vector<std::string>::const_iterator end);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

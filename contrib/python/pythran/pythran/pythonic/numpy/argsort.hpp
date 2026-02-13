@@ -9,16 +9,15 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  types::ndarray<long, types::array_tuple<long, 1>>
-  argsort(E const &expr, types::none_type, types::none_type)
+  types::ndarray<long, types::array_tuple<long, 1>> argsort(E const &expr, types::none_type,
+                                                            types::none_type)
   {
     auto out = functor::array{}(expr).flat();
     return argsort(out);
   }
 
   template <class T, class pS, class Sorter>
-  types::ndarray<long, pS> _argsort(types::ndarray<T, pS> const &a, long axis,
-                                    Sorter sorter)
+  types::ndarray<long, pS> _argsort(types::ndarray<T, pS> const &a, long axis, Sorter sorter)
   {
     constexpr auto N = std::tuple_size<pS>::value;
     if (axis < 0)
@@ -30,8 +29,7 @@ namespace numpy
       size_t step = a.template shape<N - 1>();
 
       auto a_base = a.fbegin();
-      for (long *iter_indices = indices.buffer,
-                *end_indices = indices.buffer + flat_size;
+      for (long *iter_indices = indices.buffer, *end_indices = indices.buffer + flat_size;
            iter_indices != end_indices; iter_indices += step, a_base += step) {
         // fill with the original indices
         std::iota(iter_indices, iter_indices + step, 0L);
@@ -42,8 +40,7 @@ namespace numpy
     } else {
       auto out_shape = sutils::getshape(a);
       const long step =
-          std::accumulate(out_shape.begin() + axis, out_shape.end(), 1L,
-                          std::multiplies<long>());
+          std::accumulate(out_shape.begin() + axis, out_shape.end(), 1L, std::multiplies<long>());
       long const buffer_size = out_shape[axis];
       const long stepper = step / out_shape[axis];
       const long n = flat_size / out_shape[axis];
@@ -54,10 +51,9 @@ namespace numpy
       std::iota(buffer_start, buffer_end, 0L);
       for (long i = 0; i < n; i++) {
         auto a_base = a.fbegin() + ith;
-        sorter(buffer, buffer + buffer_size,
-               [a_base, stepper](long i1, long i2) {
-                 return a_base[i1 * stepper] < a_base[i2 * stepper];
-               });
+        sorter(buffer, buffer + buffer_size, [a_base, stepper](long i1, long i2) {
+          return a_base[i1 * stepper] < a_base[i2 * stepper];
+        });
 
         for (long j = 0; j < buffer_size; ++j)
           indices.buffer[ith + j * stepper] = buffer[j];
@@ -73,8 +69,7 @@ namespace numpy
   }
 
   template <class T, class pS>
-  types::ndarray<long, pS> argsort(types::ndarray<T, pS> const &a, long axis,
-                                   types::none_type)
+  types::ndarray<long, pS> argsort(types::ndarray<T, pS> const &a, long axis, types::none_type)
   {
     return _argsort(a, axis, ndarray::quicksorter());
   }

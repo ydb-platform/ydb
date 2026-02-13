@@ -381,6 +381,47 @@ struct TFollowerUpdates {
     }
 };
 
+// same as NKikimrTabletBase::TMetrics, except not a protobuf - for lighter operations
+struct TMetrics {
+    ui64 CPU = 0;
+    ui64 Memory = 0;
+    ui64 Network = 0;
+    ui64 Counter = 0;
+    ui64 Storage = 0;
+    TVector<NKikimrTabletBase::TThroughputRecord> GroupReadThroughput;
+    TVector<NKikimrTabletBase::TThroughputRecord> GroupWriteThroughput;
+    ui64 ReadThroughput = 0;
+    ui64 WriteThroughput = 0;
+    TVector<NKikimrTabletBase::TIopsRecord> GroupReadIops;
+    TVector<NKikimrTabletBase::TIopsRecord> GroupWriteIops;
+    ui64 ReadIops = 0;
+    ui64 WriteIops = 0;
+
+    TMetrics& operator+=(const TMetrics& other);
+
+    void ToProto(NKikimrTabletBase::TMetrics* proto) const;
+};
+
+struct TReassignOperation {
+    TTabletId TabletId;
+    TVector<ui32> TabletChannels;
+    TVector<ui32> ForcedGroups;
+    bool Async;
+
+    TReassignOperation(TTabletId tablet,
+                       const TVector<ui32>& channels = {},
+                       const TVector<ui32>& groups = {},
+                       bool async = false)
+        : TabletId(tablet)
+        , TabletChannels(channels)
+        , ForcedGroups(groups)
+        , Async(async)
+    {}
+
+    auto* ToEvent() const {
+        return new TEvHive::TEvReassignTablet(TabletId, TabletChannels, ForcedGroups, Async);
+    }
+};
 
 } // NHive
 } // NKikimr

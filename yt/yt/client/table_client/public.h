@@ -51,6 +51,7 @@ class TVersionedRowDigestExt;
 class TCompressionDictionaryExt;
 class TVersionedReadOptions;
 class TVersionedWriteOptions;
+class TColumnNameToConstraintMap;
 
 } // namespace NProto
 
@@ -334,6 +335,13 @@ struct TColumnarStatistics;
 class TTableSchema;
 using TTableSchemaPtr = TIntrusivePtr<TTableSchema>;
 
+class TConstrainedTableSchema;
+
+// NB: Is used to store constraints on master side.
+using TColumnStableNameToConstraintMap = THashMap<TColumnStableName, std::string>;
+// NB: Is used to handle constraints on user side.
+using TColumnNameToConstraintMap = THashMap<std::string, std::string>;
+
 class TLegacyLockMask;
 using TLegacyLockBitmap = ui64;
 
@@ -467,6 +475,9 @@ template <ESimpleLogicalValueType type>
 struct TUnderlyingTzTypeImpl;
 
 template <ESimpleLogicalValueType type>
+static constexpr ESimpleLogicalValueType TUnderlyingTzType = TUnderlyingTzTypeImpl<type>::TValue;
+
+template <ESimpleLogicalValueType type>
 struct TUnderlyingTimestampIntegerTypeImpl;
 
 template <ESimpleLogicalValueType type>
@@ -477,6 +488,10 @@ using TUnderlyingTimestampIntegerType = TUnderlyingTimestampIntegerTypeImpl<type
 YT_DEFINE_STRONG_TYPEDEF(TSignedDistributedWriteSessionPtr, NSignature::TSignaturePtr);
 YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentCookiePtr, NSignature::TSignaturePtr);
 YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentResultPtr, NSignature::TSignaturePtr);
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_STRONG_TYPEDEF(TRowsDigest, ui64);
 
 ////////////////////////////////////////////////////////////////////////////////
 

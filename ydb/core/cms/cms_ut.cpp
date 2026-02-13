@@ -2775,7 +2775,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(DisableCMS){
+    Y_UNIT_TEST(DisableMaintenance) {
         TCmsTestEnv env(16);
 
         auto r1 = env.CheckPermissionRequest("user", false, false, true, true, TStatus::ALLOW,
@@ -2786,9 +2786,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto r2 = env.CheckPermissionRequest("user", false, false, /* scheduled */ true, true, TStatus::DISALLOW_TEMP,
                                              MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
 
-        // Disable CMS
+        // Disable maintenance
         NKikimrCms::TCmsConfig config;
-        config.SetEnable(false);
+        config.SetDisableMaintenance(true);
         env.SetCmsConfig(config);
 
         env.CheckDonePermission("user", r1.GetPermissions(0).GetId());
@@ -2798,8 +2798,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000));
         env.CheckRequest("user", r2.GetRequestId(), true, TStatus::ERROR_TEMP);
 
-        // Enable CMS back
-        config.SetEnable(true);
+        // Enable maintenance back
+        config.SetDisableMaintenance(false);
         env.SetCmsConfig(config);
 
         // Requests should be ok
@@ -2809,7 +2809,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckRequest("user", r2.GetRequestId(), true, TStatus::ALLOW, 1);
     }
 
-    Y_UNIT_TEST(WalleDisableCMS){
+    Y_UNIT_TEST(WalleDisableMaintenance) {
         TCmsTestEnv env(16);
 
         env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::ALLOW, env.GetNodeId(0));
@@ -2817,9 +2817,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Scheduled request
         env.CheckWalleCreateTask("task-2", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(0));
 
-        // Disable CMS
+        // Disable maintenance
         NKikimrCms::TCmsConfig config;
-        config.SetEnable(false);
+        config.SetDisableMaintenance(true);
         env.SetCmsConfig(config);
 
         env.CheckWalleRemoveTask("task-1");
@@ -2828,13 +2828,66 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleCreateTask("task-3", "reboot", false, TStatus::ERROR_TEMP, env.GetNodeId(9));
         env.CheckWalleCheckTask("task-2", TStatus::ERROR_TEMP);
 
-        // Enable CMS back
-        config.SetEnable(true);
+        // Enable maintenance back
+        config.SetDisableMaintenance(false);
         env.SetCmsConfig(config);
 
         // Requests should be ok
         env.CheckWalleCreateTask("task-3", "reboot", false, TStatus::ALLOW, env.GetNodeId(9));
         env.CheckWalleCheckTask("task-2", TStatus::ALLOW);
+    }
+
+    Y_UNIT_TEST(PriorityLocks)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsLocksPriority());
+
+        // Set cluster limits
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(1);
+        config.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
+        env.SetCmsConfig(config);
+
+        // Make basic request, allow
+        auto r1 = env.CheckPermissionRequest
+            ("user", true, false, true, true, /* priority */ 0, TStatus::ALLOW,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(r1.PermissionsSize(), 1);
+        env.CheckListPermissions("user", 1);
+
+        // Make request with high priority for the same node, allow
+        auto r2 = env.CheckPermissionRequest
+            ("user", true, false, true, true, /* priority */ -100, TStatus::ALLOW,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(r1.PermissionsSize(), 1);
+        env.CheckListPermissions("user", 2);
+
+        // Make request with middle priority for the same node, blocked by higher priority
+        auto r3 = env.CheckPermissionRequest
+            ("user", true, false, true, true, /* priority */ -50, TStatus::DISALLOW_TEMP,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckListPermissions("user", 2);
+
+        // Done with high priority request
+        env.CheckDonePermission("user", r2.GetPermissions(0).GetId());
+        env.CheckListPermissions("user", 1);
+
+        // Make new request, blocked by scheduled middle priority request
+        env.CheckPermissionRequest
+            ("user", true, false, true, false, /* priority */ -25, TStatus::DISALLOW_TEMP,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckListPermissions("user", 1);
+
+        // Middle priority request can continue
+        r3 = env.CheckRequest("user", r3.GetRequestId(), false, TStatus::ALLOW, 1);
+        env.CheckListPermissions("user", 2);
+
+        // Done with basic request
+        env.CheckDonePermission("user", r1.GetPermissions(0).GetId());
+        env.CheckListPermissions("user", 1);
+
+        // Done with middle priority request
+        env.CheckDonePermission("user", r3.GetPermissions(0).GetId());
+        env.CheckListPermissions("user", 0);
     }
 }
 

@@ -170,15 +170,21 @@ public:
             codegen->CreateRun(ctx, block, pointer, args);
         } else {
             const auto callable = GetNodeValue(CallableNode, ctx, block);
+            // XXX: Since <GetNodeValue> method releases the
+            // UnboxedValue, obtained via <GetValue>, the only
+            // reference to this UnboxedValue remains in mutables.
+            // However, it might be invalidated within its <Run>
+            // method, so anchor the callable value to prevent its
+            // destruction while running its <Run> method.
+            ValueAddRef(CallableNode->GetRepresentation(), callable, ctx, block);
             const auto calleePtr = GetElementPtrInst::CreateInBounds(GetCompContextType(context), ctx.Ctx, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, 6)}, "callee_ptr", block);
             const auto previous = new LoadInst(PointerType::getUnqual(GetSourcePosType(context)), calleePtr, "previous", block);
             const auto callee = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), ui64(&Position)), previous->getType(), "callee", block);
             new StoreInst(callee, calleePtr, block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, callable, ctx.Codegen, block, ctx.GetBuilder(), args);
             new StoreInst(previous, calleePtr, block);
-            if (CallableNode->IsTemporaryValue()) {
-                CleanupBoxed(callable, ctx, block);
-            }
+            // XXX: Release the anchor to the callable, taken above.
+            ValueUnRef(CallableNode->GetRepresentation(), callable, ctx, block);
         }
         for (const auto& arg : argsv) {
             ValueUnRef(arg.second, arg.first, ctx, block);

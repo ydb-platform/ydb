@@ -6,7 +6,7 @@ namespace {
 
 class TDummyTranslator: public ITranslator {
 public:
-    TDummyTranslator(const TString& name)
+    explicit TDummyTranslator(const TString& name)
         : Name_(name)
     {
     }

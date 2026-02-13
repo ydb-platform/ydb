@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                 auto* msg = ev->Get<TEvBlobStorage::TEvVGet>();
 
                 TVDiskID vdid = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
-                
+
                 auto senderActor = env.Runtime->GetActor(ev->Sender);
 
                 auto senderType = senderActor->GetActivityType().GetName();

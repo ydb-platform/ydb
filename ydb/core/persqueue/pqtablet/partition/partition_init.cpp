@@ -1,8 +1,10 @@
 #include "autopartitioning_manager.h"
+#include "message_id_deduplicator.h"
 #include "offload_actor.h"
 #include "partition.h"
 #include "partition_compactification.h"
 #include "partition_util.h"
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 
@@ -18,7 +20,8 @@ static const TString WRITE_QUOTA_ROOT_PATH = "write-quota";
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
-bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
+void ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev);
 
 //
 // TInitializer
@@ -36,6 +39,8 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
     Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
+    Steps.push_back(MakeHolder<TInitMessageDeduplicatorStep>(this));
+    Steps.push_back(MakeHolder<TDeleteKeysStep>(this));
     Steps.push_back(MakeHolder<TInitFieldsStep>(this));
 
     CurrentStep = Steps.begin();
@@ -115,10 +120,6 @@ const TPartitionId& TInitializerStep::PartitionId() const {
     return Initializer->Partition->Partition;
 }
 
-void TInitializerStep::PoisonPill(const TActorContext& ctx) {
-    ctx.Send(Partition()->TabletActorId, new TEvents::TEvPoisonPill());
-}
-
 const TString& TInitializerStep::TopicName() const {
     return Partition()->TopicName();
 }
@@ -169,10 +170,7 @@ void TInitConfigStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& res = ev->Get()->Record;
     PQ_INIT_ENSURE(res.ReadResultSize() == 1);
@@ -196,14 +194,8 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         Partition()->Config = Partition()->TabletConfig;
         break;
 
-    case NKikimrProto::ERROR:
-        PQ_LOG_ERROR("can't read config");
-        PoisonPill(ctx);
-        return;
-
     default:
-        Cerr << "ERROR " << response.GetStatus() << "\n";
-        Y_ABORT("bad status");
+        AFL_ENSURE(false)("status", response.GetStatus());
     };
 
     // There should be no consumers in the configuration of the background partition. When creating a partition,
@@ -249,10 +241,7 @@ void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.GetStatusResultSize());
@@ -290,18 +279,15 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadResultSize() == 2);
-    LoadMeta(response, ctx);
+    LoadMeta(response);
     Done(ctx);
 }
 
-void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const TMaybe<TActorContext>& mbCtx) {
+void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
     auto handleReadResult = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response, auto&& action) {
         switch (response.GetStatus()) {
         case NKikimrProto::OK:
@@ -309,18 +295,8 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
             break;
         case NKikimrProto::NODATA:
             break;
-        case NKikimrProto::ERROR:
-            if (!mbCtx) {
-                Y_ABORT();
-            } else {
-                auto& ctx = mbCtx.GetRef();
-                PQ_LOG_ERROR("read topic error");
-                PoisonPill(ctx);
-            }
-            break;
         default:
-            Cerr << "ERROR " << response.GetStatus() << "\n";
-            Y_ABORT("bad status");
+            AFL_ENSURE(false)("status", response.GetStatus());
         };
     };
 
@@ -347,6 +323,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
+        Partition()->MessageIdDeduplicator.NextMessageIdDeduplicatorWAL = meta.GetNextMessageIdDeduplicatorWAL();
         if (Partition()->IsSupportive()) {
             const auto& counterData = meta.GetCounterData();
             Partition()->BytesWrittenGrpc.SetSavedValue(counterData.GetBytesWrittenGrpc());
@@ -389,10 +366,7 @@ void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -414,13 +388,10 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             for (ui32 i = 0; i < range.PairSize(); ++i) {
                 const auto& pair = range.GetPair(i);
                 PQ_INIT_ENSURE(pair.HasStatus());
-                if (pair.GetStatus() != NKikimrProto::OK) {
-                    PQ_LOG_ERROR("read range error got status " << pair.GetStatus() << " for key " << (pair.HasKey() ? pair.GetKey() : "unknown")
-                    );
 
-                    PoisonPill(ctx);
-                    return;
-                }
+                AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK)
+                    ("status", pair.GetStatus())
+                    ("key", pair.GetKey());
 
                 PQ_INIT_ENSURE(pair.HasKey());
                 PQ_INIT_ENSURE(pair.HasValue());
@@ -449,13 +420,8 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         case NKikimrProto::NODATA:
             PostProcessing(ctx);
             break;
-        case NKikimrProto::ERROR:
-            PQ_LOG_ERROR("read topic error");
-            PoisonPill(ctx);
-            break;
         default:
-            Cerr << "ERROR " << range.GetStatus() << "\n";
-            Y_ABORT("bad status");
+            AFL_ENSURE(false)("status", range.GetStatus());
     };
 }
 
@@ -478,14 +444,12 @@ TInitDataRangeStep::TInitDataRangeStep(TInitializer* initializer)
 }
 
 void TInitDataRangeStep::Execute(const TActorContext &ctx) {
+    Ranges.clear();
     RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), "");
 }
 
 void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -496,47 +460,50 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     switch(range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-
-            FillBlobsMetaData(range, ctx);
+            Ranges.push_back(range);
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
                 PQ_INIT_ENSURE(range.PairSize());
                 RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
                 return;
             }
+
+            FillBlobsMetaData(ctx);
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->GetStartOffset()) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->GetStartOffset());
-                Y_ABORT("meta is broken");
-                return PoisonPill(ctx);
-            }
-            if (GetContext().EndOffset && *GetContext().EndOffset != Partition()->GetEndOffset()) {
-                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->GetEndOffset());
-                Y_ABORT("meta is broken");
-                return PoisonPill(ctx);
-            }
+            // AFL_ENSURE(!GetContext().StartOffset || *GetContext().StartOffset >= Partition()->GetStartOffset())
+            //     ("d", "StartOffset from meta and blobs are different")
+            //     ("l", *GetContext().StartOffset)
+            //     ("r", Partition()->GetStartOffset());
 
-            Done(ctx);
-            break;
+            // AFL_ENSURE(!GetContext().EndOffset || *GetContext().EndOffset == Partition()->GetEndOffset())
+            //     ("d", "EndOffset from meta and blobs are different")
+            //     ("l", *GetContext().EndOffset)
+            //     ("r", Partition()->GetEndOffset());
+
+            [[fallthrough]];
+
         case NKikimrProto::NODATA:
             Done(ctx);
             break;
         default:
-            Cerr << "ERROR " << range.GetStatus() << "\n";
-            Y_ABORT("bad status");
+            AFL_ENSURE(false)("status", range.GetStatus());
     };
 }
 
-THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
+THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& ranges,
                                       const TPartitionId& partitionId)
 {
     TVector<TString> keys;
 
-    for (ui32 i = 0; i < range.PairSize(); ++i) {
-        const auto& pair = range.GetPair(i);
-        AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        keys.push_back(pair.GetKey());
+    for (const auto& range : ranges) {
+        for (ui32 i = 0; i < range.PairSize(); ++i) {
+            const auto& pair = range.GetPair(i);
+            AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK) //this is readrange without keys, only OK could be here
+                ("status", pair.GetStatus())
+                ("key", pair.GetKey());
+            keys.push_back(pair.GetKey());
+        }
     }
 
     auto compare = [](const TString& lhs, const TString& rhs) {
@@ -641,7 +608,7 @@ static void CheckKeysTimestampOrder(const std::deque<TDataKey>& keys) {
     }
 }
 
-void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
+void TInitDataRangeStep::FillBlobsMetaData(const TActorContext&) {
     auto& endOffset = Partition()->BlobEncoder.EndOffset;
     auto& startOffset = Partition()->BlobEncoder.StartOffset;
     auto& head = Partition()->BlobEncoder.Head;
@@ -653,48 +620,49 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     // If there are multiple keys for a message, then only the key that contains more messages remains.
     //
     // Extra keys will be added to the queue for deletion.
-    const auto actualKeys = FilterBlobsMetaData(range,
-                                                PartitionId());
+    const auto actualKeys = FilterBlobsMetaData(Ranges, PartitionId());
 
-    for (ui32 i = 0; i < range.PairSize(); ++i) {
-        const auto& pair = range.GetPair(i);
-        PQ_INIT_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        PQ_LOG_D("check key " << pair.GetKey());
-        const auto k = TKey::FromString(pair.GetKey(), PartitionId());
-        if (!actualKeys.contains(pair.GetKey())) {
-            PQ_LOG_D("unknown key " << pair.GetKey() << " will be deleted");
-            Partition()->DeletedKeys->emplace_back(k.ToString());
-            continue;
-        }
-        if (dataKeysBody.empty()) { //no data - this is first pair of first range
-            head.Offset = endOffset = startOffset = k.GetOffset();
-            if (k.GetPartNo() > 0) {
-                ++startOffset;
+    for (const auto& range : Ranges) {
+        for (ui32 i = 0; i < range.PairSize(); ++i) {
+            const auto& pair = range.GetPair(i);
+            PQ_INIT_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+            PQ_LOG_D("check key " << pair.GetKey());
+            const auto k = TKey::FromString(pair.GetKey(), PartitionId());
+            if (!actualKeys.contains(pair.GetKey())) {
+                PQ_LOG_D("unknown key " << pair.GetKey() << " will be deleted");
+                GetContext().DeletedKeys.emplace_back(k.ToString());
+                continue;
             }
-            head.PartNo = 0;
-        } else {
-            PQ_INIT_ENSURE(endOffset <= k.GetOffset())("endOffset", endOffset)("key", pair.GetKey());
-            if (endOffset < k.GetOffset()) {
-                gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
-                gapSize += k.GetOffset() - endOffset;
+            if (dataKeysBody.empty()) { //no data - this is first pair of first range
+                head.Offset = endOffset = startOffset = k.GetOffset();
+                if (k.GetPartNo() > 0) {
+                    ++startOffset;
+                }
+                head.PartNo = 0;
+            } else {
+                PQ_INIT_ENSURE(endOffset <= k.GetOffset())("endOffset", endOffset)("key", pair.GetKey());
+                if (endOffset < k.GetOffset()) {
+                    gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
+                    gapSize += k.GetOffset() - endOffset;
+                }
             }
-        }
-        PQ_INIT_ENSURE(k.GetCount() + k.GetInternalPartsCount() > 0);
-        PQ_INIT_ENSURE(k.GetOffset() >= endOffset);
-        endOffset = k.GetOffset() + k.GetCount();
-        //at this point EndOffset > StartOffset
-        if (!k.HasSuffix() || !k.IsHead()) { //head.Size will be filled after read or head blobs
-            bodySize += pair.GetValueSize();
-        }
+            PQ_INIT_ENSURE(k.GetCount() + k.GetInternalPartsCount() > 0);
+            PQ_INIT_ENSURE(k.GetOffset() >= endOffset);
+            endOffset = k.GetOffset() + k.GetCount();
+            //at this point EndOffset > StartOffset
+            if (!k.HasSuffix() || !k.IsHead()) { //head.Size will be filled after read or head blobs
+                bodySize += pair.GetValueSize();
+            }
 
-        PQ_LOG_D("Got data offset " << k.GetOffset() << " count " << k.GetCount() << " size " << pair.GetValueSize()
-                << " so " << startOffset << " eo " << endOffset << " " << pair.GetKey()
-        );
-        dataKeysBody.emplace_back(k,
-                                  pair.GetValueSize(),
-                                  TInstant::Seconds(pair.GetCreationUnixTime()),
-                                  dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
-                                  Partition()->MakeBlobKeyToken(k.ToString()));
+            PQ_LOG_D("Got data offset " << k.GetOffset() << " count " << k.GetCount() << " size " << pair.GetValueSize()
+                     << " so " << startOffset << " eo " << endOffset << " " << pair.GetKey()
+                    );
+            dataKeysBody.emplace_back(k,
+                                      pair.GetValueSize(),
+                                      TInstant::Seconds(pair.GetCreationUnixTime()),
+                                      dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
+                                      Partition()->MakeBlobKeyToken(k.ToString()));
+        }
     }
     CheckKeysTimestampOrder(dataKeysBody);
 
@@ -728,7 +696,7 @@ TKeyBoundaries SplitBodyHeadAndFastWrite(const std::deque<TDataKey>& keys)
         }
     }
 
-    AFL_ENSURE(b.Head <= b.FastWrite);
+    AFL_ENSURE(b.Head <= b.FastWrite)("head", b.Head)("fastWrite", b.FastWrite);
 
     return b;
 }
@@ -846,6 +814,92 @@ void TInitDataRangeStep::FormHeadAndProceed() {
     PQ_INIT_ENSURE(fwz.Head.Offset >= startOffset || fwz.Head.Offset == startOffset - 1 && fwz.Head.PartNo > 0);
 }
 
+//
+// TDeleteKeysStep
+//
+
+TDeleteKeysStep::TDeleteKeysStep(TInitializer* initializer)
+    : TBaseKVStep(initializer, "TDeleteKeysStep", true) {
+}
+
+void TDeleteKeysStep::Execute(const TActorContext &ctx) {
+    if (GetContext().DeletedKeys.empty()) {
+        Done(ctx);
+        return;
+    }
+
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    for (auto& key : GetContext().DeletedKeys) {
+        auto* cmd = request->Record.AddCmdDeleteRange();
+        cmd->MutableRange()->SetFrom(key);
+        cmd->MutableRange()->SetIncludeFrom(true);
+        cmd->MutableRange()->SetTo(std::move(key));
+        cmd->MutableRange()->SetIncludeTo(true);
+    }
+    GetContext().DeletedKeys = {};
+
+    ctx.Send(Partition()->TabletActorId, request.release());
+}
+
+void TDeleteKeysStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
+    ValidateResponse(*this, ev);
+
+    Done(ctx);
+}
+
+//
+// TInitMessageDeduplicatorStep
+//
+
+TInitMessageDeduplicatorStep::TInitMessageDeduplicatorStep(TInitializer* initializer)
+    : TBaseKVStep(initializer, "TInitMessageDeduplicatorStep", true) {
+}
+
+void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
+    if (MirroringEnabled(Partition()->Config) || Partition()->Partition.IsSupportivePartition()) {
+        return Done(ctx);
+    }
+    auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, 0);
+    RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), firstKey);
+}
+
+void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
+    ValidateResponse(*this, ev);
+
+    auto& response = ev->Get()->Record;
+    PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
+
+    auto* range = response.MutableReadRangeResult(0);
+
+    PQ_INIT_ENSURE(range->HasStatus());
+    switch(range->GetStatus()) {
+        case NKikimrProto::OK:
+        case NKikimrProto::OVERRUN:
+            for (auto& w : *range->MutablePair()) {
+                NKikimrPQ::TMessageDeduplicationIdWAL wal;
+                auto r = wal.ParseFromString(w.GetValue());
+                AFL_ENSURE(r)("key", w.key());
+
+                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(std::move(*w.MutableKey()), std::move(wal));
+                AFL_ENSURE(a)("key", w.key());
+            }
+
+            if (range->GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
+                PQ_INIT_ENSURE(range->PairSize());
+                RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), range->GetPair(range->PairSize() - 1).GetKey());
+                return;
+            }
+
+            [[fallthrough]];
+        case NKikimrProto::NODATA:
+            Done(ctx);
+            break;
+        default:
+            AFL_ENSURE(false && "bad status")("status", range->GetStatus());
+    };
+}
+
+
 
 //
 // TInitDataStep
@@ -876,10 +930,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadResultSize());
@@ -902,13 +953,21 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 ui32 size = headKeys[i].Size;
                 ui64 offset = key.GetOffset();
-                while (currentLevel + 1 < totalLevels && size < compactLevelBorder[currentLevel + 1])
+                while (currentLevel + 1 < totalLevels && size < compactLevelBorder[currentLevel + 1]) {
                     ++currentLevel;
-                PQ_INIT_ENSURE(size < compactLevelBorder[currentLevel]);
+                }
+                PQ_INIT_ENSURE(size < compactLevelBorder[currentLevel])
+                    ("l", size)
+                    ("r", compactLevelBorder[currentLevel])
+                    ("c", currentLevel);
 
                 dataKeysHead[currentLevel].AddKey(key, size);
-                PQ_INIT_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
-                PQ_INIT_ENSURE(!dataKeysHead[currentLevel].NeedCompaction());
+                PQ_INIT_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel())
+                    ("l", dataKeysHead[currentLevel].KeysCount())
+                    ("r", AppData(ctx)->PQConfig.GetMaxBlobsPerLevel())
+                    ("c", currentLevel);
+                PQ_INIT_ENSURE(!dataKeysHead[currentLevel].NeedCompaction())
+                    ("c", currentLevel);
 
                 PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->BlobEncoder.EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()
@@ -928,23 +987,12 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 break;
                 }
-            case NKikimrProto::OVERRUN:
-                Y_ABORT("implement overrun in readresult!!");
-                return;
-            case NKikimrProto::NODATA:
-                Y_ABORT("NODATA can't be here");
-                return;
             case NKikimrProto::ERROR:
-                PQ_LOG_ERROR("tablet " << Partition()->TabletId << " HandleOnInit ReadResult "
-                        << i << " status NKikimrProto::ERROR result message: \"" << read.GetMessage()
-                        << " \" errorReason: \"" << response.GetErrorReason() << "\""
-                );
-                PoisonPill(ctx);
-                return;
+                AFL_ENSURE(false)
+                    ("m", read.GetMessage())
+                    ("e", response.GetErrorReason());
             default:
-                Cerr << "ERROR " << read.GetStatus() << " message: \"" << read.GetMessage() << "\"\n";
-                Y_ABORT("bad status");
-
+                AFL_ENSURE(false)("status", read.GetStatus());
         };
     }
 
@@ -1021,7 +1069,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();
 
-    ReadQuotaTrackerActor = RegisterWithSameMailbox(new TReadQuoter(
+    ReadQuotaTrackerActor = RegisterWithSameMailbox(CreateReadQuoter(
         AppData(ctx)->PQConfig,
         TopicConverter,
         Config,
@@ -1051,23 +1099,27 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
-                                      FolderId,
-                                      MonitoringProjectId);
+                                      FolderId);
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
+            PartitionCountersLabeled = CreateProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>(
+                                                                         EscapeBadChars(TopicName()),
                                                                          Partition.InternalPartitionId,
-                                                                         Config.GetYdbDatabasePath()));
+                                                                         Config.GetYdbDatabasePath());
 
-            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(EscapeBadChars(TopicName()),
+            PartitionCountersExtended = CreateProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>(
+                                                                                  EscapeBadChars(TopicName()),
                                                                                   Partition.InternalPartitionId,
-                                                                                  Config.GetYdbDatabasePath()));
+                                                                                  Config.GetYdbDatabasePath());
         } else {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
-            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(TopicName(),
-                                                                                  Partition.InternalPartitionId));
+            PartitionCountersLabeled = CreateProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>(
+                                                                        TopicName(),
+                                                                        Partition.InternalPartitionId);
+            PartitionCountersExtended = CreateProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>(
+                                                                        TopicName(),
+                                                                        Partition.InternalPartitionId);
         }
     }
 
@@ -1107,14 +1159,10 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
-        if (DetailedMetricsAreEnabled()) {
+        if (DetailedMetricsAreEnabled(Config)) {
             SetupDetailedMetrics();
         }
     }
-}
-
-bool TPartition::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DETAILED);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
@@ -1131,21 +1179,14 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     auto subGroup = GetServiceCounters(counters, "pqproxy|writeTimeLag");
     InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
         subGroup, labels, {{"sensor", "TimeLags" + suffix}}, "Interval",
-        TVector<std::pair<ui64, TString>>{
-            {100, "100ms"}, {200, "200ms"}, {500, "500ms"}, {1000, "1000ms"},
-            {2000, "2000ms"}, {5000, "5000ms"}, {10'000, "10000ms"}, {30'000, "30000ms"},
-            {60'000, "60000ms"}, {180'000,"180000ms"}, {9'999'999, "999999ms"}}, true));
+        SLOW_LATENCY_MS_INTERVALS, true));
 
 
     subGroup = GetServiceCounters(counters, "pqproxy|writeInfo");
     {
         std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter(
             subGroup, labels, {{"sensor", "MessageSize" + suffix}}, "Size",
-            TVector<std::pair<ui64, TString>>{
-                {1_KB, "1kb"}, {5_KB, "5kb"}, {10_KB, "10kb"},
-                {20_KB, "20kb"}, {50_KB, "50kb"}, {100_KB, "100kb"}, {200_KB, "200kb"},
-                {512_KB, "512kb"},{1024_KB, "1024kb"}, {2048_KB,"2048kb"}, {5120_KB, "5120kb"},
-                {10240_KB, "10240kb"}, {65536_KB, "65536kb"}, {999'999'999, "99999999kb"}}, true));
+            SIZE_KB_INTERVALS, true));
 
         MessageSize.Setup(IsSupportive(), std::move(percentileCounter));
     }
@@ -1180,22 +1221,14 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
             new NKikimr::NPQ::TPercentileCounter(
                 GetServiceCounters(counters, "pqproxy|topicWriteQuotaWait"), labels,
                     {{"sensor", "TopicWriteQuotaWait" + suffix}}, "Interval",
-                        TVector<std::pair<ui64, TString>>{
-                            {0, "0ms"}, {1, "1ms"}, {5, "5ms"}, {10, "10ms"},
-                            {20, "20ms"}, {50, "50ms"}, {100, "100ms"}, {500, "500ms"},
-                            {1000, "1000ms"}, {2500, "2500ms"}, {5000, "5000ms"},
-                            {10'000, "10000ms"}, {9'999'999, "999999ms"}}, true)
+                        FAST_LATENCY_MS_INTERVALS, true)
         );
     }
 
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(GetServiceCounters(counters, "pqproxy|partitionWriteQuotaWait"),
             labels, {{"sensor", "PartitionWriteQuotaWait" + suffix}}, "Interval",
-                TVector<std::pair<ui64, TString>>{
-                    {0, "0ms"}, {1, "1ms"}, {5, "5ms"}, {10, "10ms"},
-                    {20, "20ms"}, {50, "50ms"}, {100, "100ms"}, {500, "500ms"},
-                    {1000, "1000ms"}, {2500, "2500ms"}, {5000, "5000ms"},
-                    {10'000, "10000ms"}, {9'999'999, "999999ms"}}, true)
+                FAST_LATENCY_MS_INTERVALS, true)
     );
 }
 
@@ -1227,11 +1260,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {},
                         subgroups, "bin",
-                        TVector<std::pair<ui64, TString>>{
-                            {100, "100"}, {200, "200"}, {500, "500"},
-                            {1000, "1000"}, {2000, "2000"}, {5000, "5000"},
-                            {10'000, "10000"}, {30'000, "30000"}, {60'000, "60000"},
-                            {180'000,"180000"}, {9'999'999, "999999"}}, true));
+                        SLOW_LATENCY_INTERVALS, true));
 
     }
     subgroups.back().second = "topic.write.message_size_bytes";
@@ -1239,12 +1268,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {},
             subgroups, "bin",
-            TVector<std::pair<ui64, TString>>{
-                {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
-                {20'480, "20480"}, {51'200, "51200"}, {102'400, "102400"},
-                {204'800, "204800"}, {524'288, "524288"},{1'048'576, "1048576"},
-                {2'097'152,"2097152"}, {5'242'880, "5242880"}, {10'485'760, "10485760"},
-                {67'108'864, "67108864"}, {999'999'999, "99999999"}}, true));
+            SIZE_INTERVALS, true));
         MessageSize.Setup(IsSupportive(), std::move(percentileCounter));
     }
 
@@ -1346,11 +1370,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
             new NKikimr::NPQ::TPercentileCounter(
                 NPersQueue::GetCountersForTopic(counters, IsServerless), {},
                             subgroups, "bin",
-                            TVector<std::pair<ui64, TString>>{
-                                {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
-                                {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
-                                {1000, "1000"}, {2500, "2500"}, {5000, "5000"},
-                                {10'000, "10000"}, {9'999'999, "999999"}}, true)
+                            FAST_LATENCY_INTERVALS, true)
         );
         subgroups.pop_back();
     }
@@ -1359,11 +1379,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups, "bin",
-                        TVector<std::pair<ui64, TString>>{
-                            {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
-                            {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
-                            {1000, "1000"}, {2500, "2500"}, {5000, "5000"},
-                            {10'000, "10000"}, {9'999'999, "999999"}}, true)
+            FAST_LATENCY_INTERVALS, true)
     );
 }
 
@@ -1373,7 +1389,7 @@ void TPartition::CreateCompacter() {
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         }
         Compacter.Reset();
-        PartitionCompactionCounters.Reset();
+        PartitionKeyCompactionCounters.reset();
         return;
     }
     if (Compacter) {
@@ -1386,12 +1402,16 @@ void TPartition::CreateCompacter() {
 
     //Init compacter counters
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(EscapeBadChars(TopicName()),
-                                                                           Partition.OriginalPartitionId,
-                                                                           Config.GetYdbDatabasePath()));
+        PartitionKeyCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
+                                            EscapeBadChars(TopicName()),
+                                            Partition.OriginalPartitionId,
+                                            Config.GetYdbDatabasePath()
+                                        );
     } else {
-        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(TopicName(),
-                                                                           Partition.OriginalPartitionId));
+        PartitionKeyCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
+                                            TopicName(),
+                                            Partition.OriginalPartitionId
+                                        );
     }
     Compacter->TryCompactionIfPossible();
 }
@@ -1400,26 +1420,20 @@ void TPartition::CreateCompacter() {
 // Functions
 //
 
-bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&) {
+void ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev) {
     auto& response = ev->Get()->Record;
-    if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-        PQ_LOG_ERROR("commands for topic '" << step.TopicName() << " partition " << step.PartitionId()
-                << " are not processed at all, got KV error " << response.GetStatus()
-        );
-        return false;
-    }
+    AFL_ENSURE(response.GetStatus() == NMsgBusProxy::MSTATUS_OK)
+        ("d", "commands for topic are not processed at all")
+        ("topic", step.TopicName())
+        ("status", response.GetStatus());
 
     for (ui32 i = 0; i < response.GetStatusResultSize(); ++i) {
         auto& res = response.GetGetStatusResult(i);
-        if (res.GetStatus() != NKikimrProto::OK) {
-            PQ_LOG_ERROR("commands for topic '" << step.TopicName() << "' partition " << step.PartitionId()
-                    << " are not processed at all, got KV error in CmdGetStatus " << res.GetStatus()
-            );
-            return false;
-        }
+        AFL_ENSURE(res.GetStatus() == NKikimrProto::OK)
+            ("d", "got KV error in CmdGetStatus")
+            ("topic", step.TopicName())
+            ("status", res.GetStatus());
     }
-
-    return true;
 }
 
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
@@ -1476,6 +1490,8 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
         AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, partition);
     }
 
+    PQ_LOG_D("Read range request. From " << from.ToString() << " to " << to.ToString());
+
     ctx.Send(dst, request.Release());
 }
 
@@ -1485,6 +1501,10 @@ void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPart
 
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeData, false, key);
+}
+
+void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
+    RequestRange(ctx, dst, partition, TKeyPrefix::TypeDeduplicator, true, key, key == "");
 }
 
 } // namespace NKikimr::NPQ

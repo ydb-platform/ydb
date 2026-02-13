@@ -27,6 +27,8 @@ TKikimrRunner CreateKikimrRunner(bool withSampleTables, ui64 channelBufferSize =
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(channelBufferSize);
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(std::min(2_KB, channelBufferSize));
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelChunkSizeLimit(channelBufferSize);
 
     auto settings = TKikimrSettings(appConfig).SetFeatureFlags(featureFlags).SetWithSampleTables(withSampleTables);
     return TKikimrRunner(settings);
@@ -1413,7 +1415,29 @@ UuidNotNullValue:   [
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
         auto client = kikimr.GetQueryClient();
 
+        std::unordered_map<size_t, std::shared_ptr<arrow::Schema>> arrowSchemas;
+        std::unordered_map<size_t, size_t> arrowResultSetsCount;
+        std::unordered_map<size_t, size_t> arrowRowsPerStatement;
+
+        std::unordered_map<size_t, size_t> valueRowsPerStatement;
+
         CreateLargeTable(kikimr, 1000, 4, 4, 100, 10);
+
+        const size_t statementCount = 3;
+        const auto query = R"(
+            SELECT * FROM LargeTable;
+            UPDATE LargeTable SET Data = Data + 1 WHERE Key % 2 = 1 RETURNING Data;
+            SELECT DataText FROM LargeTable WHERE Key % 2 = 0;
+        )";
+
+        // Get rows count for each statement from Value format to compare with Arrow format
+        const auto valueResult = client.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(valueResult.IsSuccess(), valueResult.GetIssues().ToString());
+
+        for (size_t stmt = 0; stmt < statementCount; ++stmt) {
+            const auto resultSet = valueResult.GetResultSet(stmt);
+            valueRowsPerStatement[stmt] = resultSet.RowsCount();
+        }
 
         auto settings = TExecuteQuerySettings()
             .Format(TResultSet::EFormat::Arrow)
@@ -1423,15 +1447,8 @@ UuidNotNullValue:   [
                     .Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd)
                     .Level(10)));
 
-        auto it = client.StreamExecuteQuery(R"(
-            SELECT * FROM LargeTable;
-            UPDATE LargeTable SET Data = Data + 1 WHERE Key % 2 = 1 RETURNING Data;
-            SELECT DataText FROM LargeTable WHERE Key % 2 = 0;
-        )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        auto it = client.StreamExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-        std::unordered_map<size_t, std::shared_ptr<arrow::Schema>> arrowSchemas;
-        std::unordered_map<size_t, ui64> counts;
 
         for (;;) {
             auto part = it.ReadNext().GetValueSync();
@@ -1467,22 +1484,26 @@ UuidNotNullValue:   [
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchemas[idx]);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
-                ++counts[idx];
+                arrowRowsPerStatement[idx] += arrowBatch->num_rows();
+                ++arrowResultSetsCount[idx];
             }
         }
 
-        UNIT_ASSERT_C(counts.size() == 3, "Expected 3 result set indexes");
+        UNIT_ASSERT_C(arrowResultSetsCount.size() == 3, "Expected 3 result set indexes");
 
-        for (const auto& [idx, count] : counts) {
+        for (const auto& [idx, count] : arrowResultSetsCount) {
             UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets for statement with ResultSetIndex = " << idx);
+        }
+
+        for (const auto& [idx, count] : arrowRowsPerStatement) {
+            UNIT_ASSERT_VALUES_EQUAL_C(count, valueRowsPerStatement[idx], "Rows count mismatch for statement with ResultSetIndex = " << idx);
         }
     }
 
     /**
      * More tests for different types with correctness and convertations between Arrow and UV :
-     * ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
+     * ydb/core/kqp/common/result_set_format/ut/kqp_formats_arrow_ut.cpp
     */
 
     // Optional<T>
@@ -1565,58 +1586,8 @@ column1:   -- is_valid: all not null
         }
     }
 
-    // Optional<Optional<Optional<Optional<T>>>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
-        auto client = kikimr.GetQueryClient();
-
-        {
-            auto batches = ExecuteAndCombineBatches(client, R"(
-                SELECT Just(Just(Just(Key1))), Just(Just(Just(Name))) FROM Join2
-                WHERE Key1 IN [104, 106, 108]
-                ORDER BY Key1;
-            )", /* assertSize */ false, 1);
-
-            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
-
-            const auto& batch = batches.front();
-
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
-
-            ValidateOptionalColumn(batch->column(0), 3, false);
-            ValidateOptionalColumn(batch->column(1), 3, false);
-
-            const TString expected =
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: struct<opt: uint32 not null> not null>
-    -- is_valid: all not null
-    -- child 0 type: struct<opt: uint32 not null>
-      -- is_valid: all not null
-      -- child 0 type: uint32
-        [
-          104,
-          106,
-          108
-        ]
-column1:   -- is_valid: all not null
-  -- child 0 type: struct<opt: struct<opt: binary not null> not null>
-    -- is_valid: all not null
-    -- child 0 type: struct<opt: binary not null>
-      -- is_valid: all not null
-      -- child 0 type: binary
-        [
-          4E616D6533,
-          4E616D6533,
-          null
-        ]
-)";
-            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
-        }
-    }
-
     // Optional<Variant<T, F>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_4) {
+    Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -1656,7 +1627,7 @@ R"(column0:   -- is_valid: all not null
     }
 
     // Optional<Optional<Variant<T, F, G>>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_5) {
+    Y_UNIT_TEST(ArrowFormat_Types_Optional_4) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -1676,7 +1647,7 @@ R"(column0:   -- is_valid: all not null
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2> not null>
+  -- child 0 type: struct<opt: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2>>
     -- is_valid: all not null
     -- child 0 type: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2>
       -- is_valid: all not null
@@ -1899,29 +1870,24 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
-            const TString expected = 
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: map<binary, int32>
-    [
-      keys:
+            const TString expected =
+R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
       [
         61,
         63,
         62
       ]
-      values:
+    -- child 1 type: int32
       [
         1,
         3,
         2
       ]
-    ]
-  -- child 1 type: uint64
-    [
-      0
-    ]
+  ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
@@ -1944,30 +1910,24 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
             const TString expected =
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: list<item: struct<key: binary, payload: int32 not null>>
-    [
-      -- is_valid: all not null
-      -- child 0 type: binary
-        [
-          61,
-          62,
-          null
-        ]
-      -- child 1 type: int32
-        [
-          1,
-          2,
-          3
-        ]
-    ]
-  -- child 1 type: uint64
-    [
-      0
-    ]
+R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
+      [
+        61,
+        62,
+        null
+      ]
+    -- child 1 type: int32
+      [
+        1,
+        2,
+        3
+      ]
+  ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);

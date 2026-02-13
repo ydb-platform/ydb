@@ -45,8 +45,4 @@ namespace NInterconnect {
             return res;
         }
     };
-
-#if not defined(_win32_)
-    TAddress::TV6Addr GetV6CompatAddr(const TAddress& a) noexcept;
-#endif
 }

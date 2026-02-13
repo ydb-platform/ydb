@@ -10,8 +10,7 @@ namespace numpy
 {
 
   template <class... Args>
-  auto std_(Args &&...args)
-      -> decltype(functor::sqrt{}(var(std::forward<Args>(args)...)));
+  auto std_(Args &&...args) -> decltype(functor::sqrt{}(var(std::forward<Args>(args)...)));
 
   DEFINE_FUNCTOR(pythonic::numpy, std_);
 } // namespace numpy

@@ -809,7 +809,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
         } else {
             bool outsideLogEnd = ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx;
-            
+
             if (!outsideLogEnd) {
                 // If read invalid data from the log (but not outside this owner's log bounds), check if the owner is on quarantine.
                 TGuard<TMutex> guard(PDisk->StateMutex);
@@ -1142,8 +1142,8 @@ void TLogReader::ReplyOk() {
     Result->NextPosition = IsInitial ? LastGoodToWriteLogPosition : TLogPosition::Invalid();
     Result->IsEndOfLog = true;
     if (IsInitial) {
-        Result->LastGoodChunkIdx = ChunkIdx; 
-        Result->LastGoodSectorIdx = SectorIdx; 
+        Result->LastGoodChunkIdx = ChunkIdx;
+        Result->LastGoodSectorIdx = SectorIdx;
     }
     Reply();
 }

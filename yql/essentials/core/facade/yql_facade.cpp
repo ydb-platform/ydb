@@ -32,6 +32,7 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
+#include <yql/essentials/providers/common/activation/yql_activation.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
 #include <yql/essentials/core/qplayer/url_lister/qplayer_url_lister_manager.h>
 
@@ -69,9 +70,12 @@ const TString StaticCredentialsLabel = "Credentials";
 const TString DynamicCredentialsLabel = "DynamicCredentials";
 const TString FullCaptureLabel = "FullCapture";
 
+const TString GeneralInfoComponent = "GeneralInfo";
+const TString StartTimeLabel = "StartTime";
+
 class TUrlLoader: public IUrlLoader {
 public:
-    TUrlLoader(TFileStoragePtr storage)
+    explicit TUrlLoader(TFileStoragePtr storage)
         : Storage_(storage)
     {
     }
@@ -142,14 +146,46 @@ std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolv
     };
 }
 
-void AddSqlFlagsFromPatch(THashSet<TString>& flags, const TString& gatewaysPatch) {
+TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
+    const auto& list = node["SqlFlags"].AsList();
+
+    THashSet<TString> flags(list.size());
+    for (const auto& f : list) {
+        flags.insert(f.AsString());
+    }
+
+    return {
+        .Unconditional = std::move(flags),
+    };
+}
+
+TGatewaySQLFlags SQLFlagsFromGatewaysPatch(TStringBuf patch) {
     TGatewaysConfig config;
-    YQL_ENSURE(NProtoBuf::TextFormat::ParseFromString(gatewaysPatch, &config));
-    auto patchFlags = ExtractSqlFlags(config);
-    flags.insert(patchFlags.begin(), patchFlags.end());
+    YQL_ENSURE(NProtoBuf::TextFormat::ParseFromString(patch, &config));
+
+    // Gateways Patch is used for experimental features
+    return TGatewaySQLFlags::FromTesting(config);
 }
 
 } // namespace
+
+TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
+    if (!context.CanRead()) {
+        return {};
+    }
+
+    TMaybe<NYql::TQItem> loaded =
+        context
+            .GetReader()
+            ->Get({FacadeComponent, TranslationLabel})
+            .GetValueSync();
+
+    if (!loaded) {
+        return {};
+    }
+
+    return SQLFlagsFromYson(NYT::NodeFromYsonString(loaded->Value));
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // TProgramFactory
@@ -177,6 +213,10 @@ void TProgramFactory::UnrepeatableRandom() {
 
 void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
+}
+
+void TProgramFactory::SetIssueReportTarget(const TString& reportTarget) {
+    IssueReportTarget_ = reportTarget;
 }
 
 void TProgramFactory::SetLanguageVersion(TLangVersion version) {
@@ -281,7 +321,7 @@ TProgramPtr TProgramFactory::Create(
     }
 
     // make UserDataTable_ copy here
-    return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
+    return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
@@ -292,6 +332,7 @@ TProgramPtr TProgramFactory::Create(
 // TProgram
 ///////////////////////////////////////////////////////////////////////////////
 TProgram::TProgram(
+    const TString& issueReportTarget,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TIntrusivePtr<IRandomProvider> randomProvider,
     const TIntrusivePtr<ITimeProvider> timeProvider,
@@ -320,7 +361,8 @@ TProgram::TProgram(
     const TQContext& qContext,
     TMaybe<TString> gatewaysForMerge,
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
-    : FunctionRegistry_(functionRegistry)
+    : IssueReportTarget_(issueReportTarget)
+    , FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
     , NextUniqueId_(nextUniqueId)
@@ -359,6 +401,7 @@ TProgram::TProgram(
     }
 
     if (QContext_.CanWrite()) {
+        QContext_.GetWriter()->Put({GeneralInfoComponent, StartTimeLabel}, TInstant::Now().ToStringLocalUpToSeconds()).GetValueSync();
         NYT::TNode credListNode = NYT::TNode::CreateList();
         Credentials_->ForEach([&](const TString name, const TCredential& cred) {
             credListNode.Add(NYT::TNode()("Name", name)("Category", cred.Category)("Subcategory", cred.Subcategory));
@@ -433,12 +476,16 @@ TProgram::TProgram(
             auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
             if (item) {
                 YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
+
                 if (GatewaysForMerge_) {
                     YQL_ENSURE(NProtoBuf::TextFormat::MergeFromString(*GatewaysForMerge_, &LoadedGatewaysConfig_));
                 }
+
                 THashMap<TString, TString> clusterMapping;
                 GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
-                auto sqlFlags = ExtractSqlFlags(LoadedGatewaysConfig_);
+
+                THashSet<TString> sqlFlags = TGatewaySQLFlags::FromTesting(LoadedGatewaysConfig_).All();
+
                 if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
                     modules->SetClusterMapping(clusterMapping);
                     modules->SetSqlFlags(sqlFlags);
@@ -739,34 +786,6 @@ void TProgram::HandleSourceCode() {
     }
 }
 
-namespace {
-
-THashSet<TString> ExtractSqlFlags(const NYT::TNode& dataNode) {
-    THashSet<TString> result;
-    for (const auto& f : dataNode["SqlFlags"].AsList()) {
-        result.insert(f.AsString());
-    }
-    return result;
-}
-
-} // namespace
-
-void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch) {
-    if (qContext.CanRead()) {
-        auto loaded = qContext.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
-        if (!loaded) {
-            return;
-        }
-
-        auto dataNode = NYT::NodeFromYsonString(loaded->Value);
-        flags = ExtractSqlFlags(dataNode);
-
-        if (gatewaysPatch) {
-            AddSqlFlagsFromPatch(flags, *gatewaysPatch);
-        }
-    }
-}
-
 bool HasFullCapture(const IQReaderPtr& reader) {
     auto fullCaptureItem = reader->Get({FacadeComponent, FullCaptureLabel}).GetValueSync();
     return fullCaptureItem.Defined();
@@ -810,10 +829,11 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
             loadedSettings.ClusterMapping[c.first] = c.second.AsString();
         }
 
-        loadedSettings.Flags = ExtractSqlFlags(dataNode);
+        TGatewaySQLFlags flags = SQLFlagsFromYson(dataNode);
         if (GatewaysForMerge_) {
-            AddSqlFlagsFromPatch(loadedSettings.Flags, *GatewaysForMerge_);
+            flags.ExtendWith(SQLFlagsFromGatewaysPatch(*GatewaysForMerge_));
         }
+        loadedSettings.Flags = flags.All();
 
         loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
@@ -886,11 +906,11 @@ bool TProgram::ParseYql() {
 bool TProgram::ParseSql() {
     YQL_PROFILE_FUNC(TRACE);
 
-    static const THashMap<TString, TString> clusters = {
+    static const THashMap<TString, TString> Clusters = {
         {"plato", TString(YtProviderName)}};
 
     NSQLTranslation::TTranslationSettings settings;
-    settings.ClusterMapping = clusters;
+    settings.ClusterMapping = Clusters;
     return ParseSql(settings);
 }
 
@@ -934,6 +954,21 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
         NSQLTranslationPG::MakeTranslator());
 
     return FillParseResult(SqlToYql(translators, SourceCode_, *currentSettings, &warningRules), &warningRules);
+}
+
+TProgram::TStatus TProgram::TestPartialTypecheck() {
+    YQL_PROFILE_FUNC(TRACE);
+
+    Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
+
+    TIssues issues;
+    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, issues, [&](TTypeAnnotationContext& newTypeCtx) {
+        return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+    })
+                   ? TProgram::TStatus::Ok
+                   : TProgram::TStatus::Error;
+    ExprCtx_->IssueManager.AddIssues(issues);
+    return ret;
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {
@@ -1404,7 +1439,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1483,7 +1518,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1871,18 +1906,31 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             writer.OnEndMap();
     }
 
-    if (TypeCtx_->EnableLineage) {
-        writer.OnKeyedItem("CorrectLineage");
+    // lineage
+    if (TypeCtx_->LineageStats.Correct || TypeCtx_->LineageStats.CorrectStandalone) {
+        writer.OnKeyedItem("Lineage");
         writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
-        writer.OnEndMap();
-    }
-    if (TypeCtx_->CorrectStandaloneLineage) {
-        writer.OnKeyedItem("CorrectStandaloneLineage");
-        writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(*TypeCtx_->CorrectStandaloneLineage);
+            if (TypeCtx_->LineageStats.Correct) {
+                writer.OnKeyedItem("Correct");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(*TypeCtx_->LineageStats.Correct);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.CorrectStandalone) {
+                writer.OnKeyedItem("CorrectStandalone");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(*TypeCtx_->LineageStats.CorrectStandalone);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.Size > 0) {
+                writer.OnKeyedItem("Size");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Size);
+                writer.OnEndMap();
+            }
         writer.OnEndMap();
     }
 
@@ -1939,7 +1987,7 @@ TIssues TProgram::Issues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetIssues());
     }
     result.AddIssues(FinalIssues_);
-    CheckFatalIssues(result);
+    CheckFatalIssues(result, IssueReportTarget_);
     return result;
 }
 
@@ -1949,7 +1997,7 @@ TIssues TProgram::CompletedIssues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetCompletedIssues());
     }
     result.AddIssues(FinalIssues_);
-    CheckFatalIssues(result);
+    CheckFatalIssues(result, IssueReportTarget_);
     return result;
 }
 
@@ -1965,12 +2013,12 @@ TIssue MakeNoBlocksInfoIssue(const TVector<TString>& names, bool isTypes) {
 void TProgram::FinalizeIssues() {
     FinalIssues_.Clear();
     if (TypeCtx_) {
-        static const size_t topCount = 10;
-        auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(topCount);
+        constexpr size_t TopCount = 10;
+        auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(TopCount);
         if (!noBlockTypes.empty()) {
             FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, true));
         }
-        auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(topCount);
+        auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(TopCount);
         if (!noBlockCallables.empty()) {
             FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, false));
         }
@@ -2183,7 +2231,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     tokenResolvers.push_back(BuildDefaultTokenResolver(typeAnnotationContext->Credentials));
-    typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
+    auto tokenResolver = BuildCompositeTokenResolver(std::move(tokenResolvers));
+
+    typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
+
+    if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
+        urlListerManager->SetTokenResolver(std::move(tokenResolver));
+    }
 
     return typeAnnotationContext;
 }

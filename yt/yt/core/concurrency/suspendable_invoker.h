@@ -1,0 +1,15 @@
+#pragma once
+
+#include "public.h"
+
+#include <yt/yt/core/actions/public.h>
+
+namespace NYT::NConcurrency {
+
+////////////////////////////////////////////////////////////////////////////////
+
+ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NConcurrency

@@ -49,7 +49,7 @@ TSkiffToYsonConverter CreateSkiffToYsonConverter(
 template <NSkiff::EWireType wireType>
 struct TSimpleSkiffParser
 {
-    Y_FORCE_INLINE auto operator () (NSkiff::TCheckedInDebugSkiffParser* parser) const;
+    Y_FORCE_INLINE auto operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,7 +59,7 @@ class TTzSkiffParser
 {
 public:
     TTzSkiffParser();
-    Y_FORCE_INLINE TStringBuf operator () (NSkiff::TCheckedInDebugSkiffParser* parser);
+    Y_FORCE_INLINE TStringBuf operator()(NSkiff::TCheckedInDebugSkiffParser* parser);
 
 private:
     std::string Buffer_;
@@ -70,7 +70,7 @@ private:
 template <NSkiff::EWireType internalWireType>
 struct TTzSkiffWriter
 {
-    Y_FORCE_INLINE void operator() (TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
+    Y_FORCE_INLINE void operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,7 +80,7 @@ class TDecimalSkiffParser
 {
 public:
     explicit TDecimalSkiffParser(int precision);
-    Y_FORCE_INLINE TStringBuf operator() (NSkiff::TCheckedInDebugSkiffParser* parser) const;
+    Y_FORCE_INLINE TStringBuf operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const;
 
 private:
     const int Precision_;
@@ -95,7 +95,7 @@ class TDecimalSkiffWriter
 public:
     explicit TDecimalSkiffWriter(int precision);
 
-    void operator() (TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
+    void operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
 
 private:
     const int Precision_;
@@ -106,7 +106,7 @@ private:
 class TUuidParser
 {
 public:
-    Y_FORCE_INLINE TStringBuf operator() (NSkiff::TCheckedInDebugSkiffParser* parser) const;
+    Y_FORCE_INLINE TStringBuf operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const;
 
 private:
     mutable ui64 Buffer_[2];
@@ -117,7 +117,7 @@ private:
 class TUuidWriter
 {
 public:
-    Y_FORCE_INLINE void operator() (TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
+    Y_FORCE_INLINE void operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

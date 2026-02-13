@@ -37,7 +37,6 @@ protected:
     };
 
     struct TFeatureFlags {
-        bool EnablePQConfigTransactionsAtSchemeShard = true;
     };
 
     class ISession {
@@ -143,6 +142,8 @@ protected:
 
     void DeleteSupportivePartition(const std::string& topicName,
                                    std::uint32_t partition);
+    void WaitForTheTabletToDeleteTheWriteInfo(const std::string& topicName,
+                                              std::uint32_t partition);
 
     struct TTableRecord {
         TTableRecord() = default;

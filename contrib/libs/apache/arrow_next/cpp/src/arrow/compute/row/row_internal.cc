@@ -15,9 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/row/row_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/row_internal.h"
 
-#include "arrow/compute/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util.h"
 
 namespace arrow20 {
 namespace compute {

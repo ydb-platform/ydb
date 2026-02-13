@@ -30,14 +30,38 @@
 #error "File boost/type_index/stl_type_index.ipp is not usable when typeid() is not available."
 #endif
 
+#if defined(__has_include)
+#  if __has_include(<cxxabi.h>)
+#    define BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+#  endif
+#endif
+
 #if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <typeinfo>
 #include <cstring>                                  // std::strcmp, std::strlen, std::strstr
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 
 #include <boost/throw_exception.hpp>
-#include <boost/core/demangle.hpp>
+
+#ifdef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+# include <cxxabi.h>
+# include <cstdlib>
+# include <cstddef>
+#endif
+
+#endif
+
+// Copied from boost/core/demangle.hpp
+#ifdef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+// For some architectures (mips, mips64, x86, x86_64) cxxabi.h in Android NDK is implemented by gabi++ library
+// (https://android.googlesource.com/platform/ndk/+/master/sources/cxx-stl/gabi++/), which does not implement
+// abi::__cxa_demangle(). We detect this implementation by checking the include guard here.
+# ifdef __GABIXX_CXXABI_H__
+#  undef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+# endif
 #endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
@@ -45,6 +69,34 @@
 #endif
 
 namespace boost { namespace typeindex {
+
+namespace impl {
+
+#ifdef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+
+inline const char* demangle_alloc(const char* name) noexcept {
+    int status = 0;
+    std::size_t size = 0;
+    return abi::__cxa_demangle(name, NULL, &size, &status);
+}
+
+inline void demangle_free(const void* name) noexcept {
+    std::free(const_cast<void*>(name));
+}
+
+#else
+
+inline const char* demangle_alloc(const char* name) noexcept {
+    return name;
+}
+
+inline void demangle_free(const void* ) noexcept {}
+
+#endif
+
+#undef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
+
+}  // namespace impl
 
 BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 
@@ -127,7 +179,9 @@ inline std::string stl_type_index::pretty_name() const {
 
     // In case of MSVC demangle() is a no-op, and name() already returns demangled name.
     // In case of GCC and Clang (on non-Windows systems) name() returns mangled name and demangle() undecorates it.
-    const boost::core::scoped_demangled_name demangled_name(data_->name());
+    const std::unique_ptr<const char, void(*)(const void*)> demangled_name(
+        impl::demangle_alloc(data_->name()), &impl::demangle_free
+    );
 
     const char* begin = demangled_name.get();
     if (!begin) {
@@ -142,7 +196,7 @@ inline std::string stl_type_index::pretty_name() const {
         if (b) {
             b += cvr_saver_name_len;
 
-            // Trim everuthing till '<'. In modules the name could be boost::typeindex::detail::cvr_saver@boost.type_index<
+            // Trim everything till '<'. In modules the name could be boost::typeindex::detail::cvr_saver@boost.type_index<
             while (*b != '<') {         // the string is zero terminated, we won't exceed the buffer size
                 ++ b;
             }

@@ -5,7 +5,7 @@
 namespace NYql::NFmr {
     // helper functions for yson reformatting
 
-    TString GetBinaryYson(const TString& textYsonContent);
+    TString GetBinaryYson(const TString& textYsonContent, NYson::EYsonType nodeType = NYson::EYsonType::ListFragment);
 
     TString GetTextYson(const TString& binaryYsonContent);
 

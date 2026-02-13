@@ -102,7 +102,7 @@ enum ECumulativeCounters {
     COUNTER_CLEANUP_FAIL = 46                               [(CounterOpts) = {Name: "CleanupFail"}];
     COUNTER_TTL_SUCCESS = 47                                [(CounterOpts) = {Name: "TtlSuccess"}];
     COUNTER_TTL_FAIL = 48                                   [(CounterOpts) = {Name: "TtlFail"}];
-    COUNTER_OUT_OF_SPACE = 49                               [(CounterOpts) = {Name: "OutOfSpace"}];
+    COUNTER_DISK_GROUP_OUT_OF_SPACE = 49                    [(CounterOpts) = {Name: "DiskGroupOutOfSpace"}];
     COUNTER_SCAN_RESTARTED = 50                             [(CounterOpts) = {Name: "ScanRestarted"}];
     COUNTER_READ_INDEX_GRANULES = 51                        [(CounterOpts) = {Name: "ReadIndexGranules"}];
     COUNTER_READ_INDEX_PORTIONS = 52                        [(CounterOpts) = {Name: "ReadIndexPortions"}];
@@ -211,4 +211,5 @@ enum ETxTypes {
     TXTYPE_PERSIST_SUBDOMAIN_PATH_ID = 42                   [(TxTypeOpts) = {Name: "TxPersistSubDomainPathId"}];
     TXTYPE_CLEANUP_SCHEMAS = 43                             [(TxTypeOpts) = {Name: "TxCleanupSchemasWithnoData"}];
     TXTYPE_ABORT_LOCK = 44                                  [(TxTypeOpts) = {Name: "TxAbortLock"}];
+    TXTYPE_TX_ABORT = 45                                    [(TxTypeOpts) = {Name: "TxTxAbort"}];
 }

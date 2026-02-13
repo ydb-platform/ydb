@@ -218,7 +218,7 @@ TEST(TStatisticPathTest, Swap)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TStatisticPath, Serialize)
+TEST(TStatisticPathTest, Serialize)
 {
     TStatisticPath path = "A"_L / "B/C"_L;
     EXPECT_EQ(
@@ -228,7 +228,7 @@ TEST(TStatisticPath, Serialize)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TStatisticPath, Deserialize)
+TEST(TStatisticPathTest, Deserialize)
 {
     TStatisticPath simplePath = "/A/B/C"_SP;
 
@@ -251,7 +251,7 @@ TEST(TStatisticPath, Deserialize)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TStatisticPath, SaveLoad)
+TEST(TStatisticPathTest, SaveLoad)
 {
     TStringStream stream;
     TStreamSaveContext saveContext(&stream);

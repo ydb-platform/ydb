@@ -9,19 +9,15 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Hashable, Iterable, Sequence
+from dataclasses import dataclass
 from typing import (
-    TYPE_CHECKING,
-    Callable,
     Literal,
-    Optional,
+    TypeAlias,
     TypedDict,
     TypeVar,
-    Union,
     cast,
 )
-
-import attr
 
 from hypothesis.errors import ChoiceTooLarge
 from hypothesis.internal.conjecture.floats import float_to_lex, lex_to_float
@@ -31,14 +27,11 @@ from hypothesis.internal.intervalsets import IntervalSet
 
 T = TypeVar("T")
 
-if TYPE_CHECKING:
-    from typing import TypeAlias
-
 
 class IntegerConstraints(TypedDict):
-    min_value: Optional[int]
-    max_value: Optional[int]
-    weights: Optional[dict[int, float]]
+    min_value: int | None
+    max_value: int | None
+    weights: dict[int, float] | None
     shrink_towards: int
 
 
@@ -64,43 +57,43 @@ class BooleanConstraints(TypedDict):
     p: float
 
 
-ChoiceT: "TypeAlias" = Union[int, str, bool, float, bytes]
-ChoiceConstraintsT: "TypeAlias" = Union[
-    IntegerConstraints,
-    FloatConstraints,
-    StringConstraints,
-    BytesConstraints,
-    BooleanConstraints,
-]
-ChoiceTypeT: "TypeAlias" = Literal["integer", "string", "boolean", "float", "bytes"]
-ChoiceKeyT: "TypeAlias" = Union[
-    int, str, bytes, tuple[Literal["bool"], bool], tuple[Literal["float"], int]
-]
+ChoiceT: TypeAlias = int | str | bool | float | bytes
+ChoiceConstraintsT: TypeAlias = (
+    IntegerConstraints
+    | FloatConstraints
+    | StringConstraints
+    | BytesConstraints
+    | BooleanConstraints
+)
+ChoiceTypeT: TypeAlias = Literal["integer", "string", "boolean", "float", "bytes"]
+ChoiceKeyT: TypeAlias = (
+    int | str | bytes | tuple[Literal["bool"], bool] | tuple[Literal["float"], int]
+)
 
 
-@attr.s(slots=True)
+@dataclass(slots=True, frozen=False)
 class ChoiceTemplate:
-    type: Literal["simplest"] = attr.ib()
-    count: Optional[int] = attr.ib()
+    type: Literal["simplest"]
+    count: int | None
 
-    def __attrs_post_init__(self) -> None:
+    def __post_init__(self) -> None:
         if self.count is not None:
             assert self.count > 0
 
 
-@attr.s(slots=True, repr=False, eq=False)
+@dataclass(slots=True, frozen=False)
 class ChoiceNode:
-    type: ChoiceTypeT = attr.ib()
-    value: ChoiceT = attr.ib()
-    constraints: ChoiceConstraintsT = attr.ib()
-    was_forced: bool = attr.ib()
-    index: Optional[int] = attr.ib(default=None)
+    type: ChoiceTypeT
+    value: ChoiceT
+    constraints: ChoiceConstraintsT
+    was_forced: bool
+    index: int | None = None
 
     def copy(
         self,
         *,
-        with_value: Optional[ChoiceT] = None,
-        with_constraints: Optional[ChoiceConstraintsT] = None,
+        with_value: ChoiceT | None = None,
+        with_constraints: ChoiceConstraintsT | None = None,
     ) -> "ChoiceNode":
         # we may want to allow this combination in the future, but for now it's
         # a footgun.
@@ -601,8 +594,11 @@ def choice_constraints_equal(
     )
 
 
-def choice_constraints_key(choice_type, constraints):
+def choice_constraints_key(
+    choice_type: ChoiceTypeT, constraints: ChoiceConstraintsT
+) -> tuple[Hashable, ...]:
     if choice_type == "float":
+        constraints = cast(FloatConstraints, constraints)
         return (
             float_to_int(constraints["min_value"]),
             float_to_int(constraints["max_value"]),
@@ -610,13 +606,14 @@ def choice_constraints_key(choice_type, constraints):
             constraints["smallest_nonzero_magnitude"],
         )
     if choice_type == "integer":
+        constraints = cast(IntegerConstraints, constraints)
         return (
             constraints["min_value"],
             constraints["max_value"],
             None if constraints["weights"] is None else tuple(constraints["weights"]),
             constraints["shrink_towards"],
         )
-    return tuple(constraints[key] for key in sorted(constraints))
+    return tuple(constraints[key] for key in sorted(constraints))  # type: ignore
 
 
 def choices_size(choices: Iterable[ChoiceT]) -> int:

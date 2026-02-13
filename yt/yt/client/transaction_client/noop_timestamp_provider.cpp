@@ -20,6 +20,9 @@ public:
     {
         return NullTimestamp;
     }
+
+    void Reconfigure(const TRemoteTimestampProviderConfigPtr& /*config*/) override
+    { }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

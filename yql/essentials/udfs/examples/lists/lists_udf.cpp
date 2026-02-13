@@ -18,8 +18,8 @@ namespace {
 class TNumbers: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Numbers");
-        return name;
+        static auto Name = TStringRef::Of("Numbers");
+        return Name;
     }
 
 private:
@@ -50,8 +50,8 @@ private:
 class TExtend: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Extend");
-        return name;
+        static auto Name = TStringRef::Of("Extend");
+        return Name;
     }
 
 private:

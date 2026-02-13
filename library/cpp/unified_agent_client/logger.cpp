@@ -53,6 +53,12 @@ namespace NUnifiedAgent {
         SetCurrentLogContext(DefaultLogContext);
     }
 
+    void TLogger::AddLog(TLog& log) {
+        with_lock(Lock) {
+            AdditionalLogs.push_back(log);
+        }
+    }
+
     void TLogger::SetCurrentLogContext(TLogContext& logContext) {
         CurrentLogContext_.store(logContext.Log.IsNullLog() ? nullptr : &logContext, std::memory_order_release);
     }
@@ -67,6 +73,11 @@ namespace NUnifiedAgent {
                 return;
             }
             log.Write(logPriority, logLine);
+
+            // Write to all additional logs
+            for (auto& additionalLog : AdditionalLogs) {
+                additionalLog.Write(logPriority, logLine);
+            }
         } catch (...) {
         }
     }

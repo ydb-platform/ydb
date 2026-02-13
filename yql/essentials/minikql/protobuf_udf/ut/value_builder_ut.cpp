@@ -36,7 +36,7 @@ struct TSetup {
         , Env(Alloc)
         , FunctionRegistry(CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr()))
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, {})
+        , FunctionTypeInfoBuilder(UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, NYql::NUdf::TSourcePosition())
         , PgmBuilder(Env, *FunctionRegistry)
         , MemInfo("Test")
         , HolderFactory(Alloc.Ref(), MemInfo)
@@ -113,7 +113,7 @@ private:
 template <typename TProto>
 TString ProtoTextToYson(TSetup& setup, NUdf::TProtoInfo& info, TStringBuf protoText) {
     TProto proto;
-    if (!NProtoBuf::TextFormat::ParseFromString(TString{protoText}, &proto)) {
+    if (!NProtoBuf::TextFormat::ParseFromString(protoText, &proto)) {
         throw yexception() << "Failed to parse proto";
     }
 

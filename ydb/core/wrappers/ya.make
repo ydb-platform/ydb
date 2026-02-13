@@ -9,6 +9,8 @@ ELSE()
         s3_wrapper.cpp
         s3_storage.cpp
         s3_storage_config.cpp
+        fs_storage.cpp
+        fs_storage_config.cpp
         abstract.cpp
         fake_storage.cpp
         fake_storage_config.cpp

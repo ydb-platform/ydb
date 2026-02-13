@@ -9,6 +9,10 @@ SRCS(
     utils.cpp
 )
 
+IF (REF)
+    CFLAGS(-DREF=${REF})
+ENDIF()
+
 PEERDIR(
     contrib/libs/opentelemetry-cpp
     library/cpp/json/writer

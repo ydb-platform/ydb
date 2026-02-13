@@ -13,8 +13,8 @@ namespace builtins
   {
 
     template <typename T, typename U>
-    typename __combined<types::set<T>, U>::type
-    symmetric_difference(types::set<T> const &set, U const &other);
+    typename __combined<types::set<T>, U>::type symmetric_difference(types::set<T> const &set,
+                                                                     U const &other);
 
     /* No rvalue overload possible because of return type modification.:
      * >>> a = set([1, 2, 3])
@@ -25,8 +25,8 @@ namespace builtins
 
     // combiner is used as other may be list but return is a set
     template <typename U>
-    typename __combined<types::empty_set, U>::type
-    symmetric_difference(types::empty_set const &set, U const &other);
+    typename __combined<types::empty_set, U>::type symmetric_difference(types::empty_set const &set,
+                                                                        U const &other);
 
     DEFINE_FUNCTOR(pythonic::builtins::set, symmetric_difference);
   } // namespace set

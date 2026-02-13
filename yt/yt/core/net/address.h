@@ -100,7 +100,7 @@ struct TNetworkAddressFormatOptions
 void FormatValue(TStringBuilderBase* builder, const TNetworkAddress& address, TStringBuf spec);
 TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options = {});
 
-bool operator == (const TNetworkAddress& lhs, const TNetworkAddress& rhs);
+bool operator==(const TNetworkAddress& lhs, const TNetworkAddress& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -135,12 +135,12 @@ private:
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStringBuf spec);
 
-bool operator == (const TIP6Address& lhs, const TIP6Address& rhs);
+bool operator==(const TIP6Address& lhs, const TIP6Address& rhs);
 
-TIP6Address operator & (const TIP6Address& lhs, const TIP6Address& rhs);
-TIP6Address operator | (const TIP6Address& lhs, const TIP6Address& rhs);
-TIP6Address& operator &= (TIP6Address& lhs, const TIP6Address& rhs);
-TIP6Address& operator |= (TIP6Address& lhs, const TIP6Address& rhs);
+TIP6Address operator&(const TIP6Address& lhs, const TIP6Address& rhs);
+TIP6Address operator|(const TIP6Address& lhs, const TIP6Address& rhs);
+TIP6Address& operator&=(TIP6Address& lhs, const TIP6Address& rhs);
+TIP6Address& operator|=(TIP6Address& lhs, const TIP6Address& rhs);
 
 void Deserialize(TIP6Address& value, NYTree::INodePtr node);
 void Deserialize(TIP6Address& value, NYson::TYsonPullParserCursor* cursor);

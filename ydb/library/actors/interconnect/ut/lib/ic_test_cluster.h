@@ -2,11 +2,11 @@
 
 #include "node.h"
 #include "interrupter.h"
+#include "port_manager.h"
 
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/generic/noncopyable.h>
 
@@ -21,7 +21,8 @@ public:
     enum Flags : ui64 {
         EMPTY = 0,
         USE_ZC = 1,
-        USE_TLS = 1 << 1
+        USE_TLS = 1 << 1,
+        RDMA_POLLING_CQ = 1 << 2,
     };
 
     using TCheckerFactory = std::function<IActor*(ui32)>;
@@ -29,28 +30,30 @@ public:
 private:
     const ui32 NumNodes;
     const TString Address = "::1";
-    TDuration DeadPeerTimeout = TDuration::Seconds(2);
+    const TDuration DeadPeerTimeout;
     NMonitoring::TDynamicCounterPtr Counters;
     THashMap<ui32, THolder<TNode>> Nodes;
     TList<TTrafficInterrupter> interrupters;
     NActors::TChannelsConfig ChannelsConfig;
-    TPortManager PortManager;
+    NInterconnectTest::IPortManager::TPtr PortManager;
     TIntrusivePtr<NLog::TSettings> LoggerSettings;
 
 public:
     TTestICCluster(ui32 numNodes = 1, NActors::TChannelsConfig channelsConfig = NActors::TChannelsConfig(),
                    TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, Flags flags = EMPTY,
-                   TCheckerFactory checkerFactory = {})
+                   TCheckerFactory checkerFactory = {}, TDuration deadPeerTimeout = TDuration::Seconds(2), ui32 inflight = TNode::DefaultInflight())
         : NumNodes(numNodes)
+        , DeadPeerTimeout(deadPeerTimeout)
         , Counters(new NMonitoring::TDynamicCounters)
         , ChannelsConfig(channelsConfig)
+        , PortManager(NInterconnectTest::CreatePortmanager())
         , LoggerSettings(loggerSettings)
     {
         THashMap<ui32, ui16> nodeToPortMap;
         THashMap<ui32, THashMap<ui32, ui16>> specificNodePortMap;
 
         for (ui32 i = 1; i <= NumNodes; ++i) {
-            nodeToPortMap.emplace(i, PortManager.GetPort());
+            nodeToPortMap.emplace(i, PortManager->GetPort());
         }
 
         if (tiSettings) {
@@ -60,7 +63,7 @@ public:
             for (auto& item : nodeToPortMap) {
                 nodeId = item.first;
                 listenPort = item.second;
-                forwardPort = PortManager.GetPort();
+                forwardPort = PortManager->GetPort();
 
                 specificNodePortMap[nodeId] = nodeToPortMap;
                 specificNodePortMap[nodeId].at(nodeId) = forwardPort;
@@ -72,9 +75,9 @@ public:
         for (ui32 i = 1; i <= NumNodes; ++i) {
             auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap;
             Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
-                /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings, TNode::DefaultInflight(),
+                /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings, inflight,
                 flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
-                flags & USE_TLS, checkerFactory));
+                flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT));
         }
     }
 
@@ -133,3 +136,27 @@ public:
         return promise.GetFuture();
     }
 };
+
+struct TPatternNotFound : public yexception {};
+
+inline TString ExtractPattern(TTestICCluster& testCluster, ui32 me, ui32 peer, TString patternStart, TString patternEnd) {
+    auto httpResp = testCluster.GetSessionDbg(me, peer);
+    const TString& resp = httpResp.GetValueSync();
+    auto pos = resp.find(patternStart);
+    if (pos == std::string::npos) {
+        ythrow TPatternNotFound() << "pattern was not found: " << httpResp.GetValueSync();
+    }
+    pos += patternStart.size();
+    size_t end = resp.find(patternEnd, pos);
+    Y_ABORT_UNLESS(end != std::string::npos);
+    return resp.substr(pos, end - pos);
+
+}
+
+inline TString GetRdmaQpStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
+    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaQp</td><td>[", "]<");
+}
+
+inline TString GetRdmaChecksumStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
+    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaMode</td><td>", "<");
+}

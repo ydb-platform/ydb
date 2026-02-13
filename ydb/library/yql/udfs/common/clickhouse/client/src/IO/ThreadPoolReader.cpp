@@ -196,8 +196,13 @@ std::future<IAsynchronousReader::Result> ThreadPoolReader::submit(Request reques
             if (!res)
                 break;
 
-            if (-1 == res && errno != EINTR)
+            if (-1 == res)
             {
+                if (errno == EINTR)
+                {
+                    /// Interrupted by a signal.
+                    continue;
+                }
                 ProfileEvents::increment(ProfileEvents::ReadBufferFromFileDescriptorReadFailed);
                 throwFromErrno(fmt::format("Cannot read from file {}", fd), ErrorCodes::CANNOT_READ_FROM_FILE_DESCRIPTOR);
             }

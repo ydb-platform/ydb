@@ -129,7 +129,7 @@ Y_UNIT_TEST(TestArbitraryAtom) {
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
     TAstNode* xValue = ast.Root->GetChild(0)->GetChild(1)->GetChild(1);
-    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "0123456789ABCDEF");
+    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(xValue->GetContent()), "0123456789ABCDEF");
     UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::ArbitraryContent);
 }
 
@@ -149,7 +149,7 @@ Y_UNIT_TEST(TestBinaryAtom) {
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
     TAstNode* xValue = ast.Root->GetChild(0)->GetChild(2)->GetChild(1);
-    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "FEDCBA9876543210");
+    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(xValue->GetContent()), "FEDCBA9876543210");
     UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::BinaryContent);
 }
 

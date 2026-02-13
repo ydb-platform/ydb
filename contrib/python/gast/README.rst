@@ -73,6 +73,9 @@ not used.
 For minor version before 3.8, please note that ``Ellipsis``, ``Num``, ``Str``,
 ``Bytes`` and ``NamedConstant`` are represented as ``Constant``.
 
+For minor version before 3.10, the ``_field_types`` field exist for each AST
+class, but it's always empty.
+
 Python2
 *******
 
@@ -219,7 +222,9 @@ trade-offs to cope with legacy ASTs.
              | Call(expr func, expr* args, keyword* keywords)
              | Repr(expr value)
              | FormattedValue(expr value, int? conversion, expr? format_spec)
+             | Interpolation(expr value, constant str, int conversion, expr? format_spec)
              | JoinedStr(expr* values)
+             | TemplateStr(expr* values)
              | Constant(constant value, string? kind)
 
              -- the following expression can appear in assignment context
@@ -284,9 +289,9 @@ trade-offs to cope with legacy ASTs.
 
         type_ignore = TypeIgnore(int lineno, string tag)
 
-         type_param = TypeVar(identifier name, expr? bound)
-                    | ParamSpec(identifier name)
-                    | TypeVarTuple(identifier name)
+         type_param = TypeVar(identifier name, expr? bound, expr? default_value)
+                    | ParamSpec(identifier name, expr? default_value)
+                    | TypeVarTuple(identifier name, expr? default_value)
                     attributes (int lineno, int col_offset, int end_lineno, int end_col_offset)
     }
 

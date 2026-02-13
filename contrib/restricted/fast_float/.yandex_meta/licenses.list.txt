@@ -199,25 +199,6 @@ Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
 was originally published under the Apache 2.0 license.
 
 
-====================Apache-2.0 AND MIT====================
-was originally published under the Apache 2.0 license.
-
-## License
-
-<sup>
-Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
-2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a
-href="LICENSE-BOOST">BOOST license</a>.
-</sup>
-
-<br/>
-
-<sub>
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this repository by you, as defined in the Apache-2.0 license,
-shall be triple licensed as above, without any additional terms or conditions.
-
-
 ====================Apache-2.0 OR MIT OR BSL-1.0====================
 Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
 

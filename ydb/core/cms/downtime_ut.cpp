@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TDowntimeTest) {
                       t6, t8, "notification-1");
 
         pdisk.State = DOWN;
-        pdisk.Lock.Clear();
+        pdisk.Locks.clear();
         pdisk.ExternalLocks.clear();
         pdisk.Downtime.Clear();
         downtime2.Clear();
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TDowntimeTest) {
         downtime2.AddDowntime(pdisk, t3);
         CheckDowntime(downtime2, t3, t4, "permission-2");
 
-        pdisk.Lock.Clear();
+        pdisk.Locks.clear();
         TNotificationInfo notification2;
         notification2.NotificationId = "notification-2";
         notification2.Notification.SetTime(t2.GetValue());

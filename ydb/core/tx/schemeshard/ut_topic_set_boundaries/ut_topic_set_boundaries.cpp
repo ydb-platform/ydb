@@ -86,7 +86,6 @@ TTestEnv CreateTestEnv(TTestBasicRuntime& runtime) {
     TTestEnvOptions opts;
 
     opts.EnableTopicSplitMerge(true);
-    opts.EnablePQConfigTransactionsAtSchemeShard(true);
 
     TTestEnv env(runtime, opts);
 

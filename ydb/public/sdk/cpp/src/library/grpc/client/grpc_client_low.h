@@ -4,7 +4,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
-#include <ydb/public/sdk/cpp/src/library/time/time.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
 
 #include <util/thread/factory.h>
 #include <util/string/builder.h>
@@ -425,10 +425,10 @@ public:
     virtual void Write(TRequest&& request, TWriteCallback callback = { }) = 0;
 };
 
-class TGRpcKeepAliveSocketMutator;
+class TGRpcSocketMutator;
 
 namespace NImpl {
-grpc_socket_mutator* CreateGRpcKeepAliveSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_);
+grpc_socket_mutator* CreateGRpcSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_, bool tcpNoDelay);
 } // NImpl
 
 // Class to hold stubs allocated on channel.
@@ -500,7 +500,7 @@ private:
 
 class TChannelPool {
 public:
-    TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime = TDuration::Minutes(6));
+    TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime = TDuration::Minutes(6), bool tcpNoDelay = true);
     //Allows to CreateStub from TStubsHolder under lock
     //The callback will be called just during GetStubsHolderLocked call
     void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb);
@@ -511,6 +511,7 @@ private:
     std::unordered_map<std::string, TStubsHolder> Pool_;
     std::multimap<TInstant, std::string> LastUsedQueue_;
     [[maybe_unused]] TTcpKeepAliveSettings TcpKeepAliveSettings_;
+    [[maybe_unused]] bool TcpNoDelay_;
     TDuration ExpireTime_;
     TDuration UpdateReUseTime_;
     void EraseFromQueueByTime(const TInstant& lastUseTime, const std::string& channelId);
@@ -1274,7 +1275,7 @@ public:
     }
 
     /*
-     * Start bidirectional streamming
+     * Start bidirectional streaming
      */
     template<typename TRequest, typename TResponse>
     void DoStreamRequest(TStreamConnectedCallback<TRequest, TResponse> callback,
@@ -1367,8 +1368,8 @@ public:
     }
 
     template<typename TGRpcService>
-    std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config, const TTcpKeepAliveSettings& keepAlive) {
-        auto mutator = NImpl::CreateGRpcKeepAliveSocketMutator(keepAlive);
+    std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config, const TTcpKeepAliveSettings& keepAlive, bool tcpNoDelay = true) {
+        auto mutator = NImpl::CreateGRpcSocketMutator(keepAlive, tcpNoDelay);
         // will be destroyed inside grpc
         return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config, mutator), this));
     }
@@ -1412,23 +1413,18 @@ private:
     std::mutex JoinMutex_;
 };
 
-gpr_timespec DurationToTimespec(const NYdb::TDeadline::Duration& duration) noexcept;
-
-gpr_timespec DeadlineToTimespec(const NYdb::TDeadline& deadline);
-
-}
+} // namespace NYdbGrpc
 
 template <>
 class grpc::TimePoint<NYdb::TDeadline> {
 public:
-    TimePoint(const NYdb::TDeadline& deadline)
-        : time_(NYdbGrpc::DeadlineToTimespec(deadline))
-    {}
+    TimePoint(const NYdb::TDeadline& deadline);
 
-    gpr_timespec raw_time() const noexcept {
-        return time_;
-    }
+    gpr_timespec raw_time() const noexcept;
 
 private:
+    static gpr_timespec DurationToTimespec(const NYdb::TDeadline::Duration& duration) noexcept;
+    static gpr_timespec DeadlineToTimespec(const NYdb::TDeadline& deadline);
+
     gpr_timespec time_;
 };

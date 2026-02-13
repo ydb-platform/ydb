@@ -1,9 +1,10 @@
 {% extends '//builtin/run.ym' %}
 
-{% block current_version %}6d66ac51a49af7ee46f1ccac45d312352d8b942e{% endblock %}
-{% block current_date %}2024-09-20{% endblock %}
+{% block current_version %}99f44c8fed5b538ab37c4227d9059a65450b68de{% endblock %}
+{% block current_date %}2024-11-12{% endblock %}
 
 {% block keep_sources %}
+.yandex_meta/scripts/fixlic.py
 .yandex_meta/scripts/sysincls.py
 include/__config_site
 include/__config_epilogue.h
@@ -32,9 +33,12 @@ SYSINCLS=${WORKDIR}/sysincls
 {% block prepare_env %}
 {{super()}}
 {% if local_llvm %}
-cp -R {{local_llvm.strip()}}/. ${RESOURCES}/
-cd ${RESOURCES}
-git checkout {{self.version().strip()}}
+(
+    cd {{local_llvm.strip()}}
+    git checkout {{self.version().strip()}}
+)
+mkdir ${RESOURCES}/libcxx
+cp -R {{local_llvm.strip()}}/libcxx/. ${RESOURCES}/libcxx/
 {% else %}
 tar xf ${RESOURCES}/{{self.current_url().strip() | basename}} --strip-components=1 --directory=${RESOURCES}
 {% endif %}
@@ -64,6 +68,7 @@ cp ${RESOURCES}/libcxx/vendor/llvm/default_assertion_handler.in include/__assert
 {% block build_source %}
 {{super()}}
 rm src/CMakeLists.txt include/CMakeLists.txt
+rm -r include/__cxx03
 
 sysincls ${SRC} ${SYSINCLS}/stl-to-libcxx.yml
 {% endblock %}
@@ -286,8 +291,17 @@ echo "no version update"
 rsync --recursive --delete --perms ${SRC}/ ${OUTPUT}
 {% endblock %}
 
-
 {% block step_install %}
 {{super()}}
 rsync ${SYSINCLS}/stl-to-libcxx.yml ${ARCADIA_ROOT}/build/sysincl/stl-to-libcxx.yml
+{% endblock %}
+
+{% block run_license_analyzer %}
+{{super()}}
+base64 -d << EOF > ${BIN}/fixlic
+{% include 'scripts/fixlic.py/base64' %}
+
+EOF
+cat ${OUTPUT}/.yandex_meta/licenses.list.txt | python3 ${BIN}/fixlic > _
+mv _ ${OUTPUT}/.yandex_meta/licenses.list.txt
 {% endblock %}

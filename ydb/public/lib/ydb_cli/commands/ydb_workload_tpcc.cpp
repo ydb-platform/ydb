@@ -7,6 +7,7 @@
 #include <ydb/library/workload/tpcc/runner.h>
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
 #include <util/generic/serialized_enum.h>
 #include <util/system/info.h>
@@ -219,6 +220,10 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     // advanced hidden options (mainly for developers)
 
+    auto highresHistOpt = config.Opts->AddLongOption(
+        "highres-histogram", TStringBuilder() << "Use high resolution histogram for transaction latencies")
+            .Optional().StoreTrue(&RunConfig->HighResHistogram);
+
     auto extendedStatsOpt = config.Opts->AddLongOption(
         "extended-stats", TStringBuilder() << "Print additional statistics")
             .Optional().StoreTrue(&RunConfig->ExtendedStats);
@@ -237,6 +242,17 @@ void TCommandTPCCRun::Config(TConfig& config) {
         "no-delays", TStringBuilder() << "Disable TPC-C keying/thinking delays")
             .Optional().StoreTrue(&RunConfig->NoDelays);
 
+    auto txModeOpt = config.Opts->AddLongOption(
+        "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw or snapshot-rw")
+            .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [](const TString& value) {
+                if (value == "serializable-rw") {
+                    return NQuery::TTxSettings::SerializableRW();
+                } else if (value == "snapshot-rw") {
+                    return NQuery::TTxSettings::SnapshotRW();
+                }
+                throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable-rw, snapshot-rw";
+            }).DefaultValue("serializable-rw");
+
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")
             .OptionalArgument("INT").StoreResult(&RunConfig->SimulateTransactionMs).DefaultValue(0);
@@ -247,6 +263,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     // for now. Later might be "config.HelpCommandVerbosiltyLevel <= 1" or advanced section
     if (true) {
+        highresHistOpt.Hidden();
         extendedStatsOpt.Hidden();
         logLevelOpt.Hidden();
         connectionsOpt.Hidden();

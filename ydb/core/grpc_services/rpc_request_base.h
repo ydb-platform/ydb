@@ -53,8 +53,28 @@ protected:
         Reply(response, status);
     }
 
+    void Reply(
+        const Ydb::StatusIds::StatusCode status,
+        const NYql::TIssues& issues
+    ) {
+        TResponse response;
+        if constexpr (HasOperation) {
+            *response.mutable_operation() = MakeOperation(status, issues);
+        } else {
+            response.set_status(status);
+            if (issues.Size()) {
+                response.mutable_issues()->CopyFrom(issues);
+            }
+        }
+        Reply(response, status);
+    }
+
     void Reply(const Ydb::StatusIds::StatusCode status, const TString& error = TString()) {
         Reply(status, ErrorToIssues(error));
+    }
+
+    void Reply(const Ydb::StatusIds::StatusCode status, const TString& error, NKikimrIssues::TIssuesIds::EIssueCode issueCode) {
+        Reply(status, ErrorToIssues(error, issueCode));
     }
 
     void Reply(
@@ -142,13 +162,16 @@ private:
     }
 
 private:
-    static google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> ErrorToIssues(const TString& error) {
+    static google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> ErrorToIssues(const TString& error, std::optional<NKikimrIssues::TIssuesIds::EIssueCode> issueCode=std::nullopt) {
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
 
         if (error) {
             auto& issue = *issues.Add();
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
             issue.set_message(error);
+            if (issueCode) {
+                issue.set_issue_code(*issueCode);
+            }
         }
 
         return issues;

@@ -412,10 +412,11 @@ IDynamicTableLogWriterFactoryPtr GetDynamicTableLogWriterFactory()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_STATIC_INITIALIZER(
+YT_STATIC_INITIALIZER({
     TLogManager::Get()->RegisterWriterFactory(
         TString(TDynamicTableLogWriterConfig::WriterType),
-        GetDynamicTableLogWriterFactory()));
+        GetDynamicTableLogWriterFactory());
+});
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -81,7 +81,59 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
     if (startOperationRequest.FmrOperationSpec) {
         protoStartOperationRequest.SetFmrOperationSpec(NYT::NodeToYsonString(*startOperationRequest.FmrOperationSpec));
     }
+    for (auto& fileInfo: startOperationRequest.Files) {
+        auto protoFileInfo = FileInfoToProto(fileInfo);
+        protoStartOperationRequest.AddFiles()->Swap(&protoFileInfo);
+    }
+    for (auto& ytResourceInfo: startOperationRequest.YtResources) {
+        auto protoYtResourceInfo = YtResourceInfoToProto(ytResourceInfo);
+        protoStartOperationRequest.AddYtResources()->Swap(&protoYtResourceInfo);
+    }
+    for (auto& fmrResourceInfo: startOperationRequest.FmrResources) {
+        auto protoFmrResourceOperationInfo = FmrResourceOperationInfoToProto(fmrResourceInfo);
+        protoStartOperationRequest.AddFmrResources()->Swap(&protoFmrResourceOperationInfo);
+    }
     return protoStartOperationRequest;
+}
+
+TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepareOperationRequest& protoPrepareOperationRequest) {
+    TPrepareOperationRequest PrepareOperationRequest;
+    PrepareOperationRequest.OperationParams = OperationParamsFromProto(protoPrepareOperationRequest.GetOperationParams());
+    std::unordered_map<TFmrTableId, TClusterConnection> PrepareOperationRequestClusterConnections;
+    for (auto& [tableName, conn]: protoPrepareOperationRequest.GetClusterConnections()) {
+        PrepareOperationRequestClusterConnections[tableName] = ClusterConnectionFromProto(conn);
+    }
+    PrepareOperationRequest.ClusterConnections = PrepareOperationRequestClusterConnections;
+    if (protoPrepareOperationRequest.HasFmrOperationSpec()) {
+        PrepareOperationRequest.FmrOperationSpec = NYT::NodeFromYsonString(protoPrepareOperationRequest.GetFmrOperationSpec());
+    }
+    return PrepareOperationRequest;
+}
+
+NProto::TPrepareOperationRequest PrepareOperationRequestToProto(const TPrepareOperationRequest& PrepareOperationRequest) {
+    NProto::TPrepareOperationRequest protoPrepareOperationRequest;
+    auto protoOperationParams = OperationParamsToProto(PrepareOperationRequest.OperationParams);
+    protoPrepareOperationRequest.MutableOperationParams()->Swap(&protoOperationParams);
+
+    auto& clusterConnections = *protoPrepareOperationRequest.MutableClusterConnections();
+    for (auto& [tableName, conn]: PrepareOperationRequest.ClusterConnections) {
+        clusterConnections[tableName.Id] = ClusterConnectionToProto(conn);
+    }
+    if (PrepareOperationRequest.FmrOperationSpec) {
+        protoPrepareOperationRequest.SetFmrOperationSpec(NYT::NodeToYsonString(*PrepareOperationRequest.FmrOperationSpec));
+    }
+    return protoPrepareOperationRequest;
+}
+
+NProto::TPrepareOperationResponse PrepareOperationResponseToProto(const TPrepareOperationResponse& PrepareOperationResponse) {
+    NProto::TPrepareOperationResponse protoPrepareOperationResponse;
+    protoPrepareOperationResponse.SetPartitionId(PrepareOperationResponse.PartitionId);
+    protoPrepareOperationResponse.SetTasksNum(PrepareOperationResponse.TasksNum);
+    return protoPrepareOperationResponse;
+}
+
+TPrepareOperationResponse PrepareOperationResponseFromProto(const NProto::TPrepareOperationResponse& protoPrepareOperationResponse) {
+    return TPrepareOperationResponse{.PartitionId = protoPrepareOperationResponse.GetPartitionId(), .TasksNum = protoPrepareOperationResponse.GetTasksNum()};
 }
 
 TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperationRequest& protoStartOperationRequest) {
@@ -100,6 +152,15 @@ TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperat
     startOperationRequest.ClusterConnections = startOperationRequestClusterConnections;
     if (protoStartOperationRequest.HasFmrOperationSpec()) {
         startOperationRequest.FmrOperationSpec = NYT::NodeFromYsonString(protoStartOperationRequest.GetFmrOperationSpec());
+    }
+    for (ui64 i = 0; i < protoStartOperationRequest.FilesSize(); ++i) {
+        startOperationRequest.Files.emplace_back(FileInfoFromProto(protoStartOperationRequest.GetFiles(i)));
+    }
+    for (ui64 i = 0; i < protoStartOperationRequest.YtResourcesSize(); ++i) {
+        startOperationRequest.YtResources.emplace_back(YtResourceInfoFromProto(protoStartOperationRequest.GetYtResources(i)));
+    }
+    for (ui64 i = 0; i < protoStartOperationRequest.FmrResourcesSize(); ++i) {
+        startOperationRequest.FmrResources.emplace_back(FmrResourceOperationInfoFromProto(protoStartOperationRequest.GetFmrResources(i)));
     }
     return startOperationRequest;
 }
@@ -131,6 +192,9 @@ NProto::TGetOperationResponse GetOperationResponseToProto(const TGetOperationRes
         auto protoTableStats = TableStatsToProto(tableStats);
         curTableStats->Swap(&protoTableStats);
     }
+    for (auto& operationResult: getOperationResponse.OperationResultsYson) {
+        protoGetOperationResponse.AddOperationResultsYson(operationResult);
+    }
     return protoGetOperationResponse;
 }
 
@@ -139,6 +203,7 @@ TGetOperationResponse GetOperationResponseFromProto(const NProto::TGetOperationR
     getOperationResponse.Status = static_cast<EOperationStatus>(protoGetOperationReponse.GetStatus());
     std::vector<TFmrError> errorMessages;
     std::vector<TTableStats> outputTableStats;
+    std::vector<TString> operationResultsYson;
     for (size_t i = 0; i < protoGetOperationReponse.ErrorMessagesSize(); ++i) {
         TFmrError errorMessage = FmrErrorFromProto(protoGetOperationReponse.GetErrorMessages(i));
         errorMessages.emplace_back(errorMessage);
@@ -147,8 +212,13 @@ TGetOperationResponse GetOperationResponseFromProto(const NProto::TGetOperationR
         TTableStats tableStats = TableStatsFromProto(protoGetOperationReponse.GetTableStats(i));
         outputTableStats.emplace_back(tableStats);
     }
+    for (size_t i = 0; i < protoGetOperationReponse.OperationResultsYsonSize(); ++i) {
+        TString operationResult = protoGetOperationReponse.GetOperationResultsYson(i);
+        operationResultsYson.emplace_back(operationResult);
+    }
     getOperationResponse.ErrorMessages = errorMessages;
     getOperationResponse.OutputTablesStats = outputTableStats;
+    getOperationResponse.OperationResultsYson = operationResultsYson;
     return getOperationResponse;
 }
 

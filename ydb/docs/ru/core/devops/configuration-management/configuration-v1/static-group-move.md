@@ -1,7 +1,5 @@
 # Перемещение статической группы
 
-{% include [deprecated](_includes/deprecated.md) %}
-
 Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [статической группы](../../../reference/configuration/index.md#blob_storage_config), необходимо переместить её на другой хост.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}

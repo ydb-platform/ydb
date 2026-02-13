@@ -2099,7 +2099,8 @@ void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
              bool dml,
-             Ydb::StatusIds::StatusCode code)
+             Ydb::StatusIds::StatusCode code,
+             NYdb::NUt::TTestContext testCtx)
 {
     auto &runtime = *server->GetRuntime();
     auto request = MakeSQLRequest(sql, dml);
@@ -2107,9 +2108,9 @@ void ExecSQL(Tests::TServer::TPtr server,
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     auto& response = ev->Get()->Record;
     auto& issues = response.GetResponse().GetQueryIssues();
-    UNIT_ASSERT_VALUES_EQUAL_C(response.GetYdbStatus(),
-                               code,
-                               issues.empty() ? response.DebugString() : issues.Get(0).DebugString()
+    CTX_UNIT_ASSERT_VALUES_EQUAL_C(response.GetYdbStatus(),
+                                   code,
+                                   issues.empty() ? response.DebugString() : issues.Get(0).DebugString()
     );
 }
 
@@ -2304,6 +2305,18 @@ NKikimrDataEvents::TEvWriteResult Increment(TTestActorRuntime& runtime, TActorId
 NKikimrDataEvents::TEvWriteResult Increment(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
     auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT, tableId, columnIds, cells);
+    return Write(runtime, sender, shardId, std::move(request), expectedStatus);
+}
+
+NKikimrDataEvents::TEvWriteResult UpsertIncrement(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT, tableId, columnIds, cells);
+    return Write(runtime, sender, shardId, std::move(request));
+}
+
+NKikimrDataEvents::TEvWriteResult UpsertIncrement(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT, tableId, columnIds, cells);
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);
 }
 
@@ -2608,6 +2621,8 @@ namespace {
                 out << parser.GetTimestamp64().time_since_epoch().count();
                 break;
             PRINT_PRIMITIVE(String);
+            PRINT_PRIMITIVE(Bool);
+            PRINT_PRIMITIVE(Double);
             PRINT_PRIMITIVE(Utf8);
             PRINT_PRIMITIVE(DyNumber);
 
@@ -2867,6 +2882,19 @@ ui64 AsyncAlterSubDomain(
     UNIT_ASSERT_C(ok, "failed to parse schema: " << schema);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
+ui64 AsyncTruncateTable(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& tableName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpTruncateTable, workingDir);
+    auto* op = request->Record.MutableTransaction()->MutableModifyScheme()->MutableTruncateTable();
+    op->SetTableName(tableName);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
 }
 
 }

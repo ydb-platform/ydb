@@ -53,6 +53,10 @@ public:
         }
     }
 
+    void Push(TInstant watermark) override {
+        PushWatermark(watermark);
+    }
+
     virtual void Push(TDqSerializedBatch&&, i64) override {
         YQL_ENSURE(!"Unimplemented");
     }

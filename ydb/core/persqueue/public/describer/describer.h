@@ -4,6 +4,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NKikimr::NPQ::NDescriber {
 
@@ -53,6 +54,7 @@ NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,
                                       const std::unordered_set<TString>&& topicPaths,
                                       const TDescribeSettings& settings = {});
 
+Ydb::StatusIds::StatusCode Convert(const EStatus status);
 TString Description(const TString& topicPath, const EStatus status);
 
 }

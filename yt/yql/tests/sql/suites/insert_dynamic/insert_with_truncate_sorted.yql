@@ -1,0 +1,16 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+use plato;
+pragma yt.UseNativeDynamicTableRead;
+
+insert into Output with truncate
+select "x" as key
+order by key;
+
+select * from Output;
+
+commit;
+
+select * from Output;

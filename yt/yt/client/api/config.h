@@ -65,6 +65,7 @@ struct TConnectionDynamicConfig
     : public virtual NYTree::TYsonStruct
 {
     NTabletClient::TTableMountCacheDynamicConfigPtr TableMountCache;
+    NTransactionClient::TRemoteTimestampProviderDynamicConfigPtr TimestampProvider;
 
     TExponentialBackoffOptions TabletWriteBackoff;
 
@@ -187,6 +188,10 @@ struct TJournalChunkWriterConfig
     //! but rows will be actually written.
     std::optional<std::vector<int>> ReplicaRowLimits;
     TDuration ReplicaFakeTimeoutDelay;
+
+    //! When writing hunk journal chunk will wait this amount of time before chunk
+    //! is considered closed to give time for all the records to be written to all the replicas.
+    TDuration ChunkCloseGracePeriod;
 
     REGISTER_YSON_STRUCT(TJournalChunkWriterConfig);
 

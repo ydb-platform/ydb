@@ -33,7 +33,9 @@ namespace NYql {
     xx(Block, 25)                   \
     xx(Scalar, 26)                  \
     xx(Linear, 27)                  \
-    xx(DynamicLinear, 28)
+    xx(DynamicLinear, 28)           \
+    xx(Universal, 29)               \
+    xx(UniversalStruct, 30)
 // clang-format on
 
 enum class ETypeAnnotationKind: ui64 {

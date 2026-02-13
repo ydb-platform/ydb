@@ -107,6 +107,8 @@ public:
     ui64 GetNativeYtTypeFlags() const override;
     ITimeProvider* GetTimeProvider() const override;
     void Invalidate() override;
+    void CheckState(bool finish) override;
+    virtual void PrepareCheckState(bool finish) = 0;
 
 protected:
     void Release() override;
@@ -123,11 +125,12 @@ private:
 
 public:
     using TWorker::TWorker;
-    ~TPullStreamWorker();
+    ~TPullStreamWorker() override;
 
 public:
     void SetInput(NKikimr::NUdf::TUnboxedValue&&, ui32) override;
     NKikimr::NUdf::TUnboxedValue& GetOutput() override;
+    void PrepareCheckState(bool finish) final;
 
 protected:
     void Release() override;
@@ -145,13 +148,14 @@ private:
 
 public:
     using TWorker::TWorker;
-    ~TPullListWorker();
+    ~TPullListWorker() override;
 
 public:
     void SetInput(NKikimr::NUdf::TUnboxedValue&&, ui32) override;
     NKikimr::NUdf::TUnboxedValue& GetOutput() override;
     NKikimr::NUdf::TUnboxedValue& GetOutputIterator() override;
     void ResetOutputIterator() override;
+    void PrepareCheckState(bool finish) final;
 
 protected:
     void Release() override;
@@ -169,6 +173,7 @@ public:
 private:
     void FeedToConsumer();
     NYql::NUdf::IBoxedValue* GetPushStream() const;
+    void PrepareCheckState(bool finish) final;
 
 public:
     void SetConsumer(THolder<IConsumer<const NKikimr::NUdf::TUnboxedValue*>>) override;

@@ -77,6 +77,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike},
     {"DebugPositions", &TContext::DebugPositions},
     {"ExceptIntersectBefore202503", &TContext::ExceptIntersectBefore202503},
+    {"WindowNewPipeline", &TContext::WindowNewPipeline},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -124,6 +125,10 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
 
     if (settings.LangVer >= MakeLangVersion(2025, 4)) {
         DisableLegacyNotNull = true;
+    }
+
+    if (settings.Flags.contains("AutoYqlSelect")) {
+        SetYqlSelectMode(EYqlSelectMode::Auto);
     }
 
     for (auto lib : settings.Libraries) {
@@ -189,6 +194,16 @@ void TContext::PopCurrentBlocks() {
 TBlocks& TContext::GetCurrentBlocks() const {
     YQL_ENSURE(!CurrentBlocks_.empty());
     return *CurrentBlocks_.back();
+}
+
+IOutputStream& TContext::Fatal() {
+    bool isError = false;
+    return MakeIssue(
+        TSeverityIds::S_FATAL,
+        NYql::TIssuesIds::UNEXPECTED,
+        TPosition(),
+        /*forceError=*/false,
+        isError);
 }
 
 IOutputStream& TContext::Error(NYql::TIssueCode code) {
@@ -525,7 +540,7 @@ TScopedStatePtr TContext::CreateScopedState() const {
 }
 
 TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {
-    static const TSet<TStringBuf> denyForAllArgs = {
+    static const TSet<TStringBuf> DenyForAllArgs = {
         "datatype",
         "optionaltype",
         "listtype",
@@ -547,7 +562,7 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
         "callableargumenttype",
         "variantunderlyingtype",
     };
-    static const TMap<std::pair<TStringBuf, size_t>, EColumnRefState> positionalArgsCustomStatus = {
+    static const TMap<std::pair<TStringBuf, size_t>, EColumnRefState> PositionalArgsCustomStatus = {
         {{"frombytes", 1}, EColumnRefState::Deny},
         {{"enum", 0}, EColumnRefState::Deny},
         {{"asenum", 0}, EColumnRefState::Deny},
@@ -594,12 +609,12 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
         return ctx.GetTopLevelColumnReferenceState();
     }
 
-    if (denyForAllArgs.contains(normalized)) {
+    if (DenyForAllArgs.contains(normalized)) {
         return EColumnRefState::Deny;
     }
 
-    auto it = positionalArgsCustomStatus.find(std::make_pair(normalized, argIndex));
-    if (it != positionalArgsCustomStatus.end()) {
+    auto it = PositionalArgsCustomStatus.find(std::make_pair(normalized, argIndex));
+    if (it != PositionalArgsCustomStatus.end()) {
         return it->second;
     }
     return {};

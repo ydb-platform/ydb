@@ -93,7 +93,7 @@ public:
         return true;
     }
 
-    TEventSerializationInfo CreateSerializationInfo() const override { return {}; }
+    TEventSerializationInfo CreateSerializationInfo(bool /*allowExternalDataChannel*/) const override { return {}; }
 
     const TString& GetDatabase() const {
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
@@ -388,11 +388,20 @@ public:
     }
 
     bool HasArrowFormatSettings() const {
-        return ArrowFormatSettings.has_value();
+        if (RequestCtx) {
+            return ArrowFormatSettings.has_value();
+        }
+        return Record.GetRequest().HasArrowFormatSettings();
     }
 
     std::optional<NFormats::TArrowFormatSettings> GetArrowFormatSettings() const {
-        return ArrowFormatSettings;
+        if (RequestCtx) {
+            return ArrowFormatSettings;
+        }
+        if (Record.GetRequest().HasArrowFormatSettings()) {
+            return NFormats::TArrowFormatSettings::ImportFromProto(Record.GetRequest().GetArrowFormatSettings());
+        }
+        return std::nullopt;
     }
 
     bool GetSaveQueryPhysicalGraph() const {

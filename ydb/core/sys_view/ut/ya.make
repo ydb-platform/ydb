@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/sys_view)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -25,6 +25,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ut_auth.cpp
     ut_kqp.cpp
+    ut_tli.cpp
     ut_common.cpp
     ut_counters.cpp
     ut_labeled.cpp

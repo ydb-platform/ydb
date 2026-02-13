@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
 FORK_TEST_FILES()
@@ -10,6 +10,8 @@ SPLIT_FACTOR(10)
 TEST_SRCS(
     test_example.py
     test_followers.py
+    test_fulltext_index.py
+    test_in_memory.py
     test_compatibility.py
     test_stress.py
     test_statistics.py
@@ -25,9 +27,11 @@ TEST_SRCS(
     test_transfer.py
     test_node_broker_delta_protocol.py
     test_table_schema_compatibility.py
+    test_user_management.py
     test_workload_manager.py
     test_default_columns.py
     test_infer_pdisk_expected_slot_count.py
+    test_show_create_table.py
     udf/test_datetime2.py
     udf/test_digest.py
     udf/test_digest_regression.py
@@ -55,4 +59,6 @@ RECURSE(
     federated_queries
     s3_backups
     olap
+    streaming
+    result_set_format
 )

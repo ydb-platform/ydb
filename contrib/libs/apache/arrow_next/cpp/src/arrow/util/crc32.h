@@ -19,7 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 namespace internal {

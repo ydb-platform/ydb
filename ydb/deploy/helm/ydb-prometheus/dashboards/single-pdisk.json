@@ -24,9 +24,8 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 36,
+  "id": 24,
   "links": [],
-  "liveNow": false,
   "panels": [
     {
       "datasource": {
@@ -45,6 +44,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -61,6 +61,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -76,7 +77,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -102,6 +103,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
@@ -115,7 +117,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_DeviceReads{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_DeviceReads{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "DeviceReads",
           "range": true,
@@ -128,7 +130,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_DeviceWrites{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_DeviceWrites{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "DeviceWrites",
           "range": true,
@@ -141,7 +143,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_DeviceExpectedSeeks{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_DeviceExpectedSeeks{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "DeviceExpectedSeeks",
           "range": true,
@@ -168,6 +170,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -184,6 +187,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -199,7 +203,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -226,6 +230,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
@@ -239,7 +244,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_DeviceBytesRead{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_DeviceBytesRead{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "DeviceBytesRead",
           "range": true,
@@ -252,7 +257,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_DeviceBytesWritten{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_DeviceBytesWritten{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "DeviceBytesWritten",
           "range": true,
@@ -279,6 +284,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -295,6 +301,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -310,7 +317,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -337,6 +344,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
@@ -350,24 +358,11 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (req) (rate(pdisks_Bytes{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum by (req) (rate(pdisks_Bytes{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{req}}",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$ds"
-          },
-          "editorMode": "code",
-          "expr": "",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "B"
         }
       ],
       "title": "Priority Class Bytes Read/Write Requested (bytes)",
@@ -390,6 +385,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -406,6 +402,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -421,7 +418,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -447,6 +444,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
@@ -460,7 +458,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_DeviceInFlightBytesRead{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_DeviceInFlightBytesRead{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "Read",
           "range": true,
@@ -473,7 +471,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_DeviceInFlightBytesWrite{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_DeviceInFlightBytesWrite{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "Write",
           "range": true,
@@ -486,7 +484,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_QueueBytes{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_QueueBytes{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "QueueBytes",
           "range": true,
@@ -513,6 +511,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -529,6 +528,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -544,7 +544,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -570,6 +570,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
@@ -583,7 +584,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_DeviceInFlightReads{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_DeviceInFlightReads{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "Reads",
           "range": true,
@@ -596,7 +597,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_DeviceInFlightWrites{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_DeviceInFlightWrites{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "Writes",
           "range": true,
@@ -609,7 +610,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pdisks_QueueRequests{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum(rate(pdisks_QueueRequests{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "QueueRequests",
           "range": true,
@@ -636,6 +637,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 100,
             "gradientMode": "none",
@@ -652,6 +654,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -667,7 +670,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -695,6 +698,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
@@ -708,7 +712,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (le) (rate(pdisks_deviceWriteDurationMs_bucket{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum by (le) (rate(pdisks_deviceWriteDurationMs_bucket{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -736,6 +740,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 100,
             "gradientMode": "none",
@@ -752,6 +757,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -767,7 +773,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -793,6 +799,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
@@ -806,7 +813,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (le) (rate(pdisks_deviceReadDurationMs_bucket{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum by (le) (rate(pdisks_deviceReadDurationMs_bucket{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -834,6 +841,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 100,
             "gradientMode": "none",
@@ -850,6 +858,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -865,7 +874,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -893,6 +902,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
@@ -906,7 +916,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (le) (rate(pdisks_deviceTrimDurationMs_bucket{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval]))",
+          "expr": "sum by (le) (rate(pdisks_deviceTrimDurationMs_bucket{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -934,6 +944,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -950,6 +961,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -965,7 +977,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -992,6 +1004,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "single",
           "sort": "none"
@@ -1005,7 +1018,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "rate(pdisks_DeviceActualCostNs{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}[$__rate_interval])",
+          "expr": "rate(pdisks_DeviceActualCostNs{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "DeviceActualCostNs",
           "range": true,
@@ -1032,6 +1045,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1048,6 +1062,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1063,7 +1078,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -1090,6 +1105,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "single",
           "sort": "none"
@@ -1102,7 +1118,7 @@
             "uid": "$ds"
           },
           "editorMode": "code",
-          "expr": "rate(pdisks_L6_redMs{container=~\"ydb-static|ydb-storage\", media=\"$media\", pdisk=\"$pdisk\"}[$__rate_interval])",
+          "expr": "rate(pdisks_L6_redMs{container=~\"ydb-static|ydb-storage\", media=\"$media\", pdisk=\"$pdisk\", instance=\"$instance\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "{{media}}:{{pdisk}}",
@@ -1130,6 +1146,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1146,6 +1163,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1161,7 +1179,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -1187,6 +1205,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "single",
           "sort": "none"
@@ -1200,7 +1219,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "pdisks_DeviceOverestimationRatio{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\"}",
+          "expr": "pdisks_DeviceOverestimationRatio{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", instance=\"$instance\"}",
           "interval": "",
           "legendFormat": "DeviceOverestimationRatio",
           "range": true,
@@ -1227,6 +1246,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1243,6 +1263,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1258,7 +1279,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -1285,6 +1306,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "single",
           "sort": "none"
@@ -1296,9 +1318,9 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "editorMode": "builder",
+          "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(vdisks_LsmCompactionBytesRead{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", subsystem=\"lsmhull\"}[$__rate_interval]))",
+          "expr": "sum(rate(vdisks_LsmCompactionBytesRead{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", subsystem=\"lsmhull\", instance=\"$instance\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "LsmCompactionBytes Read",
           "range": true,
@@ -1339,6 +1361,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1355,6 +1378,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1370,7 +1394,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -1396,6 +1420,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "single",
           "sort": "none"
@@ -1448,6 +1473,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 100,
             "gradientMode": "none",
@@ -1464,6 +1490,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1479,7 +1506,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -1507,6 +1534,7 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "maxHeight": 600,
           "mode": "multi",
           "sort": "desc"
@@ -1518,9 +1546,9 @@
             "type": "prometheus",
             "uid": "$ds"
           },
-          "editorMode": "builder",
+          "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(group) (rate(vdisks_LatencyMs_count{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", handleclass=\"PutTabletLog\"}[$__rate_interval]))",
+          "expr": "sum by(group) (rate(vdisks_LatencyMs_count{container=~\"ydb-static|ydb-storage\", media=\"$media\", pod=\"$pod\", pdisk=\"$pdisk\", handleclass=\"PutTabletLog\", instance=\"$instance\"}[$__rate_interval]))",
           "format": "time_series",
           "interval": "",
           "legendFormat": "{{group}}:{{le}}",
@@ -1532,46 +1560,33 @@
       "type": "timeseries"
     }
   ],
+  "preload": false,
   "refresh": "",
-  "schemaVersion": 39,
+  "schemaVersion": 42,
   "tags": [
     "ydb"
   ],
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": false,
-          "text": "prometheus",
-          "value": "bdps0jslu0ow0e"
-        },
-        "hide": 0,
+        "current": {},
         "includeAll": false,
-        "multi": false,
         "name": "ds",
         "options": [],
         "query": "prometheus",
-        "queryValue": "",
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "type": "datasource"
       },
       {
-        "current": {
-          "selected": false,
-          "text": "ssd",
-          "value": "ssd"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "$ds"
         },
         "definition": "label_values(media)",
-        "hide": 0,
         "includeAll": false,
         "label": "media",
-        "multi": false,
         "name": "media",
         "options": [],
         "query": {
@@ -1580,26 +1595,39 @@
         },
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
         "type": "query"
       },
       {
-        "current": {
-          "isNone": true,
-          "selected": false,
-          "text": "None",
-          "value": ""
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "$ds"
         },
+        "definition": "label_values({job=\"ydb/pdisks\"},instance)",
+        "includeAll": false,
+        "label": "instance",
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values({job=\"ydb/pdisks\"},instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "$ds"
         },
         "definition": "label_values(pod)",
-        "hide": 0,
         "includeAll": false,
         "label": "pod (for k8s)",
-        "multi": false,
         "name": "pod",
         "options": [],
         "query": {
@@ -1608,25 +1636,18 @@
         },
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
         "type": "query"
       },
       {
-        "current": {
-          "selected": false,
-          "text": "000000001",
-          "value": "000000001"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "$ds"
         },
         "definition": "label_values(pdisk)",
-        "hide": 0,
         "includeAll": false,
         "label": "pdisk",
-        "multi": false,
         "name": "pdisk",
         "options": [],
         "query": {
@@ -1635,7 +1656,6 @@
         },
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
         "type": "query"
       }
@@ -1645,10 +1665,9 @@
     "from": "now-6h",
     "to": "now"
   },
-  "timeRangeUpdatedDuringEditOrView": false,
   "timepicker": {},
   "timezone": "",
   "title": "PDisk Device single disk",
-  "uid": "rd_fdq5077ccf18gc",
-  "weekStart": ""
+  "uid": "ydb-single-pdisk",
+  "version": 2
 }

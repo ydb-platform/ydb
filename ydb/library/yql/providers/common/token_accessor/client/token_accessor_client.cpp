@@ -4,7 +4,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <library/cpp/threading/atomic/bool.h>
+#include <library/cpp/deprecated/atomic_bool/bool.h>
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/string/builder.h>

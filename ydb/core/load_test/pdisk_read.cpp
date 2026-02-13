@@ -74,6 +74,7 @@ class TPDiskReaderLoadTestActor : public TActorBootstrapped<TPDiskReaderLoadTest
     const TActorId Parent;
     ui64 Tag;
     ui32 DurationSeconds;
+    TDuration DelayBeforeMeasurements;
     ui32 IntervalMsMin = 0;
     ui32 IntervalMsMax = 0;
     TControlWrapper MaxInFlight;
@@ -136,6 +137,7 @@ public:
 
         VERIFY_PARAM(DurationSeconds);
         DurationSeconds = cmd.GetDurationSeconds();
+        DelayBeforeMeasurements = TDuration::Seconds(cmd.GetDelayBeforeMeasurementsSeconds());
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         Report->Duration = TDuration::Seconds(DurationSeconds);
 
@@ -199,7 +201,6 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskReaderLoadTestActor::StateFunc);
-        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill());
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskReadLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
@@ -290,6 +291,7 @@ public:
         if (ChunkWrite_OK == Chunks.size()) {
             TestStartTime = TAppData::TimeProvider->Now();
             MeasurementStartTime = TestStartTime + DelayBeforeMeasurements;
+            ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill());
 
             SendReadRequests(ctx);
         }

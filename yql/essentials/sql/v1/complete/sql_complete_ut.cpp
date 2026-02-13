@@ -63,8 +63,7 @@ TLexerSupplier MakePureLexerSupplier() {
     lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
     return [lexers = std::move(lexers)](bool ansi) {
         return NSQLTranslationV1::MakeLexer(
-            lexers, ansi, /* antlr4 = */ true,
-            NSQLTranslationV1::ELexerFlavor::Pure);
+            lexers, ansi, NSQLTranslationV1::ELexerFlavor::Pure);
     };
 }
 
@@ -216,6 +215,7 @@ Y_UNIT_TEST(Beginning) {
         {Keyword, "ROLLBACK"},
         {Keyword, "SELECT"},
         {Keyword, "SHOW CREATE"},
+        {Keyword, "TRUNCATE TABLE"},
         {Keyword, "UPDATE"},
         {Keyword, "UPSERT"},
         {Keyword, "USE"},
@@ -438,6 +438,7 @@ Y_UNIT_TEST(Explain) {
         {Keyword, "ROLLBACK"},
         {Keyword, "SELECT"},
         {Keyword, "SHOW CREATE"},
+        {Keyword, "TRUNCATE TABLE"},
         {Keyword, "UPDATE"},
         {Keyword, "UPSERT"},
         {Keyword, "USE"},
@@ -1005,7 +1006,7 @@ Y_UNIT_TEST(SelectTableHintName) {
         TVector<TCandidate> expected = {
             {Keyword, "COLUMNS"},
             {Keyword, "SCHEMA"},
-            {Keyword, "WATERMARK AS()", 1},
+            {Keyword, "WATERMARK"},
             {HintName, "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE my_table WITH "), expected);
@@ -1014,7 +1015,7 @@ Y_UNIT_TEST(SelectTableHintName) {
         TVector<TCandidate> expected = {
             {Keyword, "COLUMNS"},
             {Keyword, "SCHEMA"},
-            {Keyword, "WATERMARK AS()", 1},
+            {Keyword, "WATERMARK"},
             {HintName, "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT key FROM my_table WITH "), expected);
@@ -1026,7 +1027,7 @@ Y_UNIT_TEST(InsertTableHintName) {
         {Keyword, "COLUMNS"},
         {HintName, "EXPIRATION"},
         {Keyword, "SCHEMA"},
-        {Keyword, "WATERMARK AS()", 1},
+        {Keyword, "WATERMARK"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -1196,6 +1197,28 @@ Y_UNIT_TEST(TableFunction) {
         TVector<TCandidate> expected = {};
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT Conca#"), expected);
     }
+}
+
+Y_UNIT_TEST(BeforeTableFunction) {
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TString query = R"sql(
+        USE example; --абвгдабвгдаб
+        FROM (SELECT a FROM # RANGE(`t/`, ''));
+    )sql";
+
+    TVector<TCandidate> expected = {
+        {TableName, "`people`"},
+        {FolderName, "`yql/`", 1},
+        {ClusterName, "example"},
+        {ClusterName, "loggy"},
+        {ClusterName, "saurus"},
+        {Keyword, "ANY"},
+        {FunctionName, "CONCAT()", 1},
+        {FunctionName, "EACH()", 1},
+    };
+
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(8, engine, query), expected);
 }
 
 Y_UNIT_TEST(TableAsFunctionArgument) {
@@ -1645,6 +1668,28 @@ Y_UNIT_TEST(ColumnFromQuotedAlias) {
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
     }
+}
+
+Y_UNIT_TEST(ColumnFromFolderLikeQuotedAlias) {
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TVector<TCandidate> expected = {
+        {ColumnName, "Age"},
+        {ColumnName, "Name"},
+        {ColumnName, "`people/`.Age"},
+        {ColumnName, "`people/`.Name"},
+    };
+
+    TString query;
+
+    query = R"sql(SELECT # FROM example.`/people` AS `people/`)sql";
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+
+    query = R"sql(SELECT # FROM (SELECT * FROM example.`/people`) AS `people/`)sql";
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+
+    query = R"sql(SELECT # FROM (SELECT Age, Name FROM example.`/people`) AS `people/`)sql";
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
 }
 
 Y_UNIT_TEST(ProjectionVisibility) {

@@ -110,7 +110,7 @@ private:
 
     struct TUserBucketComparer
     {
-        bool operator ()(TUserBucket* lhs, TUserBucket* rhs) const
+        bool operator()(TUserBucket* lhs, TUserBucket* rhs) const
         {
             return lhs->HeapKey < rhs->HeapKey;
         }

@@ -22,6 +22,9 @@ public:
         GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
             opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&GetRunOptions().ValidateResultFormat);
         });
+        GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
+            opts.AddLongOption("test-partial-typecheck", "Check partial AST typecheck").NoArgument().SetFlag(&GetRunOptions().TestPartialTypecheck);
+        });
 
         GetRunOptions().SetSupportedGateways({TString{PureProviderName}});
         GetRunOptions().GatewayTypes.emplace(PureProviderName);

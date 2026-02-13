@@ -866,6 +866,37 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
     }
 
+    Y_UNIT_TEST(InitialDeploymentGracePeriod) {
+        NKikimrCms::TCmsConfig config;
+        config.MutableSentinelConfig()->SetInitialDeploymentGracePeriod(TDuration::Minutes(10).GetValue());
+        TTestEnv env(8, 4, config);
+
+        const TPDiskID id = env.RandomPDiskID();
+
+        Cerr << "...Initializing" << Endl;
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Initial, NKikimrBlobStorage::INACTIVE);
+
+        Cerr << "...Working normally" << Endl;
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal, NKikimrBlobStorage::ACTIVE);
+
+        Cerr << "...Disconnected" << Endl;
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::NodeDisconnected, NKikimrBlobStorage::INACTIVE);
+
+        Cerr << "...Working normally again" << Endl;
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal, NKikimrBlobStorage::ACTIVE);
+
+        Cerr << "...Initial deployment grace period is over" << Endl;
+        env.AdvanceCurrentTime(TDuration::Minutes(15));
+
+        Cerr << "...Disconnected" << Endl;
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::NodeDisconnected, NKikimrBlobStorage::INACTIVE);
+
+        Cerr << "...Working normally again, but no fast path to ACTIVE" << Endl;
+        for (ui32 i = 1; i < DefaultStateLimit; ++i) {
+            env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
+        }
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
+    }
 } // TSentinelTests
 
 }

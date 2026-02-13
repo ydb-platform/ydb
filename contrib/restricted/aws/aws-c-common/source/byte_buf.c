@@ -174,6 +174,7 @@ int aws_byte_buf_init_cache_and_update_cursors(struct aws_byte_buf *dest, struct
     while ((cursor_i = va_arg(args, struct aws_byte_cursor *)) != NULL) {
         AWS_ASSERT(aws_byte_cursor_is_valid(cursor_i));
         if (aws_add_size_checked(total_len, cursor_i->len, &total_len)) {
+            va_end(args);
             return AWS_OP_ERR;
         }
     }

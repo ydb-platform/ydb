@@ -11,6 +11,7 @@ namespace NYql::NCommon {
 namespace {
 
 const TString UdfResolver_GetSystemModulePath = "UdfResolver_GetSystemModulePath";
+const TString UdfResolver_LoadMetadataImports = "UdfResolver_LoadMetadataImports";
 const TString UdfResolver_LoadMetadata = "UdfResolver_LoadMetadata";
 const TString UdfResolver_ContainsModule = "UdfResolver_ContainsModule";
 
@@ -48,6 +49,17 @@ public:
     bool LoadMetadata(const TVector<TImport*>& imports,
                       const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const final {
         if (QContext_.CanRead()) {
+            for (auto& import : imports) {
+                auto key = MakeKey(import);
+                auto res = QContext_.GetReader()->Get({UdfResolver_LoadMetadataImports, key}).GetValueSync();
+                if (!res) {
+                    // for compatibility
+                    continue;
+                }
+
+                LoadValue(import, res->Value);
+            }
+
             for (auto& f : functions) {
                 auto key = MakeKey(f);
                 auto res = QContext_.GetReader()->Get({UdfResolver_LoadMetadata, key}).GetValueSync();
@@ -63,6 +75,12 @@ public:
 
         auto res = Inner_->LoadMetadata(imports, functions, ctx, logLevel, storage);
         if (res && QContext_.CanWrite()) {
+            for (const auto& import : imports) {
+                auto key = MakeKey(import);
+                auto value = SaveValue(import);
+                QContext_.GetWriter()->Put({UdfResolver_LoadMetadataImports, key}, value).GetValueSync();
+            }
+
             // calculate hash for each function and store it
             for (const auto& f : functions) {
                 auto key = MakeKey(f);
@@ -101,6 +119,18 @@ public:
     }
 
 private:
+    TString MakeKey(const TImport* import) const {
+        // clang-format off
+        auto node = NYT::TNode()
+            ("FileAlias", NYT::TNode(import->FileAlias))
+            ("PosColumn", NYT::TNode(import->Pos.Column))
+            ("PosRow", NYT::TNode(import->Pos.Row))
+            ("PosFile", NYT::TNode(import->Pos.File));
+        // clang-format on
+
+        return MakeHash(NYT::NodeToCanonicalYsonString(node, NYT::NYson::EYsonFormat::Binary));
+    }
+
     TString MakeKey(const TFunction* f) const {
         auto node = NYT::TNode()("Name", NYT::TNode(f->Name));
         if (f->TypeConfig) {
@@ -112,6 +142,20 @@ private:
         }
 
         return MakeHash(NYT::NodeToCanonicalYsonString(node, NYT::NYson::EYsonFormat::Binary));
+    }
+
+    TString SaveValue(const TImport* import) const {
+        auto node = NYT::TNode::CreateMap();
+        if (import->Modules) {
+            auto modules = NYT::TNode::CreateList();
+            for (const auto& x : *import->Modules) {
+                modules.Add(x);
+            }
+
+            node("Modules", modules);
+        }
+
+        return NYT::NodeToYsonString(node, NYT::NYson::EYsonFormat::Binary);
     }
 
     TString SaveValue(const TFunction* f) const {
@@ -142,6 +186,17 @@ private:
         }
 
         return NYT::NodeToYsonString(node, NYT::NYson::EYsonFormat::Binary);
+    }
+
+    void LoadValue(TImport* import, const TString& value) const {
+        auto node = NYT::NodeFromYsonString(value);
+        if (node.HasKey("Modules")) {
+            import->Modules.ConstructInPlace();
+            const auto& moduleNodes = node["Modules"].AsList();
+            for (const auto& moduleNode : moduleNodes) {
+                import->Modules->push_back(moduleNode.AsString());
+            }
+        }
     }
 
     void LoadValue(TFunction* f, const TString& value, TExprContext& ctx) const {

@@ -1,0 +1,14 @@
+/* custom error: :13:5: Error: Invalid inner source node */
+PRAGMA YqlSelect = 'auto';
+
+-- FIXME(YQL-20436): bad test.
+$x = (
+    SELECT
+        1 AS a
+);
+
+SELECT
+    a
+FROM
+    $x WITH UNORDERED
+;

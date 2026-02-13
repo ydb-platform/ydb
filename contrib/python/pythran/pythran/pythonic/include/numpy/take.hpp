@@ -6,8 +6,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class F, class T>
-  auto take(T &&expr, F &&indices)
-      -> decltype(std::forward<T>(expr)[std::forward<F>(indices)]);
+  auto take(T &&expr, F &&indices) -> decltype(std::forward<T>(expr)[std::forward<F>(indices)]);
 
   DEFINE_FUNCTOR(pythonic::numpy, take);
 } // namespace numpy

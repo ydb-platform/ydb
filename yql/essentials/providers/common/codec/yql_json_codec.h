@@ -26,8 +26,8 @@ using TValueConvertPolicy = TEnumBitSet<EValueConvertPolicy, EValueConvertPolicy
 class DefaultPolicy {
 public:
     static DefaultPolicy& GetInstance() {
-        static DefaultPolicy instance;
-        return instance;
+        static DefaultPolicy Instance;
+        return Instance;
     }
 
 private:

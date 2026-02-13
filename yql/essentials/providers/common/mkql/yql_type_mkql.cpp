@@ -145,6 +145,8 @@ NKikimr::NMiniKQL::TType* BuildTypeImpl(const TTypeAnnotationNode& annotation, c
 
         case ETypeAnnotationKind::Generic:
         case ETypeAnnotationKind::Unit:
+        case ETypeAnnotationKind::Universal:
+        case ETypeAnnotationKind::UniversalStruct:
             return typeBuilder.NewVoidType();
 
         case ETypeAnnotationKind::Resource:

@@ -61,7 +61,7 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
                 YQL_ENSURE(fileInfo, "Unknown file path " << fullFileName);
                 const auto path = fileInfo->Path->GetPath();
                 const auto content = callable.GetType()->GetName() == "FileContentJob" ? TFileInput(path).ReadAll() : path.GetPath();
-                return ctx.NodeFactory.CreateImmutableNode(MakeString(content));
+                return ctx.NodeFactory.CreateImmutableNode(NKikimr::NMiniKQL::MakeString(content));
             }
         }
 
@@ -109,10 +109,6 @@ TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const IFunct
 TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session, TLangVersion langver)
     : TNativeYtLambdaBuilder(alloc, services.FunctionRegistry, session, nullptr, langver)
 {
-}
-
-TString TNativeYtLambdaBuilder::BuildLambdaWithIO(const IMkqlCallableCompiler& compiler, TCoLambda lambda, TExprContext& exprCtx) {
-    return TGatewayLambdaBuilder::BuildLambdaWithIO("Yt", compiler, lambda, exprCtx);
 }
 
 } // NNative

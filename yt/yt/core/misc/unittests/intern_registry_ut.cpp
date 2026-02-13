@@ -10,19 +10,19 @@ namespace {
 using TStringRegistry = TInternRegistry<TString>;
 using TInternedString = TInternedObject<TString>;
 
-TEST(TInternRegistry, TestEmptyRegistry)
+TEST(TInternRegistryTest, TestEmptyRegistry)
 {
     auto registry = New<TStringRegistry>();
     EXPECT_EQ(0, registry->GetSize());
 }
 
-TEST(TInternRegistry, TestEmptyInstance)
+TEST(TInternRegistryTest, TestEmptyInstance)
 {
     TInternedString s;
     EXPECT_EQ(0u, s->length());
 }
 
-TEST(TInternRegistry, Simple)
+TEST(TInternRegistryTest, Simple)
 {
     auto registry = New<TStringRegistry>();
     EXPECT_EQ(0, registry->GetSize());
@@ -56,7 +56,7 @@ TEST(TInternRegistry, Simple)
 }
 
 
-TEST(TInternRegistry, Default)
+TEST(TInternRegistryTest, Default)
 {
     auto registry = New<TStringRegistry>();
     EXPECT_EQ(0, registry->GetSize());

@@ -221,7 +221,7 @@ private:
 
 class TJsonPathReader {
 public:
-    TJsonPathReader(const TJsonPathPtr path);
+    explicit TJsonPathReader(const TJsonPathPtr path);
 
     const TJsonPathItem& ReadFirst();
 

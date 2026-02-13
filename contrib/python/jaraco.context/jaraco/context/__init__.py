@@ -12,8 +12,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-from typing import Iterator
-
+from collections.abc import Iterator
 
 if sys.version_info < (3, 12):
     from backports import tarfile
@@ -78,10 +77,17 @@ def tarball(
     try:
         req = urllib.request.urlopen(url)
         with tarfile.open(fileobj=req, mode='r|*') as tf:
-            tf.extractall(path=target_dir, filter=strip_first_component)
+            tf.extractall(path=target_dir, filter=_default_filter)
         yield target_dir
     finally:
         shutil.rmtree(target_dir)
+
+
+def _compose_tarfile_filters(*filters):
+    def compose_two(f1, f2):
+        return lambda member, path: f1(f2(member, path), path)
+
+    return functools.reduce(compose_two, filters, lambda member, path: member)
 
 
 def strip_first_component(
@@ -90,6 +96,9 @@ def strip_first_component(
 ) -> tarfile.TarInfo:
     _, member.name = member.name.split('/', 1)
     return member
+
+
+_default_filter = _compose_tarfile_filters(tarfile.data_filter, strip_first_component)
 
 
 def _compose(*cmgrs):
@@ -181,6 +190,8 @@ def repo_context(
     If dest_ctx is supplied, it should be a context manager
     to yield the target directory for the check out.
 
+    >>> getfixture('ensure_git')
+    >>> getfixture('needs_internet')
     >>> repo = repo_context('https://github.com/jaraco/jaraco.context')
     >>> with repo as dest:
     ...     listing = os.listdir(dest)

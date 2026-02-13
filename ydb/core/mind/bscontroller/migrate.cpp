@@ -207,7 +207,7 @@ public:
                 Y_ABORT_UNLESS(success);
             }
             if (!AppData()->FeatureFlags.GetSuppressCompatibilityCheck() && !CompatibilityInfo.CheckCompatibility(
-                        stored ? &*stored : nullptr, 
+                        stored ? &*stored : nullptr,
                         NKikimrConfig::TCompatibilityRule::BlobStorageController,
                         CompatibilityError)) {
                 IncompatibleData = true;
@@ -237,7 +237,7 @@ public:
         Queue.emplace_back(new TTxFillInNonNullConfigForPDisk);
 
         Queue.emplace_back(new TTxDropDriveStatus);
-    
+
         Queue.emplace_back(new TTxUpdateCompatibilityInfo);
 
         if (!hasInstanceId) {

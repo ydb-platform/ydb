@@ -37,6 +37,7 @@ DEFINE_ENUM(EMultiplexingBand,
     ((Heavy)                 (2))
     ((Interactive)           (3))
     ((RealTime)              (4))
+    ((Journal)               (5))
 );
 
 DEFINE_ENUM_UNKNOWN_VALUE(EMultiplexingBand, Default);

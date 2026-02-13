@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
 
 namespace arrow20 {
 namespace internal {

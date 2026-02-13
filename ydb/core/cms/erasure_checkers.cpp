@@ -254,26 +254,13 @@ void TMirror3dcCounter::CountGroupState(TClusterInfoPtr info, TDuration retryTim
 }
 
 TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpecies es,
-     const TVDiskInfo &vdisk, ui32 groupId, TTabletCountersBase* cmsCounters) 
+     const TVDiskInfo &vdisk, ui32 groupId, TTabletCountersBase* cmsCounters)
 {
     switch (es) {
         case TErasureType::ErasureNone:
-        case TErasureType::ErasureMirror3:
-        case TErasureType::Erasure3Plus1Block:
-        case TErasureType::Erasure3Plus1Stripe:
         case TErasureType::Erasure4Plus2Block:
-        case TErasureType::Erasure3Plus2Block:
-        case TErasureType::Erasure4Plus2Stripe:
-        case TErasureType::Erasure3Plus2Stripe:
-        case TErasureType::ErasureMirror3Plus2:
         case TErasureType::Erasure4Plus3Block:
-        case TErasureType::Erasure4Plus3Stripe:
         case TErasureType::Erasure3Plus3Block:
-        case TErasureType::Erasure3Plus3Stripe:
-        case TErasureType::Erasure2Plus3Block:
-        case TErasureType::Erasure2Plus3Stripe:
-        case TErasureType::Erasure2Plus2Block:
-        case TErasureType::Erasure2Plus2Stripe:
         case TErasureType::ErasureMirror3of4:
             return TSimpleSharedPtr<IErasureCounter>(new TDefaultErasureCounter(vdisk, groupId, cmsCounters));
         case TErasureType::ErasureMirror3dc:

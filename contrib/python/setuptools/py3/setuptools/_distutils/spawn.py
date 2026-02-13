@@ -12,11 +12,18 @@ import shutil
 import subprocess
 import sys
 import warnings
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableSequence
+from typing import TYPE_CHECKING, TypeVar, overload
 
 from ._log import log
 from .debug import DEBUG
 from .errors import DistutilsExecError
+
+if TYPE_CHECKING:
+    from subprocess import _ENV
+
+
+_MappingT = TypeVar("_MappingT", bound=Mapping)
 
 
 def _debug(cmd):
@@ -26,7 +33,7 @@ def _debug(cmd):
     return cmd if DEBUG else cmd[0]
 
 
-def _inject_macos_ver(env: Mapping[str:str] | None) -> Mapping[str:str] | None:
+def _inject_macos_ver(env: _MappingT | None) -> _MappingT | dict[str, str | int] | None:
     if platform.system() != 'Darwin':
         return env
 
@@ -37,11 +44,21 @@ def _inject_macos_ver(env: Mapping[str:str] | None) -> Mapping[str:str] | None:
     return {**_resolve(env), **update}
 
 
-def _resolve(env: Mapping[str:str] | None) -> Mapping[str:str]:
+@overload
+def _resolve(env: None) -> os._Environ[str]: ...
+@overload
+def _resolve(env: _MappingT) -> _MappingT: ...
+def _resolve(env: _MappingT | None) -> _MappingT | os._Environ[str]:
     return os.environ if env is None else env
 
 
-def spawn(cmd, search_path=True, verbose=False, dry_run=False, env=None):
+def spawn(
+    cmd: MutableSequence[bytes | str | os.PathLike[str]],
+    search_path: bool = True,
+    verbose: bool = False,
+    dry_run: bool = False,
+    env: _ENV | None = None,
+) -> None:
     """Run another program, specified as a command list 'cmd', in a new process.
 
     'cmd' is just the argument list for the new process, ie.
@@ -78,7 +95,7 @@ def spawn(cmd, search_path=True, verbose=False, dry_run=False, env=None):
         ) from err
 
 
-def find_executable(executable, path=None):
+def find_executable(executable: str, path: str | None = None) -> str | None:
     """Tries to find 'executable' in the directories listed in 'path'.
 
     A string listing directories separated by 'os.pathsep'; defaults to

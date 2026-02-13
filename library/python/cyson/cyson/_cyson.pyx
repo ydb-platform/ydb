@@ -25,7 +25,10 @@ from cpython.bytes cimport (
     PyBytes_GET_SIZE,
 )
 from cpython.dict cimport PyDict_Next, PyDict_Copy, PyDict_Check
-from cpython.int cimport PyInt_FromLong
+IF PYTHON2:
+    from cpython.int cimport PyInt_FromLong
+ELSE:
+    from cpython.long cimport PyLong_FromLong
 from cpython.long cimport PyLong_AsUnsignedLong
 from cpython.list cimport PyList_GET_SIZE, PyList_GET_ITEM
 from cpython.object cimport (
@@ -901,7 +904,10 @@ cdef object _c_yson_reader_get_scalar(C.yson_reader* c_reader):
     elif scalar_type == C.YSON_SCALAR_BOOLEAN:
         return C.yson_reader_get_boolean(c_reader)
     elif scalar_type == C.YSON_SCALAR_INT64:
-        return PyInt_FromLong(C.yson_reader_get_int64(c_reader))
+        IF PYTHON2:
+            return PyInt_FromLong(C.yson_reader_get_int64(c_reader))
+        ELSE:
+            return PyLong_FromLong(C.yson_reader_get_int64(c_reader))
     elif scalar_type == C.YSON_SCALAR_UINT64:
         return ConstructPyNumberFromUint(C.yson_reader_get_uint64(c_reader))
     elif scalar_type == C.YSON_SCALAR_FLOAT64:
@@ -1109,7 +1115,10 @@ cdef object _c_yson_unicode_reader_get_scalar(C.yson_reader* c_reader):
     elif scalar_type == C.YSON_SCALAR_BOOLEAN:
         return C.yson_reader_get_boolean(c_reader)
     elif scalar_type == C.YSON_SCALAR_INT64:
-        return PyInt_FromLong(C.yson_reader_get_int64(c_reader))
+        IF PYTHON2:
+            return PyInt_FromLong(C.yson_reader_get_int64(c_reader))
+        ELSE:
+            return PyLong_FromLong(C.yson_reader_get_int64(c_reader))
     elif scalar_type == C.YSON_SCALAR_UINT64:
         return ConstructPyNumberFromUint(C.yson_reader_get_uint64(c_reader))
     elif scalar_type == C.YSON_SCALAR_FLOAT64:

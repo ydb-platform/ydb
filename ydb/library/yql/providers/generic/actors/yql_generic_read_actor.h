@@ -20,6 +20,7 @@ namespace NYql::NDq {
         const TVector<TString>& readRanges,
         const NActors::TActorId& computeActorId,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 } // namespace NYql::NDq

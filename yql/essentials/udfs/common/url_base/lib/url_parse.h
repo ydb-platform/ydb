@@ -27,15 +27,15 @@ struct TUrlParseIndexes {
 
 class TParse: public TBoxedValue {
 public:
-    TParse(const TUrlParseIndexes& UrlParseIndexes)
+    explicit TParse(const TUrlParseIndexes& UrlParseIndexes)
         : UrlParseIndexes_(UrlParseIndexes)
         , ParseFlags_(TUri::FeaturesRecommended)
     {
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef("Parse");
-        return nameRef;
+        static const auto Name = TStringRef("Parse");
+        return Name;
     }
 
 private:

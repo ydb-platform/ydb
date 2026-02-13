@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.12)
+VERSION(2.13)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.12.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.13.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -96,6 +96,7 @@ RECURSE(
     test/fd-pass.t
     test/fdinfo-sqpoll.t
     test/fdinfo.t
+    test/fifo-futex-poll.t
     test/fifo-nonblock-read.t
     test/file-exit-unreg.t
     test/file-register.t
@@ -137,6 +138,7 @@ RECURSE(
     test/min-timeout-wait.t
     test/min-timeout.t
     test/mkdir.t
+    test/mock_file.t
     test/msg-ring-fd.t
     test/msg-ring-flags.t
     test/msg-ring-overflow.t
@@ -147,6 +149,8 @@ RECURSE(
     test/nolibc.t
     test/nop-all-sizes.t
     test/nop.t
+    test/nop32-overflow.t
+    test/nop32.t
     test/ooo-file-unreg.t
     test/open-close.t
     test/open-direct-link.t
@@ -196,6 +200,8 @@ RECURSE(
     test/resize-rings.t
     test/ring-leak.t
     test/ring-leak2.t
+    test/ring-query.t
+    test/ringbuf-loop.t
     test/ringbuf-read.t
     test/ringbuf-status.t
     test/rsrc_tags.t
@@ -225,6 +231,9 @@ RECURSE(
     test/sq-poll-kthread.t
     test/sq-poll-share.t
     test/sq-space_left.t
+    test/sqe-mixed-bad-wrap.t
+    test/sqe-mixed-nop.t
+    test/sqe-mixed-uring_cmd.t
     test/sqpoll-disable-exit.t
     test/sqpoll-exec.t
     test/sqpoll-exit-hang.t

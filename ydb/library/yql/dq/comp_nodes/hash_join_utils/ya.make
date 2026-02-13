@@ -13,9 +13,14 @@ PEERDIR(
 SRCS(
     tuple.cpp
     accumulator.cpp
+    scalar_layout_converter.cpp
     block_layout_converter.cpp
     layout_converter_common.cpp
     page_hash_table.cpp
+    alloc.cpp
+    spilled_storage.cpp
+    join_defs.cpp
+    print_unboxed_value.cpp
 )
 
 IF (ARCH_X86_64 AND OS_LINUX)

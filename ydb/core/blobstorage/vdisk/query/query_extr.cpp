@@ -108,7 +108,7 @@ namespace NKikimr {
             TQuery *query = nullptr;
             while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) {
                 // only full blobs (w/o specifying a part) are allowed
-                Y_VERIFY_S(query->PartId == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix); 
+                Y_VERIFY_S(query->PartId == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
                 const ui64 *cookiePtr = query->HasCookie ? &query->CookieVal : nullptr;
                 ResultSize.AddLogoBlobIndex();
                 if (!BlobInIndex) {

@@ -4,6 +4,8 @@
 
 #include "fluent_settings_helpers.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
+
 #include <util/datetime/base.h>
 
 #include <vector>
@@ -17,20 +19,23 @@ struct TRequestSettings {
     using TSelf = TDerived;
     using THeader = std::vector<std::pair<std::string, std::string>>;
 
+    FLUENT_SETTING_DEFAULT(TDuration, ClientTimeout, TDuration::Max());
+    FLUENT_SETTING_DEFAULT(TDeadline, Deadline, TDeadline::Max());
+
     FLUENT_SETTING(std::string, TraceId);
     FLUENT_SETTING(std::string, RequestType);
     FLUENT_SETTING(THeader, Header);
-    FLUENT_SETTING_DEFAULT(TDuration, ClientTimeout, TDuration::Max());
     FLUENT_SETTING(std::string, TraceParent);
 
     TRequestSettings() = default;
 
     template <typename T>
     explicit TRequestSettings(const TRequestSettings<T>& other)
-        : TraceId_(other.TraceId_)
+        : ClientTimeout_(other.ClientTimeout_)
+        , Deadline_(other.Deadline_)
+        , TraceId_(other.TraceId_)
         , RequestType_(other.RequestType_)
         , Header_(other.Header_)
-        , ClientTimeout_(other.ClientTimeout_)
         , TraceParent_(other.TraceParent_)
     {}
 };

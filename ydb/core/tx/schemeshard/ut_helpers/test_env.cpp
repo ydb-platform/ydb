@@ -494,7 +494,7 @@ private:
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_ABORT_UNLESS(success);
-        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo());
+        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo(false));
         return TPreSerializedMessage(message->Type(), data);
     }
 
@@ -592,7 +592,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
-    app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
@@ -602,7 +601,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
     app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
-    app.SetEnablePQConfigTransactionsAtSchemeShard(opts.EnablePQConfigTransactionsAtSchemeShard_);
     app.SetEnableTopicSplitMerge(opts.EnableTopicSplitMerge_);
     app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
@@ -616,11 +614,15 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
+    app.SetEnableReplication(opts.EnableReplication_);
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
     app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
     app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
+    app.FeatureFlags.SetEnableAlterDatabase(opts.EnableAlterDatabase_);
+    app.SetEnableAccessToIndexImplTables(opts.EnableAccessToIndexImplTables_);
+    app.SetEnableIndexMaterialization(opts.EnableIndexMaterialization_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -1190,8 +1192,8 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::functio
         },
         Max<ui32>(),
         Max<ui64>(),
-        0,
-        0,
+        Bucket,
+        TotalBuckets,
         KillOnCommit
     );
 }
@@ -1212,7 +1214,10 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<v
 
             activeZone = true;
             testScenario(*Runtime, activeZone);
-        }
+        },
+        Max<ui32>(),
+        Bucket,
+        TotalBuckets
     );
 }
 

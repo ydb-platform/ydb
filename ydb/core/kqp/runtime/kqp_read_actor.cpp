@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -463,7 +464,7 @@ public:
     }
 
     bool StartShards() {
-        const ui32 maxAllowedInFlight = Settings->GetSorted() ? 1 : MaxInFlight;
+        const ui32 maxAllowedInFlight = Settings->GetSorted() || Settings->GetIsBatch() ? 1 : MaxInFlight;
         CA_LOG_D("effective maxinflight " << maxAllowedInFlight << " sorted " << Settings->GetSorted());
         bool isFirst = true;
         while (!PendingShards.Empty() && RunningReads() + 1 <= maxAllowedInFlight) {
@@ -520,6 +521,7 @@ public:
             << ", attempt #" << state->ResolveAttempt);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Settings->GetDatabase();
         request->ResultSet.emplace_back(std::move(keyDesc));
 
         request->ResultSet.front().UserData = ResolveShardId;
@@ -606,7 +608,7 @@ public:
         } else if (!Snapshot.IsValid() && !Settings->HasLockTxId() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads without locks", NDqProto::StatusIds::UNAVAILABLE);
         }
-        if (Settings->GetIsolationLevel() == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+        if (Settings->GetIsolationLevel() == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
             YQL_ENSURE(!Settings->HasLockTxId(), "SnapshotReadOnly should not take locks");
         }
 
@@ -892,6 +894,10 @@ public:
             record.SetLockNodeId(Settings->GetLockNodeId());
         }
 
+        if (Settings->HasVectorTopK()) {
+            *record.MutableVectorTopK() = Settings->GetVectorTopK();
+        }
+
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
             << ", limit: " << limit
@@ -904,7 +910,11 @@ public:
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
 
-        Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
+        bool newPipe = HasEstablishedPipe.insert(state->TabletId).second;
+        Send(PipeCacheId, new TEvPipeCache::TEvForward(
+            ev.Release(), state->TabletId, TEvPipeCache::TEvForwardOptions{
+                .AutoConnect = newPipe,
+                .Subscribe = newPipe}),
             IEventHandle::FlagTrackDelivery, 0, ReadActorSpan.GetTraceId());
 
         if (!FirstShardStarted) {
@@ -1072,7 +1082,7 @@ public:
         ui64 seqNo = record.GetSeqNo();
         Reads[id].RegisterMessage(msg);
 
-        if (Settings->GetIsBatch() && msg.GetRowsCount() > 0) {
+        if (Settings->GetIsBatch() && msg.GetRowsCount() > 0 && BatchOperationMaxRow.GetCells().empty()) {
             auto cells = msg.GetCells(msg.GetRowsCount() - 1);
             BatchOperationMaxRow = TSerializedCellVec{cells};
         }
@@ -1091,6 +1101,7 @@ public:
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         auto& msg = *ev->Get();
 
+        HasEstablishedPipe.erase(msg.TabletId);
         TVector<ui32> reads;
         reads = ReadIdByTabletId[msg.TabletId];
         CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered);
@@ -1370,6 +1381,11 @@ public:
             }
 
             auto id = result.ReadResult->Get()->Record.GetReadId();
+            // For VectorTopK pushdown, accumulate actual scanned rows from datashard stats
+            if (result.ProcessedRows == 0 && Settings->HasVectorTopK() && msg.Record.HasStats()) {
+                ScannedRowCount += msg.Record.GetStats().GetRows();
+                ScannedBytesCount += msg.Record.GetStats().GetBytes();
+            }
 
             for (; result.ProcessedRows < result.PackedRows; ++result.ProcessedRows) {
                 NMiniKQL::TBytesStatistics rowSize = GetRowSize((*batch)[result.ProcessedRows].GetElements());
@@ -1403,7 +1419,10 @@ public:
                         }
                         Counters->SentIteratorAcks->Inc();
                         CA_LOG_D("sending ack for read #" << id << " limit " << limit << " seqno = " << record.GetSeqNo());
-                        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, true),
+                        bool newPipe = HasEstablishedPipe.insert(Reads[id].Shard->TabletId).second;
+                        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, TEvPipeCache::TEvForwardOptions{
+                            .AutoConnect = newPipe,
+                            .Subscribe = newPipe}),
                             IEventHandle::FlagTrackDelivery);
 
                         if (auto delay = ShardTimeout()) {
@@ -1464,17 +1483,35 @@ public:
 
             }
 
-            auto consumedRows = mstats ? mstats->Inputs[InputIndex]->RowsConsumed : ReceivedRowCount;
-
             //FIXME: use real rows count
+            auto consumedRows = mstats ? mstats->Inputs[InputIndex]->RowsConsumed : ReceivedRowCount;
+            auto consumedBytes = mstats ? mstats->Inputs[InputIndex]->BytesConsumed : BytesStats.DataBytes;
+
+            // For VectorTopK pushdown, use actual scanned rows from datashard stats
+            if (Settings->HasVectorTopK()) {
+                consumedRows = ScannedRowCount;
+                consumedBytes = ScannedBytesCount;
+            }
+
             tableStats->SetReadRows(tableStats->GetReadRows() + consumedRows);
-            tableStats->SetReadBytes(tableStats->GetReadBytes() + (mstats ? mstats->Inputs[InputIndex]->BytesConsumed : BytesStats.DataBytes));
+            tableStats->SetReadBytes(tableStats->GetReadBytes() + consumedBytes);
             tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
             //FIXME: use evread statistics after KIKIMR-16924
             //tableStats->SetReadRows(tableStats->GetReadRows() + ReceivedRowCount);
             //tableStats->SetReadBytes(tableStats->GetReadBytes() + BytesStats.DataBytes);
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
+
+            // Add lock stats for broken locks from read operations
+            if (!BrokenLocks.empty()) {
+                NKqpProto::TKqpTaskExtraStats extraStats;
+                if (stats->HasExtra()) {
+                    stats->GetExtra().UnpackTo(&extraStats);
+                }
+                extraStats.MutableLockStats()->SetBrokenAsVictim(
+                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                stats->MutableExtra()->PackFrom(extraStats);
+            }
         }
     }
 
@@ -1606,6 +1643,8 @@ private:
 
     NMiniKQL::TBytesStatistics BytesStats;
     ui64 ReceivedRowCount = 0;
+    ui64 ScannedRowCount = 0;  // Actual rows scanned (for VectorTopK, may differ from ReceivedRowCount)
+    ui64 ScannedBytesCount = 0;
     ui64 ProcessedRowCount = 0;
     ui64 ResetReads = 0;
     ui64 ReadId = 0;
@@ -1657,6 +1696,8 @@ private:
         ui64 SeqNo;
         ui64 RowIndex;
     };
+
+    THashSet<ui64> HasEstablishedPipe;
     THashMap<TString, TDuplicationStats> DuplicateCheckStats;
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;

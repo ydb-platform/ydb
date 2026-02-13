@@ -29,10 +29,10 @@ from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 
 from .. import Command, _normalization, _path, _shutil, errors, namespaces
 from .._path import StrPath
-from ..compat import py312
+from ..compat import py310, py312
 from ..discovery import find_package_path
 from ..dist import Distribution
-from ..warnings import InformationOnly, SetuptoolsDeprecationWarning, SetuptoolsWarning
+from ..warnings import InformationOnly, SetuptoolsDeprecationWarning
 from .build import build as build_cls
 from .build_py import build_py as build_py_cls
 from .dist_info import dist_info as dist_info_cls
@@ -137,10 +137,14 @@ class editable_wheel(Command):
             bdist_wheel.write_wheelfile(self.dist_info_dir)
 
             self._create_wheel_file(bdist_wheel)
-        except Exception:
-            traceback.print_exc()
+        except Exception as ex:
             project = self.distribution.name or self.distribution.get_name()
-            _DebuggingTips.emit(project=project)
+            py310.add_note(
+                ex,
+                f"An error occurred when building editable wheel for {project}.\n"
+                "See debugging tips in: "
+                "https://setuptools.pypa.io/en/latest/userguide/development_mode.html#debugging-tips",
+            )
             raise
 
     def _ensure_dist_info(self):
@@ -211,6 +215,11 @@ class editable_wheel(Command):
         install.install_headers = headers
         install.install_data = data
 
+        # For portability, ensure scripts are built with #!python shebang
+        # pypa/setuptools#4863
+        build_scripts = dist.get_command_obj("build_scripts")
+        build_scripts.executable = 'python'
+
         install_scripts = cast(
             install_scripts_cls, dist.get_command_obj("install_scripts")
         )
@@ -278,7 +287,7 @@ class editable_wheel(Command):
         This method implements a temporary workaround to support the ecosystem
         while the implementations catch up.
         """
-        # TODO: Once plugins/customisations had the chance to catch up, replace
+        # TODO: Once plugins/customizations had the chance to catch up, replace
         #       `self._run_build_subcommands()` with `self.run_command("build")`.
         #       Also remove _safely_run, TestCustomBuildPy. Suggested date: Aug/2023.
         build = self.get_finalized_command("build")
@@ -309,7 +318,7 @@ class editable_wheel(Command):
                 https://setuptools.pypa.io/en/latest/userguide/extension.html.
 
                 For the time being `setuptools` will silence this error and ignore
-                the faulty command, but this behaviour will change in future versions.
+                the faulty command, but this behavior will change in future versions.
                 """,
                 # TODO: define due_date
                 # There is a series of shortcomings with the available editable install
@@ -564,7 +573,7 @@ def _encode_pth(content: str) -> bytes:
     .pth files are always read with 'locale' encoding, the recommendation
     from the cpython core developers is to write them as ``open(path, "w")``
     and ignore warnings (see python/cpython#77102, pypa/setuptools#3937).
-    This function tries to simulate this behaviour without having to create an
+    This function tries to simulate this behavior without having to create an
     actual file, in a way that supports a range of active Python versions.
     (There seems to be some variety in the way different version of Python handle
     ``encoding=None``, not all of them use ``locale.getpreferredencoding(False)``
@@ -897,29 +906,3 @@ def _finder_template(
 
 class LinksNotSupported(errors.FileError):
     """File system does not seem to support either symlinks or hard links."""
-
-
-class _DebuggingTips(SetuptoolsWarning):
-    _SUMMARY = "Problem in editable installation."
-    _DETAILS = """
-    An error happened while installing `{project}` in editable mode.
-
-    The following steps are recommended to help debug this problem:
-
-    - Try to install the project normally, without using the editable mode.
-      Does the error still persist?
-      (If it does, try fixing the problem before attempting the editable mode).
-    - If you are using binary extensions, make sure you have all OS-level
-      dependencies installed (e.g. compilers, toolchains, binary libraries, ...).
-    - Try the latest version of setuptools (maybe the error was already fixed).
-    - If you (or your project dependencies) are using any setuptools extension
-      or customization, make sure they support the editable mode.
-
-    After following the steps above, if the problem still persists and
-    you think this is related to how setuptools handles editable installations,
-    please submit a reproducible example
-    (see https://stackoverflow.com/help/minimal-reproducible-example) to:
-
-        https://github.com/pypa/setuptools/issues
-    """
-    _SEE_DOCS = "userguide/development_mode.html"

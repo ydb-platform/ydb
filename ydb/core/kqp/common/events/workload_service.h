@@ -9,7 +9,7 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-
+#include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NKqp::NWorkload {
 
@@ -44,6 +44,17 @@ struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqp
         , PoolConfig(poolConfig)
         , Issues(std::move(issues))
     {}
+
+    bool IsDiskFull() {
+        if (Issues.Empty() || Issues.Size() > 1) {
+            return false;
+        }
+
+        const auto& issue = *Issues.begin();
+
+        return issue.GetCode() == NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED ||
+            issue.GetCode() == NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE;
+    }
 
     const Ydb::StatusIds::StatusCode Status;
     const TString PoolId;

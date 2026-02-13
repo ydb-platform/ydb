@@ -16,19 +16,16 @@ namespace numpy
   template <class E, class dtype>
   auto mean(E const &expr, types::none_type axis, dtype d, types::none_type out,
             types::false_immediate keepdims)
-      -> decltype(sum(expr, axis, d) /
-                  details::dtype_or_double<dtype>(expr.flat_size()))
+      -> decltype(sum(expr, axis, d) / details::dtype_or_double<dtype>(expr.flat_size()))
   {
-    return sum(expr, axis, d) /
-           details::dtype_or_double<dtype>(expr.flat_size());
+    return sum(expr, axis, d) / details::dtype_or_double<dtype>(expr.flat_size());
   }
 
   template <class E, class dtype>
   auto mean(E const &expr, long axis, dtype d, types::none_type out,
             types::false_immediate keepdims) -> decltype(sum(expr, axis, d))
   {
-    return sum(expr, axis, d) /=
-           details::dtype_or_double<dtype>(sutils::getshape(expr)[axis]);
+    return sum(expr, axis, d) /= details::dtype_or_double<dtype>(sutils::getshape(expr)[axis]);
   }
 
   template <class E, class dtype>
@@ -37,13 +34,11 @@ namespace numpy
   mean(E const &expr, types::none_type axis, dtype d, types::none_type out,
        types::true_immediate keep_dims)
   {
-    return {typename details::make_scalar_pshape<E::value>::type(),
-            mean(expr, axis, d, out)};
+    return {typename details::make_scalar_pshape<E::value>::type(), mean(expr, axis, d, out)};
   }
 
   template <class E, class dtype>
-  auto mean(E const &expr, long axis, dtype d, types::none_type out,
-            types::true_immediate keepdims)
+  auto mean(E const &expr, long axis, dtype d, types::none_type out, types::true_immediate keepdims)
       -> decltype(expand_dims(mean(expr, axis, d), axis))
   {
     return expand_dims(mean(expr, axis, d), axis);

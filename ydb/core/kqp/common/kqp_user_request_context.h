@@ -7,6 +7,10 @@
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/library/actors/core/actorid.h>
 
+namespace NYql::NPq::NProto {
+    class StreamingDisposition;
+} // namespace NYql::NPq::NProto
+
 namespace NKikimr::NKqp {
 
     struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
@@ -21,6 +25,8 @@ namespace NKikimr::NKqp {
         std::optional<NResourcePool::TPoolSettings> PoolConfig;
         bool IsStreamingQuery = false;
         TString CheckpointId;
+        TString StreamingQueryPath;
+        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
 
         TUserRequestContext() = default;
 

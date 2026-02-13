@@ -33,7 +33,8 @@ public:
         NScheduler::TSchedulableActorOptions schedulableOptions,
         NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        const TString& database);
+        const TString& database
+    );
 
     void DoBootstrap();
 

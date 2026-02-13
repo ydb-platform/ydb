@@ -50,6 +50,9 @@ namespace NKikimr::NBlobDepot {
 
                 if (!std::exchange(Self->Configured, true)) {
                     Self->StartOperation();
+                } else {
+                    // TODO(alexvru): handle it in a better way, without tablet restart
+                    Self->Send(Self->Tablet(), new TEvents::TEvPoison);
                 }
 
                 TActivationContext::Send(Response.release());

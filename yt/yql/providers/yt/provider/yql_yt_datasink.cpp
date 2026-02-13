@@ -239,8 +239,10 @@ public:
     void FillModifyCallables(THashSet<TStringBuf>& callables) override {
         callables.insert(TYtWriteTable::CallableName());
         callables.insert(TYtDropTable::CallableName());
+        callables.insert(TYtDropView::CallableName());
         callables.insert(TYtConfigure::CallableName());
         callables.insert(TYtCreateTable::CallableName());
+        callables.insert(TYtCreateView::CallableName());
     }
 
     bool IsWrite(const TExprNode& node) override {
@@ -253,7 +255,7 @@ public:
         if (const auto m = NYql::GetSetting(*node->Child(4), EYtSettingType::Mode)) {
             mode = FromString<EYtWriteMode>(m->Tail().Content());
         }
-        if (mode && *mode == EYtWriteMode::Drop) {
+        if (mode && (*mode == EYtWriteMode::Drop || *mode == EYtWriteMode::DropIfExists)) {
             if (!node->Child(3)->IsCallable("Void")) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
                     << "Expected Void, but got: " << node->Child(3)->Content()));
@@ -261,9 +263,21 @@ public:
             }
 
             TExprNode::TListType children = node->ChildrenList();
-            children.resize(3);
+            children[3] = NYql::RemoveSetting(*children[4], EYtSettingType::Initial, ctx);
+            children.resize(4);
             return ctx.NewCallable(node->Pos(), TYtDropTable::CallableName(), std::move(children));
-        } else if (mode && *mode == EYtWriteMode::Create) {
+        } else if (mode && (*mode == EYtWriteMode::DropObject || *mode == EYtWriteMode::DropObjectIfExists)) {
+            if (!node->Child(3)->IsCallable("Void")) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
+                    << "Expected Void, but got: " << node->Child(3)->Content()));
+                return {};
+            }
+
+            auto children = node->ChildrenList();
+            children[3] = NYql::RemoveSetting(*children[4], EYtSettingType::Initial, ctx);
+            children.resize(4);
+            return ctx.NewCallable(node->Pos(), TYtDropView::CallableName(), std::move(children));
+        } else if (mode && (*mode == EYtWriteMode::Create || *mode == EYtWriteMode::CreateIfNotExists)) {
             if (!node->Child(3U)->IsCallable("Void")) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(3U)->Pos()), TStringBuilder()
                     << "Expected Void, but got: " << node->Child(3U)->Content()));
@@ -277,8 +291,41 @@ public:
             children[3U] = columns ? columns->TailPtr() : ctx.NewList(node->Pos(), {});
             const auto keys = NYql::GetSetting(*settings, EYtSettingType::OrderBy);
             children[4U] = keys ? keys->TailPtr() : ctx.NewList(node->Pos(), {});
-            children.back() = NYql::RemoveSettings(*settings, EYtSettingType::Columns | EYtSettingType::OrderBy | EYtSettingType::Mode, ctx);
+            children.back() = NYql::RemoveSettings(*settings, EYtSettingType::Columns | EYtSettingType::OrderBy, ctx);
             return ctx.NewCallable(node->Pos(), TYtCreateTable::CallableName(), std::move(children));
+        } else if (mode && (*mode == EYtWriteMode::CreateObject || *mode == EYtWriteMode::CreateObjectIfNotExists)) {
+            if (!node->Child(3U)->IsCallable("Void")) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3U)->Pos()), TStringBuilder()
+                    << "Expected Void, but got: " << node->Child(3U)->Content()));
+                return {};
+            }
+
+            auto children = node->ChildrenList();
+            children.resize(6U);
+
+            const auto settings = node->Child(4U);
+            if (const auto features = NYql::GetSetting(*settings, EYtSettingType::Features)) {
+                for (auto i = 0U; i < features->Tail().ChildrenSize(); ++i) {
+                    if (const auto feature = features->Tail().Child(i); feature->IsList()) {
+                        if (feature->Head().IsAtom({"query_text", "__query_text"}))
+                            children[3U] = feature->TailPtr();
+                        else if (feature->Head().IsAtom({"query_ast", "__query_ast"}))
+                            children[4U] = feature->TailPtr();
+                        else {
+                            ctx.AddError(TIssue(ctx.GetPosition(feature->Pos()), "Unexpected feature."));
+                            return {};
+                        }
+                    }
+                }
+            }
+
+            if (!(children[3U] && children[4U])) {
+                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()),  "The view does not contain a query."));
+                return {};
+            }
+
+            children.back() = NYql::RemoveSetting(*settings, EYtSettingType::Features, ctx);
+            return ctx.NewCallable(node->Pos(), TYtCreateView::CallableName(), std::move(children));
         } else {
             auto res = ctx.RenameNode(*node, TYtWriteTable::CallableName());
             if ((!mode || *mode == EYtWriteMode::Renew) && NYql::HasSetting(*node->Child(4), EYtSettingType::KeepMeta)) {
@@ -430,6 +477,7 @@ public:
                 op.Maybe<TYtReduce>() || op.Maybe<TYtSort>() || op.Maybe<TYtEquiJoin>())
             {
                 TSet<TString> keyFilterColumns;
+                TSet<TString> qlFilterColumns;
                 for (auto section: op.Input()) {
                     for (auto col : GetKeyFilterColumns(section, EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2)) {
                         keyFilterColumns.insert(TString(col));
@@ -451,6 +499,12 @@ public:
                             YQL_ENSURE(keyLength <= rowSpec->SortedBy.size());
                             keyFilterColumns.insert(rowSpec->SortedBy.begin(), rowSpec->SortedBy.begin() + keyLength);
                         }
+                        if (auto qlFilter = path.QLFilter().Maybe<TYtQLFilter>()) {
+                            const TStructExprType* qlFilterType = qlFilter.Cast().Ref().Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                            for (const auto& item : qlFilterType->GetItems()) {
+                                qlFilterColumns.emplace(item->GetName());
+                            }
+                        }
                     }
                 }
 
@@ -458,6 +512,16 @@ public:
                     writer.OnKeyedItem("InputKeyFilterColumns");
                     writer.OnBeginList();
                     for (auto column : keyFilterColumns) {
+                        writer.OnListItem();
+                        writer.OnStringScalar(column);
+                    }
+                    writer.OnEndList();
+                }
+
+                if (!qlFilterColumns.empty()) {
+                    writer.OnKeyedItem("InputQLFilterColumns");
+                    writer.OnBeginList();
+                    for (auto column : qlFilterColumns) {
                         writer.OnListItem();
                         writer.OnStringScalar(column);
                     }

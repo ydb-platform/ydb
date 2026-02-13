@@ -1,4 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -10,11 +13,7 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpWrite) {
     Y_UNIT_TEST(UpsertNullKey) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-
-        auto kikimr = DefaultKikimrRunner({setting});
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -441,6 +440,82 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([
             [[1000];[101u];["Value1"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(OutOfSpace) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        Y_UNUSED(runtime);
+
+        auto edgeActor = runtime.AllocateEdgeActor();
+
+        const auto& shards = GetTableShards(
+            &kikimr.GetTestServer(),
+            edgeActor,
+            "/Root/KeyValue");
+        UNIT_ASSERT(shards.size() == 1);
+
+        {
+            const TString query =
+                R"(
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, 'value');
+                )";
+
+            std::vector<std::unique_ptr<IEventHandle>> responses;
+            bool blockResults = true;
+
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (blockResults && ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                    auto* msg = ev->Get<NEvents::TDataEvents::TEvWriteResult>();
+                    auto newResult = NEvents::TDataEvents::TEvWriteResult::BuildError(
+                        msg->Record.GetOrigin(),
+                        msg->Record.GetTxId(),
+                        NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
+                        "");
+
+                    runtime.Send(ev->Recipient, ev->Sender, newResult.release());
+
+                    responses.emplace_back(ev.Release());
+
+                    blockResults = false;
+
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = NYdb::NQuery::TTxControl::BeginTx(
+                    NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteQuery(query, txc).ExtractValueSync();
+            });
+
+            size_t requestsExpected = 1;
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return responses.size() >= requestsExpected;
+            });
+            runtime.DispatchEvents(opts);
+            UNIT_ASSERT(responses.size() == requestsExpected);
+            UNIT_ASSERT(!blockResults);
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE));
+        }
     }
 }
 

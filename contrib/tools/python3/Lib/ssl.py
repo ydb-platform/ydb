@@ -110,13 +110,13 @@ from _ssl import RAND_status, RAND_add, RAND_bytes
 try:
     from _ssl import RAND_egd
 except ImportError:
-    # LibreSSL does not provide RAND_egd
+    # RAND_egd is not supported on some platforms
     pass
 
 
 from _ssl import (
     HAS_SNI, HAS_ECDH, HAS_NPN, HAS_ALPN, HAS_SSLv2, HAS_SSLv3, HAS_TLSv1,
-    HAS_TLSv1_1, HAS_TLSv1_2, HAS_TLSv1_3
+    HAS_TLSv1_1, HAS_TLSv1_2, HAS_TLSv1_3, HAS_PSK
 )
 from _ssl import _DEFAULT_CIPHERS, _OPENSSL_API_VERSION
 
@@ -720,6 +720,16 @@ def create_default_context(purpose=Purpose.SERVER_AUTH, *, cafile=None,
     else:
         raise ValueError(purpose)
 
+    # `VERIFY_X509_PARTIAL_CHAIN` makes OpenSSL's chain building behave more
+    # like RFC 3280 and 5280, which specify that chain building stops with the
+    # first trust anchor, even if that anchor is not self-signed.
+    #
+    # `VERIFY_X509_STRICT` makes OpenSSL more conservative about the
+    # certificates it accepts, including "disabling workarounds for
+    # some broken certificates."
+    context.verify_flags |= (_ssl.VERIFY_X509_PARTIAL_CHAIN |
+                             _ssl.VERIFY_X509_STRICT)
+
     if cafile or capath or cadata:
         context.load_verify_locations(cafile, capath, cadata)
     elif context.verify_mode != CERT_NONE:
@@ -891,6 +901,31 @@ class SSLObject:
         provided, but not validated.
         """
         return self._sslobj.getpeercert(binary_form)
+
+    def get_verified_chain(self):
+        """Returns verified certificate chain provided by the other
+        end of the SSL channel as a list of DER-encoded bytes.
+
+        If certificate verification was disabled method acts the same as
+        ``SSLSocket.get_unverified_chain``.
+        """
+        chain = self._sslobj.get_verified_chain()
+
+        if chain is None:
+            return []
+
+        return [cert.public_bytes(_ssl.ENCODING_DER) for cert in chain]
+
+    def get_unverified_chain(self):
+        """Returns raw certificate chain provided by the other
+        end of the SSL channel as a list of DER-encoded bytes.
+        """
+        chain = self._sslobj.get_unverified_chain()
+
+        if chain is None:
+            return []
+
+        return [cert.public_bytes(_ssl.ENCODING_DER) for cert in chain]
 
     def selected_npn_protocol(self):
         """Return the currently selected NPN protocol as a string, or ``None``
@@ -1143,6 +1178,24 @@ class SSLSocket(socket):
         self._checkClosed()
         self._check_connected()
         return self._sslobj.getpeercert(binary_form)
+
+    @_sslcopydoc
+    def get_verified_chain(self):
+        chain = self._sslobj.get_verified_chain()
+
+        if chain is None:
+            return []
+
+        return [cert.public_bytes(_ssl.ENCODING_DER) for cert in chain]
+
+    @_sslcopydoc
+    def get_unverified_chain(self):
+        chain = self._sslobj.get_unverified_chain()
+
+        if chain is None:
+            return []
+
+        return [cert.public_bytes(_ssl.ENCODING_DER) for cert in chain]
 
     @_sslcopydoc
     def selected_npn_protocol(self):

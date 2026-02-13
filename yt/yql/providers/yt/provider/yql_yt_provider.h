@@ -98,6 +98,7 @@ struct TYtState {
     bool IsHybridEnabled() const;
     bool IsHybridEnabledForCluster(const std::string_view& cluster) const;
     bool HybridTakesTooLong() const;
+    TMaybe<TString> ResolveClusterToken(const TString& cluster);
 
     TYtState(TTypeAnnotationContext* types, const TQContext& qContext = {}) {
         Types = types;
@@ -116,6 +117,7 @@ struct TYtState {
     THashMap<ui32, TOperationStatistics> Statistics; // public id -> stat
     THashMap<TString, TOperationStatistics> HybridStatistics; // subfolder -> stat
     THashMap<TString, THashMap<TString, TOperationStatistics>> HybridOpStatistics; // operation name -> subfolder -> stat
+    bool FullHybridExecution = true; // flag is not cleared at query finish -> all yt operations were executed through hybrid
     TMutex StatisticsMutex;
     THashSet<std::pair<TString, TString>> Checkpoints; // Set of checkpoint tables
     THolder<IDqIntegration> DqIntegration_;

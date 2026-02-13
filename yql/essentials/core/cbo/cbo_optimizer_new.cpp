@@ -329,8 +329,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
 }
 
 const TBaseProviderContext& TBaseProviderContext::Instance() {
-    static TBaseProviderContext staticContext;
-    return staticContext;
+    static TBaseProviderContext StaticContext;
+    return StaticContext;
 }
 
 TVector<TString> TOptimizerHints::GetUnappliedString() {

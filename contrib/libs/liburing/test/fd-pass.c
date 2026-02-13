@@ -51,14 +51,15 @@ static int verify_fixed_read(struct io_uring *ring, int fixed_fd, int fail)
 	return 0;
 }
 
-static int test(const char *filename, int source_fd, int target_fd)
+static int test(const char *filename, int source_fd, int target_fd,
+		unsigned int ring_flags)
 {
 	struct io_uring sring, dring;
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
 	int ret;
 
-	ret = io_uring_queue_init(8, &sring, 0);
+	ret = io_uring_queue_init(8, &sring, ring_flags);
 	if (ret) {
 		fprintf(stderr, "ring setup failed: %d\n", ret);
 		return T_EXIT_FAIL;
@@ -203,33 +204,57 @@ int main(int argc, char *argv[])
 	sprintf(fname, ".fd-pass.%d", getpid());
 	t_create_file_pattern(fname, FSIZE, PAT);
 
-	ret = test(fname, 0, 1);
+	ret = test(fname, 0, 1, 0);
 	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test failed 0 1\n");
 		ret = T_EXIT_FAIL;
 	}
 
-	ret = test(fname, 0, 2);
+	ret = test(fname, 0, 2, 0);
 	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test failed 0 2\n");
 		ret = T_EXIT_FAIL;
 	}
 
-	ret = test(fname, 1, 1);
+	ret = test(fname, 1, 1, 0);
 	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test failed 1 1\n");
 		ret = T_EXIT_FAIL;
 	}
 
-	ret = test(fname, 1, 0);
+	ret = test(fname, 1, 0, 0);
 	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test failed 1 0\n");
 		ret = T_EXIT_FAIL;
 	}
 
-	ret = test(fname, 1, IORING_FILE_INDEX_ALLOC);
+	ret = test(fname, 1, IORING_FILE_INDEX_ALLOC, 0);
 	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test failed 1 ALLOC\n");
+		ret = T_EXIT_FAIL;
+	}
+
+	ret = test(fname, 0, 2, IORING_SETUP_DEFER_TASKRUN|IORING_SETUP_SINGLE_ISSUER);
+	if (ret == T_EXIT_FAIL) {
+		fprintf(stderr, "test failed 0 2 defer\n");
+		ret = T_EXIT_FAIL;
+	}
+
+	ret = test(fname, 1, 1, IORING_SETUP_DEFER_TASKRUN|IORING_SETUP_SINGLE_ISSUER);
+	if (ret == T_EXIT_FAIL) {
+		fprintf(stderr, "test failed 1 1 defer\n");
+		ret = T_EXIT_FAIL;
+	}
+
+	ret = test(fname, 1, 0, IORING_SETUP_DEFER_TASKRUN|IORING_SETUP_SINGLE_ISSUER);
+	if (ret == T_EXIT_FAIL) {
+		fprintf(stderr, "test failed 1 0 defer\n");
+		ret = T_EXIT_FAIL;
+	}
+
+	ret = test(fname, 1, IORING_FILE_INDEX_ALLOC, IORING_SETUP_DEFER_TASKRUN|IORING_SETUP_SINGLE_ISSUER);
+	if (ret == T_EXIT_FAIL) {
+		fprintf(stderr, "test failed 1 ALLOC defer\n");
 		ret = T_EXIT_FAIL;
 	}
 

@@ -47,6 +47,8 @@ class Workload(unittest.TestCase):
         TEST_FILES_DIRECTORY = "./test-files/"
         JAR_FILE_NAME = "e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
         JDK_FILE_NAME = "jdk-linux-x86_64.yandex.tgz"
+        if os.path.exists(TEST_FILES_DIRECTORY):
+            shutil.rmtree(TEST_FILES_DIRECTORY)
         if not os.path.exists(TEST_FILES_DIRECTORY):
             os.makedirs(TEST_FILES_DIRECTORY)
 

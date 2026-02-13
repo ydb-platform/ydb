@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         CheckTtlSettings(runtime, OltpTtlChecker);
 
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TTLEnabledTable",
-            TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}});
+            TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}, {}});
 
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {

@@ -15,7 +15,7 @@ namespace NKikimr {
             Record.SetConfigVersion(configVersion);
             Record.SetDistconf(distconf);
         }
-        
+
         TString ToString() const override {
             TStringStream str;
             str << "{TEvControllerProposeConfigRequest Record# " << Record.DebugString();

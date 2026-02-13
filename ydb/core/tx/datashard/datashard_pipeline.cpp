@@ -729,7 +729,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     }
 
     if (step <= OutdatedReadSetStep()) {
-        LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
                    "Outdated readset for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    step, txId, Self->TabletID());
         return true;
@@ -744,7 +744,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     // is not finished yet (e.g. due to out-of-order). In this case we should
     // store ack and send it after its step become outdated.
     if (!Self->TransQueue.Has(txId)) {
-        LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
                    "Unexpected readset in state %" PRIu32 " for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    Self->State, step, txId, Self->TabletID());
         if (ack) {
@@ -1715,10 +1715,15 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
-    if (rec.GetLockMode() != NKikimrDataEvents::OPTIMISTIC) {
-        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
-            "Only OPTIMISTIC lock mode is currently implemented");
-        return writeOp;
+    switch (rec.GetLockMode()) {
+        case NKikimrDataEvents::OPTIMISTIC:
+        case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            break;
+
+        default:
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented");
+            return writeOp;
     }
 
     if (!writeTx->Ready()) {

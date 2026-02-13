@@ -230,7 +230,6 @@ def compute_owner(owner):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument(
         '--build_type',
         choices=['relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan'],
@@ -239,6 +238,8 @@ def main():
         help='build type',
     )
     parser.add_argument('--branch', default='main', type=str, help='branch')
+    parser.add_argument('--start-date', dest='start_date', type=str, help='Start date (YYYY-MM-DD), inclusive')
+    parser.add_argument('--end-date', dest='end_date', type=str, help='End date (YYYY-MM-DD), inclusive')
 
     parser.add_argument(
         '--concurent',
@@ -253,113 +254,60 @@ def main():
     )
 
     args, unknown = parser.parse_known_args()
-    history_for_n_day = args.days_window
+    # Always use 1 day window
+    history_for_n_day = 1
     build_type = args.build_type
     branch = args.branch
+    start_date_override = datetime.date.fromisoformat(args.start_date) if args.start_date else None
+    end_date_override = datetime.date.fromisoformat(args.end_date) if args.end_date else None
+    if start_date_override and end_date_override and start_date_override > end_date_override:
+        raise ValueError("start-date must be earlier or equal to end-date")
     concurrent_mode = args.concurrent_mode
+    
+    if start_date_override:
+        print(f"➡️  Start date override: {start_date_override}")
+    if end_date_override:
+        print(f"➡️  End date override: {end_date_override}")
 
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    script_name = os.path.basename(__file__)
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:        
+    with YDBWrapper() as ydb_wrapper:        
         if not ydb_wrapper.check_credentials():
             return 1
         
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
+        all_tests_table = ydb_wrapper.get_table_path("all_tests_with_owner_and_mute")
+        flaky_tests_table = ydb_wrapper.get_table_path("flaky_tests_window")
+        
         base_date = datetime.datetime(1970, 1, 1)
         default_start_date = datetime.date(2025, 2, 1)
-        today = datetime.date.today()
-        table_path = f'test_results/analytics/tests_monitor'
+        actual_today = datetime.date.today()
+        today = min(end_date_override, actual_today) if end_date_override else actual_today
+        table_path = tests_monitor_table
 
-        # Get last existing day
-        print("Geting date of last collected monitor data")
-        query_last_exist_day = f"""
-            SELECT MAX(date_window) AS last_exist_day
-            FROM `{table_path}`
-            WHERE build_type = '{build_type}'
-            AND branch = '{branch}'
-        """
-        
-        try:
-            results = ydb_wrapper.execute_scan_query(query_last_exist_day)
-            last_exist_day = results[0]['last_exist_day'] if results else None
-        except Exception as e:
-            print(f"Error during fetching last existing day: {e}")
-            last_exist_day = None
+        def load_monitor_data_for_date(target_date):
+            if target_date is None:
+                return None
+            date_str = target_date.strftime('%Y-%m-%d')
+            query = f"""
+                SELECT *
+                FROM `{table_path}`
+                WHERE build_type = '{build_type}'
+                AND branch = '{branch}'
+                AND date_window = Date('{date_str}')
+            """
+            try:
+                results = ydb_wrapper.execute_scan_query(query, query_name=f"get_monitor_data_for_date_{branch}")
+            except Exception as e:
+                print(f"Error fetching monitor data for {date_str}: {e}")
+                return None
 
-        last_exist_df = None
-        last_day_data = None
+            if not results:
+                return None
 
-    # If no data exists, try to find when this branch was created
-    if last_exist_day is None:
-        print(f"Monitor data do not exist for branch '{branch}' - checking when branch was created")
-        
-        # Try to find the earliest date when this branch had any test runs
-        query_branch_creation = f"""
-            SELECT MIN(run_timestamp) as earliest_run
-            FROM `test_results/test_runs_column`
-            WHERE branch = '{branch}' AND build_type = '{build_type}'
-        """
-        
-        try:
-            results = ydb_wrapper.execute_scan_query(query_branch_creation)
-            branch_creation_date = None
-            
-            if results and results[0]['earliest_run']:
-                earliest_run = results[0]['earliest_run']
-                
-                # Convert timestamp to datetime with error handling
-                try:
-                    if earliest_run > 1000000000000000:  # Microseconds
-                        timestamp_seconds = earliest_run / 1000000
-                        branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
-                        print(f"Converted from microseconds: {branch_creation_date}")
-                    elif earliest_run > 1000000000000:  # Milliseconds
-                        timestamp_seconds = earliest_run / 1000
-                        branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
-                        print(f"Converted from milliseconds: {branch_creation_date}")
-                    else:  # Seconds
-                        branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
-                        print(f"Converted from seconds: {branch_creation_date}")
-                except (OSError, OverflowError, ValueError) as e:
-                    print(f"Error converting timestamp {earliest_run} to datetime: {e}")
-                    branch_creation_date = None
-        except Exception as e:
-            print(f"Error fetching branch creation date: {e}")
-            branch_creation_date = None
-        
-        # Use branch creation date if found, otherwise fall back to 1 week ago
-        if branch_creation_date:
-            last_exist_day = branch_creation_date
-            print(f"Found branch creation date: {branch_creation_date}")
-        else:
-            last_exist_day = today - datetime.timedelta(days=7)
-            print(f"No test runs found for branch, using 1 week ago: {last_exist_day}")
-        
-        last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
-        date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days + 1)]
-        print(f"Init new monitor collecting from date {last_exist_day_str}")
-    else:
-        # Get data from tests_monitor for last existing day
-        last_exist_day = (base_date + datetime.timedelta(days=last_exist_day)).date()
-        if last_exist_day == today:  # to recalculate data for today
-            last_exist_day = last_exist_day - datetime.timedelta(days=1)
-        last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
-        print(f"Monitor data exist - geting data for date {last_exist_day_str}")
-        date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days)]
-        query_last_exist_data = f"""
-            SELECT *
-            FROM `{table_path}`
-            WHERE build_type = '{build_type}'
-            AND branch = '{branch}'
-            AND date_window = Date('{last_exist_day_str}')
-        """
-        
-        try:
-            results = ydb_wrapper.execute_scan_query(query_last_exist_data)
-            last_exist_data = []
-
+            rows = []
             for row in results:
-                # Convert each row to a dictionary with consistent keys
-                row_dict = {
+                rows.append({
                     'test_name': row['test_name'],
                     'suite_folder': row['suite_folder'],
                     'full_name': row['full_name'],
@@ -386,19 +334,102 @@ def main():
                     'mute_state_change_date': base_date + datetime.timedelta(days=row['mute_state_change_date']),
                     'days_in_mute_state': row['days_in_mute_state'],
                     'previous_state_filtered': row['previous_state_filtered'],
-                    'state_change_date_filtered': base_date
-                    + datetime.timedelta(days=row['state_change_date_filtered']),
+                    'state_change_date_filtered': base_date + datetime.timedelta(days=row['state_change_date_filtered']),
                     'days_in_state_filtered': row['days_in_state_filtered'],
                     'state_filtered': row['state_filtered'],
-                }
-                last_exist_data.append(row_dict)
+                })
 
-            last_exist_df = pd.DataFrame(last_exist_data)
+            return pd.DataFrame(rows)
+
+        # Get last existing day
+        print("Getting date of last collected monitor data")
+        query_last_exist_day = f"""
+            SELECT MAX(date_window) AS last_exist_day
+            FROM `{table_path}`
+            WHERE build_type = '{build_type}'
+            AND branch = '{branch}'
+        """
+        
+        try:
+            results = ydb_wrapper.execute_scan_query(query_last_exist_day, query_name=f"get_max_monitor_date_{branch}")
+            last_exist_day = results[0]['last_exist_day'] if results else None
         except Exception as e:
-            print(f"Error fetching last existing data: {e}")
-            last_exist_df = None
+            print(f"Error during fetching last existing day: {e}")
+            last_exist_day = None
 
-        # Get data from flaky_tests_window table for dates after last existing day
+        last_exist_df = None
+        last_day_data = None
+
+        if start_date_override:
+            process_start_date = max(start_date_override, default_start_date)
+            if process_start_date != start_date_override:
+                print(f"Requested start date {start_date_override} is earlier than supported minimum {default_start_date}. Using {process_start_date} instead.")
+            if process_start_date > today:
+                print(f"Requested start date {process_start_date} is after end date {today}. Nothing to process.")
+                return 0
+
+            prev_day = process_start_date - datetime.timedelta(days=1)
+            if prev_day >= default_start_date:
+                last_exist_df = load_monitor_data_for_date(prev_day)
+            date_list = [process_start_date + datetime.timedelta(days=x) for x in range((today - process_start_date).days + 1)]
+            print(f"Recalculating monitor data for custom range {process_start_date} - {today}")
+        elif last_exist_day is None:
+            print(f"Monitor data do not exist for branch '{branch}' - checking when branch was created")
+
+            query_branch_creation = f"""
+                SELECT MIN(run_timestamp) as earliest_run
+                FROM `{test_runs_table}`
+                WHERE branch = '{branch}' AND build_type = '{build_type}'
+            """
+
+            try:
+                results = ydb_wrapper.execute_scan_query(query_branch_creation, query_name=f"get_branch_creation_date_{branch}")
+                branch_creation_date = None
+
+                if results and results[0]['earliest_run']:
+                    earliest_run = results[0]['earliest_run']
+                    try:
+                        if earliest_run > 1000000000000000:
+                            timestamp_seconds = earliest_run / 1000000
+                            branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                            print(f"Converted from microseconds: {branch_creation_date}")
+                        elif earliest_run > 1000000000000:
+                            timestamp_seconds = earliest_run / 1000
+                            branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                            print(f"Converted from milliseconds: {branch_creation_date}")
+                        else:
+                            branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
+                            print(f"Converted from seconds: {branch_creation_date}")
+                    except (OSError, OverflowError, ValueError) as e:
+                        print(f"Error converting timestamp {earliest_run} to datetime: {e}")
+                        branch_creation_date = None
+            except Exception as e:
+                print(f"Error fetching branch creation date: {e}")
+                branch_creation_date = None
+
+            if branch_creation_date:
+                process_start_date = max(branch_creation_date, default_start_date)
+                print(f"Found branch creation date: {branch_creation_date}")
+            else:
+                process_start_date = max(today - datetime.timedelta(days=7), default_start_date)
+                print(f"No test runs found for branch, using 1 week ago: {process_start_date}")
+
+            date_list = [process_start_date + datetime.timedelta(days=x) for x in range((today - process_start_date).days + 1)]
+            print(f"Init new monitor collecting from date {process_start_date}")
+        else:
+            last_exist_day_date = (base_date + datetime.timedelta(days=last_exist_day)).date()
+            if last_exist_day_date >= today:
+                last_exist_day_date = last_exist_day_date - datetime.timedelta(days=1)
+            print(f"Monitor data exist - getting data for date {last_exist_day_date}")
+            last_exist_df = load_monitor_data_for_date(last_exist_day_date)
+
+            process_start_date = last_exist_day_date + datetime.timedelta(days=1)
+            if process_start_date > today:
+                print("No new dates to process.")
+                return 0
+            date_list = [process_start_date + datetime.timedelta(days=x) for x in range((today - process_start_date).days + 1)]
+
+        # Get data from flaky_tests_window table for requested dates
         data = {
             'test_name': [],
             'suite_folder': [],
@@ -419,7 +450,6 @@ def main():
 
         print(f'Getting aggregated history in window {history_for_n_day} days')
         for date in sorted(date_list):
-            # Query for data from flaky_tests_window with date_window >= last_existing_day
             query_get_history = f"""
                 SELECT 
                     hist.branch AS branch,
@@ -440,7 +470,7 @@ def main():
                     hist.test_name AS test_name
                 FROM (
                     SELECT * FROM
-                    `test_results/analytics/flaky_tests_window_{history_for_n_day}_days` 
+                    `{flaky_tests_table}` 
                     WHERE 
                     date_window = Date('{date}')
                     AND build_type = '{build_type}' 
@@ -455,7 +485,7 @@ def main():
                         is_muted,
                         date
                     FROM 
-                        `test_results/all_tests_with_owner_and_mute`
+                        `{all_tests_table}`
                     WHERE 
                         branch = '{branch}'
                         AND date = Date('{date}')
@@ -465,10 +495,8 @@ def main():
                     AND hist.suite_folder = owners_t.suite_folder
                     AND hist.date_window = owners_t.date;
             """
-            # Execute query using ydb_wrapper
-            results = ydb_wrapper.execute_scan_query(query_get_history)
+            results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
 
-            # Check if new data was found
             if results:
                 for row in results:
                     data['test_name'].append(row['test_name'])
@@ -670,7 +698,6 @@ def main():
 
         # Create table and bulk upsert using ydb_wrapper
         create_tables(ydb_wrapper, table_path)
-        full_path = f"{ydb_wrapper.database_path}/{table_path}"
 
         chunk_size = 40000
 
@@ -708,8 +735,7 @@ def main():
             .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         )
         
-        # Используем bulk_upsert_batches для агрегированной статистики
-        ydb_wrapper.bulk_upsert_batches(full_path, prepared_for_update_rows, column_types, chunk_size)
+        ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_update_rows, column_types, chunk_size)
 
         end_time = time.time()
         print(f'monitor data upserted: {end_time - start_upsert_time}')

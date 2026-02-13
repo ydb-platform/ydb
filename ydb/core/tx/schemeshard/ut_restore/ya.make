@@ -27,6 +27,7 @@ PEERDIR(
 
 SRCS(
     ut_restore.cpp
+    ut_restore_fs.cpp
 )
 
 YQL_LAST_ABI_VERSION()

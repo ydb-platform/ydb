@@ -13,11 +13,8 @@
 
 namespace NYdb {
 
-    class TResultSetParquetPrinter;
+class TResultSetParquetPrinter;
 
-}
-
-namespace NYdb {
 namespace NConsoleClient {
 
 class TCommandWithResponseHeaders {
@@ -170,5 +167,6 @@ private:
     size_t MaxWidth;
 };
 
-}
-}
+} // namespace NYdb
+
+} // namespace NConsoleClient

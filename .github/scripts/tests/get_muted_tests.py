@@ -9,7 +9,7 @@ import time
 import ydb
 from get_diff_lines_of_file import get_diff_lines_of_file
 from mute_utils import pattern_to_re
-from transform_ya_junit import YaMuteCheck
+from mute_check import YaMuteCheck
 
 # Add analytics directory to path for ydb_wrapper import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
@@ -26,10 +26,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
     print(f'   - branch: {branch}')
     print(f'   - build_type: {build_type}')
 
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return []
@@ -37,6 +34,10 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         # geting last date from history
         today = datetime.date.today().strftime('%Y-%m-%d')
         print(f'📅 Using date: {today}')
+        
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        testowners_table = ydb_wrapper.get_table_path("testowners")
         
         if job_id and branch:  # extend all tests from main by new tests from pr
             print(f'🔄 Mode: Extend all tests from main by new tests from PR')
@@ -49,7 +50,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
                 suite_folder,
                 test_name,
                 full_name
-                from `test_results/analytics/testowners`
+                from `{testowners_table}`
             WHERE  
                 run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
                 and run_timestamp_last <= Date('{today}') + Interval("P1D")
@@ -58,10 +59,11 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
                 suite_folder,
                 test_name,
                 suite_folder || '/' || test_name as full_name
-            FROM `test_results/test_runs_column`
+            FROM `{test_runs_table}`
             WHERE
                 job_id = {job_id} 
                 and branch = '{branch}'
+                and run_timestamp >= CurrentUtcDate() - 30*Interval("P1D")
         )
         """
         else:  # get all tests with run_timestamp_last from test_runs_column for specific branch
@@ -77,15 +79,16 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             t.owners as owners,
             trc.run_timestamp_last as run_timestamp_last,
             Date('{today}') as date
-        FROM `test_results/analytics/testowners` t
+        FROM `{testowners_table}` t
         INNER JOIN (
             SELECT 
                 suite_folder,
                 test_name,
                 MAX(run_timestamp) as run_timestamp_last
-            FROM `test_results/test_runs_column`
+            FROM `{test_runs_table}`
             WHERE branch = '{branch}'
             AND build_type = '{build_type}'
+            and  run_timestamp >= CurrentUtcDate() - 90*Interval("P1D")
             GROUP BY suite_folder, test_name
         ) trc ON t.suite_folder = trc.suite_folder AND t.test_name = trc.test_name
         """
@@ -93,8 +96,14 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         print(f'📝 Executing SQL query:')
         print(tests_query)
         
+        # Determine query name based on mode
+        if job_id and branch:
+            query_name = f"get_all_tests_extend_main_with_pr_{branch}"
+        else:
+            query_name = f"get_all_tests_with_run_timestamp_last_{branch}" if branch else "get_all_tests_with_run_timestamp_last"
+        
         print(f'⏱️  Starting query execution...')
-        results = ydb_wrapper.execute_scan_query(tests_query)
+        results = ydb_wrapper.execute_scan_query(tests_query, query_name=query_name)
         
         print(f'✅ Query completed successfully')
         print(f'📊 Total results: {len(results)} tests')
@@ -133,25 +142,22 @@ def write_to_file(text, file):
 def upload_muted_tests(tests):
     print(f'💾 Starting upload_muted_tests with {len(tests)} tests')
     
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return
-
-        table_path = f'test_results/all_tests_with_owner_and_mute'
+        
+        # Get table path from config
+        table_path = ydb_wrapper.get_table_path("all_tests_with_owner_and_mute")
         print(f'📋 Target table: {table_path}')
 
         print(f'🏗️  Creating table if not exists...')
         create_tables(ydb_wrapper, table_path)
         
-        full_path = f"{ydb_wrapper.database_path}/{table_path}"
-        print(f'📤 Starting bulk upsert to: {full_path}')
+        print(f'📤 Starting bulk upsert to: {table_path}')
         print(f'   - Records to upload: {len(tests)}')
         
-        # Подготавливаем column_types
+        # Prepare column_types
         column_types = (
             ydb.BulkUpsertColumns()
             .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
@@ -164,8 +170,8 @@ def upload_muted_tests(tests):
             .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         )
         
-        # Используем bulk_upsert_batches
-        ydb_wrapper.bulk_upsert_batches(full_path, tests, column_types, batch_size=1000)
+        # Use bulk_upsert_batches (wrapper will construct full path internally)
+        ydb_wrapper.bulk_upsert_batches(table_path, tests, column_types, batch_size=1000)
         
         print(f'✅ Bulk upsert completed successfully')
         print(f'📊 Successfully uploaded {len(tests)} test records')
@@ -191,10 +197,11 @@ def mute_applier(args):
     all_tests_file = os.path.join(output_path, '1_all_tests.txt')
     all_muted_tests_file = os.path.join(output_path, '1_all_muted_tests.txt')
 
-    # all muted
-    print(f'📋 Loading mute rules from: {muted_ya_path}')
+    # Use the provided path or default path
+    current_muted_ya_path = getattr(args, 'muted_ya_file', None) or muted_ya_path
+    print(f'📋 Loading mute rules from: {current_muted_ya_path}')
     mute_check = YaMuteCheck()
-    mute_check.load(muted_ya_path)
+    mute_check.load(current_muted_ya_path)
     print(f'✅ Mute rules loaded successfully')
 
     if args.mode == 'upload_muted_tests':
@@ -246,7 +253,8 @@ def mute_applier(args):
         removed_mute_lines_file = os.path.join(output_path, '3_removed_mute_lines.txt')
         unmuted_tests_file = os.path.join(output_path, '3_unmuted_tests.txt')
 
-        added_lines, removed_lines = get_diff_lines_of_file(args.base_sha, args.head_sha, muted_ya_path)
+        current_muted_ya_path = getattr(args, 'muted_ya_file', None) or muted_ya_path
+        added_lines, removed_lines = get_diff_lines_of_file(args.base_sha, args.head_sha, current_muted_ya_path)
 
         # checking added lines
         write_to_file('\n'.join(added_lines), added_mute_lines_file)
@@ -294,7 +302,7 @@ def mute_applier(args):
 if __name__ == "__main__":
     print(f'🚀 Starting get_muted_tests.py script')
     print(f'📅 Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
-    print(f'📋 Muted YA file path: {muted_ya_path}')
+    print(f'📋 Muted YA file path (default): {muted_ya_path}')
     
     parser = argparse.ArgumentParser(description="Generate diff files for mute_ya.txt")
 
@@ -315,6 +323,11 @@ if __name__ == "__main__":
     )
     upload_muted_tests_parser.add_argument(
         '--build_type', required=True, help='build type for filtering tests'
+    )
+    upload_muted_tests_parser.add_argument(
+        '--muted_ya_file',
+        type=str,
+        help='Path to muted_ya.txt file (default: .github/config/muted_ya.txt)'
     )
 
     get_mute_details_parser = subparsers.add_parser(

@@ -272,6 +272,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 continue;
             }
 
+            if (key == "skip.json.errors"sv) {
+                continue;
+            }
+
             if (matchAllSettings) {
                 issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
             }

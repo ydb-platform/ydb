@@ -177,6 +177,7 @@ public:
             if (!ev) {
                 ev = std::make_unique<TEvHive::TEvReassignTablet>(channel.TabletId);
                 ev->Record.SetReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE);
+                ev->Record.SetAsync(true);
             }
             ev->Record.AddChannels(channel.ChannelId);
         }

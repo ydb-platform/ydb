@@ -324,6 +324,9 @@ namespace NYql::NDqs {
                     *sourceProto->MutableSettings() = *input.SourceSettings;
                     sourceProto->SetType(input.SourceType);
                     sourceProto->SetWatermarksMode(input.WatermarksMode);
+                    if (input.WatermarksIdleTimeoutUs) {
+                        sourceProto->SetWatermarksIdleTimeoutUs(*input.WatermarksIdleTimeoutUs);
+                    }
                 } else {
                     FillInputDesc(inputDesc, input);
                 }
@@ -444,9 +447,11 @@ namespace NYql::NDqs {
             _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*read, parts, &clusterName, ExprContext, settings));
             TMaybe<::google::protobuf::Any> sourceSettings;
             TString sourceType;
+            TMaybe<IDqIntegration::TSourceWatermarksSettings> sourceWatermarksSettings;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
                 dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext);
+                sourceWatermarksSettings = dqIntegration->ExtractSourceWatermarksSettings(*read, *sourceSettings, sourceType);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }
@@ -457,6 +462,10 @@ namespace NYql::NDqs {
                 if (dqSource) {
                     task.Inputs[dqSourceInputIndex].SourceSettings = sourceSettings;
                     task.Inputs[dqSourceInputIndex].SourceType = sourceType;
+                    if (sourceWatermarksSettings) {
+                        task.Inputs[dqSourceInputIndex].WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT;
+                        task.Inputs[dqSourceInputIndex].WatermarksIdleTimeoutUs = sourceWatermarksSettings->IdleTimeoutUs;
+                    }
                 }
             }
         }
@@ -515,6 +524,10 @@ namespace NYql::NDqs {
         settings.SetMaxDelayedRows(FromString<ui64>(streamLookup.MaxDelayedRows().StringValue()));
         if (auto maybeMultiget = streamLookup.IsMultiget()) {
             settings.SetIsMultiget(FromString<bool>(maybeMultiget.Cast().StringValue()));
+        }
+
+        if (auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
+            settings.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast().StringValue()));
         }
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
@@ -605,6 +618,10 @@ namespace NYql::NDqs {
         channelDesc.SetDstTaskId(channel.DstTask);
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
         channelDesc.SetTransportVersion(Settings->GetDataTransportVersion());
+        channelDesc.SetWatermarksMode(channel.WatermarksMode);
+        if (channel.WatermarksIdleTimeoutUs) {
+            channelDesc.SetWatermarksIdleTimeoutUs(*channel.WatermarksIdleTimeoutUs);
+        }
         channelDesc.SetEnableSpilling(enableSpilling);
 
         if (channel.SrcTask) {

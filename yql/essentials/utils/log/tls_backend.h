@@ -16,7 +16,7 @@ namespace NLog {
  */
 class TTlsLogBackend: public TLogBackend {
 public:
-    TTlsLogBackend(TAutoPtr<TLogBackend> defaultBackend)
+    explicit TTlsLogBackend(TAutoPtr<TLogBackend> defaultBackend)
         : DefaultBackend_(defaultBackend)
     {
         Y_DEBUG_ABORT_UNLESS(DefaultBackend_, "default backend is not set");
@@ -48,13 +48,13 @@ template <typename TBackend>
 class TScopedBackend: public TBackend {
 public:
     template <typename... TArgs>
-    TScopedBackend(TArgs&&... args)
+    explicit TScopedBackend(TArgs&&... args)
         : TBackend(std::forward<TArgs>(args)...)
         , PrevBacked_(SetLogBackendForCurrentThread(this))
     {
     }
 
-    ~TScopedBackend() {
+    ~TScopedBackend() override {
         SetLogBackendForCurrentThread(PrevBacked_);
     }
 

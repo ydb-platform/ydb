@@ -22,7 +22,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, Simple)
         {
             BIND([&] {
                 ++x;
-                return VoidFuture;
+                return OKFuture;
             })
         },
         /*concurrencyLimit*/ 1);
@@ -68,7 +68,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, Cancelation)
     for (int i = 0; i < 9; ++i) {
         callbacks.push_back(BIND([&] {
             if (x++ < 5) {
-                return VoidFuture;
+                return OKFuture;
             }
 
             auto promise = NewPromise<void>();
@@ -101,7 +101,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, RecurseRunner)
     std::vector<TCallback<TFuture<void>()>> callbacks;
     for (int i = 0; i < 50'000; ++i) {
         callbacks.push_back(BIND([] {
-            return VoidFuture;
+            return OKFuture;
         }));
     }
 

@@ -6,10 +6,12 @@ import os
 from hamcrest import assert_that
 import time
 import pytest
+import functools
 
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
+from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
@@ -17,6 +19,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.util import LogLevels
 
 import ydb.public.api.protos.ydb_config_pb2 as config
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,7 @@ class DistConfKiKiMRTest(object):
         "version": 0,
         "cluster": "",
     }
+    console_node = 3
 
     @classmethod
     def setup_class(cls):
@@ -64,6 +68,14 @@ class DistConfKiKiMRTest(object):
             # 'TX_PROXY': LogLevels.DEBUG,
             # 'TICKET_PARSER': LogLevels.DEBUG,
         }
+        system_tablets = {
+            "console": [
+                {
+                    "info": {"tablet_id": 72057594037936131},
+                    "node": [cls.console_node]
+                }
+            ],
+        }
         cls.configurator = KikimrConfigGenerator(
             cls.erasure,
             nodes=cls.nodes_count,
@@ -75,7 +87,8 @@ class DistConfKiKiMRTest(object):
             use_self_management=True,
             protected_mode=cls.protected_mode,
             extra_grpc_services=['config'],
-            additional_log_configs=log_configs)
+            additional_log_configs=log_configs,
+            system_tablets=system_tablets)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
@@ -83,7 +96,9 @@ class DistConfKiKiMRTest(object):
         if not cls.protected_mode:
             cms.request_increase_ratio_limit(cls.cluster.client)
         host = cls.cluster.nodes[1].host
+        grpc_port = cls.cluster.nodes[1].grpc_port
         cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
+        cls.dynconfig_client = DynConfigClient(host, grpc_port)
 
     @classmethod
     def teardown_class(cls):
@@ -201,6 +216,89 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                 logger.error(f"Viewer API response content: {pdisk_info}")
             raise
 
+    def test_dynamic_node_start_with_seed_nodes(self):
+        database_path = os.path.join('/', self.cluster.domain_name, 'dyn_seed_db')
+        try:
+            self.cluster.remove_database(database_path)
+        except Exception:
+            pass
+        self.cluster.create_database(database_path, storage_pool_units_count={'rot': 1}, timeout_seconds=60)
+
+        endpoint = f"{self.cluster.nodes[1].host}:{self.cluster.nodes[1].grpc_port}"
+        driver = ydb.Driver(ydb.DriverConfig(endpoint, database_path))
+        pool = ydb.SessionPool(driver)
+
+        def create_table(num, session):
+            session.execute_scheme(
+                f"""
+                create table `{database_path}/t{num}` (
+                    id Uint64,
+                    primary key(id)
+                );
+                """
+            )
+
+        initial_slots = self.cluster.register_and_start_slots(database_path, count=1)
+        self.cluster.wait_tenant_up(database_path)
+        pool.retry_operation_sync(functools.partial(create_table, 1))
+
+        initial_slots[0].stop()
+
+        self.cluster.nodes[self.console_node].stop()
+
+        seed_nodes = [f"grpc://localhost:{node.grpc_port}" for _, node in self.cluster.nodes.items() if node.node_id != self.console_node]
+        seed_nodes_file = tempfile.NamedTemporaryFile(mode='w', prefix='seed_nodes_', suffix='.yaml', delete=False)
+        try:
+            yaml.dump(seed_nodes, seed_nodes_file)
+            seed_nodes_file.close()
+
+            # start with seed nodes
+            initial_slots[0].set_seed_nodes_file(seed_nodes_file.name)
+            initial_slots[0].start()
+
+            pool.retry_operation_sync(functools.partial(create_table, 2))
+
+            def alter_table(num, session):
+                session.execute_scheme(
+                    f"""
+                    alter table `{database_path}/t{num}` add column value Utf8;
+                    """
+                )
+
+            def describe_table(num, session):
+                return session.describe_table(f"{database_path}/t{num}")
+
+            def upsert_table(num, session):
+                session.transaction().execute(
+                    f"upsert into `{database_path}/t{num}` (id) values (1);",
+                    commit_tx=True,
+                )
+
+            def select_table(num, session):
+                session.transaction().execute(
+                    f"select id from `{database_path}/t{num}`;",
+                    commit_tx=True,
+                )
+
+            for num in [1, 2]:
+                pool.retry_operation_sync(functools.partial(alter_table, num))
+                desc = pool.retry_operation_sync(functools.partial(describe_table, num))
+                assert any(c.name == 'value' for c in desc.columns)
+                pool.retry_operation_sync(functools.partial(upsert_table, num))
+                pool.retry_operation_sync(functools.partial(select_table, num))
+        except Exception:
+            assert False, 'Query unexpectedly failed with dynamic slots'
+        finally:
+            try:
+                self.cluster.remove_database(database_path)
+            except Exception:
+                pass
+            if os.path.exists(seed_nodes_file.name):
+                try:
+                    os.unlink(seed_nodes_file.name)
+                except Exception:
+                    pass
+
     def test_cluster_expand_with_seed_nodes(self):
         table_path = '/Root/mydb/mytable_with_seed_nodes'
         number_of_tablets = 5
@@ -277,7 +375,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         try:
             pdisk_info = self.swagger_client.pdisk_info(new_node.node_id)
 
-            pdisks_list = pdisk_info['PDiskStateInfo']
+            pdisks_list = pdisk_info.get('PDiskStateInfo', [])
 
             found_pdisk_in_viewer = False
             for pdisk_entry in pdisks_list:
@@ -319,6 +417,29 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+
+    def test_invalid_change_static_pdisk(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        dumped_fetched_config = yaml.safe_load(fetched_config)
+
+        # replace config with invalid static pdisk path
+        dumped_fetched_config["config"]["host_configs"][0]["drive"][0] = {
+            "path": "fake_pdisk.dat",
+            "type": "ROT"
+        }
+
+        dumped_fetched_config['metadata']['version'] = 1
+        replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        logger.debug(f"replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+        assert_that("failed to remove PDisk# 1:1 as it has active VSlots" in replace_config_response.operation.issues[0].message)
+
+    def test_v1_blocked_when_v2_is_enabled(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        replace_config_response = self.dynconfig_client.replace_config(fetched_config)
+        assert_that(replace_config_response.operation.status == StatusIds.BAD_REQUEST)
+        assert_that(replace_config_response.operation.issues[0].message == "Dynamic Config V1 is disabled. Use V2 API.")
+        logger.debug(replace_config_response.operation)
 
 
 class TestDistConfBootstrapValidation:

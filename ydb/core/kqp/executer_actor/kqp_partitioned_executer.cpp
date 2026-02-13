@@ -11,25 +11,25 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/util/stlog.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NKqp {
 
 namespace {
 
-#define PE_LOG_C(msg) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
-#define PE_LOG_E(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
-#define PE_LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
-#define PE_LOG_N(msg) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
-#define PE_LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
-#define PE_LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
-#define PE_LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
+#define PE_STLOG_T(MESSAGE, ...) STLOG(PRI_TRACE,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
+#define PE_STLOG_D(MESSAGE, ...) STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
+#define PE_STLOG_I(MESSAGE, ...) STLOG(PRI_INFO,   NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
+#define PE_STLOG_N(MESSAGE, ...) STLOG(PRI_NOTICE, NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
+#define PE_STLOG_W(MESSAGE, ...) STLOG(PRI_WARN,   NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
+#define PE_STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
+#define PE_STLOG_C(MESSAGE, ...) STLOG(PRI_CRIT,   NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
 
-/*
+/**
  * TKqpPartitionedExecuter only executes BATCH UPDATE/DELETE queries
  * with the idempotent set of updates (except primary key), without RETURNING,
  * only for row tables and without any joins or subqueries.
@@ -61,7 +61,7 @@ public:
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
     }
 
-    explicit TKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings)
+    explicit TKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : Request(std::move(settings.Request))
         , SessionActorId(std::move(settings.SessionActorId))
         , FuncRegistry(std::move(settings.FuncRegistry))
@@ -81,22 +81,30 @@ public:
         , ShardIdToTableInfo(std::move(settings.ShardIdToTableInfo))
         , WriteBufferInitialMemoryLimit(std::move(settings.WriteBufferInitialMemoryLimit))
         , WriteBufferMemoryLimit(std::move(settings.WriteBufferMemoryLimit))
+        , ChannelService(channelService)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
         if (TableServiceConfig.HasBatchOperationSettings()) {
             Settings = NBatchOperations::ImportSettingsFromProto(TableServiceConfig.GetBatchOperationSettings());
         }
+    }
 
-        PE_LOG_I("Created " << ActorName << " with MaxBatchSize = " << Settings.MaxBatchSize
-            << ", PartitionExecutionLimit = " << Settings.PartitionExecutionLimit);
-
-        FillTableMetaInfo();
+    TString LogPrefix() const {
+        return TStringBuilder()
+            << "ActorId: " << SelfId() << ", "
+            << "ActorState: " << CurrentStateFuncName() << ", "
+            << "Operation: " << OperationName() << ", "
+            << "ActivePartitions: " << StartedPartitions.size() << ", "
+            << "Message: ";
     }
 
     void Bootstrap() {
         Become(&TKqpPartitionedExecuter::PrepareState);
 
+        PE_STLOG_I("Start resolving table partitions");
+
+        FillTableMetaInfo();
         ResolvePartitioning();
     }
 
@@ -104,65 +112,64 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandlePrepare);
-                hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                    << "Got an unknown event in PrepareState, "
+                    << "ActorId = " << ev->Sender << ", "
+                    << "EventType = " << ev->GetTypeRewrite())}));
             }
         } catch (...) {
-            RuntimeError(
-                Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue(TStringBuilder()
-                    << "KqpPartitionedExecuterActor got an unknown error, state = " << CurrentStateFuncName())}));
+            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "Got an unknown error in PrepareState")}));
         }
     }
 
     void HandlePrepare(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        auto* request = ev->Get()->Request.Get();
-
-        PE_LOG_D("Got TEvTxProxySchemeCache::TEvResolveKeySetResult from ActorId = " << ev->Sender);
+        const auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
-            return RuntimeError(
-                Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue(TStringBuilder()
-                    << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, state = " << CurrentStateFuncName())}));
+            return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "Could not resolve a partitioning of the table, "
+                << "ErrorCount = " << request->ErrorCount)}));
         }
 
-        YQL_ENSURE(request->ResultSet.size() == 1);
+        if (request->ResultSet.size() != 1) {
+            return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "Could not resolve a partitioning of the table, resultSet is empty")}));
+        }
 
-        TablePartitioning = request->ResultSet[0].KeyDescription->Partitioning;
+        const auto& result = request->ResultSet[0].KeyDescription;
+        if (!result || !result->Partitioning) {
+            return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "Could not resolve a partitioning of the table, partitioning is null")}));
+        }
+
+        if (result->Partitioning->empty()) {
+            return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "Could not resolve a partitioning of the table, partitioning is empty, "
+                << "TableId = " << result->TableId)}));
+        }
+
+        TablePartitioning = result->Partitioning;
+
+        PE_STLOG_T("Partitions were resolved",
+            (PartitionsCount, result->Partitioning->size()));
 
         CreateExecutersWithBuffers();
     }
 
-    void HandlePrepare(TEvKqp::TEvAbortExecution::TPtr& ev) {
-        auto& msg = ev->Get()->Record;
+    void HandleAbort(TEvKqp::TEvAbortExecution::TPtr& ev) {
+        const auto& msg = ev->Get()->Record;
         auto issues = ev->Get()->GetIssues();
 
-        auto it = ExecuterToPartition.find(ev->Sender);
-        if (it != ExecuterToPartition.end()) {
-            PE_LOG_D("Got TEvKqp::EvAbortExecution from ActorId = " << ev->Sender
-                << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-                << ", message: " << issues.ToOneLineString() << ", abort child executers");
+        PE_STLOG_E("Got abort execution",
+            (Sender, ev->Sender),
+            (FromSessionActor, ev->Sender == SessionActorId),
+            (StatusCode, NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())),
+            (Issues, issues.ToOneLineString()));
 
-            auto [_, partInfo] = *it;
-            AbortBuffer(partInfo->ExecuterId);
-            ForgetExecuterAndBuffer(partInfo);
-            ForgetPartition(partInfo);
-        } else {
-            PE_LOG_D("Got TEvKqp::TEvAbortExecution from unknown actor with Id = " << ev->Sender
-                << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-                << ", message: " << issues.ToOneLineString() << ", ignore");
-        }
-
-        if (ReturnStatus == Ydb::StatusIds::SUCCESS) {
-            ReturnStatus = Ydb::StatusIds::ABORTED;
-            ReturnIssues.AddIssues(issues);
-            ReturnIssues.AddIssue(NYql::TIssue(TStringBuilder()
-                << "aborting by KqpPartitionedExecuterActor"));
-        }
-
-        Abort();
+        AbortWithError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
     }
 
     STFUNC(ExecuteState) {
@@ -170,64 +177,88 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
-                hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleExecute);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                    << "Got an unknown event in ExecuteState, "
+                    << "ActorId = " << ev->Sender << ", "
+                    << "EventType = " << ev->GetTypeRewrite())}));
             }
         } catch (...) {
-            RuntimeError(
-                Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue(TStringBuilder()
-                    << "KqpPartitionedExecuterActor got an unknown error, state = " << CurrentStateFuncName())}));
+            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "Got an unknown error in ExecuteState")}));
         }
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         auto* response = ev->Get()->Record.MutableResponse();
 
+        NYql::TIssues issues;
+        IssuesFromMessage(response->GetIssues(), issues);
+
         auto it = ExecuterToPartition.find(ev->Sender);
         if (it == ExecuterToPartition.end()) {
-            PE_LOG_D("Got TEvKqpExecuter::TEvTxResponse from unknown actor with Id = " << ev->Sender
-                << ", status = " << response->GetStatus() << ", ignore");
-            return;
+            PE_STLOG_W("Got tx response from an unknown executer",
+                (Sender, ev->Sender),
+                (Status, response->GetStatus()),
+                (Issues, issues.ToOneLineString()));
+
+            return TryFinishExecution();
         }
 
-        PE_LOG_I("Got TEvKqpExecuter::TEvTxResponse from ActorId = " << ev->Sender
-            << ", status = " << response->GetStatus());
-
         auto [_, partInfo] = *it;
+
+        PE_STLOG_T("Got tx response",
+            (Sender, ev->Sender),
+            (PartitionIndex, partInfo->PartitionIndex),
+            (Status, response->GetStatus()));
+
         AbortBuffer(partInfo->BufferId);
         ForgetExecuterAndBuffer(partInfo);
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
-                partInfo->RetryDelayMs = Settings.StartRetryDelayMs;
-                partInfo->LimitSize = std::min(partInfo->LimitSize * 2, Settings.MaxBatchSize);
-                return OnSuccessResponse(partInfo, ev->Get());
+                try {
+                    partInfo->RetryDelayMs = Settings.StartRetryDelayMs;
+                    partInfo->LimitSize = std::min(partInfo->LimitSize * 2, Settings.MaxBatchSize);
+                    return OnSuccessResponse(partInfo, ev->Get());
+                } catch (...) {
+                    ForgetPartition(partInfo);
+                    throw;
+                }
             case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED:
             case Ydb::StatusIds::ABORTED:
             case Ydb::StatusIds::UNAVAILABLE:
             case Ydb::StatusIds::OVERLOADED:
             case Ydb::StatusIds::UNDETERMINED:
+                PE_STLOG_D("Executer retriable error, will retry",
+                    (PartitionIndex, partInfo->PartitionIndex),
+                    (Status, response->GetStatus()),
+                    (Issues, issues.ToOneLineString()));
+
                 return ScheduleRetryWithNewLimit(partInfo);
             default:
                 break;
         }
 
+        PE_STLOG_E("Executer unretriable error",
+            (PartitionIndex, partInfo->PartitionIndex),
+            (Status, response->GetStatus()),
+            (Issues, issues.ToOneLineString()));
+
         ForgetPartition(partInfo);
-
-        IssuesFromMessage(response->GetIssues(), ReturnIssues);
-        ReturnIssues.AddIssue(NYql::TIssue(TStringBuilder()
-            << "while executing by KqpPartitionedExecuterActor"));
-
-        RuntimeError(response->GetStatus(), ReturnIssues);
+        AbortWithError(response->GetStatus(), issues);
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxDelayedExecution::TPtr& ev) {
         RequestCounters->Counters->BatchOperationRetries->Inc();
 
         auto& partInfo = StartedPartitions[ev->Get()->PartitionIdx];
+
+        PE_STLOG_D("Delayed execution timer fired",
+            (PartitionIndex, ev->Get()->PartitionIdx));
+
         RetryPartExecution(partInfo);
     }
 
@@ -236,40 +267,51 @@ public:
 
         auto it = BufferToPartition.find(ev->Sender);
         if (it == BufferToPartition.end()) {
-            PE_LOG_D("Got TEvKqpBuffer::TEvError from unknown actor with Id = " << ev->Sender << ", status = "
-            << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << ", ignore");
-            return;
+            PE_STLOG_W("Got error from an unknown buffer",
+                (Sender, ev->Sender),
+                (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
+                (Issues, msg.Issues.ToOneLineString()));
+
+            return TryFinishExecution();
         }
 
-        PE_LOG_D("Got TEvKqpBuffer::TEvError from ActorId = " << ev->Sender << ", status = "
-            << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode));
-
         auto [_, partInfo] = *it;
+
+        PE_STLOG_T("Got buffer error",
+            (Sender, ev->Sender),
+            (PartitionIndex, partInfo->PartitionIndex),
+            (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)));
+
         AbortExecuter(partInfo->ExecuterId, "got error from KqpBufferWriteActor");
         ForgetExecuterAndBuffer(partInfo);
 
         switch (msg.StatusCode) {
             case NYql::NDqProto::StatusIds::SUCCESS:
-                YQL_ENSURE(false, "KqpBufferWriteActor should not return success by TEvKqpBuffer::TEvError");
+                ForgetPartition(partInfo);
+                YQL_ENSURE(false, "Buffer should not return success in TEvError");
                 break;
             case NYql::NDqProto::StatusIds::UNSPECIFIED:
             case NYql::NDqProto::StatusIds::ABORTED:
             case NYql::NDqProto::StatusIds::UNAVAILABLE:
             case NYql::NDqProto::StatusIds::OVERLOADED:
             case NYql::NDqProto::StatusIds::UNDETERMINED:
+                PE_STLOG_D("Buffer retriable error, will retry",
+                    (PartitionIndex, partInfo->PartitionIndex),
+                    (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
+                    (Issues, msg.Issues.ToOneLineString()));
+
                 return ScheduleRetryWithNewLimit(partInfo);
             default:
                 break;
         }
 
+        PE_STLOG_E("Buffer unretriable error",
+            (PartitionIndex, partInfo->PartitionIndex),
+            (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
+            (Issues, msg.Issues.ToOneLineString()));
+
         ForgetPartition(partInfo);
-
-        ReturnIssues.AddIssues(msg.Issues);
-
-        RuntimeError(
-            Ydb::StatusIds::INTERNAL_ERROR,
-            NYql::TIssues({NYql::TIssue(TStringBuilder()
-                << "while executing by KqpPartitionedExecuterActor")}));
+        AbortWithError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), msg.Issues);
     }
 
     STFUNC(AbortState) {
@@ -280,71 +322,75 @@ public:
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleAbort);
             default:
-                PE_LOG_W("unknown message from ActorId = " << ev->Sender);
+                PE_STLOG_W("Got an unknown event",
+                    (Sender, ev->Sender),
+                    (EventType, ev->GetTypeRewrite()));
+
+                return TryFinishExecution();
             }
         } catch (...) {
-            RuntimeError(
-                Ydb::StatusIds::INTERNAL_ERROR,
-                NYql::TIssues({NYql::TIssue(TStringBuilder()
-                    << "KqpPartitionedExecuterActor got an unknown error, state = " << CurrentStateFuncName())}));
+            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "Got an unknown error in AbortState")}));
         }
     }
 
     void HandleAbort(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         const auto& response = ev->Get()->Record.MutableResponse();
+
+        NYql::TIssues issues;
+        IssuesFromMessage(response->GetIssues(), issues);
+
         auto it = ExecuterToPartition.find(ev->Sender);
         if (it == ExecuterToPartition.end()) {
-            PE_LOG_D("Got TEvKqpExecuter::TEvTxResponse from unknown actor with Id = " << ev->Sender
-                << ", status = " << response->GetStatus() << ", ignore");
-            return;
+            PE_STLOG_W("Got tx response from an unknown executer",
+                (Sender, ev->Sender),
+                (Status, response->GetStatus()),
+                (Issues, issues.ToOneLineString()));
+
+            return TryFinishExecution();
         }
 
-        PE_LOG_D("Got TEvKqpExecuter::TEvTxResponse from ActorId = " << ev->Sender
-            << ", status = " << response->GetStatus());
-
         auto [_, partInfo] = *it;
+
+        PE_STLOG_T("Got tx response",
+            (Sender, ev->Sender),
+            (PartitionIndex, partInfo->PartitionIndex),
+            (Status, response->GetStatus()),
+            (Issues, issues.ToOneLineString()));
+
         AbortBuffer(partInfo->BufferId);
         ForgetExecuterAndBuffer(partInfo);
         ForgetPartition(partInfo);
 
-        if (CheckExecutersAreFinished()) {
-            PE_LOG_I("All executers have been finished, abort KqpPartitionedExecuterActor");
-            RuntimeError(ReturnStatus, ReturnIssues);
-        }
-    }
-
-    void HandleAbort(TEvKqp::TEvAbortExecution::TPtr& ev) {
-        auto& msg = ev->Get()->Record;
-        auto issues = ev->Get()->GetIssues();
-
-        auto it = ExecuterToPartition.find(ev->Sender);
-        if (it == ExecuterToPartition.end()) {
-            PE_LOG_D("Got TEvKqp::EvAbortExecution from unknown actor with Id = " << ev->Sender
-                << " , status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-                << ", message: " << issues.ToOneLineString() << ", ignore");
-            return;
-        }
-
-        PE_LOG_D("Got TEvKqp::EvAbortExecution from ActorId = " << ev->Sender
-            << " , status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", message: " << issues.ToOneLineString());
-
-        auto [_, partInfo] = *it;
-        AbortBuffer(partInfo->BufferId);
-        ForgetExecuterAndBuffer(partInfo);
+        TryFinishExecution();
     }
 
     void HandleAbort(TEvKqpBuffer::TEvError::TPtr& ev) {
         const auto& msg = *ev->Get();
-        PE_LOG_D("Got TEvError from KqpBufferWriteActor with Id = " << ev->Sender << ", status = "
-            << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << ", ignore");
-    }
 
-    TString LogPrefix() const {
-        TStringBuilder result = TStringBuilder()
-            << "[PARTITIONED] ActorId: " << SelfId() << ", "
-            << "ActorState: " << CurrentStateFuncName() << ", ";
-        return result;
+        auto it = BufferToPartition.find(ev->Sender);
+        if (it == BufferToPartition.end()) {
+            PE_STLOG_W("Got error from an unknown buffer",
+                (Sender, ev->Sender),
+                (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
+                (Issues, msg.Issues.ToOneLineString()));
+
+            return TryFinishExecution();
+        }
+
+        auto [_, partInfo] = *it;
+
+        PE_STLOG_E("Got buffer error",
+            (Sender, ev->Sender),
+            (PartitionIndex, partInfo->PartitionIndex),
+            (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
+            (Issues, msg.Issues.ToOneLineString()));
+
+        AbortExecuter(partInfo->ExecuterId, "got error from KqpBufferWriteActor");
+        ForgetExecuterAndBuffer(partInfo);
+        ForgetPartition(partInfo);
+
+        TryFinishExecution();
     }
 
 private:
@@ -357,7 +403,18 @@ private:
         } else if (func == &TThis::AbortState) {
             return "AbortState";
         } else {
-            return "unknown state";
+            return "UnknownState";
+        }
+    }
+
+    TString OperationName() const {
+        switch (OperationType) {
+            case TKeyDesc::ERowOperation::Update:
+                return "BATCH UPDATE";
+            case TKeyDesc::ERowOperation::Erase:
+                return "BATCH DELETE";
+            default:
+                return "";
         }
     }
 
@@ -383,20 +440,22 @@ private:
     void FillTableMetaInfo() {
         auto settings = FillSinkSettings();
         if (!settings) {
-            YQL_ENSURE(false, "Cannot execute a request without sinks");
+            return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "Cannot execute a request without sinks")}));
         }
 
         TableId = MakeTableId(settings->GetTable());
 
         switch (settings->GetType()) {
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT:
                 OperationType = TKeyDesc::ERowOperation::Update;
                 break;
             case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
                 OperationType = TKeyDesc::ERowOperation::Erase;
                 break;
             default:
-                YQL_ENSURE(false);
+                YQL_ENSURE(false, "Unknown operation type for BATCH query");
                 break;
         }
 
@@ -412,20 +471,27 @@ private:
             KeyColumnTypes.emplace_back(typeInfoMod.TypeInfo);
         }
 
+        PE_STLOG_D("Filling table meta info",
+            (TableId, TableId),
+            (KeyColumnsCount, KeyColumnTypes.size()));
+
         YQL_ENSURE(!KeyIds.empty());
     }
 
     void ResolvePartitioning() {
-        YQL_ENSURE(!KeyIds.empty());
-
         const TVector<TCell> minKey(KeyIds.size());
         const TTableRange range(minKey, true, {}, false, false);
 
         YQL_ENSURE(range.IsFullRange(KeyIds.size()));
 
+        PE_STLOG_D("Resolving table partitioning",
+            (TableId, TableId),
+            (KeyColumnsCount, KeyIds.size()));
+
         auto keyRange = MakeHolder<TKeyDesc>(TableId, range, OperationType, KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{});
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
+        request->DatabaseName = Database;
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
@@ -434,11 +500,15 @@ private:
     }
 
     void CreateExecutersWithBuffers() {
-        YQL_ENSURE(TablePartitioning);
-
         Become(&TKqpPartitionedExecuter::ExecuteState);
 
+        YQL_ENSURE(TablePartitioning && !TablePartitioning->empty(), "No partitions to execute");
         auto partCount = std::min(Settings.PartitionExecutionLimit, TablePartitioning->size());
+
+        PE_STLOG_I("Starting execution, creating executers with buffers",
+            (PartitionsCount, TablePartitioning->size()),
+            (InFlightPartitionsCount, partCount));
+
         while (NextPartitionIndex < partCount) {
             CreateExecuterWithBuffer(NextPartitionIndex++, /* isRetry */ false);
         }
@@ -460,6 +530,13 @@ private:
         partition->LimitSize = Settings.MaxBatchSize;
         partition->RetryDelayMs = Settings.StartRetryDelayMs;
 
+        PE_STLOG_D("Created partition",
+            (PartitionIndex, idx),
+            (HasBeginRange, partition->BeginRange.Defined()),
+            (HasEndRange, partition->EndRange.Defined()),
+            (InitialLimitSize, partition->LimitSize),
+            (InitialRetryDelayMs, partition->RetryDelayMs));
+
         return partition;
     }
 
@@ -478,7 +555,9 @@ private:
         alloc->SetLimit(WriteBufferInitialMemoryLimit);
         alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc=alloc.get()](ui64 currentLimit, ui64 required) {
             if (required < WriteBufferMemoryLimit) {
-                PE_LOG_D("Increase memory limit from " << currentLimit << " to " << required);
+                PE_STLOG_D("Increase memory limit",
+                    (CurrentLimit, currentLimit),
+                    (Required, required));
                 alloc->SetLimit(required);
             }
         });
@@ -509,42 +588,42 @@ private:
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
-            llvmSettings, {}, 0);
+            llvmSettings, {}, 0, ChannelService);
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;
         partInfo->BufferId = bufferActorId;
         ExecuterToPartition[exId] = BufferToPartition[bufferActorId] = partInfo;
 
-        PE_LOG_I("Create new KQP executer by KqpPartitionedExecuterActor: ExecuterId = " << partInfo->ExecuterId
-            << ", PartitionIndex = " << partitionIndex << ", LimitSize = " << partInfo->LimitSize
-            << ", RetryDelayMs = " << partInfo->RetryDelayMs);
+        PE_STLOG_D("Created executer",
+            (PartitionIndex, partitionIndex),
+            (ExecuterId, partInfo->ExecuterId),
+            (BufferId, bufferActorId),
+            (LimitSize, partInfo->LimitSize),
+            (IsRetry, isRetry));
 
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
     }
 
     void Abort() {
+        PE_STLOG_I("Entering AbortState, trying to finish execution",
+            (ActivePartitionsCount, StartedPartitions.size()),
+            (ReturnStatus, Ydb::StatusIds_StatusCode_Name(ReturnStatus)));
+
         Become(&TKqpPartitionedExecuter::AbortState);
 
         if (CheckExecutersAreFinished()) {
-            PE_LOG_I("All executers have been finished, abort KqpPartitionedExecuterActor");
-            return RuntimeError(ReturnStatus, ReturnIssues);
+            return TryFinishExecution();
         }
 
-        SendAbortToExecuters();
-    }
-
-    void SendAbortToExecuters() {
-        PE_LOG_I("Send abort to executers");
-
-        for (auto& [exId, partInfo] : ExecuterToPartition) {
-            AbortExecuter(exId, "runtime error");
+        for (auto [exId, partInfo] : ExecuterToPartition) {
+            AbortExecuter(exId, ReturnIssues.ToOneLineString());
         }
     }
 
     void AbortExecuter(TActorId id, const TString& reason) {
-        auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Aborted by KqpPartitionedExecuterActor, reason: " + reason);
+        auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Aborted by PEA: " + reason);
         Send(id, abortEv.Release());
     }
 
@@ -565,17 +644,22 @@ private:
         TSerializedCellVec minKey = GetMinCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
         if (minKey) {
             if (!IsKeyInPartition(minKey.GetCells(), partInfo)) {
-                ReturnStatus = Ydb::StatusIds::PRECONDITION_FAILED;
-                ReturnIssues.AddIssue(NYql::TIssue(TStringBuilder()
-                    << "The next key from KqpReadActor does not belong to the partition with PartitionIndex = "
-                    << partInfo->PartitionIndex));
                 ForgetPartition(partInfo);
-                return Abort();
+                return AbortWithError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                    << "The next key from ReadActor does not belong to the partition, "
+                    << "PartitionIndex = " << partInfo->PartitionIndex)}));
             }
+
+            PE_STLOG_D("Partition has more data, continue processing",
+                (PartitionIndex, partInfo->PartitionIndex),
+                (NextKeyCellsCount, minKey.GetCells().size()));
 
             partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(minKey, /* IsInclusive */ false, /* IsPoint */ false);
             return RetryPartExecution(partInfo);
         }
+
+        PE_STLOG_D("Partition finished completely",
+            (PartitionIndex, partInfo->PartitionIndex));
 
         ForgetPartition(partInfo);
 
@@ -583,15 +667,7 @@ private:
             return CreateExecuterWithBuffer(NextPartitionIndex++, /* isRetry */ false);
         }
 
-        if (CheckExecutersAreFinished()) {
-            auto& response = *ResponseEv->Record.MutableResponse();
-            response.SetStatus(ReturnStatus);
-
-            PE_LOG_I("All executers have been finished. Send SUCCESS to SessionActor");
-
-            Send(SessionActorId, ResponseEv.release());
-            PassAway();
-        }
+        TryFinishExecution();
     }
 
     bool IsKeyInPartition(const TConstArrayRef<TCell>& key, const TBatchPartitionInfo::TPtr& partInfo) {
@@ -604,46 +680,50 @@ private:
     }
 
     void RetryPartExecution(const TBatchPartitionInfo::TPtr& partInfo) {
-        PE_LOG_D("Retry query execution for PartitionIndex = " << partInfo->PartitionIndex
-            << ", RetryDelayMs = " << partInfo->RetryDelayMs);
+        if (CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
+            PE_STLOG_D("Retrying partition",
+                (PartitionIndex, partInfo->PartitionIndex),
+                (LimitSize, partInfo->LimitSize),
+                (RetryDelayMs, partInfo->RetryDelayMs));
 
-        if (this->CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
             return CreateExecuterWithBuffer(partInfo->PartitionIndex, /* isRetry */ true);
         }
 
-        ForgetPartition(partInfo);
+        PE_STLOG_D("Partition retry cancelled due to AbortState",
+            (PartitionIndex, partInfo->PartitionIndex));
 
-        if (CheckExecutersAreFinished()) {
-            PE_LOG_I("All executers have been finished, abort KqpPartitionedExecuterActor");
-            RuntimeError(ReturnStatus, ReturnIssues);
-        }
+        ForgetPartition(partInfo);
+        TryFinishExecution();
     }
 
     void ScheduleRetryWithNewLimit(TBatchPartitionInfo::TPtr& partInfo) {
         if (partInfo->RetryDelayMs == Settings.MaxRetryDelayMs) {
+            PE_STLOG_E("Partition reached maximum retry delay",
+                (PartitionIndex, partInfo->PartitionIndex),
+                (MaxRetryDelayMs, Settings.MaxRetryDelayMs));
+
             ForgetPartition(partInfo);
-
-            if (this->CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
-                RuntimeError(
-                    Ydb::StatusIds::UNAVAILABLE,
-                    NYql::TIssues({NYql::TIssue(TStringBuilder()
-                        << "cannot retry query execution because the maximum retry delay has been reached")}));
-            }
-
-            return;
+            return AbortWithError(Ydb::StatusIds::UNAVAILABLE, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "Cannot retry query execution because the maximum retry delay has been reached")}));
         }
 
-        auto newLimit = std::max(partInfo->LimitSize / 2, Settings.MinBatchSize);
-        partInfo->LimitSize = newLimit;
+        const auto decJitterDelay = RandomProvider->Uniform(Settings.StartRetryDelayMs, partInfo->RetryDelayMs * 3ul);
+        const auto newDelay = std::min(Settings.MaxRetryDelayMs, decJitterDelay);
+        const auto oldLimit = partInfo->LimitSize;
+        const auto oldDelay = partInfo->RetryDelayMs;
+
+        partInfo->RetryDelayMs = newDelay;
+        partInfo->LimitSize = std::max(partInfo->LimitSize / 2, Settings.MinBatchSize);
+
+        PE_STLOG_D("Scheduling retry for partition",
+            (PartitionIndex, partInfo->PartitionIndex),
+            (OldDelay, oldDelay),
+            (NewDelay, partInfo->RetryDelayMs),
+            (OldLimit, oldLimit),
+            (NewLimit, partInfo->LimitSize));
 
         auto ev = std::make_unique<TEvKqpExecuter::TEvTxDelayedExecution>(partInfo->PartitionIndex);
         Schedule(TDuration::MilliSeconds(partInfo->RetryDelayMs), ev.release());
-
-        // We use the init delay value first and change it for the next attempt
-        auto decJitterDelay = RandomProvider->Uniform(Settings.StartRetryDelayMs, partInfo->RetryDelayMs * 3ul);
-        auto newDelay = std::min(Settings.MaxRetryDelayMs, decJitterDelay);
-
-        partInfo->RetryDelayMs = newDelay;
     }
 
     bool CheckExecutersAreFinished() const {
@@ -662,6 +742,9 @@ private:
             YQL_ENSURE(it != KeyColumnIdToPos.end());
 
             if (it->second != i) {
+                PE_STLOG_D("Key columns need reorder to continue processing",
+                    (KeyColumnsCount, KeyIds.size()));
+
                 return true;
             }
         }
@@ -678,7 +761,9 @@ private:
                 for (auto keyId : KeyIds) {
                     auto it = std::find(rowColumnIds.begin(), rowColumnIds.end(), keyId);
                     if (it != rowColumnIds.end()) {
-                        newKey.emplace_back(key.GetCells()[it - rowColumnIds.begin()]);
+                        const auto pos = static_cast<size_t>(it - rowColumnIds.begin());
+                        YQL_ENSURE(pos < key.GetCells().size(), "Column with KeyId = " << keyId << " not found in the key row");
+                        newKey.emplace_back(key.GetCells()[pos]);
                     } else {
                         YQL_ENSURE(false, "KeyId " << keyId << " not found in readKeyIds");
                     }
@@ -687,6 +772,8 @@ private:
                 return TSerializedCellVec(std::move(newKey));
             });
         }
+
+        YQL_ENSURE(!rowColumnIds.empty() || rows.empty(), "No column ids for key extraction");
 
         TSerializedCellVec result;
 
@@ -710,15 +797,42 @@ private:
         return result;
     }
 
-    void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
-        PE_LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
+    void TryFinishExecution() {
+        if (CheckExecutersAreFinished()) {
+            PE_STLOG_I("All partitions processed, finish execution",
+                (Status, Ydb::StatusIds_StatusCode_Name(ReturnStatus)),
+                (Issues, ReturnIssues.ToOneLineString()));
 
-        if (this->CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
-            ReturnStatus = code;
-            return Abort();
+            if (ReturnStatus != Ydb::StatusIds::SUCCESS) {
+                return ReplyErrorAndDie(ReturnStatus, ReturnIssues);
+            }
+
+            return ReplySuccessAndDie();
         }
 
-        ReplyErrorAndDie(code, issues);
+        PE_STLOG_D("Not all partitions have been processed, cannot finish execution",
+            (RemainingPartitionsCount, StartedPartitions.size()),
+            (TotalPartitions, TablePartitioning ? TablePartitioning->size() : 0));
+    }
+
+    void AbortWithError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
+        if (CurrentStateFunc() == &TKqpPartitionedExecuter::AbortState) {
+            PE_STLOG_N("Ignoring error because already in AbortState",
+                (Status, Ydb::StatusIds_StatusCode_Name(code)),
+                (Issues, issues.ToOneLineString()));
+
+            return TryFinishExecution();
+        }
+
+        PE_STLOG_E("First error occurred",
+            (Status, Ydb::StatusIds_StatusCode_Name(code)),
+            (Issues, issues.ToOneLineString()));
+
+        ReturnStatus = code;
+        ReturnIssues.AddIssues(issues);
+        ReturnIssues.AddIssue(TStringBuilder() << "while executing " << OperationName() << " query");
+
+        Abort();
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
@@ -727,19 +841,20 @@ private:
         ReplyErrorAndDie(status, &protoIssues);
     }
 
-    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {
-        google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
-        IssueToMessage(issue, issues.Add());
-        ReplyErrorAndDie(status, &issues);
-    }
-
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
         auto& response = *ResponseEv->Record.MutableResponse();
-
         response.SetStatus(status);
         response.MutableIssues()->Swap(issues);
+
+        Send(SessionActorId, ResponseEv.release());
+        PassAway();
+    }
+
+    void ReplySuccessAndDie() {
+        auto& response = *ResponseEv->Record.MutableResponse();
+        response.SetStatus(ReturnStatus);
 
         Send(SessionActorId, ResponseEv.release());
         PassAway();
@@ -789,13 +904,13 @@ private:
 
     const ui64 WriteBufferInitialMemoryLimit;
     const ui64 WriteBufferMemoryLimit;
+    std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
 };
 
 } // namespace
 
-NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings)
-{
-    return new TKqpPartitionedExecuter(std::move(settings));
+NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService) {
+    return new TKqpPartitionedExecuter(std::move(settings), channelService);
 }
 
 } // namespace NKqp

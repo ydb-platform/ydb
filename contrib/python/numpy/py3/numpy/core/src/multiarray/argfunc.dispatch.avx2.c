@@ -14,4 +14,4 @@
 #define NPY__CPU_TARGET_AVX
 #define NPY__CPU_TARGET_F16C
 #define NPY__CPU_TARGET_AVX2
-#include "numpy/core/src/multiarray/argfunc.dispatch.c"
+#include "contrib/python/numpy/py3/numpy/core/src/multiarray/argfunc.dispatch.c"

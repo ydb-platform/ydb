@@ -2,13 +2,15 @@
 
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 
-#define ANTLR4_TOKEN(NAME) ((SQLv1Antlr4Lexer::TOKEN_##NAME << 16) + 1)
-#define IS_TOKEN(USE_ANTLR4, ID, NAME) (UnifiedToken(USE_ANTLR4, ID) == ANTLR4_TOKEN(NAME))
+#include <util/system/types.h>
+
+#define ANTLR4_TOKEN(NAME) ((NALPDefaultAntlr4::SQLv1Antlr4Lexer::TOKEN_##NAME << 16) + 1)
+#define IS_TOKEN(ID, NAME) (UnifiedToken(ID) == ANTLR4_TOKEN(NAME))
 
 namespace NSQLTranslationV1 {
 
-inline ui32 UnifiedToken(bool useAntlr4, ui32 id) {
-    return useAntlr4 + (id << 16);
+inline constexpr ui32 UnifiedToken(ui32 id) {
+    return 1 + (id << 16);
 }
 
 } // namespace NSQLTranslationV1

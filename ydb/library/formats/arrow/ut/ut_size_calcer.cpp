@@ -5,6 +5,7 @@
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/library/formats/arrow/size_calcer.h>
 
+#include <util/random/fast.h>
 
 namespace {
 

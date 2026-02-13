@@ -14,6 +14,7 @@ class TestYdbWorkload(StressFixture):
                 "enable_parameterized_decimal": True,
                 "enable_table_datetime64": True,
                 "enable_vector_index": True,
+                "enable_fulltext_index": True,
             }
         )
 

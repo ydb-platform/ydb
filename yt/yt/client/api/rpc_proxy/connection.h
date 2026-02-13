@@ -8,12 +8,6 @@ namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TConnectionOptions
-    : public NApi::TConnectionOptions
-{ };
-
-////////////////////////////////////////////////////////////////////////////////
-
 NApi::IConnectionPtr CreateConnection(
     TConnectionConfigPtr config,
     TConnectionOptions options = {});

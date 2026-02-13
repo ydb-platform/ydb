@@ -52,6 +52,12 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
 
 void TIndexMonPage::OutputIndex(IOutputStream& out, bool pathEndsWithSlash) {
     TGuard<TMutex> g(Mtx);
+    if (SortPagesPending) {
+        Pages.sort([](const TMonPagePtr& a, const TMonPagePtr& b) {
+            return AsciiCompareIgnoreCase(a->GetTitle(), b->GetTitle()) < 0;
+        });
+        SortPagesPending = false;
+    }
     for (auto& Page : Pages) {
         IMonPage* page = Page.Get();
         if (page->IsInIndex()) {
@@ -164,9 +170,7 @@ void TIndexMonPage::OutputBody(IMonHttpRequest& req) {
 
 void TIndexMonPage::SortPages() {
     TGuard<TMutex> g(Mtx);
-    Pages.sort([](const TMonPagePtr& a, const TMonPagePtr& b) {
-        return AsciiCompareIgnoreCase(a->GetTitle(), b->GetTitle()) < 0;
-    });
+    SortPagesPending = true;
 }
 
 void TIndexMonPage::ClearPages() {

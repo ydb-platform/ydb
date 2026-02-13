@@ -95,6 +95,7 @@ message TEvWrite {
             OPERATION_UPSERT = 4;
             OPERATION_REPLACE = 5;
             OPERATION_INCREMENT = 6;
+            OPERATION_UPSERT_INCREMENT = 7;
         }
 
         optional EOperationType Type = 1;
@@ -141,10 +142,10 @@ message TEvWriteResult {
         STATUS_BAD_REQUEST = 7;
         STATUS_SCHEME_CHANGED = 8;
         STATUS_LOCKS_BROKEN = 9;
-        STATUS_DISK_SPACE_EXHAUSTED = 10;
+        STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED = 10;
         STATUS_WRONG_SHARD_STATE = 11;
         STATUS_CONSTRAINT_VIOLATION = 12;
-        STATUS_OUT_OF_SPACE = 13;
+        STATUS_DISK_GROUP_OUT_OF_SPACE = 13;
     }
 
     // Status

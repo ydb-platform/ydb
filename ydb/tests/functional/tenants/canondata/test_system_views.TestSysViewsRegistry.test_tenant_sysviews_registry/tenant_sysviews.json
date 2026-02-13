@@ -1,0 +1,1878 @@
+{
+  "auth_effective_permissions": {
+    "columns": [
+      {
+        "name": "Path",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Sid",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Permission",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "Path",
+      "Sid",
+      "Permission"
+    ]
+  },
+  "auth_group_members": {
+    "columns": [
+      {
+        "name": "GroupSid",
+        "type": "Utf8?"
+      },
+      {
+        "name": "MemberSid",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "GroupSid",
+      "MemberSid"
+    ]
+  },
+  "auth_groups": {
+    "columns": [
+      {
+        "name": "Sid",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "Sid"
+    ]
+  },
+  "auth_owners": {
+    "columns": [
+      {
+        "name": "Path",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Sid",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "Path"
+    ]
+  },
+  "auth_permissions": {
+    "columns": [
+      {
+        "name": "Path",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Sid",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Permission",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "Path",
+      "Sid",
+      "Permission"
+    ]
+  },
+  "auth_users": {
+    "columns": [
+      {
+        "name": "Sid",
+        "type": "Utf8?"
+      },
+      {
+        "name": "IsEnabled",
+        "type": "Bool?"
+      },
+      {
+        "name": "IsLockedOut",
+        "type": "Bool?"
+      },
+      {
+        "name": "CreatedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "LastSuccessfulAttemptAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "LastFailedAttemptAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "FailedAttemptCount",
+        "type": "Uint32?"
+      },
+      {
+        "name": "PasswordHash",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "Sid"
+    ]
+  },
+  "compile_cache_queries": {
+    "columns": [
+      {
+        "name": "NodeId",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryId",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Query",
+        "type": "Utf8?"
+      },
+      {
+        "name": "AccessCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompiledAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "LastAccessedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "CompilationDuration",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Warnings",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Metadata",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "NodeId",
+      "QueryId"
+    ]
+  },
+  "nodes": {
+    "columns": [
+      {
+        "name": "NodeId",
+        "type": "Uint32?"
+      },
+      {
+        "name": "Address",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Host",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Port",
+        "type": "Uint32?"
+      },
+      {
+        "name": "StartTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "UpTime",
+        "type": "Interval?"
+      },
+      {
+        "name": "CpuThreads",
+        "type": "Uint32?"
+      },
+      {
+        "name": "CpuUsage",
+        "type": "Double?"
+      },
+      {
+        "name": "CpuIdle",
+        "type": "Double?"
+      }
+    ],
+    "primary_key": [
+      "NodeId"
+    ]
+  },
+  "partition_stats": {
+    "columns": [
+      {
+        "name": "OwnerId",
+        "type": "Uint64?"
+      },
+      {
+        "name": "PathId",
+        "type": "Uint64?"
+      },
+      {
+        "name": "PartIdx",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DataSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "RowCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IndexSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CPUCores",
+        "type": "Double?"
+      },
+      {
+        "name": "TabletId",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Path",
+        "type": "Utf8?"
+      },
+      {
+        "name": "NodeId",
+        "type": "Uint32?"
+      },
+      {
+        "name": "StartTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "AccessTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "UpdateTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "InFlightTxCount",
+        "type": "Uint32?"
+      },
+      {
+        "name": "RowUpdates",
+        "type": "Uint64?"
+      },
+      {
+        "name": "RowDeletes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "RowReads",
+        "type": "Uint64?"
+      },
+      {
+        "name": "RangeReads",
+        "type": "Uint64?"
+      },
+      {
+        "name": "RangeReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ImmediateTxCompleted",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CoordinatedTxCompleted",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TxRejectedByOverload",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TxRejectedByOutOfStorage",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LastTtlRunTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "LastTtlRowsProcessed",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LastTtlRowsErased",
+        "type": "Uint64?"
+      },
+      {
+        "name": "FollowerId",
+        "type": "Uint32?"
+      },
+      {
+        "name": "LocksAcquired",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksWholeShard",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksBroken",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TxCompleteLag",
+        "type": "Interval?"
+      }
+    ],
+    "primary_key": [
+      "OwnerId",
+      "PathId",
+      "PartIdx",
+      "FollowerId"
+    ]
+  },
+  "query_metrics_one_minute": {
+    "columns": [
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Count",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "MinDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "MaxDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "MinReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinUpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxUpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumUpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinUpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxUpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumUpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinDeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxDeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumDeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinRequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxRequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumRequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksBrokenAsBreaker",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksBrokenAsVictim",
+        "type": "Uint64?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "query_sessions": {
+    "columns": [
+      {
+        "name": "SessionId",
+        "type": "Utf8?"
+      },
+      {
+        "name": "NodeId",
+        "type": "Uint32?"
+      },
+      {
+        "name": "State",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Query",
+        "type": "Utf8?"
+      },
+      {
+        "name": "QueryCount",
+        "type": "Uint32?"
+      },
+      {
+        "name": "ClientAddress",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ClientPID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ClientUserAgent",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ClientSdkBuildInfo",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ApplicationName",
+        "type": "Utf8?"
+      },
+      {
+        "name": "SessionStartAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "QueryStartAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "StateChangeAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "SessionId"
+    ]
+  },
+  "resource_pool_classifiers": {
+    "columns": [
+      {
+        "name": "Name",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Rank",
+        "type": "Int64?"
+      },
+      {
+        "name": "MemberName",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ResourcePool",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "Name"
+    ]
+  },
+  "resource_pools": {
+    "columns": [
+      {
+        "name": "Name",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ConcurrentQueryLimit",
+        "type": "Int32?"
+      },
+      {
+        "name": "QueueSize",
+        "type": "Int32?"
+      },
+      {
+        "name": "DatabaseLoadCpuThreshold",
+        "type": "Double?"
+      },
+      {
+        "name": "ResourceWeight",
+        "type": "Double?"
+      },
+      {
+        "name": "TotalCpuLimitPercentPerNode",
+        "type": "Double?"
+      },
+      {
+        "name": "QueryCpuLimitPercentPerNode",
+        "type": "Double?"
+      },
+      {
+        "name": "QueryMemoryLimitPercentPerNode",
+        "type": "Double?"
+      }
+    ],
+    "primary_key": [
+      "Name"
+    ]
+  },
+  "streaming_queries": {
+    "columns": [
+      {
+        "name": "Path",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Status",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Issues",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Plan",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Ast",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Text",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Run",
+        "type": "Bool?"
+      },
+      {
+        "name": "ResourcePool",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RetryCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LastFailAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "SuspendedUntil",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "LastExecutionId",
+        "type": "Utf8?"
+      },
+      {
+        "name": "PreviousExecutionIds",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "Path"
+    ]
+  },
+  "top_partitions_by_tli_one_hour": {
+    "columns": [
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "TabletId",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Path",
+        "type": "Utf8?"
+      },
+      {
+        "name": "LocksAcquired",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksWholeShard",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksBroken",
+        "type": "Uint64?"
+      },
+      {
+        "name": "NodeId",
+        "type": "Uint32?"
+      },
+      {
+        "name": "DataSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "RowCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IndexSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "FollowerId",
+        "type": "Uint32?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_partitions_by_tli_one_minute": {
+    "columns": [
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "TabletId",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Path",
+        "type": "Utf8?"
+      },
+      {
+        "name": "LocksAcquired",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksWholeShard",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksBroken",
+        "type": "Uint64?"
+      },
+      {
+        "name": "NodeId",
+        "type": "Uint32?"
+      },
+      {
+        "name": "DataSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "RowCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IndexSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "FollowerId",
+        "type": "Uint32?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_partitions_one_hour": {
+    "columns": [
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "TabletId",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Path",
+        "type": "Utf8?"
+      },
+      {
+        "name": "PeakTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "CPUCores",
+        "type": "Double?"
+      },
+      {
+        "name": "NodeId",
+        "type": "Uint32?"
+      },
+      {
+        "name": "DataSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "RowCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IndexSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "InFlightTxCount",
+        "type": "Uint32?"
+      },
+      {
+        "name": "FollowerId",
+        "type": "Uint32?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_partitions_one_minute": {
+    "columns": [
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "TabletId",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Path",
+        "type": "Utf8?"
+      },
+      {
+        "name": "PeakTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "CPUCores",
+        "type": "Double?"
+      },
+      {
+        "name": "NodeId",
+        "type": "Uint32?"
+      },
+      {
+        "name": "DataSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "RowCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IndexSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "InFlightTxCount",
+        "type": "Uint32?"
+      },
+      {
+        "name": "FollowerId",
+        "type": "Uint32?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_queries_by_cpu_time_one_hour": {
+    "columns": [
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Duration",
+        "type": "Interval?"
+      },
+      {
+        "name": "EndTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Partitions",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ParametersSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "FromQueryCache",
+        "type": "Bool?"
+      },
+      {
+        "name": "CPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ShardCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeNodesCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ProcessCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Type",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_queries_by_cpu_time_one_minute": {
+    "columns": [
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Duration",
+        "type": "Interval?"
+      },
+      {
+        "name": "EndTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Partitions",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ParametersSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "FromQueryCache",
+        "type": "Bool?"
+      },
+      {
+        "name": "CPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ShardCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeNodesCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ProcessCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Type",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_queries_by_duration_one_hour": {
+    "columns": [
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Duration",
+        "type": "Interval?"
+      },
+      {
+        "name": "EndTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Partitions",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ParametersSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "FromQueryCache",
+        "type": "Bool?"
+      },
+      {
+        "name": "CPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ShardCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeNodesCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ProcessCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Type",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_queries_by_duration_one_minute": {
+    "columns": [
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Duration",
+        "type": "Interval?"
+      },
+      {
+        "name": "EndTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Partitions",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ParametersSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "FromQueryCache",
+        "type": "Bool?"
+      },
+      {
+        "name": "CPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ShardCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeNodesCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ProcessCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Type",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_queries_by_read_bytes_one_hour": {
+    "columns": [
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Duration",
+        "type": "Interval?"
+      },
+      {
+        "name": "EndTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Partitions",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ParametersSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "FromQueryCache",
+        "type": "Bool?"
+      },
+      {
+        "name": "CPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ShardCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeNodesCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ProcessCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Type",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_queries_by_read_bytes_one_minute": {
+    "columns": [
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Duration",
+        "type": "Interval?"
+      },
+      {
+        "name": "EndTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Partitions",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ParametersSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "FromQueryCache",
+        "type": "Bool?"
+      },
+      {
+        "name": "CPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ShardCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeNodesCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ProcessCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Type",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_queries_by_request_units_one_hour": {
+    "columns": [
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Duration",
+        "type": "Interval?"
+      },
+      {
+        "name": "EndTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Partitions",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ParametersSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "FromQueryCache",
+        "type": "Bool?"
+      },
+      {
+        "name": "CPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ShardCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeNodesCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ProcessCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Type",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
+  "top_queries_by_request_units_one_minute": {
+    "columns": [
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Duration",
+        "type": "Interval?"
+      },
+      {
+        "name": "EndTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "DeleteBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Partitions",
+        "type": "Uint64?"
+      },
+      {
+        "name": "UserSID",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ParametersSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "FromQueryCache",
+        "type": "Bool?"
+      },
+      {
+        "name": "CPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ShardCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxShardCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeNodesCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxComputeCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ProcessCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Type",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  }
+}

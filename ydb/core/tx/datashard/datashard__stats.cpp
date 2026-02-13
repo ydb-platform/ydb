@@ -143,7 +143,7 @@ private:
 
             if (now > CoroutineDeadline) {
                 Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
-                
+
                 Interrupt();
                 WaitForSpecificEvent([](IEventHandle& ev) {
                     return ev.Type == EvResume;
@@ -244,15 +244,69 @@ public:
         ui64 tableId = Ev->Get()->Record.GetTableId();
 
         Result = new TEvDataShard::TEvGetTableStatsResult(Self->TabletID(), Self->PathOwnerId, tableId);
+        Result->Record.SetFollowerId(Self->FollowerId());
 
-        if (!Self->TableInfos.contains(tableId))
+        const auto tableInfoIt = Self->TableInfos.find(tableId);
+
+        if (tableInfoIt == Self->TableInfos.end()) {
             return true;
-
-        if (Ev->Get()->Record.GetCollectKeySample()) {
-            Self->EnableKeyAccessSampling(ctx, AppData(ctx)->TimeProvider->Now() + TDuration::Seconds(60));
         }
 
-        const TUserTable& tableInfo = *Self->TableInfos[tableId];
+        const TUserTable& tableInfo = *(tableInfoIt->second);
+
+        // Return the key access sample if it has been collected no more
+        // than 30 seconds ago or it has been active for at least 5 seconds
+        //
+        // NOTE: This must be done before calling EnableKeyAccessSampling()
+        //       because this function resets StopKeyAccessSamplingAt and clears
+        //       the current key access data (if available)
+        const auto appData = AppData(ctx);
+        const auto currentTime = appData->TimeProvider->Now();
+
+        const TDuration sampleMinCollection = TDuration::Seconds(
+            appData->DataShardConfig.GetKeyAccessSampleCollectionMinIntervalSeconds()
+        );
+
+        const TDuration sampleMaxCollection = TDuration::Seconds(
+            appData->DataShardConfig.GetKeyAccessSampleCollectionMaxIntervalSeconds()
+        );
+
+        const TDuration sampleValidity = TDuration::Seconds(
+            appData->DataShardConfig.GetKeyAccessSampleValidityIntervalSeconds()
+        );
+
+        bool returnKeyAccessSample = false;
+
+        if (Self->CurrentKeySampler == Self->EnabledKeySampler) {
+            // Key access collection is active
+            if (Self->StartedKeyAccessSamplingAt + sampleMinCollection <= currentTime) {
+                // The key collection has been active for at least the min required time
+                returnKeyAccessSample = true;
+            }
+        } else {
+            // Key access collection is not active
+            if (Self->StopKeyAccessSamplingAt + sampleValidity >= currentTime) {
+                // There is a valid key access data not older than some min age
+                returnKeyAccessSample = true;
+            }
+        }
+
+        if (returnKeyAccessSample) {
+            // NOTE: It is important to return the key access data even if the caller
+            //       did not set the collectKeySample flag. SchemeShard may initiate
+            //       the split-by-load operation (and use the key access data)
+            //       even if it did not want to do the split-by-load when sending
+            //       the EvGetTableStats message
+            FillKeyAccessSample(
+                tableInfo.Stats.AccessStats,
+                *Result->Record.MutableTableStats()->MutableKeyAccessSample()
+            );
+        }
+
+        // Start collecting key samples or extend the duration of the active collection
+        if (Ev->Get()->Record.GetCollectKeySample()) {
+            Self->EnableKeyAccessSampling(ctx, currentTime + sampleMaxCollection);
+        }
 
         // Fill stats with current mem table size:
         auto memSize = txc.DB.GetTableMemSize(tableInfo.LocalTid);
@@ -270,38 +324,40 @@ public:
         tableInfo.Stats.RowCountResolution = Ev->Get()->Record.GetRowCountResolution();
         tableInfo.Stats.HistogramBucketsCount = Ev->Get()->Record.GetHistogramBucketsCount();
 
-        // Check if first stats update has been completed:
+        // Check if first stats update has been completed (happens only for leaders)
         bool ready = (tableInfo.Stats.StatsUpdateTime != TInstant());
         Result->Record.SetFullStatsReady(ready);
-        if (!ready) {
-            return true;
+
+        if (ready) {
+            const TStats& stats = tableInfo.Stats.DataStats;
+            Result->Record.MutableTableStats()->SetIndexSize(stats.IndexSize.Size);
+            Result->Record.MutableTableStats()->SetByKeyFilterSize(stats.ByKeyFilterSize);
+            Result->Record.MutableTableStats()->SetDataSize(stats.DataSize.Size + memSize);
+            Result->Record.MutableTableStats()->SetRowCount(stats.RowCount + memRowCount);
+            FillHistogram(stats.DataSizeHistogram, *Result->Record.MutableTableStats()->MutableDataSizeHistogram());
+            FillHistogram(stats.RowCountHistogram, *Result->Record.MutableTableStats()->MutableRowCountHistogram());
+
+            Result->Record.MutableTableStats()->SetPartCount(tableInfo.Stats.PartCount);
+            Result->Record.MutableTableStats()->SetSearchHeight(tableInfo.Stats.SearchHeight);
+            Result->Record.MutableTableStats()->SetHasSchemaChanges(tableInfo.Stats.HasSchemaChanges);
+            Result->Record.MutableTableStats()->SetLastFullCompactionTs(tableInfo.Stats.LastFullCompaction.Seconds());
+            Result->Record.MutableTableStats()->SetHasLoanedParts(Self->Executor()->HasLoanedParts());
+
+            Result->Record.SetShardState(Self->State);
+            for (const auto& pi : tableInfo.Stats.PartOwners) {
+                Result->Record.AddUserTablePartOwners(pi);
+            }
+
+            for (const auto& pi : Self->SysTablesPartOwners) {
+                Result->Record.AddSysTablesPartOwners(pi);
+            }
         }
 
-        const TStats& stats = tableInfo.Stats.DataStats;
-        Result->Record.MutableTableStats()->SetIndexSize(stats.IndexSize.Size);
-        Result->Record.MutableTableStats()->SetByKeyFilterSize(stats.ByKeyFilterSize);
-        Result->Record.MutableTableStats()->SetDataSize(stats.DataSize.Size + memSize);
-        Result->Record.MutableTableStats()->SetRowCount(stats.RowCount + memRowCount);
-        FillHistogram(stats.DataSizeHistogram, *Result->Record.MutableTableStats()->MutableDataSizeHistogram());
-        FillHistogram(stats.RowCountHistogram, *Result->Record.MutableTableStats()->MutableRowCountHistogram());
-        // Fill key access sample if it was collected not too long ago:
-        if (Self->StopKeyAccessSamplingAt + TDuration::Seconds(30) >= AppData(ctx)->TimeProvider->Now()) {
-            FillKeyAccessSample(tableInfo.Stats.AccessStats, *Result->Record.MutableTableStats()->MutableKeyAccessSample());
-        }
+        // Also return back the CPU usage data
+        auto* resourceMetrics = Self->Executor()->GetResourceMetrics();
 
-        Result->Record.MutableTableStats()->SetPartCount(tableInfo.Stats.PartCount);
-        Result->Record.MutableTableStats()->SetSearchHeight(tableInfo.Stats.SearchHeight);
-        Result->Record.MutableTableStats()->SetHasSchemaChanges(tableInfo.Stats.HasSchemaChanges);
-        Result->Record.MutableTableStats()->SetLastFullCompactionTs(tableInfo.Stats.LastFullCompaction.Seconds());
-        Result->Record.MutableTableStats()->SetHasLoanedParts(Self->Executor()->HasLoanedParts());
-
-        Result->Record.SetShardState(Self->State);
-        for (const auto& pi : tableInfo.Stats.PartOwners) {
-            Result->Record.AddUserTablePartOwners(pi);
-        }
-
-        for (const auto& pi : Self->SysTablesPartOwners) {
-            Result->Record.AddSysTablesPartOwners(pi);
+        if (resourceMetrics != nullptr) {
+            resourceMetrics->Fill(*(Result->Record.MutableTabletMetrics()));
         }
 
         return true;
@@ -402,7 +458,7 @@ void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TAc
     LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Stats rebuilt error '" << msg->Message
         << "', code: " << ui32(msg->Code)
         << " at datashard " << TabletID() << ", for tableId " << msg->TableId);
-    
+
     if (msg->Exception) {
         std::rethrow_exception(msg->Exception);
     }

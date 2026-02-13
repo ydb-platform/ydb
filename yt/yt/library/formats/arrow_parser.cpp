@@ -1,5 +1,6 @@
 #include "arrow_parser.h"
 #include "arrow_metadata_constants.h"
+#include "arrow_helpers.h"
 
 #include <yt/yt/client/formats/parser.h>
 
@@ -84,7 +85,7 @@ void CheckTzArrowType(
         {
             arrow20::Type::BINARY,
             arrow20::Type::STRUCT,
-            arrow20::Type::DICTIONARY
+            arrow20::Type::DICTIONARY,
         },
         arrowTypeName,
         arrowDataType->id());
@@ -108,7 +109,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::UINT16
+                    arrow20::Type::UINT16,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -117,7 +118,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::UINT32
+                    arrow20::Type::UINT32,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -126,7 +127,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::UINT64
+                    arrow20::Type::UINT64,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -135,7 +136,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::INT32
+                    arrow20::Type::INT32,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -144,7 +145,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::INT64
+                    arrow20::Type::INT64,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -153,7 +154,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::INT64
+                    arrow20::Type::INT64,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -636,32 +637,19 @@ i64 CheckAndTransformTimestamp(i64 arrowValue, arrow20::TimeUnit::type timeUnit,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<std::string> GetYtTypeFromMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
-{
-    auto columnMetadata = schemaField->metadata();
-    if (!columnMetadata) {
-        return std::nullopt;
-    }
-    auto valueResult = columnMetadata->Get(YtTypeMetadataKey);
-    if (valueResult.ok()) {
-        return *valueResult;
-    }
-    return std::nullopt;
-}
-
 bool HasEmptyStructTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
 {
-    return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueEmptyStruct;
+    return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueEmptyStruct;
 }
 
 bool HasNestedOptionalTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
 {
-    return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueNestedOptional;
+    return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueNestedOptional;
 }
 
 bool HasYsonTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
 {
-    return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueYson;
+    return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueYson;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1638,9 +1626,9 @@ private:
             if (structFields.empty()) {
                 if (!HasEmptyStructTypeInMetadata(SchemaField_)) {
                     THROW_ERROR_EXCEPTION(
-                        "YT \"struct\" type has no fields, but no metadata found with the key \'%v\' and the value \'%v\'",
-                        YtTypeMetadataKey,
-                        YtTypeMetadataValueEmptyStruct);
+                        "YT \"struct\" type has no fields, but no metadata found with the key %Qv and the value %Qv",
+                        YTTypeMetadataKey,
+                        YTTypeMetadataValueEmptyStruct);
                 }
                 if (array->num_fields() != 1 && array->field(0)->type()->Equals(arrow20::null())) {
                     THROW_ERROR_EXCEPTION("YT \"struct\" type has no fields, but Arrow \"struct\" type does not have a single dummy null field");
@@ -1683,16 +1671,16 @@ private:
             Writer_->WriteBeginList();
             if (!HasNestedOptionalTypeInMetadata(SchemaField_)) {
                 THROW_ERROR_EXCEPTION(
-                    "The element of YT \"optional\" type is nullable, but no metadata found with the key \'%v\' and the value \'%v\'",
-                    YtTypeMetadataKey,
-                    YtTypeMetadataValueNestedOptional);
+                    "The element of YT \"optional\" type is nullable, but no metadata found with the key %Qv and the value %Qv",
+                    YTTypeMetadataKey,
+                    YTTypeMetadataValueNestedOptional);
             }
             if (array->num_fields() != 1) {
                 THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type is not equal to 1 for the YT \"optional\" type")
                     << TErrorAttribute("arrow_field_count", array->num_fields());
             }
 
-            auto arrowField = array->field(0);
+            const auto& arrowField = array->field(0);
             TArrayCompositeVisitor visitor(YTType_->GetElement(), arrowField, array->type()->field(0), Writer_, RowIndex_);
             try {
                 ThrowOnError(arrowField->type()->Accept(&visitor));
@@ -1761,7 +1749,7 @@ void PrepareArrayForComplexType(
                 metatype,
                 {
                     arrow20::Type::LIST,
-                    arrow20::Type::BINARY
+                    arrow20::Type::BINARY,
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1772,7 +1760,7 @@ void PrepareArrayForComplexType(
                 metatype,
                 {
                     arrow20::Type::MAP,
-                    arrow20::Type::BINARY
+                    arrow20::Type::BINARY,
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1783,7 +1771,7 @@ void PrepareArrayForComplexType(
                 metatype,
                 {
                     arrow20::Type::STRUCT,
-                    arrow20::Type::BINARY
+                    arrow20::Type::BINARY,
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1794,7 +1782,7 @@ void PrepareArrayForComplexType(
                 metatype,
                 {
                     arrow20::Type::DECIMAL128,
-                    arrow20::Type::DECIMAL256
+                    arrow20::Type::DECIMAL256,
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1805,7 +1793,7 @@ void PrepareArrayForComplexType(
                 metatype,
                 {
                     arrow20::Type::STRUCT,
-                    arrow20::Type::BINARY
+                    arrow20::Type::BINARY,
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1839,10 +1827,10 @@ void PrepareArrayForComplexType(
                     rowValues[offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
                 } else {
                     THROW_ERROR_EXCEPTION(
-                        "Unexpected arrow type in complex type %Qv, there was no metadata found with the key \'%v\' and the value \'%v\'",
+                        "Unexpected arrow type in complex type %Qv, there was no metadata found with the key %Qv and the value %Qv",
                         column->type()->name(),
-                        YtTypeMetadataKey,
-                        YtTypeMetadataValueYson);
+                        YTTypeMetadataKey,
+                        YTTypeMetadataValueYson);
                 }
             }
         }

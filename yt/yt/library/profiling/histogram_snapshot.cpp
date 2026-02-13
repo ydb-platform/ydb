@@ -62,7 +62,7 @@ THistogramSnapshot MergeHistograms(const THistogramSnapshot& first, const THisto
     return result;
 }
 
-THistogramSnapshot& THistogramSnapshot::operator += (const THistogramSnapshot& other)
+THistogramSnapshot& THistogramSnapshot::operator+=(const THistogramSnapshot& other)
 {
     if (Bounds.empty()) {
         Bounds = other.Bounds;
@@ -96,7 +96,7 @@ bool THistogramSnapshot::IsEmpty() const
     return empty;
 }
 
-bool THistogramSnapshot::operator == (const THistogramSnapshot& other) const
+bool THistogramSnapshot::operator==(const THistogramSnapshot& other) const
 {
     if (IsEmpty() && other.IsEmpty()) {
         return true;

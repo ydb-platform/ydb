@@ -91,10 +91,11 @@ public:
     TNodeMap<ui32> ExternalWorlds;
     TDeque<TExprNode::TPtr> ExternalWorldsList;
     TNodeMap<bool> Visited;
+    bool ForceConfigure = false;
 
 public:
     void Scan(const TExprNode& node) {
-        VisitExprByFirst(node, [this](const TExprNode& n) {
+        VisitExpr(node, [this](const TExprNode& n) {
             if (n.IsCallable(ConfigureName)) {
                 if (n.ChildrenSize() > 3 && n.Child(1)->Child(0)->Content() == ConfigProviderName) {
                     bool pending = false;
@@ -106,10 +107,14 @@ public:
                     }
                     if (pending) {
                         const TStringBuf command = n.Child(2)->Content();
-                        if (command == "AddFileByUrl") {
-                            PendingFileAliases_.insert(n.Child(3)->Content());
-                        } else if (command == "AddFolderByUrl") {
-                            PendingFolderPrefixes_.insert(n.Child(3)->Content());
+                        if (!n.Child(3)->IsCallable("EvaluateAtom")) {
+                            if (command == "AddFileByUrl") {
+                                PendingFileAliases_.insert(n.Child(3)->Content());
+                            } else if (command == "AddFolderByUrl") {
+                                PendingFolderPrefixes_.insert(n.Child(3)->Content());
+                            }
+                        } else {
+                            ForceConfigure = true;
                         }
                     }
                 }
@@ -140,14 +145,18 @@ private:
             }
         }
 
-        static THashSet<TStringBuf> FILE_CALLABLES = {"FilePath", "FileContent", "FolderPath"};
-        if (node.IsCallable(FILE_CALLABLES)) {
-            const auto alias = node.Head().Content();
-            if (PendingFileAliases_.contains(alias) || AnyOf(PendingFolderPrefixes_, [alias](const TStringBuf prefix) {
-                    auto withSlash = TString(prefix) + "/";
-                    return alias.StartsWith(withSlash);
-                })) {
+        static THashSet<TStringBuf> FileCallables = {"FilePath", "FileContent", "FolderPath"};
+        if (node.IsCallable(FileCallables)) {
+            if (node.Head().IsCallable("EvaluateAtom")) {
                 localConfigPending = true;
+            } else {
+                const auto alias = node.Head().Content();
+                if (PendingFileAliases_.contains(alias) || AnyOf(PendingFolderPrefixes_, [alias](const TStringBuf prefix) {
+                        auto withSlash = TString(prefix) + "/";
+                        return alias.StartsWith(withSlash);
+                    })) {
+                    localConfigPending = true;
+                }
             }
         }
 
@@ -205,13 +214,15 @@ private:
 };
 
 struct TEvalScope {
-    TEvalScope(TTypeAnnotationContext& types)
+    TEvalScope(TTypeAnnotationContext& types, TExprContext& ctx)
         : Types(types)
+        , Ctx(ctx)
     {
         ++Types.EvaluationInProgress;
         for (auto& dataProvider : Types.DataSources) {
             dataProvider->EnterEvaluation(Types.EvaluationInProgress);
         }
+        Ctx.ResetCycleDetector();
     }
 
     ~TEvalScope() {
@@ -219,8 +230,10 @@ struct TEvalScope {
             dataProvider->LeaveEvaluation(Types.EvaluationInProgress);
         }
         --Types.EvaluationInProgress;
+        Ctx.ResetCycleDetector();
     }
     TTypeAnnotationContext& Types;
+    TExprContext& Ctx;
 };
 
 bool ValidateCalcWorlds(const TExprNode& node, const TTypeAnnotationContext& types, TNodeSet& visited) {
@@ -955,7 +968,10 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
         if (marked.Reachable.find(node.Get()) == marked.Reachable.cend()) {
             bool withRestart = false;
-            if (auto it = marked.Visited.find(node.Get()); it != marked.Visited.end() && it->second) {
+            if (marked.ForceConfigure) {
+                ctx.Step.Repeat(TExprStep::Configure);
+                withRestart = true;
+            } else if (auto it = marked.Visited.find(node.Get()); it != marked.Visited.end() && it->second) {
                 ctx.Step.Repeat(TExprStep::Configure);
                 withRestart = true;
             }
@@ -1040,7 +1056,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 calcWorldRoot.Drop();
                 fullTransformer->Rewind();
                 auto prevSteps = ctx.Step;
-                TEvalScope scope(types);
+                TEvalScope scope(types, ctx);
                 ctx.Step.Reset();
                 if (prevSteps.IsDone(TExprStep::Recapture)) {
                     ctx.Step.Done(TExprStep::Recapture);

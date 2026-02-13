@@ -358,16 +358,17 @@ void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& ver
 }
 
 void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
-    Y_ABORT_UNLESS(!HasTable(table.GetPathId().InternalPathId));
+    const TUnifiedPathId unifiedPathId = table.GetPathId();
+    Y_ABORT_UNLESS(!HasTable(unifiedPathId.InternalPathId));
     Y_ABORT_UNLESS(table.IsEmpty());
-    NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, table.GetPathId());
+    NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, unifiedPathId);
 
-    Schema::SaveTableInfo(db, table.GetPathId().InternalPathId);
-    const auto pathId = table.GetPathId().InternalPathId;
+    Schema::SaveTableInfo(db, unifiedPathId.InternalPathId);
+    const auto pathId = unifiedPathId.InternalPathId;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", pathId);
     AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second)("path_id", pathId)("size", Tables.size());
-    AFL_VERIFY(SchemeShardLocalToInternal.emplace(table.GetPathId().SchemeShardLocalPathId, table.GetPathId().InternalPathId).second);
-    Schema::SaveTableSchemeShardLocalPathId(db, table.GetPathId().InternalPathId, table.GetPathId().SchemeShardLocalPathId);
+    AFL_VERIFY(SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId).second);
+    Schema::SaveTableSchemeShardLocalPathId(db, unifiedPathId.InternalPathId, unifiedPathId.SchemeShardLocalPathId);
     if (GenerateInternalPathId) {
         Schema::SaveSpecialValue(db, Schema::EValueIds::MaxInternalPathId, MaxInternalPathId.GetRawValue());
     }
@@ -608,7 +609,8 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
     const TString& tablePath, const TSchemeShardLocalPathId externalPathId) {
     const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId, false);
-    auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(TFsPath(tablePath).Fix().GetName());
+    auto path = TFsPath(tablePath).Fix();
+    auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(std::tuple{path.Parent().GetName(), path.GetName()});
     if (schemaAdapter) {
         return schemaAdapter->BuildMetadataAccessor(tablePath, TUnifiedOptionalPathId::BuildExternal(externalPathId, internalPathId));
     } else if (!internalPathId) {

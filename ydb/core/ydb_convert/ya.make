@@ -3,10 +3,14 @@ LIBRARY()
 SRCS(
     column_families.cpp
     compression.cpp
+    kesus_description.cpp
     table_settings.cpp
     table_description.cpp
     table_profiles.cpp
     topic_description.cpp
+    replication_description.cpp
+    external_data_source_description.cpp
+    external_table_description.cpp
     ydb_convert.cpp
     tx_proxy_status.cpp
 )

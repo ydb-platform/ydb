@@ -55,11 +55,32 @@ namespace numpy
       };
 
       template <class T>
-      struct _comp;
+      struct _comp : std::less<T> {
+      };
+
+      template <>
+      struct _comp<float> {
+        bool operator()(float x, float y)
+        {
+          if (__builtin_expect(std::isnan(y), false))
+            return true;
+          return x < y;
+        }
+      };
+
+      template <>
+      struct _comp<double> {
+        bool operator()(double x, double y)
+        {
+          if (__builtin_expect(std::isnan(y), false))
+            return true;
+          return x < y;
+        }
+      };
+
       template <class T>
       struct _comp<std::complex<T>> {
-        bool operator()(std::complex<T> const &i,
-                        std::complex<T> const &j) const
+        bool operator()(std::complex<T> const &i, std::complex<T> const &j) const
         {
           if (std::real(i) == std::real(j))
             return std::imag(i) < std::imag(j);
@@ -69,20 +90,18 @@ namespace numpy
       };
 
       template <class T>
-      using comparator =
-          typename std::conditional<types::is_complex<T>::value, _comp<T>,
-                                    std::less<T>>::type;
+      using comparator = _comp<T>;
 
       template <class T, class pS, class Sorter>
-      typename std::enable_if<std::tuple_size<pS>::value == 1, void>::type
-      _sort(types::ndarray<T, pS> &out, long axis, Sorter sorter)
+      std::enable_if_t<std::tuple_size<pS>::value == 1, void> _sort(types::ndarray<T, pS> &out,
+                                                                    long axis, Sorter sorter)
       {
         sorter(out.begin(), out.end(), comparator<T>{});
       }
 
       template <class T, class pS, class Sorter>
-      typename std::enable_if<std::tuple_size<pS>::value != 1, void>::type
-      _sort(types::ndarray<T, pS> &out, long axis, Sorter sorter)
+      std::enable_if_t<std::tuple_size<pS>::value != 1, void> _sort(types::ndarray<T, pS> &out,
+                                                                    long axis, Sorter sorter)
       {
         constexpr auto N = std::tuple_size<pS>::value;
         if (axis < 0)
@@ -90,14 +109,13 @@ namespace numpy
         long const flat_size = out.flat_size();
         if (axis == N - 1) {
           const long step = out.template shape<N - 1>();
-          for (T *out_iter = out.buffer, *end_iter = out.buffer + flat_size;
-               out_iter != end_iter; out_iter += step)
+          for (T *out_iter = out.buffer, *end_iter = out.buffer + flat_size; out_iter != end_iter;
+               out_iter += step)
             sorter(out_iter, out_iter + step, comparator<T>{});
         } else {
           auto out_shape = sutils::getshape(out);
-          const long step =
-              std::accumulate(out_shape.begin() + axis, out_shape.end(), 1L,
-                              std::multiplies<long>());
+          const long step = std::accumulate(out_shape.begin() + axis, out_shape.end(), 1L,
+                                            std::multiplies<long>());
           long const buffer_size = out_shape[axis];
           const long stepper = step / out_shape[axis];
           const long n = flat_size / out_shape[axis];

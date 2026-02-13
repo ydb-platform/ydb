@@ -18,4 +18,4 @@
 #define NPY__CPU_TARGET_AVX512F
 #define NPY__CPU_TARGET_AVX512CD
 #define NPY__CPU_TARGET_AVX512_SKX
-#include "numpy/core/src/umath/loops_exponent_log.dispatch.c"
+#include "contrib/python/numpy/py3/numpy/core/src/umath/loops_exponent_log.dispatch.c"

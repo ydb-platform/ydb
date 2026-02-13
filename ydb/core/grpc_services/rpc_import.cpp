@@ -3,15 +3,25 @@
 #include "rpc_import_base.h"
 #include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
+#include "fs_path_validation.h"
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
+
+#include <util/folder/path.h>
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
+
+#ifdef _linux_
+#include <sys/vfs.h>
+#include <linux/magic.h>
+#endif
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -23,10 +33,13 @@ using namespace Ydb;
 
 using TEvImportFromS3Request = TGrpcRequestOperationCall<Ydb::Import::ImportFromS3Request,
     Ydb::Import::ImportFromS3Response>;
+using TEvImportFromFsRequest = TGrpcRequestOperationCall<Ydb::Import::ImportFromFsRequest,
+    Ydb::Import::ImportFromFsResponse>;
 
 template <typename TDerived, typename TEvRequest>
 class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TImportConv {
     static constexpr bool IsS3Import = std::is_same_v<TEvRequest, TEvImportFromS3Request>;
+    static constexpr bool IsFsImport = std::is_same_v<TEvRequest, TEvImportFromFsRequest>;
 
     TStringBuf GetLogPrefix() const override {
         return "[CreateImport]";
@@ -49,6 +62,9 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         if constexpr (IsS3Import) {
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
         }
+        if constexpr (IsFsImport) {
+            createImport.MutableImportFromFsSettings()->CopyFrom(request.settings());
+        }
 
         return ev.Release();
     }
@@ -65,13 +81,20 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 public:
     using TRpcOperationRequestActor<TDerived, TEvRequest, true>::TRpcOperationRequestActor;
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         const auto& request = *(this->GetProtoRequest());
         if (request.operation_params().has_forget_after() && request.operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
             return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "forget_after is not supported for this type of operation");
         }
 
         const auto& settings = request.settings();
+        try {
+            // Validate regexps
+            NBackup::CombineRegexps(settings.exclude_regexps());
+        } catch (const std::exception& ex) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
+        }
+
         if constexpr (IsS3Import) {
             const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
             const bool commonSourcePrefixSpecified = !settings.source_prefix().empty();
@@ -120,6 +143,41 @@ public:
             }
         }
 
+        if constexpr (IsFsImport) {
+            if (!TFsPath(settings.base_path()).IsAbsolute()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                    "base_path must be an absolute path");
+            }
+
+#ifdef _linux_
+            struct statfs fsInfo;
+            if (statfs(settings.base_path().c_str(), &fsInfo) == 0) {
+                if (fsInfo.f_type != NFS_SUPER_MAGIC) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                        "base_path must be on NFS filesystem");
+                }
+            }
+#endif
+
+            TString error;
+            if (!ValidateFsPath(settings.base_path(), "base_path", error)) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+            }
+
+            for (const auto& item : settings.items()) {
+                if (item.destination_path().empty() && item.source_path().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty item is not allowed");
+                }
+
+                if (!item.source_path().empty()) {
+                    const auto pathDesc = TStringBuilder() << "source_path for item to \"" << item.destination_path() << "\"";
+                    if (!ValidateFsPath(item.source_path(), pathDesc, error)) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+                    }
+                }
+            }
+        }
+
         this->AllocateTxId();
         this->Become(&TDerived::StateWait);
     }
@@ -139,9 +197,17 @@ public:
     using TImportRPC::TImportRPC;
 };
 
+class TImportFromFsRPC: public TImportRPC<TImportFromFsRPC, TEvImportFromFsRequest> {
+public:
+    using TImportRPC::TImportRPC;
+};
+
 void DoImportFromS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TImportFromS3RPC(p.release()));
 }
 
+void DoImportFromFsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TImportFromFsRPC(p.release()));
+}
 } // namespace NGRpcService
 } // namespace NKikimr

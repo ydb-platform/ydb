@@ -47,14 +47,14 @@ struct TStateTableRow
 
 struct TStateTable
 {
-    static const TString TabletIndexColumnName;
-    static const TString RowIndexColumnName;
-    static const TString StateColumnName;
+    static const std::string TabletIndexColumnName;
+    static const std::string RowIndexColumnName;
+    static const std::string StateColumnName;
 };
 
-const TString TStateTable::TabletIndexColumnName("tablet_index");
-const TString TStateTable::RowIndexColumnName("row_index");
-const TString TStateTable::StateColumnName("state");
+const std::string TStateTable::TabletIndexColumnName("tablet_index");
+const std::string TStateTable::RowIndexColumnName("row_index");
+const std::string TStateTable::StateColumnName("state");
 
 std::vector<int> PrepareTabletIndexes(std::vector<int> tabletIndexes)
 {

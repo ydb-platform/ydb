@@ -240,11 +240,13 @@ namespace NKikimr {
             TLsnSeg seg,
             bool confirmSyncLogAlso,
             std::unique_ptr<TEvLocalSyncDataResult> result,
-            TEvLocalSyncData::TPtr origEv)
+            TEvLocalSyncData::TPtr origEv,
+            TActorId syncLogActorId)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Result(std::move(result))
         , OrigEv(origEv)
         , Span(TWilson::VDiskInternals, std::move(OrigEv->TraceId), "VDisk.LoggedRecLocalSyncData")
+        , SyncLogActorId(syncLogActorId)
     {}
 
     void TLoggedRecLocalSyncData::Replay(THull &hull, const TActorContext &ctx) {
@@ -258,8 +260,9 @@ namespace NKikimr {
 #else
         hull.AddSyncDataCmd(ctx, OrigEv->Get()->Data, Seg, replySender);
 #endif
-        Span.EndOk();        
+        Span.EndOk();
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
+        TActivationContext::Send(std::unique_ptr<IEventHandle>(OrigEv->Forward(SyncLogActorId).Release()));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

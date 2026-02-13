@@ -41,7 +41,7 @@ public:
         ValidateNotClosed();
 
         if (rows.Empty()) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         return Underlying_->Write(PackRefs(rows));

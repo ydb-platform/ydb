@@ -56,11 +56,15 @@ protected:
 
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToYt(backup, columns)).swap(exp);
+                if (!exp) {
+                    Abort(op, ctx, "Failed to create YT export");
+                    return false;
+                }
             } else {
                 Abort(op, ctx, "Exports to YT are disabled");
                 return false;
             }
-        } else if (backup.HasS3Settings()) {
+        } else if (backup.HasS3Settings() || backup.HasFSSettings()) {
             NBackupRestoreTraits::ECompressionCodec codec;
             if (!TryCodecFromTask(backup, codec)) {
                 Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
@@ -70,6 +74,10 @@ protected:
 
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);
+                if (!exp) {
+                    Abort(op, ctx, "Failed to create S3 export");
+                    return false;
+                }
             } else {
                 Abort(op, ctx, "Exports to S3 are disabled");
                 return false;

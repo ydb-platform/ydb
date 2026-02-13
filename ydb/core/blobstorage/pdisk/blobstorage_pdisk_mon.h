@@ -243,13 +243,17 @@ struct TPDiskMon {
     // statistics subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> StatsGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr FreeSpacePerMile;
-    ::NMonitoring::TDynamicCounters::TCounterPtr UsedSpacePerMile;
+    ::NMonitoring::TDynamicCounters::TCounterPtr UsedSpacePerMile; // reflects PDiskUsage
     ::NMonitoring::TDynamicCounters::TCounterPtr SplicedLogChunks;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr TotalSpaceBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr FreeSpaceBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr UsedSpaceBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr SectorMapAllocatedBytes;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr NumActiveSlots;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ExpectedSlotCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SlotSizeInUnits;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedWriteErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedReadErrors;

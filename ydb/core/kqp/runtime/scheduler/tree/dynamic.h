@@ -11,6 +11,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         public:
             // returns previous snapshot
             TSnapshotPtr SetSnapshot(const TSnapshotPtr& snapshot) {
+                TGuard lock(mutex);
                 ui8 oldSnapshotIdx = SnapshotIdx;
                 ui8 newSnapshotIdx = 1 - SnapshotIdx;
                 Snapshots.at(newSnapshotIdx) = snapshot;
@@ -19,12 +20,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
             }
 
             TSnapshotPtr GetSnapshot() const {
+                TGuard lock(mutex);
                 return Snapshots.at(SnapshotIdx);
             }
 
         private:
-            std::array<TSnapshotPtr, 2> Snapshots;
-            std::atomic<ui8> SnapshotIdx = 0;
+            TAdaptiveLock mutex;
+            std::array<TSnapshotPtr, 2> Snapshots; // protected by mutex
+            std::atomic<ui8> SnapshotIdx = 0;      // protected by mutex
     };
 
     struct TTreeElement : public virtual NHdrf::TTreeElementBase<ETreeType::DYNAMIC> {
@@ -50,12 +53,11 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::DYNAMIC>, public TSnapshotSwitch<NSnapshot::TQueryPtr>, public std::enable_shared_from_this<TQuery> {
     public:
         // TODO: pass delay params directly to actors from table_service_config
-        TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStaticAttributes& attrs = {});
+        TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare, const TStaticAttributes& attrs = {});
 
         NSnapshot::TQuery* TakeSnapshot() override;
 
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
-        void RemoveTask(const TSchedulableTaskList::iterator& it);
         ui32 ResumeTasks(ui32 count);
 
         void UpdateActualDemand();
@@ -67,6 +69,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         NMonitoring::THistogramPtr Delay; // TODO: hacky counter for delays from queries - initialize from pool
         const TDelayParams* const DelayParams; // owned by scheduler
 
+        const bool AllowMinFairShare; // tasks should look at this in case of missing snapshot
+
     private:
         // used to calculate adjusted satisfaction between snapshots
         ui64 PrevBurstUsage = 0;
@@ -74,7 +78,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         ui64 PrevBurstUsageExtra = 0;
         ui64 PrevBurstThrottle = 0;
 
-        TRWMutex TasksMutex;
+        TMutex TasksMutex;
         TSchedulableTaskList SchedulableTasks; // protected by TasksMutex
     };
 

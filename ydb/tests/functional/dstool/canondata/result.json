@@ -1,0 +1,106 @@
+{
+    "test_canonical_requests.Test.test_cluster_get_set": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.2"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.3"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.4"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.5"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.6"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.7"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.8"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.9"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.10"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.11"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.12"
+        }
+    ],
+    "test_canonical_requests.Test.test_essential": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt.2"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt.3"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt.4"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt.5"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt.6"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt.7"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_essential/results.txt.8"
+        }
+    ],
+    "test_canonical_requests.Test.test_infer_pdisk_slot_count": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_infer_pdisk_slot_count/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_infer_pdisk_slot_count/results.txt.0"
+        }
+    ],
+    "test_canonical_requests.Test.test_pdisk_set_status_inactive": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt.1"
+        }
+    ],
+    "test_canonical_requests.Test.test_vdisk_ready_stable_period": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_vdisk_ready_stable_period/results.txt"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_vdisk_ready_stable_period/results.txt.0"
+        }
+    ]
+}

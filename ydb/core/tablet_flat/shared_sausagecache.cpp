@@ -173,25 +173,50 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     ui64 ActiveInMemoryBytes = 0;
     ui64 InFlyInMemoryBytes = 0;
 
+    // True if after a large drop in target cache limit, we couldn't decrease it right away
+    // and yielded to process other events.
+    bool LimitDecreaseScheduled = false;
+
+    ui64 GetTargetCacheLimitBytes() const {
+        if (Config.HasMemoryLimit()) {
+            return Min(MemLimitBytes, Config.GetMemoryLimit());
+        }
+        return MemLimitBytes;
+    }
+
     ui64 GetInMemoryLimitBytes() {
         ui64 remainInFlyLimit = Config.GetInMemoryInFlyLimit() > InFlyInMemoryBytes ? Config.GetInMemoryInFlyLimit() - InFlyInMemoryBytes : 0;
         return Min(AliveInMemoryBytes + remainInFlyLimit, TargetInMemoryBytes);
     }
 
     void ActualizeCacheSizeLimit() {
-        ui64 limitBytes = MemLimitBytes;
-        if (Config.HasMemoryLimit()) {
-            limitBytes = Min(limitBytes, Config.GetMemoryLimit());
-            Counters.ConfigLimitBytes->Set(Config.GetMemoryLimit());
+        Counters.ConfigLimitBytes->Set(Config.HasMemoryLimit() ? Config.GetMemoryLimit() : 0);
+
+        const ui64 currentLimit = Cache.GetLimit();
+        const ui64 targetLimit = GetTargetCacheLimitBytes();
+        ui64 newLimit;
+        if (targetLimit >= currentLimit) {
+            // Limit increased, no problem, do it right away.
+            newLimit = targetLimit;
+        } else if (LimitDecreaseScheduled) {
+            // Limit decreased, but we can't update it yet.
+            newLimit = currentLimit;
+        } else if (targetLimit + Config.GetMaxLimitDecreaseStepBytes() >= currentLimit) {
+            // Limit decreased by a small amount, do it right away.
+            newLimit = targetLimit;
         } else {
-            Counters.ConfigLimitBytes->Set(0);
+            // A large decrease in target limit, decrease the current limit for a bit
+            // and schedule another decrease after we process the current event queue.
+            newLimit = currentLimit - Config.GetMaxLimitDecreaseStepBytes();
+            LimitDecreaseScheduled = true;
+            Send(SelfId(), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoLimitDecrease)));
         }
 
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        Cache.UpdateLimit(limitBytes, GetInMemoryLimitBytes());
-        Counters.ActiveLimitBytes->Set(limitBytes);
+        Cache.UpdateLimit(newLimit, GetInMemoryLimitBytes());
+        Counters.ActiveLimitBytes->Set(newLimit);
     }
 
     void DoGC() {
@@ -199,18 +224,22 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // update StatActiveBytes + StatPassiveBytes
         ProcessGCList();
 
+        const ui64 cacheLimit = Cache.GetLimit();
         // TODO: get rid of active pages reservation
-        ui64 configActiveReservedBytes = (Config.HasMemoryLimit() ? Config.GetMemoryLimit() : 0)
-            * Config.GetActivePagesReservationPercent() / 100;
+        const ui64 configActiveReservedBytes = cacheLimit * Config.GetActivePagesReservationPercent() / 100;
 
         THashSet<TCollection*> recheck;
+        ui64 evictedBytes = 0;
         ui64 evictedInMemoryBytes = 0;
-        while (GetStatAllBytes() > MemLimitBytes
-            || GetStatAllBytes() > (Config.HasMemoryLimit() ? Config.GetMemoryLimit() : Max<ui64>()) && StatActiveBytes > configActiveReservedBytes)
-        {
+        // Evict pages from the cache until *all* used bytes get under the cache limit,
+        // but stop if *active* bytes get under configActiveReservedBytes to avoid the case
+        // where we just make all pages passive without actually freeing any memory.
+        while (GetStatAllBytes() > cacheLimit && StatActiveBytes > configActiveReservedBytes) {
             if (TPage* evictedPage = Cache.EvictNext()) {
+                auto pageSize = TPageTraits::GetSize(evictedPage);
+                evictedBytes += pageSize;
                 if (evictedPage->CacheMode == ECacheMode::TryKeepInMemory) {
-                    evictedInMemoryBytes += TPageTraits::GetSize(evictedPage);
+                    evictedInMemoryBytes += pageSize;
                 }
                 EvictNow(evictedPage, recheck);
             } else {
@@ -225,11 +254,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             MemoryConsumer->SetConsumption(GetStatAllBytes());
         }
 
+        Counters.S3FIFOEvictOps->Set(Cache.GetEvictOpsCounter());
+
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "GC has finished with"
             << " Limit: " << HumanReadableBytes(Cache.GetLimit())
+            << " TargetLimit: " << HumanReadableBytes(GetTargetCacheLimitBytes())
             << " Active: " << HumanReadableBytes(StatActiveBytes)
             << " Passive: " << HumanReadableBytes(StatPassiveBytes)
             << " LoadInFly: " << HumanReadableBytes(StatLoadInFlyBytes)
+            << " EvictedBytes: " << HumanReadableBytes(evictedBytes)
             << " EvictedInMemoryBytes: " << HumanReadableBytes(evictedInMemoryBytes)
         );
     }
@@ -867,11 +900,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         switch (tag) {
         case EWakeupTag::DoGCScheduled:
             ScheduleGC();
-            [[fallthrough]];
+            break;
         case EWakeupTag::DoGCManual:
-            // DoGC will be called at the end of StateFunc
+            break;
+        case EWakeupTag::DoLimitDecrease:
+            LimitDecreaseScheduled = false;
+            ActualizeCacheSizeLimit();
             break;
         }
+
+        // DoGC will be called at the end of StateFunc
     }
 
     void ProcessGCList() {
@@ -1064,7 +1102,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto *fetch = new NBlockIO::TEvFetch(request.Priority, request.PageCollection, std::move(pages), bytes);
         if (cookie == EBlockIOFetchTypeCookie::AsyncQueue || cookie == EBlockIOFetchTypeCookie::ScanQueue) {
             // Note: queued requests can fetch multiple times, so copy trace id
-            fetch->TraceId = request.TraceId.GetTraceId();
+            fetch->TraceId = NWilson::TTraceId(request.TraceId);
         } else {
             fetch->TraceId = std::move(request.TraceId);            
         }
@@ -1166,27 +1204,29 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void TryMoveToTryKeepInMemoryCache(TCollection& collection, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
-        if (collection.InMemoryOwners && collection.InMemoryOwners.emplace(owner, pageCollection).second) {
-            // new owner for already in-memory collection
-            TVector<TPage*> loadedPages;
-            for (const auto& kv : collection.PageMap) {
-                auto* page = kv.second.Get();
-                switch (page->State) {
-                case PageStateLoaded:
-                    loadedPages.push_back(page);
-                    break;
-                case PageStateEvicted:
-                    // also we need to notify about pages that can be reloaded
-                    if (ActiveInMemoryBytes + TPageTraits::GetSize(page) <= GetInMemoryLimitBytes()) {
-                        ReloadEvictedPage(page, false);
+        if (collection.InMemoryOwners) {
+            if (collection.InMemoryOwners.emplace(owner, pageCollection).second) {
+                // new owner for already in-memory collection
+                TVector<TPage*> loadedPages;
+                for (const auto& kv : collection.PageMap) {
+                    auto* page = kv.second.Get();
+                    switch (page->State) {
+                    case PageStateLoaded:
                         loadedPages.push_back(page);
+                        break;
+                    case PageStateEvicted:
+                        // also we need to notify about pages that can be reloaded
+                        if (ActiveInMemoryBytes + TPageTraits::GetSize(page) <= GetInMemoryLimitBytes()) {
+                            ReloadEvictedPage(page, false);
+                            loadedPages.push_back(page);
+                        }
+                        break;
                     }
-                    break;
                 }
-            }
 
-            if (loadedPages) {
-                NotifyInMemOwner(pageCollection, loadedPages, owner);
+                if (loadedPages) {
+                    NotifyInMemOwner(pageCollection, loadedPages, owner);
+                }
             }
             return;
         }
@@ -1328,8 +1368,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Evict(TIntrusiveList<TPage>&& pages) {
+        size_t evictedPages = 0;
+        ui64 evictedBytes = 0;
         while (!pages.Empty()) {
             TPage* page = pages.PopFront();
+            auto pageSize = TPageTraits::GetSize(page);
 
             page->EnsureNoCacheFlags();
 
@@ -1341,10 +1384,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             if (page->UnUse()) {
                 SharedCachePages->GCList->PushGC(page);
             }
+
+            ++evictedPages;
+            evictedBytes += pageSize;
         }
+
+        Counters.EvictedPages->Add(evictedPages);
+        Counters.EvictedBytes->Add(evictedBytes);
     }
 
     void EvictNow(TPage* page, THashSet<TCollection*>& recheck) {
+        auto pageSize = TPageTraits::GetSize(page);
         page->EnsureNoCacheFlags();
 
         Y_ENSURE(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
@@ -1355,6 +1405,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (page->UnUse()) {
             TryDrop(page, recheck);
         }
+
+        Counters.EvictedPages->Inc();
+        Counters.EvictedBytes->Add(pageSize);
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {

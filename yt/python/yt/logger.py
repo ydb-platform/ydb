@@ -82,7 +82,7 @@ def set_formatter(new_formatter):
         handler.setFormatter(new_formatter)
 
 
-logging.getLogger("yt.packages.requests.packages.urllib3").setLevel(logging.WARNING)
+logging.getLogger("yt.packages.urllib3").setLevel(logging.WARNING)
 
 LOGGER = logging.getLogger("Yt")
 

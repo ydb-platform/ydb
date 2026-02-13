@@ -242,7 +242,9 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const IEnv& env,
-        IInitLogger& logger) const override
+        IInitLogger& logger,
+        const std::vector<TString>&,
+        int) const override
     {
         Y_UNUSED(grpcSettings, addrs, env, logger);
         return SavedResult;
@@ -265,9 +267,11 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const IEnv& env,
-        IInitLogger& logger) const override
+        IInitLogger& logger,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort) const override
     {
-        Mock.SavedResult = Impl.FetchConfig(grpcSettings, addrs, env, logger);
+        Mock.SavedResult = Impl.FetchConfig(grpcSettings, addrs, env, logger, hostOptions, interconnectPort);
         return Mock.SavedResult;
     }
 

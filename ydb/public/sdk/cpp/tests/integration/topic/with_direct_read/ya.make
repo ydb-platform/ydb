@@ -30,11 +30,11 @@ CFLAGS(
 )
 
 SRCS(
-    ../basic_usage.cpp
-    ../describe_topic.cpp
-    ../direct_read.cpp
-    ../local_partition.cpp
-    ../topic_to_table.cpp
+    ../basic_usage_it.cpp
+    ../describe_topic_it.cpp
+    ../direct_read_it.cpp
+    ../local_partition_it.cpp
+    ../topic_to_table_it.cpp
 )
 
 END()

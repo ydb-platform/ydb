@@ -15,11 +15,14 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         self.rows_per_user = 3
         self.index_name = "vector_idx"
         self.vector_dimension = 3
+        # vector type: [ data type, conversion function ]
         self.vector_types = {
-            "Uint8": "Knn::ToBinaryStringUint8",
-            "Int8": "Knn::ToBinaryStringInt8",
-            "Float": "Knn::ToBinaryStringFloat",
+            "Uint8": ["Uint8", "Knn::ToBinaryStringUint8"],
+            "Int8": ["Int8", "Knn::ToBinaryStringInt8"],
+            "Float": ["Float", "Knn::ToBinaryStringFloat"],
         }
+        if min(self.versions) >= (26, 1):
+            self.vector_types["Bit"] = ["Float", "Knn::ToBinaryStringBit"]
         self.targets = {
             "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
             "distance": {
@@ -31,8 +34,8 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
 
         yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
 
-    def get_vector(self, type, numb):
-        if type == "FloatVector":
+    def get_vector(self, data_type, numb):
+        if data_type == "Float":
             values = [float(i) for i in range(self.vector_dimension - 1)]
             values.append(float(numb))
             return ",".join(f'{val}f' for val in values)
@@ -41,10 +44,14 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         values.append(numb)
         return ",".join(str(val) for val in values)
 
-    def _create_index(self, vector_type, table_name, target, prefixed):
+    def _create_index(self, vector_type, table_name, target, prefixed, overlap):
         prefix = ""
         if prefixed:
             prefix = "user, "
+        if overlap:
+            overlap = f", overlap_clusters={overlap}"
+        else:
+            overlap = ""
         create_index_sql = f"""
             ALTER TABLE {table_name}
             ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
@@ -54,6 +61,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                   vector_dimension={self.vector_dimension},
                   levels=2,
                   clusters=10
+                  {overlap}
             );
         """
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -71,12 +79,13 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
 
         assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "Error getting index status"
 
-    def _write_data(self, name, vector_type, table_name):
+    def _write_data(self, vector_type, table_name):
+        [data_type, converter] = self.vector_types[vector_type]
         values = []
         for key in range(self.rows_count):
-            vector = self.get_vector(vector_type, key + 1)
+            vector = self.get_vector(data_type, key + 1)
             user = 1 + (key % self.rows_per_user)
-            values.append(f'({key}, {user}, Untag({name}([{vector}]), "{vector_type}Vector"))')
+            values.append(f'({key}, {user}, Untag({converter}([{vector}]), "{vector_type}Vector"))')
 
         sql_upsert = f"""
                 UPSERT INTO `{table_name}` (key, user, vec)
@@ -85,59 +94,94 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(sql_upsert)
 
-    def _get_queries(self):
+    def _get_knn_queries(self):
+        """Get KNN search queries without vector index (brute force with pushdown)."""
         queries = []
         for prefixed in ['', '_pfx']:
             for vector_type in self.vector_types.keys():
+                [data_type, converter] = self.vector_types[vector_type]
                 for distance in self.targets.keys():
                     for distance_func in self.targets[distance].keys():
-                        table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}"
+                        table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}_"
                         order = "ASC" if distance != "similarity" else "DESC"
-                        vector = self.get_vector(f"{vector_type}Vector", 1)
+                        vector = self.get_vector(data_type, 1)
                         where = ""
                         if prefixed:
                             where = "WHERE user=1"
                         queries.append([
                             True, f"""
-                            $Target = {self.vector_types[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
+                            $Target = {converter}(Cast([{vector}] AS List<{data_type}>));
                             SELECT key, vec, {self.targets[distance][distance_func]}(vec, $Target) as target
                             FROM `{table_name}`
-                            VIEW `{self.index_name}`
                             {where}
                             ORDER BY {self.targets[distance][distance_func]}(vec, $Target) {order}
                             LIMIT {self.rows_count};"""
                         ])
-                        # Insert, update, upsert, delete
-                        key = self.rows_count+1
-                        vector = self.get_vector(vector_type, key+1)
-                        queries.append([
-                            False, f"""
-                            INSERT INTO `{table_name}` (key, user, vec)
-                            VALUES ({key}, {1 + (key) % self.rows_per_user},
-                                Untag({self.vector_types[vector_type]}([{vector}]), "{vector_type}Vector"))
-                            """
-                        ])
-                        vector = self.get_vector(vector_type, key+2)
-                        queries.append([
-                            False, f"""
-                            UPDATE `{table_name}` SET user=user+1,
-                                vec=Untag({self.vector_types[vector_type]}([{vector}]), "{vector_type}Vector")
-                            WHERE key={key}
-                            """
-                        ])
-                        vector = self.get_vector(vector_type, key+3)
-                        queries.append([
-                            False, f"""
-                            UPSERT INTO `{table_name}` (key, user, vec)
-                            VALUES ({key}, {1 + (key) % self.rows_per_user},
-                                Untag({self.vector_types[vector_type]}([{vector}]), "{vector_type}Vector"))
-                            """
-                        ])
-                        queries.append([
-                            False, f"""
-                            DELETE FROM `{table_name}` WHERE key={key}
-                            """
-                        ])
+        return queries
+
+    def _get_queries(self):
+        overlaps = ['']
+        if min(self.versions) >= (25, 4):
+            overlaps = ['', '2']
+        queries = []
+        for prefixed in ['', '_pfx']:
+            for vector_type in self.vector_types.keys():
+                for distance in self.targets.keys():
+                    for distance_func in self.targets[distance].keys():
+                        for overlap in overlaps:
+                            queries.extend(self._get_queries_for(prefixed, vector_type, distance, distance_func, overlap))
+        return queries
+
+    def _get_queries_for(self, prefixed, vector_type, distance, distance_func, overlap):
+        queries = []
+        [data_type, converter] = self.vector_types[vector_type]
+        table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}_{overlap}"
+        order = "ASC" if distance != "similarity" else "DESC"
+        vector = self.get_vector(data_type, 1)
+        where = ""
+        if prefixed:
+            where = "WHERE user=1"
+        queries.append([
+            True, f"""
+            $Target = {converter}(Cast([{vector}] AS List<{data_type}>));
+            SELECT key, vec, {self.targets[distance][distance_func]}(vec, $Target) as target
+            FROM `{table_name}`
+            VIEW `{self.index_name}`
+            {where}
+            ORDER BY {self.targets[distance][distance_func]}(vec, $Target) {order}
+            LIMIT {self.rows_count};"""
+        ])
+        # Insert, update, upsert, delete
+        key = self.rows_count+1
+        vector = self.get_vector(data_type, key+1)
+        queries.append([
+            False, f"""
+            INSERT INTO `{table_name}` (key, user, vec)
+            VALUES ({key}, {1 + (key) % self.rows_per_user},
+                Untag({converter}([{vector}]), "{vector_type}Vector"))
+            """
+        ])
+        vector = self.get_vector(data_type, key+2)
+        queries.append([
+            False, f"""
+            UPDATE `{table_name}` SET user=user+1,
+                vec=Untag({converter}([{vector}]), "{vector_type}Vector")
+            WHERE key={key}
+            """
+        ])
+        vector = self.get_vector(data_type, key+3)
+        queries.append([
+            False, f"""
+            UPSERT INTO `{table_name}` (key, user, vec)
+            VALUES ({key}, {1 + (key) % self.rows_per_user},
+                Untag({converter}([{vector}]), "{vector_type}Vector"))
+            """
+        ])
+        queries.append([
+            False, f"""
+            DELETE FROM `{table_name}` WHERE key={key}
+            """
+        ])
         return queries
 
     def _do_queries(self, queries):
@@ -159,6 +203,12 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         queries = self._get_queries()
         self._do_queries(queries)
 
+    def knn_search(self):
+        """Perform KNN search without vector index during rolling upgrade/downgrade."""
+        queries = self._get_knn_queries()
+        for _ in self.roll():
+            self._do_queries(queries)
+
     def create_table(self, table_name):
         query = f"""
                 CREATE TABLE {table_name} (
@@ -172,22 +222,27 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
             session_pool.execute_with_retries(query)
 
     def test_vector_index(self):
+        overlaps = ['']
+        if min(self.versions) >= (25, 4):
+            overlaps = ['', '2']
         for prefixed in ['', '_pfx']:
             for vector_type in self.vector_types.keys():
                 for distance in self.targets.keys():
                     for distance_func in self.targets[distance].keys():
-                        table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}"
-                        self.create_table(table_name)
-                        self._write_data(
-                            name=self.vector_types[vector_type],
-                            vector_type=vector_type,
-                            table_name=table_name,
-                        )
-                        self._create_index(
-                            table_name=table_name,
-                            vector_type=vector_type,
-                            target=f"{distance}={distance_func}",
-                            prefixed=prefixed,
-                        )
+                        for overlap in overlaps:
+                            table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}_{overlap}"
+                            self.create_table(table_name)
+                            self._write_data(
+                                vector_type=vector_type,
+                                table_name=table_name,
+                            )
+                            self._create_index(
+                                table_name=table_name,
+                                vector_type=vector_type,
+                                target=f"{distance}={distance_func}",
+                                prefixed=prefixed,
+                                overlap=overlap,
+                            )
+        self.knn_search()
         self.wait_index_ready()
         self.select_from_index()

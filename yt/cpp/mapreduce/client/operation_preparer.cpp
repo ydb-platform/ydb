@@ -210,22 +210,19 @@ TRichYPath TOperationPreparer::LockFile(const TRichYPath& path)
 {
     CheckValidity();
 
-    auto lockRequest = Client_->GetRawClient()->CreateRawBatchRequest();
-    auto lockIdFuture = lockRequest->Lock(
+    auto fileTx = Client_->AttachTransaction(
         FileTransaction_->GetId(),
-        path.Path_,
-        ELockMode::LM_SNAPSHOT,
-        TLockOptions().Waitable(true));
+        TAttachTransactionOptions()
+            .AbortOnTermination(false)
+            .AutoPingable(false));
 
-    lockRequest->ExecuteBatch();
+    auto lock = fileTx->Lock(path.Path_, ELockMode::LM_SNAPSHOT);
 
-    auto nodeIdFuture = Client_->GetRawClient()->Get(
-        FileTransaction_->GetId(),
-        ::TStringBuilder() << '#' << GetGuidAsString(lockIdFuture.GetValue()) << "/@node_id");
+    auto nodeId = lock->GetLockedNodeId();
 
     auto result = path;
     result.OriginalPath(path.Path_);
-    result.Path("#" + nodeIdFuture.AsString());
+    result.Path("#" + nodeId.AsGuidString());
 
     YT_LOG_DEBUG("Locked file %v, new path is %v",
         *result.OriginalPath_,
@@ -380,8 +377,7 @@ const TVector<TRichYPath>& TJobPreparer::TEagerLockingFileCache::GetFiles() cons
 
 void TJobPreparer::TEagerLockingFileCache::InsertFile(const TRichYPath& path)
 {
-    LockedFiles_.emplace_back(
-        OperationPreparer_.LockFile(path));
+    LockedFiles_.emplace_back(OperationPreparer_.LockFile(path));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

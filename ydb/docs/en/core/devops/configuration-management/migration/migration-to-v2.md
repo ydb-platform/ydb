@@ -1,5 +1,8 @@
 # Migration to Configuration V2
 
+{% include [_](../_includes/experimental_v2.md) %}
+
+
 This document contains instructions for migrating from [configuration V1](../../configuration-management/configuration-v1/config-overview.md) to [configuration V2](../../configuration-management/configuration-v2/config-overview.md).
 
 In configuration V1, there are two different mechanisms for applying configuration files:

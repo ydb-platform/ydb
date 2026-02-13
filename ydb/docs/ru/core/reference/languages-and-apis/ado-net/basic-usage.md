@@ -1,83 +1,35 @@
 # Основное использование ADO.NET
 
-В этой статье рассматриваются основные сценарии использования ADO.NET c YDB, включая подключение к базе данных, выполнение запросов и обработку результатов. Дополнительные сведения см. в основной [документации](index.md).
+В этой статье рассматриваются основные сценарии использования ADO.NET с YDB, включая подключение к базе данных, выполнение запросов и обработку результатов. Дополнительные сведения см. в основной [документации](index.md).
 
-## Подключения
+## Data Source {#data_source}
 
-Подключение к {{ ydb-short-name }} устанавливается через `YdbConnection`.
+Отправной точкой для любой операции с базой данных является [DbDataSource](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbdatasource).
 
-1. **Использование пустой строки подключения**:
+YdbDataSource можно создать несколькими способами.
 
-   Следующий код создаёт подключение с настройками по умолчанию:
+### Без параметров
 
-    ```c#
-    await using var ydbConnection = new YdbConnection("");
-    await ydbConnection.OpenAsync();
-    ```
-
-   Этот вариант создаёт подключение к базе данных по URL: `grpc://localhost:2136/local`, с анонимной аутентификацией.
-
-2. **Использование конструктора со строкой подключения**:
-
-   В следующем примере происходит создание подключения при помощи [строки подключения в ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/connection-strings):
-
-   ```c#
-   await using var ydbConnection = new YdbConnection(
-       "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
-   await ydbConnection.OpenAsync();
-   ```
-
-   В данном случае подключение будет установлено по URL: `grpc://database-sample-grpc:2135/root/database-sample`. Поддерживаемый набор настроек описан на [странице параметров подключения](connection-parameters.md).
-
-3. **Использование конструктора с аргументом `YdbConnectionStringBuilder`**:
-
-   Вариант с использованием `YdbConnectionStringBuilder` демонстрируется в коде ниже:
-
-    ```c#
-    var ydbConnectionBuilder = new YdbConnectionStringBuilder
-    {
-        Host = "server",
-        Port = 2135,
-        Database = "/ru-prestable/my-table",
-        UseTls = true
-    };
-    await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
-    await ydbConnection.OpenAsync();
-    ```
-
-   `YdbConnectionStringBuilder` поддерживает дополнительные [настройки](connection-parameters.md#connection-builder-parameters), помимо строки подключения, такие как логирование, расширенные параметры аутентификации.
-
-## Pooling
-
-Открытие и закрытие логического соединения с {{ ydb-short-name }} является дорогостоящим и трудоемким процессом. Поэтому соединения с {{ ydb-short-name }} объединяются в пул. Закрытие или удаление соединения не проводит к закрытию основного логического соединения; скорее, она возвращается в пул, управляемый `Ydb.Sdk.Ado`. Когда соединение снова понадобится, будет возвращено соединение из пула. Это делает операции открытия и закрытия быстрыми. Не стесняйтесь часто открывать и закрывать соединения, если это необходимо, вместо того, чтобы без необходимости поддерживать соединение открытым в течении длительного периода времени.
-
-### ClearPool
-
-Немедленно закрывает незанятые соединения. Активные соединения закрываются при возврате.
+Следующий код создаёт источник данных с настройками по умолчанию:
 
 ```c#
-YdbConnection.ClearPool(ydbConnection)
+await using var ydbDataSource = new YdbDataSource();
 ```
 
-### ClearAllPools
+В этом случае используется адрес подключения `grpc://localhost:2136/local` и анонимная аутентификация.
 
-Закрывает все незанятые соединения во всех пулах. Активные соединения закрываются при возврате.
+### С использованием строки подключения
+
+Пример создания с помощью [строки подключения ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/connection-strings):
 
 ```c#
-YdbConnection.ClearAllPools()
+await using var ydbDataSource = new YdbDataSource(
+    "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
 ```
 
-## Data Source
+Источник данных будет использовать URL: `grpc://database-sample-grpc:2135/root/database-sample`. Поддерживаемый набор настроек описан на [странице параметров подключения](connection-parameters.md).
 
-Начиная с .NET 7.0, отправной точкой для любой операции с базой данных является [DbDataSource](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbdatasource).
-
-Самый простой способ создать источник данных заключается в следующем:
-
-```c#
-await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
-```
-
-Или
+### Использование конструктора с аргументом `YdbConnectionStringBuilder`
 
 ```c#
 var ydbConnectionBuilder = new YdbConnectionStringBuilder
@@ -88,20 +40,130 @@ var ydbConnectionBuilder = new YdbConnectionStringBuilder
     UseTls = false
 };
 
-await using var dataSource = new YdbDataSource(ydbConnectionBuilder);
+await using var ydbDataSource = new YdbDataSource(ydbConnectionBuilder);
 ```
+
+`YdbConnectionStringBuilder` поддерживает дополнительные [настройки](connection-parameters.md#connection-builder-parameters), помимо строки подключения, такие как логирование, расширенные параметры аутентификации.
+
+## Подключения
+
+Подключение к {{ ydb-short-name }} устанавливается через `YdbConnection`. Получение подключений осуществляется через `YdbDataSource`, это можно сделать через следующие методы:
+
+### YdbDataSource.OpenConnectionAsync
+
+Открывает подключение к YDB с параметрами, указанными при создании `YdbDataSource` (см. [раздел Ydb Data Source](#data_source)).
+
+```c#
+await using var ydbConnection = await ydbDataSource.OpenConnectionAsync();
+```
+
+Рекомендуется для длинных читающих запросов.
+
+### YdbDataSource.OpenRetryableConnectionAsync
+
+Открывает подключение с автоматическими повторами операций (retry), учитывающее YDB Retry Policy (см. [раздел Повторные попытки](#retry_policy)).
+
+```c#
+await using var ydbConnection = ydbDataSource.OpenRetryableConnectionAsync();
+```
+
+Особенности режима:
+
+- Транзакции не поддерживаются. Попытка использовать транзакцию приведет к исключению (см. [раздел Транзакции](#transactions)).
+- Команды (`YdbCommand`), созданные из такого подключения, автоматически повторяют одиночные операции при временных ошибках.
+
+{% note warning %}
+
+При чтении будьте аккуратны с «длинными» выборками: они могут привести к переполнению памяти (Out Of Memory, OOM), поскольку результирующий набор считывается целиком для получения финальных статусов от сервера.
+
+{% endnote %}
+
+### YdbDataSource.CreateConnection
+
+{% note warning %}
+
+Использование `YdbDataSource.CreateConnection` и конструктора `YdbConnection` (legacy API ADO.NET) не рекомендуется. По возможности используйте современные способы открытия подключения через `YdbDataSource.OpenConnectionAsync` или `YdbDataSource.OpenRetryableConnectionAsync`.
+
+{% endnote %}
+
+Если необходим именно этот способ — откройте подключение вручную:
+
+- Вариант со строкой подключения:
+
+```c#
+await using var ydbConnection = new YdbConnection(
+    "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
+await ydbConnection.OpenAsync(); 
+```
+
+- Вариант с `YdbConnectionStringBuilder`:
+
+```c#
+var ydbConnectionBuilder = new YdbConnectionStringBuilder
+{
+    Host = "server",
+    Port = 2135,
+    Database = "/ru-prestable/my-table",
+    UseTls = true
+};
+await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
+await ydbConnection.OpenAsync();
+```
+
+- Вариант `YdbDataSource.CreateConnection`:
+
+```c#
+await using var ydbConnection = ydbDataSource.CreateConnection();
+await ydbConnection.OpenAsync();
+```
+
+## Pooling
+
+Открытие нового подключения к {{ ydb-short-name }} — затратная операция, поэтому провайдер использует пул подключений. При закрытии или освобождении объекта подключения оно не закрывается — экземпляр возвращается в пул, управляемый `Ydb.Sdk.Ado`. При следующем запросе подключение будет повторно использовано из пула. Это делает операции открытия и закрытия быстрыми: открывайте и закрывайте подключения по мере необходимости, не удерживайте их открытыми без нужды.
+
+{% note info %}
+
+Пул работает для подключений, открытых через `YdbDataSource` (например, `OpenConnectionAsync`/`OpenRetryableConnectionAsync`), а также для подключений, созданных вручную через конструктор `YdbConnection` с последующим вызовом `OpenAsync()`.
+
+{% endnote %}
+
+{% note info %}
+
+Как это устроено внутри: для прикладного кода «подключение» — логическое. Под капотом операции — это RPC‑вызовы поверх небольшого пула gRPC/HTTP/2‑каналов. Провайдер также управляет пулом сессий таблиц. Эти детали прозрачны для пользователя и настраиваются параметрами пула (см. [параметры Pooling](connection-parameters.md#pooling)).
+
+{% endnote %}
+
+Очистить пул сессий и закрыть все физические подключения с узлами YDB:
+
+- `YdbDataSource.DisposeAsync()`: Освобождает источник данных. Закрывает связанные с ним пулы и сетевые каналы для его `ConnectionString`.
+
+    ```c#
+   await YdbDataSource.DisposeAsync()
+   ```
+
+- `YdbConnection.ClearPool`: Немедленно закрывает все незанятые подключения в пуле, связанном с `ConnectionString` указанного подключения. Активные подключения будут закрыты при возврате в пул.
+
+   ```c#
+   await YdbConnection.ClearPool(ydbConnection)
+   ```
+
+- `YdbConnection.ClearAllPools()`: Закрывает все незанятые соединения во всех пулах. Активные соединения закрываются при возврате.
+
+    ```c#
+    await YdbConnection.ClearAllPools()
+    ```
 
 ## Базовое выполнение SQL
 
 Как только у вас есть `YdbConnection`, для выполнения SQL-запроса можно использовать `YdbCommand`:
 
 ```c#
-await using var command = dataSource.CreateCommand("SELECT some_field FROM some_table")
-await using var reader = await command.ExecuteReaderAsync();
+await using var ydbCommand = new YdbCommand("SELECT some_field FROM some_table", ydbConnection);
+await using var ydbDataReader = await ydbCommand.ExecuteReaderAsync();
 
-while (await reader.ReadAsync())
+while (await ydbDataReader.ReadAsync())
 {
-    Console.WriteLine(reader.GetString(0));
+    Console.WriteLine(ydbDataReader.GetString(0));
 }
 ```
 
@@ -120,11 +182,11 @@ while (await reader.ReadAsync())
 2. [ExecuteScalarAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executescalarasync): выполняет SQL, который возвращает единственное скалярное значение.
 3. [ExecuteReaderAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executereaderasync): выполняет SQL, который вернет полный результирующий набор. Возвращает `YdbDataReader`, который можно использовать для доступа к результирующему набору (как в приведенном выше примере).
 
-Например, чтобы выполнить простой SQL `INSERT`, который ничего не возвращает, вы можете использовать ExecuteNonQueryAsync следующим образом:
+Например, чтобы выполнить простой SQL `INSERT`, который ничего не возвращает, вы можете использовать `ExecuteNonQueryAsync` следующим образом:
 
 ```c#
-await using var command = dataSource.CreateCommand("INSERT INTO some_table (some_field) VALUES ('Hello YDB!'u)");
-await command.ExecuteNonQueryAsync();
+await using var ydbCommand = new YdbCommand("INSERT INTO some_table (some_field) VALUES ('Hello YDB!'u)", ydbConnection);
+await ydbCommand.ExecuteNonQueryAsync();
 ```
 
 ## Параметры
@@ -132,15 +194,10 @@ await command.ExecuteNonQueryAsync();
 При отправке пользовательских данных в базу данных всегда рекомендуется использовать параметры, а не включать значения в SQL следующим образом:
 
 ```c#
-await using var connection = new YdbConnection(_cmdOptions.SimpleConnectionString);
-await connection.OpenAsync();
+await using var ydbConnection = await ydbDataSource.OpenConnectionAsync();
 
-var ydbCommand = connection.CreateCommand();
+var ydbCommand = ydbConnection.CreateCommand();
 ydbCommand.CommandText = """
-                         DECLARE $series_id AS Uint64;
-                         DECLARE $season_id AS Uint64;
-                         DECLARE $limit_size AS Uint64;
-
                          SELECT series_id, season_id, episode_id, air_date, title
                          FROM episodes WHERE series_id = $series_id AND season_id > $season_id
                          ORDER BY series_id, season_id, episode_id
@@ -174,7 +231,7 @@ ydbCommand.Parameters.Add(new YdbParameter("season_id", DbType.UInt64, 1U));
 ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));
 ```
 
-ADO.NET за вас подготовит запрос, чтобы переменные соответствовали [YQL](../../../yql/reference/index.md). А тип будет определен согласно [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) или .NET тип самого значения.
+ADO.NET за вас подготовит запрос, чтобы переменные соответствовали [YQL](../../../yql/reference/index.md). Тип каждого параметра будет определен по YdbDbType, при его отсутствии — по [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype), иначе выводится из .NET‑типа значения.
 
 ## Parameter types
 
@@ -182,38 +239,129 @@ ADO.NET за вас подготовит запрос, чтобы перемен
 
 Для получения дополнительной информации о поддерживаемых типах и их сопоставления смотрите эту [страницу](type-mapping.md).
 
-## Транзакции
+## Транзакции {#transactions}
 
-Чтобы создать клиентскую транзакцию, используйте стандартный метод ADO.NET `ydbConnection.BeginTransaction()`.
+Интерактивные транзакции и повторы (retry) — ключевая часть работы с {{ ydb-short-name }}.
+
+YdbDataSource предоставляет вспомогательные методы, упрощающие выполнение кода в транзакции с автоматическими повторами.
+
+```c#
+await ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
+{
+    var count = (int)(await new YdbCommand(ydbConnection)
+        { CommandText = $"SELECT count FROM {tableName} WHERE id = 1" }
+        .ExecuteScalarAsync())!;
+
+    await new YdbCommand(ydbConnection)
+    {
+        CommandText = $"UPDATE {tableName} SET count = @count + 1 WHERE id = 1",
+        Parameters = { new YdbParameter { Value = count, ParameterName = "count" } }
+    }.ExecuteNonQueryAsync();
+},
+new YdbRetryPolicyConfig { MaxAttempts = 5 });
+```
+
+Повторные попытки выполняются в соответствии с политиками YDB (см. [раздел Повторные попытки](#retry_policy)).
+
+### Транзакции YdbConnection
+
+Создать транзакцию можно стандартным способом ADO.NET:
+
+```c#
+await using var ydbConnection = await ydbDataSource.OpenConnectionAsync();
+await using var ydbTransaction = await connection.BeginTransactionAsync();
+// ... команды в транзакции ...
+await transaction.CommitAsync();
+```
+
+{% note warning %}
+
+В таком случае обработка ошибок ([Transaction Lock Invalidated](https://ydb.tech/docs/ru/troubleshooting/performance/queries/transaction-lock-invalidation)) становится заботой пользователя. YDB может откатить транзакцию в случае инвалидации MVC локов.
+
+{% endnote %}
+
+{% note info %}
+
+Это допустимый и рекомендуемый для длительных чтений. Используйте транзакции чтения в режиме [snapshot read-only](../../../concepts/transactions.md#modes). Такие транзакции дают консистентный срез, не берут блокировки записи и минимизируют конфликты.
+
+{% endnote %}
 
 Есть две сигнатуры этого метода с единственным параметром уровня изоляции:
 
-- `BeginTransaction(TxMode txMode)`<br>
-  Параметр `Ydb.Sdk.Services.Query.TxMode` - это {{ ydb-short-name }} специфичный уровень изоляции, ознакомиться поподробнее можно [здесь](../../../concepts/transactions.md).
+- `BeginTransaction(TransactionMode transactionMode)`<br>
+  Параметр `Ydb.Sdk.Ado.TransactionMode` — это {{ ydb-short-name }}-специфичный уровень изоляции, подробнее ознакомиться можно [здесь](../../../concepts/transactions.md).
 
 - `BeginTransaction(IsolationLevel isolationLevel)`<br>
   Параметр `System.Data.IsolationLevel` из стандарта ADO.NET. Поддерживаются следующие уровни изоляции: `Serializable` и `Unspecified`. Оба эквивалентны параметру `TxMode.SerializableRW`.
 
 Вызов `BeginTransaction()` без параметров открывает транзакцию с уровнем `TxMode.SerializableRW`.
 
-Рассмотрим пример использования транзакции:
-
-```c#
-await using var connection = await dataSource.OpenConnectionAsync();
-await using var transaction = await connection.BeginTransactionAsync();
-
-await using var command1 = new YdbCommand(connection) { CommandText = "...", Transaction = transaction };
-await command1.ExecuteNonQueryAsync();
-
-await using var command2 = new YdbCommand(connection) { CommandText = "...", Transaction = transaction };
-await command2.ExecuteNonQueryAsync();
-
-await transaction.CommitAsync();
-```
-
 {{ ydb-short-name }} не поддерживает вложенные или параллельные транзакции. В любой момент времени может выполняться только одна транзакция, и при запуске новой транзакции, в то время как другая уже выполняется, возникает исключение. Следовательно, нет необходимости передавать объект `YdbTransaction`, возвращаемый функцией `BeginTransaction()` в команды, которые вы выполняете. При запуске транзакции все последующие команды автоматически включаются до тех пор, пока не будет выполнена фиксация или откат. Однако для обеспечения максимальной переносимости лучше всего явно задать область транзакции для ваших команд.
 
+## Повторные попытки {#retry_policy}
+
+Повторы (retry) — важная часть дизайна {{ ydb-short-name }}. Провайдер ADO.NET предоставляет гибкую политику повторов с учетом специфики {{ ydb-short-name }}.
+
+Рекомендации по выбору подхода:
+
+- Одиночные пишущие операции (без интерактивных транзакций): используйте `YdbDataSource.OpenRetryableConnectionAsync`.
+- Транзакционные сценарии: используйте семейство методов `YdbDataSource.ExecuteInTransactionAsync`.
+- Выполнение кода с автоматическими повторами вне транзакции: используйте семейство `YdbDataSource.ExecuteAsync`
+- Долгие читающие операции: используйте обычный `YdbConnection`. Для консистентных «снимков» данных выполняйте чтение в read-only Snapshot‑транзакции. Не используйте retry‑подключение для «длинных» чтений, чтобы избежать избыточного буферизации результатов.
+
+### Передача настроек политики
+
+В методы `OpenRetryableConnectionAsync`, `ExecuteInTransactionAsync`, `ExecuteAsync` можно передать `YdbRetryPolicyConfig`:
+
+- Подключение с повторами:
+
+    ```c#
+    await using var conn = await ydbDataSource.OpenRetryableConnectionAsync(
+        new YdbRetryPolicyConfig { MaxAttempts = 5 });
+    ```
+
+- Транзакция с повторами:
+
+    ```c#
+    await ydbDataSource.ExecuteInTransactionAsync(
+        async conn => { /* ваш код */ },
+        new YdbRetryPolicyConfig { MaxAttempts = 5 });
+    ```
+
+- Выполнение блока кода с повторами:
+
+    ```c#
+    await ydbDataSource.ExecuteAsync(
+        async conn => { /* ваш код */ },
+        new YdbRetryPolicyConfig { MaxAttempts = 5 });
+    ```
+
+| **Параметр**           | **Описание**                                                                                                                                                                                   | **Значение по умолчанию** |
+|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|
+| `MaxAttempts`            | Общее число попыток, включая первую. Значение 1 полностью отключает повторы.                                                                                                                   | `10`                        |
+| `EnableRetryIdempotence` | Включает повторы для статусов с неизвестным результатом выполнения на сервере. Используйте только для идемпотентных операций — иначе возможен повторный эффект выполнения.                     | `false`                     |
+| `FastBackoffBaseMs`      | Базовая задержка (мс) для быстрых повторов: ошибки, которые обычно быстро проходят (например, временная недоступность, TLI — Transaction Lock Invalidated). Экспоненциальный backoff с jitter. | `5`                         |
+| `FastCapBackoffMs`       | Максимальная задержка (мс) для быстрых повторов. Экспоненциальный backoff с jitter не превышает этот предел.                                                                                   | `500`                       |
+| `SlowBackoffBaseMs`      | Базовая задержка (мс) для «медленных» повторов: перегрузка, исчерпание ресурсов и т.п. Экспоненциальный backoff с jitter.                                                                      | `50`                        |
+| `SlowCapBackoffMs`       | Максимальная задержка (мс) для «медленных» повторов. Экспоненциальный backoff с jitter не превышает этот предел.                                                                               | `5000`                      |
+
+### Кастомная политика повторных попыток
+
+Для крайних случаев можно реализовать собственную политику, реализовав интерфейс `Ydb.Sdk.Ado.Retry.IRetryPolicy`. Политика получает `YdbException` и номер текущей попытки (attempt) и должна вернуть решение — повторять ли операцию и с какой задержкой.
+
+{% note warning %}
+
+Используя данный подход, вы точно должны быть уверены в том, что хотите, так как вы отказываетесь от рекомендуемых настроек.
+
+{% endnote %}
+
 ## Обработка ошибок
+
+{% note info %}
+
+Этот раздел актуален, если вы не используете встроенные повторы провайдера (см. [раздел Повторные попытки](#retry_policy)).
+
+{% endnote %}
 
 Все исключения, связанные с операциями в базе данных, являются подклассами `YdbException`.
 
@@ -248,4 +396,4 @@ catch (YdbException e)
 
 ## Примеры
 
-Примеры приведены на GitHub по [ссылке](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/AdoNet).
+Примеры приведены на GitHub по [ссылке](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples).

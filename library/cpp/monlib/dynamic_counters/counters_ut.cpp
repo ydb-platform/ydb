@@ -339,4 +339,30 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
         histogram = rootGroup->FindNamedHistogram("name", "histogram2");
         UNIT_ASSERT(histogram);
     }
+
+    Y_UNIT_TEST(FindSubgroup) {
+        TDynamicCounterPtr rootGroup(new TDynamicCounters());
+
+        auto a = rootGroup->GetSubgroup("a", "1");
+        auto b1 = rootGroup->GetSubgroup("b", "1");
+        auto b2 = rootGroup->GetSubgroup("b", "2");
+        auto c = rootGroup->GetSubgroup("c", "1");
+        auto e = rootGroup->GetSubgroup("e", "1");
+
+        UNIT_ASSERT(a == rootGroup->FindSubgroup("a"));
+        UNIT_ASSERT(a == rootGroup->FindSubgroup("a", "1"));
+        UNIT_ASSERT(nullptr == rootGroup->FindSubgroup("a", "2"));
+
+        UNIT_ASSERT(nullptr == rootGroup->FindSubgroup("b"));
+        UNIT_ASSERT(b1 == rootGroup->FindSubgroup("b", "1"));
+        UNIT_ASSERT(b2 == rootGroup->FindSubgroup("b", "2"));
+        UNIT_ASSERT(nullptr == rootGroup->FindSubgroup("b", "3"));
+
+        UNIT_ASSERT(c == rootGroup->FindSubgroup("c"));
+        UNIT_ASSERT(c == rootGroup->FindSubgroup("c", "1"));
+        UNIT_ASSERT(nullptr == rootGroup->FindSubgroup("c", "2"));
+
+        UNIT_ASSERT(nullptr == rootGroup->FindSubgroup("d"));
+        UNIT_ASSERT(nullptr == rootGroup->FindSubgroup("f"));
+    }
 }

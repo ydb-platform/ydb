@@ -9,6 +9,8 @@ items:
   href: bridge_config.md
 - name: client_certificate_authorization
   href: client_certificate_authorization.md
+- name: cms_config
+  href: cms_config.md
 - name: domains_config
   href: domains_config.md
 - name: feature_flags
@@ -18,13 +20,13 @@ items:
 - name: healthcheck_config
   href: healthcheck_config.md
 - name: hive_config
-  href: hive.md
+  href: hive_config.md
 - name: host_configs
   href: host_configs.md
 - name: hosts
   href: hosts.md
 - name: kafka_proxy_config
-  href: kafka.md
+  href: kafka_proxy_config.md
 - name: log_config
   href: log_config.md
 - name: memory_controller_config

@@ -214,7 +214,6 @@ struct TDqTaskRunnerSettings {
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     bool TerminateOnError = false;
     bool UseCacheForLLVM = true;
-    TDqComputeActorWatermarks* WatermarksTracker = nullptr;
     TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
@@ -441,7 +440,8 @@ public:
     virtual ui64 GetTaskId() const = 0;
 
     virtual void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx) = 0;
+        const IDqTaskRunnerExecutionContext& execCtx,
+        TDqComputeActorWatermarks* watermarksTracker = nullptr) = 0;
     virtual ERunStatus Run() = 0;
 
     virtual bool HasEffects() const = 0;

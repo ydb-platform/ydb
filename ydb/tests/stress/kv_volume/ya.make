@@ -1,14 +1,16 @@
-PY3_PROGRAM(workload_keyvalue_volume)
+PROGRAM(workload_keyvalue_volume)
 
-PY_SRCS(
-    __main__.py
+SRCS(
+    main.cpp
 )
 
 PEERDIR(
-    ydb/tests/stress/common
-    ydb/tests/library/clients
-    ydb/tests/library
-    ydb/tests/stress/kv_volume/workload
+    contrib/libs/grpc
+    contrib/libs/protobuf
+    library/cpp/getopt
+    ydb/public/api/grpc
+    ydb/public/api/protos
+    ydb/tests/stress/kv_volume/protos
 )
 
 END()

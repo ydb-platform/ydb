@@ -1,13 +1,13 @@
-# Изменение состава колонок
+# Изменение колонок
 
-{{ backend_name }} поддерживает возможность добавлять колонки в {% if backend_name == "YDB" and oss == true %} строковые и колоночные таблицы{% else %} таблицы {% endif %}, а также удалять неключевые колонки из таблиц.
+{{ backend_name }} поддерживает возможность добавлять колонки в {% if backend_name == "YDB" and oss == true %} строковые и колоночные таблицы{% else %} таблицы {% endif %}, удалять неключевые колонки из таблиц, а также изменять свойства существующих колонок.
 
 ## ADD COLUMN
 
 Строит новую колонку с указанными именем, типом и опциями для указанной таблицы.
 
 ```yql
-ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION(<compression_params>)];
+ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION(key1=value1[, key2=value2])];
 ```
 
 ## Параметры запроса
@@ -43,8 +43,10 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альт
 
 ## ALTER COLUMN
 
+Изменяет свойства существующей колонки в указанной таблице.
+
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION(<compression_params>)];
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([key1=value1[, key2=value2]])];
 ```
 
 ### Параметры запроса

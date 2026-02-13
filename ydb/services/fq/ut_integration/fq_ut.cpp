@@ -787,9 +787,17 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
             req.set_scope(scope.ToString());
             req.set_owner_id("some_owner");
             req.set_status(FederatedQuery::QueryMeta::COMPLETED);
-            auto result = client.PingTask(std::move(req)).ExtractValueSync();
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            const auto result = DoWithRetryOnRetCode([&]() {
+                auto r = req;
+                auto result = client.PingTask(std::move(r)).ExtractValueSync();
+                result.GetIssues().PrintTo(Cerr);
+                if (result.GetStatus() == EStatus::TRANSPORT_UNAVAILABLE)) {
+                    return false;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+                return true;
+            }, TRetryOptions(Retries));
+            UNIT_ASSERT_C(result, "Incorrect ping did not fail within the time limit");
         }
     }
 

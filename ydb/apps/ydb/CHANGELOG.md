@@ -1,3 +1,4 @@
+* Added `--proccess-count` and `--proccess-index` options to `ydb workload tpcc import` command for upload tpcc data by multiple processes.
 
 ## 2.29.0 ##
 

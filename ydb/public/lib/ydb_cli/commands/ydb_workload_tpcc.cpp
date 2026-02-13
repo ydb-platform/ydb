@@ -133,6 +133,12 @@ void TCommandTPCCImport::Config(TConfig& config) {
         "no-tui", TStringBuilder() << "Disable TUI, which is enabled by default in interactive mode")
             .Optional().StoreTrue(&RunConfig->NoTui);
 
+    config.Opts->AddLongOption('C', "proccess-count", "Count of parallel processes (for multiprocess runing).")
+        .DefaultValue(RunConfig->ProcessCount).StoreResult(&RunConfig->ProcessCount);
+
+    config.Opts->AddLongOption('i', "proccess-index", "Zerobased index of parallel processes (for multiprocess runing).")
+        .DefaultValue(RunConfig->ProcessIndex).StoreResult(&RunConfig->ProcessIndex);
+
     // advanced hidden options (mainly for developers)
 
     auto logLevelOpt = config.Opts->AddLongOption(

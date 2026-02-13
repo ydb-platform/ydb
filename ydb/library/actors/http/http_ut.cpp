@@ -1,13 +1,16 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/testing/unittest/tests_data.h>
-#include <ydb/library/actors/core/executor_pool_basic.h>
-#include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/testlib/test_runtime.h>
-#include <util/system/tempfile.h>
 #include "http.h"
 #include "http_proxy.h"
 
-
+#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/http/ut/tls_client_connection.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/resource/resource.h>
+#include <util/system/tempfile.h>
+#include <thread>
 
 enum EService : NActors::NLog::EComponent {
     MIN,
@@ -1349,4 +1352,162 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         UNIT_ASSERT_EQUAL(response2->Response->Status, "200");
     }
+}
+
+Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
+    struct TMtlsTestSetup {
+        TStringStream LogStream;
+        TAutoPtr<TLogBackend> LogBackend;
+        NKikimr::TCertAndKey CaCertAndKey;
+        NKikimr::TCertAndKey ServerCertAndKey;
+        NKikimr::TCertAndKey ClientCertAndKey;
+        NKikimr::TCertAndKey UntrustedCaCertAndKey;
+        NKikimr::TCertAndKey UntrustedClientCertAndKey;
+        TTempFileHandle CaCertFile;
+        TTempFileHandle ServerCertFile;
+        TTempFileHandle ServerKeyFile;
+        TTempFileHandle ClientCertFile;
+        TTempFileHandle ClientKeyFile;
+        TTempFileHandle UntrustedCaCertFile;
+        TTempFileHandle UntrustedClientCertFile;
+        TTempFileHandle UntrustedClientKeyFile;
+        NActors::TTestActorRuntimeBase ActorSystem;
+        TPortManager PortManager;
+        TIpPort Port;
+        NActors::TActorId ProxyId;
+        NActors::TActorId ServerId;
+
+        TMtlsTestSetup(const bool useRealThreads = false, const bool secureConnection = true)
+            : LogBackend(new TStreamLogBackend(&LogStream))
+            , ActorSystem(1, useRealThreads)
+        {
+            // Generate certificates
+            CaCertAndKey = NKikimr::GenerateCA(NKikimr::TProps::AsCA());
+            ServerCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsServer());
+            ClientCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsClient());
+
+            NKikimr::TProps untrustedCaProps = NKikimr::TProps::AsCA();
+            untrustedCaProps.CommonName = "Untrusted " + untrustedCaProps.CommonName;
+            UntrustedCaCertAndKey = NKikimr::GenerateCA(untrustedCaProps);
+
+            NKikimr::TProps untrustedClientProps = NKikimr::TProps::AsClient();
+            untrustedClientProps.CommonName = "Untrusted " + untrustedClientProps.CommonName;
+            UntrustedClientCertAndKey = NKikimr::GenerateSignedCert(UntrustedCaCertAndKey, untrustedClientProps);
+
+            // Write certificates to files
+            CaCertFile.Write(CaCertAndKey.Certificate.c_str(), CaCertAndKey.Certificate.size());
+            ServerCertFile.Write(ServerCertAndKey.Certificate.c_str(), ServerCertAndKey.Certificate.size());
+            ServerKeyFile.Write(ServerCertAndKey.PrivateKey.c_str(), ServerCertAndKey.PrivateKey.size());
+            ClientCertFile.Write(ClientCertAndKey.Certificate.c_str(), ClientCertAndKey.Certificate.size());
+            ClientKeyFile.Write(ClientCertAndKey.PrivateKey.c_str(), ClientCertAndKey.PrivateKey.size());
+            UntrustedCaCertFile.Write(UntrustedCaCertAndKey.Certificate.c_str(), UntrustedCaCertAndKey.Certificate.size());
+            UntrustedClientCertFile.Write(UntrustedClientCertAndKey.Certificate.c_str(), UntrustedClientCertAndKey.Certificate.size());
+            UntrustedClientKeyFile.Write(UntrustedClientCertAndKey.PrivateKey.c_str(), UntrustedClientCertAndKey.PrivateKey.size());
+
+            ActorSystem.SetLogBackend(LogBackend);
+            ActorSystem.Initialize();
+
+            NActors::IActor* proxy = NHttp::CreateHttpProxy();
+            ProxyId = ActorSystem.Register(proxy);
+
+            Port = PortManager.GetTcpPort();
+            THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(Port);
+            if (secureConnection) {
+                add->Secure = true;
+                add->CertificateFile = ServerCertFile.Name();
+                add->PrivateKeyFile = ServerKeyFile.Name();
+                add->CaFile = CaCertFile.Name(); // enables mTLS
+            }
+            ActorSystem.Send(new NActors::IEventHandle(ProxyId, ActorSystem.AllocateEdgeActor(), add.Release()), 0, true);
+            TAutoPtr<NActors::IEventHandle> handle;
+            ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+            ServerId = ActorSystem.AllocateEdgeActor();
+            ActorSystem.Send(new NActors::IEventHandle(ProxyId, ServerId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", ServerId)), 0, true);
+        }
+    };
+
+    Y_UNIT_TEST(ValidClientCertificate) {
+        TMtlsTestSetup setup;
+
+        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+        std::thread clientThread([&setup, httpRequest]() {
+            // We run it in a separate thread because GrabEdgeEvent() blocks the main thread waiting for events.
+            // Without a separate thread, we would have a deadlock: main thread blocked in GrabEdgeEvent,
+            // client thread blocked waiting for response from server.
+            NHttp::NTest::SendTlsRequest(setup.Port, setup.ClientCertFile.Name(), setup.ClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
+        });
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request1 = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request1->Request->URL, "/test");
+        UNIT_ASSERT(!request1->Request->MTlsClientCertificate.empty());
+
+        clientThread.join();
+    }
+
+    Y_UNIT_TEST(UntrustedClientCertificate) {
+        // Need real threads, since we can't use GrabEdgeEvent – there's no events to detect errors
+        TMtlsTestSetup setup(/* useRealThreads */ true);
+
+        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+        std::thread clientThread([&setup, httpRequest]() {
+            // We run it in a separate thread because GrabEdgeEvent() blocks the main thread waiting for events.
+            // Without a separate thread, we would have a deadlock: main thread blocked in GrabEdgeEvent,
+            // client thread blocked waiting for response from server.
+            NHttp::NTest::SendTlsRequest(setup.Port, setup.UntrustedClientCertFile.Name(), setup.UntrustedClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
+        });
+
+        const TDuration timeout = TDuration::Seconds(2);
+        const TInstant deadline = TInstant::Now() + timeout;
+        bool errorFound = false;
+        while (TInstant::Now() < deadline) {
+            if (setup.LogStream.Str().Contains("connection closed - error in Accept")) {
+                errorFound = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(errorFound, "No connection error happened for untrusted client");
+
+        clientThread.join();
+    }
+
+    Y_UNIT_TEST(NoClientCertificate) {
+        TMtlsTestSetup setup;
+
+        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+        std::thread clientThread([&setup, httpRequest]() {
+            // We run it in a separate thread because GrabEdgeEvent() blocks the main thread waiting for events.
+            // Without a separate thread, we would have a deadlock: main thread blocked in GrabEdgeEvent,
+            // client thread blocked waiting for response from server.
+            NHttp::NTest::SendTlsRequest(setup.Port, "", "", setup.CaCertFile.Name(), httpRequest);
+        });
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(request->Request->MTlsClientCertificate.empty());
+
+        clientThread.join();
+    }
+
+    Y_UNIT_TEST(NotSecureConnection) {
+        TMtlsTestSetup setup(/* useRealThreads */ false, /* secureConnection */ false);
+
+        NActors::TActorId clientId = setup.ActorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(setup.Port) + "/test");
+        setup.ActorSystem.Send(new NActors::IEventHandle(setup.ProxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(request->Request->MTlsClientCertificate.empty());
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 OK\r\nConnection: Close\r\n\r\n");
+        setup.ActorSystem.Send(new NActors::IEventHandle(handle->Sender, setup.ServerId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+    }
+
 }

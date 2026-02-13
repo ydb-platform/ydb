@@ -302,10 +302,10 @@ namespace NKikimr::NDDisk {
                 if (selector.OffsetInBytes % BlockSize || selector.Size % BlockSize || !selector.Size) {
                     SendReply(ev, std::make_unique<typename TEvent::TResult>(
                         NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                        "offset and must must be multiple of block size and size must be nonzero"));
+                        "offset and size must be multiple of block size and size must be nonzero"));
                     registerError();
                     return false;
-                }
+                    }
 
                 if constexpr (NPrivate::THasWriteInstructionField<TRecord>::value) {
                     const TWriteInstruction instruction(record.GetWriteInstruction());
@@ -471,6 +471,7 @@ namespace NKikimr::NDDisk {
         void StartRestorePersistentBuffer(ui32 pos = 0);
         void GetPersistentBufferRecordData(TDDiskActor::TPersistentBuffer::TRecord& pr, std::function<void(TRope data)> callback);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
+        double GetPersistentBufferFreeSpace();
 
         struct TWriteInFlight {
             TActorId Sender;

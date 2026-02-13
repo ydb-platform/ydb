@@ -81,7 +81,7 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
     // try enqueue shards from multiple tables fairly
     auto initialQueueSize = ForcedCompactionTablesQueue.Size();
     THashSet<TPathId> tablesWithoutCandidates;
-    while (tablesWithoutCandidates.size() < initialQueueSize) {
+    while (!ForcedCompactionTablesQueue.Empty() && tablesWithoutCandidates.size() < initialQueueSize) {
         const auto& tablePathId = ForcedCompactionTablesQueue.Front();
         auto& compaction = InProgressForcedCompactionsByTable.at(tablePathId);
         auto& shards = ForcedCompactionShardsByTable.at(tablePathId);
@@ -95,6 +95,7 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
             tablesWithoutCandidates.insert(tablePathId);
             ForcedCompactionTablesQueue.PopFront();
             InProgressForcedCompactionsByTable.erase(tablePathId);
+            ForcedCompactionShardsByTable.erase(tablePathId);
         } else {
             if (compaction->MaxShardsInFlight <= compaction->ShardsInFlight.size()) {
                 tablesWithoutCandidates.insert(tablePathId);
@@ -179,7 +180,7 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
         }
 
         const auto now = ctx.Now();
-        if (shardsQueue.Empty() && compactionPtr->ShardsInFlight.empty()
+        if (shardsQueue.Empty() && compactionPtr->ShardsInFlight.empty()  // compaction completed. TODO: check all table when cascade = true
             || DoneShardsToPersist.size() >= ForcedCompactionPersistBatchSize
             || now - ForcedCompactionProgressStartTime > ForcedCompactionPersistBatchMaxTime)
         {

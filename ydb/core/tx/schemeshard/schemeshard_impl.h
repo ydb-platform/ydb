@@ -1752,13 +1752,13 @@ public:
     };
 
     void AddForcedCompaction(const TForcedCompactionInfo::TPtr& forcedCompactionInfo);
-    void AddForcedCompactionShard(const TShardIdx& shardsId, const TForcedCompactionInfo& forcedCompactionInfo);
+    void AddForcedCompactionShard(const TShardIdx& shardId, const TForcedCompactionInfo& forcedCompactionInfo);
 
     void PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<TShardIdx>& shardsToCompact);
     void PersistForcedCompactionDoneShard(NIceDb::TNiceDb& db, const TShardIdx& shardId);
 
-    void FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedCompaction& exprt, const TForcedCompactionInfo& exportInfo);
+    void FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedCompaction& compaction, const TForcedCompactionInfo& forcedCompactionInfo);
 
     void ProcessForcedCompactionQueues();
 

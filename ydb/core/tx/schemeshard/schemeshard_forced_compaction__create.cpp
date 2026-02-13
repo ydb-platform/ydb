@@ -102,6 +102,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         for (const auto& shardInfo : tableInfo->GetPartitions()) {
             shardsToCompact.push_back(shardInfo.ShardIdx);
         }
+        info->TotalShardCount = shardsToCompact.size();
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistForcedCompactionState(db, *info);

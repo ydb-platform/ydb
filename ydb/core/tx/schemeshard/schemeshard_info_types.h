@@ -3865,9 +3865,7 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
     TMaybe<TString> UserSID;
 
     ui32 TotalShardCount = 0;
-
-    // counters update only when persisting
-    ui32 DoneShardCount = 0;
+    ui32 DoneShardCount = 0; // updates only when persisting
 
     THashSet<TShardIdx> ShardsInFlight;
 };

@@ -24,7 +24,11 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
 
         for (auto& forcedCompactionInfo : compactionsToPersist) {
             const auto* shardsQueue = Self->ForcedCompactionShardsByTable.FindPtr(forcedCompactionInfo->TablePathId);
-            if (!shardsQueue && forcedCompactionInfo->ShardsInFlight.empty()) {
+            if ((!shardsQueue || shardsQueue->Empty()) && forcedCompactionInfo->ShardsInFlight.empty()) {
+                if (!shardsQueue) {
+                    Self->ForcedCompactionShardsByTable.erase(forcedCompactionInfo->TablePathId);
+                    Self->ForcedCompactionTablesQueue.Remove(forcedCompactionInfo->TablePathId);
+                }
                 forcedCompactionInfo->State = TForcedCompactionInfo::EState::Done;
                 forcedCompactionInfo->EndTime = TAppData::TimeProvider->Now();
             }

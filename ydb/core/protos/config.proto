@@ -2612,7 +2612,7 @@ message TCompactionConfig {
     }
 
     message TBorrowedCompactionConfig {
-        optional double MaxRate = 1 [default = 0]; // unlimitted
+        optional double MaxRate = 1 [default = 0]; // unlimited
         optional uint64 InflightLimit = 2 [default = 10]; // TODO: consider more?
 
         // After this interval we will try to restart
@@ -2623,7 +2623,7 @@ message TCompactionConfig {
     }
 
     message TForcedCompactionConfig {
-        optional double MaxRate = 1 [default = 0]; // unlimitted
+        optional double MaxRate = 1 [default = 0]; // unlimited
         optional uint64 InflightLimit = 2 [default = 10];
 
         // After this interval we will try to restart
@@ -2645,7 +2645,7 @@ message TCompactionConfig {
 }
 
 message TBackgroundCleaningConfig {
-    optional double MaxRate = 1 [default = 0]; // unlimitted
+    optional double MaxRate = 1 [default = 0]; // unlimited
     optional uint64 InflightLimit = 2 [default = 10]; // TODO: consider more?
 
     // After this interval we will try to restart

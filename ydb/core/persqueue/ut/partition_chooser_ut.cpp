@@ -249,6 +249,7 @@ void InitTable(NPersQueue::TTestServer& server) {
     private:
         void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext&) {
             Promise.SetValue();
+            PassAway();
         }
 
         STFUNC(StateWork) {

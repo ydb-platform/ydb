@@ -974,8 +974,8 @@ public:
 
         std::vector<std::thread> threads;
         threads.reserve(threadCount);
-        const auto whByProcess = Config.WarehouseCount / Config.ProcessCount + bool(Config.WarehouseCount % Config.ProcessCount);
-        const auto whByThread = whByProcess / threadCount + bool(whByProcess % threadCount);
+        const auto whByProcess = Config.WarehouseCount / Config.ProcessCount + (Config.WarehouseCount % Config.ProcessCount ? 1 : 0);
+        const auto whByThread = whByProcess / threadCount + (whByProcess % threadCount ? 1 : 0);
         const auto whPrStart = Config.ProcessIndex * whByProcess + 1;
         const auto whPrEnd = std::min<int>((Config.ProcessIndex + 1) * whByProcess, Config.WarehouseCount);
 

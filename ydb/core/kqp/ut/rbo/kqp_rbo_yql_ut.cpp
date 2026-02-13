@@ -1361,7 +1361,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST_TWIN(ColumnStatistics, ColumnStore) {
         auto enableNewRbo = [](Tests::TServerSettings& settings) {
             settings.AppConfig->MutableTableServiceConfig()->SetEnableNewRBO(true);
-            // Fallback is enabled, becayse analyze uses UDAF which are not supported in NEW RBO.
+            // Fallback is enabled, because analyze uses UDAF which are not supported in NEW RBO.
             settings.AppConfig->MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
             settings.AppConfig->MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
             settings.AppConfig->MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);

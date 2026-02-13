@@ -56,7 +56,7 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     }
 }
 
-std::shared_ptr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
+std::unique_ptr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto kqpOpRoot = TKqpOpRoot(node);
     auto rootInput = ExprNodeToOperator(kqpOpRoot.Input().Ptr());
     TVector<TString> columnOrder;
@@ -65,7 +65,7 @@ std::shared_ptr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
         columnOrder.push_back(column.StringValue());
     }
 
-    auto opRoot = std::make_shared<TOpRoot>(rootInput, node->Pos(), columnOrder);
+    auto opRoot = std::make_unique<TOpRoot>(rootInput, node->Pos(), columnOrder);
     opRoot->Node = node;
     opRoot->PlanProps = PlanProps;
     opRoot->PlanProps.PgSyntax = std::stoi(kqpOpRoot.PgSyntax().StringValue());

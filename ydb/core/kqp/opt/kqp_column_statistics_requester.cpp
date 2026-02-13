@@ -70,13 +70,6 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
         }
     );
 
-<<<<<<< HEAD
-    TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
-=======
     std::vector<TFuture<TColumnStatisticsResponse>> futures;
 
     auto addStatRequest = [&](
@@ -175,7 +168,6 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
     addStatRequest(
         NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
         [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
->>>>>>> be0ec44c8f6 (Added logging for requesting statistics)
 
     if (futures.empty()) {
         return IGraphTransformer::TStatus::Ok;

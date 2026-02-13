@@ -4647,6 +4647,8 @@ Y_UNIT_TEST(AddFullTextFlatIndexWithTruncateWithSelect) {
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
     };
 
     auto ensureTableIsEmpty = [&](){

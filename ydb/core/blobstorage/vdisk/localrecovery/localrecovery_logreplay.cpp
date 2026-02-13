@@ -795,6 +795,10 @@ namespace NKikimr {
             return EDispatchStatus::Success;
         }
 
+        EDispatchStatus HandleChunkKeeper(const TActorContext& /*ctx*/, const NPDisk::TLogRecord& /*record*/) {
+            return EDispatchStatus::Success;
+        }
+
         void Handle(TEvBulkSstEssenceLoaded::TPtr &ev, const TActorContext &ctx) {
             // BulkSstEssence is loaded into memory, apply it
             TEvBulkSstEssenceLoaded *msg = ev->Get();
@@ -884,6 +888,9 @@ namespace NKikimr {
                 case TLogSignature::SignatureMetadata:
                     LocRecCtx->RecovInfo->DispatchSignatureMetadata(record);
                     return HandleMetadata(ctx, record);
+                case TLogSignature::SignatureChunkKeeper:
+                    LocRecCtx->RecovInfo->DispatchSignatureChunkKeeper(record);
+                    return HandleChunkKeeper(ctx, record);
                 case TLogSignature::Max:
                     break;
             }
@@ -897,6 +904,7 @@ namespace NKikimr {
             LocRecCtx->HullDbRecovery->GetOwnedChunks(chunks);
             LocRecCtx->RepairedHuge->GetOwnedChunks(chunks);
             LocRecCtx->SyncLogRecovery->GetOwnedChunks(chunks);
+            LocRecCtx->ChunkKeeperData->GetOwnedChunks(chunks, LocRecCtx->VCtx->VDiskLogPrefix);
 
             // calculate leaked and unowned chunks
             TVector<TChunkIdx> leaks, misowned;

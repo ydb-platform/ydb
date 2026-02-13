@@ -110,4 +110,8 @@ namespace NKikimr {
         barrierFrom.Serialize(*Record.MutableBarrierFrom());
         Record.SetProtocol(protocol);
     }
+
+    TEvGetSkeletonStateResult::TEvGetSkeletonStateResult(TActorId chunkKeeperActorId)
+        : ChunkKeeperActorId(chunkKeeperActorId)
+    {}
 } // NKikimr

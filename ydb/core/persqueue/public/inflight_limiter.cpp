@@ -86,6 +86,12 @@ bool TInFlightController::IsMemoryLimitReached() const {
 }
 
 TDuration TInFlightController::GetFullnessDuration() {
+    auto now = TInstant::Now();
+    if (InFlightFullSince != TInstant::Zero()) {
+        InFlightFullnessDuration += (now - InFlightFullSince);
+        InFlightFullSince = now;
+    }
+
     return std::exchange(InFlightFullnessDuration, TDuration::Zero());
 }
 

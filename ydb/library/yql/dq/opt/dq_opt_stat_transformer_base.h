@@ -11,6 +11,7 @@ public:
     TDqStatisticsTransformerBase(
         TTypeAnnotationContext* typeCtx,
         const IProviderContext& ctx,
+        const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
         const TOptimizerHints& hints = {},
         TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
         const bool useFSMForSortElimination = false
@@ -29,6 +30,7 @@ protected:
 
     TTypeAnnotationContext* TypeCtx;
     const IProviderContext& Pctx;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
     TOptimizerHints Hints;
     TShufflingOrderingsByJoinLabels* ShufflingOrderingsByJoinLabels;
     const bool UseFSMForSortElimination;

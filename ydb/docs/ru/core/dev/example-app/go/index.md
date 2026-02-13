@@ -187,9 +187,66 @@ if err != nil {
 }
 ```
 
+<<<<<<< HEAD
 {% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
 
 Для выполнения scan-запросов используется метод `table.Session.StreamExecuteScanQuery()`.
+=======
+Для получения данных строки `query.Row` можно использовать следующие методы:
+
+* `query.Row.ScanStruct` — по названиям колонок, зафиксированным в тегах структуры.
+* `query.Row.ScanNamed` — по названиям колонок.
+* `query.Row.Scan` — по порядку колонок.
+
+{% list tabs %}
+
+- ScanStruct
+
+  ```go
+  var info struct {
+   SeriesID    string    `sql:"series_id"`
+   Title       string    `sql:"title"`
+   ReleaseDate time.Time `sql:"release_date"`
+  }
+  err = row.ScanStruct(&info)
+  if err != nil {
+    // обработка ошибки выполнения запроса
+  }
+  ```
+
+- ScanNamed
+
+  ```go
+  var seriesID, title string
+  var releaseDate time.Time
+  err = row.ScanNamed(query.Named("series_id", &seriesID), query.Named("title", &title), query.Named("release_date", &releaseDate))
+  if err != nil {
+    // обработка ошибки выполнения запроса
+  }
+  ```
+
+- Scan
+
+  ```go
+  var seriesID, title string
+  var releaseDate time.Time
+  err = row.Scan(&seriesID, &title, &releaseDate)
+  if err != nil {
+    // обработка ошибки выполнения запроса
+  }
+  ```
+  
+ {% endlist %}
+
+{% note warning %}
+
+Если ожидаемый объём данных от запроса велик, не следует пытаться загружать их полностью в оперативную память с помощью вспомогательных методов, таких как `query.Client.Query` и `query.Client.QueryResultSet`. Эти методы возвращают уже материализованный результат, при котором все данные запроса загружены с сервера в локальную память клиентского приложения. При большом количестве возвращаемых строк материализация результата может привести к проблеме [OOM](https://en.wikipedia.org/wiki/Out_of_memory).
+
+Для таких запросов следует использовать методы `query.TxActor.Query` или `query.TxActor.QueryResultSet` на сессии или транзакции, которые предоставляют итератор по результату без полной материализации. Сессия `query.Session` доступна только из метода `query.Client.Do`, реализующего механизмы повторных попыток при ошибках. Нужно учитывать, что чтение может быть прервано в любой момент, и в таком случае весь процесс выполнения запроса начнётся заново. То есть функция, переданная в `Do`, может вызываться более одного раза.
+
+{% endnote %}
+
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 ```go
 var (

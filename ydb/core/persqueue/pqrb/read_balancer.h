@@ -156,7 +156,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void StartWatchingSubDomainPathId();
 
     void ProcessPendingMLPGetPartitionRequests(const TActorContext& ctx);
-
+    void UpdateActivePartitions();
 
     bool Inited;
     ui64 PathId;
@@ -249,6 +249,7 @@ private:
     bool SubDomainOutOfSpace = false;
 
     TPartitionGraph PartitionGraph;
+    std::vector<ui32> ActivePartitions;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

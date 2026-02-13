@@ -270,6 +270,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
 
     PartitionGraph = MakePartitionGraph(record);
+    UpdateActivePartitions();
 
     std::vector<std::pair<ui64, TTabletInfo>> newTablets;
     std::vector<std::pair<ui32, ui32>> newGroups;
@@ -769,6 +770,15 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
             const ui64& tabletId = p.second.TabletId;
             TActorId pipeClient = GetPipeClient(tabletId, ctx);
             NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(outOfSpace));
+        }
+    }
+}
+
+void TPersQueueReadBalancer::UpdateActivePartitions() {
+    ActivePartitions.clear();
+    for (const auto& partition : TabletConfig.GetAllPartitions()) {
+        if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+            ActivePartitions.push_back(partition.GetPartitionId());
         }
     }
 }

@@ -30,7 +30,7 @@ private:
         ui64 Cookie = 0;
         ui32 Generation = 0;
         // True if the reading of the partition is inactive and last messages ware committed.
-        bool ReadingIsFinished = false;
+        bool ReadingIsFinished = true;
         // True if the partition is may used for reading.
         bool UseForReading = false;
     };
@@ -59,6 +59,7 @@ public:
 
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
+    const std::vector<ui32>& GetActivePartitions() const;
 
 private:
     TPersQueueReadBalancer& TopicActor;

@@ -16,9 +16,10 @@ const TPartitionGraph& TMLPConsumer::GetPartitionGraph() const {
 }
 
 const TPartitionGraph::Node* TMLPConsumer::NextPartition() {
-    AFL_VERIFY_DEBUG(!PartitionsForBalancing.empty());
     if (PartitionsForBalancing.empty()) {
-        return nullptr;
+        const auto& activePartitions = Balancer.GetActivePartitions();
+        auto partitionId = PartitionIterator++ % activePartitions.size();
+        return GetPartitionGraph().GetPartition(activePartitions[partitionId]);
     }
 
     auto partitionId = PartitionIterator++ % PartitionsForBalancing.size();
@@ -196,9 +197,18 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
             for (const auto& partitionId : addedPartitions) {
                 consumer.SetUseForReading(partitionId, 0, false, false, 0, 0);
             }
-            consumer.Rebuild();
+            if (!addedPartitions.empty()) {
+                consumer.Rebuild();
+            }
         } else {
             Consumers.erase(consumerName);
+        }
+    }
+
+    for (const auto& consumerName : mlpConsumers) {
+        auto [it, inserted] = Consumers.try_emplace(consumerName, *this);
+        if (inserted) {
+            it->second.Rebuild();
         }
     }
 }
@@ -235,6 +245,10 @@ const NKikimrPQ::TPQTabletConfig& TMLPBalancer::GetConfig() const {
 
 const TPartitionGraph& TMLPBalancer::GetPartitionGraph() const {
     return TopicActor.PartitionGraph;
+}
+
+const std::vector<ui32>& TMLPBalancer::GetActivePartitions() const {
+    return TopicActor.ActivePartitions;
 }
 
 } // namespace NKikimr::NPQ::NBalancing

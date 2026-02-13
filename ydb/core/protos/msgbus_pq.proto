@@ -2,7 +2,6 @@ import "ydb/core/protos/pqconfig.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/library/actors/protos/actors.proto";
-import "google/protobuf/duration.proto";
 
 package NKikimrClient;
 option java_package = "ru.yandex.kikimr.proto";
@@ -111,7 +110,7 @@ message TPersQueuePartitionRequest {
     }
 
     message TCmdUpdateReadMetrics {
-        optional google.protobuf.Duration in_flight_fullness_duration = 1;
+        optional uint64 InFlightOverflowDurationMs = 1;
     }
 
     message TCmdGetMaxSeqNo {

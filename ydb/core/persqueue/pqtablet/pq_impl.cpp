@@ -2414,12 +2414,11 @@ void TPersQueue::HandleUpdateReadMetricsRequest(ui64 responseCookie, NWilson::TT
 {
     PQ_ENSURE(req.HasCmdUpdateReadMetrics());
 
-    if (!req.GetCmdUpdateReadMetrics().Hasin_flight_fullness_duration()) {
+    if (!req.GetCmdUpdateReadMetrics().HasInFlightOverflowDurationMs()) {
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "in_flight_full_duration is required");
     }
 
-    TDuration inFlightFullnessDuration = TDuration::Seconds(req.GetCmdUpdateReadMetrics().Getin_flight_fullness_duration().seconds()) +
-        TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().Getin_flight_fullness_duration().nanos() / 1'000'000);
+    auto inFlightFullnessDuration = TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().GetInFlightOverflowDurationMs());
     ctx.Send(partActor, new TEvPQ::TEvUpdateReadMetrics(inFlightFullnessDuration), 0, 0, std::move(traceId));
 }
 

@@ -27,6 +27,10 @@ void TSlidingWindow::RemoveOldRecords(TInstant now) {
     }
 }
 
+size_t TSlidingWindow::GetRecordsCount() const {
+    return Records.size();
+}
+
 TDuration TSlidingWindow::GetValueOnWindow() {
     auto now = TInstant::Now();
     RemoveOldRecords(now);
@@ -151,7 +155,7 @@ bool TInFlightController::IsMemoryLimitReached() const {
     return TotalSize >= MaxAllowedSize;
 }
 
-TDuration TInFlightController::GetFullnessDuration() {
+TDuration TInFlightController::GetOverflowDuration() {
     return SlidingWindow.GetValueOnWindow();
 }
 

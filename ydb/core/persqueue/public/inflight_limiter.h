@@ -13,17 +13,18 @@ private:
         TDuration Duration;
     };
     std::deque<TSlidingWindowRecord> Records;
+    TInstant RecordingStart = TInstant::Zero();
 
     void RemoveOldRecords(TInstant now);
 
 public:
     TDuration WindowSize = TDuration::Seconds(60);
     TDuration UnitSize = TDuration::Seconds(1);
-    TInstant RecordingStart = TInstant::Zero();
 
     void StartRecord();
     TDuration GetValueOnWindow();
     void Reset();
+    size_t GetRecordsCount() const;
 };
 
 } // namespace NDetail
@@ -62,7 +63,7 @@ struct TInFlightController {
     bool Remove(ui64 Offset);
     bool IsMemoryLimitReached() const;
 
-    TDuration GetFullnessDuration();
+    TDuration GetOverflowDuration();
 };
 
 } // namespace NKikimr::NPQ

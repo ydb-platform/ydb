@@ -1005,13 +1005,10 @@ void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContex
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {
-    auto inFlightFullnessDuration = PartitionInFlightMemoryController.GetFullnessDuration();
+    auto inFlightFullnessDuration = PartitionInFlightMemoryController.GetOverflowDuration();
 
     NKikimrClient::TPersQueueRequest request;
-    auto duration = request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->mutable_in_flight_fullness_duration();
-    auto seconds = inFlightFullnessDuration.Seconds();
-    duration->set_seconds(seconds);
-    duration->set_nanos((inFlightFullnessDuration - TDuration::Seconds(seconds)).NanoSeconds());
+    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetInFlightOverflowDurationMs(inFlightFullnessDuration.MilliSeconds());
 
     TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
     req->Record.Swap(&request);

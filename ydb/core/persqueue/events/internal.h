@@ -718,11 +718,11 @@ struct TEvPQ {
     };
 
     struct TEvUpdateReadMetrics : TEventLocal<TEvUpdateReadMetrics, EvUpdateReadMetrics> {
-        TEvUpdateReadMetrics(TDuration inFlightFullnessDuration)
-            : InFlightFullnessDuration(inFlightFullnessDuration)
+        TEvUpdateReadMetrics(TDuration inFlightOverflowDuration)
+            : InFlightOverflowDuration(inFlightOverflowDuration)
         {}
 
-        TDuration InFlightFullnessDuration;
+        TDuration InFlightOverflowDuration;
     };
 
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {

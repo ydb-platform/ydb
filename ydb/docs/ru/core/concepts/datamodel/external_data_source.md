@@ -23,11 +23,11 @@ CREATE EXTERNAL DATA SOURCE test_data_source WITH (
 SELECT * FROM test_data_source.test_table;
 ```
 
-С помощью внешних источников данных можно выполнять [федеративные запросы](../federated_query/index.md) для задач межсистемной аналитики данных.
+С помощью внешних источников данных можно выполнять [федеративные запросы](../query_execution/federated_query/index.md) для задач межсистемной аналитики данных.
 
 В качестве источников данных можно использовать:
 
-- [ClickHouse](../federated_query/clickhouse.md)
-- [PostgreSQL](../federated_query/postgresql.md)
-- [Подключения к S3 ({{ objstorage-name }})](../federated_query/s3/external_data_source.md)
+- [ClickHouse](../query_execution/federated_query/clickhouse.md)
+- [PostgreSQL](../query_execution/federated_query/postgresql.md)
+- [Подключения к S3 ({{ objstorage-name }})](../query_execution/federated_query/s3/external_data_source.md)
 

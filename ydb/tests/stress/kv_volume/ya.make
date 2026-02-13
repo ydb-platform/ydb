@@ -2,6 +2,11 @@ PROGRAM(workload_keyvalue_volume)
 
 SRCS(
     main.cpp
+    utils.cpp
+    run_stats.cpp
+    data_storage.cpp
+    keyvalue_client_v1.cpp
+    worker.cpp
 )
 
 PEERDIR(

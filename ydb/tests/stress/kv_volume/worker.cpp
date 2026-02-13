@@ -7,12 +7,18 @@
 
 #include <algorithm>
 #include <exception>
-#include <limits>
 #include <random>
+#include <system_error>
 
 namespace NKvVolumeStress {
 
 using namespace std::chrono_literals;
+
+namespace {
+
+constexpr ui32 DefaultActionMaxInFlight = 5;
+
+} // namespace
 
 TWorker::TWorker(
     ui32 workerId,
@@ -115,7 +121,7 @@ void TWorker::ScheduleAction(const TString& actionName) {
     const auto* action = actionIt->second;
     const ui32 limit = action->has_worker_max_in_flight() && action->worker_max_in_flight() > 0
         ? action->worker_max_in_flight()
-        : std::numeric_limits<ui32>::max();
+        : DefaultActionMaxInFlight;
 
     {
         std::lock_guard lock(RunningByActionMutex_);
@@ -128,9 +134,24 @@ void TWorker::ScheduleAction(const TString& actionName) {
 
     ActiveActions_.fetch_add(1, std::memory_order_relaxed);
 
-    std::thread([this, actionName] {
-        ExecuteAction(actionName);
+    try {
+        std::thread([this, actionName] {
+            ExecuteAction(actionName);
 
+            {
+                std::lock_guard lock(RunningByActionMutex_);
+                auto it = RunningByAction_.find(actionName);
+                if (it != RunningByAction_.end() && it->second) {
+                    --it->second;
+                }
+            }
+
+            if (ActiveActions_.fetch_sub(1, std::memory_order_relaxed) == 1) {
+                std::lock_guard lock(ActiveActionsMutex_);
+                ActiveActionsCv_.notify_all();
+            }
+        }).detach();
+    } catch (const std::system_error& e) {
         {
             std::lock_guard lock(RunningByActionMutex_);
             auto it = RunningByAction_.find(actionName);
@@ -143,7 +164,9 @@ void TWorker::ScheduleAction(const TString& actionName) {
             std::lock_guard lock(ActiveActionsMutex_);
             ActiveActionsCv_.notify_all();
         }
-    }).detach();
+
+        Stats_.RecordError("thread_create_failed", e.what());
+    }
 }
 
 void TWorker::ExecuteAction(const TString& actionName) {

@@ -4692,6 +4692,7 @@ Y_UNIT_TEST(LinearAsColumnOrType) {
 Y_UNIT_TEST(CreateTableTrailingComma) {
     UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
     UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32,);").IsOk());
+    UNIT_ASSERT(SqlToYql(R"sql(USE ydb; CREATE TABLE tableName (Key Uint32) WITH (STORE = COLUMN,);)sql").IsOk());
 }
 
 Y_UNIT_TEST(BetweenSymmetric) {

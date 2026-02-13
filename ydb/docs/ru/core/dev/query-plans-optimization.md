@@ -52,7 +52,7 @@ SELECT season_id, episode_id
 
 - Embedded UI
 
-  План запроса также можно получить через [Embedded UI](../reference/embedded-ui/ydb-monitoring.md). Для этого необходимо перейти на страницу базы данных в раздел `Query` и нажать `Explain`:
+  План запроса также можно получить через [Embedded UI](../reference/embedded-ui/database.md). Для этого необходимо перейти на страницу базы данных в раздел `Query` и нажать `Explain`:
 
   ![explain_ui](../_assets/explain_ui.png)
 

@@ -1,0 +1,37 @@
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "google/protobuf/timestamp.proto";
+
+package NKikimrForcedCompaction;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TForcedCompactionSettings {
+    optional string source_path = 1;
+    optional bool cascade = 2 [ default = false ];
+    optional uint32 max_shards_in_flight = 3 [ default = 1 ];
+}
+
+message TForcedCompaction {
+    optional uint64 Id = 1;
+    optional TForcedCompactionSettings Settings = 2;
+    optional float Progress = 3 [default = 0];
+    optional google.protobuf.Timestamp StartTime = 4;
+    optional google.protobuf.Timestamp EndTime = 5;
+    optional string UserSID = 6;
+}
+
+message TEvCreateRequest {
+    optional Ydb.Operations.OperationParams OperationParams = 1;
+    optional uint64 TxId = 2;
+    optional string DatabaseName = 3;
+    optional TForcedCompactionSettings Settings = 4;
+    optional string UserSID = 5;
+}
+
+message TEvCreateResponse {
+    optional uint64 TxId = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+    optional TForcedCompaction ForcedCompaction = 4;
+}

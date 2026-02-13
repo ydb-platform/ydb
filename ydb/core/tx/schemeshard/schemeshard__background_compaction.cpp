@@ -38,7 +38,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     PipeClientCache->Send(
         ctx,
         ui64(datashardId),
-        request.release());
+        request.release(),
+        static_cast<ui64>(ECompactionType::Background));
 
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
@@ -72,7 +73,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
         << " at schemeshard " << TabletID());
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::HandleBackgroundCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
     const auto& record = ev->Get()->Record;
 
     const TTabletId tabletId(record.GetTabletId());

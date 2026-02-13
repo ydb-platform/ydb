@@ -1,0 +1,105 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: Window and aggregation functions are not allowed in this context */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+$web_v1 = (
+    SELECT
+        ws_item_sk AS item_sk,
+        d_date,
+        Sum(Sum(ws_sales_price)) OVER (
+            PARTITION BY
+                ws_item_sk
+            ORDER BY
+                d_date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS cume_sales
+    FROM
+        plato.web_sales
+    ,
+        plato.date_dim
+    WHERE
+        ws_sold_date_sk == d_date_sk
+        AND d_month_seq BETWEEN 1212 AND 1212 + 11
+        AND ws_item_sk IS NOT NULL
+    GROUP BY
+        ws_item_sk,
+        d_date
+);
+
+$store_v1 = (
+    SELECT
+        ss_item_sk AS item_sk,
+        d_date,
+        Sum(Sum(ss_sales_price)) OVER (
+            PARTITION BY
+                ss_item_sk
+            ORDER BY
+                d_date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS cume_sales
+    FROM
+        plato.store_sales
+    ,
+        plato.date_dim
+    WHERE
+        ss_sold_date_sk == d_date_sk
+        AND d_month_seq BETWEEN 1212 AND 1212 + 11
+        AND ss_item_sk IS NOT NULL
+    GROUP BY
+        ss_item_sk,
+        d_date
+);
+
+SELECT
+    *
+FROM (
+    SELECT
+        item_sk,
+        d_date,
+        web_sales,
+        store_sales,
+        Max(web_sales) OVER (
+            PARTITION BY
+                item_sk
+            ORDER BY
+                d_date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS web_cumulative,
+        Max(store_sales) OVER (
+            PARTITION BY
+                item_sk
+            ORDER BY
+                d_date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS store_cumulative
+    FROM (
+        SELECT
+            CASE
+                WHEN web.item_sk IS NOT NULL THEN web.item_sk
+                ELSE store.item_sk
+            END AS item_sk,
+            CASE
+                WHEN web.d_date IS NOT NULL THEN web.d_date
+                ELSE store.d_date
+            END AS d_date,
+            web.cume_sales AS web_sales,
+            store.cume_sales AS store_sales
+        FROM
+            web_v1 AS web
+        FULL OUTER JOIN
+            store_v1 AS store
+        ON
+            (
+                web.item_sk == store.item_sk
+                AND web.d_date == store.d_date
+            )
+    ) AS x
+) AS y
+WHERE
+    web_cumulative > store_cumulative
+ORDER BY
+    item_sk,
+    d_date
+LIMIT 100;

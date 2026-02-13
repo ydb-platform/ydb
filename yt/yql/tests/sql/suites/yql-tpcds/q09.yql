@@ -1,0 +1,136 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    CASE
+        WHEN (
+            SELECT
+                Count(*)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 1 AND 20
+        ) > 25437 THEN (
+            SELECT
+                Avg(ss_ext_discount_amt)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 1 AND 20
+        )
+        ELSE (
+            SELECT
+                Avg(ss_net_profit)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 1 AND 20
+        )
+    END AS bucket1,
+    CASE
+        WHEN (
+            SELECT
+                Count(*)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 21 AND 40
+        ) > 22746 THEN (
+            SELECT
+                Avg(ss_ext_discount_amt)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 21 AND 40
+        )
+        ELSE (
+            SELECT
+                Avg(ss_net_profit)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 21 AND 40
+        )
+    END AS bucket2,
+    CASE
+        WHEN (
+            SELECT
+                Count(*)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 41 AND 60
+        ) > 9387 THEN (
+            SELECT
+                Avg(ss_ext_discount_amt)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 41 AND 60
+        )
+        ELSE (
+            SELECT
+                Avg(ss_net_profit)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 41 AND 60
+        )
+    END AS bucket3,
+    CASE
+        WHEN (
+            SELECT
+                Count(*)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 61 AND 80
+        ) > 10098 THEN (
+            SELECT
+                Avg(ss_ext_discount_amt)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 61 AND 80
+        )
+        ELSE (
+            SELECT
+                Avg(ss_net_profit)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 61 AND 80
+        )
+    END AS bucket4,
+    CASE
+        WHEN (
+            SELECT
+                Count(*)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 81 AND 100
+        ) > 18213 THEN (
+            SELECT
+                Avg(ss_ext_discount_amt)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 81 AND 100
+        )
+        ELSE (
+            SELECT
+                Avg(ss_net_profit)
+            FROM
+                plato.store_sales
+            WHERE
+                ss_quantity BETWEEN 81 AND 100
+        )
+    END AS bucket5
+FROM
+    plato.reason
+WHERE
+    r_reason_sk == 1
+;

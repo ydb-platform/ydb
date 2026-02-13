@@ -1,0 +1,179 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: YqlSelect unsupported: (union_op select_stmt_intersect)* */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+$ssr = (
+    SELECT
+        s_store_id,
+        Sum(sales_price) AS sales,
+        Sum(profit) AS profit,
+        Sum(return_amt) AS returns,
+        Sum(net_loss) AS profit_loss
+    FROM (
+        SELECT
+            ss_store_sk AS store_sk,
+            ss_sold_date_sk AS date_sk,
+            ss_ext_sales_price AS sales_price,
+            ss_net_profit AS profit,
+            CAST(0 AS Decimal (7, 2)) AS return_amt,
+            CAST(0 AS Decimal (7, 2)) AS net_loss
+        FROM
+            plato.store_sales
+        UNION ALL
+        SELECT
+            sr_store_sk AS store_sk,
+            sr_returned_date_sk AS date_sk,
+            CAST(0 AS Decimal (7, 2)) AS sales_price,
+            CAST(0 AS Decimal (7, 2)) AS profit,
+            sr_return_amt AS return_amt,
+            sr_net_loss AS net_loss
+        FROM
+            plato.store_returns
+    ) salesreturns
+    ,
+        plato.date_dim
+    ,
+        plato.store
+    WHERE
+        date_sk == d_date_sk
+        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (
+            CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(14)
+        )
+        AND store_sk == s_store_sk
+    GROUP BY
+        s_store_id
+);
+
+$csr = (
+    SELECT
+        cp_catalog_page_id,
+        Sum(sales_price) AS sales,
+        Sum(profit) AS profit,
+        Sum(return_amt) AS returns,
+        Sum(net_loss) AS profit_loss
+    FROM (
+        SELECT
+            cs_catalog_page_sk AS page_sk,
+            cs_sold_date_sk AS date_sk,
+            cs_ext_sales_price AS sales_price,
+            cs_net_profit AS profit,
+            CAST(0 AS Decimal (7, 2)) AS return_amt,
+            CAST(0 AS Decimal (7, 2)) AS net_loss
+        FROM
+            plato.catalog_sales
+        UNION ALL
+        SELECT
+            cr_catalog_page_sk AS page_sk,
+            cr_returned_date_sk AS date_sk,
+            CAST(0 AS Decimal (7, 2)) AS sales_price,
+            CAST(0 AS Decimal (7, 2)) AS profit,
+            cr_return_amount AS return_amt,
+            cr_net_loss AS net_loss
+        FROM
+            plato.catalog_returns
+    ) salesreturns
+    ,
+        plato.date_dim
+    ,
+        plato.catalog_page
+    WHERE
+        date_sk == d_date_sk
+        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (
+            CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(14)
+        )
+        AND page_sk == cp_catalog_page_sk
+    GROUP BY
+        cp_catalog_page_id
+);
+
+$wsr = (
+    SELECT
+        web_site_id,
+        Sum(sales_price) AS sales,
+        Sum(profit) AS profit,
+        Sum(return_amt) AS returns,
+        Sum(net_loss) AS profit_loss
+    FROM (
+        SELECT
+            ws_web_site_sk AS wsr_web_site_sk,
+            ws_sold_date_sk AS date_sk,
+            ws_ext_sales_price AS sales_price,
+            ws_net_profit AS profit,
+            CAST(0 AS Decimal (7, 2)) AS return_amt,
+            CAST(0 AS Decimal (7, 2)) AS net_loss
+        FROM
+            plato.web_sales
+        UNION ALL
+        SELECT
+            ws_web_site_sk AS wsr_web_site_sk,
+            wr_returned_date_sk AS date_sk,
+            CAST(0 AS Decimal (7, 2)) AS sales_price,
+            CAST(0 AS Decimal (7, 2)) AS profit,
+            wr_return_amt AS return_amt,
+            wr_net_loss AS net_loss
+        FROM
+            plato.web_returns
+        LEFT OUTER JOIN
+            plato.web_sales
+        ON
+            (
+                wr_item_sk == ws_item_sk
+                AND wr_order_number == ws_order_number
+            )
+    ) AS salesreturns
+    ,
+        plato.date_dim
+    ,
+        plato.web_site
+    WHERE
+        date_sk == d_date_sk
+        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (
+            CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(14)
+        )
+        AND wsr_web_site_sk == web_site_sk
+    GROUP BY
+        web_site_id
+);
+
+SELECT
+    channel,
+    id,
+    Sum(sales) AS sales,
+    Sum(returns) AS returns,
+    Sum(profit) AS profit
+FROM (
+    SELECT
+        'store channel' AS channel,
+        'store' || s_store_id AS id,
+        sales,
+        returns,
+        (profit - profit_loss) AS profit
+    FROM
+        $ssr AS ssr
+    UNION ALL
+    SELECT
+        'catalog channel' AS channel,
+        'catalog_page' || cp_catalog_page_id AS id,
+        sales,
+        returns,
+        (profit - profit_loss) AS profit
+    FROM
+        $csr AS csr
+    UNION ALL
+    SELECT
+        'web channel' AS channel,
+        'web_site' || web_site_id AS id,
+        sales,
+        returns,
+        (profit - profit_loss) AS profit
+    FROM
+        $wsr AS wsr
+) AS x
+GROUP BY
+    ROLLUP (channel, id)
+ORDER BY
+    channel,
+    id
+LIMIT 100;

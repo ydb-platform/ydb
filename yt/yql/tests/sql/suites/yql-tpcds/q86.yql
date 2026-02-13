@@ -1,0 +1,39 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: Window and aggregation functions are not allowed in this context */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    Sum(ws_net_paid) AS total_sum,
+    i_category,
+    i_class,
+    Grouping(i_category) + Grouping(i_class) AS lochierarchy,
+    Rank() OVER (
+        PARTITION BY
+            Grouping(i_category) + Grouping(i_class),
+            CASE
+                WHEN Grouping(i_class) == 0 THEN i_category
+            END
+        ORDER BY
+            Sum(ws_net_paid) DESC
+    ) AS rank_within_parent
+FROM
+    plato.web_sales
+,
+    plato.date_dim AS d1
+,
+    plato.item
+WHERE
+    d1.d_month_seq BETWEEN 1212 AND 1212 + 11
+    AND d1.d_date_sk == ws_sold_date_sk
+    AND i_item_sk == ws_item_sk
+GROUP BY
+    ROLLUP (i_category, i_class)
+ORDER BY
+    lochierarchy DESC,
+    CASE
+        WHEN lochierarchy == 0 THEN i_category
+    END,
+    rank_within_parent
+LIMIT 100;

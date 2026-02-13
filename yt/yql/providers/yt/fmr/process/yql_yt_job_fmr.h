@@ -5,6 +5,7 @@
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_base_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/client/impl/yql_yt_table_data_service_client_impl.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
@@ -95,7 +96,7 @@ private:
 
     TFmrRawTableQueue::TPtr UnionInputTablesQueue_; // Queue which represents union of all input streams
     TFmrRawTableQueueReader::TPtr QueueReader_;
-    TVector<TFmrTableDataServiceWriter::TPtr> TableDataServiceWriters_;
+    TVector<TFmrTableDataServiceBaseWriter::TPtr> TableDataServiceWriters_;
     ITableDataService::TPtr TableDataService_;
     IYtJobService::TPtr YtJobService_;
     THolder<IThreadPool> ThreadPool_;

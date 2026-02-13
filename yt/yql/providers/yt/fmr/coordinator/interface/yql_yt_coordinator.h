@@ -116,6 +116,11 @@ struct TPingSessionResponse {
     bool Success;
 };
 
+enum class EPartitionType {
+    UnorderedPartition,
+    OrderedPartition,
+    SortedPartition
+};
 
 class IFmrCoordinator: public TThrRefBase {
 public:

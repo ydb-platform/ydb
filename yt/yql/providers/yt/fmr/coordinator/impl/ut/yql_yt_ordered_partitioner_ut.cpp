@@ -611,12 +611,7 @@ Y_UNIT_TEST_SUITE(OrderedPartitionerTests) {
                 TFmrTableInputRef{
                     .TableId = table.FmrTableId.Id,
                     .TableRanges = {
-                        TTableRange{.PartId = FirstPartId, .MinChunk = 0, .MaxChunk = 1}
-                    }
-                },
-                TFmrTableInputRef{
-                    .TableId = table.FmrTableId.Id,
-                    .TableRanges = {
+                        TTableRange{.PartId = FirstPartId, .MinChunk = 0, .MaxChunk = 1},
                         TTableRange{.PartId = SecondPartId, .MinChunk = 0, .MaxChunk = 1}
                     }
                 }

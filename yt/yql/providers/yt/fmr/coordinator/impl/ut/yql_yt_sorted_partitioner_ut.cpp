@@ -148,9 +148,9 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
 
         TSortedPartitionSettings settings;
         settings.FmrPartitionSettings = {.MaxDataWeightPerPart = 15, .MaxParts = 1000};
-        settings.KeyColumns = {.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
+        TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
 
-        TSortedPartitioner partitioner(partIdsForTables, partIdStats, settings);
+        TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
         auto [tasks, ok] = partitioner.PartitionTablesIntoTasksSorted({r1, r2});
         UNIT_ASSERT(ok);
         UNIT_ASSERT(!tasks.empty());
@@ -160,6 +160,48 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
 
         AssertTaskHasRangesForTable(task0, t1.Id, 1, true, true);
         AssertTaskHasRangesForTable(task0, t2.Id, 1, true, true);
+    }
+
+    Y_UNIT_TEST(FailsOnEmptyPartitionsForInputTable) {
+        TFmrTableId t1("c", "t1");
+        TFmrTableRef r1{.FmrTableId = t1};
+
+        std::unordered_map<TFmrTableId, std::vector<TString>> partIdsForTables{
+            {t1, {}},
+        };
+        std::unordered_map<TString, std::vector<TChunkStats>> partIdStats;
+
+        TSortedPartitionSettings settings;
+        settings.FmrPartitionSettings = {.MaxDataWeightPerPart = 10, .MaxParts = 1000};
+        TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
+
+        TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            partitioner.PartitionTablesIntoTasksSorted({r1}),
+            yexception,
+            "at least one partition");
+    }
+
+    Y_UNIT_TEST(FailsOnEmptyChunksForInputTable) {
+        TFmrTableId t1("c", "t1");
+        TFmrTableRef r1{.FmrTableId = t1};
+
+        std::unordered_map<TFmrTableId, std::vector<TString>> partIdsForTables{
+            {t1, {"p1"}},
+        };
+        std::unordered_map<TString, std::vector<TChunkStats>> partIdStats{
+            {"p1", {}},
+        };
+
+        TSortedPartitionSettings settings;
+        settings.FmrPartitionSettings = {.MaxDataWeightPerPart = 10, .MaxParts = 1000};
+        TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
+
+        TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            partitioner.PartitionTablesIntoTasksSorted({r1}),
+            yexception,
+            "at least one chunk");
     }
 
     Y_UNIT_TEST(MergeMatchesSourceMultipleChunks) {
@@ -190,9 +232,9 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
         for (ui64 maxWeight : weightsToTest) {
             TSortedPartitionSettings settings;
             settings.FmrPartitionSettings = {.MaxDataWeightPerPart = maxWeight, .MaxParts = 1000};
-            settings.KeyColumns = {.Columns = keyColumns, .SortOrders = {ESortOrder::Ascending}};
+            TSortingColumns sortingColumns{.Columns = keyColumns, .SortOrders = {ESortOrder::Ascending}};
 
-            TSortedPartitioner partitioner(partIdsForTables, partIdStats, settings);
+            TSortedPartitioner partitioner(partIdsForTables, partIdStats, sortingColumns, settings);
             auto [tasks, ok] = partitioner.PartitionTablesIntoTasksSorted({refTable1, refTable2});
             UNIT_ASSERT_C(ok, "Partitioner returned non-ok");
             UNIT_ASSERT_C(!tasks.empty(), "Partitioner returned no tasks");
@@ -363,9 +405,9 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
 
             TSortedPartitionSettings settings;
             settings.FmrPartitionSettings = {.MaxDataWeightPerPart = c.MaxWeight, .MaxParts = 1000};
-            settings.KeyColumns = {.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
+            TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
 
-            TSortedPartitioner partitioner(partIdsForTables, partIdStats, settings);
+            TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
             auto [tasks, ok] = partitioner.PartitionTablesIntoTasksSorted(inputTables);
             UNIT_ASSERT_C(ok, "Partitioner returned non-ok");
 

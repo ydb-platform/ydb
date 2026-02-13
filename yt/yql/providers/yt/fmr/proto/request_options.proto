@@ -27,6 +27,7 @@ enum ETaskType {
     TASK_TYPE_MERGE = 3;
     TASK_TYPE_MAP = 4;
     TASK_TYPE_DISTRIBUTED_UPLOAD = 5;
+    TASK_TYPE_SORTED_MERGE = 6;
 }
 
 enum EFmrComponent {
@@ -41,6 +42,11 @@ enum EFmrReason {
     REASON_RESTART_OPERATION = 1;
     REASON_RESTART_QUERY = 2;
     REASON_UDF_TERMINATE = 3;
+}
+
+enum ESortOrder {
+    ASCENDING = 0;
+    DESCENDING = 1;
 }
 
 message TFmrError {
@@ -71,6 +77,8 @@ message TFmrTableRef {
     TFmrTableId FmrTableId = 1;
     repeated string Columns = 2;
     optional string ColumnGroups = 3;
+    repeated ESortOrder SortOrder = 4;
+    repeated string SortColumns = 5;
 }
 
 message TTableRange {
@@ -89,10 +97,16 @@ message TFmrTableInputRef {
     optional string LastRowKeys = 7;
 }
 
+message TSortingColumns {
+    repeated string Columns = 1;
+    repeated ESortOrder SortOrder = 2;
+}
+
 message TFmrTableOutputRef {
     string TableId = 1;
     string PartId = 2;
     optional string ColumnGroups = 3;
+    optional TSortingColumns SortingColumns = 4;
 }
 
 message TTableStats {
@@ -189,6 +203,16 @@ message TMergeOperationParams {
     TFmrTableRef Output = 2;
 }
 
+message TSortedMergeOperationParams {
+    repeated TOperationTableRef Input = 1;
+    TFmrTableRef Output = 2;
+}
+
+message TSortedMergeTaskParams {
+    TTaskTableInputRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+}
+
 message TMergeTaskParams {
     TTaskTableInputRef Input = 1;
     TFmrTableOutputRef Output = 2;
@@ -215,6 +239,7 @@ message TOperationParams {
         TMergeOperationParams MergeOperationParams = 3;
         TMapOperationParams MapOperationParams = 4;
         TSortedUploadOperationParams SortedUploadOperationParams = 5;
+        TSortedMergeOperationParams SortedMergeOperationParams = 6;
     }
 }
 
@@ -225,6 +250,7 @@ message TTaskParams {
         TMergeTaskParams MergeTaskParams = 3;
         TMapTaskParams MapTaskParams = 4;
         TSortedUploadTaskParams SortedUploadTaskParams = 5;
+        TSortedMergeTaskParams SortedMergeTaskParams = 6;
     }
 }
 

@@ -17,11 +17,11 @@ namespace NYql::NFmr {
 // Last (StartOffset, EndOffset) defines boundaries of row
 class TParserFragmentListIndex {
 public:
-    TParserFragmentListIndex(TStringBuf data, const TVector<TString>& keyColumns);
+    TParserFragmentListIndex(TStringBuf data, const std::vector<TString>& keyColumns);
 
     void Parse();
 
-    const TVector<TRowIndexMarkup>& GetRows() const {
+    const std::vector<TRowIndexMarkup>& GetRows() const {
         return RowOffsets_;
     }
 
@@ -52,7 +52,7 @@ private:
     const char* const DataStart_;
     const char* const DataEnd_;
     THashMap<TString, ui64> KeyColumnsMap_;
-    TVector<TRowIndexMarkup> RowOffsets_;
+    std::vector<TRowIndexMarkup> RowOffsets_;
     THashMap<TString, TColumnOffsetRange> CurrentRow_;
 };
 

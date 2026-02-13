@@ -117,6 +117,8 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
 }
 
 void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
+    PQ_LOG_D("Handle TEvPersQueue::TEvStatusResponse " << ev->Get()->Record.ShortDebugString());
+
     absl::flat_hash_map<TString, bool> mlpConsumers;
     for (const auto& consumer : GetConfig().GetConsumers()) {
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
@@ -225,7 +227,6 @@ void TMLPBalancer::SetUseForReading(const TString& consumerName,
     if (consumer.SetUseForReading(partitionId, messages, readingIsFinished, useForReading, generation, cookie)) {
         consumer.Rebuild();
     }
-
 }
 
 const NKikimrPQ::TPQTabletConfig& TMLPBalancer::GetConfig() const {

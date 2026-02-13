@@ -463,6 +463,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
     StatsRequestTracker.Cookies.erase(tabletId);
 
+    Balancer->Handle(ev, ctx);
+    MLPBalancer->Handle(ev, ctx);
+
     for (auto& partRes : *record.MutablePartResult()) {
         ui32 partitionId = partRes.GetPartition();
         if (!PartitionsInfo.contains(partitionId)) {
@@ -481,9 +484,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
         TopicMetricsHandler->Handle(std::move(partRes));
     }
-
-    Balancer->Handle(ev, ctx);
-    MLPBalancer->Handle(ev, ctx);
 
     if (StatsRequestTracker.Cookies.empty()) {
         StatsRequestTracker.StatsReceived = true;

@@ -589,5 +589,44 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_VALUES_EQUAL_C(descr.TopicSettings().MetricsLevel().value(), metricsLevel, descr.GetIssues().ToOneLineString());
         }
     }
+
+    Y_UNIT_TEST(CreateTopicWithCustomAdvancedMonitoringSettings) {
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto& client = setup->GetPersQueueClient();
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+
+        const TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings{
+            {NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName("shared/user")},
+        };
+        {
+            NPersQueue::TCreateTopicSettings settings{};
+            settings.ReadRules(rrSettings);
+            const auto creat = client.CreateTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());
+        }
+        {
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_C(!descr.TopicSettings().AdvancedMonitoringSettings().has_value(), descr.GetIssues().ToOneLineString());
+        }
+        for (const bool enabled: {true, false}) {
+            NPersQueue::TAlterTopicSettings settings{};
+            settings.ReadRules(rrSettings);
+            const std::string m = R"-({"shared/user":{"metrics_level":3,"monitoring_project_id": "mon"}})-";
+            if (enabled) {
+                settings.AdvancedMonitoringSettings(m);
+            }
+            const auto alter = client.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(alter.IsSuccess(), LabeledOutput(enabled, alter.GetIssues().ToOneLineString()));
+
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), LabeledOutput(enabled, descr.GetIssues().ToOneLineString()));
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.TopicSettings().AdvancedMonitoringSettings().has_value(), enabled, LabeledOutput(enabled, descr.GetIssues().ToOneLineString()));
+            if (enabled) {
+                UNIT_ASSERT_VALUES_EQUAL_C(descr.TopicSettings().AdvancedMonitoringSettings().value(), m, LabeledOutput(enabled, descr.GetIssues().ToOneLineString()));
+            }
+        }
+    }
 }
 } // namespace NYdb::NPersQueue::NTests

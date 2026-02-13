@@ -33,7 +33,8 @@ int Bind(LDAP* ld, const TString& dn, const NLoginProto::ESaslAuthMech::SaslAuth
         cred.bv_val = credentials->data();
     }
     struct berval* servercredp = nullptr;
-    return ldap_sasl_bind_s(ld, (dn.empty() ? nullptr : dn.c_str()), ConvertSaslMechanism(mechanism), credPtr, nullptr, nullptr, &servercredp);
+    char* bindDn = (dn.empty() ? nullptr : const_cast<char*>(dn.c_str()));
+    return ldap_sasl_bind_sA(ld, bindDn, const_cast<char*>(ConvertSaslMechanism(mechanism)), credPtr, nullptr, nullptr, &servercredp);
 }
 
 int Unbind(LDAP* ld) {
@@ -191,7 +192,7 @@ namespace {
 const char* ConvertSaslMechanism(const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism) {
     switch (mechanism) {
     case NLoginProto::ESaslAuthMech::Simple: {
-        return LDAP_SASL_SIMPLE;
+        return nullptr;
     }
     case NLoginProto::ESaslAuthMech::Plain: {
         return "PLAIN";

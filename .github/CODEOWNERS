@@ -61,6 +61,8 @@
 /ydb/core/protos/replication.proto @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
 /ydb/core/tx/replication @ydb-platform/core
+/ydb/tests/functional/backup_collection @ydb-platform/core
+/ydb/tests/functional/serverless @ydb-platform/core
 
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend

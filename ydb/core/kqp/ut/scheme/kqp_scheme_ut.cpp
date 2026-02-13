@@ -67,7 +67,7 @@ void CreateSecret(const TString& secretName, const TString& secretValue, TSessio
     UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, queryResult.GetStatus(), queryResult.GetIssues().ToString());
 }
 
-void TestTruncateTable(const TString& tablePath, bool useQueryClient = false) {
+void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bool createSecondaryIndex = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableTruncateTable(true);
     TKikimrRunner kikimr(featureFlags);
@@ -88,6 +88,16 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false) {
 
         auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    }
+
+    if (createSecondaryIndex) {
+        TString query = Sprintf(R"(
+            ALTER TABLE %s ADD INDEX value_index GLOBAL SYNC ON (`v`);
+        )"
+        , tablePath.c_str());
+
+        auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     {
@@ -133,6 +143,17 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false) {
         UNIT_ASSERT(parser.TryNextRow());
         auto count = parser.ColumnParser(0).GetUint64();
         UNIT_ASSERT_VALUES_EQUAL(count, 0);
+    }
+
+    if (createSecondaryIndex) {
+        TString query = Sprintf(R"(
+            SELECT * FROM %s
+            WHERE v = "Hello2";
+        )"
+        , tablePath.c_str());
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 }
 
@@ -13684,6 +13705,14 @@ END DO)",
 
     Y_UNIT_TEST(SimpleTruncateTableNameOnlyQueryClient) {
         TestTruncateTable("TestTable", true);
+    }
+
+    Y_UNIT_TEST(TruncateTableWithSecondaryIndex) {
+        TString tableName = "TestTable";
+        bool useQueryClient = true;
+        bool createSecondaryIndex = true;
+
+        TestTruncateTable(tableName, useQueryClient, createSecondaryIndex);
     }
 }
 

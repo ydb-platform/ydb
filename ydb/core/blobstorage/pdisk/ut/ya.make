@@ -38,6 +38,7 @@ SRCS(
     blobstorage_pdisk_crypto_ut.cpp
     blobstorage_pdisk_log_cache_ut.cpp
     blobstorage_pdisk_restore_ut.cpp
+    blobstorage_pdisk_scheduler_ut.cpp
     blobstorage_pdisk_ut.cpp
     blobstorage_pdisk_ut_actions.cpp
     blobstorage_pdisk_ut_color_limits.cpp

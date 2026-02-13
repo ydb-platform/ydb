@@ -104,11 +104,13 @@
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core
 /ydb/core/cms @ydb-platform/core
-/ydb/tests/functional/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
+/ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
-/ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
+/ydb/tests/functional/backup_collection @ydb-platform/core
+/ydb/tests/functional/cms @ydb-platform/core
+/ydb/tests/functional/serverless @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/tests/functional/sqs @ydb-platform/Topics

@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             std::tuple<ui32, ui32, ui32> sourceDDiskId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
             ui64 sourceDDiskInstanceGuid = *PBCreds.DDiskInstanceGuid;
-            auto sync = std::make_unique<NDDisk::TEvSync>(Creds, sourceDDiskId, sourceDDiskInstanceGuid);
+            auto sync = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(Creds, sourceDDiskId, sourceDDiskInstanceGuid);
 
             for (ui64 lsn : selectedLsns) {
                 const auto& record = PersistentBuffers.at(lsn);
@@ -324,11 +324,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const ui32 size = std::get<1>(record);
                 Cerr << "sync persistent buffer offset# " << offsetInBytes << " size# " << size
                     << " lsn# " << lsn << "\n";
-                sync->AddSegmentFromPersistentBuffer({VChunkIndex, offsetInBytes, size}, lsn);
+                sync->AddSegment({VChunkIndex, offsetInBytes, size}, lsn);
             }
 
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, sync.release()), Edge.NodeId());
-            auto syncRes = Env.WaitForEdgeActorEvent<NDDisk::TEvSyncResult>(Edge, false);
+            auto syncRes = Env.WaitForEdgeActorEvent<NDDisk::TEvSyncWithPersistentBufferResult>(Edge, false);
             const auto& syncRecord = syncRes->Get()->Record;
             UNIT_ASSERT(syncRecord.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             UNIT_ASSERT_VALUES_EQUAL(syncRecord.SegmentResultsSize(), selectedLsns.size());

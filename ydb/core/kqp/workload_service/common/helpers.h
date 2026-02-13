@@ -23,6 +23,51 @@ namespace NKikimr::NKqp::NWorkload {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
+#define LOG_REQ(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
+
+#define LOG_JSON_INTERNAL(ev, poolId, sid, splittedText, extra) do {           \
+    const auto& _chunks = splittedText;                                        \
+    const size_t _total = _chunks.empty() ? 1 : _chunks.size();                \
+    const TString _extraStr = (TStringBuilder() << extra);                     \
+    const void* _reqId = static_cast<const void*>(&_chunks);                   \
+                                                                               \
+    for (size_t _i = 0; _i < _total; ++_i) {                                   \
+        const TString& _part = _chunks.empty() ? "" : _chunks.at(_i);          \
+                                                                               \
+        LOG_REQ("[REQ_JSON]{\"pool\":\"" << poolId                             \
+            << "\",\"sid\":\"" << sid << "\""                                  \
+            << ",\"req_id\":\"" << _reqId << "\""                              \
+            << ",\"part\":" << (_i + 1) << ",\"total\":" << _total             \
+            << ",\"request\":{"                                                \
+            << "\"event\":\"" << (ev) << "\","                                 \
+            << "\"data\":\"" << _part << "\""                                  \
+            << (_extraStr.empty() ? "" : ",") << _extraStr                     \
+            << "}}");                                                          \
+    }                                                                          \
+} while (0)
+
+#define LOG_REQ_FINISHED(poolId, sid, splittedText, dur, cpu) \
+    LOG_JSON_INTERNAL("finished", poolId, sid, splittedText, \
+        TStringBuilder() << "\"dur\":" << (dur) << ",\"cpu\":" << (cpu))
+
+#define LOG_REQ_QUEUED(poolId, sid, splittedText, delayed) \
+    LOG_JSON_INTERNAL("queued", poolId, sid, splittedText, \
+        TStringBuilder() << "\"delayed\":" << (delayed))
+
+#define LOG_REQ_STARTED(poolId, sid, splittedText, inFlight) \
+    LOG_JSON_INTERNAL("started", poolId, sid, splittedText, \
+        TStringBuilder() << "\"in_flight\":" << (inFlight))
+
+#define LOG_REQ_OVERLOADED(poolId, sid, splittedText, issues) \
+    LOG_JSON_INTERNAL("overloaded", poolId, sid, splittedText, \
+        TStringBuilder() << "\"issues\":\"" << issues << "\"")
+
+#define LOG_REQ_PENDING(poolId, sid, splittedText) \
+    LOG_JSON_INTERNAL("pending", poolId, sid, splittedText, "")
+
+#define LOG_REQ_CANCELED(poolId, sid, splittedText, issues) \
+    LOG_JSON_INTERNAL("canceled", poolId, sid, splittedText, \
+        TStringBuilder() << "\"issues\":\"" << issues << "\"")
 
 
 template <typename TDerived>

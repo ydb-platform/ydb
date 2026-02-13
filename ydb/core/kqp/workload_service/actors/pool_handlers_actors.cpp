@@ -109,12 +109,56 @@ protected:
         TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "")
             : WorkerActorId(workerActorId)
             , SessionId(sessionId)
-            , RequestText(requestText)
+            , SplittedRequestText(GetEscapedChunks(requestText))
         {}
+
+        std::vector<TString> GetEscapedChunks(const TString& requestText, size_t chunkSize = 4000) const {
+            std::vector<TString> chunks;
+
+            if (requestText.empty()) {
+                chunks.push_back("");
+                return chunks;
+            }
+
+            TStringBuilder currentChunk;
+            size_t currentRawCount = 0;
+
+            for (auto c : requestText) {
+                switch (c) {
+                    case '"':  currentChunk << "\\\""; break;
+                    case '\\': currentChunk << "\\\\"; break;
+                    case '\n': currentChunk << "\\n";  break;
+                    case '\r': currentChunk << "\\r";  break;
+                    case '\t': currentChunk << "\\t";  break;
+                    default:   currentChunk << c;
+                }
+
+                currentRawCount++;
+
+                if (currentRawCount >= chunkSize) {
+                    chunks.push_back(currentChunk);
+                    currentChunk.clear();
+                    currentRawCount = 0;
+                }
+            }
+
+            if (currentRawCount > 0) {
+                chunks.push_back(currentChunk);
+            }
+
+            return chunks;
+        }
+
+        const TStringBuf GetRequestText() const {
+            if (SplittedRequestText.empty()) {
+                return {};
+            }
+            return SplittedRequestText[0];
+        }
 
         const TActorId WorkerActorId;
         const TString SessionId;
-        const TString RequestText;
+        const std::vector<TString> SplittedRequestText;
         const TInstant StartTime = TInstant::Now();
         TInstant ContinueTime;
 
@@ -211,8 +255,10 @@ private:
         TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, requestText)}).first->second;
         Counters.LocalDelayedRequests->Inc();
 
-        LOG_I("Request is pending, session id: " << sessionId
-            << ", request text: " << request->RequestText
+        LOG_REQ_PENDING(
+            PoolId,
+            sessionId,
+            request->SplittedRequestText
         );
 
         UpdatePoolConfig(ev->Get()->PoolConfig);
@@ -237,11 +283,14 @@ private:
         request->Duration = ev->Get()->Duration;
         request->CpuConsumed = ev->Get()->CpuConsumed;
 
-        LOG_I("Request is finished, session id: " << sessionId
-            << ", request text: " << request->RequestText
-            << ", duration: " << request->Duration
-            << ", cpu consumed: " << request->CpuConsumed
+        LOG_REQ_FINISHED(
+            PoolId,
+            sessionId,
+            request->SplittedRequestText,
+            request->Duration,
+            request->CpuConsumed
         );
+
         OnCleanupRequest(request);
     }
 
@@ -322,26 +371,36 @@ public:
             Counters.ContinueOk->Inc();
             Counters.DelayedTimeMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
 
-            LOG_I("Request is started, session id: " << request->SessionId
-                << ", request text: " << request->RequestText
-                << ", local in flight: " << LocalInFlight
+            LOG_REQ_STARTED(
+                PoolId,
+                request->SessionId,
+                request->SplittedRequestText,
+                LocalInFlight
             );
         } else {
             if (status == Ydb::StatusIds::OVERLOADED) {
                 Counters.ContinueOverloaded->Inc();
-                LOG_I("Request is overloaded, session id: " << request->SessionId
-                    << ", request text: " << request->RequestText
-                    << ", issues: " << issues.ToOneLineString()
+                LOG_REQ_OVERLOADED(
+                    PoolId,
+                    request->SessionId,
+                    request->SplittedRequestText,
+                    issues.ToOneLineString()
                 );
             } else if (status == Ydb::StatusIds::CANCELLED) {
                 Counters.Cancelled->Inc();
-                LOG_I("Request is canceled, session id: " << request->SessionId
-                    << ", request text: " << request->RequestText
-                    << ", issues: " << issues.ToOneLineString()
+                LOG_REQ_CANCELED(
+                    PoolId,
+                    request->SessionId,
+                    request->SplittedRequestText,
+                    issues.ToOneLineString()
                 );
             } else {
                 Counters.ContinueError->Inc();
-                LOG_W("Reply continue error " << status << " to " << request->WorkerActorId << ", session id: " << request->SessionId << ", request text: " << request->RequestText << ", issues: " << issues.ToOneLineString());
+                LOG_W("Reply continue error " << status
+                    << " to " << request->WorkerActorId
+                    << ", session id: " << request->SessionId
+                    << ", request text: " << request->GetRequestText()
+                    << ", issues: " << issues.ToOneLineString());
             }
             RemoveRequest(request);
         }
@@ -660,7 +719,10 @@ protected:
 
         PendingRequests.emplace_back(request->SessionId);
         FifoCounters.PendingRequestsCount->Inc();
-        LOG_D("Request placed into pending queue, session id: " << request->SessionId << ", request text: " << request->RequestText << ", queue size: " << PendingRequests.size());
+        LOG_D("Request placed into pending queue, session id: " << request->SessionId
+            << ", request text: " << request->GetRequestText()
+            << ", queue size: " << PendingRequests.size()
+        );
 
         if (!PreparingFinished) {
             this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPrepareTablesRequest(DatabaseId, PoolId));
@@ -811,9 +873,11 @@ private:
         const TString& sessionId = ev->Get()->SessionId;
         TRequest* request = GetRequestSafe(sessionId);
         if (request) {
-            LOG_I("Request is queued, session id: " << sessionId
-                << ", request text: "<< request->RequestText
-                << ", global delayed: " << GlobalState.DelayedRequests
+            LOG_REQ_QUEUED(
+                PoolId,
+                sessionId,
+                request->SplittedRequestText,
+                GlobalState.DelayedRequests
             );
         } else {
             LOG_D("successfully delayed request, session id: " << sessionId);

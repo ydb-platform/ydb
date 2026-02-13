@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdlib.h>
+#include <bitset>
 
 /* 
  * This header contains helper functions for working with bitsets.

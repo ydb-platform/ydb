@@ -120,7 +120,7 @@ public:
                     YQL_CLOG(ERROR, ProviderYt) << "Native CBO does not support link hints";
                     return OrderJoinsParams.Root;
                 }
-                opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerNative(*providerCtx, Ctx, {.MaxDPhypDPTableSize = 100000});
+                opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerNative(*providerCtx, Ctx, {});
                 break;
             case ECostBasedOptimizerType::Disable:
                 YQL_CLOG(DEBUG, ProviderYt) << "CBO disabled";

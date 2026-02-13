@@ -538,12 +538,58 @@ namespace NKikimr {
             // finish merging data for this item
             IndexMerger.Finish();
 
+<<<<<<< HEAD
             // reset transformed item and try to create new one if we want to keep this item
             const bool keepData = GcmpIt.KeepData();
             const bool keepItem = GcmpIt.KeepItem();
             TransformedItem = Hmp->Transform(key, &IndexMerger.GetMemRec(), IndexMerger.GetDataMerger(), keepData, keepItem);
             if (keepItem) {
                 ++(keepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
+=======
+                const ui32 subsKeep = IndexMerger.GetNumKeepFlags();
+                const ui32 subsDoNotKeep = IndexMerger.GetNumDoNotKeepFlags();
+
+                IndexMerger.SetExternalDataStage();
+                LevelSnapIt->PutToMerger(&IndexMerger);
+
+                const ui32 wholeKeep = IndexMerger.GetNumKeepFlags() - subsKeep; // they are counted too
+                const ui32 wholeDoNotKeep = IndexMerger.GetNumDoNotKeepFlags() - subsDoNotKeep; // so are they
+
+                NGcOpt::TKeepFlagStat keepFlagStat;
+                if (IsFresh) {
+                    keepFlagStat.Needed = true;
+                } else {
+                    keepFlagStat = {subsKeep, subsDoNotKeep, wholeKeep, wholeDoNotKeep};
+                }
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), keepFlagStat, HullCtx->AllowKeepFlags,
+                    AllowGarbageCollection);
+
+                const TLogoBlobID& id = Key.LogoBlobID();
+                if (!TBlobStorageGroupType::IsCrcModeValid(id.CrcMode())) {
+                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_SKELETON, HullCtx->VCtx->VDiskLogPrefix
+                        << "invalid CrcMode in BlobId found during compaction"
+                        << " BlobId# " << id.ToString()
+                        << " KeepIndex# " << keep.KeepIndex
+                        << " KeepData# " << keep.KeepData
+                        << " SubsKeep# " << subsKeep
+                        << " SubsDoNotKeep# " << subsDoNotKeep
+                        << " WholeKeep# " << wholeKeep
+                        << " WholeDoNotKeep# " << wholeDoNotKeep);
+                }
+
+                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, id, MinHugeBlobInBytes), keep.KeepData);
+            } else {
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {}, HullCtx->AllowKeepFlags,
+                    AllowGarbageCollection);
+
+                IndexMerger.Finish(false, false);
+            }
+
+            Y_VERIFY_S(keep.KeepIndex || !keep.KeepData, HullCtx->VCtx->VDiskLogPrefix); // either we keep the item, or we drop it along with data
+
+            if (keep.KeepIndex) {
+                ++(keep.KeepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
+>>>>>>> 5244db2c4fe (Fix VDisk keep and donotkeep flags processing during compaction (#34051))
             } else {
                 ++Statistics.DontKeepItems;
             }

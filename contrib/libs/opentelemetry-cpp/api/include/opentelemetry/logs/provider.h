@@ -48,6 +48,16 @@ public:
   }
 
 #if OPENTELEMETRY_ABI_VERSION_NO < 2
+#  if defined(_MSC_VER)
+#    pragma warning(push)
+#    pragma warning(disable : 4996)
+#  elif defined(__GNUC__) && !defined(__clang__) && !defined(__apple_build_version__)
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#  elif defined(__clang__) || defined(__apple_build_version__)
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#  endif
   /**
    * Returns the singleton EventLoggerProvider.
    *
@@ -70,6 +80,13 @@ public:
     std::lock_guard<common::SpinLockMutex> guard(GetLock());
     GetEventProvider() = tp;
   }
+#  if defined(_MSC_VER)
+#    pragma warning(pop)
+#  elif defined(__GNUC__) && !defined(__clang__) && !defined(__apple_build_version__)
+#    pragma GCC diagnostic pop
+#  elif defined(__clang__) || defined(__apple_build_version__)
+#    pragma clang diagnostic pop
+#  endif
 #endif
 
 private:
@@ -80,10 +97,6 @@ private:
   }
 
 #if OPENTELEMETRY_ABI_VERSION_NO < 2
-  OPENTELEMETRY_DEPRECATED
-  OPENTELEMETRY_API_SINGLETON static nostd::shared_ptr<EventLoggerProvider> &
-  GetEventProvider() noexcept
-  {
 #  if defined(_MSC_VER)
 #    pragma warning(push)
 #    pragma warning(disable : 4996)
@@ -95,8 +108,13 @@ private:
 #    pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #  endif
 
+  OPENTELEMETRY_DEPRECATED
+  OPENTELEMETRY_API_SINGLETON static nostd::shared_ptr<EventLoggerProvider> &
+  GetEventProvider() noexcept
+  {
     static nostd::shared_ptr<EventLoggerProvider> provider(new NoopEventLoggerProvider);
     return provider;
+  }
 
 #  if defined(_MSC_VER)
 #    pragma warning(pop)
@@ -105,7 +123,6 @@ private:
 #  elif defined(__clang__) || defined(__apple_build_version__)
 #    pragma clang diagnostic pop
 #  endif
-  }
 #endif
 
   OPENTELEMETRY_API_SINGLETON static common::SpinLockMutex &GetLock() noexcept

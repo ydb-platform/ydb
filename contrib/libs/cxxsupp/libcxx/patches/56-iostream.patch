@@ -1,8 +1,8 @@
 diff --git a/include/__ostream/basic_ostream.h b/include/__ostream/basic_ostream.h
-index ad43c72..621c6f2 100644
+index 9722647..db8b33b 100644
 --- a/include/__ostream/basic_ostream.h
 +++ b/include/__ostream/basic_ostream.h
-@@ -773,7 +773,7 @@ operator<<(basic_ostream<_CharT, _Traits>& __os, const bitset<_Size>& __x) {
+@@ -613,7 +613,7 @@ operator<<(basic_ostream<_CharT, _Traits>& __os, const bitset<_Size>& __x) {
                                                           std::use_facet<ctype<_CharT> >(__os.getloc()).widen('1'));
  }
  

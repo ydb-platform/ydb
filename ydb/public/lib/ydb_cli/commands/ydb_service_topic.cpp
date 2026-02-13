@@ -78,29 +78,33 @@ namespace NYdb::NConsoleClient {
             {ETopicMetadataField::Body, "Message data"},
             {ETopicMetadataField::WriteTime, "Message write time, a UNIX timestamp the message was written to server."},
             {ETopicMetadataField::CreateTime, "Message creation time, a UNIX timestamp provided by the publishing client."},
-            {ETopicMetadataField::MessageGroupID, "Message group id. All messages with the same message group id are guaranteed to be read in FIFO order."},
+            {ETopicMetadataField::ProducerID, "Message producer id. All messages with the same producer id are guaranteed to be read in FIFO order."},
             {ETopicMetadataField::Offset, "Message offset. Offset orders messages in each partition."},
             {ETopicMetadataField::SeqNo, "Message sequence number, used for message deduplication when publishing."},
             {ETopicMetadataField::MessageMeta, "Message metadata"},
             {ETopicMetadataField::SessionMeta, "Message session metadata."},
+            {ETopicMetadataField::PartitionID, "Message partition ID."},
         };
 
         const TVector<ETopicMetadataField> AllTopicMetadataFields = {
             ETopicMetadataField::Body,
             ETopicMetadataField::WriteTime,
             ETopicMetadataField::CreateTime,
-            ETopicMetadataField::MessageGroupID,
+            ETopicMetadataField::ProducerID,
             ETopicMetadataField::Offset,
             ETopicMetadataField::SeqNo,
             ETopicMetadataField::MessageMeta,
             ETopicMetadataField::SessionMeta,
+            ETopicMetadataField::PartitionID,
         };
 
         const THashMap<TString, ETopicMetadataField> TopicMetadataFieldsMap = {
             {"body", ETopicMetadataField::Body},
             {"write_time", ETopicMetadataField::WriteTime},
             {"create_time", ETopicMetadataField::CreateTime},
-            {"message_group_id", ETopicMetadataField::MessageGroupID},
+            {"message_group_id", ETopicMetadataField::ProducerID},
+            {"producer_id", ETopicMetadataField::ProducerID},
+            {"partition_id", ETopicMetadataField::PartitionID},
             {"offset", ETopicMetadataField::Offset},
             {"seq_no", ETopicMetadataField::SeqNo},
             {"message_meta", ETopicMetadataField::MessageMeta},

@@ -128,6 +128,7 @@ message TEvWritePersistentBuffer {
 message TEvWritePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
+    optional double FreeSpace = 3;
 }
 
 message TEvReadPersistentBuffer {
@@ -141,19 +142,6 @@ message TEvReadPersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     TReadResult ReadResult = 3;
-}
-
-message TEvFlushPersistentBuffer {
-    TQueryCredentials Credentials = 1;
-    TBlockSelector Selector = 2;
-    uint64 Lsn = 3;
-    TDDiskId DDiskId = 4;
-    fixed64 DDiskInstanceGuid = 5;
-}
-
-message TEvFlushPersistentBufferResult {
-    TReplyStatus.E Status = 1;
-    optional string ErrorReason = 2;
 }
 
 message TEvSync {
@@ -200,6 +188,7 @@ message TEvErasePersistentBuffer {
 message TEvErasePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
+    optional double FreeSpace = 3;
 }
 
 message TEvListPersistentBuffer {

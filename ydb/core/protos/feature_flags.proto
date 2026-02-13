@@ -253,4 +253,5 @@ message TFeatureFlags {
     optional bool EnableTopicsSqlIoOperations = 226 [default = false];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
+    optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
 }

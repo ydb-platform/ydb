@@ -1,10 +1,10 @@
 diff --git a/include/__atomic/atomic_ref.h b/include/__atomic/atomic_ref.h
-index eef1598..ba5d46b 100644
+index 177ea64..a0ed1e8 100644
 --- a/include/__atomic/atomic_ref.h
 +++ b/include/__atomic/atomic_ref.h
 @@ -261,7 +261,7 @@ template <class _Tp>
  struct atomic_ref<_Tp> : public __atomic_ref_base<_Tp> {
-   using __base = __atomic_ref_base<_Tp>;
+   using __base _LIBCPP_NODEBUG = __atomic_ref_base<_Tp>;
  
 -  using difference_type = __base::value_type;
 +  using difference_type = typename __base::value_type;
@@ -13,7 +13,7 @@ index eef1598..ba5d46b 100644
      _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(
 @@ -307,7 +307,7 @@ template <class _Tp>
  struct atomic_ref<_Tp> : public __atomic_ref_base<_Tp> {
-   using __base = __atomic_ref_base<_Tp>;
+   using __base _LIBCPP_NODEBUG = __atomic_ref_base<_Tp>;
  
 -  using difference_type = __base::value_type;
 +  using difference_type = typename __base::value_type;

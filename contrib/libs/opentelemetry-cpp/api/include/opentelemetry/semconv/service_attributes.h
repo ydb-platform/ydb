@@ -31,8 +31,7 @@ namespace service
 static constexpr const char *kServiceName = "service.name";
 
 /**
-  The version string of the service API or implementation. The format is not defined by these
-  conventions.
+  The version string of the service component. The format is not defined by these conventions.
  */
 static constexpr const char *kServiceVersion = "service.version";
 

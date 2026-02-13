@@ -119,6 +119,10 @@ public:
 
   shared_ptr &operator=(shared_ptr &&other) noexcept
   {
+    if (this == &other)
+    {
+      return *this;
+    }
     wrapper().~shared_ptr_wrapper();
     other.wrapper().MoveTo(buffer_);
     return *this;
@@ -132,6 +136,10 @@ public:
 
   shared_ptr &operator=(const shared_ptr &other) noexcept
   {
+    if (this == &other)
+    {
+      return *this;
+    }
     wrapper().~shared_ptr_wrapper();
     other.wrapper().CopyTo(buffer_);
     return *this;

@@ -792,6 +792,7 @@ alter_table_action:
   | alter_table_alter_column_drop_not_null
   | alter_table_alter_column_set_not_null
   | alter_table_alter_column_set_compression
+  | alter_table_compact
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -829,6 +830,7 @@ alter_table_add_changefeed: ADD changefeed;
 alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
 alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
+alter_table_compact: COMPACT with_compact_settings?;
 
 column_schema: an_id_schema type_name_or_bind column_option_list;
 
@@ -880,6 +882,10 @@ index_setting_value:
     | integer
     | bool_value
 ;
+
+with_compact_settings: WITH LPAREN compact_setting_entry (COMMA compact_setting_entry)* COMMA? RPAREN;
+compact_setting_entry: an_id EQUALS compact_setting_value;
+compact_setting_value: literal_value;
 
 changefeed: CHANGEFEED an_id WITH LPAREN changefeed_settings RPAREN;
 changefeed_settings: changefeed_settings_entry (COMMA changefeed_settings_entry)*;

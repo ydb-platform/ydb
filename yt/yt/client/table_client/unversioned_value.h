@@ -92,6 +92,7 @@ struct TDefaultUnversionedValueEqual
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// NB: Hash includes the value.Id, so if you need a column order-independent hash, you should reset the value.Id.
 struct TBitwiseUnversionedValueHash
 {
     size_t operator()(const TUnversionedValue& value) const;

@@ -1,8 +1,8 @@
 diff --git a/include/string_view b/include/string_view
-index a62d75a..bc9c9f0 100644
+index e797463..dcbdc3d 100644
 --- a/include/string_view
 +++ b/include/string_view
-@@ -312,6 +312,8 @@ public:
+@@ -313,6 +313,8 @@ public:
  
    _LIBCPP_HIDE_FROM_ABI basic_string_view& operator=(const basic_string_view&) _NOEXCEPT = default;
  
@@ -11,7 +11,7 @@ index a62d75a..bc9c9f0 100644
    _LIBCPP_CONSTEXPR _LIBCPP_HIDE_FROM_ABI basic_string_view(const _CharT* __s, size_type __len) _NOEXCEPT
        : __data_(__s),
          __size_(__len) {
-@@ -350,7 +352,7 @@ public:
+@@ -351,7 +353,7 @@ public:
    _LIBCPP_CONSTEXPR _LIBCPP_HIDE_FROM_ABI basic_string_view(const _CharT* __s)
        : __data_(__s), __size_(std::__char_traits_length_checked<_Traits>(__s)) {}
  
@@ -20,7 +20,7 @@ index a62d75a..bc9c9f0 100644
    basic_string_view(nullptr_t) = delete;
  #  endif
  
-@@ -673,7 +675,7 @@ public:
+@@ -674,7 +676,7 @@ public:
    }
  #  endif
  

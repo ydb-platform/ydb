@@ -1159,9 +1159,9 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
-        if (DetailedMetricsAreEnabled(Config)) {
-            SetupDetailedMetrics();
-        }
+
+        SetupDetailedMetrics();
+        UsersInfoStorage->SetupDetailedMetrics(ctx);
     }
 }
 

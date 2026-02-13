@@ -21,8 +21,6 @@ struct PeriodicExportingMetricReaderRuntimeOptions
 {
   std::shared_ptr<sdk::common::ThreadInstrumentation> periodic_thread_instrumentation =
       std::shared_ptr<sdk::common::ThreadInstrumentation>(nullptr);
-  std::shared_ptr<sdk::common::ThreadInstrumentation> collect_thread_instrumentation =
-      std::shared_ptr<sdk::common::ThreadInstrumentation>(nullptr);
 };
 
 }  // namespace metrics

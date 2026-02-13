@@ -1,16 +1,14 @@
 #pragma once
 
-#include "logical_type.h"
 #include "schema.h"
 
-#include <yt/yt/core/yson/pull_parser.h>
-
-#include <yt/yt/core/ytree/yson_struct.h>
+#include <yt/yt/core/yson/public.h>
 
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Exposed for unittests.
 struct TMaybeDeletedColumnSchema
     : public TColumnSchema
 {
@@ -22,33 +20,6 @@ struct TMaybeDeletedColumnSchema
 
 void Deserialize(TMaybeDeletedColumnSchema& schema, NYson::TYsonPullParserCursor* cursor);
 void Deserialize(TMaybeDeletedColumnSchema& schema, NYTree::INodePtr node);
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TSerializableColumnSchema
-    : public TMaybeDeletedColumnSchema
-    , public NYTree::TYsonStructLite
-{
-    REGISTER_YSON_STRUCT_LITE(TSerializableColumnSchema);
-
-    static void Register(TRegistrar registrar);
-
-    void RunPostprocessor();
-
-public:
-    void DeserializeFromCursor(NYson::TYsonPullParserCursor* cursor);
-
-    void SetColumnSchema(const TColumnSchema& columnSchema, std::optional<std::string> constraint);
-    void SetDeletedColumnSchema(const TDeletedColumn& deletedColumnSchema);
-
-private:
-    std::optional<TColumnStableName> SerializedStableName_;
-
-    std::optional<ESimpleLogicalValueType> LogicalTypeV1_;
-    std::optional<bool> RequiredV1_;
-
-    std::optional<TTypeV3LogicalTypeWrapper> LogicalTypeV3_;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 

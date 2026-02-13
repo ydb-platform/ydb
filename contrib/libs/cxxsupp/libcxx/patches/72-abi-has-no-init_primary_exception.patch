@@ -1,8 +1,8 @@
 diff --git a/include/__exception/exception_ptr.h b/include/__exception/exception_ptr.h
-index 3a7fa82..a26391e 100644
+index 6411a2f..8092ff6 100644
 --- a/include/__exception/exception_ptr.h
 +++ b/include/__exception/exception_ptr.h
-@@ -99,7 +99,7 @@ public:
+@@ -98,7 +98,7 @@ public:
  template <class _Ep>
  _LIBCPP_HIDE_FROM_ABI exception_ptr make_exception_ptr(_Ep __e) _NOEXCEPT {
  #  if _LIBCPP_HAS_EXCEPTIONS

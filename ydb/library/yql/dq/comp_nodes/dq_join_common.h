@@ -454,7 +454,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     TSides<const NPackedTuple::TTupleLayout*> layouts)
         : Logger_(ctx, componentName)
         , Layouts_(layouts)
-        , Spiller_(ctx.SpillerFactory->CreateSpiller())
+        , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
     {
     }
@@ -477,8 +477,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
 
 
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume) {
-        auto notEnoughMemory = [] {
-            return TlsAllocState->IsMemoryYellowZoneEnabled();
+        auto notEnoughMemory = [hasSpiller = !!Spiller_] {
+            return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
         auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
             bool found = false;

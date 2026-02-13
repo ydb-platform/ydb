@@ -66,6 +66,7 @@
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
@@ -623,6 +624,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.InactivityTimeout = TDuration::Parse(appConfig.GetMonitoringConfig().GetInactivityTimeout());
         monConfig.CertificateFile = appConfig.GetMonitoringConfig().GetMonitoringCertificateFile();
         monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
+        monConfig.CaFile = appConfig.GetMonitoringConfig().GetMonitoringCaFile();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
         monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
         if (includeHostName) {

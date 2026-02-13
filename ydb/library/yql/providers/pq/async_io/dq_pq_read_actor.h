@@ -37,8 +37,9 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     IPqGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
     bool enableStreamingQueriesCounters,
-    i64 bufferSize = PQReadDefaultFreeSpace
-    );
+    i64 bufferSize = PQReadDefaultFreeSpace,
+    NActors::TActorId infoAggregator = {}
+);
 
 void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), const TString& reconnectPeriod = {}, bool enableStreamingQueriesCounters = true);
 

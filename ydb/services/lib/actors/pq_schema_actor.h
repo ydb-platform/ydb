@@ -1,5 +1,7 @@
 #pragma once
 
+#include "consumers_advanced_monitoring_settings.h"
+
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
@@ -85,7 +87,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         NKikimrPQ::TPQTabletConfig *config,
         const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,
         const TClientServiceTypes& supportedReadRuleServiceTypes,
-        const NKikimrPQ::TPQConfig& pqConfig
+        const NKikimrPQ::TPQConfig& pqConfig,
+        const TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings /* nullable */
     );
 
     TString RemoveReadRuleFromConfig(

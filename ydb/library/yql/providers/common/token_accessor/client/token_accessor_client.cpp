@@ -4,10 +4,11 @@
 #include <ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <library/cpp/deprecated/atomic_bool/bool.h>
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/string/builder.h>
+
+#include <atomic>
 
 namespace NYql {
 
@@ -135,9 +136,9 @@ private:
         const TDuration RefreshPeriod;
         const TDuration RequestTimeout;
         TAdaptiveLock Lock;
-        mutable NAtomic::TBool RequestInflight;
+        mutable std::atomic<bool> RequestInflight = false;
         mutable TString LastRequestError;
-        NAtomic::TBool NeedStop = false;
+        std::atomic<bool> NeedStop = false;
         mutable TDuration BackoffTimeout = BACKOFF_START;
         mutable ui32 Infly;
     };

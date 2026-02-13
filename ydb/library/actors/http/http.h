@@ -964,6 +964,7 @@ public:
     std::shared_ptr<THttpEndpointInfo> Endpoint;
     THttpConfig::SocketAddressType Address;
     THPTimer Timer;
+    TString MTlsClientCertificate;
 
     THttpIncomingRequest()
         : Endpoint(std::make_shared<THttpEndpointInfo>())
@@ -974,11 +975,22 @@ public:
         , Address(address)
     {}
 
+    THttpIncomingRequest(std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address, const TString& mTlsClientCertificate)
+        : Endpoint(std::move(endpoint))
+        , Address(address)
+        , MTlsClientCertificate(mTlsClientCertificate)
+    {}
+
     THttpIncomingRequest(TStringBuf content, std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address)
         : THttpParser(content)
         , Endpoint(std::move(endpoint))
         , Address(address)
     {}
+
+    void Clear() {
+        THttpRequestParser::Clear();
+        MTlsClientCertificate.clear();
+    }
 
     bool IsConnectionClose() const {
         if (Connection.empty()) {

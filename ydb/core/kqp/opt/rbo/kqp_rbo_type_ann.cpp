@@ -136,10 +136,10 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanP
         return IGraphTransformer::TStatus::Error;
     }
 
-    ctx.TypeAnnTransformer->Rewind();
+    ctx.TypeAnnTransformer.Rewind();
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
-        status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
+        status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
 
     } while (status == IGraphTransformer::TStatus::Repeat);
 
@@ -195,10 +195,10 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        ctx.TypeAnnTransformer->Rewind();
+        ctx.TypeAnnTransformer.Rewind();
         IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
         do {
-            status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
         // Could we have an infinity loop?
         } while (status == IGraphTransformer::TStatus::Repeat);
 
@@ -386,7 +386,7 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProp
 namespace NKikimr {
 namespace NKqp {
 
-TStatus TOpRoot::ComputeTypes(TRBOContext & ctx) {
+TStatus TOpRoot::ComputeTypes(TRBOContext& ctx) {
     for (auto it = begin(); it != end(); it++) {
         auto status = ::ComputeTypes((*it).Current, ctx, PlanProps);
         if (status != TStatus::Ok) {

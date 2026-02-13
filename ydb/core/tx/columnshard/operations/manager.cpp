@@ -115,9 +115,6 @@ void TOperationsManager::CommitTransactionOnExecute(
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
-    if (lock.GetWriteOperations().size() > 0) {
-        AFL_VERIFY(!lock.IsBroken())("error", "the tx has writes, it is broken, and we are committing it")("writes_count", lock.GetWriteOperations().size());
-    }
     TVector<TWriteOperation::TPtr> commited;
     for (auto&& opPtr : lock.GetWriteOperations()) {
         opPtr->CommitOnExecute(owner, txc, snapshot);

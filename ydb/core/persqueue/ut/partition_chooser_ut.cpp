@@ -235,8 +235,8 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server, bool spliMer
 void InitTable(NPersQueue::TTestServer& server) {
     class Initializer: public TActorBootstrapped<Initializer> {
     public:
-        Initializer(NThreading::TPromise<void>& promise)
-            : Promise(promise) {}
+        Initializer(NThreading::TPromise<void>&& promise)
+            : Promise(std::move(promise)) {}
 
         void Bootstrap(const TActorContext& ctx) {
             Become(&TThis::StateWork);
@@ -259,12 +259,13 @@ void InitTable(NPersQueue::TTestServer& server) {
         }
 
     private:
-        NThreading::TPromise<void>& Promise;
+        NThreading::TPromise<void> Promise;
     };
 
     NThreading::TPromise<void> promise = NThreading::NewPromise<void>();
-    server.GetRuntime()->Register(new Initializer(promise));
-    promise.GetFuture().GetValueSync();
+    auto future = promise.GetFuture();
+    server.GetRuntime()->Register(new Initializer(std::move(promise)));
+    future.GetValueSync();
 }
 
 void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId, ui64 seqNo = 0) {

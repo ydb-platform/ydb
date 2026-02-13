@@ -1968,7 +1968,7 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     newTableInfo->StatsNeedUpdate = true;
 
     TDataShardLocksDb locksDb(*this, txc);
-    RemoveUserTable(prevId, &locksDb, ctx);
+    RemoveUserTable(prevId, &locksDb);
     AddUserTable(newId, newTableInfo);
 
     for (auto& [_, record] : ChangesQueue) {

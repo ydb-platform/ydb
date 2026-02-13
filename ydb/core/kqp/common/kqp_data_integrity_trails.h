@@ -17,12 +17,13 @@
 namespace NKikimr {
 namespace NDataIntegrity {
 
-// Node-level cache: QuerySpanId -> QueryText.
-// Used for breaker query text lookup in deferred lock TLI scenarios.
+// Node-level cache for query text lookup in deferred lock TLI scenarios.
+// Stores hash(queryText)->queryText for deduplication (OLTP typically has few distinct queries)
+// and querySpanId->hash for lookup by QuerySpanId.
 // Cross-node lookups use TKqpQueryTextCacheService when local cache misses.
 class TNodeQueryTextCache {
 public:
-    static constexpr size_t MaxCacheSize = 10000;
+    static constexpr size_t MaxSpanIdEntries = 10000;
 
     static TNodeQueryTextCache& Instance() {
         return *Singleton<TNodeQueryTextCache>();
@@ -33,42 +34,41 @@ public:
             return;
         }
         with_lock(Lock) {
-            // Only add if (querySpanId, queryText) pair is different from the previous entry
-            if (!Entries.empty() &&
-                Entries.back().first == querySpanId &&
-                Entries.back().second == queryText) {
-                return;
+            ui64 textHash = ComputeHash(queryText);
+            // Store unique query text (deduplicated by hash)
+            QueryTexts[textHash] = queryText;
+            // Evict oldest SpanId mappings if full
+            while (SpanIdOrder.size() >= MaxSpanIdEntries) {
+                SpanIdToHash.erase(SpanIdOrder.front());
+                SpanIdOrder.pop_front();
             }
-            // Evict oldest entries if cache is full
-            while (Entries.size() >= MaxCacheSize) {
-                Index.erase(Entries.front().first);
-                Entries.pop_front();
-            }
-            Entries.push_back({querySpanId, queryText});
-            // Point to the last element; overwrites if querySpanId already exists (keeping newest text)
-            Index[querySpanId] = std::prev(Entries.end());
+            SpanIdToHash[querySpanId] = textHash;
+            SpanIdOrder.push_back(querySpanId);
         }
     }
 
     TString Get(ui64 querySpanId) const {
         with_lock(Lock) {
-            auto it = Index.find(querySpanId);
-            if (it != Index.end()) {
-                return it->second->second;
+            auto spanIt = SpanIdToHash.find(querySpanId);
+            if (spanIt != SpanIdToHash.end()) {
+                auto textIt = QueryTexts.find(spanIt->second);
+                if (textIt != QueryTexts.end()) {
+                    return textIt->second;
+                }
             }
         }
         return "";
     }
 
 private:
-    using TEntry = std::pair<ui64, TString>;
-    using TDeque = std::deque<TEntry>;
-    using TIterator = TDeque::iterator;
+    static ui64 ComputeHash(const TString& s) {
+        return std::hash<TString>{}(s);
+    }
 
     mutable TAdaptiveLock Lock;
-    TDeque Entries;
-    // Auxiliary index: querySpanId -> iterator into Entries for O(1) lookup
-    std::unordered_map<ui64, TIterator> Index;
+    std::unordered_map<ui64, ui64> SpanIdToHash;       // querySpanId -> hash(queryText)
+    std::unordered_map<ui64, TString> QueryTexts;      // hash(queryText) -> queryText (deduplicated)
+    std::deque<ui64> SpanIdOrder;                       // eviction order for SpanId mappings
 };
 
 // Collects query texts and QuerySpanIds for TLI logging and victim stats attribution

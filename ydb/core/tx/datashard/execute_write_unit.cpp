@@ -75,14 +75,12 @@ public:
             DataShard.SysLocksTable(), writeResult.Record, ctx,
             "Write transaction broke other locks");
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
-        // Get the query trace ID to include in the returned locks
-        ui64 querySpanId = writeOp->QuerySpanId();
         for (const auto& lock : locks) {
             if (lock.IsError()) {
                 LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Lock is not set for " << *writeOp << " at " << DataShard.TabletID() << " lock " << lock);
             }
 
-            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites, querySpanId);
+            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites);
 
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add lock to result: " << writeResult.Record.GetTxLocks().rbegin()->ShortDebugString());
         }

@@ -365,8 +365,6 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
     }
     NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), op->GetTxId(), locksBrokenByTx);
 
-    // Get the query trace ID to include in the returned locks
-    ui64 querySpanId = op->QuerySpanId();
     for (const auto& lock : locks) {
         if (lock.IsError()) {
             LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
@@ -374,7 +372,7 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
                                                 << " lock " << lock);
         }
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
-                                lock.SchemeShard, lock.PathId, lock.HasWrites, querySpanId);
+                                lock.SchemeShard, lock.PathId, lock.HasWrites);
     }
     DataShard.SubscribeNewLocks(ctx);
 }

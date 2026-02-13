@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/test_tli.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
+#include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 
 #include <algorithm>
 #include <memory>
@@ -765,6 +766,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
 
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString breakerQueryText2 = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (2u, \"UsualValue\")";
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
 
@@ -773,7 +775,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Breaker: begin tx, write key 1, write key 2, then separate commit
         auto breakerTx = BeginTx(ctx.Session, breakerQueryText);
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
-            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (2u, \"UsualValue\")",
+            breakerQueryText2,
             TTxControl::Tx(*breakerTx)).GetValueSync());
         NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
 
@@ -1255,6 +1257,78 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Verify issue and TLI logs
         VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
+    }
+
+    // Test: Basic TLI flow with Wilson tracing enabled.
+    // Verifies that QuerySpanId is derived from the Wilson trace's SpanId
+    // instead of a random fallback, and that TLI logging works correctly.
+    Y_UNIT_TEST(BasicWithWilsonTracing) {
+        TStringStream ss;
+
+        // Configure tracing: always sample all requests at max verbosity
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.LogStream = &ss;
+        settings.SetWithSampleTables(false);
+
+        auto* tracingConfig = settings.AppConfig.MutableTracingConfig();
+        auto* samplingRule = tracingConfig->AddSampling();
+        samplingRule->SetFraction(1.0);
+        samplingRule->SetLevel(15);
+        samplingRule->SetMaxTracesPerMinute(1000000);
+        samplingRule->SetMaxTracesBurst(1000000);
+
+        TKikimrRunner kikimr(settings);
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+
+        // Register fake Wilson uploader so spans are collected
+        auto* uploader = new NWilson::TFakeWilsonUploader();
+        TActorId uploaderId = runtime->Register(uploader, 0);
+        runtime->RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0);
+
+        ConfigureKikimrForTli(kikimr);
+
+        TTableClient client(kikimr.GetTableClient());
+        TSession session = client.CreateSession().GetValueSync().GetSession();
+        TSession victimSession = client.CreateSession().GetValueSync().GetSession();
+
+        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(
+            R"(CREATE TABLE `/Root/Tenant1/TableTracing` (Key Uint64, Value String, PRIMARY KEY (Key));)"
+        ).GetValueSync());
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
+            "UPSERT INTO `/Root/Tenant1/TableTracing` (Key, Value) VALUES (1u, \"Initial\")",
+            TTxControl::BeginTx().CommitTx()
+        ).GetValueSync());
+
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableTracing` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableTracing` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableTracing` (Key, Value) VALUES (1u, \"VictimValue\")";
+
+        auto victimTx = BeginReadTx(victimSession, victimQueryText);
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(breakerQueryText, TTxControl::BeginTx().CommitTx()).GetValueSync());
+        auto [status, issues] = ExecuteVictimCommitWithIssues(victimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+
+        // When Wilson tracing is active, SessionActor TLI logs must include TraceId
+        const TString logs = ss.Str();
+        const auto patterns = MakeTliLogPatterns();
+        bool foundTraceIdInBreaker = false;
+        bool foundTraceIdInVictim = false;
+        for (const auto& record : ExtractTliRecords(logs)) {
+            if (!record.Contains("Component: SessionActor")) {
+                continue;
+            }
+            if (MatchesMessage(record, patterns.BreakerSessionActorMessagePattern) && record.Contains("TraceId: ")) {
+                foundTraceIdInBreaker = true;
+            }
+            if (MatchesMessage(record, patterns.VictimSessionActorMessagePattern) && record.Contains("TraceId: ")) {
+                foundTraceIdInVictim = true;
+            }
+        }
+        UNIT_ASSERT_C(foundTraceIdInBreaker, "breaker SessionActor TLI log should contain TraceId when Wilson tracing is active");
+        UNIT_ASSERT_C(foundTraceIdInVictim, "victim SessionActor TLI log should contain TraceId when Wilson tracing is active");
     }
 }
 

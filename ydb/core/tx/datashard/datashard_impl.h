@@ -930,10 +930,9 @@ class TDataShard
             struct Counter : Column<4, NScheme::NTypeIds::Uint64> {};
             struct CreateTimestamp : Column<5, NScheme::NTypeIds::Uint64> {};
             struct Flags : Column<6, NScheme::NTypeIds::Uint64> {};
-            struct VictimQuerySpanId : Column<7, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<LockId>;
-            using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags, VictimQuerySpanId>;
+            using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags>;
         };
 
         struct LockRanges : Table<30> {
@@ -1682,7 +1681,7 @@ public:
         return nullptr;
     }
 
-    void RemoveUserTable(const TPathId& tableId, ILocksDb* locksDb, const TActorContext& ctx) {
+    void RemoveUserTable(const TPathId& tableId, ILocksDb* locksDb) {
         // Collect lock IDs before removal for TLI logging
         TVector<ui64> locksToInvalidate;
         const auto& allLocks = SysLocks.GetLocks();
@@ -1693,7 +1692,8 @@ public:
         }
         if (!locksToInvalidate.empty()) {
             auto victimQuerySpanIds = SysLocks.ExtractVictimQuerySpanIds(locksToInvalidate);
-            NKikimr::NDataIntegrity::LogLocksBroken(ctx, TabletID(), "Schema change: table removed invalidated locks",
+            NKikimr::NDataIntegrity::LogLocksBroken(TlsActivationContext->AsActorContext(), TabletID(),
+                "Schema change: table removed invalidated locks",
                 locksToInvalidate, Nothing(), victimQuerySpanIds);
         }
 

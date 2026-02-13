@@ -65,15 +65,17 @@ private:
         ui64 compactedPortionsBytes = 0;
         ui64 insertedPortionsBytes = 0;
         ui64 committedPortionsBytes = 0;
-        for (auto&& i : TBase::GetConstructors()) {
-            if (i.GetPortion()->GetPortionType() == EPortionType::Compacted) {
-                compactedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
-            } else if (i.GetPortion()->GetProduced() == NPortion::EProduced::INSERTED) {
-                insertedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+
+        TBase::ForEachConstructor([&](const TSourceConstructor& constructor) {
+            if (constructor.GetPortion()->GetPortionType() == EPortionType::Compacted) {
+                compactedPortionsBytes += constructor.GetPortion()->GetTotalBlobBytes();
+            } else if (constructor.GetPortion()->GetProduced() == NPortion::EProduced::INSERTED) {
+                insertedPortionsBytes += constructor.GetPortion()->GetTotalBlobBytes();
             } else {
-                committedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+                committedPortionsBytes += constructor.GetPortion()->GetTotalBlobBytes();
             }
-        }
+        });
+
         stats.IndexPortions = TBase::GetConstructorsCount();
         stats.InsertedPortionsBytes = insertedPortionsBytes;
         stats.CompactedPortionsBytes = compactedPortionsBytes;

@@ -16,7 +16,7 @@ namespace {
 using namespace NActors;
 
 constexpr TDuration LEASE_DURATION = TDuration::Seconds(30);
-
+constexpr size_t SQL_TEXT_MAX_SIZE = 4000;
 
 template <typename TDerived>
 class TPoolHandlerActorBase : public TActor<TDerived> {
@@ -109,44 +109,52 @@ protected:
         TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "")
             : WorkerActorId(workerActorId)
             , SessionId(sessionId)
-            , SplittedRequestText(GetEscapedChunks(requestText))
+            , SplittedRequestText(GetChunks(requestText))
         {}
 
-        std::vector<TString> GetEscapedChunks(const TString& requestText, size_t chunkSize = 4000) const {
+        std::vector<TString> GetChunks(const TString& requestText, size_t chunkSize = SQL_TEXT_MAX_SIZE) const {
             std::vector<TString> chunks;
-
             if (requestText.empty()) {
-                chunks.push_back("");
                 return chunks;
             }
 
-            TStringBuilder currentChunk;
-            size_t currentRawCount = 0;
+            size_t total = (requestText.size() + chunkSize - 1) / chunkSize;
+            chunks.reserve(total);
 
-            for (auto c : requestText) {
-                switch (c) {
-                    case '"':  currentChunk << "\\\""; break;
-                    case '\\': currentChunk << "\\\\"; break;
-                    case '\n': currentChunk << "\\n";  break;
-                    case '\r': currentChunk << "\\r";  break;
-                    case '\t': currentChunk << "\\t";  break;
-                    default:   currentChunk << c;
-                }
-
-                currentRawCount++;
-
-                if (currentRawCount >= chunkSize) {
-                    chunks.push_back(currentChunk);
-                    currentChunk.clear();
-                    currentRawCount = 0;
-                }
+            for (size_t i = 0; i < total; ++i) {
+                chunks.push_back(requestText.substr(i * chunkSize, chunkSize));
             }
-
-            if (currentRawCount > 0) {
-                chunks.push_back(currentChunk);
-            }
-
             return chunks;
+        }
+
+        template <typename TExtraFunc>
+        void SerializeChunk(size_t index, IOutputStream& out, const TString& poolId,
+                            const TStringBuf eventName, TExtraFunc&& extraFunc) const
+        {
+            const size_t total = SplittedRequestText.empty() ? 1 : SplittedRequestText.size();
+            const void* reqId = static_cast<const void*>(&SplittedRequestText);
+            TStringBuf partData = "";
+
+            if (index < SplittedRequestText.size()) {
+                partData = SplittedRequestText[index];
+            }
+
+            NJsonWriter::TBuf json(NJsonWriter::HEM_RELAXED, &out);
+
+            json.BeginObject();
+            json.WriteKey("pool").WriteString(poolId);
+            json.WriteKey("sid").WriteString(SessionId);
+            json.WriteKey("req_id").WriteString(TStringBuilder() << reqId);
+            json.WriteKey("part").WriteInt(index + 1);
+            json.WriteKey("total").WriteInt(total);
+                
+            json.WriteKey("request");
+                json.BeginObject();
+                    json.WriteKey("event").WriteString(eventName);
+                    json.WriteKey("data").WriteString(partData);
+                    extraFunc(json);
+                json.EndObject();
+            json.EndObject();
         }
 
         const TStringBuf GetRequestText() const {
@@ -255,11 +263,7 @@ private:
         TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, requestText)}).first->second;
         Counters.LocalDelayedRequests->Inc();
 
-        LOG_REQ_PENDING(
-            PoolId,
-            sessionId,
-            request->SplittedRequestText
-        );
+        LOG_REQ_PENDING(PoolId, request);
 
         UpdatePoolConfig(ev->Get()->PoolConfig);
         UpdateSchemeboardSubscription(ev->Get()->PathId);
@@ -283,13 +287,7 @@ private:
         request->Duration = ev->Get()->Duration;
         request->CpuConsumed = ev->Get()->CpuConsumed;
 
-        LOG_REQ_FINISHED(
-            PoolId,
-            sessionId,
-            request->SplittedRequestText,
-            request->Duration,
-            request->CpuConsumed
-        );
+        LOG_REQ_FINISHED(PoolId, request);
 
         OnCleanupRequest(request);
     }
@@ -371,29 +369,14 @@ public:
             Counters.ContinueOk->Inc();
             Counters.DelayedTimeMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
 
-            LOG_REQ_STARTED(
-                PoolId,
-                request->SessionId,
-                request->SplittedRequestText,
-                LocalInFlight
-            );
+            LOG_REQ_STARTED(PoolId, request,LocalInFlight);
         } else {
             if (status == Ydb::StatusIds::OVERLOADED) {
                 Counters.ContinueOverloaded->Inc();
-                LOG_REQ_OVERLOADED(
-                    PoolId,
-                    request->SessionId,
-                    request->SplittedRequestText,
-                    issues.ToOneLineString()
-                );
+                LOG_REQ_OVERLOADED(PoolId, request, issues);
             } else if (status == Ydb::StatusIds::CANCELLED) {
                 Counters.Cancelled->Inc();
-                LOG_REQ_CANCELED(
-                    PoolId,
-                    request->SessionId,
-                    request->SplittedRequestText,
-                    issues.ToOneLineString()
-                );
+                LOG_REQ_CANCELED(PoolId, request, issues);
             } else {
                 Counters.ContinueError->Inc();
                 LOG_W("Reply continue error " << status
@@ -873,12 +856,7 @@ private:
         const TString& sessionId = ev->Get()->SessionId;
         TRequest* request = GetRequestSafe(sessionId);
         if (request) {
-            LOG_REQ_QUEUED(
-                PoolId,
-                sessionId,
-                request->SplittedRequestText,
-                GlobalState.DelayedRequests
-            );
+            LOG_REQ_QUEUED(PoolId, request, GlobalState.DelayedRequests);
         } else {
             LOG_D("successfully delayed request, session id: " << sessionId);
         }

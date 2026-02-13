@@ -25,50 +25,50 @@ namespace NKikimr::NKqp::NWorkload {
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 #define LOG_REQ(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
 
-#define LOG_JSON_INTERNAL(ev, poolId, sid, splittedText, extra) do {           \
-    const auto& _chunks = splittedText;                                        \
+#define LOG_REQ_JSON_INTERNAL(poolId, reqPtr, evName, extraBuilder) do {       \
+    if (!(reqPtr)) {                                                           \
+        break;                                                                 \
+    }                                                                          \
+                                                                               \
+    const auto& _chunks = (reqPtr)->SplittedRequestText;                       \
     const size_t _total = _chunks.empty() ? 1 : _chunks.size();                \
-    const TString _extraStr = (TStringBuilder() << extra);                     \
-    const void* _reqId = static_cast<const void*>(&_chunks);                   \
                                                                                \
     for (size_t _i = 0; _i < _total; ++_i) {                                   \
-        const TString& _part = _chunks.empty() ? "" : _chunks.at(_i);          \
-                                                                               \
-        LOG_REQ("[REQ_JSON]{\"pool\":\"" << poolId                             \
-            << "\",\"sid\":\"" << sid << "\""                                  \
-            << ",\"req_id\":\"" << _reqId << "\""                              \
-            << ",\"part\":" << (_i + 1) << ",\"total\":" << _total             \
-            << ",\"request\":{"                                                \
-            << "\"event\":\"" << (ev) << "\","                                 \
-            << "\"data\":\"" << _part << "\""                                  \
-            << (_extraStr.empty() ? "" : ",") << _extraStr                     \
-            << "}}");                                                          \
+        TStringStream _ss;                                                     \
+        _ss << "[REQ_JSON]";                                                   \
+        (reqPtr)->SerializeChunk(_i, _ss, poolId, evName, extraBuilder);       \
+        LOG_REQ(_ss.Str());                                                    \
     }                                                                          \
 } while (0)
 
-#define LOG_REQ_FINISHED(poolId, sid, splittedText, dur, cpu) \
-    LOG_JSON_INTERNAL("finished", poolId, sid, splittedText, \
-        TStringBuilder() << "\"dur\":" << (dur) << ",\"cpu\":" << (cpu))
+#define LOG_REQ_QUEUED(poolId, req, delayed)                                   \
+    LOG_REQ_JSON_INTERNAL(poolId, req, "queued", [&](NJsonWriter::TBuf& j) {   \
+        j.WriteKey("delayed").WriteInt(delayed);                               \
+    })
 
-#define LOG_REQ_QUEUED(poolId, sid, splittedText, delayed) \
-    LOG_JSON_INTERNAL("queued", poolId, sid, splittedText, \
-        TStringBuilder() << "\"delayed\":" << (delayed))
+#define LOG_REQ_PENDING(poolId, req)                                           \
+    LOG_REQ_JSON_INTERNAL(poolId, req, "pending", [](NJsonWriter::TBuf&) {})
 
-#define LOG_REQ_STARTED(poolId, sid, splittedText, inFlight) \
-    LOG_JSON_INTERNAL("started", poolId, sid, splittedText, \
-        TStringBuilder() << "\"in_flight\":" << (inFlight))
+#define LOG_REQ_STARTED(poolId, req, inFlight)                                 \
+    LOG_REQ_JSON_INTERNAL(poolId, req, "started", [&](NJsonWriter::TBuf& j) {  \
+        j.WriteKey("in_flight").WriteInt(inFlight);                            \
+    })
 
-#define LOG_REQ_OVERLOADED(poolId, sid, splittedText, issues) \
-    LOG_JSON_INTERNAL("overloaded", poolId, sid, splittedText, \
-        TStringBuilder() << "\"issues\":\"" << issues << "\"")
+#define LOG_REQ_FINISHED(poolId, req) \
+    LOG_REQ_JSON_INTERNAL(poolId, req, "finished", [&](NJsonWriter::TBuf& j) { \
+        j.WriteKey("dur").WriteInt((req)->Duration.MilliSeconds());            \
+        j.WriteKey("cpu").WriteInt((req)->CpuConsumed.MilliSeconds());         \
+    })
 
-#define LOG_REQ_PENDING(poolId, sid, splittedText) \
-    LOG_JSON_INTERNAL("pending", poolId, sid, splittedText, "")
+#define LOG_REQ_OVERLOADED(poolId, req, issues) \
+    LOG_REQ_JSON_INTERNAL(poolId, req, "overloaded", [&](NJsonWriter::TBuf& j) { \
+        j.WriteKey("issues").WriteString(issues.ToOneLineString());              \
+    })
 
-#define LOG_REQ_CANCELED(poolId, sid, splittedText, issues) \
-    LOG_JSON_INTERNAL("canceled", poolId, sid, splittedText, \
-        TStringBuilder() << "\"issues\":\"" << issues << "\"")
-
+#define LOG_REQ_CANCELED(poolId, req, issues) \
+    LOG_REQ_JSON_INTERNAL(poolId, req, "canceled", [&](NJsonWriter::TBuf& j) { \
+        j.WriteKey("issues").WriteString(issues.ToOneLineString());            \
+    })
 
 template <typename TDerived>
 class TSchemeActorBase : public NActors::TActorBootstrapped<TDerived> {

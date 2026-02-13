@@ -124,7 +124,7 @@ class TestWatermarks(TestYdsBase):
         client.create_yds_connection(
             name=YDS_CONNECTION, database=os.getenv("YDB_DATABASE"), endpoint=os.getenv("YDB_ENDPOINT"), shared_reading=shared_reading
         )
-        self.init_topics(f"test_idle_watermarks_{"shared" if shared_reading else "no_shared"}", partitions_count=2)
+        self.init_topics(f"test_idle_wm_{'shared' if shared_reading else 'no_shared'}_{tasks}", partitions_count=2)
 
         ts = "ts" if shared_reading else "write_time"
         watermark_expr = ", WATERMARK AS (Unwrap(CAST(ts AS Timestamp) - Interval(\"PT0.1S\")))" if shared_reading else ""

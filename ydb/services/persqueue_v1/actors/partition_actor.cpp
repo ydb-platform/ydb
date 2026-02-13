@@ -160,7 +160,7 @@ TPartitionActor::~TPartitionActor() = default;
 void TPartitionActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
-    ctx.Schedule(TDuration::Seconds(60), new TEvPQProxy::TEvUpdateReadMetrics());
+    ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
 }
 
 const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const {

@@ -50,6 +50,7 @@ void InitAsyncOutput(
             0,
             NYql::NDq::TCollectStatsLevel::None,
             "TxId-42",
+            777,
             secureParams,
             &actor.GetAsyncOutputCallbacks(),
             counters,

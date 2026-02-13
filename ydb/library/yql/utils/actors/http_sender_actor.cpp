@@ -47,9 +47,9 @@ namespace {
             auto nextRetryDelay = RetryState->GetNextRetryDelay(res);
 
             const bool isTerminal = error.empty() || nextRetryDelay.Empty();
+            Send(SenderId, new TEvHttpBase::TEvSendResult(ev, RetryCount++, isTerminal), /*flags=*/0, Cookie);
 
             if (isTerminal) {
-                Send(SenderId, new TEvHttpBase::TEvSendResult(ev, RetryCount++, isTerminal), /*flags=*/0, Cookie);
                 PassAway();
                 return;
             }

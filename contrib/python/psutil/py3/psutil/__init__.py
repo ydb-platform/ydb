@@ -149,8 +149,7 @@ __all__ = [
 
     "STATUS_RUNNING", "STATUS_IDLE", "STATUS_SLEEPING", "STATUS_DISK_SLEEP",
     "STATUS_STOPPED", "STATUS_TRACING_STOP", "STATUS_ZOMBIE", "STATUS_DEAD",
-    "STATUS_WAKING", "STATUS_LOCKED", "STATUS_WAITING", "STATUS_LOCKED",
-    "STATUS_PARKED",
+    "STATUS_WAKING", "STATUS_LOCKED", "STATUS_WAITING", "STATUS_PARKED",
 
     "CONN_ESTABLISHED", "CONN_SYN_SENT", "CONN_SYN_RECV", "CONN_FIN_WAIT1",
     "CONN_FIN_WAIT2", "CONN_TIME_WAIT", "CONN_CLOSE", "CONN_CLOSE_WAIT",
@@ -204,7 +203,7 @@ if hasattr(_psplatform.Process, "rlimit"):
 AF_LINK = _psplatform.AF_LINK
 
 __author__ = "Giampaolo Rodola'"
-__version__ = "7.2.1"
+__version__ = "7.2.2"
 version_info = tuple(int(num) for num in __version__.split('.'))
 
 _timer = getattr(time, 'monotonic', time.time)
@@ -1340,25 +1339,42 @@ class Process:
             self._proc.kill()
 
     def wait(self, timeout=None):
-        """Wait for process to terminate and, if process is a children
+        """Wait for process to terminate, and if process is a children
         of os.getpid(), also return its exit code, else None.
         On Windows there's no such limitation (exit code is always
         returned).
 
-        If the process is already terminated immediately return None
+        If the process is already terminated, immediately return None
         instead of raising NoSuchProcess.
 
         If *timeout* (in seconds) is specified and process is still
-        alive raise TimeoutExpired.
+        alive, raise TimeoutExpired.
 
-        To wait for multiple Process(es) use psutil.wait_procs().
+        If *timeout=0* either return immediately or raise
+        TimeoutExpired (non-blocking).
+
+        To wait for multiple Process objects use psutil.wait_procs().
         """
-        if timeout is not None and not timeout >= 0:
-            msg = "timeout must be a positive integer"
+        if self.pid == 0:
+            msg = "can't wait for PID 0"
             raise ValueError(msg)
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)):
+                msg = f"timeout must be an int or float (got {type(timeout)})"
+                raise TypeError(msg)
+            if timeout < 0:
+                msg = f"timeout must be positive or zero (got {timeout})"
+                raise ValueError(msg)
+
         if self._exitcode is not _SENTINEL:
             return self._exitcode
-        self._exitcode = self._proc.wait(timeout)
+
+        try:
+            self._exitcode = self._proc.wait(timeout)
+        except TimeoutExpired as err:
+            exc = TimeoutExpired(timeout, pid=self.pid, name=self._name)
+            raise exc from err
+
         return self._exitcode
 
 
@@ -1603,11 +1619,12 @@ def wait_procs(procs, timeout=None, callback=None):
     if timeout is not None and not timeout >= 0:
         msg = f"timeout must be a positive integer, got {timeout}"
         raise ValueError(msg)
-    gone = set()
-    alive = set(procs)
     if callback is not None and not callable(callback):
         msg = f"callback {callback!r} is not a callable"
         raise TypeError(msg)
+
+    gone = set()
+    alive = set(procs)
     if timeout is not None:
         deadline = _timer() + timeout
 

@@ -92,6 +92,9 @@
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
 
+/ydb/core/blobstorage @ydb-platform/blobstorage
+/ydb/library/workload/tpcc @ydb-platform/blobstorage
+
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli
 /ydb/public/lib/ydb_cli/dump @ydb-platform/core

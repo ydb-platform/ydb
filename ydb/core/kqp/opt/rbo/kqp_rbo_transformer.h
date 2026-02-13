@@ -74,7 +74,7 @@ private:
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
-    std::shared_ptr<TOpRoot> OpRoot;
+    std::unique_ptr<TOpRoot> OpRoot;
     TRuleBasedOptimizer RBO;
 };
 

@@ -53,7 +53,7 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
  *
  * TODO: Add sanity checks that can be tunred on in debug mode to immediately catch transformation problems
  */
-void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
+void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     bool fired = true;
     ui32 numMatches = 0;
     const ui32 maxNumOfMatches = 1000;
@@ -98,10 +98,8 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(std::shared_ptr<TOpRoot> opRoot, TRBOContext& rboCtx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
-    Y_ENSURE(opRoot);
-    auto& root = *opRoot;
     auto& ctx = rboCtx.ExprCtx;
 
     if (needToLog) {

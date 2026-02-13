@@ -89,7 +89,7 @@ public:
 
     // This function applies RBO optimizations, translates given `root` to physical yql `callables`, applies lightweight (stage based) physical optimizations
     // and returns a root of the physical program.
-    TExprNode::TPtr Optimize(std::shared_ptr<TOpRoot> root, TRBOContext& rboCtx);
+    TExprNode::TPtr Optimize(TOpRoot& root, TRBOContext& rboCtx);
 
     // Adds a RBO stage to the RBO pipeline.
     void AddStage(std::shared_ptr<IRBOStage>&& stage) {

@@ -400,9 +400,9 @@ private:
             // TODO: try partially early resolve AwaitingQueue (for multiMatches we MUST ignore incomplete results)
         }
         if (!fullscan || (resultIncomplete && !IsMultiMatches)) {
-            for (auto&& [k, v]: *lookupResult) {
+            for (auto& [k, v]: *lookupResult) {
                 Y_DEBUG_ABORT_UNLESS(!fullscan || v);
-                LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
+                LruCache->Update(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
             }
             lookupResult->clear();
             lookupResult.reset();

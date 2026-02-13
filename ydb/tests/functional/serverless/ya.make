@@ -5,6 +5,7 @@ TEST_SRCS(
     test_serverless.py
 )
 
+SPLIT_FACTOR(50)
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 

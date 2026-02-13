@@ -20,6 +20,7 @@ using namespace std::chrono_literals;
 constexpr ui32 GrpcRetryCount = 10;
 constexpr auto GrpcRetrySleep = 100ms;
 constexpr auto GrpcDeadline = 10s;
+constexpr const char* YdbAuthHeader = "x-ydb-auth-ticket";
 
 TString StatusToString(Ydb::StatusIds::StatusCode status) {
     return Ydb::StatusIds::StatusCode_Name(status);
@@ -28,17 +29,14 @@ TString StatusToString(Ydb::StatusIds::StatusCode status) {
 const TString& AuthTicket() {
     static const TString token = [] {
         const TString fromEnv = GetEnv("YDB_AUTH_TICKET", "");
-        if (!fromEnv.empty()) {
-            return fromEnv;
-        }
-        return TString("root@builtin");
+        return fromEnv;
     }();
 
     return token;
 }
 
 void AdjustCtx(grpc::ClientContext& ctx) {
-    ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, AuthTicket());
+    ctx.AddMetadata(YdbAuthHeader, AuthTicket());
 }
 
 } // namespace
@@ -67,7 +65,14 @@ bool TKeyValueClientV1::CreateVolume(const TString& path, ui32 partitionCount, c
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        *error = TStringBuilder() << "CreateVolume returned " << StatusToString(response.operation().status());
+        auto builder = TStringBuilder() << "CreateVolume for path " << path << " returned " << StatusToString(response.operation().status()) 
+            << " partition_count: " << partitionCount
+            << " media: ";
+        for (const TString& channelMedia : channels) {
+            builder << channelMedia << ' ';
+        }
+
+        *error = builder;
         return false;
     }
 

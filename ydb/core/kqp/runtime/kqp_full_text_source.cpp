@@ -179,6 +179,7 @@ public:
         record.SetMaxRows(MaxRowsDefaultQuota);
         record.SetMaxBytes(MaxBytesDefaultQuota);
         record.SetResultFormat(UseArrowFormat ? NKikimrDataEvents::FORMAT_ARROW : NKikimrDataEvents::FORMAT_CELLVEC);
+
         return request;
     }
 

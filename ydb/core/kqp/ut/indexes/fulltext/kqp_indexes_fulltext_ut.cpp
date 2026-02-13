@@ -4694,43 +4694,57 @@ Y_UNIT_TEST(ExplainFulltextIndexScanQuery) {
     UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
 }
 
-Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate) {
+Y_UNIT_TEST(AddFullTextFlatIndexWithTruncateWithSelect) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
     featureFlags.SetEnableTruncateTable(true);
 
     auto kikimr = Kikimr(std::move(featureFlags));
+
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_TRACE);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
     AddIndex(db);
 
+    auto select = [&](){
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "404 not found")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
+    };
+
+    auto ensureTableIsEmpty = [&](){
+        auto result = db.ExecuteQuery("SELECT * FROM `/Root/Texts`;", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
+    };
+
     auto verifyIndexWorksCorrectly = [&](){
-        UpsertTexts(db);
-        auto index = ReadIndex(db);
-        CompareYson(R"([
-            [[100u];"animals"];
-            [[100u];"cats"];
-            [[200u];"cats"];
-            [[300u];"cats"];
-            [[100u];"chase"];
-            [[200u];"chase"];
-            [[200u];"dogs"];
-            [[400u];"dogs"];
-            [[400u];"foxes"];
-            [[300u];"love"];
-            [[400u];"love"];
-            [[100u];"small"];
-            [[200u];"small"]
-        ])", NYdb::FormatResultSetYson(index));
+        select();
+        UpsertSomeTexts(db);
+        select();
     };
 
     verifyIndexWorksCorrectly();
 
     for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
         TruncateTable(db);
+        ensureTableIsEmpty();
         verifyIndexWorksCorrectly();
     }
 }

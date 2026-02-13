@@ -226,6 +226,11 @@ message TEvListPersistentBufferResult {
 }
 
 message TDirectBlockGroupAllocation {
-    repeated TDDiskId DDiskId = 1;
+    message TDDiskRecord {
+        TDDiskId DDiskId = 1; // if not set, then this item is empty
+        uint32 NumChunksClaimed = 2; // number of chunks claimed within this DDisk
+    }
+
+    repeated TDDiskRecord DDiskRecord = 1;
     repeated TDDiskId PersistentBufferDDiskId = 2;
 }

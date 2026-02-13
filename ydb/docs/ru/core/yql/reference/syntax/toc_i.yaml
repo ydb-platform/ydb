@@ -12,10 +12,16 @@ items:
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER TRANSFER,               href: alter-transfer.md,             when: feature_transfer }
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
+<<<<<<< HEAD
 - { name: ANALYZE,                      href: analyze.md, when: backend_name == "YDB" }
 - { name: BATCH DELETE,                 href: batch-delete.md,               when: feature_batch_operations }
 - { name: BATCH UPDATE,                 href: batch-update.md,               when: feature_batch_operations }
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md,   when: feature_async_replication }
+=======
+- { name: BATCH DELETE,                 href: batch-delete.md }
+- { name: BATCH UPDATE,                 href: batch-update.md }
+- { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md }
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE EXTERNAL DATA SOURCE,  href: create-external-data-source.md,when: feature_federated_queries}
 - { name: CREATE EXTERNAL TABLE,        href: create-external-table.md,      when: feature_federated_queries}

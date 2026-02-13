@@ -199,17 +199,29 @@ Access control in {{ ydb-short-name }} is divided into two segments:
 
 Both segments are used in combination: a [subject](../../concepts/glossary.md#access-subject) is granted the privilege to perform an action only if both segments allow it. The action is not allowed if either segment denies it.
 
-Access levels are defined by SID lists. The lists `database_allowed_sids`, `viewer_allowed_sids`, `monitoring_allowed_sids`, and `administration_allowed_sids` form a hierarchy (used for the [Embedded UI](../embedded-ui/ydb-monitoring.md), viewer, and for many other cluster-wide actions); higher implies lower, so a subject only needs to be in one list.
-The lists `bootstrap_allowed_sids` and `register_dynamic_node_allowed_sids` are separate and apply only to bootstrap and node registration.
-For any list, a subject is allowed if the list is **empty** or if their token contains at least one SID from the list.
+Access levels are defined by SID lists.
+
+The lists form a hierarchy (used by the [Embedded UI](../embedded-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions):
+- `administration_allowed_sids`
+- `monitoring_allowed_sids`
+- `viewer_allowed_sids`
+- `database_allowed_sids`
+
+Higher levels imply lower, so a subject only needs to appear in one list.
+
+The lists `bootstrap_allowed_sids` and `register_dynamic_node_allowed_sids` are separate, applying only to bootstrap and node registration respectively.
+
+For any list, access is granted if the list is **empty** or if the subject's token contains at least one SID from the list.
 
 [//]: # (TODO: add a link to the viewer api reference and the required privileges, when available)
 
 #|
 || Parameter | Description ||
-|| `database_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) for the **"database"** role.
+|| `database_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the database access level.
 
-This role is less privileged than the viewer role. Subjects in this list are not allowed to issue any backend call without specifying a database; cluster-level requests (for example, listing all cluster nodes) are forbidden and return 403. Within a database context (for example, in the [Embedded UI](../embedded-ui/ydb-monitoring.md) when connected to a database), they can access data scoped to that database. Use this list for application or tenant users who must be restricted to database-scoped operations only.
+This level is less privileged than viewer. Subjects can only operate within a database scope — backend calls without a specified database are forbidden. Cluster-level requests (e.g., listing cluster nodes) return 403. Database-scoped requests (e.g., database pages in [Embedded UI](../embedded-ui/ydb-monitoring.md)) work normally.
+
+Intended for applications or users restricted to a single database.
     ||
 || `viewer_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the viewer access level.
 
@@ -223,13 +235,15 @@ This level grants additional privileges to monitor and modify the cluster state.
 
 This level grants privileges to administer the {{ ydb-short-name }} cluster and its databases.
 
-Used not only for the Embedded UI and viewer but also for many other important actions: config changes, scheme operations requiring admin, and other administrative checks.
+Also used for config changes, scheme operations requiring admin privileges, and other administrative checks.
 
-Empty list means any user is treated as an administrator.
+An empty list means any user is treated as an administrator.
     ||
-|| `bootstrap_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) that are allowed to perform bootstrap cluster operations.
+|| `bootstrap_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) that are allowed to perform cluster bootstrap.
 
-Used when the cluster is not yet initialized (no security object). A request is allowed if the subject is in `administration_allowed_sids` **or** in `bootstrap_allowed_sids`. Use this to allow a restricted set of identities to bootstrap the cluster without granting full administration.
+Used to initially bootstrap the cluster from an uninitialized state (when the auth subsystem is not yet functional). Bootstrap is allowed if the subject is in `bootstrap_allowed_sids` or `administration_allowed_sids`.
+
+`bootstrap_allowed_sids` allows specific identities to bootstrap the cluster without granting full administration privileges.
     ||
 || `register_dynamic_node_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) that are allowed to register database nodes.
 
@@ -241,26 +255,33 @@ For technical reasons, this list must include `root@builtin`.
 
 The access level lists are empty by default.
 
-For each list, an **empty** value means "allow any user" for that check: no SID is required. So empty `administration_allowed_sids` means any user is treated as an administrator; empty `viewer_allowed_sids` (with the other UI lists empty) means any user can use the Embedded UI as a viewer; and so on. If all four UI-related lists (`database_allowed_sids`, `viewer_allowed_sids`, `monitoring_allowed_sids`, `administration_allowed_sids`) are empty, any user has the full administrative access level for the UI and for cluster administration.
+An **empty** list means "allow any user" — any SID is acceptable (or no SID at all if anonymous access is allowed). Empty `administration_allowed_sids` grants any user administrator privileges; empty `viewer_allowed_sids` (with other UI lists empty) allows any user viewer-level access to Embedded UI. If all four hierarchical lists are empty, any user has full administrative access.
 
 For a secure {{ ydb-short-name }} deployment, plan the access model beforehand and define the group lists before starting the cluster for the first time.
 
 {% endnote %}
 
-The access level lists can include the SIDs of [users](../../concepts/glossary.md#access-user) or [user groups](../../concepts/glossary.md#access-group). A subject is considered to belong to a list if the list contains the subject's user SID or the SID of any group the subject belongs to (including groups of groups); a single match is sufficient.
+Access level lists can contain [user](../../concepts/glossary.md#access-user) or [group](../../concepts/glossary.md#access-group) SIDs. A subject matches a list if it contains their user SID or any of their group SIDs (including nested groups) — a single match is sufficient.
 
 It is recommended to add user groups and separate service accounts to the `*_allowed_sids` access level lists. This way, granting access levels to individual users does not require changing the {{ ydb-short-name }} cluster configuration.
 
 **Where the lists are used:**
 
-- **`database_allowed_sids`**, **`viewer_allowed_sids`**, **`monitoring_allowed_sids`**, **`administration_allowed_sids`**: Access to the Embedded UI and viewer HTTP endpoints; checks are hierarchical (administration implies monitoring and viewer). When any of these lists is non-empty, the cluster may require cluster access resource checks for the access service.
-- **`administration_allowed_sids`**: Also used for all administrative checks. Empty list means any user is treated as an administrator.
-- **`bootstrap_allowed_sids`**: Only for bootstrap cluster operations when the cluster is not yet initialized; the subject must be in this list or in `administration_allowed_sids`.
-- **`register_dynamic_node_allowed_sids`**: Node registration (gRPC, message bus, console).
+- **`database_allowed_sids`**, **`viewer_allowed_sids`**, **`monitoring_allowed_sids`**, **`administration_allowed_sids`**
+    To access Embedded UI and viewer HTTP endpoints.
+    
+- **`administration_allowed_sids`**
+    For all administrative checks.
+    
+- **`bootstrap_allowed_sids`**
+    Only for cluster bootstrap operation
+    
+- **`register_dynamic_node_allowed_sids`**
+    For registering nodes in a cluster (discovery service and cms subsystem).
 
 {% note info %}
 
-Access level lists are layers of additional privileges; a higher list implies all lower privileges:
+Access level lists represent layers of additional privileges:
 
 - An access subject that is not included in any access level list can view only publicly available information about the cluster (for example, [a list of databases on the cluster](../embedded-ui/ydb-monitoring.md#tenant_list_page) or [a list of cluster nodes](../embedded-ui/ydb-monitoring.md#node_list_page)).
 - The `database_allowed_sids` list defines the "database" role: these users are less privileged than viewers and cannot issue any backend call without specifying a database; cluster-wide requests are not allowed.
@@ -268,7 +289,7 @@ Access level lists are layers of additional privileges; a higher list implies al
 
 For example:
 
-- A user with the "database" role (e.g. an application that must stay database-scoped) should be added only to `database_allowed_sids`.
+- A user of a database (e.g. an application that must stay database-scoped) should be added only to `database_allowed_sids`.
 - A viewer should be added only to `viewer_allowed_sids`.
 - An operator should be added only to `monitoring_allowed_sids` (they automatically get viewer privileges).
 - An administrator should be added only to `administration_allowed_sids` (they automatically get monitoring and viewer privileges).

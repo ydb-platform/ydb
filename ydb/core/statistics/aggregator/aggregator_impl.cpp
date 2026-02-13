@@ -507,6 +507,14 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
+void TStatisticsAggregator::PassAway() {
+    if (AnalyzeActorId) {
+        Send(AnalyzeActorId, new TEvents::TEvPoison());
+    }
+
+    IActor::PassAway();
+}
+
 void TStatisticsAggregator::Handle(TEvPrivate::TEvResolve::TPtr&) {
     Resolve();
 }
@@ -645,10 +653,13 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
     }
     SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze");
     Y_ABORT_UNLESS(!TraversalPathId);
+    Y_ABORT_UNLESS(!AnalyzeActorId);
 
     for (TForceTraversalOperation& operation : ForceTraversals) {
         for (TForceTraversalTable& operationTable : operation.Tables) {
-            if (operationTable.Status == TForceTraversalTable::EStatus::None) {
+            if (operationTable.Status == TForceTraversalTable::EStatus::None
+                || (operationTable.Status == TForceTraversalTable::EStatus::AnalyzeStarted
+                    && operation.RequestingActorReattached)) {
                 std::optional<bool> isKnown = IsKnownTable(operationTable.PathId);
                 if (!isKnown.has_value()) {
                     SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
@@ -1047,6 +1058,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
                 auto forceTraversal = CurrentForceTraversalOperation();
                 str << "  CreatedAt: " << forceTraversal->CreatedAt << Endl;
                 str << ", ReplyToActorId: " << forceTraversal->ReplyToActorId << Endl;
+                str << ", HeardFromRequester: " << forceTraversal->RequestingActorReattached << Endl;
                 str << ", Types: " << forceTraversal->Types << Endl;
                 str << ", Tables size: " << forceTraversal->Tables.size() << Endl;
                 str << ", Tables: " << Endl;

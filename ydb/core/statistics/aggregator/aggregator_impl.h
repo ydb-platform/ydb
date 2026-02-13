@@ -154,6 +154,8 @@ private:
     void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev);
 
+    void PassAway() final;
+
     void InitializeStatisticsTable();
     void Navigate();
     void Resolve();
@@ -410,6 +412,7 @@ private: // stored in local db
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
+        bool RequestingActorReattached = false; // True if the requesting actor reached this tablet instance
         TInstant CreatedAt;
     };
     std::list<TForceTraversalOperation> ForceTraversals;

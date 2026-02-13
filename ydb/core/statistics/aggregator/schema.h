@@ -53,13 +53,15 @@ struct TAggregatorSchema : NIceDb::Schema {
         struct Types          : Column<2, NScheme::NTypeIds::String> {};
         struct CreatedAt      : Column<3, NScheme::NTypeIds::Uint64> {};
         struct DatabaseName   : Column<4, NScheme::NTypeIds::String> {};
+        struct ReplyToActorId : Column<5, NScheme::NTypeIds::ActorId>{};
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
             Types,
             CreatedAt,
-            DatabaseName
+            DatabaseName,
+            ReplyToActorId
         >;
     };
 

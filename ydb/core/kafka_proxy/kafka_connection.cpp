@@ -68,6 +68,9 @@ public:
     bool CloseConnection = false;
 
     bool RetryingWriteToSocket = false;
+    bool MtlsAuthenticationSuccessful = false;
+    bool MtslRecievedCert = false;
+    std::shared_ptr<TActorContext> SavedCtxForRead = nullptr;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
@@ -847,7 +850,7 @@ protected:
                 EApiKey::SASL_AUTHENTICATE == apiKey);
     }
 
-    void HandleAuthorizeTicketResult(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
+    void HandleAuthorizeTicketResult(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext&) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
         if (result.Error) {
             KAFKA_LOG_D("Authentication unsuccessful:" << result.Error.Message);
@@ -856,7 +859,8 @@ protected:
             KAFKA_LOG_D("Empty token");
         }
         KAFKA_LOG_D("Authorization successful");
-        if (!DoRead(ctx)) {
+        MtlsAuthenticationSuccessful = true;
+        if (!DoRead(*SavedCtxForRead)) {
             return;
         }
     }
@@ -864,13 +868,18 @@ protected:
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
         if (event->Get()->Read) {
             if (!CloseConnection) {
-                if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
+                if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable() && !MtslRecievedCert) {
                     TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
                     Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
                     if (cert != nullptr) {
                         TString clientCert = Socket->GetStringClientCert(cert.get());
                         Cout << "Client cert:" << clientCert << Endl;
+                        // SavedCtxForRead.SelfID = ctx.SelfID;
+                        MtslRecievedCert = true;
+                        SavedCtxForRead =  std::make_shared<TActorContext>(TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ctx.SelfID));
+
                         Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(clientCert));
+                        return;
                     }
                 }
 

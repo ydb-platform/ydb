@@ -1,0 +1,11 @@
+--- contrib/libs/grpc/src/core/lib/compression/message_compress.cc	(a31456d79c5352c94e2eced9c1df3b5c9f3353b8)
++++ contrib/libs/grpc/src/core/lib/compression/message_compress.cc	(index)
+@@ -103,7 +103,7 @@ static int zlib_compress(grpc_slice_buffer* input, grpc_slice_buffer* output,
+   memset(&zs, 0, sizeof(zs));
+   zs.zalloc = zalloc_gpr;
+   zs.zfree = zfree_gpr;
+-  r = deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | (gzip ? 16 : 0),
++  r = deflateInit2(&zs, getenv("GRPC_ZLEVEL") ? atoi(getenv("GRPC_ZLEVEL")) : Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | (gzip ? 16 : 0),
+                    8, Z_DEFAULT_STRATEGY);
+   GPR_ASSERT(r == Z_OK);
+   r = zlib_body(&zs, input, output, deflate) && output->length < input->length;

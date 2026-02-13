@@ -405,6 +405,9 @@ DECLARE_REFCOUNTED_STRUCT(TSchemalessBufferedDynamicTableWriterConfig)
 
 DECLARE_REFCOUNTED_CLASS(TSchemafulPipe)
 
+DECLARE_REFCOUNTED_CLASS(TMemoryProviderMapByTag)
+DECLARE_REFCOUNTED_CLASS(TTrackedMemoryChunkProvider)
+
 class TSaveContext;
 class TLoadContext;
 using TPersistenceContext = TCustomPersistenceContext<TSaveContext, TLoadContext>;

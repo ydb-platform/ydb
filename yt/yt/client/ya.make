@@ -146,6 +146,7 @@ SRCS(
     table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
     table_client/table_upload_options.cpp
+    table_client/tracked_memory_chunk_provider.cpp
     table_client/logical_type.cpp
     table_client/merge_table_schemas.cpp
     table_client/name_table.cpp
@@ -258,6 +259,7 @@ RECURSE_FOR_TESTS(
     api/unittests
     arrow/unittests
     query_client/unittests
+    queue_client/unittests
     signature/unittests
     table_client/unittests
     unittests

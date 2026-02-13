@@ -30,7 +30,7 @@
 ||
 || `available_external_data_sources`
 | пустой список
-| Список с разрешенными типами внешних источников. Применяется при `all_external_data_sources_are_available: false`. 
+| Список с разрешенными типами внешних источников. Применяется при `all_external_data_sources_are_available: false`.
 
 Возможные значения:
 

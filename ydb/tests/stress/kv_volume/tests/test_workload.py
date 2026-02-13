@@ -11,8 +11,15 @@ class TestYdbKvVolumeWorkload(StressFixture):
     def setup(self):
         yield from self.setup_cluster()
 
-    @pytest.mark.parametrize("config_name", ["common_channel_read", "inline_channel_read", "write_read_delete"])
-    def test(self, config_name):
+    @pytest.mark.parametrize(
+        "config",
+        [
+            "ydb/tests/stress/kv_volume/tests/configs/common_channel_read.textproto",
+            "ydb/tests/stress/kv_volume/tests/configs/inline_channel_read.textproto",
+            "ydb/tests/stress/kv_volume/tests/configs/write_read_delete.textproto",
+        ],
+    )
+    def test(self, config):
         yatest.common.execute([
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
@@ -20,5 +27,5 @@ class TestYdbKvVolumeWorkload(StressFixture):
             "--duration", "1",
             "--in-flight", "1",
             "--version", "v1",
-            "--config-name", config_name,
+            "--config", yatest.common.source_path(config),
         ])

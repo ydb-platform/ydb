@@ -6,6 +6,10 @@ ENV(YDB_ERASURE=mirror_3_dc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/kv_volume/workload_keyvalue_volume")
 
+DATA(
+    arcadia/ydb/tests/stress/kv_volume/tests/configs
+)
+
 TEST_SRCS(
     test_workload.py
 )

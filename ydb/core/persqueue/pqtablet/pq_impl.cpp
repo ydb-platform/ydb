@@ -2418,8 +2418,8 @@ void TPersQueue::HandleUpdateReadMetricsRequest(ui64 responseCookie, NWilson::TT
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "in_flight_full_duration is required");
     }
 
-    auto inFlightFullnessDuration = TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().GetInFlightOverflowDurationMs());
-    ctx.Send(partActor, new TEvPQ::TEvUpdateReadMetrics(inFlightFullnessDuration), 0, 0, std::move(traceId));
+    auto inFlightOverflowDuration = TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().GetInFlightOverflowDurationMs());
+    ctx.Send(partActor, new TEvPQ::TEvUpdateReadMetrics(inFlightOverflowDuration), 0, 0, std::move(traceId));
 }
 
 void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,

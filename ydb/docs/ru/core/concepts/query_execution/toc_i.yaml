@@ -1,0 +1,17 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: Оптимизатор запросов
+    href: optimizer.md
+  - name: Многоверсионное управление конкурентным доступом (MVCC)
+    href: mvcc.md
+  - name: Вторичные индексы
+    href: secondary_indexes.md
+  - name: Векторный поиск
+    href: vector_search.md
+  - name: Федеративные запросы
+    include:
+      path: federated_query/toc_p.yaml
+      mode: link
+  - name: Спиллинг
+    href: spilling.md

@@ -25,4 +25,4 @@ INSERT INTO s3_test_data
 SELECT * FROM Table
 ```
 
-Подробнее про работу с внешними таблицами, описывающими бакеты S3 ({{ objstorage-name }}) описано в разделе [{#T}](../federated_query/s3/external_table.md).
+Подробнее про работу с внешними таблицами, описывающими бакеты S3 ({{ objstorage-name }}) описано в разделе [{#T}](../query_execution/federated_query/s3/external_table.md).

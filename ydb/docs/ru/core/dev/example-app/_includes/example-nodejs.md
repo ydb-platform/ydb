@@ -230,8 +230,11 @@ async function selectWithParameters(driver: Driver, data: ThreeIds[], logger: Lo
 }
 ```
 
+<<<<<<< HEAD
 {% include [scan-query.md](steps/08_scan_query.md) %}
 
+=======
+>>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 Для получения данных потоком используется метод `QuerySession.execute()`.
 
 ```ts

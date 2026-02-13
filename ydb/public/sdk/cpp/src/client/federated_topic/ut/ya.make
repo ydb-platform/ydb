@@ -33,6 +33,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     basic_usage_ut.cpp
+    simple_blocking_write_session_ut.cpp
 )
 
 END()

@@ -20,9 +20,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("queue-url", "AWS queue URL.")
             .Required()
             .StoreResult(&Scenario.QueueUrl);
-        config.Opts->AddLongOption("endpoint-override", "AWS queue endpoint.")
+        config.Opts->AddLongOption("queue-endpoint", "Queue endpoint.")
             .Optional()
-            .StoreResult(&Scenario.EndpointOverride);
+            .StoreResult(&Scenario.QueueEndpoint);
         config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
             .DefaultValue(60)
             .StoreResult(&Scenario.TotalSec);
@@ -42,15 +42,15 @@ namespace NYdb::NConsoleClient {
                             "Print timestamp each second with statistics.")
             .StoreTrue(&Scenario.PrintTimestamp);
         config.Opts
-            ->AddLongOption("producers", "Number of concurrent producers.")
+            ->AddLongOption("workers", "Number of concurrent workers.")
             .DefaultValue(1)
-            .StoreResult(&Scenario.Concurrency);
-        config.Opts->AddLongOption('a', "account", "AWS account ID.")
-            .Required()
+            .StoreResult(&Scenario.WorkersCount);
+        config.Opts->AddLongOption("aws-access-key-id", "AWS access key id.")
             .StoreResult(&Scenario.Account);
-        config.Opts->AddLongOption('t', "token", "AWS token.")
-            .Required()
+        config.Opts->AddLongOption("aws-session-token", "AWS session token.")
             .StoreResult(&Scenario.Token);
+        config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
+            .StoreResult(&Scenario.SecretKey);
         config.Opts->AddLongOption('b', "batch-size", "AWS batch size.")
             .DefaultValue(1)
             .StoreResult(&Scenario.BatchSize);
@@ -64,9 +64,9 @@ namespace NYdb::NConsoleClient {
             ->AddLongOption('p', "percentile", "Percentile for output statistics.")
             .DefaultValue(80.0)
             .StoreResult(&Scenario.Percentile);
-        config.Opts->AddLongOption("use-json-api", "Use JSON API.")
+        config.Opts->AddLongOption("use-xml-api", "Use XML API.")
             .DefaultValue(false)
-            .StoreTrue(&Scenario.UseJsonAPI);
+            .StoreTrue(&Scenario.UseXmlAPI);
         config.Opts
             ->AddLongOption("request-timeout", "Request timeout in milliseconds.")
             .DefaultValue(2000)

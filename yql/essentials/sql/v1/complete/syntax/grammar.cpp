@@ -11,7 +11,7 @@ namespace NSQLComplete {
 
 class TSqlGrammar: public ISqlGrammar {
 public:
-    TSqlGrammar(const NSQLReflect::TLexerGrammar& grammar)
+    explicit TSqlGrammar(const NSQLReflect::TLexerGrammar& grammar)
         : Parser_(MakeDummyParser())
         , AllTokens_(ComputeAllTokens())
         , KeywordTokens_(ComputeKeywordTokens(grammar))

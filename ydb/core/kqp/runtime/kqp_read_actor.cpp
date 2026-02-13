@@ -379,10 +379,6 @@ public:
             UseFollowers = true;
         }
 
-        if (Settings->DuplicateCheckColumnsSize() > 0) {
-            CollectDuplicateStats = true;
-        }
-
         InitResultColumns();
 
         KeyColumnTypes.reserve(Settings->GetKeyColumnTypes().size());
@@ -842,12 +838,6 @@ public:
 
         YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() == KeyColumnTypes.size());
 
-        if (CollectDuplicateStats) {
-            for (const auto& column : DuplicateCheckExtraColumns) {
-                record.AddColumns(column.Tag);
-            }
-        }
-
         if (Snapshot.IsValid()) {
             record.MutableSnapshot()->SetTxId(Snapshot.TxId);
             record.MutableSnapshot()->SetStep(Snapshot.Step);
@@ -1234,12 +1224,6 @@ public:
             }
         }
 
-        if (CollectDuplicateStats) {
-            for (auto& column : DuplicateCheckExtraColumns) {
-                types.push_back(column.TypeInfo);
-            }
-        }
-
         for (size_t rowIndex = 0; rowIndex < result->GetRowsCount(); ++rowIndex) {
             const auto& row = result->GetCells(rowIndex);
             builder << "|" << DebugPrintPoint(types, row, *AppData()->TypeRegistry);
@@ -1286,40 +1270,6 @@ public:
                     rowItems[resultColumnIndex] = NMiniKQL::GetCellValue(row[columnIndex], column.TypeInfo);
                     columnIndex += 1;
                 }
-            }
-
-            if (CollectDuplicateStats) {
-                TVector<TCell> cells;
-                cells.resize(DuplicateCheckColumnRemap.size());
-                for (size_t deduplicateColumn = 0; deduplicateColumn < DuplicateCheckColumnRemap.size(); ++deduplicateColumn) {
-                    cells[deduplicateColumn] = row[DuplicateCheckColumnRemap[deduplicateColumn]];
-                }
-                TString result = TSerializedCellVec::Serialize(cells);
-                if (auto ptr = DuplicateCheckStats.FindPtr(result)) {
-                    TVector<NScheme::TTypeInfo> types;
-                    for (auto& column : Settings->GetDuplicateCheckColumns()) {
-                        types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
-                    }
-                    TString rowRepr = DebugPrintPoint(types, cells, *AppData()->TypeRegistry);
-
-                    TStringBuilder rowMessage;
-                    rowMessage << "found duplicate rows from table "
-                        << Settings->GetTable().GetTablePath()
-                        << " previous shardId is " << ptr->ShardId
-                        << " current is " << handle.ShardId
-                        << " previous readId is " << ptr->ReadId
-                        << " current is " << handle.ReadId
-                        << " previous seqNo is " << ptr->SeqNo
-                        << " current is " << handle.SeqNo
-                        << " previous row number is " << ptr->RowIndex
-                        << " current is " << rowIndex
-                        << " key is " << rowRepr;
-                    CA_LOG_E(rowMessage);
-                    Counters->RowsDuplicationsFound->Inc();
-                    RuntimeError(rowMessage, NYql::NDqProto::StatusIds::INTERNAL_ERROR, {});
-                    return stats;
-                }
-                DuplicateCheckStats[result] = {.ReadId = readId , .ShardId = handle.ShardId, .SeqNo = seqNo, .RowIndex = rowIndex };
             }
 
             stats.DataBytes += rowSize;
@@ -1599,32 +1549,6 @@ private:
             column.NotNull = srcColumn.GetNotNull();
             ResultColumns.push_back(column);
         }
-        if (CollectDuplicateStats) {
-            THashMap<ui32, ui32> positions;
-            size_t resultIndex = 0;
-            for (auto& column : Settings->GetColumns()) {
-                if (!IsSystemColumn(column.GetId())) {
-                    positions[column.GetId()] = resultIndex;
-                    resultIndex += 1;
-                }
-            }
-            DuplicateCheckExtraColumns.reserve(Settings->ColumnsSize());
-            for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DuplicateCheckColumnsSize(); ++deduplicateColumn) {
-                const auto& srcColumn = Settings->GetDuplicateCheckColumns(deduplicateColumn);
-                TResultColumn column;
-                column.Tag = srcColumn.GetId();
-                Y_ENSURE(!IsSystemColumn(column.Tag));
-                if (!positions.contains(column.Tag)) {
-                    positions[column.Tag] = resultIndex;
-                    resultIndex += 1;
-                    column.TypeInfo = MakeTypeInfo(srcColumn);
-                    column.IsSystem = false;
-                    column.NotNull = false;
-                    DuplicateCheckExtraColumns.push_back(column);
-                }
-                DuplicateCheckColumnRemap.push_back(positions[column.Tag]);
-            }
-        }
     }
 
 private:
@@ -1689,18 +1613,7 @@ private:
     NWilson::TSpan ReadActorSpan;
     NWilson::TSpan ReadActorStateSpan;
 
-    bool CollectDuplicateStats = false;
-    struct TDuplicationStats {
-        ui64 ReadId;
-        ui64 ShardId;
-        ui64 SeqNo;
-        ui64 RowIndex;
-    };
-
     THashSet<ui64> HasEstablishedPipe;
-    THashMap<TString, TDuplicationStats> DuplicateCheckStats;
-    TVector<TResultColumn> DuplicateCheckExtraColumns;
-    TVector<ui32> DuplicateCheckColumnRemap;
 
     struct TBatchOperationColumnMeta {
         size_t ReadIndex;

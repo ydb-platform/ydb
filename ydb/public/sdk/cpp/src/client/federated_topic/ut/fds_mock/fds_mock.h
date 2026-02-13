@@ -57,10 +57,26 @@ public:
         } while (true);
     }
 
+    void SetAutoRespondSingleDatabase(bool enable) {
+        with_lock(Lock) {
+            AutoRespondSingleDatabase = enable;
+        }
+    }
+
     virtual grpc::Status ListFederationDatabases(grpc::ServerContext*,
                               const TRequest* request,
                               TResponse* response) override {
         Y_UNUSED(request);
+
+        // Check if auto-respond mode is enabled
+        with_lock(Lock) {
+            if (AutoRespondSingleDatabase) {
+                auto result = ComposeOkResultSingleDatabase();
+                Cerr << ">>> Auto-responding with single database" << Endl;
+                *response = std::move(result.Response);
+                return result.Status;
+            }
+        }
 
         auto p = NThreading::NewPromise<TGrpcResult>();
         auto f = p.GetFuture();
@@ -125,6 +141,32 @@ public:
         return ComposeOkResult(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
     }
 
+    // Returns a single database response to avoid partition competition between multiple sub-sessions
+    TGrpcResult ComposeOkResultSingleDatabase() {
+        Ydb::FederationDiscovery::ListFederationDatabasesResponse okResponse;
+
+        auto op = okResponse.mutable_operation();
+        op->set_status(Ydb::StatusIds::SUCCESS);
+        okResponse.mutable_operation()->set_ready(true);
+        okResponse.mutable_operation()->set_id("12345");
+
+        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
+        mockResult.set_self_location("dc1");
+        auto c1 = mockResult.add_federation_databases();
+        c1->set_name("dc1");
+        c1->set_path("/Root");
+        c1->set_id("account-dc1");
+        c1->set_endpoint("localhost:" + ToString(Port));
+        c1->set_location("dc1");
+        c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        c1->set_weight(1000);
+
+        op->mutable_result()->PackFrom(mockResult);
+
+        return {okResponse, grpc::Status::OK};
+    }
+
     TGrpcResult ComposeOkResultUnavailableDatabases() {
         return ComposeOkResult(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
     }
@@ -173,6 +215,7 @@ public:
     ui16 Port;
     std::deque<TManualRequest> PendingRequests;
     TAdaptiveLock Lock;
+    bool AutoRespondSingleDatabase = false;
 };
 
 }  // namespace NYdb::NFederatedTopic::NTests

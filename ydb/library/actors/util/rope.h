@@ -238,7 +238,11 @@ private:
         template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
         char *ContiguousDataMut() {
             CheckValid();
-            return GetChunk().GetDataMut();
+            const size_t offset = Ptr - Iter->Begin;
+            auto& chunk = GetChunk();
+            char *res = chunk.GetDataMut() + offset;
+            Ptr = Iter->Begin + offset;
+            return res;
         }
 
         template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>

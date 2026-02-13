@@ -67,23 +67,6 @@ BELONGS Lib/ya.make
     Files with this license:
         Lib/urllib/robotparser.py [3:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 135ed74fd2b9c407102e439e80a9689d
-BELONGS Lib/ya.make
-    License text:
-        \# Copyright 2004-2005 Elemental Security, Inc. All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        Lib/lib2to3/pgen2/__init__.py [1:1]
-        Lib/lib2to3/pgen2/conv.py [1:1]
-        Lib/lib2to3/pgen2/driver.py [1:1]
-        Lib/lib2to3/pgen2/grammar.py [1:1]
-        Lib/lib2to3/pgen2/literals.py [1:1]
-        Lib/lib2to3/pgen2/parse.py [1:1]
-        Lib/lib2to3/pgen2/pgen.py [1:1]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 1efebd8207a0c0e452c1e893fab844aa
 BELONGS Lib/ya.make
     License text:
@@ -102,14 +85,16 @@ BELONGS Lib/ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 1f0b75b0fa5f5914f30890b0882d008c
 BELONGS ya.make
     License text:
-        Copyright © 2001-2024 Python Software Foundation.  All rights reserved.
+        provided, however, that PSF's License Agreement and PSF's notice of copyright,
+        i.e., "Copyright (c) 2001-2024 Python Software Foundation; All Rights Reserved"
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        LICENSE [85:86]
         README.rst [17:17]
-        README.rst [215:215]
+        README.rst [218:218]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1f14a98f6d5884f76bc096957af8f3f0
 BELONGS Modules/_sqlite/ya.make
@@ -134,6 +119,34 @@ BELONGS Lib/ya.make
     Files with this license:
         Lib/logging/handlers.py [1:1]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 210725e63b95484e83c2efcd7e0c6122
+BELONGS Lib/ya.make
+    License text:
+        \#   Copyright 2000-2010 Michael Hudson-Doyle <micahel@gmail.com>
+        \#                       Armin Rigo
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/_pyrepl/curses.py [1:2]
+        Lib/_pyrepl/simple_interact.py [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 266d6f62fcd508e39b8dfd2cc9abf823
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Objects/mimalloc/alloc-aligned.c [2:4]
+        Objects/mimalloc/alloc-override.c [2:4]
+        Objects/mimalloc/alloc-posix.c [2:4]
+        Objects/mimalloc/heap.c [2:4]
+        Objects/mimalloc/options.c [2:4]
+        Objects/mimalloc/stats.c [2:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 29be00457f74dcf5f2b494d41d6a6c10
 BELONGS Lib/ya.make
     License text:
@@ -157,6 +170,21 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         Python/hashtable.c [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2fe0814f10b3df86b72804bbcf241322
+BELONGS Lib/ya.make
+    License text:
+        \#   Copyright 2000-2010 Michael Hudson-Doyle <micahel@gmail.com>
+        \#                       Antonio Cuni
+        \#                       Armin Rigo
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/_pyrepl/commands.py [1:3]
+        Lib/_pyrepl/reader.py [1:3]
+        Lib/_pyrepl/unix_console.py [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 31a99035c0feae994abfc37a475fbbef
 BELONGS Lib/ya.make
@@ -254,7 +282,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Include/unicodeobject.h [13:13]
+        Include/unicodeobject.h [11:11]
         Objects/unicodeobject.c [9:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4730c6cc3207e49296b1422babd08c84
@@ -267,7 +295,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Modules/selectmodule.c [1721:1722]
+        Modules/selectmodule.c [1731:1732]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4c4db466ec49df90501b3efa15b48115
 BELONGS ya.make
@@ -334,6 +362,39 @@ BELONGS Lib/ya.make ya.make
         Modules/_multiprocessing/multiprocessing.c [6:7]
         Modules/_multiprocessing/semaphore.c [6:7]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 5f21aa30041415548b09b1e8e25da7fb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Objects/mimalloc/arena.c [2:4]
+        Objects/mimalloc/segment-map.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5fc5246a7da6971940f2a93100292b4d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Objects/mimalloc/random.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 656755fa5c3e2a7d5a52271c6e206e2a
+BELONGS Lib/ya.make
+    License text:
+        \#   Copyright 2000-2010 Michael Hudson-Doyle <micahel@gmail.com>
+        \#                       Antonio Cuni
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/_pyrepl/completing_reader.py [1:2]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 6d727687fcc95ba4d2aac674e9c30f19
 BELONGS ya.make
     License text:
@@ -344,7 +405,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Modules/binascii.c [646:647]
+        Modules/binascii.c [636:637]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6df801c8be98b70cf1e1bd99eee48534
 BELONGS Lib/ya.make
@@ -382,7 +443,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Include/unicodeobject.h [24:25]
+        Include/unicodeobject.h [22:23]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 726a23fbbe59fd1c0168b2deaa565438
 BELONGS Lib/ya.make
@@ -503,6 +564,16 @@ BELONGS Lib/ya.make
     Files with this license:
         Lib/xml/etree/ElementInclude.py [11:11]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 8417b808fabacd093257b7972e1b7c8f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Include/internal/mimalloc/mimalloc/atomic.h [2:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 8600cd4ce6ae06bf59303d5400806dd6
 BELONGS ya.make
     License text:
@@ -526,19 +597,6 @@ BELONGS Lib/ya.make
         Match type      : COPYRIGHT
     Files with this license:
         Lib/sqlite3/__init__.py [3:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 899627115d890c4e4189c19a62ec287a
-BELONGS Lib/ya.make
-    License text:
-        \# Copyright 2008 Armin Ronacher.
-        \# Licensed to PSF under a Contributor Agreement.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        Lib/lib2to3/fixes/fix_isinstance.py [1:2]
-        Lib/lib2to3/fixes/fix_reduce.py [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 91abf9fc93588e766c31cefc6cb04c69
 BELONGS Lib/ya.make
@@ -574,7 +632,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        README.rst [222:222]
+        README.rst [225:225]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 93670f683508a451216895afb3ae4125
 BELONGS Lib/ya.make
@@ -620,7 +678,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Python/pyhash.c [297:297]
+        Python/pyhash.c [288:288]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9f04c8fd6f5602c4c86d36d247e2d5a7
 BELONGS Lib/ya.make ya.make
@@ -656,19 +714,6 @@ BELONGS Lib/ya.make
     Files with this license:
         Lib/wsgiref/validate.py [1:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL a2b06d735de2c112ff877c256568ba97
-BELONGS Lib/ya.make
-    License text:
-        \# Copyright 1994 by Lance Ellinghouse
-        \# Cathedral City, California Republic, United States of America.
-        \#                        All Rights Reserved
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        Lib/uu.py [3:5]
-
 KEEP     COPYRIGHT_SERVICE_LABEL a33893018247ff1b3c48917d6748d15a
 BELONGS Lib/ya.make
     License text:
@@ -692,7 +737,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENSE [247:248]
+        LICENSE [245:246]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a984b43b8fe410b55c1b870c44551dd8
 BELONGS Lib/ya.make
@@ -777,6 +822,17 @@ BELONGS Lib/ya.make
         Lib/profile.py [11:11]
         Lib/pstats.py [7:7]
 
+KEEP     COPYRIGHT_SERVICE_LABEL bb2ecc7d3573627ff5673fd4981120f7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Objects/mimalloc/bitmap.c [2:4]
+        Objects/mimalloc/bitmap.h [2:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL bfc8838d0a6fb65ac57c3f523b66bd9a
 BELONGS Lib/ya.make
     License text:
@@ -837,6 +893,21 @@ BELONGS Lib/ya.make
         Lib/concurrent/futures/process.py [1:1]
         Lib/concurrent/futures/thread.py [1:1]
 
+KEEP     COPYRIGHT_SERVICE_LABEL c820b5a218e17445341b84fbb4c72b9b
+BELONGS Lib/ya.make
+    License text:
+        \#   Copyright 2000-2008 Michael Hudson-Doyle <micahel@gmail.com>
+        \#                       Armin Rigo
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/_pyrepl/__init__.py [1:2]
+        Lib/_pyrepl/base_eventqueue.py [1:2]
+        Lib/_pyrepl/keymap.py [1:2]
+        Lib/_pyrepl/unix_eventqueue.py [1:2]
+
 KEEP     COPYRIGHT_SERVICE_LABEL c9840b23152aadd27a62cd4838286ea9
 BELONGS Lib/ya.make
     License text:
@@ -871,18 +942,6 @@ BELONGS Lib/ya.make
         Match type      : COPYRIGHT
     Files with this license:
         Lib/trace.py [16:16]
-
-KEEP     COPYRIGHT_SERVICE_LABEL cb8ec424ee4208dda6ce1f0904d25941
-BELONGS Lib/ya.make
-    License text:
-        \# Copyright 2006 Georg Brandl.
-        \# Licensed to PSF under a Contributor Agreement.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        Lib/lib2to3/fixes/fix_intern.py [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ce95a9dd8bc334eae3ea12a182c73d8e
 BELONGS Lib/ya.make
@@ -938,13 +997,6 @@ BELONGS Lib/ya.make
     Files with this license:
         Lib/_collections_abc.py [1:1]
         Lib/abc.py [1:1]
-        Lib/lib2to3/fixes/fix_buffer.py [1:1]
-        Lib/lib2to3/fixes/fix_dict.py [1:1]
-        Lib/lib2to3/fixes/fix_filter.py [1:1]
-        Lib/lib2to3/fixes/fix_map.py [1:1]
-        Lib/lib2to3/fixes/fix_standarderror.py [1:1]
-        Lib/lib2to3/fixes/fix_types.py [1:1]
-        Lib/lib2to3/fixes/fix_xrange.py [1:1]
         Lib/numbers.py [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d4ad3ffd972b79301d6beee7c8154f7b
@@ -988,30 +1040,6 @@ BELONGS ya.make
         Modules/_decimal/libmpdec/typearith.h [2:2]
         Modules/_decimal/libmpdec/umodarith.h [2:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL d515e0443b2f49784a4fd369c10de4d0
-BELONGS Lib/ya.make
-    License text:
-        \# Copyright 2006 Google, Inc. All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        Lib/lib2to3/fixer_base.py [1:1]
-        Lib/lib2to3/fixes/fix_apply.py [1:1]
-        Lib/lib2to3/fixes/fix_exec.py [1:1]
-        Lib/lib2to3/fixes/fix_execfile.py [1:1]
-        Lib/lib2to3/fixes/fix_has_key.py [1:1]
-        Lib/lib2to3/fixes/fix_long.py [1:1]
-        Lib/lib2to3/fixes/fix_ne.py [1:1]
-        Lib/lib2to3/fixes/fix_print.py [1:1]
-        Lib/lib2to3/fixes/fix_repr.py [1:1]
-        Lib/lib2to3/patcomp.py [1:1]
-        Lib/lib2to3/pgen2/driver.py [5:5]
-        Lib/lib2to3/pygram.py [1:1]
-        Lib/lib2to3/pytree.py [1:1]
-        Lib/lib2to3/refactor.py [1:1]
-
 KEEP     COPYRIGHT_SERVICE_LABEL d68bbe46e0726dcca7e0d5f66734920d
 BELONGS ya.make
     License text:
@@ -1049,6 +1077,19 @@ BELONGS ya.make
     Files with this license:
         Modules/_winapi.c [7:9]
 
+KEEP     COPYRIGHT_SERVICE_LABEL dbc750ac14a2c476b13130576be76d96
+BELONGS Lib/ya.make
+    License text:
+        \#   Copyright 2000-2010 Michael Hudson-Doyle <micahel@gmail.com>
+        \#                       Alex Gaynor
+        \#                       Antonio Cuni
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/_pyrepl/readline.py [1:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL deaf0ed8b84337a5249581c2f2f9b48b
 BELONGS Lib/ya.make
     License text:
@@ -1060,6 +1101,17 @@ BELONGS Lib/ya.make
         Match type      : COPYRIGHT
     Files with this license:
         Lib/optparse.py [44:45]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e1941a10ca29a3cb8f29b06ab8d4da0d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019,2020 Jeffrey Roberson <jeff@FreeBSD.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Python/qsbr.c [11:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e27726446f471a232c54b5b938c2856d
 BELONGS Lib/ya.make ya.make
@@ -1073,6 +1125,21 @@ BELONGS Lib/ya.make ya.make
     Files with this license:
         Lib/hashlib.py [1:2]
         Modules/_hashopenssl.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e6daa4c8870b7d157589b4f5fe80fb7d
+BELONGS Lib/ya.make
+    License text:
+        \#   Copyright 2000-2004 Michael Hudson-Doyle <micahel@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/_pyrepl/console.py [1:1]
+        Lib/_pyrepl/fancy_termios.py [1:1]
+        Lib/_pyrepl/historical_reader.py [1:1]
+        Lib/_pyrepl/input.py [1:1]
+        Lib/_pyrepl/windows_console.py [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e75fa2c7318e971f6f17f194667f8514
 BELONGS Modules/_sqlite/ya.make
@@ -1092,6 +1159,26 @@ BELONGS Modules/_sqlite/ya.make
         Modules/_sqlite/util.c [3:3]
         Modules/_sqlite/util.h [3:3]
 
+KEEP     COPYRIGHT_SERVICE_LABEL e7f053f38ca4d796d9d56538f0ce1ac7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Include/internal/mimalloc/mimalloc.h [2:4]
+        Include/internal/mimalloc/mimalloc/internal.h [2:4]
+        Include/internal/mimalloc/mimalloc/prim.h [2:4]
+        Include/internal/mimalloc/mimalloc/track.h [2:4]
+        Include/internal/mimalloc/mimalloc/types.h [2:4]
+        Objects/mimalloc/os.c [2:4]
+        Objects/mimalloc/prim/osx/prim.c [2:4]
+        Objects/mimalloc/prim/prim.c [2:4]
+        Objects/mimalloc/prim/unix/prim.c [2:4]
+        Objects/mimalloc/prim/wasi/prim.c [2:4]
+        Objects/mimalloc/prim/windows/prim.c [2:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL ebda03a35d7f204391be70b31a955347
 BELONGS ya.make
     License text:
@@ -1101,29 +1188,19 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        README.rst [217:217]
-
-KEEP     COPYRIGHT_SERVICE_LABEL ed5c60b5b3f284c2919fc59429142b23
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE [85:89]
+        README.rst [220:220]
 
 KEEP     COPYRIGHT_SERVICE_LABEL edeb8cc9f75ca4f57d69b895279ff0bf
 BELONGS Lib/ya.make
     License text:
-            :copyright: Copyright 2008 by Armin Ronacher.
-            :license: Python License.
+        :copyright: Copyright 2008 by Armin Ronacher.
+        :license: Python License.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Lib/ast.py [24:25]
+        Lib/ast.py [20:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f34d2138926a953a957f6eb5488166b2
 BELONGS ya.make
@@ -1135,33 +1212,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Include/unicodeobject.h [33:34]
+        Include/unicodeobject.h [31:32]
         Objects/unicodeobject.c [14:15]
-
-KEEP     COPYRIGHT_SERVICE_LABEL f509d1b17b86fe3de44d634c21ec6b47
-BELONGS Lib/ya.make
-    License text:
-        \# Copyright 2007 Georg Brandl.
-        \# Licensed to PSF under a Contributor Agreement.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        Lib/lib2to3/fixes/fix_numliterals.py [3:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL faff3bcadeb1b00048b846bfd4192de6
-BELONGS Lib/ya.make
-    License text:
-        \# Copyright (C) 2005 Martin v. Löwis
-        \# Licensed to PSF under a Contributor Agreement.
-        from _msi import *
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        Lib/msilib/__init__.py [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL fb1938002c07378e3df6cabaa8791691
 BELONGS ya.make
@@ -1173,8 +1225,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Include/unicodeobject.h [24:25]
-        Include/unicodeobject.h [33:34]
+        Include/unicodeobject.h [22:23]
+        Include/unicodeobject.h [31:32]
         Objects/unicodeobject.c [14:15]
 
 KEEP     COPYRIGHT_SERVICE_LABEL fdc070f8bc87235256d9738f6e2cebb6
@@ -1198,6 +1250,31 @@ BELONGS ya.make
     Files with this license:
         Modules/_decimal/_decimal.c [2:2]
 
+KEEP     COPYRIGHT_SERVICE_LABEL fe63ec86a6a35162f9131f69ba4bc3e6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Objects/mimalloc/alloc.c [2:4]
+        Objects/mimalloc/init.c [2:4]
+        Objects/mimalloc/prim/osx/alloc-override-zone.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL feb05913c2d79921f57fa41bec01920f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Objects/mimalloc/page-queue.c [2:4]
+        Objects/mimalloc/page.c [2:4]
+        Objects/mimalloc/segment.c [2:4]
+        Objects/mimalloc/static.c [2:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL ffa0e70185ef5e29a38a46da6ff126fc
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -1206,5 +1283,5 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENSE [187:192]
-        README.rst [219:220]
+        LICENSE [185:190]
+        README.rst [222:223]

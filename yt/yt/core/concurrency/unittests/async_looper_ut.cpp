@@ -676,6 +676,51 @@ TEST(TAsyncLooperTest, CancelInvoker)
     queue->Shutdown();
 }
 
+TEST(TAsyncLooperTest, NullFutureStopsLooper)
+{
+    auto queue = New<TActionQueue>();
+
+    NThreading::TEvent asyncStartCalled;
+    std::atomic<int> asyncRunCount = 0;
+    std::atomic<int> syncRunCount = 0;
+
+    auto asyncStart = BIND([&] {
+        asyncRunCount.fetch_add(1);
+        asyncStartCalled.NotifyAll();
+        return TFuture<void>();
+    });
+
+    auto syncFinish = BIND([&] {
+        syncRunCount.fetch_add(1);
+    });
+
+    auto looper = New<TAsyncLooper>(
+        queue->GetInvoker(),
+        asyncStart,
+        syncFinish);
+
+    looper->Start();
+
+    while (asyncRunCount.load() == 0) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
+
+    EXPECT_EQ(asyncRunCount.load(), 1);
+    EXPECT_EQ(syncRunCount.load(), 0);
+
+    looper->Start();
+
+    while (asyncRunCount.load() == 1) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
+
+    EXPECT_EQ(asyncRunCount.load(), 2);
+    EXPECT_EQ(syncRunCount.load(), 0);
+
+    looper->Stop();
+    queue->Shutdown();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

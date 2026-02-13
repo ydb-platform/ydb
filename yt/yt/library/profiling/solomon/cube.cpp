@@ -7,13 +7,29 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <library/cpp/iterator/functools.h>
+
 #include <library/cpp/yt/assert/assert.h>
+
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <type_traits>
 
 namespace NYT::NProfiling {
 
 using namespace NYTree;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+struct TIntPoint
+{
+    TInstant Time;
+    i64 Value;
+};
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -226,13 +242,17 @@ int TCube<T>::ReadSensors(
     auto rateNameLabel = prepareNameLabel(".rate");
     auto globalHostLabel = consumer->PrepareLabel("host", "");
     auto hostLabel = consumer->PrepareLabel("host", options.Host.value_or(""));
-    auto ytAggrLabel = consumer->PrepareLabel("yt_aggr", "1");
+    auto ytAggrLegacyLabel = consumer->PrepareLabel("yt_aggr", "1");
+    TCompactFlatMap<ESummaryPolicy, std::pair<ui32, ui32>, 5> ytAggrLabelBySummaryPolicy({
+        {ESummaryPolicy::All, consumer->PrepareLabel("yt_aggr", "all")},
+        {ESummaryPolicy::Sum, consumer->PrepareLabel("yt_aggr", "sum")},
+        {ESummaryPolicy::Max, consumer->PrepareLabel("yt_aggr", "max")},
+        {ESummaryPolicy::Min, consumer->PrepareLabel("yt_aggr", "min")},
+        {ESummaryPolicy::Avg, consumer->PrepareLabel("yt_aggr", "avg")},
+    });
 
-    // Set allowAggregate to true to aggregate by host.
-    // Currently Monitoring supports only sum aggregation.
-    auto writeLabels = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, bool allowAggregate) {
-        consumer->OnLabelsBegin();
-
+    // Set appropriate |summaryPolicy| to aggregate by host.
+    auto writeLabelsInternal = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
         consumer->OnLabel(nameLabel.first, nameLabel.second);
 
         if (options.Global) {
@@ -243,8 +263,14 @@ int TCube<T>::ReadSensors(
 
         TCompactVector<bool, 8> replacedInstanceTags(options.InstanceTags.size());
 
-        if (allowAggregate && options.MarkAggregates && !options.Global) {
-            consumer->OnLabel(ytAggrLabel.first, ytAggrLabel.second);
+        if (options.MarkAggregates && !options.Global) {
+            if (options.EnableSolomonAggregates) {
+                auto ytAggrLabel = GetOrCrash(ytAggrLabelBySummaryPolicy, summaryPolicy);
+                consumer->OnLabel(ytAggrLabel.first, ytAggrLabel.second);
+            } else if (summaryPolicy == ESummaryPolicy::Sum) {
+                // By default support only sum aggregate.
+                consumer->OnLabel(ytAggrLegacyLabel.first, ytAggrLegacyLabel.second);
+            }
         }
 
         for (auto tagId : tagIds) {
@@ -269,7 +295,11 @@ int TCube<T>::ReadSensors(
                 consumer->OnLabel(tag.first, tag.second);
             }
         }
+    };
 
+    auto writeLabels = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
+        consumer->OnLabelsBegin();
+        writeLabelsInternal(tagIds, nameLabel, summaryPolicy);
         consumer->OnLabelsEnd();
     };
 
@@ -353,14 +383,13 @@ int TCube<T>::ReadSensors(
             auto writeMetric = [&] (
                 ESummaryPolicy policyBit,
                 std::pair<ui32, ui32> specificNameLabel,
-                bool aggregate,
                 NMonitoring::EMetricType type,
                 auto cb)
             {
                 if (Any(options.SummaryPolicy & policyBit)) {
                     consumer->OnMetricBegin(type);
                     writeFlags();
-                    writeLabels(tagIds, omitSuffix ? nameLabel : specificNameLabel, aggregate);
+                    writeLabels(tagIds, omitSuffix ? nameLabel : specificNameLabel, policyBit);
 
                     rangeValues(cb);
 
@@ -371,13 +400,11 @@ int TCube<T>::ReadSensors(
             auto writeGaugeSummaryMetric = [&] (
                 ESummaryPolicy policyBit,
                 std::pair<ui32, ui32> specificNameLabel,
-                bool aggregate,
                 double (NMonitoring::TSummaryDoubleSnapshot::*valueGetter)() const)
             {
                 writeMetric(
                     policyBit,
                     specificNameLabel,
-                    aggregate,
                     NMonitoring::EMetricType::GAUGE,
                     [&] (auto value, auto time, const auto& /*indices*/) {
                         sensorCount += 1;
@@ -388,7 +415,6 @@ int TCube<T>::ReadSensors(
             writeMetric(
                 ESummaryPolicy::All,
                 nameLabel,
-                /*aggregate*/ true,
                 NMonitoring::EMetricType::DSUMMARY,
                 [&] (auto value, auto time, const auto& /*indices*/) {
                     sensorCount += 5;
@@ -398,19 +424,16 @@ int TCube<T>::ReadSensors(
             writeGaugeSummaryMetric(
                 ESummaryPolicy::Sum,
                 sumNameLabel,
-                /*aggregate*/ true,
                 &NMonitoring::TSummaryDoubleSnapshot::GetSum);
 
             writeGaugeSummaryMetric(
                 ESummaryPolicy::Min,
                 minNameLabel,
-                /*aggregate*/ false,
                 &NMonitoring::TSummaryDoubleSnapshot::GetMin);
 
             writeGaugeSummaryMetric(
                 ESummaryPolicy::Max,
                 maxNameLabel,
-                /*aggregate*/ false,
                 &NMonitoring::TSummaryDoubleSnapshot::GetMax);
 
             if (Any(options.SummaryPolicy & ESummaryPolicy::Avg)) {
@@ -426,7 +449,7 @@ int TCube<T>::ReadSensors(
                         empty = false;
                         consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
                         writeFlags();
-                        writeLabels(tagIds, omitSuffix ? nameLabel : avgNameLabel, false);
+                        writeLabels(tagIds, omitSuffix ? nameLabel : avgNameLabel, ESummaryPolicy::Avg);
                     }
 
                     sensorCount += 1;
@@ -440,6 +463,55 @@ int TCube<T>::ReadSensors(
             }
         };
 
+        if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
+            bool needToSplitHistogram =
+                (
+                    std::is_same_v<T, TTimeHistogramSnapshot> &&
+                    (options.ConvertCountersToRateGauge || options.EnableHistogramCompat) &&
+                    options.SplitRateHistogramIntoGauges
+                ) ||
+                (std::is_same_v<T, TRateHistogramSnapshot> && options.SplitRateHistogramIntoGauges);
+
+            if (needToSplitHistogram) {
+                if (options.RateDenominator < 0.1) {
+                    THROW_ERROR_EXCEPTION("Invalid rate denominator");
+                }
+                THashMap<double, std::vector<TIntPoint>> boundToValues;
+                // Histograms may have different numbers of buckets, merge them into map.
+                rangeValues([&] (auto value, auto time, const auto& /*indices*/) {
+                    for (const auto& [bound, value] : Zip(value.Bounds, value.Values)) {
+                        boundToValues[bound].push_back(TIntPoint{time, value});
+                    }
+                    if (value.Values.size() > value.Bounds.size()) {
+                        boundToValues[NMonitoring::HISTOGRAM_INF_BOUND].push_back(TIntPoint{time, value.Values[value.Bounds.size()]});
+                    } else {
+                        boundToValues[NMonitoring::HISTOGRAM_INF_BOUND].push_back(TIntPoint{time, 0});
+                    }
+                });
+
+                for (const auto& [bucket, values] : boundToValues) {
+                    consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
+                    writeFlags();
+
+                    consumer->OnLabelsBegin();
+                    writeLabelsInternal(tagIds, nameLabel, ESummaryPolicy::Sum);
+                    if (bucket == NMonitoring::HISTOGRAM_INF_BOUND) {
+                        consumer->OnLabel("bin", "inf");
+                    } else {
+                        consumer->OnLabel("bin", ToString(bucket));
+                    }
+                    consumer->OnLabelsEnd();
+                    for (const auto& [time, value] : values) {
+                        consumer->OnDouble(time, static_cast<double>(value) / options.RateDenominator);
+                    }
+                    consumer->OnMetricEnd();
+                }
+
+                sensorsEmitted += boundToValues.size();
+                continue;
+            }
+        }
+
         if constexpr (std::is_same_v<T, i64> || std::is_same_v<T, TDuration>) {
             if (options.ConvertCountersToRateGauge || options.ConvertCountersToDeltaGauge) {
                 consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
@@ -448,7 +520,7 @@ int TCube<T>::ReadSensors(
             }
 
             writeFlags();
-            writeLabels(tagIds, (options.ConvertCountersToRateGauge && options.RenameConvertedCounters) ? rateNameLabel : nameLabel, true);
+            writeLabels(tagIds, (options.ConvertCountersToRateGauge && options.RenameConvertedCounters) ? rateNameLabel : nameLabel, ESummaryPolicy::Sum);
 
             rangeValues([&, window = &window] (auto value, auto time, const auto& indices) {
                 sensorCount += 1;
@@ -487,7 +559,7 @@ int TCube<T>::ReadSensors(
             consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
 
             writeFlags();
-            writeLabels(tagIds, nameLabel, true);
+            writeLabels(tagIds, nameLabel, ESummaryPolicy::Sum);
 
             rangeValues([&, window = &window] (auto /* value */, auto time, const auto& indices) {
                 if (options.DisableDefault && !window->HasValue[indices.back()]) {
@@ -521,7 +593,7 @@ int TCube<T>::ReadSensors(
             consumer->OnMetricBegin(NMonitoring::EMetricType::HIST);
 
             writeFlags();
-            writeLabels(tagIds, nameLabel, true);
+            writeLabels(tagIds, nameLabel, ESummaryPolicy::Sum);
 
             rangeValues([&, window = &window] (auto value, auto time, const auto& indices) {
                 size_t n = value.Bounds.size();
@@ -562,7 +634,7 @@ int TCube<T>::ReadSensors(
             consumer->OnMetricBegin(NMonitoring::EMetricType::HIST);
 
             writeFlags();
-            writeLabels(tagIds, nameLabel, true);
+            writeLabels(tagIds, nameLabel, ESummaryPolicy::Sum);
 
             rangeValues([&] (auto value, auto time, const auto& /*indices*/) {
                 size_t n = value.Bounds.size();
@@ -586,7 +658,7 @@ int TCube<T>::ReadSensors(
             consumer->OnMetricBegin(NMonitoring::EMetricType::HIST);
 
             writeFlags();
-            writeLabels(tagIds, nameLabel, true);
+            writeLabels(tagIds, nameLabel, ESummaryPolicy::Sum);
 
             rangeValues([&] (auto value, auto time, const auto& /*indices*/) {
                 size_t n = value.Bounds.size();

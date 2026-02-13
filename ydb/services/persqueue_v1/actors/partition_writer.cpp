@@ -7,7 +7,7 @@ const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 void TPartitionWriter::OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev)
 {
     const auto& result = *ev->Get();
-    Y_ABORT_UNLESS(result.IsSuccess());
+    AFL_ENSURE(result.IsSuccess());
 
     OwnerCookie = result.GetResult().OwnerCookie;
     MaxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
@@ -16,7 +16,7 @@ void TPartitionWriter::OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResu
 void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId,
                                       const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(ev->Record.HasPartitionRequest());
+    AFL_ENSURE(ev->Record.HasPartitionRequest());
 
     if (SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
         SentRequests.emplace_back(ev->Record.GetPartitionRequest().GetCookie());
@@ -29,8 +29,8 @@ void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteR
 
 void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(!SentRequests.empty());
-    Y_ABORT_UNLESS(ev.Cookie == SentRequests.front().Cookie);
+    AFL_ENSURE(!SentRequests.empty());
+    AFL_ENSURE(ev.Cookie == SentRequests.front().Cookie);
 
     const TSentRequest& front = SentRequests.front();
 
@@ -53,10 +53,10 @@ void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAc
 
 void TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev)
 {
-    Y_ABORT_UNLESS(ev.IsSuccess());
+    AFL_ENSURE(ev.IsSuccess());
 
-    Y_ABORT_UNLESS(!AcceptedRequests.empty());
-    Y_ABORT_UNLESS(ev.Record.GetPartitionResponse().GetCookie() == AcceptedRequests.front().Cookie);
+    AFL_ENSURE(!AcceptedRequests.empty());
+    AFL_ENSURE(ev.Record.GetPartitionResponse().GetCookie() == AcceptedRequests.front().Cookie);
 
     AcceptedRequests.pop_front();
 }

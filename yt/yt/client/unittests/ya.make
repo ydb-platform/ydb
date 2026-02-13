@@ -22,6 +22,7 @@ SRCS(
     uuid_text_ut.cpp
     time_text_ut.cpp
     node_directory_ut.cpp
+    positional_yson_translation_ut.cpp
     query_builder_ut.cpp
     queue_static_export_config_ut.cpp
     read_limit_ut.cpp

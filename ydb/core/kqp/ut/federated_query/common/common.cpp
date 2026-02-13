@@ -102,6 +102,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
 
+        appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
+
         auto settings = TKikimrSettings(*appConfig);
 
         NYql::IHTTPGateway::TPtr httpGateway;
@@ -151,7 +153,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetEnableStorageProxy(true)
             .SetCheckpointPeriod(options.CheckpointPeriod)
             .SetUseLocalCheckpointsInStreamingQueries(options.UseLocalCheckpointsInStreamingQueries)
-            .SetLogSettings(std::move(logSettings));
+            .SetLogSettings(std::move(logSettings))
+            .SetInitFederatedQuerySetupFactory(options.InternalInitFederatedQuerySetupFactory);
 
         settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
 

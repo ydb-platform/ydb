@@ -275,6 +275,10 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
                             MAP_TIMING(ReconfigureVirtualGroup, RECONFIGURE_VIRTUAL_GROUP)
                             MAP_TIMING(RecommissionGroups, RECOMMISSION_GROUPS)
+                            MAP_TIMING(DefineDDiskPool, DEFINE_DDISK_POOL)
+                            MAP_TIMING(ReadDDiskPool, READ_DDISK_POOL)
+                            MAP_TIMING(DeleteDDiskPool, DELETE_DDISK_POOL)
+                            MAP_TIMING(MoveDDisk, MOVE_DDISK)
 
                             default:
                                 break;
@@ -285,22 +289,23 @@ namespace NKikimr::NBsController {
                     }
                 }
 
-                if (Success && Cmd.GetRollback()) {
-                    Rollback();
-                }
-
                 if (Success && SelfHeal && !Self->SelfHealEnable) {
                     Success = false;
                     Error = "SelfHeal is disabled, transaction rollback";
                 }
 
-                const bool doLogCommand = Success && State->Changed();
-                Success = Success && Self->CommitConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
-                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), txc, &Error,
-                    Response);
+                const bool hasChanges = Success && State->Changed() && !Cmd.GetRollback();
+                Success = Success && Self->ValidateConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
+                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), &Error, Response);
+
+                if (Success && Cmd.GetRollback()) {
+                    Rollback();
+                } else if (Success) {
+                    Self->CommitConfigUpdates(*State, txc);
+                }
 
                 Finish();
-                if (doLogCommand) {
+                if (Success && hasChanges) {
                     LogCommand(txc, TDuration::Seconds(timer.Passed()));
                 }
 
@@ -395,6 +400,10 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
                     HANDLE_COMMAND(ReconfigureVirtualGroup)
                     HANDLE_COMMAND(RecommissionGroups)
+                    HANDLE_COMMAND(DefineDDiskPool)
+                    HANDLE_COMMAND(ReadDDiskPool)
+                    HANDLE_COMMAND(DeleteDDiskPool)
+                    HANDLE_COMMAND(MoveDDisk)
                     default: break;
                 }
 

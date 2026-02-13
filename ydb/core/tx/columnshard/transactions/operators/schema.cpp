@@ -146,6 +146,25 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             owner.TablesManager.MoveTablePropose(srcSchemeShardLocalPathId);
             break;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
+        {
+            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
+            const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("propose_execute", "copy_table")("src", srcSchemeShardLocalPathId)("dst", dstSchemeShardLocalPathId);
+            if (!owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false)) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
+            }
+            if (owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Copy to existing table");
+            }
+            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
+            if (!txIdsToWait.empty()) {
+                AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
+                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            }
+            owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
+            break;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
@@ -275,6 +294,21 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
                 WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
             }
         }
+        break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
+        {
+            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
+            const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
+            AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false));
+            AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false));
+            owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
+            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
+            AFL_VERIFY(txIdsToWait.erase(GetTxId()));
+            if (!txIdsToWait.empty()) {
+                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            }
+        }
+        break;
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }

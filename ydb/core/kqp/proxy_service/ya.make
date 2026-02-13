@@ -35,6 +35,7 @@ PEERDIR(
     ydb/library/table_creator
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/providers/common/http_gateway
+    ydb/library/yql/providers/pq/proto
     ydb/library/yql/providers/s3/actors_factory
     ydb/public/api/protos
     ydb/public/lib/scheme_types

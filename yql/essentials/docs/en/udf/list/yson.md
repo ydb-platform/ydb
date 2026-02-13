@@ -24,6 +24,7 @@ Implementation specifics and functionality of the module:
 
   * `Yson::Parse***`: Getting a resource with a DOM object from serialized data, with all further operations performed on the obtained resource.
   * `Yson::From`: Getting a resource with a DOM object from simple YQL data types or containers (lists or dictionaries).
+  * `Yson::As***`,`Yson::TryAs***`: converting a resource to the required data type;
   * `Yson::ConvertTo***`: Converting a resource to [primitive data types](../../types/primitive.md) or [containers](../../types/containers.md).
   * `Yson::Lookup***`: Getting a single list item or a dictionary with optional conversion to the relevant data type.
   * `Yson::YPath***`: Getting one element from the document tree based on the relative path specified, optionally converting it to the relevant data type.
@@ -178,6 +179,8 @@ Yson::ConvertToStringDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String,
 
 These functions do not do implicit type casting by default, that is, the value in the argument must exactly match the function called.
 
+Since version 2025.05, it is recommended to use the [As*/TryAs*](#ysonas) functions to cast a Yson node to a specific primitive type, list or dictionary, and `Yson::ConvertTo` in other cases.
+
 {% endnote %}
 
 `Yson::ConvertTo` is a polymorphic function that converts the data type that is specified in the second argument and supports containers (lists, dictionaries, tuples, structures, and so on) into a Yson resource.
@@ -226,7 +229,15 @@ Yson::LookupDict(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Dict<String,R
 Yson::LookupList(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> List<Resource<'Yson2.Node'>>?
 ```
 
-The above functions are short notations for a typical use case: `Yson::YPath`: go to a level in the dictionary and then extract the value — `Yson::ConvertTo***`. For all the listed functions, the second argument is a key name from the dictionary (unlike YPath, it has no `/`prefix) or an index from the list (for example, `7`). They simplify the query and produce a small gain in speed.
+The above functions are short notations for a typical use case: `Yson::YPath`: go to a level in the dictionary and then extract the value — `Yson::ConvertTo***`. For all the listed functions, the second argument is a key name from the dictionary (unlike YPath, it has no `/`prefix) or an index from the list (for example, `7`).
+
+{% note warning %}
+
+Since version 2025.05, it is recommended to use `Yson::Lookup` to retrieve a node by key and the [As*/TryAs*](#ysonas) function when further type refinement is needed.
+
+In most cases, instead of multiple `Yson::Lookup` functions, consider converting data using the `Yson::ConvertTo` function to a set of dictionaries, lists, and primitive types.
+
+{% endnote %}
 
 ## Yson::YPath {#ysonypath}
 
@@ -243,7 +254,13 @@ Yson::YPathList(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> List<Resource<
 
 Lets you get a part of the resource based on the source resource and the part's path in YPath format.
 
+{% note warning %}
 
+Since version 2025.05, it is recommended to use `Yson::YPath` to retrieve a node by key and the [As*/TryAs*](#ysonas) function when further type refinement is required.
+
+In most cases, instead of multiple `Yson::YPath` functions, consider converting data using the `Yson::ConvertTo` function to a set of dictionaries, lists, and primitive types.
+
+{% endnote %}
 
 ## Yson::Attributes {#ysonattributes}
 
@@ -303,6 +320,158 @@ SELECT Yson::ConvertToDoubleDict($yson, Yson::Options(false as Strict)); --- { "
 ```
 
 If you need to use the same Yson library settings throughout the query, it's more convenient to use [PRAGMA yson.AutoConvert;](../../syntax/pragma/yson.md#autoconvert) and/or [PRAGMA yson.Strict;](../../syntax/pragma/yson.md#strict). Only with these `PRAGMA` you can affect implicit calls to the Yson library occurring when you work with Yson/Json data types.
+
+## Yson::Iterate... {#ysoniterate}
+
+```yql
+Yson::Iterate(Resource<'Yson2.Node'>{Flags:AutoMap}) -> List<Variant< 
+'BeginAttributes':Void, 
+'BeginList':Void, 
+'BeginMap':Void, 
+'EndAttributes':Void, 
+'EndList':Void, 
+'EndMap':Void, 
+'Item':Void, 
+'Key':String, 
+'PostValue':Resource<'Yson2.Node'>, 
+'PreValue':Resource<'Yson2.Node'>, 
+'Value':Resource<'Yson2.Node'>>>
+```
+
+Available since version [2025.05](../../changelog/2025.05.md#yson-module).
+Get a list of all events during a Yson tree traversal.
+Leaf nodes (`Entity`, `Bool`, `Int64`, `Uint64`, `Double`, `String`) are passed as `Value` events.
+
+For a node of type `List`, the following sequence is returned:
+* `PreValue` with the node itself
+* `BeginList`
+* `Item` - before each `List` element
+* events for the `List` element
+* `EndList`
+* `PostValue` with the node itself
+
+For a node of type `Map`, the following sequence is returned:
+* 'PreValue' with the node itself
+* `BeginMap`
+* 'Key' - before each `Map` element
+* events for the `Map` element
+* `EndMap`
+* `PostValue` with the node itself
+The order in which keys are returned is arbitrary.
+
+For a node with non-empty attributes, the following sequence is returned:
+* `PreValue` with the node itself
+* `BeginAttributes`
+* `Key` - before each attribute name
+* events for the attribute
+* `EndAttributes`
+* events for the node without attributes
+* `PostValue` with the node itself
+The order of attributes is arbitrary.
+
+#### Examples
+
+```yql
+-- View the entire output of the Yson::Iterate function
+$dump = ($x) -> (
+    (
+        Way($x),
+        $x.Key,
+        Yson::Serialize($x.PreValue),
+        Yson::Serialize($x.Value),
+        Yson::Serialize($x.PostValue)
+    )
+);
+
+SELECT ListMap(Yson::Iterate('{a=1;b=<c="foo">[2u;%true;#;-3.2]}'y), $dump);
+
+/*
+Events:
+    PreValue [1]
+    BeginMap
+    Key a
+    Value 1
+    Key b
+    PreValue [2]
+    BeginAttributes
+    Key c
+    Value foo
+    EndAttributes
+    PreValue [3]
+    BeginList
+    Item
+    Value 2
+    Item
+    Value %true
+    Item
+    Value #
+    Item
+    Value -3.2
+    EndList
+    PostValue [3]
+    PostValue [2]
+    EndMap
+    PostValue [1]
+*/
+```
+
+```yql
+-- Getting all leaf values ​​- expanding all lists
+$yson = '[[1;2];[3;4]]'y;
+SELECT ListFlatMap(Yson::Iterate($yson), ($x)->(IF($x.Value IS NOT NULL, $x.Value))); -- [1;2;3;4]
+```
+
+```yql
+-- Search for a key with a given name at any level
+$yson = '{a={b={c=1}};e={f=2}}'y;
+SELECT ListHasItems(ListFilter(Yson::Iterate($yson), ($x)->($x.Key == 'b'))); -- true
+```
+
+```yql
+-- Search for a string in values ​​at any level
+$yson = '{a={b={c="x"}};e={f="y"}}'y;
+SELECT ListHasItems(ListFilter(Yson::Iterate($yson), ($x)->(Yson::ConvertToString($x.Value) == 'y'))); -- true
+```
+
+```yql
+-- Get name attributes for all Map nodes without the children attribute
+$yson = @@{
+    name=foo;
+    children=[
+        {
+            name=bar
+        }
+    ]
+}@@y;
+
+SELECT ListFlatMap(Yson::Iterate($yson), ($x)->(
+IF(Yson::IsDict($x.PreValue) and not Yson::Contains($x.PreValue,'children'), Yson::LookupString($x.PreValue, 'name')))); -- [bar]
+```
+
+## Yson::As... and Yson::TryAs... {#ysonas}
+
+```yql
+Yson::AsString(Resource<'Yson2.Node'>{Flags:AutoMap}) -> String
+Yson::AsDouble(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Double
+Yson::AsUint64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Uint64
+Yson::AsInt64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Int64
+Yson::AsBool(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Bool
+Yson::AsList(Resource<'Yson2.Node'>{Flags:AutoMap}) -> List<Resource<'Yson2.Node'>>
+Yson::AsDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String, Resource<'Yson2.Node'>>
+
+Yson::TryAsString(Resource<'Yson2.Node'>{Flags:AutoMap}) -> String?
+Yson::TryAsDouble(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Double?
+Yson::TryAsUint64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Uint64?
+Yson::TryAsInt64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Int64?
+Yson::TryAsBool(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Bool?
+Yson::TryAsList(Resource<'Yson2.Node'>{Flags:AutoMap}) -> List<Resource<'Yson2.Node'>>?
+Yson::TryAsDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String, Resource<'Yson2.Node'>>?
+```
+
+Available since version [2025.05](../../changelog/2025.05.md#yson-module).
+Casts a Yson node to the specified type.
+The `TryAs*` functions return `NULL` if the Yson node type is invalid, while the `As*` functions will result in a query error.
+To process a node with the `Entity` ('#') type, use the [`IsEntity`](#ysonis) function.
 
 ## See also
 

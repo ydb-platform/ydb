@@ -35,7 +35,7 @@ using namespace NNodes;
 
 class TConfigCallableExecutionTransformer: public TSyncTransformerBase {
 public:
-    TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
+    explicit TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
         : Types_(types)
     {
         Y_UNUSED(Types_);
@@ -759,6 +759,12 @@ private:
                 return false;
             }
             Types_.DiscoveryMode = true;
+        } else if (name == "WindowNewPipeline" || name == "DisableWindowNewPipeline") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.WindowNewPipeline = (name == "WindowNewPipeline");
         } else if (name == "EnableSystemColumns") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -1141,6 +1147,24 @@ private:
                 return false;
             }
             Types_.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
+        } else if (name == "LineageOutputLimit") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageOutputLimit)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
+        } else if (name == "LineageMemoryLimit") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageMemoryLimit)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
         } else if (name == "Layer") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected exatly 1 argument, but got " << args.size()));

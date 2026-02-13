@@ -147,8 +147,7 @@ std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedP
 }
 
 TVector<TVector<ui32>> ChooseCombinationCase(TErasureType &type) {
-    if (type.GetErasure() == TErasureType::EErasureSpecies::Erasure4Plus2Stripe ||
-            type.GetErasure() == TErasureType::EErasureSpecies::Erasure4Plus2Block ) {
+    if (type.GetErasure() == TErasureType::EErasureSpecies::Erasure4Plus2Block) {
         return { {0, 1}
                 ,{0, 4}
                 ,{0, 5}

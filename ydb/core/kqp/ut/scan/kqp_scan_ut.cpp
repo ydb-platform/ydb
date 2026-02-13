@@ -2177,11 +2177,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(YqlTableSample) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-
-        auto kikimr = DefaultKikimrRunner({setting});
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
 
         const TString query(R"(SELECT * FROM `/Root/Test` TABLESAMPLE SYSTEM(1.0);)");

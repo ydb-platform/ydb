@@ -33,7 +33,7 @@ public:
         re2->set_flags(flags);
     }
 
-    TRe2(const TSerialization& proto)
+    explicit TRe2(const TSerialization& proto)
         : Regexp_(StringPiece(proto.GetRe2().GetRegexp().data(), proto.GetRe2().GetRegexp().size()),
                   CreateOptions(proto.GetRe2().GetRegexp(), proto.GetRe2().GetFlags()))
         , RawRegexp_(proto)

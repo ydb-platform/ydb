@@ -479,13 +479,9 @@ public:
 
     explicit TVersionedOwningRow(TVersionedRow other);
 
-    TVersionedOwningRow(const TVersionedOwningRow& other)
-        : Data_(other.Data_)
-    { }
+    TVersionedOwningRow(const TVersionedOwningRow& other) noexcept = default;
 
-    TVersionedOwningRow(TVersionedOwningRow&& other)
-        : Data_(std::move(other.Data_))
-    { }
+    TVersionedOwningRow(TVersionedOwningRow&& other) noexcept = default;
 
     explicit operator bool() const
     {

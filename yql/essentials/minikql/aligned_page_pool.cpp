@@ -32,13 +32,19 @@ void UseDefaultAllocator() {
     IsDefaultAllocator = true;
 }
 #endif
-static bool IsDefaultArrowAllocator = false;
+
+namespace {
+
+bool IsDefaultArrowAllocator = false;
+
+ui64 SYS_PAGE_SIZE = NSystemInfo::GetPageSize();
+
+} // namespace
+
 void UseDefaultArrowAllocator() {
     // TODO: check that we didn't already used the MKQL allocator
     IsDefaultArrowAllocator = true;
 }
-
-static ui64 SYS_PAGE_SIZE = NSystemInfo::GetPageSize();
 
 constexpr ui32 MidLevels = 10;
 constexpr ui32 MaxMidSize = (1u << MidLevels) * TAlignedPagePool::POOL_PAGE_SIZE;
@@ -68,7 +74,7 @@ class TGlobalPagePool {
     friend class TGlobalPools<T, SysAlign>;
 
 public:
-    TGlobalPagePool(size_t pageSize)
+    explicit TGlobalPagePool(size_t pageSize)
         : PageSize_(pageSize)
     {
     }
@@ -389,7 +395,7 @@ void TAlignedPagePoolImpl<T>::ReleaseFreePages() {
 template <typename T>
 void TAlignedPagePoolImpl<T>::OffloadAlloc(ui64 size) {
     if (Limit_ && TotalAllocated_ + size > Limit_ && !TryIncreaseLimit(TotalAllocated_ + size)) {
-        throw TMemoryLimitExceededException();
+        throw TMemoryLimitExceededException(); // NOLINT(hicpp-exception-baseclass)
     }
 
     if (AllocNotifyCallback_) {
@@ -437,7 +443,7 @@ void* TAlignedPagePoolImpl<T>::GetPageImpl() {
     }
 
     if (Limit_ && TotalAllocated_ + POOL_PAGE_SIZE > Limit_ && !TryIncreaseLimit(TotalAllocated_ + POOL_PAGE_SIZE)) {
-        throw TMemoryLimitExceededException();
+        throw TMemoryLimitExceededException(); // NOLINT(hicpp-exception-baseclass)
     }
 
     if (Y_LIKELY(!IsDefaultAllocatorUsed())) {
@@ -498,6 +504,7 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
         OffloadAlloc(size);
         auto ret = malloc(size);
         if (!ret) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
 
@@ -534,7 +541,7 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
     size = AlignUp(size, SYS_PAGE_SIZE);
 
     if (Limit_ && TotalAllocated_ + size > Limit_ && !TryIncreaseLimit(TotalAllocated_ + size)) {
-        throw TMemoryLimitExceededException();
+        throw TMemoryLimitExceededException(); // NOLINT(hicpp-exception-baseclass)
     }
 
     if (AllocNotifyCallback_) {

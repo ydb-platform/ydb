@@ -232,7 +232,7 @@ TEST(TErrorTest, ErrorCodicils)
 {
     EXPECT_FALSE(TError("ErrorCodicils").Attributes().Contains("test_attribute"));
     {
-        auto guard = TErrorCodicils::Guard("test_attribute", [] () -> std::string {
+        auto guard = TErrorCodicils::MakeGuard("test_attribute", [] () -> std::string {
             return "test_value";
         });
         EXPECT_EQ("test_value",

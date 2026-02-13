@@ -15,9 +15,9 @@ namespace NYT::NApi {
 struct TDistributedWriteSessionWithCookies
     : public NYTree::TYsonStructLite
 {
-    // TDistributedWriteSession.
+    //! TDistributedWriteSession.
     TSignedDistributedWriteSessionPtr Session;
-    // std::vector<TWriteFragmentCookie>.
+    //! std::vector<TWriteFragmentCookie>.
     std::vector<TSignedWriteFragmentCookiePtr> Cookies;
 
     REGISTER_YSON_STRUCT_LITE(TDistributedWriteSessionWithCookies)
@@ -27,9 +27,9 @@ struct TDistributedWriteSessionWithCookies
 
 struct TDistributedWriteSessionWithResults
 {
-    // TDistributedWriteSession.
+    //! TDistributedWriteSession.
     TSignedDistributedWriteSessionPtr Session;
-    // std::vector<TWriteFragmentResult>.
+    //! std::vector<TWriteFragmentResult>.
     std::vector<TSignedWriteFragmentResultPtr> Results;
 };
 
@@ -40,8 +40,10 @@ struct TDistributedWriteSessionStartOptions
     , public TTimeoutOptions
 {
     int CookieCount = 0;
-     //! Timeout for session. Similar to transaction timeout.
-    std::optional<TDuration> Timeout;
+    //! Timeout for session. Similar to transaction timeout.
+    //! This option should not be confused with "Timeout",
+    //! which is used to specify the maximum execution time of an API call.
+    std::optional<TDuration> SessionTimeout;
 };
 
 struct TDistributedWriteSessionPingOptions

@@ -216,8 +216,6 @@ class TestSysViewsRegistry(BaseSystemViews):
     @classmethod
     def setup_class(cls):
         cls.cluster = KiKiMR(KikimrConfigGenerator())
-        # Remove after support sysview type in python SDK
-        cls.cluster.config.yaml_config['feature_flags']['enable_real_system_view_paths'] = False
         cls.cluster.start()
 
     def collect_sysviews(self, driver, database):

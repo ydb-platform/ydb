@@ -1,6 +1,12 @@
 PROGRAM()
 
-IF (USE_PYTHON3_PREV)
+IF (NOT USE_ARCADIA_PYTHON)
+    PYTHON3_ADDINCL()
+
+    PEERDIR(
+        contrib/tools/python3
+    )
+ELSEIF (USE_PYTHON3_PREV)
     PEERDIR(
         contrib/tools/python3_prev
     )

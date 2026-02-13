@@ -29,3 +29,9 @@ RECURSE(
     ydb
     ymq
 )
+
+IF (OS_LINUX)
+    RECURSE(
+        nbs
+    )
+ENDIF()

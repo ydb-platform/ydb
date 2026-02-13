@@ -36,7 +36,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         for (auto& column : Record.GetColumns()) {
             auto tag = column.GetTag();
             for (auto& statistic : column.GetStatistics()) {
-                if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
+                if (statistic.GetType() == static_cast<ui32>(EStatType::COUNT_MIN_SKETCH)) {
                     if (!Self->ColumnNames.contains(tag)) {
                         continue;
                     }

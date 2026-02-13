@@ -117,7 +117,7 @@ class THazardPointerManager
 public:
     struct THazardThreadStateToRegistryNode
     {
-        auto operator() (THazardThreadState* state) const
+        auto operator()(THazardThreadState* state) const
         {
             return &state->RegistryNode;
         }

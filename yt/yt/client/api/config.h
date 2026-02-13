@@ -189,6 +189,10 @@ struct TJournalChunkWriterConfig
     std::optional<std::vector<int>> ReplicaRowLimits;
     TDuration ReplicaFakeTimeoutDelay;
 
+    //! When writing hunk journal chunk will wait this amount of time before chunk
+    //! is considered closed to give time for all the records to be written to all the replicas.
+    TDuration ChunkCloseGracePeriod;
+
     REGISTER_YSON_STRUCT(TJournalChunkWriterConfig);
 
     static void Register(TRegistrar registrar);

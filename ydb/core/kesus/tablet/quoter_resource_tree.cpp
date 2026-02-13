@@ -228,6 +228,10 @@ public:
 
     void DeactivateIfFull(TInstant now);
 
+    bool IsEffectivePropsChanged() const override {
+        return EffectivePropsChanged;
+    }
+
     void SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) override;
 
     void SetLimitCounter();
@@ -281,6 +285,7 @@ private:
     double BucketSize = 0.0;
 
     bool Active = false;
+    bool EffectivePropsChanged = false;
     THierarchicalDRRResourceConsumer* CurrentActiveChild = nullptr;
     size_t ActiveChildrenCount = 0;
     size_t ActiveV1ChildrenCount = 0;
@@ -727,6 +732,8 @@ void THierarchicalDRRQuoterResourceTree::CalcParameters() {
         PrefetchWatermark = parent->PrefetchWatermark;
     }
 
+    const double prevResourceTickQuantum = ResourceTickQuantum;
+
     ResourceTickQuantum = MaxUnitsPerSecond >= 0.0 ? MaxUnitsPerSecond / TICKS_PER_SECOND : 0.0;
     ResourceFillingEpsilon = ResourceTickQuantum * EPSILON_COEFFICIENT;
     TickSize = TDuration::Seconds(1) / TICKS_PER_SECOND;
@@ -745,7 +752,18 @@ void THierarchicalDRRQuoterResourceTree::CalcParameters() {
         parent->ActiveChildrenWeight += weightDiff;
     }
 
-    FreeResource = Min(FreeResource, HasActiveChildren() ? ResourceTickQuantum : GetBurst());
+    const double freeResourceLimit = HasActiveChildren() ? ResourceTickQuantum : GetBurst();
+    if (ResourceTickQuantum < prevResourceTickQuantum || FreeResource > freeResourceLimit) {
+        FreeResource = Min(FreeResource, freeResourceLimit);
+    }
+
+    {
+        const auto& oldEffCfg = EffectiveProps.GetHierarchicalDRRResourceConfig();
+        EffectivePropsChanged = (MaxUnitsPerSecond != oldEffCfg.GetMaxUnitsPerSecond() ||
+                                  PrefetchCoefficient != oldEffCfg.GetPrefetchCoefficient() ||
+                                  PrefetchWatermark != oldEffCfg.GetPrefetchWatermark() ||
+                                  Weight != oldEffCfg.GetWeight());
+    }
 
     // Update in props
     auto* effectiveConfig = EffectiveProps.MutableHierarchicalDRRResourceConfig();
@@ -1283,11 +1301,13 @@ const TQuoterSession* TQuoterResources::FindSession(const NActors::TActorId& cli
 }
 
 void TQuoterResources::OnUpdateResourceProps(TQuoterResourceTree* rootResource) {
-    const ui64 resId = rootResource->GetResourceId();
-    for (const auto& [sessionActor, _] : rootResource->GetSessions()) {
-        TQuoterSession* session = FindSession(sessionActor, resId);
-        Y_ABORT_UNLESS(session);
-        session->OnPropsChanged();
+    if (rootResource->IsEffectivePropsChanged()) {
+        const ui64 resId = rootResource->GetResourceId();
+        for (const auto& [sessionActor, _] : rootResource->GetSessions()) {
+            TQuoterSession* session = FindSession(sessionActor, resId);
+            Y_ABORT_UNLESS(session);
+            session->OnPropsChanged();
+        }
     }
     for (TQuoterResourceTree* child : rootResource->GetChildren()) {
         OnUpdateResourceProps(child);

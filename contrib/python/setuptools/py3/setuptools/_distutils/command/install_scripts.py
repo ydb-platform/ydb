@@ -8,6 +8,7 @@ Python scripts."""
 import os
 from distutils._log import log
 from stat import ST_MODE
+from typing import ClassVar
 
 from ..core import Command
 
@@ -22,7 +23,7 @@ class install_scripts(Command):
         ('skip-build', None, "skip the build steps"),
     ]
 
-    boolean_options = ['force', 'skip-build']
+    boolean_options: ClassVar[list[str]] = ['force', 'skip-build']
 
     def initialize_options(self):
         self.install_dir = None
@@ -30,7 +31,7 @@ class install_scripts(Command):
         self.build_dir = None
         self.skip_build = None
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         self.set_undefined_options('build', ('build_scripts', 'build_dir'))
         self.set_undefined_options(
             'install',
@@ -39,7 +40,7 @@ class install_scripts(Command):
             ('skip_build', 'skip_build'),
         )
 
-    def run(self):
+    def run(self) -> None:
         if not self.skip_build:
             self.run_command('build_scripts')
         self.outfiles = self.copy_tree(self.build_dir, self.install_dir)

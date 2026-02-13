@@ -18,7 +18,8 @@ class PlanConverter {
   public:
     PlanConverter(TTypeAnnotationContext &typeCtx, TExprContext &ctx) : TypeCtx(typeCtx), Ctx(ctx) {}
 
-    TOpRoot ConvertRoot(TExprNode::TPtr node);
+    // Convert KqpOpRoot to OpRoot.
+    std::unique_ptr<TOpRoot> ConvertRoot(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ExprNodeToOperator(TExprNode::TPtr node);
 
     std::shared_ptr<IOperator> ConvertTKqpOpMap(TExprNode::TPtr node);
@@ -29,6 +30,7 @@ class PlanConverter {
     std::shared_ptr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
+    std::shared_ptr<IOperator> ConvertTKqpInfuseDependents(TExprNode::TPtr node);
 
     TExprNode::TPtr RemoveSubplans(TExprNode::TPtr lambda);
 

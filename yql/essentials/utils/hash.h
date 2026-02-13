@@ -21,6 +21,10 @@ struct TVaryingHash {
 
     TVaryingHash() = default;
     TVaryingHash(const TVaryingHash&) = default;
+
+    // It is used in UnorderedMap specializations,
+    // but user wants to provide just a THasher.
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TVaryingHash(const THasher& underlying)
         : Underlying(underlying)
     {

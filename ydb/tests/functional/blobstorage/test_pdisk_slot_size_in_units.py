@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import time
 import logging
 import pytest
 import requests
@@ -11,6 +10,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
 from ydb.core.protos import msgbus_pb2
+from ydb.tests.library.common.wait_for import retry_assertions
 
 logger = logging.getLogger(__name__)
 
@@ -94,19 +94,6 @@ class TestPDiskSlotSizeInUnits(object):
         host_config.Drive[1].PDiskConfig.SlotSizeInUnits = slot_size_in_units
         self.cluster.client.define_host_configs([host_config])
 
-    def retriable(self, check_fn, timeout=30, delay=1):
-        deadline = time.time() + timeout
-
-        while True:
-            try:
-                return check_fn()
-            except AssertionError as e:
-                logger.info(str(e))
-                if time.time() > deadline:
-                    raise e
-                else:
-                    time.sleep(delay)
-
     def http_get(self, url):
         host = self.cluster.nodes[1].host
         port = self.cluster.nodes[1].mon_port
@@ -142,40 +129,40 @@ class TestPDiskSlotSizeInUnits(object):
     def test_change_group_size_in_units(self):
         self.change_group_size_in_units(new_size=2, group_id=self.groups[0].GroupId)
 
-        def wait_whiteboard_updated():
+        def check_whiteboard_updated():
             groups = self.get_storage_groups()
             logger.info(json.dumps(groups, indent=2))
             self.check_group(groups[0], expected_vdisk_weight=2, expected_num_active_slots=3)
             self.check_group(groups[1], expected_vdisk_weight=1, expected_num_active_slots=3)
-        self.retriable(wait_whiteboard_updated)
+        retry_assertions(check_whiteboard_updated)
 
-        def wait_pdisk_info_updated():
+        def check_pdisk_info_updated():
             pdisk_info = self.get_pdisk_info()
             logger.info(json.dumps(pdisk_info, indent=2))
             self.check_pdisk(pdisk_info['Whiteboard']['PDisk'], expected_num_active_slots=3)
             self.check_pdisk(pdisk_info['BSC']['PDisk'], expected_num_active_slots=3, expected_slot_size_in_units=0)
-        self.retriable(wait_pdisk_info_updated)
+        retry_assertions(check_pdisk_info_updated)
 
     def test_change_pdisk_slot_size_in_units(self):
         self.change_pdisk_slot_size_in_units(slot_size_in_units=2)
         self.change_group_size_in_units(new_size=4, group_id=self.groups[1].GroupId)
 
-        def wait_whiteboard_updated():
+        def check_whiteboard_updated():
             groups = self.get_storage_groups()
             logger.info(json.dumps(groups, indent=2))
             self.check_group(groups[0], expected_vdisk_weight=1, expected_num_active_slots=3)
             self.check_group(groups[1], expected_vdisk_weight=2, expected_num_active_slots=3)
-        self.retriable(wait_whiteboard_updated)
+        retry_assertions(check_whiteboard_updated)
 
-        def wait_bsc_updated():
+        def check_bsc_updated():
             base_config = self.cluster.client.query_base_config().BaseConfig
             logger.info(base_config.PDisk[1])
             assert base_config.PDisk[1].PDiskMetrics.SlotSizeInUnits == 2
-        self.retriable(wait_bsc_updated)
+        retry_assertions(check_bsc_updated)
 
-        def wait_pdisk_info_updated():
+        def check_pdisk_info_updated():
             pdisk_info = self.get_pdisk_info()
             logger.info(json.dumps(pdisk_info, indent=2))
             self.check_pdisk(pdisk_info['Whiteboard']['PDisk'], expected_num_active_slots=3)
             self.check_pdisk(pdisk_info['BSC']['PDisk'], expected_num_active_slots=3, expected_slot_size_in_units=2)
-        self.retriable(wait_pdisk_info_updated)
+        retry_assertions(check_pdisk_info_updated)

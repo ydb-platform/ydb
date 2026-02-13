@@ -13,7 +13,7 @@ class TPrintVisitor: public INodeVisitor {
 
 public:
     struct TIndentScope {
-        TIndentScope(TPrintVisitor* self)
+        explicit TIndentScope(TPrintVisitor* self)
             : Self(self)
         {
             ++Self->Indent_;
@@ -26,7 +26,7 @@ public:
         TPrintVisitor* Self;
     };
 
-    TPrintVisitor(bool singleLine)
+    explicit TPrintVisitor(bool singleLine)
         : SingleLine_(singleLine)
         , Indent_(0)
     {

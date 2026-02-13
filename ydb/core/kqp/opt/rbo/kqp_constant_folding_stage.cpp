@@ -80,7 +80,7 @@ TConstantFoldingStage::TConstantFoldingStage() : IRBOStage("Constant folding sta
 
 void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     TVector<TExprNode::TPtr> lambdasWithConstExpr;
-    bool foldUdfs = ctx.KqpCtx.Config->EnableFoldUdfs;
+    bool foldUdfs = ctx.KqpCtx.Config->GetEnableFoldUdfs();
 
     // Iterate through all operators that contain lambdas with potential constant expression
 
@@ -92,11 +92,11 @@ void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     TVector<std::shared_ptr<IOperator>> affectedOps;
 
     for (auto it : root) {
-        if (!it.Current->GetLambdas().empty()) {
-            auto lambdas = it.Current->GetLambdas();
+        if (!it.Current->GetExpressions().empty()) {
+            auto expressions = it.Current->GetExpressions();
             bool affected = false;
-            for (auto l : lambdas) {
-                auto lambda = TCoLambda(l);
+            for (auto e : expressions) {
+                auto lambda = TCoLambda(e.get().Node);
                 TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> extractedExprs;
                 ExtractConstantExprs(lambda.Body().Ptr(), extractedExprs, ctx.ExprCtx, foldUdfs);
                 if (!extractedExprs.empty()) {

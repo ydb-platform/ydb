@@ -70,6 +70,12 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
 
 TTestEnv::~TTestEnv() {
     Driver->Stop(true);
+
+    if (ThreadPoolStarted) {
+        ThreadPool.Stop();
+    }
+
+    Server->ShutdownGRpc();
 }
 
 TString CreateDatabase(TTestEnv& env, const TString& databaseName,
@@ -533,7 +539,7 @@ std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(
     return ev;
 }
 
-void Analyze(
+NKikimrStat::TEvAnalyzeResponse Analyze(
         TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables,
         const TString operationId, TString databaseName,
         NKikimrStat::TEvAnalyzeResponse::EStatus expectedStatus) {
@@ -546,6 +552,7 @@ void Analyze(
     const auto& record = evResponse->Get()->Record;
     UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), operationId);
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), expectedStatus);
+    return record;
 }
 
 void AnalyzeShard(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {

@@ -6,8 +6,13 @@ PEERDIR(
 )
 
 SRCS(
+    plain.cpp
     saslprep.cpp
     scram.cpp
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

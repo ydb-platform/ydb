@@ -82,7 +82,7 @@ class TStatementIterator final
     };
 
 public:
-    TStatementIterator(const TString&& program)
+    explicit TStatementIterator(const TString&& program)
         : Program_(std::move(program))
         , Cur_()
         , Pos_(0)

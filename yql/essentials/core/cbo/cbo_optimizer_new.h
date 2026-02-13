@@ -35,7 +35,7 @@ public:
     EOptimizerNodeKind Kind;
     TOptimizerStatistics Stats;
 
-    IBaseOptimizerNode(EOptimizerNodeKind k)
+    explicit IBaseOptimizerNode(EOptimizerNodeKind k)
         : Kind(k)
     {
     }
@@ -164,7 +164,7 @@ struct TJoinOrderHints {
     };
 
     struct TRelationNode: public ITreeNode {
-        TRelationNode(TString label)
+        explicit TRelationNode(TString label)
             : Label(std::move(label))
         {
             this->Type = ITreeNode::Relation;
@@ -337,8 +337,8 @@ struct TRelOptimizerNode: public IBaseOptimizerNode {
     virtual ~TRelOptimizerNode() {
     }
 
-    virtual TVector<TString> Labels();
-    virtual void Print(std::stringstream& stream, int ntabs = 0);
+    TVector<TString> Labels() override;
+    void Print(std::stringstream& stream, int ntabs = 0) override;
 };
 
 /**
@@ -371,8 +371,8 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
                        bool nonReorderable = false);
     virtual ~TJoinOptimizerNode() {
     }
-    virtual TVector<TString> Labels();
-    virtual void Print(std::stringstream& stream, int ntabs = 0);
+    TVector<TString> Labels() override;
+    void Print(std::stringstream& stream, int ntabs = 0) override;
 };
 
 class IOptimizerNew {
@@ -380,7 +380,7 @@ public:
     using TPtr = std::shared_ptr<IOptimizerNew>;
     IProviderContext& Pctx;
 
-    IOptimizerNew(IProviderContext& ctx)
+    explicit IOptimizerNew(IProviderContext& ctx)
         : Pctx(ctx)
     {
     }

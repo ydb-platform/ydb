@@ -96,7 +96,7 @@ public:
                 return false;
             }
             while (!stateRowset.EndOfSet()) {
-                if (stateRowset.HaveValue<Schema::State::Value>()) {
+                if (stateRowset.HaveValue<Schema::State::Value>() || stateRowset.HaveValue<Schema::State::StringValue>()) {
                     switch (stateRowset.GetKey()) {
                     case TSchemeIds::State::DatabaseVersion:
                         break;
@@ -177,6 +177,9 @@ public:
                         break;
                     case TSchemeIds::State::TabletOwnersSynced:
                         Self->TabletOwnersSynced = (bool)stateRowset.GetValue<Schema::State::Value>();
+                        break;
+                    case TSchemeIds::State::LastReassignStatus:
+                        Self->LastReassignStatus = stateRowset.GetValue<Schema::State::StringValue>();
                         break;
                     }
                 }
@@ -351,10 +354,7 @@ public:
                 if (node.BecomeUpOnRestart) {
                     // If a node must become up on restart, it must have been down
                     // That was not persisted to avoid issues with downgrades
-                    node.Down = true;
-                }
-                if (node.Down) {
-                    Self->UpdateCounterNodesDown(+1);
+                    node.SetDown(true);
                 }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();

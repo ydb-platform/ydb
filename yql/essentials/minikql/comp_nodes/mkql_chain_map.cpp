@@ -129,6 +129,8 @@ public:
                 if (!Init.IsInvalid()) {
                     ComputationNodes.StateArg->SetValue(CompCtx, std::move(Init));
                     Init = NUdf::TUnboxedValue::Invalid();
+                } else {
+                    ComputationNodes.StateArg->SetValue(CompCtx, std::move(PreservedState));
                 }
 
                 if (!Iter.Next(ComputationNodes.ItemArg->RefValue(CompCtx))) {
@@ -136,7 +138,7 @@ public:
                 }
 
                 value = ComputationNodes.NewItem->GetValue(CompCtx);
-                ComputationNodes.StateArg->SetValue(CompCtx, ComputationNodes.NewState->GetValue(CompCtx));
+                PreservedState = ComputationNodes.NewState->GetValue(CompCtx);
                 return true;
             }
 
@@ -144,6 +146,7 @@ public:
             const TComputationNodes& ComputationNodes;
             const NUdf::TUnboxedValue Iter;
             NUdf::TUnboxedValue Init;
+            NUdf::TUnboxedValue PreservedState;
         };
 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, NUdf::TUnboxedValue&& init, const TComputationNodes& computationNodes)
@@ -244,7 +247,9 @@ public:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
+        const auto funcType = IsStream
+                                  ? FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false)
+                                  : FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -256,6 +261,7 @@ public:
         ctx.Ctx = &*args;
         const auto containerArg = &*++args;
         const auto initArg = &*++args;
+        const auto stateArg = IsStream ? nullptr : &*++args;
         const auto valuePtr = &*++args;
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -264,15 +270,24 @@ public:
         const auto container = static_cast<Value*>(containerArg);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
+        const auto state = IsStream ? nullptr : BasicBlock::Create(context, "state", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
 
         const auto load = new LoadInst(valueType, initArg, "load", block);
-        BranchInst::Create(work, init, IsInvalid(load, block, context), block);
+        BranchInst::Create(IsStream ? work : state, init, IsInvalid(load, block, context), block);
         block = init;
 
         codegenStateArg->CreateSetValue(ctx, block, initArg);
         new StoreInst(GetInvalid(context), initArg, block);
         BranchInst::Create(work, block);
+
+        if constexpr (IsStream) {
+            Y_ABORT_UNLESS(stateArg == nullptr);
+        } else {
+            block = state;
+            codegenStateArg->CreateSetValue(ctx, block, stateArg);
+            BranchInst::Create(work, block);
+        }
 
         block = work;
 
@@ -292,7 +307,13 @@ public:
 
         const auto newState = GetNodeValue(ComputationNodes.NewState, ctx, block);
 
-        codegenStateArg->CreateSetValue(ctx, block, newState);
+        if constexpr (IsStream) {
+            codegenStateArg->CreateSetValue(ctx, block, newState);
+        } else {
+            ValueUnRef(EValueRepresentation::Any, stateArg, ctx, block);
+            new StoreInst(newState, stateArg, block);
+            ValueAddRef(EValueRepresentation::Any, stateArg, ctx, block);
+        }
 
         BranchInst::Create(done, block);
         block = done;
@@ -301,7 +322,7 @@ public:
         return ctx.Func;
     }
 
-    using TChainMapPtr = std::conditional_t<IsStream, TStreamCodegenStatefulValue::TFetchPtr, TCustomListCodegenStatefulValue::TNextPtr>;
+    using TChainMapPtr = std::conditional_t<IsStream, TStreamCodegenStatefulValue::TFetchPtr, TCustomListCodegenStatefulValueT<TCodegenStableStatefulIterator<>>::TNextPtr>;
 
     Function* ChainMapFunc = nullptr;
 
@@ -391,7 +412,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     NUdf::TUnboxedValuePod MakeLazyList(TComputationContext& ctx, const NUdf::TUnboxedValuePod value, const NUdf::TUnboxedValuePod init) const {
-        return ctx.HolderFactory.Create<TCustomListCodegenStatefulValue>(ChainMap, &ctx, value, init);
+        return ctx.HolderFactory.Create<TCustomListCodegenStatefulValueT<TCodegenStableStatefulIterator<>>>(ChainMap, &ctx, value, init);
     }
 
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {

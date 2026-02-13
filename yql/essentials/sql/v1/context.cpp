@@ -77,6 +77,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike},
     {"DebugPositions", &TContext::DebugPositions},
     {"ExceptIntersectBefore202503", &TContext::ExceptIntersectBefore202503},
+    {"WindowNewPipeline", &TContext::WindowNewPipeline},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -193,6 +194,16 @@ void TContext::PopCurrentBlocks() {
 TBlocks& TContext::GetCurrentBlocks() const {
     YQL_ENSURE(!CurrentBlocks_.empty());
     return *CurrentBlocks_.back();
+}
+
+IOutputStream& TContext::Fatal() {
+    bool isError = false;
+    return MakeIssue(
+        TSeverityIds::S_FATAL,
+        NYql::TIssuesIds::UNEXPECTED,
+        TPosition(),
+        /*forceError=*/false,
+        isError);
 }
 
 IOutputStream& TContext::Error(NYql::TIssueCode code) {
@@ -528,6 +539,26 @@ TScopedStatePtr TContext::CreateScopedState() const {
     return state;
 }
 
+bool TContext::EnsureBackwardCompatibleFeatureAvailable(
+    TPosition position,
+    TStringBuf feature,
+    NYql::TLangVersion version)
+{
+    if (!IsBackwardCompatibleFeatureAvailable(version)) {
+        Error(position)
+            << feature << " is not available before language version "
+            << NYql::FormatLangVersion(version);
+        return false;
+    }
+
+    return true;
+}
+
+bool TContext::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const {
+    return NYql::IsBackwardCompatibleFeatureAvailable(
+        Settings.LangVer, featureVer, Settings.BackportMode);
+}
+
 TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {
     static const TSet<TStringBuf> DenyForAllArgs = {
         "datatype",
@@ -723,10 +754,6 @@ TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32
 
 void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {
     Error() << ruleName << ": alternative is not implemented yet: " << AltDescription(node, altCase, descr);
-}
-
-bool TTranslation::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion langVer) const {
-    return NYql::IsBackwardCompatibleFeatureAvailable(Ctx_.Settings.LangVer, langVer, Ctx_.Settings.BackportMode);
 }
 
 void EnumerateSqlFlags(std::function<void(std::string_view)> callback) {

@@ -40,7 +40,7 @@ void SetCurrentFiberId(TFiberId id);
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Blocks the current fiber until #future is set.
-//! The fiber is resceduled to #invoker.
+//! The fiber is rescheduled to #invoker.
 void WaitUntilSet(
     TFuture<void> future,
     IInvokerPtr invoker = GetCurrentInvoker());

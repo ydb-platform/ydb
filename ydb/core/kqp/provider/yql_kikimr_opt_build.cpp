@@ -199,8 +199,20 @@ struct TKiExploreTxResults {
             const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
             TString indexTable;
             if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                YQL_ENSURE(indexTables.size() >= 2, "K-means tree index should have at least 2 tables");
                 indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextPlain) {
+                YQL_ENSURE(indexTables.size() == 1, "Global fulltext plain index should have 1 table");
+                indexTable = indexTables[0];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                YQL_ENSURE(indexTables.size() == 4, "Global fulltext relevance index should have 4 tables");
+                indexTable = indexTables[3];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
+                auto dictTable = indexTables[0];
+                ops[dictTable] |= TPrimitiveYdbOperation::Read;
+                ops[dictTable] |= TPrimitiveYdbOperation::Write;
             } else {
                 YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
                 indexTable = indexTables[0];

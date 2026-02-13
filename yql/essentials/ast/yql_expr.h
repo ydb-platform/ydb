@@ -11,6 +11,15 @@
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/sql_types/normalize_name.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/checked_deref_ptr.h>
+
+// #define YQL_USE_CHECKED_DEREF_PTR_FOR_TYPE_ANN
+#ifdef YQL_USE_CHECKED_DEREF_PTR_FOR_TYPE_ANN
+    #define YQL_TYPE_ANN_PTR NYql::TCheckedDerefPtr<const TTypeAnnotationNode>
+#else
+    #define YQL_TYPE_ANN_PTR const TTypeAnnotationNode*
+#endif
+
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 
@@ -166,7 +175,7 @@ struct TDefaultTypeAnnotationVisitor: public TTypeAnnotationVisitor {
 
 class TErrorTypeVisitor: public TDefaultTypeAnnotationVisitor {
 public:
-    TErrorTypeVisitor(TExprContext& ctx);
+    explicit TErrorTypeVisitor(TExprContext& ctx);
     void Visit(const TErrorExprType& type) override;
     bool HasErrors() const;
 
@@ -427,7 +436,7 @@ class TUnitExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Unit;
 
-    TUnitExprType(ui64 hash)
+    explicit TUnitExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue,
                               TypeNonComputable | TypeNonPersistable, hash, 0)
     {
@@ -447,7 +456,7 @@ class TUniversalExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Universal;
 
-    TUniversalExprType(ui64 hash)
+    explicit TUniversalExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue, TypeHasUniversal, hash, 0)
     {
     }
@@ -466,7 +475,7 @@ class TUniversalStructExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::UniversalStruct;
 
-    TUniversalStructExprType(ui64 hash)
+    explicit TUniversalStructExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue, TypeHasUniversal, hash, 0)
     {
     }
@@ -1087,7 +1096,7 @@ class TWorldExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::World;
 
-    TWorldExprType(ui64 hash)
+    explicit TWorldExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue,
                               TypeNonComposable | TypeNonComputable | TypeNonPersistable | TypeNonInspectable, hash, 0)
     {
@@ -1244,7 +1253,7 @@ class TVoidExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Void;
 
-    TVoidExprType(ui64 hash)
+    explicit TVoidExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue, 0, hash, 0)
     {
     }
@@ -1263,7 +1272,7 @@ class TNullExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Null;
 
-    TNullExprType(ui64 hash)
+    explicit TNullExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue, TypeHasNull, hash, 0)
     {
     }
@@ -1412,7 +1421,7 @@ class TGenericExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Generic;
 
-    TGenericExprType(ui64 hash)
+    explicit TGenericExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue, TypeNonComputable, hash, 0)
     {
     }
@@ -1523,7 +1532,7 @@ class TEmptyListExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::EmptyList;
 
-    TEmptyListExprType(ui64 hash)
+    explicit TEmptyListExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue, 0, hash, 0)
     {
     }
@@ -1542,7 +1551,7 @@ class TEmptyDictExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::EmptyDict;
 
-    TEmptyDictExprType(ui64 hash)
+    explicit TEmptyDictExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue, 0, hash, 0)
     {
     }
@@ -2287,8 +2296,8 @@ public:
         State_ = TypeAnnotation_ ? EState::TypeComplete : EState::Initial;
     }
 
-    const TTypeAnnotationNode* GetTypeAnn() const {
-        return TypeAnnotation_;
+    YQL_TYPE_ANN_PTR GetTypeAnn() const {
+        return static_cast<YQL_TYPE_ANN_PTR>(TypeAnnotation_);
     }
 
     EState GetState() const {
@@ -2835,7 +2844,7 @@ using TSingletonTypeCache = std::tuple<
 
 class TExprCycleDetector {
 public:
-    TExprCycleDetector(ui64 maxQueueSize);
+    explicit TExprCycleDetector(ui64 maxQueueSize);
     void Reset();
     void AddNode(const TExprNode& node);
 
@@ -2851,7 +2860,7 @@ struct TExprContext: private TNonCopyable {
         TFreezeGuard(const TFreezeGuard&) = delete;
         TFreezeGuard& operator=(const TFreezeGuard&) = delete;
 
-        TFreezeGuard(TExprContext& ctx)
+        explicit TFreezeGuard(TExprContext& ctx)
             : Ctx_(ctx)
         {
             Ctx_.Freeze();

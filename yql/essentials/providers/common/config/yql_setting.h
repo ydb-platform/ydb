@@ -22,7 +22,7 @@ template <typename TType, EConfSettingType SettingType = EConfSettingType::Dynam
 class TConfSetting {
 public:
     TConfSetting() = default;
-    TConfSetting(const TType& value) {
+    explicit TConfSetting(const TType& value) {
         PerClusterValue_[ALL_CLUSTERS] = value;
     }
     TConfSetting(const TConfSetting&) = default;
@@ -93,7 +93,7 @@ template <typename TType>
 class TConfSetting<TType, EConfSettingType::Static> {
 public:
     TConfSetting() = default;
-    TConfSetting(const TType& value)
+    explicit TConfSetting(const TType& value)
         : Value_(value)
     {
     }

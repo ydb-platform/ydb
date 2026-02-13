@@ -279,7 +279,7 @@ def _async_pile_health_check(
 
         return EndpointHealthCheckResult(self_check_result, bad_piles)
 
-    def fetch_health(path_to_cli, endpoint: str, ydb_auth_opts: Optional[List[str]) -> Optional[Tuple[str, Dict[str, Any]]]:
+    def fetch_health(path_to_cli, endpoint: str, ydb_auth_opts: Optional[List[str]]) -> Optional[Tuple[str, Dict[str, Any]]]:
         try:
             start_ts = time.monotonic()
             cmd = ["-d", "", "monitoring", "healthcheck", "-v", "--format=json", "--no-merge", "--no-cache"]

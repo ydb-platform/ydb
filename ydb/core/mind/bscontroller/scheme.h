@@ -45,13 +45,13 @@ struct Schema : NIceDb::Schema {
         struct Mood : Column<18, NScheme::NTypeIds::Uint8> { using Type = TPDiskMood::EValue; static constexpr Type Default = Type::Normal; };
         struct ShredComplete : Column<19, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct MaintenanceStatus : Column<20, NScheme::NTypeIds::Uint8> { using Type = NKikimrBlobStorage::TMaintenanceStatus::E; static constexpr Type Default = NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST; };
-        struct InferPDiskSlotCountFromUnitSize : Column<21, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
-        struct InferPDiskSlotCountMax : Column<22, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        // struct InferPDiskSlotCountFromUnitSize : Column<21, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
+        // struct InferPDiskSlotCountMax : Column<22, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
               Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus, Mood,
-              ShredComplete, MaintenanceStatus, InferPDiskSlotCountFromUnitSize, InferPDiskSlotCountMax>;
+              ShredComplete, MaintenanceStatus>;
     };
 
     struct Group : Table<4> {
@@ -147,6 +147,7 @@ struct Schema : NIceDb::Schema {
         struct LastSeenReady : Column<12, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
         struct LastGotReplicating : Column<13, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
         struct ReplicationTime : Column<14, NScheme::NTypeIds::Uint64> { using Type = TDuration; static constexpr Type Default = TDuration::Zero(); };
+        struct DDiskNumVChunksClaimed : Column<15, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<NodeID, PDiskID, VSlotID>; // order is important
         using TColumns = TableColumns<
@@ -163,7 +164,8 @@ struct Schema : NIceDb::Schema {
             Mood,
             LastSeenReady,
             LastGotReplicating,
-            ReplicationTime>;
+            ReplicationTime,
+            DDiskNumVChunksClaimed>;
     };
 
     struct VDiskMetrics : Table<6> {
@@ -248,12 +250,11 @@ struct Schema : NIceDb::Schema {
         struct ReadCentric : Column<5, NScheme::NTypeIds::Bool> {};
         struct Kind : Column<6, NScheme::NTypeIds::Uint64> {};
         struct PDiskConfig : Column<7, NScheme::NTypeIds::String> {};
-        struct InferPDiskSlotCountFromUnitSize : Column<8, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
-        struct InferPDiskSlotCountMax : Column<9, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        // struct InferPDiskSlotCountFromUnitSize : Column<8, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
+        // struct InferPDiskSlotCountMax : Column<9, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
 
         using TKey = TableKey<HostConfigId, Path>;
-        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig, InferPDiskSlotCountFromUnitSize,
-            InferPDiskSlotCountMax>;
+        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig>;
     };
 
     struct BoxHostV2 : Table<105> {
@@ -321,14 +322,16 @@ struct Schema : NIceDb::Schema {
         struct DefaultGroupSizeInUnits : Column<26, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         // does this storage pool work in bridge mode?
         struct BridgeMode : Column<27, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        // does this pool define DDisk pool instead of VDisk one?
+        struct DDisk : Column<28, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 
         using TColumns = TableColumns<BoxId, StoragePoolId, Name, ErasureSpecies, RealmLevelBegin, RealmLevelEnd,
-          DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
-          VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
-          Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-          DefaultGroupSizeInUnits, BridgeMode>;
+            DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
+            VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
+            Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
+            DefaultGroupSizeInUnits, BridgeMode, DDisk>;
     };
 
     struct BoxStoragePoolUser : Table<121> {
@@ -459,6 +462,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
     };
 
+    struct DirectBlockGroupClaims : Table<134> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
+        struct DirectBlockGroupId : Column<2, NScheme::NTypeIds::Uint64> {}; // PK
+        struct NumVChunksClaimed : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct Allocation : Column<4, NScheme::NTypeIds::String> {}; // protobuf
+
+        using TKey = TableKey<TabletId, DirectBlockGroupId>;
+        using TColumns = TableColumns<TabletId, DirectBlockGroupId, NumVChunksClaimed, Allocation>;
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -483,7 +496,8 @@ struct Schema : NIceDb::Schema {
         ScrubState,
         DriveSerial,
         BlobDepotDeleteQueue,
-        BridgeSyncState
+        BridgeSyncState,
+        DirectBlockGroupClaims
     >;
 
     using TSettings = SchemaSettings<

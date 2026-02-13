@@ -13,7 +13,14 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
-    void RunTest(TString query, TString mainResult, TString indexResult, bool exists, bool indexOverlap, bool pkOverlap = false, bool cover = false) {
+    void RunTest(TString query,
+                TString mainResult,
+                TString indexResult,
+                bool exists,
+                bool indexOverlap,
+                bool pkOverlap = false,
+                bool cover = false,
+                bool indexDefault = false) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
@@ -26,12 +33,16 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         const TString createQuery = Sprintf(R"(
             CREATE TABLE `/Root/DataShard` (
                 Col1 Uint64,
-                Col2 Uint64,
+                Col2 Uint64 %s,
                 Col3 Uint64,
                 INDEX idx GLOBAL ON (Col2 %s) %s,
                 PRIMARY KEY (Col1 %s)
             );
-        )", indexOverlap ? ", Col1" : "",  cover ? "COVER (Col3)" : "", pkOverlap ? ", Col2" : "");
+        )",
+        indexDefault ? "DEFAULT 42" : "",
+        indexOverlap ? ", Col1" : "",
+        cover ? "COVER (Col3)" : "",
+        pkOverlap ? ", Col2" : "");
 
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -109,6 +120,18 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             overlap);
     }
 
+    Y_UNIT_TEST_TWIN(InsertDefaultColumn, overlap) {
+        RunTest(
+            "INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
+            R"([[[0u];[42u];[0u]]])",
+            R"([[[0u];[42u]]])",
+            false,
+            overlap,
+            false,
+            false,
+            true);
+    }
+
     Y_UNIT_TEST_TWIN(InsertNoColumn2, overlap) {
         RunTest(
             "INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
@@ -152,6 +175,54 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             R"([[[0u];[1u]]])",
             true,
             overlap);
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertDefaultColumnNotExists, overlap) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
+            R"([[[0u];[42u];[0u]]])",
+            R"([[[0u];[42u]]])",
+            false,
+            overlap,
+            false,
+            false,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertDefaultColumnExists, overlap) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
+            R"([[[0u];[1u];[0u]]])",
+            R"([[[0u];[1u]]])",
+            true,
+            overlap,
+            false,
+            false,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertDefaultColumnNotExists2, overlap) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
+            R"([[[0u];[0u];#]])",
+            R"([[[0u];[0u]]])",
+            false,
+            overlap,
+            false,
+            false,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertDefaultColumnExists2, overlap) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
+            R"([[[0u];[0u];[1u]]])",
+            R"([[[0u];[0u]]])",
+            true,
+            overlap,
+            false,
+            false,
+            true);
     }
 
     Y_UNIT_TEST_TWIN(UpsertNoColumnNotExists2, overlap) {

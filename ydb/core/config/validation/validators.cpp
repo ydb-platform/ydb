@@ -262,6 +262,12 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
             return EValidationResult::Error;
         }
     }
+    if (config.HasMonitoringConfig()) {
+        NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateMonitoringConfig(config, msg);
+        if (result == NKikimr::NConfig::EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
     NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateStateStorageConfig(config, msg);
     if (result == NKikimr::NConfig::EValidationResult::Error) {
         return EValidationResult::Error;

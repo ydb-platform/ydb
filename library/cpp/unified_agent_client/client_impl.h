@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/unified_agent_client/atomic_throttlers.h>
 #include <library/cpp/unified_agent_client/client.h>
 #include <library/cpp/unified_agent_client/client_proto_weighing.h>
 #include <library/cpp/unified_agent_client/counters.h>
@@ -279,6 +280,10 @@ namespace NUnifiedAgent::NPrivate {
         TAdaptiveLock Lock;
         size_t MaxInflightBytes;
         TFMaybe<size_t> AgentMaxReceiveMessage;
+        // Per-session throttler for max inflight error logging.
+        // Must be per-session (not static) to ensure each session can log
+        // independently during test iterations where sessions are created/destroyed rapidly.
+        AtomicOneSecondThrottler InflightErrorThrottler;
     };
 
     class TGrpcCall final: public TAtomicRefCount<TGrpcCall> {

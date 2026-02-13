@@ -269,8 +269,8 @@ struct TCompactionStats {
     TCompactionStats() = default;
 
     TCompactionStats(const NKikimrTxDataShard::TEvGetCompactTableStatsResult& stats)
-        : BackgroundRequestCount(stats.GetBackgroundCompactionRequests())
-        , BackgroundCompactionCount(stats.GetBackgroundCompactionCount())
+        : BackgroundRequestCount(stats.GetCompactionRequests())
+        , BackgroundCompactionCount(stats.GetCompactionCount())
         , CompactBorrowedCount(stats.GetCompactBorrowedCount())
     {}
 
@@ -294,7 +294,7 @@ TCompactionStats GetCompactionStats(
 
     TAutoPtr<IEventHandle> handle;
     auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetCompactTableStatsResult>(handle);
-    UNIT_ASSERT(response->Record.HasBackgroundCompactionRequests());
+    UNIT_ASSERT(response->Record.HasCompactionRequests());
 
     return TCompactionStats(response->Record);
 }

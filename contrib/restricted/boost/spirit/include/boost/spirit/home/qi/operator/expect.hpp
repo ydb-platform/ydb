@@ -43,8 +43,8 @@ namespace boost { namespace spirit { namespace qi
     {
         friend struct sequence_base<expect_operator<Elements>, Elements>;
 
-        expect_operator(Elements const& elements)
-          : sequence_base<expect_operator<Elements>, Elements>(elements) {}
+        expect_operator(Elements const& elements_)
+          : sequence_base<expect_operator<Elements>, Elements>(elements_) {}
 
     private:
 

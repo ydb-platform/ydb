@@ -1,15 +1,11 @@
 #include "rpc_scheme_base.h"
 #include "service_table.h"
 
-#include <library/cpp/protobuf/json/util.h>
-
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
-#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/table_description.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -58,35 +54,26 @@ private:
             auto issue = NYql::TIssue(record.GetReason());
             Request_->RaiseIssue(issue);
         }
-        Ydb::Table::DescribeSystemViewResult describeSysViewResult;
+
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
+                Ydb::Table::DescribeSystemViewResult describeSysViewResult;
+                Ydb::StatusIds_StatusCode status;
+                TString error;
+
                 const auto& pathDescription = record.GetPathDescription();
-                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeSysView) {
-                    Request_->RaiseIssue(NYql::TIssue(
-                        TStringBuilder() << "Unexpected path type: " << pathDescription.GetSelf().GetPathType()
-                    ));
-                    return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
+                    switch (status) {
+                    case Ydb::StatusIds::INTERNAL_ERROR:
+                        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
+                        [[fallthrough]];
+                    case Ydb::StatusIds::SCHEME_ERROR:
+                        [[fallthrough]];
+                    default:
+                        Request_->RaiseIssue(NYql::TIssue(error));
+                        return Reply(status, ctx);
+                    }
                 }
-
-                Ydb::Scheme::Entry* selfEntry = describeSysViewResult.mutable_self();
-                ConvertDirectoryEntry(pathDescription.GetSelf(), selfEntry, true);
-
-                const auto sysViewType = pathDescription.GetSysViewDescription().GetType();
-                describeSysViewResult.set_sys_view_id(sysViewType);
-                TString sysViewTypeName = NKikimrSysView::ESysViewType_Name(sysViewType).substr(1);
-                NProtobufJson::ToSnakeCase(&sysViewTypeName);
-                describeSysViewResult.set_sys_view_name(std::move(sysViewTypeName));
-
-                const auto& tableDescription = pathDescription.GetTable();
-                try {
-                    FillColumnDescription(describeSysViewResult, tableDescription);
-                } catch (const std::exception& ex) {
-                    return ReplyOnException(ex, "Unable to fill column description");
-                }
-
-                describeSysViewResult.mutable_primary_key()->CopyFrom(tableDescription.GetKeyColumnNames());
-                FillAttributes(describeSysViewResult, pathDescription);
 
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeSysViewResult, ctx);
             }

@@ -5,7 +5,7 @@ PEERDIR(
     ydb/core/discovery
     ydb/core/engine/minikql
     ydb/core/kqp/common/events
-    ydb/core/kqp/federated_query
+    ydb/core/kqp/federated_query/actors
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
@@ -75,6 +75,7 @@ END()
 RECURSE_FOR_TESTS(
     ut_assign_tx_id
     ut_dst_creator
+    ut_replication
     ut_stream_creator
     ut_target_discoverer
 )

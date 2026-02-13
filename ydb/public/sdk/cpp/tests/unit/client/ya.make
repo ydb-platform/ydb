@@ -1,4 +1,5 @@
 RECURSE(
+    connection_string
     coordination
     discovery_mutator
     draft

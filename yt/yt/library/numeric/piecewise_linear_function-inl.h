@@ -174,7 +174,7 @@ TValue TPiecewiseSegment<TValue>::InterpolateNormalized(double t) const
 }
 
 template <class TValue>
-bool operator ==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs) {
+bool operator==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs) {
     return lhs.LeftBound() == rhs.LeftBound() && lhs.RightBound() == rhs.RightBound() &&
         lhs.LeftValue() == rhs.LeftValue() && lhs.RightValue() == rhs.RightValue();
 }

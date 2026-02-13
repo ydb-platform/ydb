@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
 void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedLastSector,
         ui64 expectedSectorOffset) {
     TDiskFormat format;
-    format.Clear();
+    format.Clear(true);
     format.SectorSize = 4096;
     format.FormatFlags &= ~EFormatFlags::FormatFlagErasureEncodeUserChunks;
 
@@ -268,7 +268,7 @@ void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedL
 
     Y_UNIT_TEST(OffsetParsingCorrectness) {
         TDiskFormat format;
-        format.Clear();
+        format.Clear(true);
         format.SectorSize = 4096;
         const ui64 sectorPayload = format.SectorPayloadSize();
 
@@ -292,7 +292,7 @@ void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedL
 void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui64 expectedPayloadSize,
         ui64 expectedPayloadOffset) {
     TDiskFormat format;
-    format.Clear();
+    format.Clear(true);
     format.SectorSize = 4096;
     format.FormatFlags &= ~EFormatFlags::FormatFlagErasureEncodeUserChunks;
 
@@ -308,7 +308,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     Y_UNIT_TEST(PayloadParsingTest) {
         TDiskFormat format;
-        format.Clear();
+        format.Clear(true);
         format.SectorSize = 4096;
         const ui64 sectorPayload = format.SectorPayloadSize();
 
@@ -327,7 +327,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     Y_UNIT_TEST(SectorRestorator) {
         TDiskFormat format;
-        format.Clear();
+        format.Clear(true);
         TSectorsWithData sectors(format.SectorSize, LogErasureDataParts + 1);
         constexpr ui64 magic = 0x123951924;
         ui64 nonce = 1;
@@ -353,7 +353,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     Y_UNIT_TEST(SectorRestoratorOldNewHash) {
         TDiskFormat format;
-        format.Clear();
+        format.Clear(true);
         TSectorsWithData sectors(format.SectorSize, 3);
         const ui64 magic = 0x123951924;
         const ui64 offset = format.SectorSize * 17;
@@ -497,8 +497,10 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         NPDisk::TKey sysLogKey{};
 
         TPDiskConfig cfg("SectorMap:1024042", 12345, 0, {});
+        TFormatOptions options;
+        options.SectorMap = sectorMap;
         FormatPDisk(cfg.Path, 0, 4096, MIN_CHUNK_SIZE, cfg.PDiskGuid, chunkKey, logKey, sysLogKey,
-                YdbDefaultPDiskSequence, TString(), false, false, sectorMap);
+                YdbDefaultPDiskSequence, TString(), options);
     }
 
     Y_UNIT_TEST(SectorMapStoreLoadFromFile) {

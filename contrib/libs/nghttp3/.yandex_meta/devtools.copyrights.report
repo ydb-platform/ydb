@@ -155,6 +155,20 @@ BELONGS ya.make
         lib/sfparse/sfparse.c [4:6]
         lib/sfparse/sfparse.h [4:6]
 
+KEEP     COPYRIGHT_SERVICE_LABEL b3a1dbf86df9b51e39d69be7e6eab066
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2025 nghttp3 contributors
+         * Copyright (c) 2025 ngtcp2 contributors
+         * Copyright (c) 2023 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_ratelim.c [4:6]
+        lib/nghttp3_ratelim.h [4:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL b9bce4a8047145ca716cda7c1ba12739
 BELONGS ya.make
     License text:
@@ -314,6 +328,20 @@ BELONGS ya.make
         lib/nghttp3_rcbuf.c [4:5]
         lib/nghttp3_rcbuf.h [4:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL d6540bc8665ef99ad871e3a0a3847f50
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2025 nghttp3 contributors
+         * Copyright (c) 2025 ngtcp2 contributors
+         * Copyright (c) 2023 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_ratelim.c [4:6]
+        lib/nghttp3_ratelim.h [4:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL d89f9db9c9889910b44184610d7947e1
 BELONGS ya.make
     License text:
@@ -358,5 +386,7 @@ BELONGS ya.make
     Files with this license:
         lib/nghttp3_callbacks.c [4:4]
         lib/nghttp3_callbacks.h [4:4]
+        lib/nghttp3_ratelim.c [4:6]
+        lib/nghttp3_ratelim.h [4:6]
         lib/nghttp3_settings.c [4:4]
         lib/nghttp3_settings.h [4:4]

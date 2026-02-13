@@ -457,20 +457,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR);
 
+        // Note: we don't return TxLocks in the reply since all changes are rolled back and lock is unaffected
         op->Result()->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED,
             TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
-
-        for (auto& table : guardLocks.AffectedTables) {
-            Y_ENSURE(guardLocks.LockTxId);
-            op->Result()->AddTxLock(
-                guardLocks.LockTxId,
-                DataShard.TabletID(),
-                DataShard.Generation(),
-                Max<ui64>(),
-                table.GetTableId().OwnerId,
-                table.GetTableId().LocalPathId,
-                false);
-        }
 
         tx->ReleaseTxData(txc, ctx);
 

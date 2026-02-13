@@ -139,6 +139,16 @@ struct TForsakeChaosCoordinatorOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TGetConnectionOrchidValueOptions
+    : public TTimeoutOptions
+{
+    //! Path can be used to access opaque fields.
+    //! By default root orchid value is returned.
+    NYPath::TYPath Path = "";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Provides a set of private APIs.
 /*!
  *  Only native clients are expected to implement this.
@@ -223,6 +233,9 @@ struct IInternalClient
         NHydra::TCellId chaosCellId,
         NHydra::TCellId coordiantorCellId,
         const TForsakeChaosCoordinatorOptions& options = {}) = 0;
+
+    virtual TFuture<NYson::TYsonString> GetConnectionOrchidValue(
+        const TGetConnectionOrchidValueOptions& options = {}) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IInternalClient)

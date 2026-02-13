@@ -150,7 +150,7 @@ static int test(int flags, int vectored)
 		return ret;
 
 	for (i = 0; i < LOOPS; i++) {
-		int async_cancel = (!i % 2);
+		int async_cancel = !(i % 2);
 		int async_wait = !(i % 3);
 		ret = __test(&ring, vectored, async_wait, async_cancel);
 		if (ret) {

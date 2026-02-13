@@ -45,7 +45,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.SetScanIdentifier(request.TaskIdentifier);
         {
-            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor("internal_request", request.GetPathId().GetInternalPathId());
+            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor("internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId());
             if (accConclusion.IsFail()) {
                 return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
                     AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
@@ -56,9 +56,9 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         // the parent write has already subscribed to the lock, so no need to subscribe again
         auto lockNodeId = std::nullopt;
         read.SetLock(
-            request.GetLockId(), 
+            request.GetLockId(),
             lockNodeId,
-            NKikimrDataEvents::OPTIMISTIC, 
+            NKikimrDataEvents::OPTIMISTIC,
             request.GetLockId().has_value() ? Self->GetOperationsManager().GetLockOptional(request.GetLockId().value()) : nullptr,
             request.GetReadOnlyConflicts()
         );
@@ -79,10 +79,12 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         }
 
         {
+            TInstant buildReadMetadataStart = TAppData::TimeProvider->Now();
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (!newRange) {
                 return SendError("cannot create read metadata", newRange.GetErrorMessage(), ctx);
             }
+            Self->Counters.GetScanCounters().OnReadMetadata((TAppData::TimeProvider->Now() - buildReadMetadataStart));
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
         }
 

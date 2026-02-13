@@ -949,19 +949,19 @@ private:
     struct TOperationInputTablesGetter {
         std::vector<TOperationTableRef> OperationTableRef; // will be filled when std::visit is called
 
-        void operator () (const TUploadOperationParams& uploadOperationParams) {
+        void operator()(const TUploadOperationParams& uploadOperationParams) {
             OperationTableRef.emplace_back(uploadOperationParams.Input);
         }
-        void operator () (const TDownloadOperationParams& downloadOperationParams) {
+        void operator()(const TDownloadOperationParams& downloadOperationParams) {
             OperationTableRef.emplace_back(downloadOperationParams.Input);
         }
-        void operator () (const TMergeOperationParams& mergeOperationParams) {
+        void operator()(const TMergeOperationParams& mergeOperationParams) {
             OperationTableRef = mergeOperationParams.Input;
         }
-        void operator () (const TMapOperationParams& mapOperationParams) {
+        void operator()(const TMapOperationParams& mapOperationParams) {
             OperationTableRef = mapOperationParams.Input;
         }
-        void operator () (const TSortedUploadOperationParams& SortedUploadOperationParams) {
+        void operator()(const TSortedUploadOperationParams& SortedUploadOperationParams) {
             OperationTableRef.emplace_back(SortedUploadOperationParams.Input);
         }
     };
@@ -970,7 +970,7 @@ private:
         std::vector<TTaskParams> TaskParams; // Will be filled when std::visit is called
         TPartitionResult PartitionResult;
 
-        void operator () (const TUploadOperationParams& uploadOperationParams) {
+        void operator()(const TUploadOperationParams& uploadOperationParams) {
             for (auto& task: PartitionResult.TaskInputs) {
                 TUploadTaskParams uploadTaskParams;
                 YQL_ENSURE(task.Inputs.size() == 1, "Upload task should have exactly one fmr table partition input");
@@ -980,7 +980,7 @@ private:
                 TaskParams.emplace_back(uploadTaskParams);
             }
         }
-        void operator () (const TSortedUploadOperationParams& SortedUploadOperationParams) {
+        void operator()(const TSortedUploadOperationParams& SortedUploadOperationParams) {
             ui64 taskOrder = 0;
             for (auto& task: PartitionResult.TaskInputs) {
                 TSortedUploadTaskParams SortedUploadTaskParams;
@@ -994,7 +994,7 @@ private:
                 taskOrder++;
             }
         }
-        void operator () (const TDownloadOperationParams& downloadOperationParams) {
+        void operator()(const TDownloadOperationParams& downloadOperationParams) {
             for (auto& task: PartitionResult.TaskInputs) {
                 TDownloadTaskParams downloadTaskParams;
                 YQL_ENSURE(task.Inputs.size() == 1, "Download task should have exactly one yt table partition input");
@@ -1005,7 +1005,7 @@ private:
                 TaskParams.emplace_back(downloadTaskParams);
             }
         }
-        void operator () (const TMergeOperationParams& mergeOperationParams) {
+        void operator()(const TMergeOperationParams& mergeOperationParams) {
             for (auto& task: PartitionResult.TaskInputs) {
                 TMergeTaskParams mergeTaskParams;
                 mergeTaskParams.Input = task;
@@ -1013,7 +1013,7 @@ private:
                 TaskParams.emplace_back(mergeTaskParams);
             }
         }
-        void operator () (const TMapOperationParams& mapOperationParams) {
+        void operator()(const TMapOperationParams& mapOperationParams) {
             for (auto& task: PartitionResult.TaskInputs) {
                 TMapTaskParams mapTaskParams;
                 mapTaskParams.Input = task;

@@ -46,12 +46,12 @@ size_t TFmrTableDataServiceReader::DoRead(void* buf, size_t len) {
             try {
                 data = chunk.Data.GetValueSync();
             } catch (...) {
-                ythrow yexception() << "Error reading chunk: " << chunk.Meta.ToString() << "Error: " << CurrentExceptionMessage();
+                throw TFmrNonRetryableJobException() << "Error reading chunk: " << chunk.Meta.ToString() << "Error: " << CurrentExceptionMessage();
             }
             if (data) {
                 DataBuffer_.Assign(data->data(), data->size());
             } else {
-                ythrow yexception() << "No data for chunk:" << chunk.Meta.ToString();
+                throw TFmrNonRetryableJobException() << "No data for chunk:" << chunk.Meta.ToString();
             }
 
             PendingChunks_.pop();

@@ -56,7 +56,7 @@ class THolderFactory;
 
 class TGenericPresortEncoder {
 public:
-    TGenericPresortEncoder(TType* type);
+    explicit TGenericPresortEncoder(TType* type);
     TStringBuf Encode(const NUdf::TUnboxedValue& value, bool desc); // user must copy
     NUdf::TUnboxedValue Decode(TStringBuf buf, bool desc, const THolderFactory& factory);
 

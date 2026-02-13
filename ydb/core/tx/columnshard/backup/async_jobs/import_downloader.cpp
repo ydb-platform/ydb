@@ -90,7 +90,11 @@ public:
         Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(resultBatch, false));
     }
 
-    void Handle(NKikimr::TEvDataShard::TEvAsyncJobComplete::TPtr&) {
+    void Handle(NKikimr::TEvDataShard::TEvAsyncJobComplete::TPtr& ev) {
+        auto product = static_cast<NDataShard::TImportJobProduct*>(ev->Get()->Prod.Get());
+        if (!product->Success) {
+            return Fail(product->Error);
+        }
         Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true));
         PassAway();
     }

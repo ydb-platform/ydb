@@ -17,6 +17,7 @@ public:
     TStructuredTokenBuilder& SetBasicAuth(const TString& login, const TString& password);
     TStructuredTokenBuilder& SetBasicAuthWithSecret(const TString& login, const TString& passwordReference);
     TStructuredTokenBuilder& SetTokenAuthWithSecret(const TString& tokenReference, const TString& token);
+    TStructuredTokenBuilder& SetTransientTokenAuth(const TString& transientToken);
     TStructuredTokenBuilder& SetIAMToken(const TString& token);
     TStructuredTokenBuilder& SetNoAuth();
     TStructuredTokenBuilder& ReplaceReferences(const std::map<TString, TString>& secrets);
@@ -38,7 +39,9 @@ public:
     bool GetBasicAuth(TString& login, TString& password) const;
     bool GetBasicAuth(TString& login, TString& password, TString& passwordReference) const;
     bool HasIAMToken() const;
+    bool HasTransientToken() const;
     TString GetIAMToken() const;
+    TString GetTransientToken() const;
     bool IsNoAuth() const;
     void ListReferences(TSet<TString>& references) const;
 
@@ -54,4 +57,6 @@ TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& ser
 TString ComposeStructuredTokenJsonForBasicAuth(const TString& login, const TString& password);
 TString ComposeStructuredTokenJsonForBasicAuthWithSecret(const TString& login, const TString& passwordSecretName, const TString& password);
 TString ComposeStructuredTokenJsonForTokenAuthWithSecret(const TString& tokenSecretName, const TString& token);
+TString ComposeStructuredTokenJsonForTransientTokenAuth(const TString& transientToken);
+
 } // namespace NYql

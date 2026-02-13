@@ -17,6 +17,7 @@ from six.moves.queue import Queue
 import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.types import FailDomainType
 from . import daemon
 from . import kikimr_config
 from . import kikimr_node_interface
@@ -25,6 +26,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 from ydb.tests.library.clients.kikimr_config_client import config_client_factory
+from ydb.tests.library.clients.kikimr_monitoring import KikimrMonitor
 
 
 logger = logging.getLogger(__name__)
@@ -71,6 +73,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self._tenant_affiliation = tenant_affiliation
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
+        self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
@@ -242,6 +245,21 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--ic-port=%d" % self.ic_port,
             ]
         )
+
+        if self.__configurator.monitoring_tls_cert_path is not None:
+            command.append(
+                "--mon-cert=%s" % self.__configurator.monitoring_tls_cert_path
+            )
+
+        if self.__configurator.monitoring_tls_key_path is not None:
+            command.append(
+                "--mon-key=%s" % self.__configurator.monitoring_tls_key_path
+            )
+
+        if self.__configurator.monitoring_tls_ca_path is not None:
+            command.append(
+                "--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path
+            )
 
         if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
             command.append("--pgwire-port=%d" % self.pgwire_port)
@@ -552,7 +570,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
-            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds)
+            token = self.root_token or self.__configurator.default_clusteradmin
+            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds, token=token)
             if not self.__configurator.use_self_management:
                 self.__add_bs_box()
 
@@ -563,6 +582,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 name=p['name'],
                 kind=p['kind'],
                 pdisk_user_kind=p['pdisk_user_kind'],
+                num_groups=p.get('num_groups'),
             )
             pools[p['name']] = p['kind']
 
@@ -877,9 +897,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 if retries == 0:
                     raise
 
-    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
+    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None, num_groups=None):
         if erasure is None:
             erasure = self.__configurator.static_erasure
+        if num_groups is None:
+            num_groups = 2
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1
@@ -892,7 +914,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         cmd.DefineStoragePool.Kind = kind
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
         cmd.DefineStoragePool.VDiskKind = "Default"
-        cmd.DefineStoragePool.NumGroups = 2
+        cmd.DefineStoragePool.NumGroups = num_groups
+
+        if str(erasure) == "mirror-3-dc" and len(self.__configurator.all_node_ids()) == 3:
+            cmd.DefineStoragePool.Geometry.RealmLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.RealmLevelEnd = int(FailDomainType.Room)
+            cmd.DefineStoragePool.Geometry.DomainLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.DomainLevelEnd = int(FailDomainType.Disk) + 1
 
         pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
         pdisk_filter.Property.add().Type = 0
@@ -900,8 +928,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
         return name
 
-    def __wait_for_bs_controller_to_start(self, timeout_seconds=240):
-        monitors = [node.monitor for node in self.nodes.values()]
+    def __wait_for_bs_controller_to_start(self, timeout_seconds=240, token=None):
+        monitors = [
+            KikimrMonitor(
+                node.host,
+                node.mon_port,
+                use_https=getattr(node, 'mon_uses_https', False),
+                token=token
+            )
+            for node in self.nodes.values()
+        ]
 
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
@@ -1202,11 +1238,11 @@ mon={mon}""".format(
 
     def cleanup_disk(self, path):
         self.ssh_command(
-            'sudo dd if=/dev/zero of={} bs=1M count=1 status=none;'.format(path),
+            'sudo /Berkanavt/kikimr/bin/kikimr admin bs disk obliterate {};'.format(path),
             raise_on_error=True)
 
     def cleanup_disks(self):
         self.ssh_command(
             "for X in /dev/disk/by-partlabel/kikimr_*; "
-            "do sudo dd if=/dev/zero of=$X bs=1M count=1 status=none; done",
+            "do sudo /Berkanavt/kikimr/bin/kikimr admin bs disk obliterate $X; done",
             raise_on_error=True)

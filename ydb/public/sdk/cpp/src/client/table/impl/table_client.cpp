@@ -85,7 +85,6 @@ void TTableClient::TImpl::ScheduleTaskUnsafe(std::function<void()>&& fn, TDeadli
 void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
     // Session pool guarantees than client is alive during call callbacks
     auto deletePredicate = [this](TKqpSessionCommon* s, size_t sessionsCount) {
-
         const auto& sessionPoolSettings = Settings_.SessionPoolSettings_;
         const auto spentTime = s->GetTimeToTouchFast() - s->GetTimeInPastFast();
 
@@ -125,7 +124,6 @@ void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
         };
 
         if (spentTime >= sessionPoolSettings.KeepAliveIdleThreshold_) {
-
             // Handle of session status will be done inside InjectSessionStatusInterception routine.
             // We just need to reschedule time to next call because InjectSessionStatusInterception doesn't
             // update timeInPast for calls from internal keep alive routine
@@ -1062,7 +1060,6 @@ bool TTableClient::TImpl::ReturnSession(TKqpSessionCommon* sessionImpl) {
     bool needUpdateCounter = sessionImpl->NeedUpdateActiveCounter();
     // Also removes NeedUpdateActiveCounter flag
     sessionImpl->MarkIdle();
-    sessionImpl->SetTimeInterval(TDuration::Zero());
     if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter)) {
         sessionImpl->SetNeedUpdateActiveCounter(needUpdateCounter);
         return false;

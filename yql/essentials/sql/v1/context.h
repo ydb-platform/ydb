@@ -112,6 +112,7 @@ public:
 
     TString MakeName(const TString& name);
 
+    IOutputStream& Fatal();
     IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
     IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
     bool Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
@@ -266,7 +267,14 @@ public:
         }
     }
 
+    bool EnsureBackwardCompatibleFeatureAvailable(
+        TPosition position,
+        TStringBuf feature,
+        NYql::TLangVersion version);
+
 private:
+    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
+
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,
         NYql::TIssueCode code,
@@ -410,6 +418,7 @@ public:
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
     bool StrictWarningAsError = false;
+    bool WindowNewPipeline = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;
@@ -464,7 +473,7 @@ protected:
     typedef TSet<ui32> TSetType;
 
 protected:
-    TTranslation(TContext& ctx);
+    explicit TTranslation(TContext& ctx);
 
 public:
     TContext& Context();
@@ -504,8 +513,6 @@ public:
 protected:
     void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
     TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
-
-    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion langVer) const;
 
 protected:
     TContext& Ctx_;

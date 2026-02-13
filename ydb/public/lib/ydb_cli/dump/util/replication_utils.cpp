@@ -155,7 +155,9 @@ TString BuildCreateTransferQuery(
 
     const auto& connectionParams = desc.GetConnectionParams();
     AddConnectionOptions(connectionParams, options);
-    options.push_back(BuildOption("CONSUMER", Quote(desc.GetConsumerName())));
+    if (!desc.GetConsumerName().empty()) {
+        options.push_back(BuildOption("CONSUMER", Quote(desc.GetConsumerName())));
+    }
 
     const auto& batchingSettings = desc.GetBatchingSettings();
     options.push_back(BuildOption("BATCH_SIZE_BYTES", ToString(batchingSettings.SizeBytes)));
@@ -220,6 +222,18 @@ bool RewriteCreateAsyncReplicationQuery(
         return false;
     }
     return RewriteCreateAsyncReplicationQueryNoSecrets(query, dbRestoreRoot, dbPath, issues);
+}
+
+bool RewriteCreateTransferQuery(
+    TString& query,
+    const TString& dbRestoreRoot,
+    const TString& dbPath,
+    NYql::TIssues& issues)
+{
+    if (!RewriteQuerySecretsNoCheck(query, dbRestoreRoot, issues)) {
+        return false;
+    }
+    return RewriteCreateTransferQueryNoSecrets(query, dbRestoreRoot, dbPath, issues);
 }
 
 } // namespace NYdb::NDump

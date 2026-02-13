@@ -8,7 +8,7 @@ namespace {
 
 class TIsValidValueSupportedVisitor: public TTypeAnnotationVisitor {
 public:
-    TIsValidValueSupportedVisitor(const TTypeAnnotationNode* type)
+    explicit TIsValidValueSupportedVisitor(const TTypeAnnotationNode* type)
         : Type_(type) {
     }
 

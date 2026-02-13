@@ -82,6 +82,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters);
 
     //client requests
+    // remove TEvPersQueue::TEvUpdateConfig at 26-3 release
     void Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionConfigChanged::TPtr& ev, const TActorContext& ctx);
     void ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx);
@@ -97,6 +98,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPPurgeRequest::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     template<typename TEventHandle>
@@ -270,6 +272,7 @@ private:
         TEvPQ::TEvMLPCommitRequest::TPtr,
         TEvPQ::TEvMLPUnlockRequest::TPtr,
         TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
+        TEvPQ::TEvMLPPurgeRequest::TPtr,
         TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
     >;
     TDeque<TMLPRequest> MLPRequests;
@@ -306,7 +309,7 @@ private:
     // транзакции
     //
     THashMap<ui64, TDistributedTransaction> Txs;
-    TDeque<std::pair<ui64, ui64>> TxQueue;
+    TDeque<std::pair<ui64, ui64>> TxQueue; // упорядоченный список пар (step, txid)
     ui64 PlanStep = 0;
     ui64 PlanTxId = 0;
     ui64 ExecStep = 0;
@@ -315,6 +318,7 @@ private:
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
+    bool DeleteTxsContainsKafkaTxs = false;
     TSet<std::pair<ui64, ui64>> ChangedTxs;
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
@@ -354,7 +358,8 @@ private:
                      const TActorContext& ctx);
     void TryWriteTxs(const TActorContext& ctx);
 
-    void ProcessProposeTransactionQueue(const TActorContext& ctx);
+    void ProcessProposeTransactionQueue(const TActorContext& ctx,
+                                        NKikimrClient::TKeyValueRequest& request);
     void ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& ev,
                          const TActorContext& ctx);
     void ProcessWriteTxs(const TActorContext& ctx,
@@ -394,7 +399,7 @@ private:
     void SendReplies(const TActorContext& ctx);
     void CheckChangedTxStates(const TActorContext& ctx);
 
-    bool AllTransactionsHaveBeenProcessed() const;
+    bool ReadyForDroppedReply() const;
 
     void BeginWriteTabletState(const TActorContext& ctx, NKikimrPQ::ETabletState state);
     void EndWriteTabletState(const NKikimrClient::TResponse& resp,
@@ -503,7 +508,6 @@ private:
 
     bool CanProcessProposeTransactionQueue() const;
     bool CanProcessWriteTxs() const;
-    bool CanProcessDeleteTxs() const;
     bool CanProcessTxWrites() const;
 
     ui64 GetGeneration();

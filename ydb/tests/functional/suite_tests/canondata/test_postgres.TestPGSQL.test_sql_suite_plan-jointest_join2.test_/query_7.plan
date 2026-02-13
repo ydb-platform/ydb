@@ -29,17 +29,25 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort",
+                                        "Node Type": "TopSort-LeftJoin (Lookup)",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "[Arg.x.x1,Arg.x.x2,Arg.y.y1,Arg.y.y2]"
+                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "[Arg.x.x1,Arg.x.x2,Arg.y.y1,Arg.y.y2]"
+                                                "Name": "LeftJoin (Lookup)"
                                             }
                                         ],
                                         "PlanNodeId": 6,

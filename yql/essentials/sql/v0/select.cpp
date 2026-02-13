@@ -155,7 +155,7 @@ TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist) {
 
 class TFakeSource: public ISource {
 public:
-    TFakeSource(TPosition pos)
+    explicit TFakeSource(TPosition pos)
         : ISource(pos)
     {}
 
@@ -337,7 +337,7 @@ protected:
 
 class IRealSource: public ISource {
 protected:
-    IRealSource(TPosition pos)
+    explicit IRealSource(TPosition pos)
         : ISource(pos)
     {
     }

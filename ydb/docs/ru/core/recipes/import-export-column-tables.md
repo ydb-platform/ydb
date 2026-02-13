@@ -24,21 +24,19 @@
 
 ### Создайте секрет для доступа к {{ objstorage-name }}
 
-Для подключения к приватному бакету необходимо использовать аутентификацию по статическим ключам доступа. В {{ ydb-short-name }} эти ключи хранятся в виде [`SECRET`](../concepts/datamodel/secrets.md) объектов.
+Для подключения к приватному бакету необходимо использовать аутентификацию по статическим ключам доступа. В {{ ydb-short-name }} эти ключи хранятся в виде [секретов](../concepts/datamodel/secrets.md).
 
 ```sql
-CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value='<ID_ключа>');
-CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value='<секретный_ключ>');
+CREATE SECRET aws_access_id WITH (value='<ID_ключа>');
+CREATE SECRET aws_access_key WITH (value='<секретный_ключ>');
 ```
 
 Где:
 
-- `aws_access_id` — имя секрета, содержащего ID_ключа.
+- `aws_access_id` — секрет, содержащий ID_ключа.
 - `<ID_ключа>` — идентификатор статического ключа доступа.
-- `aws_access_key` — имя секрета, содержащего секретный ключ.
+- `aws_access_key` — секрет, содержащий секретный ключ.
 - `<секретный_ключ>` — секретная часть ключа доступа.
-- LOCATION — endpoint выбранного {{ objstorage-name }}
-- AWS_REGION — регион выбранного {{ objstorage-name }}
 
 ### Настройка подключения
 
@@ -50,8 +48,8 @@ CREATE EXTERNAL DATA SOURCE `external/backup_datasource` WITH (
     SOURCE_TYPE="ObjectStorage",
     LOCATION="https://storage.yandexcloud.net/<bucket_name>/",
     AUTH_METHOD="AWS",
-    AWS_ACCESS_KEY_ID_SECRET_NAME="aws_access_id",
-    AWS_SECRET_ACCESS_KEY_SECRET_NAME="aws_access_key",
+    AWS_ACCESS_KEY_ID_SECRET_PATH="aws_access_id",
+    AWS_SECRET_ACCESS_KEY_SECRET_PATH="aws_access_key",
     AWS_REGION="ru-central1"
 );
 ```
@@ -61,7 +59,7 @@ CREATE EXTERNAL DATA SOURCE `external/backup_datasource` WITH (
 - `external/backup_datasource` — имя создаваемого внешнего источника данных.
 - `LOCATION` — URL бакета, включая название бакета `<bucket_name>`
 - `AUTH_METHOD="AWS"` — метод аутентификации, совместимый с S3 API.
-- `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME` — имена секретов, используемых для аутентификации в {{objstorage-name}}.
+- `AWS_ACCESS_KEY_ID_SECRET_PATH`, `AWS_SECRET_ACCESS_KEY_SECRET_PATH` — секреты, используемые для аутентификации в {{objstorage-name}}.
 
 ```sql
 -- Создание внешней таблицы со схемой lineitem

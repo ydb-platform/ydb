@@ -1,4 +1,4 @@
-#include "util.cpp"
+#include "util.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 

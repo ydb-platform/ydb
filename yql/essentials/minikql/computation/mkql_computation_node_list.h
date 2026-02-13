@@ -31,7 +31,7 @@ public:
         return ptr;
     }
 
-    TListChunk(ui64 size)
+    explicit TListChunk(ui64 size)
         : Magic_(TListChunkMagic)
         , Refs_(1)
         , DataEnd_(DataBegin() + size)
@@ -126,7 +126,7 @@ public:
         {
         }
 
-        TIterator(const TListRepresentation& owner)
+        explicit TIterator(const TListRepresentation& owner)
             : Owner(&owner)
             , Position(owner.Begin_)
         {
@@ -173,13 +173,13 @@ public:
         {
         }
 
-        TReverseIterator(const TListRepresentation& owner)
+        explicit TReverseIterator(const TListRepresentation& owner)
             : Owner_(&owner)
             , Position_(owner.End_)
         {
         }
 
-        TReverseIterator(const TIterator& other)
+        explicit TReverseIterator(const TIterator& other)
             : Owner_(other.Owner)
             , Position_(other.Position)
         {
@@ -252,7 +252,7 @@ public:
         other.Type_ = EType::Freezed;
     }
 
-    void operator=(const TSelf& other) {
+    TSelf& operator=(const TSelf& other) {
         if (this != &other) {
             if (other.Chunk_) {
                 other.Chunk_->Ref();
@@ -269,9 +269,11 @@ public:
 
             other.Type_ = EType::Freezed;
         }
+
+        return *this;
     }
 
-    void operator=(TSelf&& other) {
+    TSelf& operator=(TSelf&& other) {
         if (Chunk_) {
             Chunk_->UnRef();
         }
@@ -285,6 +287,8 @@ public:
         other.Begin_ = nullptr;
         other.End_ = nullptr;
         other.Type_ = EType::Freezed;
+
+        return *this;
     }
 
     inline void FromSingleElement(T&& element) {
@@ -296,7 +300,7 @@ public:
         *Begin_ = std::move(element);
     }
 
-    TListRepresentation(T&& element)
+    explicit TListRepresentation(T&& element)
     {
         FromSingleElement(std::move(element));
     }

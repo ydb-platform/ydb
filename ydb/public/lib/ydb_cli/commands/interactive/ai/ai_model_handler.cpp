@@ -1,7 +1,7 @@
 #include "ai_model_handler.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_anthropic.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_openai.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_query_tool.h>
@@ -86,8 +86,7 @@ FEATURES-TODO:
 
 */
 
-TModelHandler::TModelHandler(const TSettings& settings, const TInteractiveLogger& log)
-    : Log(log)
+TModelHandler::TModelHandler(const TSettings& settings)
 {
     SetupModel(settings.Profile, settings);
     SetupTools(settings);
@@ -224,10 +223,10 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
 
     switch (*apiType) {
         case TInteractiveConfigurationManager::EAiApiType::OpenAI:
-            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt}, Log);
+            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt});
             break;
         case TInteractiveConfigurationManager::EAiApiType::Anthropic:
-            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt}, Log);
+            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt});
             break;
         case TInteractiveConfigurationManager::EAiApiType::Invalid:
             Y_VALIDATE(false, "Invalid API type: " << *apiType);
@@ -238,11 +237,11 @@ void TModelHandler::SetupTools(const TSettings& settings) {
     Y_VALIDATE(Model, "Model must be initialized before initializing tools");
 
     Tools = {
-        {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
-        {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver}, Log)},
-        {"describe", CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
-        {"ydb_help", CreateYdbHelpTool({.Driver = settings.Driver}, Log)},
-        {"exec_shell", CreateExecShellTool({.Driver = settings.Driver}, Log)},
+        {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver})},
+        {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver})},
+        {"describe", CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver})},
+        {"ydb_help", CreateYdbHelpTool({.Driver = settings.Driver})},
+        {"exec_shell", CreateExecShellTool({.Driver = settings.Driver})},
     };
 
     for (const auto& [name, tool] : Tools) {

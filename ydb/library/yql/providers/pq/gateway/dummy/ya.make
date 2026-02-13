@@ -1,12 +1,13 @@
 LIBRARY()
 
 SRCS(
+    yql_pq_dummy_gateway_factory.cpp
     yql_pq_dummy_gateway.cpp
-    yql_pq_file_topic_client.cpp
 )
 
 PEERDIR(
-    ydb/library/yql/providers/pq/provider
+    ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/gateway/clients/file
 )
 
 END()

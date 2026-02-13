@@ -310,9 +310,11 @@ std::unique_ptr<Aggregation> Base2ExponentialHistogramAggregation::Merge(
     auto neg_max_index =
         (std::max)(low_res.negative_buckets_->EndIndex(), high_res.negative_buckets_->EndIndex());
 
-    if (static_cast<size_t>(pos_max_index) >
+    // The range [pos_min_index, pos_max_index] contains (pos_max_index - pos_min_index + 1)
+    // buckets. We need to downscale if this count exceeds max_buckets_.
+    if (static_cast<size_t>(pos_max_index) >=
             static_cast<size_t>(pos_min_index) + result_value.max_buckets_ ||
-        static_cast<size_t>(neg_max_index) >
+        static_cast<size_t>(neg_max_index) >=
             static_cast<size_t>(neg_min_index) + result_value.max_buckets_)
     {
       // We need to downscale the buckets to fit into the new max_buckets_.

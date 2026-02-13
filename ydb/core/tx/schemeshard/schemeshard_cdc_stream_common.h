@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr {
 
@@ -33,22 +35,3 @@ void CheckSrcDirOnPropose(
     TTxId op = InvalidTxId);
 
 } // namespace NKikimr::NSchemeShard::NCdcStreamAtTable
-
-namespace NKikimr::NSchemeShard::NCdcStreamState {
-
-// Synchronize child index versions when parent table version is updated for continuous backup
-void SyncIndexEntityVersion(
-    const TPathId& indexPathId,
-    ui64 targetVersion,
-    TOperationId operationId,
-    TOperationContext& context,
-    NIceDb::TNiceDb& db);
-
-void SyncChildIndexes(
-    TPathElement::TPtr parentPath,
-    ui64 targetVersion,
-    TOperationId operationId,
-    TOperationContext& context,
-    NIceDb::TNiceDb& db);
-
-} // namespace NKikimr::NSchemeShard::NCdcStreamState

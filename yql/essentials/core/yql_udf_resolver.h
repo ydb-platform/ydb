@@ -35,7 +35,7 @@ class IUdfResolver : public TThrRefBase {
 public:
     using TPtr = TIntrusiveConstPtr<IUdfResolver>;
 
-    virtual ~IUdfResolver() = default;
+    ~IUdfResolver() override = default;
 
     struct TFunction {
         // input

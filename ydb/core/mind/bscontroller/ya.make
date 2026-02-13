@@ -9,6 +9,7 @@ SRCS(
     cluster_balancing.cpp
     cmds_box.cpp
     cmds_bridge.cpp
+    cmds_ddisk.cpp
     cmds_drive_status.cpp
     cmds_host_config.cpp
     cmds_storage_pool.cpp
@@ -20,6 +21,7 @@ SRCS(
     config.h
     console_interaction.h
     console_interaction.cpp
+    ddisk.cpp
     defs.h
     diff.h
     disk_metrics.cpp

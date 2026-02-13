@@ -162,16 +162,18 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         {}
 
         void AddUpdate(TEvQuota::TEvProxyUpdate& ev) const {
+            constexpr double rateBurst = 2.0;
+            constexpr ui32 ticks = 2;
+            constexpr double ticksD = static_cast<double>(ticks);
+
             TVector<TEvQuota::TUpdateTick> update;
             double sustainedRate = 0.0;
             if (Available > 0.0) {
-                constexpr double rateBurst = 2.0;
-                constexpr ui32 ticks = 2;
-                constexpr double ticksD = static_cast<double>(ticks);
                 update.emplace_back(0, ticks, Available * (rateBurst / ticksD), TEvQuota::ETickPolicy::Front);
                 sustainedRate = Available * rateBurst;
             } else {
-                update.emplace_back();
+                // Ticks > 0 keeps the channel alive (Ticks=0 would erase it)
+                update.emplace_back(0, ticks, 0.0, TEvQuota::ETickPolicy::Front);
             }
             ev.Resources.emplace_back(ResId, sustainedRate, std::move(update), TEvQuota::EUpdateState::Normal);
         }
@@ -198,7 +200,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             ResourceBucketMinSize = ResourceBucketMaxSize * watermark;
             Y_ABORT_UNLESS(ResourceBucketMinSize <= ResourceBucketMaxSize);
 
-            // Decrease available resource if speed or prefetch settings have been changed.
+            // Adjust available resource if speed or prefetch settings have been changed.
             if (prefetch > 0.0) { // RTMR-3774
                 if (InitedProps && ResourceBucketMaxSize < prevBucketMaxSize) {
                     if (const double maxAvailable = ResourceBucketMaxSize + QueueWeight; Available > maxAvailable) {
@@ -208,6 +210,9 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                         }
                         SetAvailable(maxAvailable); // Update resource props with smaller quota.
                     }
+                } else if (InitedProps && ResourceBucketMaxSize > prevBucketMaxSize && prevBucketMaxSize > 0) {
+                    const double scale = ResourceBucketMaxSize / prevBucketMaxSize;
+                    SetAvailable(Min(Max(Available, 0.0) * scale, ResourceBucketMaxSize));
                 }
             }
 

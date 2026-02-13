@@ -7,7 +7,9 @@ namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
 
-static bool ValidateForCounters(const TString& input) {
+namespace {
+
+bool ValidateForCounters(const TString& input) {
     for (auto c : input) {
         if (!(IsAlnum(c) || c == '_')) {
             return false;
@@ -15,6 +17,8 @@ static bool ValidateForCounters(const TString& input) {
     }
     return true;
 }
+
+} // namespace
 
 TNodePtr TSqlCallExpr::BuildUdf(bool forReduce) {
     auto result = Node_ ? Node_ : BuildCallable(Pos_, Module_, Func_, Args_, forReduce);
@@ -60,7 +64,12 @@ TNodeResult TSqlCallExpr::BuildCall() {
             return TNonNull(TNodePtr(new TAstListNodeImpl(Pos_, applyArgs)));
         }
 
-        return Wrap(BuildSqlCall(Ctx_, Pos_, udf_node->GetModule(), udf_node->GetFunction(),
+        TString ns = udf_node->GetModule();
+        if (auto lowerNs = to_lower(ns); lowerNs == "yson" && Ctx_.PragmaYsonFast || lowerNs == "datetime") {
+            ns += "2";
+        }
+
+        return Wrap(BuildSqlCall(Ctx_, Pos_, ns, udf_node->GetFunction(),
                                  args, positional_args, named_args, udf_node->GetExternalTypes(),
                                  udf_node->GetTypeConfig(), udf_node->GetRunConfig(), options,
                                  udf_node->GetDepends()));

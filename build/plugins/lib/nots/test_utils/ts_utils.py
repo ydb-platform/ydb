@@ -3,8 +3,8 @@ import os
 import shutil
 import stat
 
-from build.plugins.lib.nots.package_manager.base import PackageJson
-from build.plugins.lib.nots.package_manager.base.utils import build_pj_path
+from build.plugins.lib.nots.package_manager import PackageJson
+from build.plugins.lib.nots.package_manager.utils import build_pj_path
 from build.plugins.lib.nots.typescript import DEFAULT_TS_CONFIG_FILE, TsConfig
 
 

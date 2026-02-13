@@ -38,6 +38,7 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_stats_registry.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/proto/logger_config.pb.h>

@@ -1,0 +1,14 @@
+--- a/Python/importdl.c	(index)
++++ b/Python/importdl.c	(working tree)
+@@ -191,6 +191,11 @@ _Py_ext_module_loader_info_init_for_builtin(
+         .hook_prefix=ascii_only_prefix,
+         .newcontext=NULL,
+     };
++    info->newcontext = PyUnicode_AsUTF8(name);
++    if (info->newcontext == NULL) {
++        _Py_ext_module_loader_info_clear(info);
++        return -1;
++    }
+     return 0;
+ }
+ 

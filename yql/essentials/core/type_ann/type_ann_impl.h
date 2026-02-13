@@ -13,7 +13,7 @@ namespace NTypeAnnImpl {
     struct TContext {
         TExprContext& Expr;
 
-        TContext(TExprContext& expr);
+        explicit TContext(TExprContext& expr);
     };
 
     struct TExtContext : public TContext {

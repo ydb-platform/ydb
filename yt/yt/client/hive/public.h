@@ -31,6 +31,8 @@ using NHydra::NullCellId;
 
 struct TTimestampMap;
 
+DECLARE_REFCOUNTED_STRUCT(TClusterDirectoryConfig)
+
 template <std::derived_from<NApi::IConnection> TConnection>
 class TClusterDirectoryBase;
 

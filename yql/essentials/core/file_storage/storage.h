@@ -14,7 +14,7 @@ namespace NYql {
 class TFileLink: public TThrRefBase {
 public:
     TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy = true);
-    ~TFileLink();
+    ~TFileLink() override;
 
     const TString& GetStorageFileName() const {
         return StorageFileName_;

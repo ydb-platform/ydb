@@ -172,7 +172,7 @@ public:
         }
     }
 
-    ~TPyCallable() {
+    ~TPyCallable() override {
         TPyGilLocker lock;
         Closure_.Reset();
         Function_.Reset();
@@ -252,7 +252,7 @@ struct TPySecureParam {
     PyObject_HEAD;
     TPyCastContext::TPtr CastCtx;
 
-    TPySecureParam(const TPyCastContext::TPtr& castCtx)
+    explicit TPySecureParam(const TPyCastContext::TPtr& castCtx)
         : CastCtx(castCtx)
     {
     }
@@ -299,7 +299,9 @@ PyObject* SecureParamCall(PyObject* self, PyObject* args, PyObject* kwargs)
     PY_CATCH(nullptr)
 }
 
-static PyTypeObject PySecureParamType = {
+namespace {
+
+PyTypeObject PySecureParamType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     // clang-format off
     INIT_MEMBER(tp_name, "yql.TSecureParam"),
@@ -367,6 +369,8 @@ static PyTypeObject PySecureParamType = {
     INIT_MEMBER(tp_print, nullptr),
 #endif
 };
+
+} // namespace
 
 TPyObjectPtr ToPySecureParam(const TPyCastContext::TPtr& castCtx)
 {

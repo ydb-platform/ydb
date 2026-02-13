@@ -295,7 +295,7 @@ public:
         : Config_(std::move(config))
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         auto getStringWeightLimit = [&] {
             auto bytesLeft = totalLimit - static_cast<i64>(consumer->GetWrittenByteCount());
@@ -386,7 +386,7 @@ public:
         , Scale_(scale)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 /*totalLimit*/) const
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 /*totalLimit*/) const
     {
         const auto& item = cursor->GetCurrent();
         EnsureYsonItemTypeEqual(item, EYsonItemType::StringValue);
@@ -411,7 +411,7 @@ public:
         : ElementConverter_(CreateWeightLimitedYsonToYqlConverter(type.GetElement(), std::move(config)))
     { }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         EnsureYsonItemTypeEqual(cursor->GetCurrent(), EYsonItemType::BeginList);
         cursor->Next();
@@ -485,7 +485,7 @@ public:
         }
     }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         ConvertSequence(cursor, consumer, FieldConverters_, totalLimit);
     }
@@ -504,7 +504,7 @@ public:
         }
     }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         ConvertSequence(cursor, consumer, ElementConverters_, totalLimit);
     }
@@ -521,7 +521,7 @@ public:
         , ElementConverter_(CreateWeightLimitedYsonToYqlConverter(type.GetElement(), std::move(config)))
     { }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         if (cursor->GetCurrent().GetType() == EYsonItemType::EntityValue) {
             consumer->OnEntity();
@@ -566,7 +566,7 @@ public:
         }
     }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         EnsureYsonItemTypeEqual(cursor->GetCurrent(), EYsonItemType::BeginList);
         cursor->Next();
@@ -646,7 +646,7 @@ template <EValueType Type, bool Required>
 class TSimpleUnversionedValueToYqlConverter
 {
 public:
-    void operator () (TUnversionedValue value, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TUnversionedValue value, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         if constexpr (!Required) {
             if (value.Type == EValueType::Null) {
@@ -703,7 +703,7 @@ public:
         , IsNullable_(isNullable)
     { }
 
-    void operator () (TUnversionedValue value, TYqlJsonWriter* consumer, i64 /*totalLimit*/) const
+    void operator()(TUnversionedValue value, TYqlJsonWriter* consumer, i64 /*totalLimit*/) const
     {
         if (IsNullable_) {
             if (value.Type == EValueType::Null) {
@@ -738,7 +738,7 @@ public:
         , IsNullable_(logicalType->IsNullable())
     { }
 
-    void operator () (TUnversionedValue value, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TUnversionedValue value, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         if (value.Type == EValueType::Null) {
             if (Y_UNLIKELY(!IsNullable_)) {

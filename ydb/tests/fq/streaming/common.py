@@ -6,6 +6,7 @@ import ydb
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics, Sensors
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
@@ -42,9 +43,10 @@ class Kikimr:
         self.cluster.start(timeout_seconds=timeout_seconds)
 
         first_node = list(self.cluster.nodes.values())[0]
+        self.endpoint = Endpoint(f"{first_node.host}:{first_node.port}", f"/{config.domain_name}")
         self.ydb_client = YdbClient(
-            database=f"/{config.domain_name}",
-            endpoint=f"grpc://{first_node.host}:{first_node.port}"
+            database=self.endpoint.database,
+            endpoint=f"grpc://{self.endpoint.endpoint}"
         )
         self.ydb_client.wait_connection()
 
@@ -54,6 +56,11 @@ class Kikimr:
 
 
 class StreamingTestBase(TestYdsBase):
+    def get_endpoint(self, kikimr, local_topics):
+        if local_topics:
+            return kikimr.endpoint
+        return Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
+
     def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False):
         kikimr.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (

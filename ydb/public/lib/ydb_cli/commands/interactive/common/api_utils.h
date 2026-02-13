@@ -1,7 +1,5 @@
 #pragma once
 
-#include "interactive_log.h"
-
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/public/lib/ydb_cli/common/interruptable.h>
 
@@ -43,7 +41,7 @@ private:
 
 class THttpExecutor : public TInterruptableCommand {
 public:
-    THttpExecutor(const TString& apiUrl, const TString& authToken, const TInteractiveLogger& log);
+    THttpExecutor(const TString& apiUrl, const TString& authToken);
 
     struct TResponse {
         TResponse() = default;
@@ -66,7 +64,6 @@ private:
     NYql::IHTTPGateway::TOnResult GetHttpCallback(NThreading::TPromise<TResponse> response) const;
 
 private:
-    const TInteractiveLogger Log;
     const TString ApiUrl;
     const NYql::THttpHeader ApiHeaders;
     const NYql::IHTTPGateway::TPtr HttpGateway;
@@ -74,6 +71,6 @@ private:
 
 TString CreateApiUrl(const TString& baseUrl, const TString& uri);
 
-std::vector<TString> ListModelNames(const TString& apiBaseEndpoint, const TString& authToken, const TInteractiveLogger& log);
+std::vector<TString> ListModelNames(const TString& apiBaseEndpoint, const TString& authToken);
 
 } // namespace NYdb::NConsoleClient::NAi

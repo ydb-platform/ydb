@@ -729,7 +729,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     }
 
     if (step <= OutdatedReadSetStep()) {
-        LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
                    "Outdated readset for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    step, txId, Self->TabletID());
         return true;
@@ -744,7 +744,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     // is not finished yet (e.g. due to out-of-order). In this case we should
     // store ack and send it after its step become outdated.
     if (!Self->TransQueue.Has(txId)) {
-        LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
                    "Unexpected readset in state %" PRIu32 " for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    Self->State, step, txId, Self->TabletID());
         if (ack) {

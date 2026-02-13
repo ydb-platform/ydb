@@ -16,7 +16,7 @@ TReplicationCardCacheKey::operator size_t() const
         FetchOptions);
 }
 
-bool TReplicationCardCacheKey::operator == (const TReplicationCardCacheKey& other) const
+bool TReplicationCardCacheKey::operator==(const TReplicationCardCacheKey& other) const
 {
     return CardId == other.CardId && FetchOptions == other.FetchOptions;
 }

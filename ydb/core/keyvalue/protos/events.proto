@@ -152,7 +152,10 @@ message ExecuteTransactionRequest {
                 TACTIC_MIN_LATENCY = 2;
             }
             string key = 1;
-            bytes value = 2;
+            oneof buffer {
+                bytes value = 2;
+                uint32 payload_id = 6;
+            }
             uint32 storage_channel = 3;
             Priorities.Priority priority = 4;
             Tactic tactic = 5;

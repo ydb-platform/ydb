@@ -11,6 +11,8 @@
 #ifndef EVENT2_EVENT_CONFIG_H_INCLUDED_
 #define EVENT2_EVENT_CONFIG_H_INCLUDED_
 
+#include <features.h>
+
 /* config.h.  Generated from config.h.in by configure.  */
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
@@ -30,13 +32,17 @@
 /* #undef EVENT__HAVE_AFUNIX_H */
 
 /* Define to 1 if you have the `arc4random' function. */
-/* #undef EVENT__HAVE_ARC4RANDOM */
+#if defined(__GLIBC__) && ((__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 36))
+#define EVENT__HAVE_ARC4RANDOM 1
+#endif
 
 /* Define to 1 if you have the `arc4random_addrandom' function. */
 /* #undef EVENT__HAVE_ARC4RANDOM_ADDRANDOM */
 
 /* Define to 1 if you have the `arc4random_buf' function. */
-/* #undef EVENT__HAVE_ARC4RANDOM_BUF */
+#if defined(__GLIBC__) && ((__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 36))
+#define EVENT__HAVE_ARC4RANDOM_BUF 1
+#endif
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define EVENT__HAVE_ARPA_INET_H 1

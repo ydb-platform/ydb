@@ -1,0 +1,36 @@
+PRAGMA WindowNewPipeline;
+PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
+
+$data = [
+    <|a: Datetime("2017-11-27T13:22:00Z"), b: 1, count: 0|>,
+    <|a: Datetime("2017-11-27T13:23:00Z"), b: 1, count: 1|>,
+    <|a: Datetime("2017-11-27T13:24:00Z"), b: 1, count: 2|>,
+    <|a: NULL, b: 1, count: 2|>,
+    <|a: NULL, b: 1, count: 2|>,
+];
+
+$win_result = (
+    SELECT
+        COUNT(*) OVER w1 AS actual_count,
+        count,
+    FROM
+        AS_TABLE($data)
+    WINDOW
+        w1 AS (
+            PARTITION COMPACT BY
+                b
+            ORDER BY
+                a DESC
+            RANGE BETWEEN Interval("PT1M") FOLLOWING AND Interval("PT3M") FOLLOWING
+        )
+);
+
+$str = ($x) -> {
+    return CAST($x as String) ?? "null";
+};
+
+SELECT
+    Ensure(count, count IS NOT DISTINCT FROM actual_count, "Got: " || $str(actual_count) || ", but expected: " || $str(count))
+FROM
+    $win_result
+;

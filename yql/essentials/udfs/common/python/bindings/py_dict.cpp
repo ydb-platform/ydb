@@ -147,6 +147,8 @@ PyNumberMethods LazyDictNumbering = {
     #define Py_TPFLAGS_HAVE_SEQUENCE_IN 0 // NOLINT(readability-identifier-naming)
 #endif
 
+namespace {
+
 PyDoc_STRVAR(get__doc__,
              "D.get(k[,d]) -> D[k] if k in D, else d.  d defaults to None.");
 PyDoc_STRVAR(keys__doc__,
@@ -164,7 +166,7 @@ PyDoc_STRVAR(iteritems__doc__,
              "D.iteritems() -> an iterator over the (key, value) items of D");
 #endif
 
-static PyMethodDef LazyDictMethods[] = {
+PyMethodDef LazyDictMethods[] = {
     {"get", TPyLazyDict::Get, METH_VARARGS, get__doc__},
     {"keys", TPyLazyDict::Keys, METH_NOARGS, keys__doc__},
     {"items", TPyLazyDict::Items, METH_NOARGS, items__doc__},
@@ -176,6 +178,8 @@ static PyMethodDef LazyDictMethods[] = {
 #endif
     {nullptr, nullptr, 0, nullptr} /* sentinel */
 };
+
+} // namespace
 
 PyTypeObject PyLazyDictType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)

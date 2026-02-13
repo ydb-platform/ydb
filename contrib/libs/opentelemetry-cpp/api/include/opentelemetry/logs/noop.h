@@ -91,12 +91,22 @@ private:
 };
 
 #if OPENTELEMETRY_ABI_VERSION_NO < 2
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#  if defined(_MSC_VER)
+#    pragma warning(push)
+#    pragma warning(disable : 4996)
+#  elif defined(__GNUC__) && !defined(__clang__) && !defined(__apple_build_version__)
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#  elif defined(__clang__) || defined(__apple_build_version__)
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#  endif
+
 class NoopEventLogger final : public EventLogger
 {
 public:
   NoopEventLogger() : logger_{nostd::shared_ptr<NoopLogger>(new NoopLogger())} {}
+  ~NoopEventLogger() override = default;
 
   const nostd::string_view GetName() noexcept override { return "noop event logger"; }
 
@@ -114,27 +124,9 @@ private:
 class NoopEventLoggerProvider final : public EventLoggerProvider
 {
 public:
-#  if defined(_MSC_VER)
-#    pragma warning(push)
-#    pragma warning(disable : 4996)
-#  elif defined(__GNUC__) && !defined(__clang__) && !defined(__apple_build_version__)
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#  elif defined(__clang__) || defined(__apple_build_version__)
-#    pragma clang diagnostic push
-#    pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#  endif
-
   NoopEventLoggerProvider() : event_logger_{nostd::shared_ptr<EventLogger>(new NoopEventLogger())}
   {}
-
-#  if defined(_MSC_VER)
-#    pragma warning(pop)
-#  elif defined(__GNUC__) && !defined(__clang__) && !defined(__apple_build_version__)
-#    pragma GCC diagnostic pop
-#  elif defined(__clang__) || defined(__apple_build_version__)
-#    pragma clang diagnostic pop
-#  endif
+  ~NoopEventLoggerProvider() override = default;
 
   nostd::shared_ptr<EventLogger> CreateEventLogger(
       nostd::shared_ptr<Logger> /*delegate_logger*/,
@@ -146,7 +138,14 @@ public:
 private:
   nostd::shared_ptr<EventLogger> event_logger_;
 };
-#pragma GCC diagnostic pop
+
+#  if defined(_MSC_VER)
+#    pragma warning(pop)
+#  elif defined(__GNUC__) && !defined(__clang__) && !defined(__apple_build_version__)
+#    pragma GCC diagnostic pop
+#  elif defined(__clang__) || defined(__apple_build_version__)
+#    pragma clang diagnostic pop
+#  endif
 #endif
 
 }  // namespace logs

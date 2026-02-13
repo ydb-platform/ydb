@@ -231,10 +231,10 @@ THolder<IComputationGraph> BuildGraph(
         pgmBuilder.NewDataLiteral<bool>(dataWatermarks),
         pgmBuilder.NewDataLiteral<bool>(watermarkMode),
 #if MKQL_RUNTIME_VERSION >= 70U
-        pgmBuilder.NewDataLiteral<ui64>(farFutureSizeLimit),
-        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&farFutureTimeLimitUs, sizeof(farFutureTimeLimitUs))),
-        pgmBuilder.NewDataLiteral<ui32>((ui32)earlyPolicy),
-        pgmBuilder.NewDataLiteral<ui32>((ui32)latePolicy)
+        farFutureSizeLimit == NYql::NHoppingWindow::TSettings{}.FarFutureSizeLimit ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<ui64>(farFutureSizeLimit),
+        farFutureTimeLimitUs == NYql::NHoppingWindow::TSettings{}.FarFutureTimeLimit.MicroSeconds() ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&farFutureTimeLimitUs, sizeof(farFutureTimeLimitUs))),
+        earlyPolicy == NYql::NHoppingWindow::TSettings{}.EarlyPolicy ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<ui32>((ui32)earlyPolicy),
+        latePolicy == NYql::NHoppingWindow::TSettings{}.LatePolicy ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<ui32>((ui32)latePolicy)
 #else
         {}, // SizeLimit
         {}, // TimeLimit

@@ -982,7 +982,7 @@ std::vector<TNodeId> TViewerPipeClient::GetDatabaseNodes() {
     return {0};
 }
 
-bool TViewerPipeClient::IsDatabaseRequest() {
+bool TViewerPipeClient::IsDatabaseRequest() const {
     return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
 }
 

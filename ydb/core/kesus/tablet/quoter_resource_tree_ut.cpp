@@ -34,6 +34,8 @@ public:
     UNIT_TEST(TestInactiveSessionDisconnectsAndThenConnectsAgain)
     UNIT_TEST(TestActiveMultiresourceSessionDisconnectsAndThenConnectsAgain)
     UNIT_TEST(TestInactiveMultiresourceSessionDisconnectsAndThenConnectsAgain)
+    UNIT_TEST(TestParentUpdateDoesNotClampLeafFreeResource)
+    UNIT_TEST(TestParentUpdateDoesNotNotifyUnchangedLeaf)
     UNIT_TEST_SUITE_END();
 
     void SetUp() override {
@@ -627,6 +629,86 @@ public:
 
     void TestInactiveMultiresourceSessionDisconnectsAndThenConnectsAgain() {
         TestSessionDisconnectsAndThenConnectsAgainImpl(false, 5);
+    }
+
+    void TestParentUpdateDoesNotClampLeafFreeResource() {
+        // Create hierarchy: /Root (speed=100) -> /Root/Leaf (speed=50, own config)
+        auto* root = AddResource("/Root", 100);
+        NKikimrKesus::THierarchicalDRRResourceConfig leafCfg;
+        leafCfg.SetMaxUnitsPerSecond(50);
+        auto* leaf = AddResource("/Root/Leaf", leafCfg);
+
+        // Create consuming session on leaf with infinite demand
+        auto session = CreateSession(leaf, true, std::numeric_limits<double>::infinity());
+
+        // Process 5 ticks before update — leaf should allocate ~5/tick (speed=50, 10 ticks/sec)
+        constexpr size_t ticksBefore = 5;
+        EXPECT_CALL(*session.Sink, OnSend(_, DoubleNear(5.0, 0.1), nullptr))
+            .Times(ticksBefore);
+        ProcessTicks(ticksBefore);
+        const double sumBefore = session.Sink->SumAmount;
+        const double perTickBefore = sumBefore / ticksBefore;
+
+        // Reset sink to track post-update allocations separately
+        session.Sink = new TTestResourceSink(leaf->GetResourceId());
+        session.Session->SetResourceSink(session.Sink);
+
+        // Update /Root to speed=200 (leaf's own speed stays at 50)
+        NKikimrKesus::TStreamingQuoterResource newProps;
+        newProps.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(200);
+        TString msg;
+        UNIT_ASSERT(root->Update(newProps, msg));
+        Resources->OnUpdateResourceProps(root);
+
+        // Allow any number of Send(0, props) calls (props notification)
+        EXPECT_CALL(*session.Sink, OnSend(_, 0.0, _))
+            .Times(AnyNumber());
+        // Process same number of ticks after update
+        EXPECT_CALL(*session.Sink, OnSend(_, DoubleNear(5.0, 0.1), nullptr))
+            .Times(ticksBefore);
+        ProcessTicks(ticksBefore);
+
+        // Filter out props notifications (amount=0) — count only real allocations
+        const double sumAfter = session.Sink->SumAmount;
+        const double perTickAfter = sumAfter / ticksBefore;
+
+        // Per-tick rate should be the same after parent update
+        UNIT_ASSERT_DOUBLES_EQUAL(perTickBefore, perTickAfter, 0.2);
+    }
+
+    void TestParentUpdateDoesNotNotifyUnchangedLeaf() {
+        // Create hierarchy: /Root (speed=100) -> /Root/Leaf (speed=50, own config)
+        auto* root = AddResource("/Root", 100);
+        NKikimrKesus::THierarchicalDRRResourceConfig leafCfg;
+        leafCfg.SetMaxUnitsPerSecond(50);
+        auto* leaf = AddResource("/Root/Leaf", leafCfg);
+
+        // Create consuming session on leaf
+        auto session = CreateSession(leaf, true, std::numeric_limits<double>::infinity());
+
+        // Process ticks to reach steady state
+        EXPECT_CALL(*session.Sink, OnSend(_, _, _))
+            .Times(AnyNumber());
+        ProcessTicks(3);
+
+        // Reset sink to track only post-update calls
+        session.Sink = new TTestResourceSink(leaf->GetResourceId());
+        session.Session->SetResourceSink(session.Sink);
+
+        // Update /Root to speed=200 (leaf's effective speed stays at min(50, 200) = 50)
+        NKikimrKesus::TStreamingQuoterResource newProps;
+        newProps.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(200);
+        TString msg;
+        UNIT_ASSERT(root->Update(newProps, msg));
+        Resources->OnUpdateResourceProps(root);
+
+        // Leaf's EffectiveProps didn't change (speed still 50), so no Send(0, props) should fire.
+        // Only allocation sends (amount > 0) should happen.
+        EXPECT_CALL(*session.Sink, OnSend(_, 0.0, _))
+            .Times(0);
+        EXPECT_CALL(*session.Sink, OnSend(_, Gt(0.0), nullptr))
+            .Times(AnyNumber());
+        ProcessTicks(3);
     }
 
 private:

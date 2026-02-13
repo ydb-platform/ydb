@@ -216,6 +216,74 @@ Y_UNIT_TEST_LLVM(Test1OverFlow) {
     UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
 }
+
+using TChainMapBuilder = TRuntimeNode (*)(TProgramBuilder&, TRuntimeNode, TRuntimeNode);
+
+template <bool LLVM>
+void TestMultiUsage(bool WithCollect, TChainMapBuilder chainMapBuilder) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    constexpr ui64 from = 1;
+    constexpr ui64 to = 5;
+    const TString prefix("Long prefix to prevent SSO: 0");
+
+    const auto list = pb.ListFromRange(pb.NewDataLiteral(from),
+                                       pb.NewDataLiteral(to),
+                                       pb.NewDataLiteral<ui64>(1));
+
+    const auto fold = chainMapBuilder(pb, WithCollect ? pb.Collect(list) : list,
+                                      pb.NewDataLiteral<NUdf::EDataSlot::String>(prefix));
+
+    const auto pgmReturn = pb.Zip({fold, fold});
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+
+    NUdf::TUnboxedValue item;
+    TString value(prefix);
+    for (ui64 i = from; i < to; i++) {
+        const auto expected = NYql::NUdf::TStringRef(value.data(), value.size());
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), expected);
+        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), expected);
+        value += ::ToString(i);
+    }
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
+}
+
+template <bool LLVM>
+void TestChainMapMultiUsage(bool WithCollect) {
+    TestMultiUsage<LLVM>(WithCollect, [](TProgramBuilder& pb, TRuntimeNode list, TRuntimeNode init) {
+        return pb.ChainMap(list, init,
+                           [&pb](const TRuntimeNode item, const TRuntimeNode state) -> TRuntimeNodePair {
+                               return {state, pb.Concat(state, pb.ToString(item))};
+                           });
+    });
+}
+
+template <bool LLVM>
+void TestChain1MapMultiUsage(bool WithCollect) {
+    TestMultiUsage<LLVM>(WithCollect, [](TProgramBuilder& pb, TRuntimeNode list, TRuntimeNode init) {
+        return pb.Chain1Map(list,
+                            [&pb, init](const TRuntimeNode item) -> TRuntimeNodePair { return {init, pb.Concat(init, pb.ToString(item))}; },
+                            [&pb](const TRuntimeNode item, const TRuntimeNode state) -> TRuntimeNodePair { return {state, pb.Concat(state, pb.ToString(item))}; });
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestChainMapMultiUsageWithCollect) {
+    TestChainMapMultiUsage<LLVM>(true);
+}
+Y_UNIT_TEST_LLVM(TestChainMapMultiUsageWithoutCollect) {
+    TestChainMapMultiUsage<LLVM>(false);
+}
+Y_UNIT_TEST_LLVM(TestChain1MapMultiUsageWithCollect) {
+    TestChain1MapMultiUsage<LLVM>(true);
+}
+Y_UNIT_TEST_LLVM(TestChain1MapMultiUsageWithoutCollect) {
+    TestChain1MapMultiUsage<LLVM>(false);
+}
 } // Y_UNIT_TEST_SUITE(TMiniKQLChainMapNodeTest)
 
 } // namespace NMiniKQL

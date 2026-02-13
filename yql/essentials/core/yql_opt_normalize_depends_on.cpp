@@ -12,7 +12,7 @@ namespace {
 
 class TNormalizeDependsOnTransformer : public TSyncTransformerBase {
 public:
-    TNormalizeDependsOnTransformer(const TTypeAnnotationContext& types)
+    explicit TNormalizeDependsOnTransformer(const TTypeAnnotationContext& types)
         : Types_(types)
     {}
 

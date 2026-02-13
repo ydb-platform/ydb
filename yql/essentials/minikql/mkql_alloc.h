@@ -286,7 +286,7 @@ private:
 
 class TPagedArena {
 public:
-    TPagedArena(TAlignedPagePool* pagePool) noexcept
+    explicit TPagedArena(TAlignedPagePool* pagePool) noexcept
         : PagePool_(pagePool)
         , CurrentPages_(TAllocState::EmptyCurrentPages)
     {
@@ -300,12 +300,13 @@ public:
         other.CurrentPages_ = TAllocState::EmptyCurrentPages;
     }
 
-    void operator=(const TPagedArena&) = delete;
-    void operator=(TPagedArena&& other) noexcept {
+    TPagedArena& operator=(const TPagedArena&) = delete;
+    TPagedArena& operator=(TPagedArena&& other) noexcept {
         Clear();
         PagePool_ = other.PagePool_;
         CurrentPages_ = other.CurrentPages_;
         other.CurrentPages_ = TAllocState::EmptyCurrentPages;
+        return *this;
     }
 
     ~TPagedArena() noexcept {
@@ -349,6 +350,7 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemor
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
 
@@ -389,6 +391,7 @@ inline void* MKQLAllocFastWithSizeImpl(size_t sz, TAllocState* state, const EMem
         state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
 
@@ -578,9 +581,11 @@ struct TMKQLAllocator {
     TMKQLAllocator() noexcept = default;
     ~TMKQLAllocator() noexcept = default;
 
-    template <typename U>
+    // Almost a copy costructor.
+    template <typename U> // NOLINTNEXTLINE(google-explicit-constructor)
     TMKQLAllocator(const TMKQLAllocator<U, MemoryPool>&) noexcept {
     }
+
     template <typename U>
     struct rebind { // NOLINT(readability-identifier-naming)
         typedef TMKQLAllocator<U, MemoryPool> other;
@@ -622,7 +627,7 @@ struct TMKQLHugeAllocator {
     ~TMKQLHugeAllocator() noexcept = default;
 
     template <typename U>
-    TMKQLHugeAllocator(const TMKQLHugeAllocator<U>&) noexcept {
+    explicit TMKQLHugeAllocator(const TMKQLHugeAllocator<U>&) noexcept {
     }
 
     template <typename U>
@@ -670,7 +675,7 @@ public:
     class TIterator;
     class TConstIterator;
 
-    TPagedList(TAlignedPagePool& pool)
+    explicit TPagedList(TAlignedPagePool& pool)
         : Pool_(pool)
         , IndexInLastPage_(OBJECTS_PER_PAGE)
     {

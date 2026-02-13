@@ -84,9 +84,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 Дополнительные параметры создания таблицы. Подробнее в разделе [{#T}](with.md).
 
-{% note info %}
-
-## Типы таблиц
+{ % note info % }
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
@@ -110,10 +108,15 @@ WITH (
 
 {% endnote %}
 
+{% note info %}
+
+При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
+
 ### AS SELECT
 
 Создание и заполнение таблицы на основе результатов запроса `SELECT`. Подробнее в разделе [{#T}](as_select.md).
-
 
 ## Примеры создания таблиц
 
@@ -156,8 +159,6 @@ WITH (
     PRIMARY KEY (id)
   );
   ```
-
-
 
   {% if feature_column_container_type == true %}
 
@@ -216,7 +217,7 @@ WITH (
   );
   ```
 
-  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
+  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [Партиционирование строковой таблицы](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
 
 - Создание колоночной таблицы
 

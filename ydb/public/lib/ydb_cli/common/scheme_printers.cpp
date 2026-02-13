@@ -3,7 +3,6 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/tabbed_table.h>
-#include <library/cpp/colorizer/colors.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
 namespace NYdb {
@@ -22,7 +21,8 @@ void TSchemePrinterBase::Print() {
 bool TSchemePrinterBase::IsDirectoryLike(const NScheme::TSchemeEntry& entry) {
     return entry.Type == NScheme::ESchemeEntryType::Directory
         || entry.Type == NScheme::ESchemeEntryType::SubDomain
-        || entry.Type == NScheme::ESchemeEntryType::ColumnStore;
+        || entry.Type == NScheme::ESchemeEntryType::ColumnStore
+        || entry.Type == NScheme::ESchemeEntryType::BackupCollection;
 }
 
 NThreading::TFuture<void> TSchemePrinterBase::PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath) {

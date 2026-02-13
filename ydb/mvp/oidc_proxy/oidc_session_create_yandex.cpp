@@ -89,18 +89,4 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
 
 } // NMVP
 
-template<>
-TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CreateSessionRequest& request) {
-    yandex::cloud::priv::oauth::v1::CreateSessionRequest copy = request;
-    copy.set_access_token(NKikimr::MaskTicket(copy.access_token()));
-    return copy.ShortDebugString();
-}
-
-template<>
-TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CreateSessionResponse& request) {
-    yandex::cloud::priv::oauth::v1::CreateSessionResponse copy = request;
-    copy.clear_set_cookie_header();
-    return copy.ShortDebugString();
-}
-
 } // NMVP

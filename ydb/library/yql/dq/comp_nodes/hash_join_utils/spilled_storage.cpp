@@ -5,14 +5,12 @@
 namespace NKikimr::NMiniKQL {
 
 NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page) {
+    MKQL_ENSURE(!page.Empty(), "sanity check");
     return spiller.Put(Serialize(std::move(page)));
 }
 
-void PopFront(NYql::TChunkedBuffer& buff) {
-    buff.Erase(buff.Front().Buf.size());
-}
-
 NYql::TChunkedBuffer Serialize(TPackResult&& result) {
+    MKQL_ENSURE(!result.Empty(), "spilling empty page?");
     NYql::TChunkedBuffer buff{};
     constexpr int size = sizeof(result.NTuples);
     char ntuplesBuff[size]{};
@@ -21,7 +19,6 @@ NYql::TChunkedBuffer Serialize(TPackResult&& result) {
     buff.Append(TString{reinterpret_cast<const char*>(result.PackedTuples.data()), result.PackedTuples.size()});
     buff.Append(TString{reinterpret_cast<const char*>(result.Overflow.data()), result.Overflow.size()});
 
-    MKQL_ENSURE(result.NTuples != 0, "spilling empty page?");
     return buff;
 }
 struct OutputStreamTo: public IOutputStream{

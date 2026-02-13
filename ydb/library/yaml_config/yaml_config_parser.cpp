@@ -281,8 +281,8 @@ namespace NKikimr::NYaml {
         if (TryFromString(info, result)) {
             return result;
         }
-        TErasureType::EErasureSpecies species = TErasureType::ErasureSpeciesByName(info);
-        Y_ENSURE_BT(species != TErasureType::ErasureSpeciesCount, "unknown erasure " << info);
+        TErasureType::EErasureSpecies species;
+        Y_ENSURE_BT(TErasureType::ParseErasureName(species, info), "unknown erasure " << info);
         return species;
     }
 
@@ -639,20 +639,6 @@ namespace NKikimr::NYaml {
                     }
                     if (drive.HasSlotSizeInUnits()) {
                         drive.MutablePDiskConfig()->SetSlotSizeInUnits(drive.GetSlotSizeInUnits());
-                    }
-                }
-
-                if (hostConfig.HasInferPDiskSlotCountFromUnitSize()) {
-                    auto unitSizeByType = hostConfig.GetInferPDiskSlotCountFromUnitSize();
-                    for(auto& drive : *hostConfig.MutableDrive()) {
-                        if (drive.HasInferPDiskSlotCountFromUnitSize()) {
-                            continue;
-                        }
-                        if (drive.GetType() == "ROT" && unitSizeByType.HasRot()) {
-                            drive.SetInferPDiskSlotCountFromUnitSize(unitSizeByType.GetRot());
-                        } else if (auto& type = drive.GetType(); (type == "SSD" || type == "NVME") && unitSizeByType.HasSsd()) {
-                            drive.SetInferPDiskSlotCountFromUnitSize(unitSizeByType.GetSsd());
-                        }
                     }
                 }
             }

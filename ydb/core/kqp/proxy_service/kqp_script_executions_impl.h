@@ -58,6 +58,7 @@ struct TEvPrivate {
         bool RetryRequired = false;
         i64 LeaseGeneration = 0;
         bool HasRetryPolicy = false;
+        bool WaitFinalizationOrRetry = false;
         std::optional<std::vector<Ydb::Query::ResultSetMeta>> ResultSetMetas;
     };
 };

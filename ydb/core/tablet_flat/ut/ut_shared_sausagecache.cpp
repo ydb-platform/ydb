@@ -44,8 +44,8 @@ struct TTxInitSchema : public ITransaction {
 
         txc.DB.Alter()
             .AddTable("test" + ToString(ui32(TableId)), TableId)
-            .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false)
-            .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false)
+            .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false, false)
+            .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false, false)
             .AddColumnToKey(TableId, KeyColumnId)
             .SetCompactionPolicy(TableId, *CompactionPolicy);
 

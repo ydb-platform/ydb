@@ -2889,6 +2889,58 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckDonePermission("user", r3.GetPermissions(0).GetId());
         env.CheckListPermissions("user", 0);
     }
+
+    Y_UNIT_TEST(TestSmartAvailabilityModeFeatureFlagDisabled)
+    {
+        TCmsTestEnv env(8);
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, MODE_SMART_AVAILABILITY, TStatus::WRONG_REQUEST,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+    }
+
+    Y_UNIT_TEST(TestSmartAvailabilityModeFallsBackToKeepAvailable)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsSmartAvailabilityMode());
+        env.EnableSysNodeChecking();
+
+        // Works as max availability
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+
+        // Works as keep available
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
+
+        // Works as keep available
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
+    }
+
+    Y_UNIT_TEST(TestSmartAvailabilityModeStaysMaxAvailability)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsSmartAvailabilityMode());
+        env.EnableSysNodeChecking();
+
+        // Works as max availability
+        auto res1 = env.ExtractPermissions(
+            env.CheckPermissionRequest("user", true, false, true,
+                                       true, MODE_SMART_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                       MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
+                                       MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
+                                       MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)));
+        UNIT_ASSERT_VALUES_EQUAL(res1.second.size(), 1);
+
+        // Works as max availability
+        env.CheckRequest("user", res1.first, false, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP, 0);
+
+        env.CheckDonePermission("user", res1.second[0]);
+
+        // Works as max availability
+        env.CheckRequest("user", res1.first, false, MODE_SMART_AVAILABILITY, TStatus::ALLOW_PARTIAL, 1);
+    }
 }
 
 }

@@ -10,13 +10,13 @@ public:
 
     virtual ~IFmrJob() = default;
 
-    virtual std::variant<TError, TStatistics> Download(const TDownloadTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr) = 0;
+    virtual std::variant<TFmrError, TStatistics> Download(const TDownloadTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr) = 0;
 
-    virtual std::variant<TError, TStatistics> Upload(const TUploadTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr) = 0;
+    virtual std::variant<TFmrError, TStatistics> Upload(const TUploadTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr) = 0;
 
-    virtual std::variant<TError, TStatistics> Merge(const TMergeTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr) = 0;
+    virtual std::variant<TFmrError, TStatistics> Merge(const TMergeTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr) = 0;
 
-    virtual std::variant<TError, TStatistics> Map(
+    virtual std::variant<TFmrError, TStatistics> Map(
         const TMapTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag,
@@ -26,7 +26,7 @@ public:
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources = {}
     ) = 0;
 
-    virtual std::variant<TError, TStatistics> SortedUpload(const TSortedUploadTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr) = 0;
+    virtual std::variant<TFmrError, TStatistics> SortedUpload(const TSortedUploadTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr) = 0;
 };
 
 } // namespace NYql

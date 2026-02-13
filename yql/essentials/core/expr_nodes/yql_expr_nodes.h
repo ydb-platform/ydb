@@ -23,6 +23,8 @@ public:
     {
     }
 
+    // TODO(YQL-20095): there are YDB usages
+    // NOLINTNEXTLINE(google-explicit-constructor)
     operator TStringBuf() const {
         return Value();
     }
@@ -238,12 +240,12 @@ class TExprApplier: public TExprBase {
     template <typename TParent, typename TNode>
     friend class TNodeBuilder;
 
-    TExprApplier(const TExprNode::TPtr& node)
+    explicit TExprApplier(const TExprNode::TPtr& node)
         : TExprBase(node)
     {
     }
 
-    TExprApplier(const TExprBase node)
+    explicit TExprApplier(const TExprBase node)
         : TExprBase(node)
     {
     }
@@ -256,10 +258,14 @@ public:
         : TMaybeNode<TExprBase>() {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node)
         : TMaybeNode<TExprBase>(node) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node) {
     }

@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>
+#include <string>
 #include <vector>
 #include <random>
 
@@ -20,7 +21,7 @@ namespace NPackedTuple {
 
 using namespace std::chrono_literals;
 
-static volatile bool IsVerbose = false;
+static volatile bool IsVerbose = true;
 #define CTEST (IsVerbose ? Cerr : Cnull)
 
 namespace {
@@ -1041,6 +1042,7 @@ Y_UNIT_TEST(PackIsValidFuzz) {
     CTEST  << "Calculating speed = " << totalSize / ((totalNanoseconds + 999)/1000) << "MB/sec" << Endl;
     CTEST  << Endl;
 }
+
 }
 
 

@@ -63,6 +63,18 @@ message WhoAmIResult {
     string user = 1;
     // List of group SIDs (Security IDs) for the user
     repeated string groups = 2;
+    // Whether user is allowed to perform administration operations
+    bool is_administration_allowed = 3;
+    // Whether user is allowed to perform monitoring operations
+    bool is_monitoring_allowed = 4;
+    // Whether user is allowed to view data
+    bool is_viewer_allowed = 5;
+    // Whether user is allowed to access database
+    bool is_database_allowed = 6;
+    // Whether user is allowed to register dynamic node
+    bool is_register_node_allowed = 7;
+    // Whether user is allowed to bootstrap
+    bool is_bootstrap_allowed = 8;
 }
 
 message WhoAmIResponse {

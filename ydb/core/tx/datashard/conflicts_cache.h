@@ -50,6 +50,7 @@ public:
     void AddUncommittedWrite(TConstArrayRef<TCell> key, ui64 txId, NTable::TDatabase& db);
     void RemoveUncommittedWrites(TConstArrayRef<TCell> key, NTable::TDatabase& db);
     void RemoveUncommittedWrites(ui64 txId, NTable::TDatabase& db);
+    void RemoveAllUncommittedWrites(NTable::TDatabase& db);
 
     bool RegisterDistributedWrite(ui64 txId, const TOwnedCellVec& key, NTable::TDatabase& db);
     void UnregisterDistributedWrites(ui64 txId);

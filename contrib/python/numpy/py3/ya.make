@@ -25,6 +25,9 @@ ADDINCL(
     contrib/python/numpy/include/numpy/core/src/umath
     contrib/python/numpy/include/numpy/distutils/include
 )
+ADDINCL(
+    GLOBAL FOR cython contrib/python/numpy/py3
+)
 
 NO_COMPILER_WARNINGS()
 

@@ -24,7 +24,7 @@ public:
 };
 
 struct TBindTerminator: private TNonCopyable {
-    TBindTerminator(ITerminator* terminator);
+    explicit TBindTerminator(ITerminator* terminator);
     ~TBindTerminator();
 
     static thread_local ITerminator* Terminator;

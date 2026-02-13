@@ -39,7 +39,7 @@ import tokenize
 import warnings
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, NoReturn, Union
 
 import setuptools
 
@@ -67,9 +67,6 @@ __all__ = [
     'SetupRequirementsError',
 ]
 
-SETUPTOOLS_ENABLE_FEATURES = os.getenv("SETUPTOOLS_ENABLE_FEATURES", "").lower()
-LEGACY_EDITABLE = "legacy-editable" in SETUPTOOLS_ENABLE_FEATURES.replace("_", "-")
-
 
 class SetupRequirementsError(BaseException):
     def __init__(self, specifiers) -> None:
@@ -77,14 +74,14 @@ class SetupRequirementsError(BaseException):
 
 
 class Distribution(setuptools.dist.Distribution):
-    def fetch_build_eggs(self, specifiers):
+    def fetch_build_eggs(self, specifiers) -> NoReturn:
         specifier_list = list(parse_strings(specifiers))
 
         raise SetupRequirementsError(specifier_list)
 
     @classmethod
     @contextlib.contextmanager
-    def patch(cls):
+    def patch(cls) -> Iterator[None]:
         """
         Replace
         distutils.dist.Distribution with this class
@@ -307,7 +304,7 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
 
         return requirements
 
-    def run_setup(self, setup_script: str = 'setup.py'):
+    def run_setup(self, setup_script: str = 'setup.py') -> None:
         # Note that we can reuse our build directory between calls
         # Correctness comes first, then optimization later
         __file__ = os.path.abspath(setup_script)
@@ -330,10 +327,14 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
                 "setup-py-deprecated.html",
             )
 
-    def get_requires_for_build_wheel(self, config_settings: _ConfigSettings = None):
+    def get_requires_for_build_wheel(
+        self, config_settings: _ConfigSettings = None
+    ) -> list[str]:
         return self._get_build_requires(config_settings, requirements=[])
 
-    def get_requires_for_build_sdist(self, config_settings: _ConfigSettings = None):
+    def get_requires_for_build_sdist(
+        self, config_settings: _ConfigSettings = None
+    ) -> list[str]:
         return self._get_build_requires(config_settings, requirements=[])
 
     def _bubble_up_info_directory(
@@ -364,7 +365,7 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
 
     def prepare_metadata_for_build_wheel(
         self, metadata_directory: StrPath, config_settings: _ConfigSettings = None
-    ):
+    ) -> str:
         sys.argv = [
             *sys.argv[:1],
             *self._global_args(config_settings),
@@ -420,7 +421,7 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
         wheel_directory: StrPath,
         config_settings: _ConfigSettings = None,
         metadata_directory: StrPath | None = None,
-    ):
+    ) -> str:
         def _build(cmd: list[str]):
             with suppress_known_deprecation():
                 return self._build_with_temp_dir(
@@ -445,7 +446,7 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
 
     def build_sdist(
         self, sdist_directory: StrPath, config_settings: _ConfigSettings = None
-    ):
+    ) -> str:
         return self._build_with_temp_dir(
             ['sdist', '--formats', 'gztar'], '.tar.gz', sdist_directory, config_settings
         )
@@ -457,37 +458,32 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
         assert len(dist_info_candidates) <= 1
         return str(dist_info_candidates[0]) if dist_info_candidates else None
 
-    if not LEGACY_EDITABLE:
-        # PEP660 hooks:
-        # build_editable
-        # get_requires_for_build_editable
-        # prepare_metadata_for_build_editable
-        def build_editable(
-            self,
-            wheel_directory: StrPath,
-            config_settings: _ConfigSettings = None,
-            metadata_directory: StrPath | None = None,
-        ):
-            # XXX can or should we hide our editable_wheel command normally?
-            info_dir = self._get_dist_info_dir(metadata_directory)
-            opts = ["--dist-info-dir", info_dir] if info_dir else []
-            cmd = ["editable_wheel", *opts, *self._editable_args(config_settings)]
-            with suppress_known_deprecation():
-                return self._build_with_temp_dir(
-                    cmd, ".whl", wheel_directory, config_settings
-                )
-
-        def get_requires_for_build_editable(
-            self, config_settings: _ConfigSettings = None
-        ):
-            return self.get_requires_for_build_wheel(config_settings)
-
-        def prepare_metadata_for_build_editable(
-            self, metadata_directory: StrPath, config_settings: _ConfigSettings = None
-        ):
-            return self.prepare_metadata_for_build_wheel(
-                metadata_directory, config_settings
+    def build_editable(
+        self,
+        wheel_directory: StrPath,
+        config_settings: _ConfigSettings = None,
+        metadata_directory: StrPath | None = None,
+    ) -> str:
+        # XXX can or should we hide our editable_wheel command normally?
+        info_dir = self._get_dist_info_dir(metadata_directory)
+        opts = ["--dist-info-dir", info_dir] if info_dir else []
+        cmd = ["editable_wheel", *opts, *self._editable_args(config_settings)]
+        with suppress_known_deprecation():
+            return self._build_with_temp_dir(
+                cmd, ".whl", wheel_directory, config_settings
             )
+
+    def get_requires_for_build_editable(
+        self, config_settings: _ConfigSettings = None
+    ) -> list[str]:
+        return self.get_requires_for_build_wheel(config_settings)
+
+    def prepare_metadata_for_build_editable(
+        self, metadata_directory: StrPath, config_settings: _ConfigSettings = None
+    ) -> str:
+        return self.prepare_metadata_for_build_wheel(
+            metadata_directory, config_settings
+        )
 
 
 class _BuildMetaLegacyBackend(_BuildMetaBackend):
@@ -502,7 +498,7 @@ class _BuildMetaLegacyBackend(_BuildMetaBackend):
     and will eventually be removed.
     """
 
-    def run_setup(self, setup_script: str = 'setup.py'):
+    def run_setup(self, setup_script: str = 'setup.py') -> None:
         # In order to maintain compatibility with scripts assuming that
         # the setup.py script is in a directory on the PYTHONPATH, inject
         # '' into sys.path. (pypa/setuptools#1642)
@@ -549,11 +545,9 @@ get_requires_for_build_sdist = _BACKEND.get_requires_for_build_sdist
 prepare_metadata_for_build_wheel = _BACKEND.prepare_metadata_for_build_wheel
 build_wheel = _BACKEND.build_wheel
 build_sdist = _BACKEND.build_sdist
-
-if not LEGACY_EDITABLE:
-    get_requires_for_build_editable = _BACKEND.get_requires_for_build_editable
-    prepare_metadata_for_build_editable = _BACKEND.prepare_metadata_for_build_editable
-    build_editable = _BACKEND.build_editable
+get_requires_for_build_editable = _BACKEND.get_requires_for_build_editable
+prepare_metadata_for_build_editable = _BACKEND.prepare_metadata_for_build_editable
+build_editable = _BACKEND.build_editable
 
 
 # The legacy backend

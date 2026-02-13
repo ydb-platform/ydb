@@ -51,7 +51,7 @@ struct TCacheKey
         , RequestBodyHash(GetChecksum(RequestBody))
     { }
 
-    bool operator == (const TCacheKey& other) const
+    bool operator==(const TCacheKey& other) const
     {
         return
             Path == other.Path &&
@@ -602,7 +602,6 @@ public:
 private:
     const IYPathServicePtr UnderlyingService_;
     const IInvokerPtr Invoker_;
-
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {

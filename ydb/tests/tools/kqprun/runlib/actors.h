@@ -100,7 +100,7 @@ public:
             }
         } else {
             Failed_++;
-            Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << response.GetStatus() << ". " << CoutColors_.Yellow() << GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << response.GetError() << CoutColors_.Default();
+            Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << response.GetStatus() << ". " << CoutColors_.Yellow() << GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << response.GetError() << CoutColors_.Default() << Endl;
         }
 
         if (Settings_.Verbosity == TAsyncQueriesSettings::EVerbosity::Final && TInstant::Now() - LastReportTime_ > TDuration::Seconds(1)) {

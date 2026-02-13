@@ -550,7 +550,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToS
         return node;
     }
 
-    if (TYtMerge::Match(node.Raw())) {
+    if (TYtMerge::Match(node.Raw()) || TYtMap::Match(node.Raw())) {
         // To not get stuck in a loop
         return node;
     }
@@ -610,7 +610,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToS
                     .Paths()
                         .Add(otherInputs)
                     .Build()
-                    .Settings(section.Settings())
+                    .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::SysColumns, ctx))
                     .Done());
             hasChanges = true;
         } else {

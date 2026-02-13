@@ -3151,6 +3151,7 @@ struct TBuiltinFuncData {
 
             {"todynamiclinear", {"ToDynamicLinear", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToDynamicLinear", 1, 1)}},
             {"fromdynamiclinear", {"FromDynamicLinear", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromDynamicLinear", 1, 1)}},
+            {"lineardestroy", {"LinearDestroy", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LinearDestroy", 1, -1)}},
             // MutDict builtins
             {"mutdictcreate", {"MutDictCreate", "Normal", BuildSimpleBuiltinFactoryCallback<TMutDictCreateBuiltin>()}},
             {"tomutdict", {"ToMutDict", "Normal", BuildSimpleBuiltinFactoryCallback<TToMutDictBuiltin>()}},
@@ -4149,6 +4150,12 @@ TNodeResult BuildBuiltinFunc(
                 *mustUseNamed = false;
             }
             return TNonNull(TNodePtr(new TUdfNode(pos, args)));
+        } else if (normalizedName == "fulltextmatch" || normalizedName == "fulltextscore") {
+            if (mustUseNamed && *mustUseNamed) {
+                *mustUseNamed = false;
+            }
+            auto fulltextBuiltinName = normalizedName == "fulltextmatch" ? "FulltextMatch" : "FulltextScore";
+            return TNonNull(TNodePtr(new TCallNodeImpl(pos, fulltextBuiltinName, args)));
         } else if (normalizedName == "asstruct" || normalizedName == "structtype") {
             if (args.empty()) {
                 return TNonNull(TNodePtr(new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args)));

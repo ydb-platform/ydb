@@ -47,6 +47,8 @@ struct TEmaCounter
     //! Set new value of counter, optionally providing a current timestamp.
     void Update(T newCount, TInstant newTimestamp = TInstant::Now());
 
+    void Merge(const TEmaCounter<T, WindowCount>& other, TInstant currentTimestamp = TInstant::Now());
+
     //! Returns the rate for the given window after enough time has passed
     //! for the values to be accurate (at least the duration of the window itself).
     //! Optionally a current timestamp can be provided.

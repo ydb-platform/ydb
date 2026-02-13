@@ -291,7 +291,9 @@ public:
 
     //! Converts (successful) result to |U|; propagates errors as is.
     template <class U>
-    TFuture<U> As() const;
+    TFuture<U> As() const&;
+    template <class U>
+    TFuture<U> As() &&;
 
     //! Converts to TFuture<void> by discarding the value; propagates errors as is.
     TFuture<void> AsVoid() const&;
@@ -520,6 +522,8 @@ public:
     //! Atomically invokes |Set|, if not already set or canceled.
     //! Returns |true| if succeeded, |false| is the promise was already set or canceled.
     bool TrySet(const TErrorOr<T>& value) const;
+    //! Same as above but takes #value by r-value reference.
+    //! If the promise is already set and |false| is returned, then #value is not affected.
     bool TrySet(TErrorOr<T>&& value) const;
 
     //! Similar to #SetFrom but calls #TrySet instead of #Set.
@@ -663,8 +667,8 @@ public:
     TFutureHolder(const TFutureHolder<T>& other) = delete;
     TFutureHolder(TFutureHolder<T>&& other) = default;
 
-    TFutureHolder& operator = (const TFutureHolder<T>& other) = delete;
-    TFutureHolder& operator = (TFutureHolder<T>&& other) = default;
+    TFutureHolder& operator=(const TFutureHolder<T>& other) = delete;
+    TFutureHolder& operator=(TFutureHolder<T>&& other) = default;
 
     //! Returns |true| if the holder has an underlying future.
     explicit operator bool() const;

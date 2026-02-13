@@ -107,7 +107,7 @@ bool IsIdLambda(TExprBase body) {
 
 TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (!kqpCtx.Config->EnableTopSortSelectIndex) {
+    if (!kqpCtx.Config->GetEnableTopSortSelectIndex()) {
         return node;
     }
 
@@ -307,8 +307,8 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     settings.BuildLiteralRange = true;
     settings.IsValidForRange = IsValidForRange;
 
-    if (kqpCtx.Config->ExtractPredicateRangesLimit != 0) {
-        settings.MaxRanges = kqpCtx.Config->ExtractPredicateRangesLimit;
+    if (kqpCtx.Config->GetExtractPredicateRangesLimit() != 0) {
+        settings.MaxRanges = kqpCtx.Config->GetExtractPredicateRangesLimit();
     } else {
         settings.MaxRanges = Nothing();
     }
@@ -359,7 +359,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                 prefixLen = buildResult.PointPrefixLen;
             }
 
-            if (!kqpCtx.Config->EnablePointPredicateSortAutoSelectIndex) {
+            if (!kqpCtx.Config->GetEnablePointPredicateSortAutoSelectIndex()) {
                 prefixLen = 0;
             }
 

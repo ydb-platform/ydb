@@ -139,9 +139,16 @@ namespace NKikimr::NStorage {
             pdiskConfig->EnableSectorEncryption = !pdiskConfig->SectorMap;
         }
 
-        if (pdisk.GetPDiskConfig().GetExpectedSlotCount() != 0) {
-            // Skip inferring PDisk SlotCount
-        } else if (ui64 unitSizeInBytes = pdisk.GetInferPDiskSlotCountFromUnitSize()) {
+        auto inferSettings = TInferPDiskSlotCountSettingsForDriveType(InferPDiskSlotCountSettings, deviceType);
+        if (!inferSettings) {
+            STLOG(PRI_DEBUG, BS_NODE, NW102, "Inferring PDisk slot count not configured", (Path, path),
+                (SlotCount, pdiskConfig->ExpectedSlotCount),
+                (SlotSizeInUnits, pdiskConfig->SlotSizeInUnits));
+        } else if (pdiskConfig->ExpectedSlotCount != 0 && !inferSettings.PreferInferredSettingsOverExplicit) {
+            STLOG(PRI_DEBUG, BS_NODE, NW102, "Skipped inferring PDisk slot count, using explicit settings", (Path, path),
+                (SlotCount, pdiskConfig->ExpectedSlotCount),
+                (SlotSizeInUnits, pdiskConfig->SlotSizeInUnits));
+        } else {
             ui64 driveSize = 0;
             TStringStream outDetails;
             if (pdiskConfig->SectorMap) {
@@ -155,8 +162,13 @@ namespace NKikimr::NStorage {
                 STLOG(PRI_ERROR, BS_NODE, NW96, "Unable to determine drive size for inferring PDisk slot count",
                     (Path, path), (Details, outDetails.Str()));
             } else {
-                ui32 maxSlots = pdisk.GetInferPDiskSlotCountMax();
-                InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes, maxSlots);
+                InferPDiskSlotCount(pdiskConfig, driveSize, inferSettings.UnitSize, inferSettings.MaxSlots);
+                STLOG(PRI_DEBUG, BS_NODE, NW102, "Inferred PDisk slot count", (Path, path),
+                    (SlotCount, pdiskConfig->ExpectedSlotCount),
+                    (SlotSizeInUnits, pdiskConfig->SlotSizeInUnits),
+                    (FromDriveSize, driveSize),
+                    (FromUnitSize, inferSettings.UnitSize),
+                    (FromMaxSlots, inferSettings.MaxSlots));
             }
         }
 
@@ -229,15 +241,19 @@ namespace NKikimr::NStorage {
             record.ReplPDiskWriteQuoter = std::make_shared<TReplQuoter>(*writeBytesPerSecond);
         }
 
-        STLOG(PRI_DEBUG, BS_NODE, NW04, "StartLocalPDisk", (NodeId, key.NodeId), (PDiskId, key.PDiskId),
-            (Path, TString(TStringBuilder() << '"' << pdisk.GetPath() << '"')),
-            (PDiskCategory, TPDiskCategory(record.Record.GetPDiskCategory())),
-            (Temporary, temporary));
-
         auto pdiskConfig = CreatePDiskConfig(pdisk);
         if (temporary) {
             pdiskConfig->MetadataOnly = true;
         }
+        record.ExpectedSlotCount = pdiskConfig->ExpectedSlotCount;
+        record.SlotSizeInUnits = pdiskConfig->SlotSizeInUnits;
+
+        STLOG(PRI_DEBUG, BS_NODE, NW04, "StartLocalPDisk", (NodeId, key.NodeId), (PDiskId, key.PDiskId),
+            (Path, TString(TStringBuilder() << '"' << pdisk.GetPath() << '"')),
+            (PDiskCategory, TPDiskCategory(record.Record.GetPDiskCategory())),
+            (ExpectedSlotCount, record.ExpectedSlotCount),
+            (SlotSizeInUnits, record.SlotSizeInUnits),
+            (Temporary, temporary));
 
         const ui32 pdiskID = pdisk.GetPDiskID();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
@@ -527,19 +543,16 @@ namespace NKikimr::NStorage {
             if (auto it = LocalPDisks.find(key); it != LocalPDisks.end()) {
                 TPDiskRecord& localPDisk = it->second;
                 TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(pdisk);
-                const NKikimrBlobStorage::TPDiskConfig& oldPDiskConfig = localPDisk.Record.GetPDiskConfig();
-                ui64 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
-                ui64 oldExpectedSlotCount = oldPDiskConfig.GetExpectedSlotCount();
+                ui32 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
                 ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
-                ui32 oldSlotSizeInUnits = oldPDiskConfig.GetSlotSizeInUnits();
                 STLOG(PRI_DEBUG, BS_NODE, NW110, "ApplyServiceSetPDisks",
                     (PDiskId, key.PDiskId),
                     (NewExpectedSlotCount, newExpectedSlotCount),
-                    (OldExpectedSlotCount, oldExpectedSlotCount),
+                    (OldExpectedSlotCount, localPDisk.ExpectedSlotCount),
                     (NewSlotSizeInUnits, newSlotSizeInUnits),
-                    (OldSlotSizeInUnits, oldSlotSizeInUnits));
-                if (newExpectedSlotCount != oldExpectedSlotCount ||
-                        newSlotSizeInUnits != oldSlotSizeInUnits) {
+                    (OldSlotSizeInUnits, localPDisk.SlotSizeInUnits));
+                if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
+                        newSlotSizeInUnits != localPDisk.SlotSizeInUnits) {
                     STLOG(PRI_DEBUG, BS_NODE, NW107, "SendChangeExpectedSlotCount",
                         (PDiskId, key.PDiskId),
                         (ExpectedSlotCount, newExpectedSlotCount),
@@ -548,9 +561,8 @@ namespace NKikimr::NStorage {
                     const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
                     Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
 
-                    NKikimrBlobStorage::TPDiskConfig* pdiskConfig = localPDisk.Record.MutablePDiskConfig();
-                    pdiskConfig->SetExpectedSlotCount(newExpectedSlotCount);
-                    pdiskConfig->SetSlotSizeInUnits(newSlotSizeInUnits);
+                    localPDisk.ExpectedSlotCount = newExpectedSlotCount;
+                    localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
                 }
             } else {
                 StartLocalPDisk(pdisk, false);

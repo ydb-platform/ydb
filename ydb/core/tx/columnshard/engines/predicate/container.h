@@ -70,6 +70,11 @@ public:
         return !Object;
     }
 
+    const NArrow::NMerger::TSortableBatchPosition& GetSortableBatchPosition() const {
+        AFL_VERIFY(Object);
+        return Object->Batch;
+    }
+
     TString DebugString() const;
 
     int MatchScalar(const ui32 columnIdx, const std::shared_ptr<arrow::Scalar>& s) const;

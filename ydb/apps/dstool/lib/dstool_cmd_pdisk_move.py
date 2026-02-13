@@ -20,11 +20,11 @@ def create_request(args, source_pdisk, target_pdisk):
     request = common.create_bsc_request(args)
     cmd = request.Command.add().MovePDisk
 
-    cmd.SourcePDisk.TargetPDiskId.NodeId = int(source_pdisk.split(';')[0])
-    cmd.SourcePDisk.TargetPDiskId.PDiskId = int(source_pdisk.split(';')[1])
+    cmd.SourcePDisk.TargetPDiskId.NodeId = int(source_pdisk.split(':')[0])
+    cmd.SourcePDisk.TargetPDiskId.PDiskId = int(source_pdisk.split(':')[1])
 
-    cmd.DestinationPDisk.TargetPDiskId.NodeId = int(target_pdisk.split(';')[0])
-    cmd.DestinationPDisk.TargetPDiskId.PDiskId = int(target_pdisk.split(';')[1])
+    cmd.DestinationPDisk.TargetPDiskId.NodeId = int(target_pdisk.split(':')[0])
+    cmd.DestinationPDisk.TargetPDiskId.PDiskId = int(target_pdisk.split(':')[1])
 
     return request
 

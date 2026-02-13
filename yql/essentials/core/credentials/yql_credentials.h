@@ -33,7 +33,7 @@ public:
     using TPtr = TIntrusivePtr<TCredentials>;
 
     TCredentials() = default;
-    ~TCredentials() = default;
+    ~TCredentials() override = default;
 
     void AddCredential(const TString& alias, const TCredential& cred);
     void SetUserCredentials(const TUserCredentials& userCredentials) {

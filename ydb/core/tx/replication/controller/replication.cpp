@@ -245,7 +245,35 @@ public:
         Issue = TruncatedIssue(issue);
     }
 
+    static void KeepResourceId(
+            const NKikimrReplication::TReplicationConfig& oldConfig,
+            NKikimrReplication::TReplicationConfig& newConfig)
+    {
+        const auto& oldParams = oldConfig.GetSrcConnectionParams();
+        if (!oldParams.HasIamCredentials()) {
+            return;
+        }
+
+        const auto& oldIam = oldParams.GetIamCredentials();
+        if (!oldIam.HasResourceId()) {
+            return;
+        }
+
+        if (!newConfig.HasSrcConnectionParams()) {
+            return;
+        }
+
+        auto& newParams = *newConfig.MutableSrcConnectionParams();
+        if (!newParams.HasIamCredentials()) {
+            return;
+        }
+
+        auto& newIam = *newParams.MutableIamCredentials();
+        newIam.SetResourceId(oldIam.GetResourceId());
+    }
+
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+        KeepResourceId(Config, config);
         Config = config;
     }
 

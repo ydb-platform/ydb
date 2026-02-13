@@ -76,8 +76,8 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const std::string& keyOrAl
             return parameter;
         }
     }
-    THROW_ERROR_EXCEPTION("Key or alias %Qv not found in yson struct", keyOrAlias)
-        << TErrorAttribute("struct", TypeName(GetStructType()));
+    THROW_ERROR_EXCEPTION("Key or alias %Qv not found in YSON struct", keyOrAlias)
+        << TErrorAttribute("type", TypeName(GetStructType()));
 }
 
 void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& key, const NYTree::INodePtr& node) const

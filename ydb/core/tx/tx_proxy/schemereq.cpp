@@ -29,9 +29,9 @@
 
 namespace {
 
-const TVector<NLogin::EHashType> HASHES_TO_COMPUTE = {
-    NLogin::EHashType::Argon,
-    NLogin::EHashType::ScramSha256,
+const TVector<NLoginProto::EHashType::HashType> HASHES_TO_COMPUTE = {
+    NLoginProto::EHashType::Argon,
+    NLoginProto::EHashType::ScramSha256,
 };
 
 }
@@ -481,6 +481,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery:
             return *modifyScheme.MutableCreateStreamingQuery()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpTruncateTable:
+            return *modifyScheme.MutableTruncateTable()->MutableTableName();
         }
         Y_UNREACHABLE();
     }
@@ -1134,6 +1137,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             ResolveForACL.push_back(toResolve);
             break;
         }
+        case NKikimrSchemeOp::ESchemeOpTruncateTable: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::EraseRow;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
         case NKikimrSchemeOp::ESchemeOpCreateTableIndex:
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
@@ -1737,6 +1747,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::TAlterLogin::kCreateUser:
         {
             auto& targetUser = *alterLogin.MutableCreateUser();
+            targetUser.SetUser(std::move(computedHashes->PreparedUsername));
             targetUser.SetPassword(std::move(computedHashes->ArgonHash));
             targetUser.SetIsHashedPassword(true);
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
@@ -1745,6 +1756,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::TAlterLogin::kModifyUser:
         {
             auto& targetUser = *alterLogin.MutableModifyUser();
+            targetUser.SetUser(std::move(computedHashes->PreparedUsername));
             targetUser.SetPassword(std::move(computedHashes->ArgonHash));
             targetUser.SetIsHashedPassword(true);
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));

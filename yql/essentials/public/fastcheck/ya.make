@@ -8,8 +8,10 @@ SRCS(
     parser.cpp
     settings.cpp
     translator.cpp
+    typecheck.cpp
     format.cpp
     utils.cpp
+    check_state.cpp
 )
 
 PEERDIR(

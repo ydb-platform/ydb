@@ -454,6 +454,18 @@ Further process APIs
     >>> gone, alive = psutil.wait_procs(procs_list, timeout=3, callback=on_terminate)
     >>>
 
+Heap info
+---------
+
+.. code-block:: python
+
+    >>> import psutil
+    >>> psutil.heap_info()
+    pheap(heap_used=5177792, mmap_used=819200)
+    >>> psutil.heap_trim()
+
+See also `psleak <https://github.com/giampaolo/psleak>`__
+
 Windows services
 ----------------
 
@@ -481,6 +493,7 @@ Projects using psutil
 
 Here's some I find particularly interesting:
 
+- https://github.com/giampaolo/psleak
 - https://github.com/google/grr
 - https://github.com/facebook/osquery/
 - https://github.com/nicolargo/glances

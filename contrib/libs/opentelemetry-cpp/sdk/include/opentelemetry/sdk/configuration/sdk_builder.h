@@ -44,7 +44,6 @@
 #include "opentelemetry/sdk/configuration/span_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/string_array_attribute_value_configuration.h"
 #include "opentelemetry/sdk/configuration/string_attribute_value_configuration.h"
-#include "opentelemetry/sdk/configuration/zipkin_span_exporter_configuration.h"
 #include "opentelemetry/sdk/logs/exporter.h"
 #include "opentelemetry/sdk/logs/logger_provider.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h"
@@ -105,9 +104,6 @@ public:
 
   std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> CreateConsoleSpanExporter(
       const opentelemetry::sdk::configuration::ConsoleSpanExporterConfiguration *model) const;
-
-  std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> CreateZipkinSpanExporter(
-      const opentelemetry::sdk::configuration::ZipkinSpanExporterConfiguration *model) const;
 
   std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> CreateExtensionSpanExporter(
       const opentelemetry::sdk::configuration::ExtensionSpanExporterConfiguration *model) const;
@@ -258,6 +254,9 @@ public:
   void SetResource(opentelemetry::sdk::resource::Resource &resource,
                    const std::unique_ptr<opentelemetry::sdk::configuration::ResourceConfiguration>
                        &opt_model) const;
+
+  void SetLogLevel(opentelemetry::sdk::common::internal_log::LogLevel &sdk_log_level,
+                   opentelemetry::sdk::configuration::SeverityNumber model_log_level) const;
 
   std::unique_ptr<ConfiguredSdk> CreateConfiguredSdk(
       const std::unique_ptr<opentelemetry::sdk::configuration::Configuration> &model) const;

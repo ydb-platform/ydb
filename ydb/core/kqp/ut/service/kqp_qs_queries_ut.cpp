@@ -323,8 +323,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(count, 1);
     }
 
-    Y_UNIT_TEST(ExecuteQueryUpsertDoesntChangeIndexedValuesIfNotChanged) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(ExecuteQueryUpsertDoesntChangeIndexedValuesIfNotChanged, UseStreamIndex) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetQueryClient();
 
         auto settings = TExecuteQuerySettings()
@@ -1414,7 +1416,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ExecStatsPlan) {
-        auto kikimr = DefaultKikimrRunner();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
+        appConfig.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
+        appConfig.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetQueryClient();
 
         auto params = TParamsBuilder()
@@ -1800,6 +1807,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         kikimr.GetTestClient().GrantConnect("user0@builtin");
         kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+        WaitForProxy(kikimr, "user0@builtin");
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())

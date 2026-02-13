@@ -28,6 +28,7 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
     Metrics.MessageLocks.Initialize(MLP_LOCKS_RANGES, std::size(MLP_LOCKS_RANGES), true);
     Metrics.MessageLockingDuration.Initialize(SLOW_LATENCY_RANGES, std::size(SLOW_LATENCY_RANGES), true);
+    Metrics.WaitingLockingDuration.Initialize(SLOW_LATENCY_RANGES, std::size(SLOW_LATENCY_RANGES), true);
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
@@ -61,6 +62,10 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
             break;
     }
 
+}
+
+bool TStorage::GetKeepMessageOrder() const {
+    return KeepMessageOrder;
 }
 
 std::optional<ui32> TStorage::GetRetentionDeadlineDelta() const {
@@ -163,6 +168,40 @@ bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
     }
 }
 
+bool TStorage::Purge(ui64 endOffset) {
+    Metrics.TotalPurgedMessageCount += Metrics.UnprocessedMessageCount + Metrics.LockedMessageCount
+        + Metrics.DelayedMessageCount + Metrics.DLQMessageCount
+        + (endOffset - GetLastOffset());
+
+    Metrics.InflightMessageCount = 0;
+    Metrics.UnprocessedMessageCount = 0;
+    Metrics.LockedMessageCount = 0;
+    Metrics.LockedMessageGroupCount = 0;
+    Metrics.DelayedMessageCount = 0;
+    Metrics.CommittedMessageCount = 0;
+    Metrics.DeadlineExpiredMessageCount = 0;
+    Metrics.DLQMessageCount = 0;
+
+    SlowMessages.clear();
+    Messages.clear();
+    DLQQueue.clear();
+    DLQMessages.clear();
+    LockedMessageGroupsId.clear();
+
+    FirstOffset = endOffset;
+    FirstUncommittedOffset = endOffset;
+    FirstUnlockedOffset = endOffset;
+
+    BaseDeadline = TrimToSeconds(TimeProvider->Now(), false);
+    BaseWriteTimestamp = TrimToSeconds(TimeProvider->Now(), false);
+
+    NextVacuumRun = TrimToSeconds(TimeProvider->Now(), false) + VACUUM_INTERVAL;
+
+    Batch.SetPurged();
+
+    return true;
+}
+
 TInstant TStorage::GetMessageDeadline(ui64 messageId) {
     auto [message, _] = GetMessageInt(messageId);
     if (!message) {
@@ -226,7 +265,7 @@ size_t TStorage::Compact() {
 
     // Remove messages by retention
     if (auto retentionDeadlineDelta = GetRetentionDeadlineDelta(); retentionDeadlineDelta.has_value()) {
-        auto dieProcessingDelta = retentionDeadlineDelta.value() + 60;
+        auto dieProcessingDelta = retentionDeadlineDelta.value() + 1;
 
         auto canRemove = [&](auto& message) {
             switch (message.GetStatus()) {
@@ -383,6 +422,17 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         Batch.MoveBaseTime(BaseDeadline, BaseWriteTimestamp);
     }
 
+    auto writeTimestampDelta = (writeTimestamp - BaseWriteTimestamp).Seconds();
+    if (auto retentionDeadlineDelta = GetRetentionDeadlineDelta(); retentionDeadlineDelta.has_value()) {
+        auto removedByRetention = writeTimestampDelta <= retentionDeadlineDelta.value();
+        // The message will be deleted by retention policy. Skip it.
+        if (removedByRetention && Messages.empty()) {
+            ++Metrics.TotalDeletedByRetentionMessageCount;
+            Batch.AddNewMessage(offset);
+            return true;
+        }
+    }
+
     ui32 deadlineDelta = delay == TDuration::Zero() ? 0 : NormalizeDeadline(writeTimestamp + delay);
 
     Messages.push_back({
@@ -391,7 +441,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         .DeadlineDelta = deadlineDelta,
         .HasMessageGroupId = hasMessagegroup,
         .MessageGroupIdHash = messageGroupIdHash,
-        .WriteTimestampDelta = static_cast<ui32>((writeTimestamp - BaseWriteTimestamp).Seconds())
+        .WriteTimestampDelta = ui32(writeTimestampDelta)
     });
 
     Batch.AddNewMessage(offset);
@@ -538,6 +588,20 @@ const std::unordered_set<ui32>& TStorage::GetLockedMessageGroupsId() const {
     return LockedMessageGroupsId;
 }
 
+bool TStorage::HasRetentionExpiredMessages() const {
+    if (Messages.empty()) {
+        return false;
+    }
+
+    auto retentionDeadlineDelta = GetRetentionDeadlineDelta();
+    if (!retentionDeadlineDelta.has_value()) {
+        return false;
+    }
+
+    auto& message = Messages.front();
+    return message.WriteTimestampDelta <= retentionDeadlineDelta.value();
+}
+
 std::pair<TStorage::TMessage*, bool> TStorage::GetMessageInt(ui64 offset, EMessageStatus expectedStatus) {
     auto [message, slowZone] = GetMessageInt(offset);
     if (!message) {
@@ -577,6 +641,8 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
 }
 
 ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
+    auto now = TimeProvider->Now();
+    
     AFL_VERIFY(message.GetStatus() == EMessageStatus::Unprocessed)("status", message.GetStatus());
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
@@ -585,7 +651,7 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
         Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
 
-    SetMessageLockingTime(message, TimeProvider->Now(), BaseDeadline);
+    SetMessageLockingTime(message, now, BaseDeadline);
 
     Batch.AddChange(offset);
 
@@ -598,6 +664,10 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     ++Metrics.LockedMessageCount;
     AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
     --Metrics.UnprocessedMessageCount;
+
+    auto writeTimestamp = BaseWriteTimestamp + TDuration::Seconds(message.WriteTimestampDelta);
+    auto waitingLockingDuration = now > writeTimestamp ? now - writeTimestamp : TDuration::Zero();
+    Metrics.WaitingLockingDuration.IncrementFor(waitingLockingDuration.MilliSeconds());
 
     return offset;
 }
@@ -946,6 +1016,10 @@ void TStorage::TBatch::DeleteFromSlow(ui64 offset) {
     DeletedFromSlowZone.push_back(offset);
 }
 
+void TStorage::TBatch::SetPurged() {
+    Purged = true;
+}
+
 void TStorage::TBatch::Compacted(size_t count) {
     CompactedMessages += count;
 }
@@ -963,7 +1037,8 @@ bool TStorage::TBatch::Empty() const {
         && !BaseWriteTimestamp.has_value()
         && MovedToSlowZone.empty()
         && DeletedFromSlowZone.empty()
-        && CompactedMessages == 0;
+        && CompactedMessages == 0
+        && !Purged;
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {
@@ -976,6 +1051,10 @@ size_t TStorage::TBatch::ChangedMessageCount() const {
 
 size_t TStorage::TBatch::DLQMessageCount() const {
     return AddedToDLQ.size();
+}
+
+bool TStorage::TBatch::GetPurged() const {
+    return Purged;
 }
 
 TStorage::TMessageIterator::TMessageIterator(const TStorage& storage, std::map<ui64, TMessage>::const_iterator it, ui64 offset)
@@ -1015,6 +1094,8 @@ TStorage::TMessageWrapper TStorage::TMessageIterator::operator*() const {
             Storage.BaseDeadline + TDuration::Seconds(message->DeadlineDelta) : TInstant::Zero(),
         .WriteTimestamp = Storage.BaseWriteTimestamp + TDuration::Seconds(message->WriteTimestampDelta),
         .LockingTimestamp = Storage.GetMessageLockingTime(*message),
+        .MessageGroupIdHash = message->HasMessageGroupId ? std::optional<ui32>(message->MessageGroupIdHash) : std::nullopt,
+        .MessageGroupIsLocked = Storage.KeepMessageOrder && message->HasMessageGroupId && Storage.LockedMessageGroupsId.contains(message->MessageGroupIdHash),
     };
 }
 

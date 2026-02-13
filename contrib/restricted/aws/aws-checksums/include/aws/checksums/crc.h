@@ -67,6 +67,69 @@ AWS_CHECKSUMS_API uint64_t aws_checksums_crc64nvme(const uint8_t *input, int len
  */
 AWS_CHECKSUMS_API uint64_t aws_checksums_crc64nvme_ex(const uint8_t *input, size_t length, uint64_t previous_crc64);
 
+/**
+ * Combines two CRC32 (Ethernet, gzip) checksums computed over separate data blocks.
+ * This is equivalent to computing the CRC32 of the concatenated data blocks without
+ * having to re-scan the data.
+ *
+ * Given:
+ *   crc1 = CRC32(data_block_A)
+ *   crc2 = CRC32(data_block_B)
+ *
+ * This function computes:
+ *   result = CRC32(data_block_A || data_block_B)
+ *
+ * @param crc1 The CRC32 checksum of the first data block
+ * @param crc2 The CRC32 checksum of the second data block
+ * @param len2 The length (in bytes) of the original data that produced crc2.
+ *             This is NOT the size of the checksum (which is always 4 bytes),
+ *             but rather the size of the data block that was checksummed.
+ * @return The combined CRC32 checksum as if computed over the concatenated data
+ */
+AWS_CHECKSUMS_API uint32_t aws_checksums_crc32_combine(uint32_t crc1, uint32_t crc2, uint64_t len2);
+
+/**
+ * Combines two CRC32C (Castagnoli, iSCSI) checksums computed over separate data blocks.
+ * This is equivalent to computing the CRC32C of the concatenated data blocks without
+ * having to re-scan the data.
+ *
+ * Given:
+ *   crc1 = CRC32C(data_block_A)
+ *   crc2 = CRC32C(data_block_B)
+ *
+ * This function computes:
+ *   result = CRC32C(data_block_A || data_block_B)
+ *
+ * @param crc1 The CRC32C checksum of the first data block
+ * @param crc2 The CRC32C checksum of the second data block
+ * @param len2 The length (in bytes) of the original data that produced crc2.
+ *             This is NOT the size of the checksum (which is always 4 bytes),
+ *             but rather the size of the data block that was checksummed.
+ * @return The combined CRC32C checksum as if computed over the concatenated data
+ */
+AWS_CHECKSUMS_API uint32_t aws_checksums_crc32c_combine(uint32_t crc1, uint32_t crc2, uint64_t len2);
+
+/**
+ * Combines two CRC64-NVME (CRC64-Rocksoft) checksums computed over separate data blocks.
+ * This is equivalent to computing the CRC64-NVME of the concatenated data blocks without
+ * having to re-scan the data.
+ *
+ * Given:
+ *   crc1 = CRC64_NVME(data_block_A)
+ *   crc2 = CRC64_NVME(data_block_B)
+ *
+ * This function computes:
+ *   result = CRC64_NVME(data_block_A || data_block_B)
+ *
+ * @param crc1 The CRC64-NVME checksum of the first data block
+ * @param crc2 The CRC64-NVME checksum of the second data block
+ * @param len2 The length (in bytes) of the original data that produced crc2.
+ *             This is NOT the size of the checksum (which is always 8 bytes),
+ *             but rather the size of the data block that was checksummed.
+ * @return The combined CRC64-NVME checksum as if computed over the concatenated data
+ */
+AWS_CHECKSUMS_API uint64_t aws_checksums_crc64nvme_combine(uint64_t crc1, uint64_t crc2, uint64_t len2);
+
 AWS_EXTERN_C_END
 AWS_POP_SANE_WARNING_LEVEL
 

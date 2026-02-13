@@ -16,6 +16,7 @@ SRCS(
     cpuinfo.h
     defs.h
     event_priority_queue.h
+    exceptions.cpp
     failure_injection.cpp
     failure_injection.h
     fast_tls.cpp
@@ -37,6 +38,7 @@ SRCS(
     log_priority_mute_checker.h
     memory_tracker.cpp
     memory_tracker.h
+    numerical_maybe.h
     operation_queue.h
     page_map.cpp
     pb.h

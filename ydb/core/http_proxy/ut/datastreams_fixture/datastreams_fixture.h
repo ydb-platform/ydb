@@ -132,7 +132,16 @@ public:
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
         if (expectedHttpCode == 200) {
-            UNIT_ASSERT(GetByPath<TString>(json, "QueueUrl").EndsWith(GetByPath<TString>(request, "QueueName")));
+            const TString url = GetByPath<TString>(json, "QueueUrl");
+            const TString queue = GetByPath<TString>(request, "QueueName");
+            if (SqsTopicMode) {
+                TStringBuf topic, consumer;
+                TStringBuf{queue}.RSplit('@', topic, consumer);
+                UNIT_ASSERT_C(url.contains(topic), LabeledOutput(url, queue, topic));
+                UNIT_ASSERT_C(url.contains(consumer), LabeledOutput(url, queue, consumer));
+            } else {
+                UNIT_ASSERT_C(url.EndsWith(queue), LabeledOutput(url, queue));
+            }
         }
         return json;
     }
@@ -241,6 +250,7 @@ public:
     ui16 DatabaseServicePort = 0;
     ui16 MonPort = 0;
     ui16 KikimrGrpcPort = 0;
+    bool SqsTopicMode = false;
 };
 
 class THttpProxyTestMockForSQS : public THttpProxyTestMock {

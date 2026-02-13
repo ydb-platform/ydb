@@ -5,7 +5,7 @@ from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, \
-    index_zero_sync, pk_pg_types, non_pk_pg_types, filter_dict
+    index_zero_sync, pk_pg_types_mixed, non_pk_pg_types_mixed, filter_dict
 
 
 class TestDMLBase(TestBase):
@@ -65,24 +65,24 @@ class TestPgDML(TestPgBase, TestDMLBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
-            ("table_index_10_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pginterval"), "", "UNIQUE", "SYNC"),
-            ("table_index_9_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pgtimestamp"), "", "UNIQUE", "SYNC"),
-            ("table_index_8_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pgdate"), "", "UNIQUE", "SYNC"),
-            ("table_index_7_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pguuid"), "", "UNIQUE", "SYNC"),
-            ("table_index_6_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pgvarchar"), "", "UNIQUE", "SYNC"),
-            ("table_index_5_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pgtext"), "", "UNIQUE", "SYNC"),
-            ("table_index_4_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pgbytea"), "", "UNIQUE", "SYNC"),
-            ("table_index_3_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pgnumeric"), "", "UNIQUE", "SYNC"),
-            ("table_index_2_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pgint8"), "", "UNIQUE", "SYNC"),
-            ("table_index_1_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pgint4"), "", "UNIQUE", "SYNC"),
-            ("table_index_0_UNIQUE_SYNC", pk_pg_types, {}, filter_dict(pk_pg_types, "pgint2"), "", "UNIQUE", "SYNC"),
-            ("table_index_0__SYNC", pk_pg_types, {}, pk_pg_types, "", "", "SYNC"),
-            ("table_index_0__ASYNC", pk_pg_types, {}, pk_pg_types, "", "", "ASYNC"),
-            ("table_all_types", pk_pg_types, {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_ttl_pgint4", pk_pg_types, {}, {}, "pgint4", "", ""),
-            ("table_ttl_pgint8", pk_pg_types, {}, {}, "pgint8", "", ""),
-            ("table_ttl_pgdate", pk_pg_types, {}, {}, "pgdate", "", ""),
-            ("table_ttl_pgtimestamp", pk_pg_types, {}, {}, "pgtimestamp", "", ""),
+            ("table_index_10_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pginterval"), "", "UNIQUE", "SYNC"),
+            ("table_index_9_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pgtimestamp"), "", "UNIQUE", "SYNC"),
+            ("table_index_8_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pgdate"), "", "UNIQUE", "SYNC"),
+            ("table_index_7_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pguuid"), "", "UNIQUE", "SYNC"),
+            ("table_index_6_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pgvarchar"), "", "UNIQUE", "SYNC"),
+            ("table_index_5_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pgtext"), "", "UNIQUE", "SYNC"),
+            ("table_index_4_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pgbytea"), "", "UNIQUE", "SYNC"),
+            ("table_index_3_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pgnumeric"), "", "UNIQUE", "SYNC"),
+            ("table_index_2_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pgint8"), "", "UNIQUE", "SYNC"),
+            ("table_index_1_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pgint4"), "", "UNIQUE", "SYNC"),
+            ("table_index_0_UNIQUE_SYNC", pk_pg_types_mixed, {}, filter_dict(pk_pg_types_mixed, "pgint2"), "", "UNIQUE", "SYNC"),
+            ("table_index_0__SYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "SYNC"),
+            ("table_index_0__ASYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "ASYNC"),
+            ("table_all_types", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_ttl_pgint4", pk_pg_types_mixed, {}, {}, "pgint4", "", ""),
+            ("table_ttl_pgint8", pk_pg_types_mixed, {}, {}, "pgint8", "", ""),
+            ("table_ttl_pgdate", pk_pg_types_mixed, {}, {}, "pgdate", "", ""),
+            ("table_ttl_pgtimestamp", pk_pg_types_mixed, {}, {}, "pgtimestamp", "", ""),
         ]
     )
     def test_dml(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):

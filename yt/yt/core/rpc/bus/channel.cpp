@@ -222,7 +222,7 @@ private:
                 auto bus = Client_->CreateBus(
                     messageHandler,
                     {
-                        .MultiplexingBand = options.MultiplexingBand
+                        .MultiplexingBand = options.MultiplexingBand,
                     });
 
                 const auto& attrs = bus->GetEndpointAttributes();

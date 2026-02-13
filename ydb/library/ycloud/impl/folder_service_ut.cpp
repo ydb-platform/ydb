@@ -140,6 +140,7 @@ Y_UNIT_TEST_SUITE(FolderServiceTest) {
 
         TString existsFolderId = "i_am_exists";
         TString notExistsFolderId = "i_am_not_exists";
+        TString emptyFolderId = "i_am_empty";
         TString cloudId = "response_cloud_id";
 
         ui16 servicePort = setup.PortManager.GetPort(4284);
@@ -153,6 +154,7 @@ Y_UNIT_TEST_SUITE(FolderServiceTest) {
 
         TFolderServiceMock folderServiceMock;
         folderServiceMock.Folders[existsFolderId].set_cloud_id(cloudId);
+        folderServiceMock.NoAnswerFolders.insert(emptyFolderId);
         auto grpcServer = setup.StartGrpcService(servicePort, &folderServiceMock);
 
         // check not found
@@ -171,6 +173,13 @@ Y_UNIT_TEST_SUITE(FolderServiceTest) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_EQUAL(result->Response.resolved_folders(0).cloud_id(), cloudId);
+
+        // check for empty answer
+        setup.SendResolveFoldersRequest(folderService, emptyFolderId);
+        result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvFolderService::TEvResolveFoldersResponse>(handle);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT(result->Status.Ok());
+        UNIT_ASSERT_VALUES_EQUAL(result->Response.resolved_folders_size(), 0);
     }
 
     Y_UNIT_TEST(TFolderServiceAdapter) {
@@ -179,6 +188,7 @@ Y_UNIT_TEST_SUITE(FolderServiceTest) {
 
         TString existsFolderId = "i_am_exists";
         TString notExistsFolderId = "i_am_not_exists";
+        TString emptyFolderId = "i_am_empty";
         TString cloudFromTransitionalService = "cloud_from_old_service";
         TString cloudFromNewService = "cloud_from_new_service";
 
@@ -191,6 +201,7 @@ Y_UNIT_TEST_SUITE(FolderServiceTest) {
 
         TFolderServiceMock folderServiceMock;
         folderServiceMock.Folders[existsFolderId].set_cloud_id(cloudFromNewService);
+        folderServiceMock.NoAnswerFolders.insert(emptyFolderId);
         auto grpcServer = setup.StartGrpcService(newServicePort, &folderServiceMock);
 
         NKikimrProto::NFolderService::TFolderServiceConfig oldConfig;
@@ -226,17 +237,25 @@ Y_UNIT_TEST_SUITE(FolderServiceTest) {
         UNIT_ASSERT(result);
         UNIT_ASSERT_EQUAL(result->CloudId, cloudFromNewService);
 
-        // check not found from the new service 
+        // check not found from the new service
         setup.SendGetCloudByFolderRequest(folderServiceAdapterWithNewConfig, notExistsFolderId);
         result = setup.GetRuntime()->GrabEdgeEvent<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.GRpcStatusCode == grpc::StatusCode::NOT_FOUND);
 
-        // check not found from the transitional service       
+        // check not found from the transitional service
         setup.SendGetCloudByFolderRequest(folderServiceAdapterWithOldConfig, notExistsFolderId);
         result = setup.GetRuntime()->GrabEdgeEvent<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.GRpcStatusCode == grpc::StatusCode::NOT_FOUND);
+
+        // check for empty answer
+        setup.SendGetCloudByFolderRequest(folderServiceAdapterWithNewConfig, emptyFolderId);
+        result = setup.GetRuntime()->GrabEdgeEvent<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse>(handle);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT(EqualToOneOf(result->Status.GRpcStatusCode, grpc::StatusCode::OK, grpc::StatusCode::NOT_FOUND));
+        UNIT_ASSERT_VALUES_EQUAL(result->CloudId, "");
+        UNIT_ASSERT_VALUES_EQUAL(result->FolderId, "");
     }
 
 }

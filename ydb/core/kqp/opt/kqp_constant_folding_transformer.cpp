@@ -86,11 +86,7 @@ IGraphTransformer::TStatus TKqpConstantFoldingTransformer::DoTransform(TExprNode
     TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
 
-    if (!Config->EnableConstantFolding) {
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    bool foldUdfs = Config->EnableFoldUdfs;
+    bool foldUdfs = Config->GetEnableFoldUdfs();
 
     TNodeOnNodeOwnedMap replaces;
 

@@ -16,7 +16,10 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     void TestKillOwnerWhileDeletingChunk(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks, ui32 vdisksNum) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
-            TActorTestContext testCtx({ false, usePDiskMock });
+            TActorTestContext::TSettings settings{};
+            settings.IsBad = false;
+            settings.UsePDiskMock = usePDiskMock;
+            TActorTestContext testCtx(settings);
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
@@ -91,7 +94,10 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     void TestDecommit(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
-            TActorTestContext testCtx({ false, usePDiskMock });
+            TActorTestContext::TSettings settings{};
+            settings.IsBad = false;
+            settings.UsePDiskMock = usePDiskMock;
+            TActorTestContext testCtx(settings);
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
@@ -184,7 +190,10 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     void TestKillOwnerWhileDecommitting(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks, ui32 vdisksNum) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
-            TActorTestContext testCtx({ false, usePDiskMock });
+            TActorTestContext::TSettings settings{};
+            settings.IsBad = false;
+            settings.UsePDiskMock = usePDiskMock;
+            TActorTestContext testCtx(settings);
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
@@ -258,7 +267,10 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     }
 
     void OwnerRecreationRaces(bool usePDiskMock, ui32 timeLimit, ui32 vdisksNum) {
-        TActorTestContext testCtx({ false, usePDiskMock });
+        TActorTestContext::TSettings settings{};
+        settings.IsBad = false;
+        settings.UsePDiskMock = usePDiskMock;
+        TActorTestContext testCtx(settings);
 
         std::vector<TVDiskMock> mocks;
         enum EMockState {

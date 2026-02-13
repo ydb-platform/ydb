@@ -8,6 +8,7 @@ LICENSE(MIT)
 
 PEERDIR(
     contrib/python/Werkzeug
+    contrib/python/pytest
 )
 
 NO_LINT()

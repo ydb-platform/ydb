@@ -13,7 +13,7 @@ private:
     static const inline TFactory::TRegistrator<TIndexScannerConstructor> Registrator =
         TFactory::TRegistrator<TIndexScannerConstructor>(GetClassNameStatic());
 
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor() const override;
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) const override;
 
 protected:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const override;

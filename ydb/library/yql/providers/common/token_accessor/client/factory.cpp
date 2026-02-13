@@ -85,6 +85,10 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
         return WrapWithBearerIfNeeded(NYdb::CreateOAuthCredentialsProviderFactory(parser.GetIAMToken()), addBearerToToken); // OK for any static token (OAuth, IAM).
     }
 
+    if (parser.HasTransientToken()) {
+        return NYdb::CreateOAuthCredentialsProviderFactory(parser.GetTransientToken()); // Expected serialized NACLib::TUserToken with authorized user SID and list of group SIDs.
+    }
+
     if (parser.HasServiceAccountIdAuth()) {
         TString id;
         TString signature;

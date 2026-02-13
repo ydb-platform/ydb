@@ -1068,7 +1068,7 @@ private:
 
 class TOpFamiliesParser: public TParser {
 public:
-    TOpFamiliesParser(TOpFamilies& opFamilies)
+    explicit TOpFamiliesParser(TOpFamilies& opFamilies)
         : OpFamilies_(opFamilies)
     {
     }
@@ -1263,7 +1263,7 @@ private:
 
 class TAmsParser: public TParser {
 public:
-    TAmsParser(TAms& ams)
+    explicit TAmsParser(TAms& ams)
         : Ams_(ams)
     {
     }
@@ -1415,7 +1415,7 @@ private:
 
 class TLanguagesParser: public TParser {
 public:
-    TLanguagesParser(TLanguages& languages)
+    explicit TLanguagesParser(TLanguages& languages)
         : Languages_(languages)
     {
     }

@@ -831,6 +831,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {
         commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxTruncateTable) {
+        commonShardOp = TTxState::ConfigureParts;
     } else {
         Y_ABORT("UNREACHABLE");
     }
@@ -1057,7 +1059,7 @@ TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDa
 }
 
 // NTableState::TProposedWaitParts
-//
+// Must be in sync with NTableState::TMoveTableProposedWaitParts
 TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextState)
     : OperationId(id)
     , NextState(nextState)
@@ -1354,3 +1356,51 @@ void AbortUnsafeDropOperation(const TOperationId& opId, const TTxId& txId, TOper
 
 }
 }
+
+namespace NKikimr::NSchemeShard::NTableIndexVersion {
+
+TVector<TPathId> SyncChildIndexVersions(
+    TPathElement::TPtr path,
+    TTableInfo::TPtr table,
+    ui64 targetVersion,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db,
+    bool skipPlannedToDrop)
+{
+    Y_UNUSED(table);
+    TVector<TPathId> publishedIndexes;
+
+    for (const auto& [childName, childPathId] : path->GetChildren()) {
+        if (!context.SS->PathsById.contains(childPathId)) {
+            continue;
+        }
+        auto childPath = context.SS->PathsById.at(childPathId);
+        if (!childPath->IsTableIndex() || childPath->Dropped()) {
+            continue;
+        }
+        if (skipPlannedToDrop && childPath->PlannedToDrop()) {
+            continue;
+        }
+        if (!context.SS->Indexes.contains(childPathId)) {
+            continue;
+        }
+        auto index = context.SS->Indexes.at(childPathId);
+        if (index->AlterVersion < targetVersion) {
+            index->AlterVersion = targetVersion;
+            // If there's ongoing alter operation, also update alterData version to converge
+            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
+                index->AlterData->AlterVersion = targetVersion;
+                context.SS->PersistTableIndexAlterData(db, childPathId);
+            }
+            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+            context.SS->ClearDescribePathCaches(childPath);
+            context.OnComplete.PublishToSchemeBoard(operationId, childPathId);
+            publishedIndexes.push_back(childPathId);
+        }
+    }
+
+    return publishedIndexes;
+}
+
+}  // NKikimr::NSchemeShard::NTableIndexVersion

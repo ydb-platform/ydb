@@ -978,7 +978,7 @@ TEST_P(TFairShareSchedulerTest, TwoLevelFairness)
         "MyFairSharePool",
         {
             /*poolWeightProvider*/ nullptr,
-            /*verboseLogging*/ true
+            /*verboseLogging*/ true,
         });
 
     std::vector<TDuration> progresses(numWorkers);

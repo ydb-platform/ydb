@@ -55,7 +55,7 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> TableType;
     NNodes::TMaybeNode<NNodes::TCallable> PgFilter;
 
-    TWriteTableSettings(const NNodes::TCoNameValueTupleList& other)
+    explicit TWriteTableSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
     {
     }
@@ -69,7 +69,7 @@ struct TWriteSequenceSettings {
 
     NNodes::TCoNameValueTupleList Other;
 
-    TWriteSequenceSettings(const NNodes::TCoNameValueTupleList& other)
+    explicit TWriteSequenceSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
     {
     }
@@ -84,7 +84,7 @@ struct TWriteTopicSettings {
     NNodes::TMaybeNode<NNodes::TCoAtomList> DropConsumers;
     NNodes::TCoNameValueTupleList Other;
 
-    TWriteTopicSettings(const NNodes::TCoNameValueTupleList& other)
+    explicit TWriteTopicSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
     {
     }
@@ -96,7 +96,7 @@ struct TWriteReplicationSettings {
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> ReplicationSettings;
     NNodes::TCoNameValueTupleList Other;
 
-    TWriteReplicationSettings(const NNodes::TCoNameValueTupleList& other)
+    explicit TWriteReplicationSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
     {
     }
@@ -110,7 +110,7 @@ struct TWriteTransferSettings {
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TransferSettings;
     NNodes::TCoNameValueTupleList Other;
 
-    TWriteTransferSettings(const NNodes::TCoNameValueTupleList& other)
+    explicit TWriteTransferSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
     {
     }
@@ -120,7 +120,7 @@ struct TDatabaseSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TCoNameValueTupleList Other;
 
-    TDatabaseSettings(const NNodes::TCoNameValueTupleList& other)
+    explicit TDatabaseSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
     {
     }
@@ -132,7 +132,7 @@ struct TWriteRoleSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> NewName;
     NNodes::TCoNameValueTupleList Other;
 
-    TWriteRoleSettings(const NNodes::TCoNameValueTupleList& other)
+    explicit TWriteRoleSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
     {
     }
@@ -169,7 +169,7 @@ struct TCommitSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Epoch;
     NNodes::TCoNameValueTupleList Other;
 
-    TCommitSettings(NNodes::TCoNameValueTupleList other)
+    explicit TCommitSettings(NNodes::TCoNameValueTupleList other)
         : Other(other)
     {
     }

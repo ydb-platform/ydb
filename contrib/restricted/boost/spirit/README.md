@@ -1,3 +1,20 @@
+# This repository is no longer actively maintained. [Spirit.X4](https://github.com/boostorg/spirit_x4) is the successor and is currently under development.
+
+All components predating X4 currently lack an active maintainer. They are feature-frozen and will accept security patches only. 
+
+If you wish to maintain a legacy version, please contact the [Boost developers' mailing list](https://lists.boost.org/).
+
+For background information, see:
+
+- <https://lists.boost.org/archives/list/boost@lists.boost.org/thread/K3EQLEQJHEUBROB6ODUKTZHFP2FDUS2E/?sort=date>
+- <https://github.com/boostorg/spirit/issues/795>
+- <https://github.com/boostorg/spirit/pull/807>
+
+
+
+
+
+
 Spirit
 ======
 

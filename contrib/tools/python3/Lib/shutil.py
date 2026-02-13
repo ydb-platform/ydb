@@ -10,7 +10,6 @@ import stat
 import fnmatch
 import collections
 import errno
-import warnings
 
 try:
     import zlib
@@ -48,7 +47,8 @@ else:
 COPY_BUFSIZE = 1024 * 1024 if _WINDOWS else 64 * 1024
 # This should never be removed, see rationale in:
 # https://bugs.python.org/issue43743#msg393429
-_USE_CP_SENDFILE = hasattr(os, "sendfile") and sys.platform.startswith("linux")
+_USE_CP_SENDFILE = (hasattr(os, "sendfile")
+                    and sys.platform.startswith(("linux", "android")))
 _HAS_FCOPYFILE = posix and hasattr(posix, "_fcopyfile")  # macOS
 
 # CMD defaults in Windows 10
@@ -302,16 +302,17 @@ def copymode(src, dst, *, follow_symlinks=True):
     sys.audit("shutil.copymode", src, dst)
 
     if not follow_symlinks and _islink(src) and os.path.islink(dst):
-        if os.name == 'nt':
-            stat_func, chmod_func = os.lstat, os.chmod
-        elif hasattr(os, 'lchmod'):
+        if hasattr(os, 'lchmod'):
             stat_func, chmod_func = os.lstat, os.lchmod
         else:
             return
     else:
+        stat_func = _stat
         if os.name == 'nt' and os.path.islink(dst):
-            dst = os.path.realpath(dst, strict=True)
-        stat_func, chmod_func = _stat, os.chmod
+            def chmod_func(*args):
+                os.chmod(*args, follow_symlinks=True)
+        else:
+            chmod_func = os.chmod
 
     st = stat_func(src)
     chmod_func(dst, stat.S_IMODE(st.st_mode))
@@ -386,16 +387,8 @@ def copystat(src, dst, *, follow_symlinks=True):
     # We must copy extended attributes before the file is (potentially)
     # chmod()'ed read-only, otherwise setxattr() will error with -EACCES.
     _copyxattr(src, dst, follow_symlinks=follow)
-    _chmod = lookup("chmod")
-    if os.name == 'nt':
-        if follow:
-            if os.path.islink(dst):
-                dst = os.path.realpath(dst, strict=True)
-        else:
-            def _chmod(*args, **kwargs):
-                os.chmod(*args)
     try:
-        _chmod(dst, mode, follow_symlinks=follow)
+        lookup("chmod")(dst, mode, follow_symlinks=follow)
     except NotImplementedError:
         # if we got a NotImplementedError, it's because
         #   * follow_symlinks=False,
@@ -603,38 +596,41 @@ def copytree(src, dst, symlinks=False, ignore=None, copy_function=copy2,
                      dirs_exist_ok=dirs_exist_ok)
 
 if hasattr(os.stat_result, 'st_file_attributes'):
-    def _rmtree_islink(path):
-        try:
-            st = os.lstat(path)
-            return (stat.S_ISLNK(st.st_mode) or
-                (st.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
-                 and st.st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT))
-        except OSError:
-            return False
+    def _rmtree_islink(st):
+        return (stat.S_ISLNK(st.st_mode) or
+            (st.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
+                and st.st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT))
 else:
-    def _rmtree_islink(path):
-        return os.path.islink(path)
+    def _rmtree_islink(st):
+        return stat.S_ISLNK(st.st_mode)
 
 # version vulnerable to race conditions
 def _rmtree_unsafe(path, onexc):
     def onerror(err):
-        onexc(os.scandir, err.filename, err)
+        if not isinstance(err, FileNotFoundError):
+            onexc(os.scandir, err.filename, err)
     results = os.walk(path, topdown=False, onerror=onerror, followlinks=os._walk_symlinks_as_files)
     for dirpath, dirnames, filenames in results:
         for name in dirnames:
             fullname = os.path.join(dirpath, name)
             try:
                 os.rmdir(fullname)
+            except FileNotFoundError:
+                continue
             except OSError as err:
                 onexc(os.rmdir, fullname, err)
         for name in filenames:
             fullname = os.path.join(dirpath, name)
             try:
                 os.unlink(fullname)
+            except FileNotFoundError:
+                continue
             except OSError as err:
                 onexc(os.unlink, fullname, err)
     try:
         os.rmdir(path)
+    except FileNotFoundError:
+        pass
     except OSError as err:
         onexc(os.rmdir, path, err)
 
@@ -692,12 +688,20 @@ def _rmtree_safe_fd(stack, onexc):
                     # Traverse into sub-directory.
                     stack.append((os.lstat, topfd, fullname, entry))
                     continue
+            except FileNotFoundError:
+                continue
             except OSError:
                 pass
             try:
                 os.unlink(entry.name, dir_fd=topfd)
+            except FileNotFoundError:
+                continue
             except OSError as err:
                 onexc(os.unlink, fullname, err)
+    except FileNotFoundError as err:
+        if orig_entry is None or func is os.close:
+            err.filename = path
+            onexc(func, path, err)
     except OSError as err:
         err.filename = path
         onexc(func, path, err)
@@ -771,7 +775,12 @@ def rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None):
         if dir_fd is not None:
             raise NotImplementedError("dir_fd unavailable on this platform")
         try:
-            if _rmtree_islink(path):
+            st = os.lstat(path)
+        except OSError as err:
+            onexc(os.lstat, path, err)
+            return
+        try:
+            if _rmtree_islink(st):
                 # symlinks to directories are forbidden, see bug #1669
                 raise OSError("Cannot call rmtree on a symbolic link")
         except OSError as err:
@@ -1387,11 +1396,18 @@ elif _WINDOWS:
         return _ntuple_diskusage(total, used, free)
 
 
-def chown(path, user=None, group=None):
+def chown(path, user=None, group=None, *, dir_fd=None, follow_symlinks=True):
     """Change owner user and group of the given path.
 
     user and group can be the uid/gid or the user/group names, and in that case,
     they are converted to their respective uid/gid.
+
+    If dir_fd is set, it should be an open file descriptor to the directory to
+    be used as the root of *path* if it is relative.
+
+    If follow_symlinks is set to False and the last element of the path is a
+    symbolic link, chown will modify the link itself and not the file being
+    referenced by the link.
     """
     sys.audit('shutil.chown', path, user, group)
 
@@ -1417,7 +1433,8 @@ def chown(path, user=None, group=None):
         if _group is None:
             raise LookupError("no such group: {!r}".format(group))
 
-    os.chown(path, _user, _group)
+    os.chown(path, _user, _group, dir_fd=dir_fd,
+             follow_symlinks=follow_symlinks)
 
 def get_terminal_size(fallback=(80, 24)):
     """Get the size of the terminal window.

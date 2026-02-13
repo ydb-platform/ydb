@@ -257,8 +257,20 @@ namespace boost { namespace spirit { namespace karma
             //    generate(sink, right_align(precision, '0')[ulong], n);
             // but it's spelled out to avoid inter-modular dependencies.
 
-            typename remove_const<T>::type digits = 
-                (traits::test_zero(n) ? 1 : ceil(log10(n + T(1.))));
+	    unsigned int digits=1; //should be number of digits n(truncating any fraction)
+	    if(!boost::spirit::traits::test_zero(n)) {
+	      static constexpr uint64_t limit = UINT64_MAX / 10;
+	      const T num = floor(n);
+	      for (uint64_t x = 10u, i = 1u;; x *= 10, i++) {
+		if (num < x) {
+		  digits=i;break;
+		}
+		if (x > limit) {
+		  digits= i + 1;break;
+		}
+	      }
+	    }
+	    
             bool r = true;
             for (/**/; r && digits < precision_; digits = digits + 1)
                 r = char_inserter<>::call(sink, '0');

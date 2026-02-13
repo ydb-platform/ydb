@@ -541,8 +541,14 @@ namespace NTabletPipe {
         void Lookup(const TActorContext& ctx) {
             BLOG_D("lookup");
             TEvTabletResolver::TEvForward::TResolveFlags resolveFlags;
-            resolveFlags.SetAllowFollower(Config.AllowFollower);
-            resolveFlags.SetForceFollower(Config.ForceFollower);
+
+            if (Config.FollowerId) {
+                resolveFlags.SetFollowerId(*Config.FollowerId);
+            } else {
+                resolveFlags.SetAllowFollower(Config.AllowFollower);
+                resolveFlags.SetForceFollower(Config.ForceFollower);
+            }
+
             resolveFlags.SetPreferLocal(Config.PreferLocal);
             resolveFlags.SetForceLocal(Config.ForceLocal);
 

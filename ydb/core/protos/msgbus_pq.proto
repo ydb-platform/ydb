@@ -439,6 +439,7 @@ message TPersQueueFetchResponse {
     }
 
     repeated TPartResult PartResult = 1;
+    optional string TimestampType = 2;
 }
 
 
@@ -471,6 +472,7 @@ message TPersQueuePartitionResponse {
             optional NKikimrPQ.TMessageGroupInfo.EState State = 6;
         }
         repeated TSourceIdInfo SourceIdInfo = 2;
+        optional bool IsPartitionActive = 3;
     }
 
     message TCmdGetClientOffsetResult {

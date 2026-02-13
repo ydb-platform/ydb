@@ -231,6 +231,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CleanupPortionsSkippedByLock;
     NMonitoring::TDynamicCounters::TCounterPtr CleanupPortionsLimitExceeded;
 
+    NMonitoring::THistogramPtr HistogramAddPortionDurationMs;
+
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
@@ -348,6 +350,10 @@ public:
 
     void OnCleanupPortionsLimitExceed() const {
         CleanupPortionsLimitExceeded->Add(1);
+    }
+
+    void OnPortionAdded(const TDuration d) const {
+        HistogramAddPortionDurationMs->Collect(d.MilliSeconds());
     }
 
     TEngineLogsCounters();

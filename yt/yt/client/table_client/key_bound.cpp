@@ -331,7 +331,7 @@ void Deserialize(TOwningKeyBound& keyBound, const NYTree::INodePtr& node)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator ==(const TKeyBound& lhs, const TKeyBound& rhs)
+bool operator==(const TKeyBound& lhs, const TKeyBound& rhs)
 {
     return
         lhs.Prefix == rhs.Prefix &&
@@ -339,7 +339,7 @@ bool operator ==(const TKeyBound& lhs, const TKeyBound& rhs)
         lhs.IsUpper == rhs.IsUpper;
 }
 
-bool operator ==(const TOwningKeyBound& lhs, const TOwningKeyBound& rhs)
+bool operator==(const TOwningKeyBound& lhs, const TOwningKeyBound& rhs)
 {
     return static_cast<TKeyBound>(lhs) == static_cast<TKeyBound>(rhs);
 }

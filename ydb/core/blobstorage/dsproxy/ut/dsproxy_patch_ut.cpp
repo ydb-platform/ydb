@@ -55,11 +55,6 @@ struct TTestArgs {
         case TErasureType::ErasureNone:
             PartPlacement[0].push_back(1);
             break;
-        case TErasureType::ErasureMirror3:
-            PartPlacement[0].push_back(1);
-            PartPlacement[1].push_back(1);
-            PartPlacement[2].push_back(1);
-            break;
         case TErasureType::ErasureMirror3dc:
             PartPlacement[0].push_back(1);
             PartPlacement[3].push_back(2);

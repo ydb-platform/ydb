@@ -30,6 +30,12 @@ struct TSchemeShard::TTxUnmarkRestoreTables : public TTransactionBase<TSchemeSha
                 table->IsRestore = false;
                 Self->PersistTableIsRestore(db, tableId, table);        
             }
+            
+            if (Self->ColumnTables.contains(tableId)) {
+                auto table = Self->ColumnTables.at(tableId).GetPtr();
+                table->IsRestore = false;
+                Self->PersistTableIsRestore(db, tableId, table);        
+            }
 
             ++UnmarkedCount;
             RestoreTablesToUnmark.pop_back();

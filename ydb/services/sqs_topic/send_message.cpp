@@ -143,6 +143,16 @@ namespace NKikimr::NSqsTopic::V1 {
                         TDerived::Method)
                 });
 
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(Request().ByteSizeLong()), true, true,
+                    GetRequestSizeMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method)
+                });
+
             auto userToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken());
             NPQ::NMLP::TWriterSettings writerSettings{
                 .DatabasePath = QueueUrl_->Database,

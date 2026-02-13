@@ -70,8 +70,8 @@ void TPQSchemaService::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPQSchemaService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev) {
-    Y_ABORT_UNLESS(ev->Get()->ClustersList);
-    Y_ABORT_UNLESS(ev->Get()->ClustersList->Clusters.size());
+    AFL_ENSURE(ev->Get()->ClustersList);
+    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size());
 
     const auto& clusters = ev->Get()->ClustersList->Clusters;
 

@@ -49,7 +49,7 @@ public:
 
     THazardPtr() = default;
     THazardPtr(const THazardPtr&) = delete;
-    THazardPtr(THazardPtr&& other);
+    THazardPtr(THazardPtr&& other) noexcept;
 
     THazardPtr& operator=(const THazardPtr&) = delete;
     THazardPtr& operator=(THazardPtr&& other);

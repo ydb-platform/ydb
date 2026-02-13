@@ -159,6 +159,8 @@ void MultiTxStatsFull(
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
     app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+    app.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
+    app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
     TKikimrRunner kikimr(app);
     auto it = getResult(kikimr, ECollectQueryStatsMode::Full, R"(
         SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
@@ -668,6 +670,8 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
     auto session = db.CreateSession().GetValueSync().GetSession();
 
     auto firstNodeId = kikimr.GetTestServer().GetRuntime()->GetFirstNodeId();
+    Cerr << "OneShardNonLocalExec: firstNodeId=" << firstNodeId
+         << " nodeCount=" << kikimr.GetTestServer().GetRuntime()->GetNodeCount() << Endl;
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
@@ -675,6 +679,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
     auto expectedNonLocalSingleNodeReqCount = counters.NonLocalSingleNodeReqCount->Val();
 
     auto drainNode = [runtime = kikimr.GetTestServer().GetRuntime()](size_t nodeId, bool undrain = false) {
+        Cerr << "drainNode: nodeId=" << nodeId << " undrain=" << undrain << Endl;
         auto sender = runtime->AllocateEdgeActor();
         IEventBase* ev = nullptr;
         if (undrain) {
@@ -683,9 +688,20 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             ev = new TEvHive::TEvDrainNode(nodeId);
         }
         runtime->SendToPipe(72057594037968897, sender, ev, 0, GetPipeConfigWithRetries());
+        if (undrain) {
+            TAutoPtr<IEventHandle> handle;
+            runtime->GrabEdgeEventRethrow<TEvHive::TEvSetDownReply>(handle, TDuration::Seconds(30));
+            Cerr << "drainNode: undrain completed" << Endl;
+        } else {
+            TAutoPtr<IEventHandle> handle;
+            auto drainResponse = runtime->GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+            Cerr << "drainNode: completed, status=" << (drainResponse ? static_cast<int>(drainResponse->Record.GetStatus()) : -1)
+                 << " movements=" << (drainResponse ? drainResponse->Record.GetMovements() : -1) << Endl;
+        }
     };
 
     auto waitTablets = [&session](size_t nodeId) mutable {
+        Cerr << "waitTablets: waiting for all tablets on nodeId=" << nodeId << Endl;
         TDescribeTableSettings describeTableSettings =
             TDescribeTableSettings()
                 .WithTableStatistics(true)
@@ -705,6 +721,12 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             for (const auto& s : res.GetTableDescription().GetPartitionStats()) {
                 nodeIds.emplace(s.LeaderNodeId);
             }
+            Cerr << "waitTablets: attempt " << i << ", tablet leader nodes: {";
+            for (auto it = nodeIds.begin(); it != nodeIds.end(); ++it) {
+                if (it != nodeIds.begin()) Cerr << ", ";
+                Cerr << *it;
+            }
+            Cerr << "}, expecting nodeId=" << nodeId << Endl;
             if (nodeIds.size() == 1 && *nodeIds.begin() == nodeId) {
                 done = true;
                 break;

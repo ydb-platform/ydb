@@ -40,7 +40,12 @@ namespace {
             switch (child.Type) {
                 case ESchemeEntryType::SubDomain:
                 case ESchemeEntryType::ColumnStore:
-                case ESchemeEntryType::Directory: {
+                case ESchemeEntryType::Directory:
+                case ESchemeEntryType::BackupCollection: {
+                    if (settings.SkipOldSecrets_ && path.EndsWith(METADATA_DIR_NAME) && child.Name == OLD_SECRETS_DIR_NAME) {
+                        break;
+                    }
+
                     auto status = RecursiveList(dst, client, Join('/', path, child.Name), settings);
                     if (!status.IsSuccess()) {
                         return status;

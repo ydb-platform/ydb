@@ -55,7 +55,6 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableNotNullDataColumns, std::nullopt);
         OPTION(std::optional<bool>, EnableAlterDatabaseCreateHiveFirst, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicDiskSubDomainQuota, std::nullopt);
-        OPTION(std::optional<bool>, EnablePQConfigTransactionsAtSchemeShard, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicSplitMerge, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDynamoDBStreamsFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDebeziumJsonFormat, std::nullopt);
@@ -86,6 +85,9 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableAlterDatabase, false);
         OPTION(std::optional<bool>, EnableAccessToIndexImplTables, std::nullopt);
         OPTION(std::optional<bool>, EnableIndexMaterialization, std::nullopt);
+        OPTION(bool, EnableConditionalEraseResponseBatching, false);
+        OPTION(std::optional<ui32>, CondEraseResponseBatchSize, std::nullopt);
+        OPTION(std::optional<ui32>, CondEraseResponseBatchMaxTimeMs, std::nullopt);
 
         #undef OPTION
     };
@@ -223,6 +225,7 @@ namespace NSchemeShardUT_Private {
         void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone);
         void EnableTabletResolverScheduling(ui32 nodeIdx = 0);
         void Finalize();
+
     private:
         virtual TTestEnv* CreateTestEnv();
         // Make sure that user requests are not dropped

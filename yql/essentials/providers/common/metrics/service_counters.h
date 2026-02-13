@@ -23,7 +23,7 @@ struct TServiceCounters {
         const ::NMonitoring::TDynamicCounterPtr& baseCounters,
         const TString& subsystemName = "");
 
-    explicit TServiceCounters(
+    TServiceCounters(
         const TServiceCounters& serviceCounters,
         const TString& subsystemName = "");
 

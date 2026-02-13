@@ -1,0 +1,13 @@
+PY23_TEST()
+
+ALL_PYTEST_SRCS(RECURSIVE)
+
+PEERDIR(
+    library/python/pytest
+)
+
+CONFTEST_LOAD_POLICY_LOCAL()
+
+STYLE_PYTHON()
+
+END()

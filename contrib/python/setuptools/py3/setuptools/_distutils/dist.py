@@ -13,9 +13,18 @@ import pathlib
 import re
 import sys
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, MutableMapping
 from email import message_from_file
-from typing import TYPE_CHECKING, Literal, TypeVar, overload
+from typing import (
+    IO,
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Literal,
+    TypeVar,
+    Union,
+    overload,
+)
 
 from packaging.utils import canonicalize_name, canonicalize_version
 
@@ -31,10 +40,17 @@ from .fancy_getopt import FancyGetopt, translate_longopt
 from .util import check_environ, rfc822_escape, strtobool
 
 if TYPE_CHECKING:
+    from _typeshed import SupportsWrite
+    from typing_extensions import TypeAlias
+
     # type-only import because of mutual dependence between these modules
     from .cmd import Command
 
 _CommandT = TypeVar("_CommandT", bound="Command")
+_OptionsList: TypeAlias = list[
+    Union[tuple[str, Union[str, None], str, int], tuple[str, Union[str, None], str]]
+]
+
 
 # Regex to define acceptable Distutils command names.  This is not *quite*
 # the same as a Python NAME -- I don't allow leading underscores.  The fact
@@ -43,7 +59,7 @@ _CommandT = TypeVar("_CommandT", bound="Command")
 command_re = re.compile(r'^[a-zA-Z]([a-zA-Z0-9_]*)$')
 
 
-def _ensure_list(value, fieldname):
+def _ensure_list(value: str | Iterable[str], fieldname) -> str | list[str]:
     if isinstance(value, str):
         # a string containing comma separated values is okay.  It will
         # be converted to a list by Distribution.finalize_options().
@@ -80,7 +96,7 @@ class Distribution:
     # don't want to pollute the commands with too many options that they
     # have minimal control over.
     # The fourth entry for verbose means that it can be repeated.
-    global_options = [
+    global_options: ClassVar[_OptionsList] = [
         ('verbose', 'v', "run verbosely (default)", 1),
         ('quiet', 'q', "run quietly (turns verbosity off)"),
         ('dry-run', 'n', "don't actually do anything"),
@@ -90,7 +106,7 @@ class Distribution:
 
     # 'common_usage' is a short (2-3 line) string describing the common
     # usage of the setup script.
-    common_usage = """\
+    common_usage: ClassVar[str] = """\
 Common commands: (see '--help-commands' for more)
 
   setup.py build      will build the package underneath 'build/'
@@ -98,7 +114,7 @@ Common commands: (see '--help-commands' for more)
 """
 
     # options that are not propagated to the commands
-    display_options = [
+    display_options: ClassVar[_OptionsList] = [
         ('help-commands', None, "list all available commands"),
         ('name', None, "print package name"),
         ('version', 'V', "print package version"),
@@ -125,14 +141,17 @@ Common commands: (see '--help-commands' for more)
         ('requires', None, "print the list of packages/modules required"),
         ('obsoletes', None, "print the list of packages/modules made obsolete"),
     ]
-    display_option_names = [translate_longopt(x[0]) for x in display_options]
+    display_option_names: ClassVar[list[str]] = [
+        translate_longopt(x[0]) for x in display_options
+    ]
 
     # negative options are options that exclude other options
-    negative_opt = {'quiet': 'verbose'}
+    negative_opt: ClassVar[dict[str, str]] = {'quiet': 'verbose'}
 
     # -- Creation/initialization methods -------------------------------
 
-    def __init__(self, attrs=None):  # noqa: C901
+    # Can't Unpack a TypedDict with optional properties, so using Any instead
+    def __init__(self, attrs: MutableMapping[str, Any] | None = None) -> None:  # noqa: C901
         """Construct a new Distribution instance: initialize all the
         attributes of a Distribution, and then use 'attrs' (a dictionary
         mapping attribute names to values) to assign some of those
@@ -164,7 +183,7 @@ Common commands: (see '--help-commands' for more)
         # can 1) quickly figure out which class to instantiate when
         # we need to create a new command object, and 2) have a way
         # for the setup script to override command classes
-        self.cmdclass = {}
+        self.cmdclass: dict[str, type[Command]] = {}
 
         # 'command_packages' is a list of packages in which commands
         # are searched for.  The factory for command 'foo' is expected
@@ -172,12 +191,12 @@ Common commands: (see '--help-commands' for more)
         # named here.  This list is searched from the left; an error
         # is raised if no named package provides the command being
         # searched for.  (Always access using get_command_packages().)
-        self.command_packages = None
+        self.command_packages: str | list[str] | None = None
 
         # 'script_name' and 'script_args' are usually set to sys.argv[0]
         # and sys.argv[1:], but they can be overridden when the caller is
         # not necessarily a setup script run from the command-line.
-        self.script_name = None
+        self.script_name: str | os.PathLike[str] | None = None
         self.script_args: list[str] | None = None
 
         # 'command_options' is where we store command options between
@@ -185,7 +204,7 @@ Common commands: (see '--help-commands' for more)
         # they are actually needed -- ie. when the command in question is
         # instantiated.  It is a dictionary of dictionaries of 2-tuples:
         #   command_options = { command_name : { option : (source, value) } }
-        self.command_options = {}
+        self.command_options: dict[str, dict[str, tuple[str, str]]] = {}
 
         # 'dist_files' is the list of (command, pyversion, file) that
         # have been created by any dist commands run so far. This is
@@ -196,13 +215,13 @@ Common commands: (see '--help-commands' for more)
         # file. pyversion should not be used to specify minimum or
         # maximum required Python versions; use the metainfo for that
         # instead.
-        self.dist_files = []
+        self.dist_files: list[tuple[str, str, str]] = []
 
         # These options are really the business of various commands, rather
         # than of the Distribution itself.  We provide aliases for them in
         # Distribution as a convenience to the developer.
         self.packages = None
-        self.package_data = {}
+        self.package_data: dict[str, list[str]] = {}
         self.package_dir = None
         self.py_modules = None
         self.libraries = None
@@ -219,7 +238,7 @@ Common commands: (see '--help-commands' for more)
         # the caller at all.  'command_obj' maps command names to
         # Command instances -- that's how we enforce that every command
         # class is a singleton.
-        self.command_obj = {}
+        self.command_obj: dict[str, Command] = {}
 
         # 'have_run' maps command names to boolean values; it keeps track
         # of whether we have actually run a particular command, to make it
@@ -231,7 +250,7 @@ Common commands: (see '--help-commands' for more)
         # command object is created, and replaced with a true value when
         # the command is successfully run.  Thus it's probably best to use
         # '.get()' rather than a straight lookup.
-        self.have_run = {}
+        self.have_run: dict[str, bool] = {}
 
         # Now we'll use the attrs dictionary (ultimately, keyword args from
         # the setup script) to possibly override any or all of these
@@ -300,7 +319,7 @@ Common commands: (see '--help-commands' for more)
             dict = self.command_options[command] = {}
         return dict
 
-    def dump_option_dicts(self, header=None, commands=None, indent=""):
+    def dump_option_dicts(self, header=None, commands=None, indent: str = "") -> None:
         from pprint import pformat
 
         if commands is None:  # dump all command option dicts
@@ -615,7 +634,7 @@ Common commands: (see '--help-commands' for more)
 
         return args
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         """Set final values for all the options on the Distribution
         instance, analogous to the .finalize_options() method of Command
         objects.
@@ -718,7 +737,7 @@ Common commands: (see '--help-commands' for more)
 
         return any_display_options
 
-    def print_command_list(self, commands, header, max_length):
+    def print_command_list(self, commands, header, max_length) -> None:
         """Print a subset of the list of all commands -- used by
         'print_commands()'.
         """
@@ -735,7 +754,7 @@ Common commands: (see '--help-commands' for more)
 
             print(f"  {cmd:<{max_length}}  {description}")
 
-    def print_commands(self):
+    def print_commands(self) -> None:
         """Print out a help message listing all available commands with a
         description of each.  The list is divided into "standard commands"
         (listed in distutils.command.__all__) and "extra commands"
@@ -802,7 +821,7 @@ Common commands: (see '--help-commands' for more)
             self.command_packages = pkgs
         return pkgs
 
-    def get_command_class(self, command):
+    def get_command_class(self, command: str) -> type[Command]:
         """Return the class that implements the Distutils command named by
         'command'.  First we check the 'cmdclass' dictionary; if the
         command is mentioned there, we fetch the class object from the
@@ -971,10 +990,10 @@ Common commands: (see '--help-commands' for more)
 
     # -- Methods that operate on the Distribution ----------------------
 
-    def announce(self, msg, level=logging.INFO):
+    def announce(self, msg, level: int = logging.INFO) -> None:
         log.log(level, msg)
 
-    def run_commands(self):
+    def run_commands(self) -> None:
         """Run each command that was seen on the setup script command line.
         Uses the list of commands found and cache of command objects
         created by 'get_command_obj()'.
@@ -984,7 +1003,7 @@ Common commands: (see '--help-commands' for more)
 
     # -- Methods that operate on its Commands --------------------------
 
-    def run_command(self, command):
+    def run_command(self, command: str) -> None:
         """Do whatever it takes to run a command (including nothing at all,
         if the command has already been run).  Specifically: if we have
         already created and run the command named by 'command', return
@@ -1004,28 +1023,28 @@ Common commands: (see '--help-commands' for more)
 
     # -- Distribution query methods ------------------------------------
 
-    def has_pure_modules(self):
+    def has_pure_modules(self) -> bool:
         return len(self.packages or self.py_modules or []) > 0
 
-    def has_ext_modules(self):
+    def has_ext_modules(self) -> bool:
         return self.ext_modules and len(self.ext_modules) > 0
 
-    def has_c_libraries(self):
+    def has_c_libraries(self) -> bool:
         return self.libraries and len(self.libraries) > 0
 
-    def has_modules(self):
+    def has_modules(self) -> bool:
         return self.has_pure_modules() or self.has_ext_modules()
 
-    def has_headers(self):
+    def has_headers(self) -> bool:
         return self.headers and len(self.headers) > 0
 
-    def has_scripts(self):
+    def has_scripts(self) -> bool:
         return self.scripts and len(self.scripts) > 0
 
-    def has_data_files(self):
+    def has_data_files(self) -> bool:
         return self.data_files and len(self.data_files) > 0
 
-    def is_pure(self):
+    def is_pure(self) -> bool:
         return (
             self.has_pure_modules()
             and not self.has_ext_modules()
@@ -1038,6 +1057,53 @@ Common commands: (see '--help-commands' for more)
     # they are defined in a sneaky way: the constructor binds self.get_XXX
     # to self.metadata.get_XXX.  The actual code is in the
     # DistributionMetadata class, below.
+    if TYPE_CHECKING:
+        # Unfortunately this means we need to specify them manually or not expose statically
+        def _(self) -> None:
+            self.get_name = self.metadata.get_name
+            self.get_version = self.metadata.get_version
+            self.get_fullname = self.metadata.get_fullname
+            self.get_author = self.metadata.get_author
+            self.get_author_email = self.metadata.get_author_email
+            self.get_maintainer = self.metadata.get_maintainer
+            self.get_maintainer_email = self.metadata.get_maintainer_email
+            self.get_contact = self.metadata.get_contact
+            self.get_contact_email = self.metadata.get_contact_email
+            self.get_url = self.metadata.get_url
+            self.get_license = self.metadata.get_license
+            self.get_licence = self.metadata.get_licence
+            self.get_description = self.metadata.get_description
+            self.get_long_description = self.metadata.get_long_description
+            self.get_keywords = self.metadata.get_keywords
+            self.get_platforms = self.metadata.get_platforms
+            self.get_classifiers = self.metadata.get_classifiers
+            self.get_download_url = self.metadata.get_download_url
+            self.get_requires = self.metadata.get_requires
+            self.get_provides = self.metadata.get_provides
+            self.get_obsoletes = self.metadata.get_obsoletes
+
+        # Default attributes generated in __init__ from self.display_option_names
+        help_commands: bool
+        name: str | Literal[False]
+        version: str | Literal[False]
+        fullname: str | Literal[False]
+        author: str | Literal[False]
+        author_email: str | Literal[False]
+        maintainer: str | Literal[False]
+        maintainer_email: str | Literal[False]
+        contact: str | Literal[False]
+        contact_email: str | Literal[False]
+        url: str | Literal[False]
+        license: str | Literal[False]
+        licence: str | Literal[False]
+        description: str | Literal[False]
+        long_description: str | Literal[False]
+        platforms: str | list[str] | Literal[False]
+        classifiers: str | list[str] | Literal[False]
+        keywords: str | list[str] | Literal[False]
+        provides: list[str] | Literal[False]
+        requires: list[str] | Literal[False]
+        obsoletes: list[str] | Literal[False]
 
 
 class DistributionMetadata:
@@ -1069,37 +1135,40 @@ class DistributionMetadata:
         "obsoletes",
     )
 
-    def __init__(self, path=None):
+    def __init__(
+        self, path: str | bytes | os.PathLike[str] | os.PathLike[bytes] | None = None
+    ) -> None:
         if path is not None:
             self.read_pkg_file(open(path))
         else:
-            self.name = None
-            self.version = None
-            self.author = None
-            self.author_email = None
-            self.maintainer = None
-            self.maintainer_email = None
-            self.url = None
-            self.license = None
-            self.description = None
-            self.long_description = None
-            self.keywords = None
-            self.platforms = None
-            self.classifiers = None
-            self.download_url = None
+            self.name: str | None = None
+            self.version: str | None = None
+            self.author: str | None = None
+            self.author_email: str | None = None
+            self.maintainer: str | None = None
+            self.maintainer_email: str | None = None
+            self.url: str | None = None
+            self.license: str | None = None
+            self.description: str | None = None
+            self.long_description: str | None = None
+            self.keywords: str | list[str] | None = None
+            self.platforms: str | list[str] | None = None
+            self.classifiers: str | list[str] | None = None
+            self.download_url: str | None = None
             # PEP 314
-            self.provides = None
-            self.requires = None
-            self.obsoletes = None
+            self.provides: str | list[str] | None = None
+            self.requires: str | list[str] | None = None
+            self.obsoletes: str | list[str] | None = None
 
-    def read_pkg_file(self, file):
+    def read_pkg_file(self, file: IO[str]) -> None:
         """Reads the metadata values from a file object."""
         msg = message_from_file(file)
 
-        def _read_field(name):
+        def _read_field(name: str) -> str | None:
             value = msg[name]
             if value and value != "UNKNOWN":
                 return value
+            return None
 
         def _read_list(name):
             values = msg.get_all(name, None)
@@ -1143,14 +1212,14 @@ class DistributionMetadata:
             self.provides = None
             self.obsoletes = None
 
-    def write_pkg_info(self, base_dir):
+    def write_pkg_info(self, base_dir: str | os.PathLike[str]) -> None:
         """Write the PKG-INFO file into the release tree."""
         with open(
             os.path.join(base_dir, 'PKG-INFO'), 'w', encoding='UTF-8'
         ) as pkg_info:
             self.write_pkg_file(pkg_info)
 
-    def write_pkg_file(self, file):
+    def write_pkg_file(self, file: SupportsWrite[str]) -> None:
         """Write the PKG-INFO format data to a file object."""
         version = '1.0'
         if (
@@ -1196,13 +1265,13 @@ class DistributionMetadata:
 
     # -- Metadata query methods ----------------------------------------
 
-    def get_name(self):
+    def get_name(self) -> str:
         return self.name or "UNKNOWN"
 
-    def get_version(self):
+    def get_version(self) -> str:
         return self.version or "0.0.0"
 
-    def get_fullname(self):
+    def get_fullname(self) -> str:
         return self._fullname(self.get_name(), self.get_version())
 
     @staticmethod
@@ -1224,74 +1293,74 @@ class DistributionMetadata:
             canonicalize_version(version, strip_trailing_zero=False),
         )
 
-    def get_author(self):
+    def get_author(self) -> str | None:
         return self.author
 
-    def get_author_email(self):
+    def get_author_email(self) -> str | None:
         return self.author_email
 
-    def get_maintainer(self):
+    def get_maintainer(self) -> str | None:
         return self.maintainer
 
-    def get_maintainer_email(self):
+    def get_maintainer_email(self) -> str | None:
         return self.maintainer_email
 
-    def get_contact(self):
+    def get_contact(self) -> str | None:
         return self.maintainer or self.author
 
-    def get_contact_email(self):
+    def get_contact_email(self) -> str | None:
         return self.maintainer_email or self.author_email
 
-    def get_url(self):
+    def get_url(self) -> str | None:
         return self.url
 
-    def get_license(self):
+    def get_license(self) -> str | None:
         return self.license
 
     get_licence = get_license
 
-    def get_description(self):
+    def get_description(self) -> str | None:
         return self.description
 
-    def get_long_description(self):
+    def get_long_description(self) -> str | None:
         return self.long_description
 
-    def get_keywords(self):
+    def get_keywords(self) -> str | list[str]:
         return self.keywords or []
 
-    def set_keywords(self, value):
+    def set_keywords(self, value: str | Iterable[str]) -> None:
         self.keywords = _ensure_list(value, 'keywords')
 
-    def get_platforms(self):
+    def get_platforms(self) -> str | list[str] | None:
         return self.platforms
 
-    def set_platforms(self, value):
+    def set_platforms(self, value: str | Iterable[str]) -> None:
         self.platforms = _ensure_list(value, 'platforms')
 
-    def get_classifiers(self):
+    def get_classifiers(self) -> str | list[str]:
         return self.classifiers or []
 
-    def set_classifiers(self, value):
+    def set_classifiers(self, value: str | Iterable[str]) -> None:
         self.classifiers = _ensure_list(value, 'classifiers')
 
-    def get_download_url(self):
+    def get_download_url(self) -> str | None:
         return self.download_url
 
     # PEP 314
-    def get_requires(self):
+    def get_requires(self) -> str | list[str]:
         return self.requires or []
 
-    def set_requires(self, value):
+    def set_requires(self, value: Iterable[str]) -> None:
         import distutils.versionpredicate
 
         for v in value:
             distutils.versionpredicate.VersionPredicate(v)
         self.requires = list(value)
 
-    def get_provides(self):
+    def get_provides(self) -> str | list[str]:
         return self.provides or []
 
-    def set_provides(self, value):
+    def set_provides(self, value: Iterable[str]) -> None:
         value = [v.strip() for v in value]
         for v in value:
             import distutils.versionpredicate
@@ -1299,10 +1368,10 @@ class DistributionMetadata:
             distutils.versionpredicate.split_provision(v)
         self.provides = value
 
-    def get_obsoletes(self):
+    def get_obsoletes(self) -> str | list[str]:
         return self.obsoletes or []
 
-    def set_obsoletes(self, value):
+    def set_obsoletes(self, value: Iterable[str]) -> None:
         import distutils.versionpredicate
 
         for v in value:

@@ -86,7 +86,7 @@ private:
 };
 
 template <class TValue>
-bool operator ==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs);
+bool operator==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

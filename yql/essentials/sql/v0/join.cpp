@@ -37,7 +37,7 @@ struct TJoinDescr {
 
     TVector<std::pair<TFullColumn, TFullColumn>> Keys;
 
-    TJoinDescr(const TString& op)
+    explicit TJoinDescr(const TString& op)
         : Op(op)
     {}
 };

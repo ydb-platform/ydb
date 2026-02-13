@@ -19,7 +19,7 @@ static TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
 {
     TFunctionTypeInfoBuilder typeInfoBuilder(NYql::UnknownLangVersion, env,
                                              new TTypeInfoHelper(),
-                                             "", nullptr, {});
+                                             "", nullptr, NYql::NUdf::TSourcePosition());
 
     // Obtain the callable type of the particular UDF.
     TFunctionTypeInfo funcInfo;

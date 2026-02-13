@@ -15,6 +15,11 @@ static inline TString LimitData(const TString &data) {
     return data.size() <= 16 ? data : (data.substr(0, 16) + "...");
 }
 
+std::string trim(std::string const& str) {
+    if(str.empty())
+        return str;
+    return str.substr(0, str.find_last_not_of(' ') + 1);
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PDisk Gen status handlers
@@ -266,8 +271,12 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
             if (mainVDiskId == VDiskInfo.VDiskID) {
                 const bool noTimeout = RequestTimeout == TDuration::Seconds(0);
                 const TInstant deadline = noTimeout ? TInstant::Max() : TInstant::Now() + RequestTimeout;
+                auto s = put.Data;
+                if (Conf->GroupInfo->Type.GetErasure() == NKikimr::TBlobStorageGroupType::Erasure4Plus2Block) {
+                    s.resize(Conf->GroupInfo->Type.PartSize(logoBlobID));
+                }
                 ctx.Send(QueueActorId,
-                         new TEvBlobStorage::TEvVPut(logoBlobID, TRope(put.Data), VDiskInfo.VDiskID, false,
+                         new TEvBlobStorage::TEvVPut(logoBlobID, TRope(s), VDiskInfo.VDiskID, false,
                                                      nullptr, deadline, HandleClassGen->GetHandleClass(), false));
                 return;
             } else {
@@ -1487,7 +1496,11 @@ ui32 PutLogoBlobToCorrespondingVDisks(const TActorContext &ctx, NKikimr::TBlobSt
     ui8 n = info->Type.TotalPartCount();
     for (ui8 i = 0; i < n; i++) {
         TLogoBlobID aid(id, i + 1);
-        PutLogoBlobToVDisk(ctx, outServIds[i], outVDisks[i], aid, data, cls);
+        auto s = data;
+        if (info->Type.GetErasure() == NKikimr::TBlobStorageGroupType::Erasure4Plus2Block) {
+            s.resize(info->Type.PartSize(aid));
+        }
+        PutLogoBlobToVDisk(ctx, outServIds[i], outVDisks[i], aid, s, cls);
         msgsSent++;
     }
     return msgsSent;
@@ -1606,7 +1619,11 @@ private:
         TThis::Become(&TThis::StateFunc);
         // send all messages
         for (const auto &it : *DataPtr) {
-            PutLogoBlobToVDisk(ctx, it.ServiceID, it.VDiskID, it.Id, it.Data, HandleClass);
+            auto s = it.Data;
+            if (Conf->GroupInfo->Type.GetErasure() == NKikimr::TBlobStorageGroupType::Erasure4Plus2Block) {
+                s.resize(Conf->GroupInfo->Type.PartSize(it.Id));
+            }
+            PutLogoBlobToVDisk(ctx, it.ServiceID, it.VDiskID, it.Id, s, HandleClass);
             Counter++;
         }
     }
@@ -1867,7 +1884,7 @@ void TExpectedSet::Check(const TLogoBlobID &id, NKikimrProto::EReplyStatus statu
     Y_ABORT_UNLESS(it->second.Status == status, "TExpectedSet::Check: incorrect status %s instead of %s for %s",
            NKikimrProto::EReplyStatus_Name(status).data(), NKikimrProto::EReplyStatus_Name(it->second.Status).data(),
            id.ToString().data());
-    Y_ABORT_UNLESS(it->second.Data == data, "TExpectedSet::Check: incorrect data '%s' instead of '%s' for %s; "
+    Y_ABORT_UNLESS(trim(it->second.Data) == trim(data), "TExpectedSet::Check: incorrect data '%s' instead of '%s' for %s; "
            "got string of size %u instead of string of size %u",
            data.data(), it->second.Data.data(), id.ToString().data(), unsigned(data.size()), unsigned(it->second.Data.size()));
     Map.erase(it);

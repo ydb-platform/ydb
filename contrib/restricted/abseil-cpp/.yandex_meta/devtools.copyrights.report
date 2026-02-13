@@ -56,7 +56,6 @@ BELONGS ya.make
         absl/base/internal/errno_saver.h [1:1]
         absl/base/internal/exception_safety_testing.h [1:1]
         absl/base/internal/exception_testing.h [1:1]
-        absl/base/internal/identity.h [1:1]
         absl/base/internal/low_level_alloc.cc [1:1]
         absl/base/internal/low_level_alloc.h [1:1]
         absl/base/internal/low_level_scheduling.h [1:1]
@@ -106,6 +105,7 @@ BELONGS ya.make
         absl/debugging/leak_check.cc [1:1]
         absl/debugging/stacktrace.cc [1:1]
         absl/memory/memory.h [1:1]
+        absl/meta/internal/requires.h [1:1]
         absl/meta/type_traits.h [2:2]
         absl/numeric/int128.cc [1:1]
         absl/numeric/int128.h [2:2]
@@ -189,8 +189,7 @@ BELONGS ya.make
         absl/strings/str_replace.h [2:2]
         absl/strings/str_split.cc [1:1]
         absl/strings/str_split.h [2:2]
-        absl/strings/string_view.cc [1:1]
-        absl/strings/string_view.h [2:2]
+        absl/strings/string_view.h [1:1]
         absl/strings/strip.h [2:2]
         absl/strings/substitute.cc [1:1]
         absl/strings/substitute.h [2:2]
@@ -347,6 +346,18 @@ BELONGS ya.make
         absl/strings/internal/cordz_sample_token.h [1:1]
         absl/strings/internal/cordz_statistics.h [1:1]
         absl/types/internal/span.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22cee558f632090fc14247ac86e6ec0f
+BELONGS ya.make
+    License text:
+        // Copyright 2025 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        absl/time/internal/cctz/src/time_zone_name_win.cc [1:1]
+        absl/time/internal/cctz/src/time_zone_name_win.h [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3fb410b721d46624abdaeb2473ffa5d6
 BELONGS ya.make
@@ -617,17 +628,33 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        absl/base/casts.cc [1:1]
         absl/base/internal/iterator_traits.h [1:1]
         absl/base/internal/iterator_traits_test_helper.h [1:1]
+        absl/base/internal/nullability_traits.h [1:1]
+        absl/container/chunked_queue.h [1:1]
+        absl/container/internal/chunked_queue.h [1:1]
         absl/container/internal/hashtable_control_bytes.h [1:1]
+        absl/container/internal/heterogeneous_lookup_testing.h [1:1]
         absl/container/internal/raw_hash_set_resize_impl.h [1:1]
+        absl/container/linked_hash_map.h [1:1]
+        absl/container/linked_hash_set.h [1:1]
         absl/debugging/internal/addresses.h [1:1]
+        absl/debugging/internal/borrowed_fixup_buffer.cc [1:1]
+        absl/debugging/internal/borrowed_fixup_buffer.h [1:1]
         absl/hash/internal/weakly_mixed_integer.h [1:1]
+        absl/log/internal/container.h [1:1]
         absl/log/log_entry.cc [1:1]
+        absl/meta/internal/constexpr_testing.h [1:1]
         absl/profiling/hashtable.cc [1:1]
         absl/profiling/hashtable.h [1:1]
         absl/profiling/internal/profile_builder.cc [1:1]
         absl/profiling/internal/profile_builder.h [1:1]
+        absl/strings/internal/append_and_overwrite.h [1:1]
+        absl/strings/internal/generic_printer.cc [1:1]
+        absl/strings/internal/generic_printer.h [1:1]
+        absl/strings/internal/generic_printer_internal.h [1:1]
+        absl/strings/resize_and_overwrite.h [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d34864d3c7c7a5ffae3d414344aa54a8
 BELONGS ya.make

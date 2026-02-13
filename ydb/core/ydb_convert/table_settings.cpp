@@ -242,6 +242,58 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     return true;
 }
 
+bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+    const Ydb::Table::CreateTableRequest& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    auto& hashSharding = *tableDesc.MutableSharding()->MutableHashSharding();
+    
+    // NOTICE: public Ydb::Table::CreateTableRequest doesn't have sharding setting
+    hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+
+    if (proto.has_partitioning_settings()) {
+        auto& partitioningSettings = proto.partitioning_settings();
+        hashSharding.MutableColumns()->CopyFrom(partitioningSettings.partition_by());
+        if (partitioningSettings.min_partitions_count()) {
+            tableDesc.SetColumnShardCount(partitioningSettings.min_partitions_count());
+        }
+    }
+    
+    if (proto.partitions_case() != Ydb::Table::CreateTableRequest::PARTITIONS_NOT_SET) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Partitions are not supported";
+        return false;
+    }
+
+    if (proto.key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Key bloom filter settings are not supported";
+        return false;
+    }
+    
+    if (proto.has_read_replicas_settings()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Read replicas settings are not supported";
+        return false;
+    }
+
+    if (proto.has_ttl_settings()) {
+        if (!FillTtlSettings(*tableDesc.MutableTtlSettings()->MutableEnabled(), proto.ttl_settings(), code, error)) {
+            return false;
+        }
+    }
+    
+    if (proto.has_storage_settings()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Storage settings are not supported";
+        return false;
+    }
+    
+    tableDesc.SetTemporary(proto.temporary());
+
+    return true;
+}
+
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     const Ydb::Table::AlterTableRequest& proto,
     Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
@@ -476,9 +528,15 @@ bool FillIndexTablePartitioning(
         }
         break;
     }
-    
-    case Ydb::Table::TableIndex::kGlobalFulltextIndex:
-        if (!fillIndexPartitioning(index.global_fulltext_index().settings(), indexImplTableDescriptions)) {
+
+    case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+        if (!fillIndexPartitioning(index.global_fulltext_plain_index().settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().settings(), indexImplTableDescriptions)) {
             return false;
         }
         break;

@@ -46,11 +46,14 @@ static struct sockaddr_in6 daddr6;
 static int saved_tskey = -1;
 static int saved_tskey_type = -1;
 
+static int listen_fd;
+
 struct ctx {
 	int family;
 	int proto;
 	int report_opt;
 	int num_pkts;
+	int cqe_mixed;
 };
 
 static int validate_key(int tskey, int tstype, struct ctx *ctx)
@@ -184,12 +187,18 @@ static int do_test(struct ctx *ctx)
 	int cqes_seen = 0;
 	int i, fd, ret;
 	int ts_expected = 0, ts_got = 0;
+	unsigned ring_flags;
 
 	ts_expected += !!(ctx->report_opt & SOF_TIMESTAMPING_TX_SCHED);
 	ts_expected += !!(ctx->report_opt & SOF_TIMESTAMPING_TX_SOFTWARE);
 	ts_expected += !!(ctx->report_opt & SOF_TIMESTAMPING_TX_ACK);
 
-	ret = t_create_ring(32, &ring, IORING_SETUP_CQE32);
+	if (ctx->cqe_mixed)
+		ring_flags = IORING_SETUP_CQE_MIXED;
+	else
+		ring_flags = IORING_SETUP_CQE32;
+
+	ret = t_create_ring(32, &ring, ring_flags);
 	if (ret == T_SETUP_SKIP)
 		return T_EXIT_SKIP;
 	else if (ret)
@@ -241,6 +250,13 @@ static int do_test(struct ctx *ctx)
 		bool hwts;
 
 		cqes_seen++;
+		if (cqe->flags & IORING_CQE_F_SKIP) {
+			if (!ctx->cqe_mixed) {
+				t_error(1, 0, "SKIP set for non-mixed");
+				break;
+			}
+			continue;
+		}
 
 		if (!(cqe->flags & IORING_CQE_F_MORE)) {
 			if (cqe->res == -EINVAL || cqe->res == -EOPNOTSUPP)
@@ -249,6 +265,11 @@ static int do_test(struct ctx *ctx)
 				t_error(1, 0, "failed cqe %i", cqe->res);
 			break;
 		}
+		if (ctx->cqe_mixed && !(cqe->flags & IORING_CQE_F_32)) {
+			t_error(1, 0, "CQE_F_32 not set");
+			break;
+		}
+		cqes_seen++;
 
 		ts = (void *)(cqe + 1);
 		tstype = cqe->flags >> IORING_TIMESTAMP_TYPE_SHIFT;
@@ -290,16 +311,14 @@ static void resolve_hostname(const char *name, int port)
 
 static void do_listen(int family, int type, void *addr, int alen)
 {
-	int fd;
-
-	fd = socket(family, type, 0);
-	if (fd == -1)
+	listen_fd = socket(family, type, 0);
+	if (listen_fd == -1)
 		t_error(1, errno, "socket rx");
 
-	if (bind(fd, addr, alen))
+	if (bind(listen_fd, addr, alen))
 		t_error(1, errno, "bind rx");
 
-	if (type == SOCK_STREAM && listen(fd, 10))
+	if (type == SOCK_STREAM && listen(listen_fd, 10))
 		t_error(1, errno, "listen rx");
 
 	/* leave fd open, will be closed on process exit.
@@ -307,7 +326,7 @@ static void do_listen(int family, int type, void *addr, int alen)
 	 */
 }
 
-static int do_main(int family, int proto)
+static int do_main(int family, int proto, int cqe_mixed)
 {
 	struct ctx ctx;
 	int ret;
@@ -315,6 +334,7 @@ static int do_main(int family, int proto)
 	ctx.num_pkts = 1;
 	ctx.family = family;
 	ctx.proto = proto;
+	ctx.cqe_mixed = cqe_mixed;
 
 	if (verbose)
 		fprintf(stderr, "test SND\n");
@@ -371,11 +391,30 @@ static int do_main(int family, int proto)
 int main(int argc, char **argv)
 {
 	const char *hostname = "::1";
+	int ret;
 
 	if (argc > 1)
 		return T_EXIT_SKIP;
 
 	resolve_hostname(hostname, dest_port);
 	do_listen(PF_INET6, SOCK_STREAM, &daddr6, sizeof(daddr6));
-	return do_main(PF_INET6, SOCK_STREAM);
+	ret = do_main(PF_INET6, SOCK_STREAM, 0);
+	if (ret == T_EXIT_SKIP) {
+		return T_EXIT_SKIP;
+	} else if (ret != T_EXIT_PASS) {
+		fprintf(stderr, "CQE32 test failed\n");
+		return ret;
+	}
+
+	close(listen_fd);
+	do_listen(PF_INET6, SOCK_STREAM, &daddr6, sizeof(daddr6));
+	ret = do_main(PF_INET6, SOCK_STREAM, 1);
+	if (ret == T_EXIT_SKIP) {
+		return T_EXIT_PASS;
+	} else if (ret != T_EXIT_PASS) {
+		fprintf(stderr, "CQE32 test failed\n");
+		return ret;
+	}
+
+	return T_EXIT_PASS;
 }

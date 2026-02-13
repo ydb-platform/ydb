@@ -7,6 +7,10 @@ bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector
     bool hasBlock = false;
     bool hasNonBlock = false;
 
+    if (typeComponents.empty()) {
+        return false;
+    }
+
     result.reserve(typeComponents.size());
     for (TType* type : typeComponents) {
         if (type->GetKind() == TType::EKind::Block) {
@@ -17,7 +21,7 @@ bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector
         }
         result.push_back(type);
     }
-    MKQL_ENSURE(hasBlock != hasNonBlock, "Inconsistent wide item types: mixing of blocks and non-blocks detected");
+    MKQL_ENSURE(hasBlock != hasNonBlock, "Inconsistent wide item types: mixing of blocks and non-blocks detected; hasBlock = " << hasBlock << "; hasNonBlock = " << hasNonBlock);
     return hasBlock;
 }
 

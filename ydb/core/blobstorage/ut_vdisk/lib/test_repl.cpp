@@ -197,7 +197,7 @@ private:
 
     void Bootstrap(const TActorContext &ctx) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        auto groupInfo = TBlobStorageGroupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+        auto groupInfo = TBlobStorageGroupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
         VCtx.Reset(new TVDiskContext(ctx.SelfID, groupInfo.PickTopology(), counters, VDiskInfo.VDiskID,
                 ctx.ActorSystem(), NPDisk::DEVICE_TYPE_UNKNOWN));
 

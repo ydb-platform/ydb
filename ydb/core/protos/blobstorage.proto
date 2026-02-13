@@ -7,6 +7,7 @@ import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
+import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/node_whiteboard.proto";
 import "google/protobuf/any.proto";
 
@@ -1007,11 +1008,8 @@ message TNodeWardenServiceSet {
         optional bool ReadOnly = 14;
         optional bool Stop = 15;
 
-        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset) by the formula
-        // ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize
-        // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= InferPDiskSlotCountMax
-        optional uint64 InferPDiskSlotCountFromUnitSize = 16;
-        optional uint32 InferPDiskSlotCountMax = 17;
+        reserved 16; // optional uint64 InferPDiskSlotCountFromUnitSize, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
+        reserved 17; // optional uint32 InferPDiskSlotCountMax, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
     }
 
     message TVDisk {
@@ -1582,4 +1580,38 @@ message TEvControllerDistconfResponse {
     optional bytes CompressedStorageConfig = 4; // current stored config, if in dual-config mode
     optional uint64 ExpectedMainConfigVersion = 5;
     optional uint64 ExpectedStorageConfigVersion = 6;
+}
+
+// DDisk block group allocation actually doesn't allocate anything, it just claims resources for the specific tablet and
+// ensures required capacity. It allocates (reallocates or destroys) Direct Block Group with desired number of vChunks,
+// returning identifiers of DDisks containing data for these chunks and Persistent Buffer identifiers. Operation is
+// declarative and, thus, idempotent. In case of failure ActualNumVChunks kept unchanged for specific Direct Block Group.
+
+message TEvControllerAllocateDDiskBlockGroup {
+    message TQuery {
+        optional uint64 DirectBlockGroupId = 1; // identifier unique within tablet
+        optional uint32 TargetNumVChunks = 2; // target number of vchunks (0 means deletion of this direct block group id)
+    }
+
+    optional string DDiskPoolName = 1; // DDisk pool name
+    optional string PersistentBufferDDiskPoolName = 2; // DDisk pool from which we assign node persistent buffers
+    optional uint64 TabletId = 3; // who allocates the Direct Block Group
+    repeated TQuery Queries = 4; // direct block groups being allocated/reallocated/deleted
+}
+
+message TEvControllerAllocateDDiskBlockGroupResult {
+    message TResponse {
+        message TNode {
+            optional NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1; // DDisk to store data
+            optional NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2; // DDisk containing persistent buffer
+        }
+
+        optional uint64 DirectBlockGroupId = 1;
+        optional uint32 ActualNumVChunks = 2; // number of VChunks actually reserved for this Direct Block Group
+        repeated TNode Nodes = 3;
+    }
+
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    repeated TResponse Responses = 3; // single response per original query
 }

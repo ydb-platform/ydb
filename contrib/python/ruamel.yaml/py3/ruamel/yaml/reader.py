@@ -33,7 +33,7 @@ __all__ = ['Reader', 'ReaderError']
 
 
 class ReaderError(YAMLError):
-    def __init__(
+    def __init__(  # NOQA
         self, name: Any, position: Any, character: Any, encoding: Any, reason: Any,
     ) -> None:
         self.name = name

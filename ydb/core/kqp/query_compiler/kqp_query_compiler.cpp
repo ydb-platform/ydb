@@ -59,10 +59,7 @@ void SetVectorTopKMetric(Ydb::Table::VectorIndexSettings* indexSettings, const T
 void SetVectorTopKTarget(NKqpProto::TKqpPhyValue* targetProto, const TExprNode::TPtr& targetExpr) {
     TExprBase expr(targetExpr);
     if (expr.Maybe<TCoString>()) {
-        auto* literal = targetProto->MutableLiteralValue();
-        literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-        literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
-        literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+        FillLiteralProto(expr.Cast<TCoDataCtor>(), *targetProto->MutableLiteralValue());
     } else if (expr.Maybe<TCoParameter>()) {
         targetProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
     } else {
@@ -75,10 +72,7 @@ void SetVectorTopKTarget(NKqpProto::TKqpPhyValue* targetProto, const TExprNode::
 void SetVectorTopKLimit(NKqpProto::TKqpPhyValue* limitProto, const TExprNode::TPtr& limitExpr) {
     TExprBase expr(limitExpr);
     if (expr.Maybe<TCoUint64>()) {
-        auto* literal = limitProto->MutableLiteralValue();
-        literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-        literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-        literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+        FillLiteralProto(expr.Cast<TCoDataCtor>(), *limitProto->MutableLiteralValue());
     } else if (expr.Maybe<TCoParameter>()) {
         limitProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
     } else {
@@ -287,6 +281,10 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     for (const auto& columnName : columns) {
         auto column = tableMeta.Columns.FindPtr(columnName);
         if (!column) {
+            if (columnName == NTableIndex::NFulltext::FullTextRelevanceColumn) {
+                continue;
+            }
+
             YQL_ENSURE(GetSystemColumns().find(columnName) != GetSystemColumns().end());
             continue;
         }
@@ -346,7 +344,7 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
         }
 
 
-        if (columnName == "_yql_full_text_relevance") {
+        if (columnName == NTableIndex::NFulltext::FullTextRelevanceColumn) {
             auto& columnProto = *opProto.AddColumns();
             // columnProto.SetId(columnId);
             columnProto.SetName(columnName);
@@ -360,39 +358,40 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
     }
 }
 
-void FillNothingData(const TDataExprType& dataType, NKqpProto::TKqpPhyLiteralValue& value) {
+void FillNothingData(const TDataExprType& dataType, Ydb::TypedValue& value) {
     auto slot = dataType.GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
     YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
         NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
 
-    value.MutableType()->SetKind(NKikimrMiniKQL::Optional);
-    auto* toFill = value.MutableType()->MutableOptional()->MutableItem();
-
-    toFill->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    toFill->MutableData()->SetScheme(typeId);
-
     if (slot == EDataSlot::Decimal) {
         const auto& paramsDataType = *dataType.Cast<TDataExprParamsType>();
         auto precision = FromString<ui8>(paramsDataType.GetParamOne());
         auto scale = FromString<ui8>(paramsDataType.GetParamTwo());
-        toFill->MutableData()->MutableDecimalParams()->SetPrecision(precision);
-        toFill->MutableData()->MutableDecimalParams()->SetScale(scale);
+        value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_precision(precision);
+        value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_scale(scale);
+    } else {
+        auto& protoType = *value.mutable_type();
+        protoType.mutable_optional_type()->mutable_item()->set_type_id((Ydb::Type::PrimitiveTypeId)typeId);
     }
 
-    value.MutableValue()->SetNullFlagValue(::google::protobuf::NullValue::NULL_VALUE);
+    value.mutable_value()->set_null_flag_value(::google::protobuf::NullValue::NULL_VALUE);
 }
 
-void FillNothingPg(const TPgExprType& pgType, NKqpProto::TKqpPhyLiteralValue& value) {
-    value.MutableType()->SetKind(NKikimrMiniKQL::Pg);
-    value.MutableType()->MutablePg()->Setoid(pgType.GetId());
+void FillNothingPg(const TPgExprType& pgType, Ydb::TypedValue& value) {
+    auto& protoType = *value.mutable_type();
+    auto actualPgType = pgType.Cast<TPgExprType>();
+    auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
 
-    value.MutableValue()->SetNullFlagValue(::google::protobuf::NullValue::NULL_VALUE);
+    protoType.mutable_pg_type()->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+    protoType.mutable_pg_type()->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+
+    value.mutable_value()->set_null_flag_value(::google::protobuf::NullValue::NULL_VALUE);
 }
 
-void FillNothing(TCoNothing expr, NKqpProto::TKqpPhyLiteralValue& value) {
-    auto* typeann = expr.Raw()->GetTypeAnn();
+void FillNothing(TCoNothing expr, Ydb::TypedValue& value) {
+    auto typeann = expr.Raw()->GetTypeAnn();
     switch (typeann->GetKind()) {
         case ETypeAnnotationKind::Optional: {
             typeann = typeann->Cast<TOptionalExprType>()->GetItemType();
@@ -472,12 +471,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
     if (settings.ItemsLimit) {
         TExprBase expr(settings.ItemsLimit);
         if (expr.Maybe<TCoUint64>()) {
-            auto* literal = readProto.MutableItemsLimit()->MutableLiteralValue();
-
-            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-
-            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+            FillLiteralProto(expr.Cast<TCoDataCtor>(), *readProto.MutableItemsLimit()->MutableLiteralValue());
         } else if (expr.Maybe<TCoParameter>()) {
             readProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
         } else {
@@ -507,12 +501,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
     if (settings.ItemsLimit) {
         TExprBase expr(settings.ItemsLimit);
         if (expr.template Maybe<TCoUint64>()) {
-            auto* literal = readProto.MutableItemsLimit()->MutableLiteralValue();
-
-            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-
-            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+            FillLiteralProto(expr.Cast<TCoDataCtor>(), *readProto.MutableItemsLimit()->MutableLiteralValue());
         } else if (expr.template Maybe<TCoParameter>()) {
             readProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.template Cast<TCoParameter>().Name().StringValue());
         } else {
@@ -742,10 +731,10 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
-        queryProto.SetEnableOltpSink(Config->EnableOltpSink);
-        queryProto.SetEnableOlapSink(Config->EnableOlapSink);
-        queryProto.SetEnableHtapTx(Config->EnableHtapTx);
-        queryProto.SetLangVer(Config->LangVer);
+        queryProto.SetEnableOltpSink(Config->GetEnableOltpSink());
+        queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
+        queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
+        queryProto.SetLangVer(Config->GetDefaultLangVer());
 
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
@@ -754,9 +743,9 @@ public:
             Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
 
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
-        queryProto.SetEnableWatermarks(Config->EnableWatermarks);
+        queryProto.SetEnableWatermarks(Config->GetEnableWatermarks());
 
-        bool enableDiscardSelect = Config->EnableDiscardSelect;
+        bool enableDiscardSelect = Config->GetEnableDiscardSelect();
 
         TDynBitMap resultDiscardFlags;
         ui32 resultCount = 0;
@@ -1126,7 +1115,7 @@ private:
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
-        programProto.SetLangVer(Config->LangVer);
+        programProto.SetLangVer(Config->GetDefaultLangVer());
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
 
@@ -1139,7 +1128,7 @@ private:
 
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
-        stageProto.SetAllowWithSpilling(Config->EnableSpilling);
+        stageProto.SetAllowWithSpilling(Config->GetEnableQueryServiceSpilling() && (OptimizeCtx.IsGenericQuery() || OptimizeCtx.IsScanQuery()) && Config->SpillingEnabled());
     }
 
     void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx,
@@ -1165,9 +1154,9 @@ private:
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
-        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
+        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination()));
         txProto.SetHasEffects(hasEffectStage);
-        txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->DefaultDqChannelVersion));
+        txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->GetDqChannelVersion()));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
             const auto& binding = paramBinding.Binding();
@@ -1240,7 +1229,7 @@ private:
                     columnHintsProto.Add(TString(columnHint.Value()));
                 }
             }
-            if (Config->EnableDiscardSelect && hasDiscards) {
+            if (Config->GetEnableDiscardSelect() && hasDiscards) {
                 bool canSkip = (shouldCreateChannel.find(std::make_pair(txIdx, resIdx)) == shouldCreateChannel.end());
                 resultProto.SetCanSkipChannel(canSkip);
             }
@@ -1322,12 +1311,7 @@ private:
             if (readSettings.ItemsLimit) {
                 TExprBase expr(readSettings.ItemsLimit);
                 if (expr.template Maybe<TCoUint64>()) {
-                    auto* literal = readProto.MutableItemsLimit()->MutableLiteralValue();
-
-                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-
-                    literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+                    FillLiteralProto(expr.Cast<TCoDataCtor>(), *readProto.MutableItemsLimit()->MutableLiteralValue());
                 } else if (expr.template Maybe<TCoParameter>()) {
                     readProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.template Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1382,64 +1366,58 @@ private:
                 indexProto->MutableTable()->SetVersion(implTableMeta->SchemaVersion);
 
                 for(auto& keyColumn: implTableMeta->KeyColumnNames) {
-                    fillCol(implTableMeta->Columns.FindPtr(keyColumn), indexProto->AddKeyColumns());
+                    auto* columnPtr = implTableMeta->Columns.FindPtr(keyColumn);
+                    YQL_ENSURE(columnPtr);
+                    fillCol(columnPtr, indexProto->AddKeyColumns());
                 }
 
                 for(auto& column: implTableMeta->Columns) {
-                    fillCol(implTableMeta->Columns.FindPtr(column.first), indexProto->AddColumns());
+                    auto* columnPtr = implTableMeta->Columns.FindPtr(column.first);
+                    YQL_ENSURE(columnPtr);
+                    fillCol(columnPtr, indexProto->AddColumns());
                 }
             }
 
             for (auto& keyColumn: tableMeta->KeyColumnNames) {
-                fillCol(tableMeta->Columns.FindPtr(keyColumn), fullTextProto.AddKeyColumns());
+                auto* columnPtr = tableMeta->Columns.FindPtr(keyColumn);
+                YQL_ENSURE(columnPtr);
+                fillCol(columnPtr, fullTextProto.AddKeyColumns());
             }
 
             for (auto item : type->GetItems()) {
                 auto* columnProto = fullTextProto.AddColumns();
                 columnProto->SetName(TString(item->GetName()));
-                if (item->GetName() == "_yql_full_text_relevance") {
+                if (item->GetName() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                     continue;
                 }
 
-                fillCol(tableMeta->Columns.FindPtr(item->GetName()), columnProto);
+                auto* columnPtr = tableMeta->Columns.FindPtr(item->GetName());
+                YQL_ENSURE(columnPtr);
+                fillCol(columnPtr, columnProto);
             }
 
             {
                 TExprBase expr(settings.Query().Raw());
-                if (expr.Maybe<TCoString>()) {
-                    auto* literal = fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue();
-                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
-                    literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
-                } else if (expr.Maybe<TCoParameter>()) {
+                if (expr.Maybe<TCoParameter>()) {
                     fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
                 } else {
-                    YQL_ENSURE(false, "Unexpected VectorTopKTarget callable '" << expr.Ref().Content()
-                        << "'. Expected TCoString or TCoParameter.");
+                    FillLiteralProto(expr.Cast<TCoDataCtor>(), *fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue());
                 }
             }
 
             TKqpReadTableFullTextIndexSettings settingsObj = TKqpReadTableFullTextIndexSettings::Parse(settings.Settings().Cast());
             if (settingsObj.ItemsLimit) {
-
                 auto itemsLimit = TExprBase(settingsObj.ItemsLimit);
-                if (itemsLimit.Maybe<TCoUint64>()) {
-                    auto* literal = fullTextProto.MutableTakeLimit()->MutableLiteralValue();
-
-                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-
-                    literal->MutableValue()->SetUint64(FromString<ui64>(itemsLimit.Cast<TCoUint64>().Literal().Value()));
-                } else if (itemsLimit.Maybe<TCoParameter>()) {
+                if (itemsLimit.Maybe<TCoParameter>()) {
                     fullTextProto.MutableTakeLimit()->MutableParamValue()->SetParamName(itemsLimit.Cast<TCoParameter>().Name().StringValue());
                 } else {
-                    YQL_ENSURE(false, "Unexpected ItemsLimit callable " << itemsLimit.Ref().Content());
+                    FillLiteralProto(itemsLimit.Cast<TCoDataCtor>(), *fullTextProto.MutableTakeLimit()->MutableLiteralValue());
                 }
             }
 
             if (settingsObj.BFactor) {
                 auto bFactor = TExprBase(settingsObj.BFactor);
-                auto just = bFactor.Cast<TCoJust>().Input();
+                auto just = bFactor.Maybe<TCoJust>() ? bFactor.Maybe<TCoJust>().Cast().Input() : bFactor;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableBFactor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1447,9 +1425,29 @@ private:
                 }
             }
 
+            if (settingsObj.DefaultOperator) {
+                auto defaultOperator = TExprBase(settingsObj.DefaultOperator);
+                auto just = defaultOperator.Maybe<TCoJust>() ? defaultOperator.Maybe<TCoJust>().Cast().Input() : defaultOperator;
+                if (just.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableDefaultOperator()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableDefaultOperator()->MutableLiteralValue());
+                }
+            }
+
+            if (settingsObj.MinimumShouldMatch) {
+                auto minimumShouldMatch = TExprBase(settingsObj.MinimumShouldMatch);
+                auto just = minimumShouldMatch.Maybe<TCoJust>() ? minimumShouldMatch.Maybe<TCoJust>().Cast().Input() : minimumShouldMatch;
+                if (just.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableMinimumShouldMatch()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableMinimumShouldMatch()->MutableLiteralValue());
+                }
+            }
+
             if (settingsObj.K1Factor) {
                 auto k1Factor = TExprBase(settingsObj.K1Factor);
-                auto just = k1Factor.Cast<TCoJust>().Input();
+                auto just = k1Factor.Maybe<TCoJust>() ? k1Factor.Maybe<TCoJust>().Cast().Input() : k1Factor;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableK1Factor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1457,7 +1455,10 @@ private:
                 }
             }
 
-            FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
+            for(const auto& column: settings.QueryColumns().Cast()) {
+                fillCol(tableMeta->Columns.FindPtr(column.StringValue()), fullTextProto.MutableQuerySettings()->AddColumns());
+            }
+
         } else {
             YQL_ENSURE(false, "Unsupported source type");
         }
@@ -1508,6 +1509,13 @@ private:
             google::protobuf::Any& settings = *externalSource.MutableSettings();
             TString& sourceType = *externalSource.MutableType();
             dqIntegration->FillSourceSettings(*source, settings, sourceType, maxTasksPerStage, ctx);
+            TMaybe<IDqIntegration::TSourceWatermarksSettings> watermarksSettings = dqIntegration->ExtractSourceWatermarksSettings(*source, settings, sourceType);
+            if (watermarksSettings) {
+                auto& protoWatermarksSettings = *externalSource.MutableWatermarksSettings();
+                if (watermarksSettings->IdleTimeoutUs) {
+                    protoWatermarksSettings.SetIdleTimeoutUs(*watermarksSettings->IdleTimeoutUs);
+                }
+            }
             YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings for its dq source node");
             YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings type for its dq source node");
         } else {
@@ -1536,6 +1544,7 @@ private:
     THashMap<TStringBuf, ui32> CreateColumnToOrder(
             const TVector<TStringBuf>& columns,
             const TKikimrTableMetadataPtr& tableMeta,
+            const THashSet<TStringBuf>& localDefaultColumnsIds,
             bool keysFirst) {
         THashSet<TStringBuf> usedColumns;
         for (const auto& columnName : columns) {
@@ -1550,8 +1559,37 @@ private:
                 columnToOrder[columnName] = number++;
             }
         }
+
+        const auto isDefaultColumn = [&tableMeta](const TString& columnName) {
+            const auto defaultKind = tableMeta->Columns.at(columnName).DefaultKind;
+            return defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
+                || defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+        };
+
+        // Not DEFAULT columns
+        for (const auto& columnName : tableMeta->ColumnOrder) {
+            if (usedColumns.contains(columnName)
+                    && !columnToOrder.contains(columnName)
+                    && !isDefaultColumn(columnName)) {
+                columnToOrder[columnName] = number++;
+            }
+        }
+
+        // Default columns without local processing
+        for (const auto& columnName : tableMeta->ColumnOrder) {
+            if (usedColumns.contains(columnName)
+                    && !columnToOrder.contains(columnName)
+                    && !localDefaultColumnsIds.contains(columnName)) {
+                AFL_ENSURE(isDefaultColumn(columnName));
+                columnToOrder[columnName] = number++;
+            }
+        }
+
+        // Default columns with local processing
         for (const auto& columnName : tableMeta->ColumnOrder) {
             if (usedColumns.contains(columnName) && !columnToOrder.contains(columnName)) {
+                AFL_ENSURE(isDefaultColumn(columnName));
+                AFL_ENSURE(localDefaultColumnsIds.contains(columnName));
                 columnToOrder[columnName] = number++;
             }
         }
@@ -1590,8 +1628,13 @@ private:
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
             } else if (settings.Mode().Cast().StringValue() == "update") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
+            } else if (settings.Mode().Cast().StringValue() == "update_conditional") {
+                AFL_ENSURE(Config->GetEnableIndexStreamWrite()); // Don't allow this mode for old versions.
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL);
             } else if (settings.Mode().Cast().StringValue() == "fill_table") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+            } else if (settings.Mode().Cast().StringValue() == "upsert_increment") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT);
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }
@@ -1603,7 +1646,10 @@ private:
 
                 const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
 
-                auto fillColumnProto = [] (TStringBuf columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
+                auto fillColumnProto = [] (
+                        TStringBuf columnName,
+                        const NYql::TKikimrColumnMetadata* column,
+                        NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
                     columnProto->SetId(column->Id);
                     columnProto->SetName(TString(columnName));
                     columnProto->SetTypeId(column->TypeInfo.GetTypeId());
@@ -1613,38 +1659,22 @@ private:
                     }
                 };
 
-                for (const auto& columnName : tableMeta->KeyColumnNames) {
-                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+                THashSet<ui32> defaultColumnsIds;
+                THashSet<TStringBuf> localDefaultColumns; // for shards DefaultColumnsCount feature
+                if (Config->GetEnableIndexStreamWrite()) {
+                    for (const auto& columnNameAtom : settings.DefaultColumns().Cast()) {
+                        const auto& columnName = columnNameAtom.StringValue();
+                        const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                        YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
-                    auto keyColumnProto = settingsProto.AddKeyColumns();
-                    fillColumnProto(columnName, columnMeta, keyColumnProto);
-                }
+                        const bool isDefault = columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
+                                        ||  columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+                        if (isDefault) {
+                            defaultColumnsIds.insert(columnMeta->Id);
+                            localDefaultColumns.insert(columnName);
+                        }
+                    }
 
-                for (const auto& columnName : columns) {
-                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                    auto columnProto = settingsProto.AddColumns();
-                    fillColumnProto(columnName, columnMeta, columnProto);
-                }
-
-                AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
-                const auto columnToOrder = CreateColumnToOrder(
-                    columns,
-                    tableMeta,
-                    tableMeta->Kind == EKikimrTableKind::Datashard);
-                for (const auto& columnName : columns) {
-                    settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
-                }
-
-                settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
-
-                const bool inconsistentWrite = settings.InconsistentWrite().Cast().Value() == "true"sv;
-                AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
-                settingsProto.SetInconsistentTx(inconsistentWrite);
-
-                if (Config->EnableIndexStreamWrite) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
 
                     std::vector<size_t> affectedIndexes;
@@ -1668,7 +1698,8 @@ private:
                                 || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
                                 const auto& implTable = tableMeta->ImplTables[index];
 
-                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                                        || settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL) {
                                     if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
                                             return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
                                         })) {
@@ -1710,9 +1741,27 @@ private:
                         });
 
                         if (needLookup) {
+                            AFL_ENSURE(settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+
+                            THashSet<TStringBuf> lookupColumnsSet;
+                            for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                                const auto& indexDescription = tableMeta->Indexes[index];
+
+                                if (indexDescription.Type == TIndexDescription::EType::GlobalSync
+                                        || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                                    const auto& implTable = tableMeta->ImplTables[index];
+
+                                    for (const auto& [columnName, columnMeta] : implTable->Columns) {
+                                        lookupColumnsSet.insert(columnName);
+                                    }
+                                }
+                            }
+
                             for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
-                                if (!mainKeyColumnsSet.contains(columnName)) {
+                                if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName)) {
                                     lookupColumns.push_back(columnName);
+                                    localDefaultColumns.erase(columnName);
+
                                     auto columnProto = settingsProto.AddLookupColumns();
                                     fillColumnProto(columnName, &columnMeta, columnProto);
                                 }
@@ -1768,6 +1817,7 @@ private:
                         const auto indexColumnToOrder = CreateColumnToOrder(
                             indexColumns,
                             implTable,
+                            localDefaultColumns,
                             true);
                         for (const auto& columnName: indexColumns) {
                             indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
@@ -1777,7 +1827,48 @@ private:
                             indexColumns,
                             tablesMap);
                     }
+                } else {
+                    AFL_ENSURE(localDefaultColumns.empty());
+                    AFL_ENSURE(defaultColumnsIds.empty());
                 }
+
+                for (const auto& columnName : tableMeta->KeyColumnNames) {
+                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                    auto keyColumnProto = settingsProto.AddKeyColumns();
+                    fillColumnProto(columnName, columnMeta, keyColumnProto);
+                }
+
+                for (const auto& columnName : columns) {
+                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                    auto columnProto = settingsProto.AddColumns();
+                    fillColumnProto(columnName, columnMeta, columnProto);
+                }
+
+                AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
+                const auto columnToOrder = CreateColumnToOrder(
+                    columns,
+                    tableMeta,
+                    localDefaultColumns,
+                    tableMeta->Kind == EKikimrTableKind::Datashard);
+                for (const auto& columnName : columns) {
+                    settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
+                }
+
+                AFL_ENSURE(settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                            || defaultColumnsIds.empty());
+                for (const auto& defaultColumnId : defaultColumnsIds) { // from plan!!!
+                    settingsProto.AddDefaultColumnsIds(defaultColumnId);
+                }
+
+                settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
+
+                const bool inconsistentWrite = settings.InconsistentWrite().Cast().Value() == "true"sv;
+                AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
+                settingsProto.SetInconsistentTx(inconsistentWrite);
             } else {
                 // Table info will be filled during execution after resolving table by name.
                 settingsProto.MutableTable()->SetPath(TString(settings.Table().Cast().Path()));
@@ -1883,10 +1974,7 @@ private:
         // Limit - may be a parameter which will be linked later
         TExprBase expr(settings.VectorTopLimit);
         if (expr.Maybe<TCoUint64>()) {
-            auto* literal = vectorTopK.MutableLimit()->MutableLiteralValue();
-            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+            FillLiteralProto(expr.Cast<TCoDataCtor>(), *vectorTopK.MutableLimit()->MutableLiteralValue());
         } else if (expr.Maybe<TCoParameter>()) {
             vectorTopK.MutableLimit()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
         } else {
@@ -1896,10 +1984,7 @@ private:
         // Target vector - may be a parameter which will be linked later
         expr = TExprBase(settings.VectorTopTarget);
         if (expr.Maybe<TCoString>()) {
-            auto* literal = vectorTopK.MutableTargetVector()->MutableLiteralValue();
-            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
-            literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+            FillLiteralProto(expr.Cast<TCoDataCtor>(), *vectorTopK.MutableTargetVector()->MutableLiteralValue());
         } else if (expr.Maybe<TCoParameter>()) {
             vectorTopK.MutableTargetVector()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
         } else {
@@ -1943,7 +2028,7 @@ private:
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
 
-            NDq::EHashShuffleFuncType hashFuncType = Config->DefaultHashShuffleFuncType;
+            NDq::EHashShuffleFuncType hashFuncType = Config->GetDqDefaultHashShuffleFuncType();
             if (shuffle.HashFunc().IsValid()) {
                 hashFuncType = FromString<NDq::EHashShuffleFuncType>(shuffle.HashFunc().Cast().StringValue());
             }
@@ -1998,7 +2083,7 @@ private:
                 }
             };
 
-            if (Config->EnableSpillingInHashJoinShuffleConnections && shuffle.UseSpilling()) {
+            if (Config->GetEnableSpillingInHashJoinShuffleConnections() && shuffle.UseSpilling()) {
                 shuffleProto.SetUseSpilling(FromStringWithDefault<bool>(shuffle.UseSpilling().Cast().StringValue(), false));
             }
 

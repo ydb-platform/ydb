@@ -136,7 +136,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::INT32
+                    arrow20::Type::INT32,
                 },
                 arrowTypeName,
                 timestampType->id());

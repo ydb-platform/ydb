@@ -972,6 +972,15 @@ namespace NLogin::NSasl {
  */
 ESaslPrepReturnCodes SaslPrep(const std::string& str, std::string& result) {
     /*
+    * Empty passwords are not allowed per RFC 5802, Section 5.1:
+    * "If the preparation of the password fails or results in an empty string,
+    * the client SHOULD NOT send the password to the server."
+    */
+    if (str.empty()) {
+        return ESaslPrepReturnCodes::Prohibited;
+    }
+
+    /*
     * Quick check if the input is pure ASCII.  An ASCII string requires no
     * further processing.
     */
@@ -1014,7 +1023,7 @@ ESaslPrepReturnCodes SaslPrep(const std::string& str, std::string& result) {
     }
 
     if (newSize == 0) {
-        return ESaslPrepReturnCodes::Prohibited;	/* don't allow empty password */
+        return ESaslPrepReturnCodes::Prohibited; /* don't allow empty password */
     }
 
     wideStr.resize(newSize);

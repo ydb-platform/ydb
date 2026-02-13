@@ -1011,18 +1011,18 @@ public:
             , Index_(index)
         { }
 
-        const typename T::value_type& operator * ()
+        const typename T::value_type& operator*()
         {
             return *((*Iterators_)[Index_]);
         }
 
-        TIteratorWrapper& operator ++ ()
+        TIteratorWrapper& operator++()
         {
             ++Index_;
             return *this;
         }
 
-        bool operator == (const TIteratorWrapper& other) const
+        bool operator==(const TIteratorWrapper& other) const
         {
             return Index_ == other.Index_;
         }

@@ -33,11 +33,8 @@ DEFAULT_BUFFER_SIZE = 8 * 1024  # bytes
 # Rebind for compatibility
 BlockingIOError = BlockingIOError
 
-# Does io.IOBase finalizer log the exception if the close() method fails?
-# The exception is ignored silently by default in release build.
-_IOBASE_EMITS_UNRAISABLE = (hasattr(sys, "gettotalrefcount") or sys.flags.dev_mode)
 # Does open() check its 'errors' argument?
-_CHECK_ERRORS = _IOBASE_EMITS_UNRAISABLE
+_CHECK_ERRORS = (hasattr(sys, "gettotalrefcount") or sys.flags.dev_mode)
 
 
 def text_encoding(encoding, stacklevel=2):
@@ -416,18 +413,12 @@ class IOBase(metaclass=abc.ABCMeta):
         if closed:
             return
 
-        if _IOBASE_EMITS_UNRAISABLE:
-            self.close()
-        else:
-            # The try/except block is in case this is called at program
-            # exit time, when it's possible that globals have already been
-            # deleted, and then the close() call might fail.  Since
-            # there's nothing we can do about such failures and they annoy
-            # the end users, we suppress the traceback.
-            try:
-                self.close()
-            except:
-                pass
+        if dealloc_warn := getattr(self, "_dealloc_warn", None):
+            dealloc_warn(self)
+
+        # If close() fails, the caller logs the exception with
+        # sys.unraisablehook. close() must be called at the end at __del__().
+        self.close()
 
     ### Inquiries ###
 
@@ -632,6 +623,8 @@ class RawIOBase(IOBase):
         n = self.readinto(b)
         if n is None:
             return None
+        if n < 0 or n > len(b):
+            raise ValueError(f"readinto returned {n} outside buffer size {len(b)}")
         del b[n:]
         return bytes(b)
 
@@ -663,8 +656,6 @@ class RawIOBase(IOBase):
         self._unsupported("write")
 
 io.RawIOBase.register(RawIOBase)
-from _io import FileIO
-RawIOBase.register(FileIO)
 
 
 class BufferedIOBase(IOBase):
@@ -871,6 +862,10 @@ class _BufferedIOMixin(BufferedIOBase):
         else:
             return "<{}.{} name={!r}>".format(modname, clsname, name)
 
+    def _dealloc_warn(self, source):
+        if dealloc_warn := getattr(self.raw, "_dealloc_warn", None):
+            dealloc_warn(source)
+
     ### Lower-level APIs ###
 
     def fileno(self):
@@ -946,22 +941,24 @@ class BytesIO(BufferedIOBase):
         return self.read(size)
 
     def write(self, b):
-        if self.closed:
-            raise ValueError("write to closed file")
         if isinstance(b, str):
             raise TypeError("can't write str to binary stream")
         with memoryview(b) as view:
+            if self.closed:
+                raise ValueError("write to closed file")
+
             n = view.nbytes  # Size of any bytes-like object
-        if n == 0:
-            return 0
-        pos = self._pos
-        if pos > len(self._buffer):
-            # Inserts null bytes between the current end of the file
-            # and the new write position.
-            padding = b'\x00' * (pos - len(self._buffer))
-            self._buffer += padding
-        self._buffer[pos:pos + n] = b
-        self._pos += n
+            if n == 0:
+                return 0
+
+            pos = self._pos
+            if pos > len(self._buffer):
+                # Inserts null bytes between the current end of the file
+                # and the new write position.
+                padding = b'\x00' * (pos - len(self._buffer))
+                self._buffer += padding
+            self._buffer[pos:pos + n] = view
+            self._pos += n
         return n
 
     def seek(self, pos, whence=0):
@@ -1508,6 +1505,11 @@ class FileIO(RawIOBase):
         if isinstance(file, float):
             raise TypeError('integer argument expected, got float')
         if isinstance(file, int):
+            if isinstance(file, bool):
+                import warnings
+                warnings.warn("bool is used as a file descriptor",
+                              RuntimeWarning, stacklevel=2)
+                file = int(file)
             fd = file
             if fd < 0:
                 raise ValueError('negative file descriptor')
@@ -1566,7 +1568,8 @@ class FileIO(RawIOBase):
                     if not isinstance(fd, int):
                         raise TypeError('expected integer from opener')
                     if fd < 0:
-                        raise OSError('Negative file descriptor')
+                        # bpo-27066: Raise a ValueError for bad value.
+                        raise ValueError(f'opener returned {fd}')
                 owned_fd = fd
                 if not noinherit_flag:
                     os.set_inheritable(fd, False)
@@ -1605,12 +1608,11 @@ class FileIO(RawIOBase):
             raise
         self._fd = fd
 
-    def __del__(self):
+    def _dealloc_warn(self, source):
         if self._fd >= 0 and self._closefd and not self.closed:
             import warnings
-            warnings.warn('unclosed file %r' % (self,), ResourceWarning,
+            warnings.warn(f'unclosed file {source!r}', ResourceWarning,
                           stacklevel=2, source=self)
-            self.close()
 
     def __getstate__(self):
         raise TypeError(f"cannot pickle {self.__class__.__name__!r} object")
@@ -1754,7 +1756,7 @@ class FileIO(RawIOBase):
         """
         if not self.closed:
             try:
-                if self._closefd:
+                if self._closefd and self._fd >= 0:
                     os.close(self._fd)
             finally:
                 super().close()
@@ -2645,6 +2647,10 @@ class TextIOWrapper(TextIOBase):
     @property
     def newlines(self):
         return self._decoder.newlines if self._decoder else None
+
+    def _dealloc_warn(self, source):
+        if dealloc_warn := getattr(self.buffer, "_dealloc_warn", None):
+            dealloc_warn(source)
 
 
 class StringIO(TextIOWrapper):

@@ -18,6 +18,7 @@ SRCS(
     draft/ydb_dynamic_config.proto
     draft/ydb_logstore.proto
     draft/ydb_maintenance.proto
+    draft/ydb_nbs.proto
     draft/ydb_object_storage.proto
     draft/ydb_replication.proto
     draft/ydb_tablet.proto

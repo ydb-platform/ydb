@@ -36,7 +36,7 @@ struct TSetup {
         , Env(Alloc)
         , FunctionRegistry(CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr()))
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, {})
+        , FunctionTypeInfoBuilder(UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, NYql::NUdf::TSourcePosition())
         , PgmBuilder(Env, *FunctionRegistry)
         , MemInfo("Test")
         , HolderFactory(Alloc.Ref(), MemInfo)

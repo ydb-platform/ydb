@@ -190,7 +190,7 @@ struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
 
     class TScalarResult: public arrow::FixedSizeBinaryScalar {
     public:
-        TScalarResult(std::shared_ptr<arrow::Buffer> value)
+        explicit TScalarResult(std::shared_ptr<arrow::Buffer> value)
             : arrow::FixedSizeBinaryScalar(std::move(value), arrow::fixed_size_binary(16))
         {
         }

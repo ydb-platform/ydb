@@ -382,8 +382,7 @@ public:
         const IInvokerPtr& invoker) override
     {
         return Client_->CreateQueueProducerSession(ProducerPath_, queuePath, sessionId)
-            .Apply(BIND([=, this, this_ = MakeStrong(this)]
-                        (const TCreateQueueProducerSessionResult& createSessionResult) -> IProducerSessionPtr {
+            .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TCreateQueueProducerSessionResult& createSessionResult) -> IProducerSessionPtr {
                 return New<TProducerSession>(Client_, ProducerPath_, queuePath, nameTable, sessionId, createSessionResult, options, invoker);
             }));
     }

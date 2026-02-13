@@ -1,6 +1,7 @@
 PY3_LIBRARY()
 
 PY_SRCS(
+    fulltext_index.py
     vector_index.py
     insert_delete_all_types.py
     select_partition.py
@@ -9,6 +10,7 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tests/stress/common
+    ydb/tests/library/fixtures
     ydb/public/sdk/python
     ydb/tests/datashard/lib
 )

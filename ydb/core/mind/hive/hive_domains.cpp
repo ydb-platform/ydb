@@ -51,7 +51,7 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             TSubDomainKey key(entry.TableId.PathId.OwnerId, entry.TableId.PathId.LocalPathId);
             TString path = CanonizePath(entry.Path);
             Domains[key].Path = path;
-            if (entry.DomainInfo) {
+            if (entry.DomainInfo && entry.DomainInfo->Params.HasHive()) {
                 Domains[key].HiveId = entry.DomainInfo->Params.GetHive();
             }
             BLOG_D("Received NavigateKeySetResult for domain " << entry.TableId << " with path " << path);

@@ -27,7 +27,7 @@ struct TUrlParseIndexes {
 
 class TParse: public TBoxedValue {
 public:
-    TParse(const TUrlParseIndexes& UrlParseIndexes)
+    explicit TParse(const TUrlParseIndexes& UrlParseIndexes)
         : UrlParseIndexes_(UrlParseIndexes)
         , ParseFlags_(TUri::FeaturesRecommended)
     {

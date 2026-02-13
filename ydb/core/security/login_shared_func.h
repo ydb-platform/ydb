@@ -2,33 +2,23 @@
 
 #include <util/generic/string.h>
 #include <util/generic/ptr.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-namespace NKikimrProto {
-    class TAuthConfig;
-};
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/library/login/protos/login.pb.h>
 
 namespace NKikimr {
 
-struct TAuthCredentials {
-    enum class EAuthType {
-        Internal,
-        Ldap
-    };
-
-    EAuthType AuthType = EAuthType::Internal;
-    TString Login;
-    TString Password;
-};
-
-struct TSendParameters {
-    TActorId Recipient;
-    THolder<IEventBase> Event;
-};
-
-THolder<NSchemeCache::TSchemeCacheNavigate> CreateNavigateKeySetRequest(const TString& pathToDatabase);
-TAuthCredentials PrepareCredentials(const TString& login, const TString& password, const NKikimrProto::TAuthConfig& config);
-NKikimrScheme::TEvLogin CreateLoginRequest(const TAuthCredentials& credentials, const NKikimrProto::TAuthConfig& config);
-TSendParameters GetSendParameters(const TAuthCredentials& credentials, const TString& pathToDatabase);
+bool IsLdapAuthenticationEnabled(const NKikimrProto::TAuthConfig& config);
+bool IsUsernameFromLdapAuthDomain(const TString& username, const NKikimrProto::TAuthConfig& config);
+TString PrepareLdapUsername(const TString& username, const NKikimrProto::TAuthConfig& config);
+NKikimrScheme::TEvLogin CreatePlainLoginRequest(const TString& username, NLoginProto::EHashType::HashType hashType,
+    const TString& hashToValidate, const TString& peerName, const NKikimrProto::TAuthConfig& config);
+NKikimrScheme::TEvLogin CreatePlainLoginRequestOldFormat(const TString& username, const TString& password,
+    const TString& peerName, const NKikimrProto::TAuthConfig& config);
+NKikimrScheme::TEvLogin CreatePlainLdapLoginRequest(const TString& username,
+     const TString& peerName, const NKikimrProto::TAuthConfig& config);
+NKikimrScheme::TEvLogin CreateScramLoginRequest(const TString& username, NLoginProto::EHashType::HashType hashType,
+    const TString& clientProof, const TString& authMessage,  const TString& peerName, const NKikimrProto::TAuthConfig& config);
 
 } // namespace NKikimr

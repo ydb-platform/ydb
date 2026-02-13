@@ -60,6 +60,8 @@ private:
                 return "Scheme:DropTable";
             case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
                 return "Scheme:MoveTable";
+            case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
+                return "Scheme:CopyTable";
             case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
                 return "Scheme:TXBODY_NOT_SET";
         }

@@ -1,0 +1,23 @@
+dstool -e <endpoint> --mon-port <mon_port> pdisk list -H --columns NodeId:PDiskId Path TotalSize ExpectedSlotCount SlotSizeInUnits
+Exit Status: 0
+===== stdout =====
+┌────────────────┬────────────────┬───────────────────┬─────────────────┬───────────┐
+│ NodeId:PDiskId │ Path           │ ExpectedSlotCount │ SlotSizeInUnits │ TotalSize │
+├────────────────┼────────────────┼───────────────────┼─────────────────┼───────────┤
+│ [1:1]          │ SectorMap:1:64 │ 9                 │ 0               │  64.0 GiB │
+│ [1:1000]       │ SectorMap:2:4  │ 9                 │ 0               │     8 GiB │
+│ [2:1]          │ SectorMap:1:64 │ 9                 │ 0               │  64.0 GiB │
+│ [2:1000]       │ SectorMap:2:4  │ 9                 │ 0               │     8 GiB │
+│ [3:1]          │ SectorMap:1:64 │ 9                 │ 0               │  64.0 GiB │
+│ [3:1000]       │ SectorMap:2:4  │ 9                 │ 0               │     8 GiB │
+│ [4:1]          │ SectorMap:1:64 │ 9                 │ 0               │  64.0 GiB │
+│ [4:1000]       │ SectorMap:2:4  │ 9                 │ 0               │     8 GiB │
+│ [5:1]          │ SectorMap:1:64 │ 9                 │ 0               │  64.0 GiB │
+│ [5:1000]       │ SectorMap:2:4  │ 9                 │ 0               │     8 GiB │
+│ [6:1]          │ SectorMap:1:64 │ 9                 │ 0               │  64.0 GiB │
+│ [6:1000]       │ SectorMap:2:4  │ 9                 │ 0               │     8 GiB │
+│ [7:1]          │ SectorMap:1:64 │ 9                 │ 0               │  64.0 GiB │
+│ [7:1000]       │ SectorMap:2:4  │ 9                 │ 0               │     8 GiB │
+│ [8:1]          │ SectorMap:1:64 │ 9                 │ 0               │  64.0 GiB │
+│ [8:1000]       │ SectorMap:2:4  │ 9                 │ 0               │     8 GiB │
+└────────────────┴────────────────┴───────────────────┴─────────────────┴───────────┘

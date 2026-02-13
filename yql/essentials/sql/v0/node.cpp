@@ -1860,7 +1860,7 @@ TString IdContent(TContext& ctx, const TString& s) {
 namespace {
 class TInvalidLiteralNode final: public INode {
 public:
-    TInvalidLiteralNode(TPosition pos)
+    explicit TInvalidLiteralNode(TPosition pos)
         : INode(pos)
     {
     }

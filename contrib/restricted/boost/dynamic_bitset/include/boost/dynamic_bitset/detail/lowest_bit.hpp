@@ -1,9 +1,9 @@
 // -----------------------------------------------------------
-// lowest_bit.hpp
+//                       lowest_bit()
 //
-//           Position of the lowest bit 'on'
+//          Position of the lowest bit that is set.
 //
-//         Copyright (c) 2003-2004, 2008 Gennaro Prota
+//      Copyright (c) 2003-2004, 2008, 2025 Gennaro Prota
 //
 // Distributed under the Boost Software License, Version 1.0.
 //    (See accompanying file LICENSE_1_0.txt or copy at
@@ -14,26 +14,23 @@
 #ifndef BOOST_LOWEST_BIT_HPP_GP_20030301
 #define BOOST_LOWEST_BIT_HPP_GP_20030301
 
-#include "boost/integer/integer_log2.hpp"
 #include "boost/assert.hpp"
+#include "boost/core/bit.hpp"
+#include <type_traits>
 
 namespace boost {
 namespace detail {
 
-    template <typename T>
-    int lowest_bit(T x) {
+template< typename T >
+int
+lowest_bit( T x )
+{
+    BOOST_ASSERT( x >= 1 );
 
-        BOOST_ASSERT(x >= 1); // PRE
-
-        // clear all bits on except the rightmost one,
-        // then calculate the logarithm base 2
-        //
-        return boost::integer_log2<T>( x - ( x & (x-1) ) );
-
-    }
+    return boost::core::countr_zero( static_cast< typename std::make_unsigned< T >::type >( x ) );
+}
 
 }
 }
-
 
 #endif // include guard

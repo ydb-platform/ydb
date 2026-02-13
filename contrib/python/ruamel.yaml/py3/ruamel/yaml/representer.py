@@ -344,7 +344,7 @@ class SafeRepresenter(BaseRepresenter):
         return self.represent_mapping(tag, state, flow_style=flow_style)
 
     def represent_undefined(self, data: Any) -> None:
-        raise RepresenterError(f'cannot represent an object: {data!s}')
+        raise RepresenterError(f'cannot represent an object: {data!r}')
 
 
 SafeRepresenter.add_representer(type(None), SafeRepresenter.represent_none)

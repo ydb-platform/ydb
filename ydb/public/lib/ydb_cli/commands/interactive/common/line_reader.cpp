@@ -1,7 +1,9 @@
 #include "line_reader.h"
+#include "interactive_settings.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
@@ -22,7 +24,7 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 class TLineReader final : public ILineReader {
-    inline static const NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+    inline static const NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
     class TFileHandlerLockGuard {
     public:
@@ -77,14 +79,18 @@ class TLineReader final : public ILineReader {
     };
 
 public:
-    TLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log)
-        : Log(log)
-        , YQLHighlighter(MakeYQLHighlighter(GetColorSchema()))
-        , ContinueAfterCancel(settings.ContinueAfterCancel)
+    explicit TLineReader(const TLineReaderSettings& settings)
+        : ContinueAfterCancel(settings.ContinueAfterCancel)
         , EnableSwitchMode(settings.EnableSwitchMode)
         , Prompt(settings.Prompt)
         , Placeholder(settings.Placeholder)
     {
+        // Get initial settings from interactive settings
+        CurrentColorSchema = TInteractiveSettings::GetCurrentColorSchema();
+        HintsEnabled = TInteractiveSettings::IsHintsEnabled();
+
+        YQLHighlighter = MakeYQLHighlighter(CurrentColorSchema);
+
         std::vector<TString> completionCommands(settings.AdditionalCommands.begin(), settings.AdditionalCommands.end());
         if (EnableSwitchMode) {
             completionCommands.push_back("/switch");
@@ -92,7 +98,7 @@ public:
 
         std::optional<TYQLCompleterConfig> yqlCompleterConfig;
         if (settings.EnableYqlCompletion) {
-            yqlCompleterConfig = TYQLCompleterConfig{.Color = GetColorSchema(), .Driver = settings.Driver, .Database = settings.Database, .IsVerbose = Log.IsVerbose()};
+            yqlCompleterConfig = TYQLCompleterConfig{.Color = CurrentColorSchema, .Driver = settings.Driver, .Database = settings.Database, .IsVerbose = GetGlobalLogger().IsVerbose()};
         }
         YQLCompleter = MakeYQLCompositeCompleter(completionCommands, yqlCompleterConfig);
 
@@ -163,8 +169,62 @@ public:
         }
     }
 
+    void SetHintsEnabled(bool enabled) final {
+        if (HintsEnabled != enabled) {
+            HintsEnabled = enabled;
+            // When hints are disabled, we set a no-op hint callback that only shows placeholder
+            if (Rx) {
+                if (!enabled) {
+                    Rx->set_hint_callback([this](const std::string& /*prefix*/, int& /*contextLen*/, replxx::Replxx::Color& color) {
+                        const char* text = Rx->get_state().text();
+                        if ((text == nullptr || text[0] == '\0') && !Placeholder.empty()) {
+                            color = replxx::Replxx::Color::GRAY;
+                            return std::vector<std::string>{std::string(Placeholder)};
+                        }
+                        return std::vector<std::string>{};
+                    });
+                } else {
+                    // Re-enable full hints
+                    Rx->set_hint_callback([this](const std::string& prefix, int& contextLen, replxx::Replxx::Color& color) {
+                        const char* text = Rx->get_state().text();
+                        if ((text == nullptr || text[0] == '\0') && !Placeholder.empty()) {
+                            color = replxx::Replxx::Color::GRAY;
+                            return std::vector<std::string>{std::string(Placeholder)};
+                        }
+                        return YQLCompleter->ApplyLight(text, prefix, contextLen);
+                    });
+                }
+            }
+        }
+    }
+
+    bool IsHintsEnabled() const final {
+        return HintsEnabled;
+    }
+
+    void SetColorSchema(const TColorSchema& schema) final {
+        CurrentColorSchema = schema;
+        YQLHighlighter = MakeYQLHighlighter(CurrentColorSchema);
+
+        // Update highlighter callback if replxx is active
+        if (Rx && EnableYqlCompletion) {
+            Rx->set_highlighter_callback([this](const auto& text, auto& colors) {
+                YQLHighlighter->Apply(text, colors);
+            });
+        }
+    }
+
+    TColorSchema GetColorSchema() const final {
+        return CurrentColorSchema;
+    }
+
+    void SetPrompt(const TString& prompt) final {
+        Prompt = prompt;
+    }
+
 private:
     void InitReplxx(bool enableYqlCompletion) {
+        EnableYqlCompletion = enableYqlCompletion;
         Rx = replxx::Replxx();
         Rx->install_window_change_handler();
 
@@ -173,14 +233,26 @@ private:
         });
 
         Rx->set_hint_delay(100);
-        Rx->set_hint_callback([this](const std::string& prefix, int& contextLen, replxx::Replxx::Color& color) {
-            const char* text = Rx->get_state().text();
-            if ((text == nullptr || text[0] == '\0') && !Placeholder.empty()) {
-                color = replxx::Replxx::Color::GRAY;
-                return std::vector<std::string>{std::string(Placeholder)};
-            }
-            return YQLCompleter->ApplyLight(text, prefix, contextLen);
-        });
+        if (HintsEnabled) {
+            Rx->set_hint_callback([this](const std::string& prefix, int& contextLen, replxx::Replxx::Color& color) {
+                const char* text = Rx->get_state().text();
+                if ((text == nullptr || text[0] == '\0') && !Placeholder.empty()) {
+                    color = replxx::Replxx::Color::GRAY;
+                    return std::vector<std::string>{std::string(Placeholder)};
+                }
+                return YQLCompleter->ApplyLight(text, prefix, contextLen);
+            });
+        } else {
+            // Hints disabled - only show placeholder
+            Rx->set_hint_callback([this](const std::string& /*prefix*/, int& /*contextLen*/, replxx::Replxx::Color& color) {
+                const char* text = Rx->get_state().text();
+                if ((text == nullptr || text[0] == '\0') && !Placeholder.empty()) {
+                    color = replxx::Replxx::Color::GRAY;
+                    return std::vector<std::string>{std::string(Placeholder)};
+                }
+                return std::vector<std::string>{};
+            });
+        }
 
         if (enableYqlCompletion) {
             Rx->set_complete_on_empty(true);
@@ -279,22 +351,25 @@ private:
     }
 
 private:
-    const TInteractiveLogger Log;
-    IYQLCompleter::TPtr YQLCompleter;
-    const IYQLHighlighter::TPtr YQLHighlighter;
     const bool ContinueAfterCancel = true;
     const bool EnableSwitchMode = true;
-    const TString Prompt;
+    bool EnableYqlCompletion = true;
+    TString Prompt;
     const TString Placeholder;
+
+    TColorSchema CurrentColorSchema;
+    IYQLCompleter::TPtr YQLCompleter;
+    IYQLHighlighter::TPtr YQLHighlighter;
     std::optional<replxx::Replxx> Rx;
     std::optional<THistory> History;
     bool SwitchRequested = false;
+    bool HintsEnabled = true;
 };
 
 } // anonymous namespace
 
-ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TLineReader>(settings, log);
+ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings) {
+    return std::make_shared<TLineReader>(settings);
 }
 
 } // namespace NYdb::NConsoleClient

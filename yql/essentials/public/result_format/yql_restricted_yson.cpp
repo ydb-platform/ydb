@@ -18,7 +18,7 @@ namespace NResult {
 namespace {
 class TRestrictedYsonFormatter: public NYson::TYsonConsumerBase {
 public:
-    TRestrictedYsonFormatter(TYsonResultWriter& writer)
+    explicit TRestrictedYsonFormatter(TYsonResultWriter& writer)
         : Writer_(writer)
     {
     }

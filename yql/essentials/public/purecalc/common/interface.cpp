@@ -130,6 +130,11 @@ TProgramFactoryOptions& TProgramFactoryOptions::SetInternalSettings(const TInter
     return *this;
 }
 
+TProgramFactoryOptions& TProgramFactoryOptions::SetIssueReportTarget(const TString& reportTarget) {
+    IssueReportTarget = reportTarget;
+    return *this;
+}
+
 void NYql::NPureCalc::ConfigureLogging(const TLoggingOptions& options) {
     InitLogging(options);
 }

@@ -41,6 +41,6 @@
 
 {% note info %}
 
-С помощью Yandex Cloud провайдера можно не только создавать инфраструктуру для дальнейшего развертывания на ней {{ ydb-short-name }} кластера с помощью [Ansible](../../initial-deployment.md), но и управлять [serverless или dedicated](https://yandex.cloud/ru/services/ydb) версией {{ ydb-short-name }} прямо из Terraform. О возможностях работы с {{ ydb-short-name }} в Yandex Cloud читайте в разделе [Работа с {{ ydb-short-name }} через Terraform]({{ yandex_docs }}/ydb/terraform/intro) документации Yandex Cloud.
+С помощью Yandex Cloud провайдера можно не только создавать инфраструктуру для дальнейшего развертывания на ней {{ ydb-short-name }} кластера с помощью [Ansible](../../initial-deployment/index.md), но и управлять [serverless или dedicated](https://yandex.cloud/ru/services/ydb) версией {{ ydb-short-name }} прямо из Terraform. О возможностях работы с {{ ydb-short-name }} в Yandex Cloud читайте в разделе [Работа с {{ ydb-short-name }} через Terraform]({{ yandex_docs }}/ydb/terraform/intro) документации Yandex Cloud.
 
 {% endnote %}

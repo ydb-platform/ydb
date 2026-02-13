@@ -17,6 +17,7 @@ void Upsert_OneBatch(const std::string& tableType);
 
 void ColumnType_Bool(const std::string& tableType);
 void ColumnType_Date(const std::string& tableType);
+void ColumnType_Decimal(const std::string& tableType);
 void ColumnType_Int8(const std::string& tableType);
 void ColumnType_Int16(const std::string& tableType);
 void ColumnType_Int32(const std::string& tableType);

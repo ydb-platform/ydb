@@ -52,7 +52,7 @@ public:
         return Inner_->IsActive(component, level);
     }
 
-    void Log(NUdf::TLogComponentId component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+    void Log(NUdf::TLogComponentId component, NUdf::ELogLevel level, const NUdf::TStringRef& message) override {
         Inner_->Log(component, level, message);
     }
 
@@ -106,7 +106,7 @@ public:
 //////////////////////////////////////////////////////////////////////////////
 class TOptionalTypeBuilder: public NUdf::IOptionalTypeBuilder {
 public:
-    TOptionalTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
+    explicit TOptionalTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
         : Parent_(parent)
     {
     }
@@ -143,7 +143,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 class TListTypeBuilder: public NUdf::IListTypeBuilder {
 public:
-    TListTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
+    explicit TListTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
         : Parent_(parent)
     {
     }
@@ -179,7 +179,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 class TStreamTypeBuilder: public NUdf::IStreamTypeBuilder {
 public:
-    TStreamTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
+    explicit TStreamTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
         : Parent_(parent)
     {
     }
@@ -215,7 +215,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 class TDictTypeBuilder: public NUdf::IDictTypeBuilder {
 public:
-    TDictTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
+    explicit TDictTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
         : Parent_(parent)
     {
     }
@@ -283,7 +283,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 class TSetTypeBuilder: public NUdf::ISetTypeBuilder {
 public:
-    TSetTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
+    explicit TSetTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
         : Parent_(parent)
     {
     }
@@ -461,7 +461,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 class TVariantTypeBuilder: public NUdf::IVariantTypeBuilder {
 public:
-    TVariantTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
+    explicit TVariantTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
         : Parent_(parent)
     {
     }
@@ -2033,7 +2033,7 @@ NUdf::TCounter TFunctionTypeInfoBuilder::GetCounter(const NUdf::TStringRef& name
         return CountersProvider_->GetCounter(ModuleName_, name, deriv);
     }
 
-    return {};
+    return NUdf::TCounter();
 }
 
 NUdf::TScopedProbe TFunctionTypeInfoBuilder::GetScopedProbe(const NUdf::TStringRef& name) {
@@ -2041,7 +2041,7 @@ NUdf::TScopedProbe TFunctionTypeInfoBuilder::GetScopedProbe(const NUdf::TStringR
         return CountersProvider_->GetScopedProbe(ModuleName_, name);
     }
 
-    return {};
+    return NUdf::TScopedProbe();
 }
 
 NUdf::TSourcePosition TFunctionTypeInfoBuilder::GetSourcePosition() {
@@ -2203,6 +2203,16 @@ ui64 TTypeInfoHelper::GetMaxBlockLength(const NUdf::TType* type) const {
 
 ui64 TTypeInfoHelper::GetMaxBlockBytes() const {
     return MaxBlockSizeInBytes;
+}
+
+void TTypeInfoHelper::NotifyNotConsumedLinear(const NUdf::TSourcePosition& pos) const {
+    if (NotConsumedLinearCallback_) {
+        NotConsumedLinearCallback_(pos);
+    }
+}
+
+void TTypeInfoHelper::SetNotConsumedLinearCallback(const TNotConsumedLinearCallback& callback) {
+    NotConsumedLinearCallback_ = callback;
 }
 
 void TTypeInfoHelper::DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v) {

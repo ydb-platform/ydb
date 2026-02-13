@@ -11,28 +11,26 @@ description = 'Estimate groups usage by tablets'
 
 
 def create_table_output():
-    columns = ['TabletId', 'TabletType', 'TabletChannel', 'StoragePool', 'GroupId', 'GroupType', 'Size', 'TabletMaxSize']
+    columns = ['TabletId', 'TabletType', 'TabletChannel', 'StoragePool', 'GroupId', 'GroupType', 'Size', 'TabletMaxSize',
+               'Count', 'TabletMaxCount']
 
     def human_readable_fn(d):
         return d.update((key, '%s GiB' % common.gib_string(d[key])) for key in ['Size', 'TabletMaxSize'] if key in d)
 
-    def tablet_size_max(d, rg):
-        sizes = [x['Size'] for x in rg]
-        d.update(
-            Size=sum(sizes),
-            TabletMaxSize=max(sizes)
-        )
+    def aggr_size(d, rg):
+        for x in rg:
+            d['Size'] = d.get('Size', 0) + x['Size']
+            d['Count'] = d.get('Count', 0) + x['Count']
+            d['TabletMaxSize'] = max(d.get('TabletMaxSize', 0), x['Size'])
+            d['TabletMaxCount'] = max(d.get('TabletMaxCount', 0), x['Count'])
         return d
 
-    def aggr_size(d, rg):
-        return d.update(Size=sum(x['Size'] for x in rg)) or d
-
     aggregations = {
-        'tablet': (['TabletId', 'Size'], tablet_size_max),
-        'tablet_type': (['TabletType', 'Size'], aggr_size),
-        'channel': (['TabletChannel', 'Size'], aggr_size),
-        'group': (['GroupId', 'Size'], aggr_size),
-        'group_type': (['GroupType', 'Size'], aggr_size),
+        'tablet': (['TabletId', 'Size', 'Count'], aggr_size),
+        'tablet_type': (['TabletType', 'Size', 'Count'], aggr_size),
+        'channel': (['TabletChannel', 'Size', 'Count'], aggr_size),
+        'group': (['GroupId', 'Size', 'Count'], aggr_size),
+        'group_type': (['GroupType', 'Size', 'Count'], aggr_size),
     }
     return table.TableOutput(
         cols_order=columns,
@@ -41,6 +39,8 @@ def create_table_output():
         aggr_drop={
             'Size',
             'TabletMaxSize',
+            'Count',
+            'TabletMaxCount',
         }
     )
 
@@ -60,7 +60,7 @@ def read_cache(args):
         tablet_channel_group_stat = defaultdict(list)
         for row in j['sizes']:
             cols = ['tablet_id', 'tablet_channel', 'group_id', 'tablet_type', 'sp_name']
-            tablet_channel_group_stat[tuple(map(row.__getitem__, cols))].append(row['size'])
+            tablet_channel_group_stat[tuple(map(row.__getitem__, cols))].append((row['size'], row['count']))
         group_sizes_map = {}
         for key, value in j['group_sizes_map'].items():
             group_sizes_map[int(key)] = value
@@ -80,9 +80,10 @@ def write_cache(args, tablet_channel_group_stat, group_sizes_map):
                 'tablet_type': tablet_type,
                 'sp_name': sp_name,
                 'size': size,
+                'count': count,
             }
             for (tablet_id, tablet_channel, group_id, tablet_type, sp_name), sizes in tablet_channel_group_stat.items()
-            for size in sizes
+            for size, count in sizes
         ]
     )
     with open(args.cache_file, 'w') as f:
@@ -94,8 +95,8 @@ def fetcher(args):
     res_q = []
     for group_id, node_id, pdisk_id, vslot_id in items:
         data = grouptool.parse_vdisk_storage(host, node_id, pdisk_id, vslot_id)
-        for tablet_id, channel, size in data or []:
-            res_q.append((group_id, tablet_id, channel, size))
+        for tablet_id, channel, size, count in data or []:
+            res_q.append((group_id, tablet_id, channel, size, count))
     return res_q
 
 
@@ -147,9 +148,9 @@ def do(args):
 
         with multiprocessing.Pool(128) as pool:
             for item in itertools.chain.from_iterable(pool.imap_unordered(fetcher, host_requests_map.items())):
-                group_id, tablet_id, channel, size = item
+                group_id, tablet_id, channel, size, count = item
                 key = tablet_id, channel, group_id, type_map.get(tablet_id, ''), group_to_sp_name.get(group_id)
-                tablet_channel_group_stat[key].append(size)
+                tablet_channel_group_stat[key].append((size, count))
 
         if args.cache_file:
             write_cache(args, tablet_channel_group_stat, group_sizes_map)
@@ -163,7 +164,8 @@ def do(args):
         row['GroupId'] = group_id
         row['GroupType'] = 'dynamic' if common.is_dynamic_group(group_id) else 'static'
         row['StoragePool'] = sp_name if common.is_dynamic_group(group_id) else 'None'
-        row['Size'] = sum(sizes) * group_sizes_map[group_id] // len(sizes)
+        row['Size'] = sum(size for size, count in sizes) * group_sizes_map[group_id] // len(sizes)
+        row['Count'] = sum(count for size, count in sizes) * group_sizes_map[group_id] // len(sizes)
         rows.append(row)
 
     table_output.dump(rows, args)

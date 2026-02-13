@@ -29,9 +29,9 @@ void TestRun(TTest *test,
              const TDuration &timeout,
              ui32 chunkSize = DefChunkSize,
              ui64 diskSize = DefDiskSize,
-             ui32 domainsNum = DefDomainsNum,
-             ui32 disksInDomain = DefDisksInDomain,
-             NKikimr::TErasureType::EErasureSpecies erasure = DefErasure)
+             ui32 domainsNum = 1,
+             ui32 disksInDomain = 1,
+             NKikimr::TErasureType::EErasureSpecies erasure = NKikimr::TBlobStorageGroupType::ErasureNone)
 {
     TConfiguration Conf(TAllPDisksConfiguration::MkOneTmp(chunkSize, diskSize, "ROT"),
                         domainsNum,
@@ -80,6 +80,13 @@ Y_UNIT_TEST(TestName) {                                                         
     TestRun<ClassName, Setup>(&test, TIMEOUT);                                   \
 }
 
+#define Y_UNIT_TEST_COMP_DISK_BLOCK42(TestName, ClassName, Setup, CompParam, VDiskNumParam, g)     \
+Y_UNIT_TEST(TestName) {                                                                    \
+    IDataSetPtr ds = DataSetSelector(g, 64u << 10u);                                            \
+    ClassName test(ds, CompParam, VDiskNumParam);                                               \
+    TestRun<ClassName, Setup>(&test, TIMEOUT, DefChunkSize, DefDiskSize, 8, 1, NKikimr::TBlobStorageGroupType::Erasure4Plus2Block);                                   \
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SIMPLE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -108,8 +115,9 @@ Y_UNIT_TEST_SUITE(TBsVDiskExtreme) {
     Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingKeyFresh, TSimple3Put1GetMissingKey, TFastVDiskSetup, false, 0, DG_3PUT)
     Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingKeyCompaction, TSimple3Put1GetMissingKey, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingPartFresh, TSimple3Put1GetMissingPart, TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingPartCompaction, TSimple3Put1GetMissingPart, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
+    // TODO: https://github.com/ydb-platform/ydb/issues/32548
+    // Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingPartFresh, TSimple3Put1GetMissingPart, TFastVDiskSetup, false, 0, DG_3PUT)
+    // Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingPartCompaction, TSimple3Put1GetMissingPart, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
     // TODO: Make range queries
     // TODO: Block and read block
 }
@@ -139,26 +147,28 @@ Y_UNIT_TEST_SUITE(TBsVDiskExtremeHuge) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SIMPLE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskExtremeHandoff) {
-    Y_UNIT_TEST_COMP_DISK(SimpleHnd6Put1SeqGetFresh, TSimpleHnd6Put1SeqGet, TFastVDiskSetupHndOff, false, 7, DB_3PUT2HND)
-    Y_UNIT_TEST_COMP_DISK(SimpleHnd6Put1SeqGetCompaction, TSimpleHnd6Put1SeqGet, TFastVDiskSetupCompactedHndOff, true, 7, DB_3PUT2HND)
+// TODO: https://github.com/ydb-platform/ydb/issues/32548
+// Y_UNIT_TEST_SUITE(TBsVDiskExtremeHandoff) {
+    // Y_UNIT_TEST_COMP_DISK(SimpleHnd6Put1SeqGetFresh, TSimpleHnd6Put1SeqGet, TFastVDiskSetupHndOff, false, 7, DB_3PUT2HND)
+    // Y_UNIT_TEST_COMP_DISK(SimpleHnd6Put1SeqGetCompaction, TSimpleHnd6Put1SeqGet, TFastVDiskSetupCompactedHndOff, true, 7, DB_3PUT2HND)
 
-    Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetFresh, TSimpleHnd2Put1Get, TFastVDiskSetupHndOff, false, 7, DB_1PUT2HND)
-    Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetCompaction, TSimpleHnd2Put1Get, TFastVDiskSetupCompactedHndOff, true, 7, DB_1PUT2HND)
-}
+    // Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetFresh, TSimpleHnd2Put1Get, TFastVDiskSetupHndOff, false, 7, DB_1PUT2HND)
+    // Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetCompaction, TSimpleHnd2Put1Get, TFastVDiskSetupCompactedHndOff, true, 7, DB_1PUT2HND)
+// }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SIMPLE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskExtremeHandoffHuge) {
+// TODO: https://github.com/ydb-platform/ydb/issues/32548
+// Y_UNIT_TEST_SUITE(TBsVDiskExtremeHandoffHuge) {
 
-    Y_UNIT_TEST_COMP_DISK(SimpleHndPut1SeqGetFresh, TSimpleHnd6Put1SeqGet, TFastVDiskSetupHndOff, false, 7, DB_3PUT2HND_HUGE)
-    // FIXME: turn this test on after implementing handoffs for huge blobs
-    //Y_UNIT_TEST_COMP_DISK(SimpleHndPut1SeqGetCompaction, TSimpleHnd6Put1SeqGet, TFastVDiskSetupCompactedHndOff, true, 7, DB_3PUT2HND_HUGE)
+//     Y_UNIT_TEST_COMP_DISK(SimpleHndPut1SeqGetFresh, TSimpleHnd6Put1SeqGet, TFastVDiskSetupHndOff, false, 7, DB_3PUT2HND_HUGE)
+//     // FIXME: turn this test on after implementing handoffs for huge blobs
+//     //Y_UNIT_TEST_COMP_DISK(SimpleHndPut1SeqGetCompaction, TSimpleHnd6Put1SeqGet, TFastVDiskSetupCompactedHndOff, true, 7, DB_3PUT2HND_HUGE)
 
-    Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetFresh, TSimpleHnd2Put1Get, TFastVDiskSetupHndOff, false, 7, DB_1PUT2HND_HUGE)
-    Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetCompaction, TSimpleHnd2Put1Get, TFastVDiskSetupCompactedHndOff, true, 7, DB_1PUT2HND_HUGE)
-}
+//     Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetFresh, TSimpleHnd2Put1Get, TFastVDiskSetupHndOff, false, 7, DB_1PUT2HND_HUGE)
+//     Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetCompaction, TSimpleHnd2Put1Get, TFastVDiskSetupCompactedHndOff, true, 7, DB_1PUT2HND_HUGE)
+// }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // RANGE BS
@@ -394,10 +404,11 @@ Y_UNIT_TEST_SUITE(TBsVDiskDefrag) {
         TestRun<TDefragEmptyDB, TDefragVDiskSetup>(&test, TIMEOUT);
     }
 
-    Y_UNIT_TEST(Defrag50PercentGarbage) {
-        TDefrag50PercentGarbage test;
-        TestRun<TDefrag50PercentGarbage, TDefragVDiskSetup>(&test, TIMEOUT);
-    }
+    // TODO: https://github.com/ydb-platform/ydb/issues/32548
+    // Y_UNIT_TEST(Defrag50PercentGarbage) {
+    //     TDefrag50PercentGarbage test;
+    //     TestRun<TDefrag50PercentGarbage, TDefragVDiskSetup>(&test, TIMEOUT);
+    // }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -439,7 +450,7 @@ Y_UNIT_TEST_SUITE(TBsHuge) {
 Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     Y_UNIT_TEST(StartStopNotEmptyDB) {
         const ui32 numIterations = NValgrind::PlainOrUnderValgrind(10, 2);
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
 
@@ -594,7 +605,7 @@ Y_UNIT_TEST_SUITE(TBsOther1) {
 
     Y_UNIT_TEST(PoisonPill) {
         TManyPutRangeGet2Channels test(false, true, LARGE_MSG_NUM, 100, UNK);
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
         bool success = Conf.Run<TManyPutRangeGet2Channels>(&test, TDuration::Minutes(100));
@@ -608,7 +619,7 @@ Y_UNIT_TEST_SUITE(TBsOther1) {
     void ChaoticParallelWriteGeneric(ui32 parallel, ui32 msgNum, ui32 msgSize,
                                      std::shared_ptr<IPutHandleClassGenerator> cls,
                                      TDuration workingTime, TDuration requestTimeout) {
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
 
@@ -659,7 +670,7 @@ Y_UNIT_TEST_SUITE(TBsDbStat) {
         const TDuration workingTime = TDuration::Seconds(600);
         const TDuration requestTimeout = TDuration();
 
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
 
@@ -681,37 +692,38 @@ Y_UNIT_TEST_SUITE(TBsDbStat) {
 // Sync/Repl
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
-    Y_UNIT_TEST(ReplProxyData) {
-        TTestReplProxyData test;
-        TestRun<TTestReplProxyData, TFastVDiskSetupCompacted>(&test, TIMEOUT);
-    }
+    // TODO: https://github.com/ydb-platform/ydb/issues/32548
+    // Y_UNIT_TEST(ReplProxyData) {
+    //     TTestReplProxyData test;
+    //     TestRun<TTestReplProxyData, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+    // }
 
     Y_UNIT_TEST(ReplProxyKeepBits) {
         TTestReplProxyKeepBits test;
         TestRun<TTestReplProxyKeepBits, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
 
-
-    Y_UNIT_TEST(ReplEraseDiskRestore) {
-        TSmallCommonDataSet dataSet;
-        ui32 domainsNum = 4u;
-        ui32 disksInDomain = 2u;
-        ui32 pDisksNum = domainsNum * disksInDomain;
-        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
-                            domainsNum, disksInDomain);
-        TFastVDiskSetup vdiskSetup;
-        Conf.Prepare(&vdiskSetup);
-        TTestReplDataWriteAndSync testLoad(&dataSet);
-        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
-        UNIT_ASSERT(success1);
-        Conf.Shutdown();
-        Conf.PDisks->EraseDisk(3, 678);
-        Conf.Prepare(&vdiskSetup, false);
-        TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT);
-        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
-        Conf.Shutdown();
-        UNIT_ASSERT(success2);
-    }
+    // TODO: https://github.com/ydb-platform/ydb/issues/32548
+    // Y_UNIT_TEST(ReplEraseDiskRestore) {
+    //     TSmallCommonDataSet dataSet;
+    //     ui32 domainsNum = 8u;
+    //     ui32 disksInDomain = 2u;
+    //     ui32 pDisksNum = domainsNum * disksInDomain;
+    //     TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
+    //                         domainsNum, disksInDomain, NKikimr::TBlobStorageGroupType::Erasure4Plus2Block);
+    //     TFastVDiskSetup vdiskSetup;
+    //     Conf.Prepare(&vdiskSetup);
+    //     TTestReplDataWriteAndSync testLoad(&dataSet);
+    //     bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
+    //     UNIT_ASSERT(success1);
+    //     Conf.Shutdown();
+    //     Conf.PDisks->EraseDisk(3, 678);
+    //     Conf.Prepare(&vdiskSetup, false);
+    //     TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT);
+    //     bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
+    //     Conf.Shutdown();
+    //     UNIT_ASSERT(success2);
+    // }
 
     Y_UNIT_TEST(ReadOnly) {
         TSmallCommonDataSet dataSet;
@@ -736,51 +748,54 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {
-    Y_UNIT_TEST(ReplEraseDiskRestoreWOOneDisk) {
-        TSmallCommonDataSet dataSet;
-        ui32 domainsNum = 4u;
-        ui32 disksInDomain = 2u;
-        ui32 pDisksNum = domainsNum * disksInDomain;
-        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
-                            domainsNum, disksInDomain);
-        TFastVDiskSetup vdiskSetup;
-        Conf.Prepare(&vdiskSetup);
-        TTestReplDataWriteAndSync testLoad(&dataSet);
-        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
-        UNIT_ASSERT(success1);
-        Conf.Shutdown();
-        Conf.PDisks->EraseDisk(3, 678);
-        TFastVDiskSetupWODisk2 vdiskSetupWODisk2;
-        Conf.Prepare(&vdiskSetupWODisk2, false);
-        TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT);
-        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
-        Conf.Shutdown();
-        UNIT_ASSERT(success2);
-    }
-}
+
+// TODO: https://github.com/ydb-platform/ydb/issues/32548
+// Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {
+//     Y_UNIT_TEST(ReplEraseDiskRestoreWOOneDisk) {
+//         TSmallCommonDataSet dataSet;
+//         ui32 domainsNum = 4u;
+//         ui32 disksInDomain = 2u;
+//         ui32 pDisksNum = domainsNum * disksInDomain;
+//         TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
+//                             domainsNum, disksInDomain);
+//         TFastVDiskSetup vdiskSetup;
+//         Conf.Prepare(&vdiskSetup);
+//         TTestReplDataWriteAndSync testLoad(&dataSet);
+//         bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
+//         UNIT_ASSERT(success1);
+//         Conf.Shutdown();
+//         Conf.PDisks->EraseDisk(3, 678);
+//         TFastVDiskSetupWODisk2 vdiskSetupWODisk2;
+//         Conf.Prepare(&vdiskSetupWODisk2, false);
+//         TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT);
+//         bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
+//         Conf.Shutdown();
+//         UNIT_ASSERT(success2);
+//     }
+// }
 
 Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
-    Y_UNIT_TEST(ReplEraseDiskRestoreMultipart) {
-        TSmallCommonDataSet dataSet;
-        ui32 domainsNum = 4u;
-        ui32 disksInDomain = 1u;
-        ui32 pDisksNum = domainsNum * disksInDomain;
-        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
-                            domainsNum, disksInDomain);
-        TFastVDiskSetup vdiskSetup;
-        Conf.Prepare(&vdiskSetup);
-        TTestReplDataWriteAndSyncMultipart testLoad(&dataSet);
-        bool success1 = Conf.Run<TTestReplDataWriteAndSyncMultipart>(&testLoad, TIMEOUT);
-        UNIT_ASSERT(success1);
-        Conf.Shutdown();
-        Conf.PDisks->EraseDisk(3, 678);
-        Conf.Prepare(&vdiskSetup, false);
-        TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT, true);
-        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
-        Conf.Shutdown();
-        UNIT_ASSERT(success2);
-    }
+    // TODO: https://github.com/ydb-platform/ydb/issues/32548
+    // Y_UNIT_TEST(ReplEraseDiskRestoreMultipart) {
+    //     TSmallCommonDataSet dataSet;
+    //     ui32 domainsNum = 4u;
+    //     ui32 disksInDomain = 1u;
+    //     ui32 pDisksNum = domainsNum * disksInDomain;
+    //     TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
+    //                         domainsNum, disksInDomain);
+    //     TFastVDiskSetup vdiskSetup;
+    //     Conf.Prepare(&vdiskSetup);
+    //     TTestReplDataWriteAndSyncMultipart testLoad(&dataSet);
+    //     bool success1 = Conf.Run<TTestReplDataWriteAndSyncMultipart>(&testLoad, TIMEOUT);
+    //     UNIT_ASSERT(success1);
+    //     Conf.Shutdown();
+    //     Conf.PDisks->EraseDisk(3, 678);
+    //     Conf.Prepare(&vdiskSetup, false);
+    //     TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT, true);
+    //     bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
+    //     Conf.Shutdown();
+    //     UNIT_ASSERT(success2);
+    // }
 
     Y_UNIT_TEST(AnubisTest) {
         // ignored
@@ -826,78 +841,79 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         }
     }
 
-    Y_UNIT_TEST(ReplPerf) {
-        const ui64 maxDataSize = 10 << 20;
-        const ui32 maxBlobs = 2000; // FIXME: set up -1
-        const ui32 minBlobSize = 128;
-        const ui32 maxBlobSize = 4096;
+    // TODO: https://github.com/ydb-platform/ydb/issues/32548
+    // Y_UNIT_TEST(ReplPerf) {
+    //     const ui64 maxDataSize = 10 << 20;
+    //     const ui32 maxBlobs = 2000; // FIXME: set up -1
+    //     const ui32 minBlobSize = 128;
+    //     const ui32 maxBlobSize = 4096;
 
-        TAutoPtr<IDataGenerator> generator;
-        TAutoPtr<TGeneratedDataSet> dataSetPtr;
+    //     TAutoPtr<IDataGenerator> generator;
+    //     TAutoPtr<TGeneratedDataSet> dataSetPtr;
 
-        ui32 domainsNum = 4u;
-        ui32 disksInDomain = 2u;
-        ui32 pDisksNum = domainsNum * disksInDomain;
-        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 16u << 20u, 16ull << 30ull, "ROT"),
-                            domainsNum, disksInDomain);
-        TFastVDiskSetupRepl vdiskSetup;
-        Conf.Prepare(&vdiskSetup);
+    //     ui32 domainsNum = 4u;
+    //     ui32 disksInDomain = 2u;
+    //     ui32 pDisksNum = domainsNum * disksInDomain;
+    //     TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 16u << 20u, 16ull << 30ull, "ROT"),
+    //                         domainsNum, disksInDomain);
+    //     TFastVDiskSetupRepl vdiskSetup;
+    //     Conf.Prepare(&vdiskSetup);
 
-        const ui32 erasedPDiskID = 4;
+    //     const ui32 erasedPDiskID = 4;
 
-        TVector<NKikimr::TVDiskID> vdisks;
-        for (ui32 i = 0; i < Conf.VDisks->GetSize(); ++i) {
-            auto& vDisk = Conf.VDisks->Get(i);
-            if (vDisk.Cfg->BaseInfo.PDiskId == erasedPDiskID) {
-                vdisks.push_back(vDisk.VDiskID);
-            }
-        }
+    //     TVector<NKikimr::TVDiskID> vdisks;
+    //     for (ui32 i = 0; i < Conf.VDisks->GetSize(); ++i) {
+    //         auto& vDisk = Conf.VDisks->Get(i);
+    //         if (vDisk.Cfg->BaseInfo.PDiskId == erasedPDiskID) {
+    //             vdisks.push_back(vDisk.VDiskID);
+    //         }
+    //     }
 
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting writer");
-        generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
-                Conf.GroupInfo, vdisks));
-        dataSetPtr.Reset(new TGeneratedDataSet(generator));
-        TTestReplDataWriteAndSync testLoad(dataSetPtr.Get());
-        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
-        UNIT_ASSERT(success1);
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "stopped writer");
-        Conf.Shutdown();
+    //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting writer");
+    //     generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
+    //             Conf.GroupInfo, vdisks));
+    //     dataSetPtr.Reset(new TGeneratedDataSet(generator));
+    //     TTestReplDataWriteAndSync testLoad(dataSetPtr.Get());
+    //     bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
+    //     UNIT_ASSERT(success1);
+    //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "stopped writer");
+    //     Conf.Shutdown();
 
-        Conf.PDisks->EraseDisk(3, 678);
+    //     Conf.PDisks->EraseDisk(3, 678);
 
-        Conf.Prepare(&vdiskSetup, false);
+    //     Conf.Prepare(&vdiskSetup, false);
 
-        generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
-                Conf.GroupInfo, vdisks));
-        dataSetPtr.Reset(new TGeneratedDataSet(generator));
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting first read pass");
-        TReadUntilSuccess testRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
-        TInstant begin = Now();
-        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
-        TInstant end = Now();
-        TDuration timedelta = end - begin;
-        Conf.Shutdown();
-        UNIT_ASSERT(success2);
+    //     generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
+    //             Conf.GroupInfo, vdisks));
+    //     dataSetPtr.Reset(new TGeneratedDataSet(generator));
+    //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting first read pass");
+    //     TReadUntilSuccess testRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
+    //     TInstant begin = Now();
+    //     bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
+    //     TInstant end = Now();
+    //     TDuration timedelta = end - begin;
+    //     Conf.Shutdown();
+    //     UNIT_ASSERT(success2);
 
-        Conf.Prepare(&vdiskSetup, false, false); // do not run replication here, all data must already be in VDisk
+    //     Conf.Prepare(&vdiskSetup, false, false); // do not run replication here, all data must already be in VDisk
 
-        generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
-                Conf.GroupInfo, vdisks));
-        dataSetPtr.Reset(new TGeneratedDataSet(generator));
+    //     generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
+    //             Conf.GroupInfo, vdisks));
+    //     dataSetPtr.Reset(new TGeneratedDataSet(generator));
 
-        LOG_NOTICE_S(*Conf.ActorSystem1, NActorsServices::TEST, "first read pass w/repl took " << timedelta.ToString().data());
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting second read pass");
-        TReadUntilSuccess verifyRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
-        begin = Now();
-        bool success3 = Conf.Run<TReadUntilSuccess>(&verifyRead, TIMEOUT);
-        end = Now();
-        timedelta = end - begin;
-        Conf.Shutdown();
-        UNIT_ASSERT(success3);
-    }
+    //     LOG_NOTICE_S(*Conf.ActorSystem1, NActorsServices::TEST, "first read pass w/repl took " << timedelta.ToString().data());
+    //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting second read pass");
+    //     TReadUntilSuccess verifyRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
+    //     begin = Now();
+    //     bool success3 = Conf.Run<TReadUntilSuccess>(&verifyRead, TIMEOUT);
+    //     end = Now();
+    //     timedelta = end - begin;
+    //     Conf.Shutdown();
+    //     UNIT_ASSERT(success3);
+    // }
 
     Y_UNIT_TEST(SyncLogTest) {
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TNoVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
         TSyncLogTestWrite test;

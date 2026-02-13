@@ -42,7 +42,7 @@ if T.TYPE_CHECKING:
     from collections.abc import Iterable
     from .ft2font import Glyph
 
-ParserElement.enablePackrat()
+ParserElement.enable_packrat()
 _log = logging.getLogger("matplotlib.mathtext")
 
 
@@ -2159,7 +2159,7 @@ class Parser:
             ParserState(fonts_object, 'default', 'rm', fontsize, dpi)]
         self._em_width_cache: dict[tuple[str, float, float], float] = {}
         try:
-            result = self._expression.parseString(s)
+            result = self._expression.parse_string(s)
         except ParseBaseException as err:
             # explain becomes a plain method on pyparsing 3 (err.explain(0)).
             raise ValueError("\n" + ParseException.explain(err, 0)) from None
@@ -2167,7 +2167,7 @@ class Parser:
         self._in_subscript_or_superscript = False
         # prevent operator spacing from leaking into a new expression
         self._em_width_cache = {}
-        ParserElement.resetCache()
+        ParserElement.reset_cache()
         return T.cast(Hlist, result[0])  # Known return type from main.
 
     def get_state(self) -> ParserState:
@@ -2186,7 +2186,7 @@ class Parser:
         return [Hlist(toks.asList())]
 
     def math_string(self, toks: ParseResults) -> ParseResults:
-        return self._math_expression.parseString(toks[0][1:-1], parseAll=True)
+        return self._math_expression.parse_string(toks[0][1:-1], parseAll=True)
 
     def math(self, toks: ParseResults) -> T.Any:
         hlist = Hlist(toks.asList())

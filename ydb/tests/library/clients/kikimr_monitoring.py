@@ -2,27 +2,44 @@
 import time
 import json
 import collections
-from six.moves.urllib import request
+import ssl
+import urllib.request
 
 
 class KikimrMonitor(object):
-    def __init__(self, host, mon_port, update_interval_seconds=1.0):
+    def __init__(self, host, mon_port, update_interval_seconds=1.0, use_https=False, token=None):
         super(KikimrMonitor, self).__init__()
         self.__host = host
         self.__mon_port = mon_port
-        self.__url = "http://{host}:{mon_port}/counters/json".format(host=host, mon_port=mon_port)
+        protocol = "https" if use_https else "http"
+        self.__monitoring_address = "{protocol}://{host}:{mon_port}".format(protocol=protocol, host=host, mon_port=mon_port)
+        self.__counters_url = "{monitoring_address}/counters/json".format(monitoring_address=self.__monitoring_address)
+        self.__use_https = use_https
+        self.__token = token
         self.__pdisks = set()
         self.__data = {}
         self.__next_update_time = time.time()
         self.__update_interval_seconds = update_interval_seconds
         self._by_sensor_name = collections.defaultdict(list)
 
+    def __open_url(self, url_str):
+        """Open URL with optional HTTPS and token authentication"""
+        req = urllib.request.Request(url_str)
+        if self.__token:
+            req.add_header('Authorization', self.__token)
+        if self.__use_https:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            return urllib.request.urlopen(req, context=ctx)
+        else:
+            return urllib.request.urlopen(req)
+
     def tabletcounters(self, tablet_id):
-        url = request.urlopen(
-            "http://{host}:{mon_port}/viewer/json/tabletcounters?tablet_id={tablet_id}".format(
-                host=self.__host, mon_port=self.__mon_port, tablet_id=tablet_id
-            )
+        url_str = "{monitoring_address}/viewer/json/tabletcounters?tablet_id={tablet_id}".format(
+            monitoring_address=self.__monitoring_address, tablet_id=tablet_id
         )
+        url = self.__open_url(url_str)
         return json.load(url)
 
     @property
@@ -38,7 +55,7 @@ class KikimrMonitor(object):
             return
 
         try:
-            url = request.urlopen(self.__url)
+            url = self.__open_url(self.__counters_url)
         except Exception:
             return False
         try:

@@ -46,7 +46,7 @@ public:
 private:
     class TArrowNode: public IArrowKernelComputationNode {
     public:
-        TArrowNode(const TBlockFuncNode* parent);
+        explicit TArrowNode(const TBlockFuncNode* parent);
         TStringBuf GetKernelName() const final;
         const arrow::compute::ScalarKernel& GetArrowKernel() const final;
         const std::vector<arrow::ValueDescr>& GetArgsDesc() const final;

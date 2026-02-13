@@ -776,7 +776,7 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, cons
     }
 
     if (node->IsCallable("Member") && (!parent || parent->IsCallable({"And", "Or", "Not", "Coalesce"}))) {
-        auto* typeAnn = node->GetTypeAnn();
+        auto typeAnn = node->GetTypeAnn();
         if (typeAnn->GetKind() == ETypeAnnotationKind::Optional) {
             typeAnn = typeAnn->Cast<TOptionalExprType>()->GetItemType();
         }
@@ -971,8 +971,9 @@ TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
         const bool keyIsPg = firstKeyType->GetKind() == ETypeAnnotationKind::Pg;
         const TTypeAnnotationNode* rangeForType = firstKeyType;
         if (keyIsPg) {
-            const TTypeAnnotationNode* yqlType = NTypeAnnImpl::FromPgImpl(pos, firstKeyType, ctx);
-            YQL_ENSURE(yqlType);
+            bool isUniversal;
+            const TTypeAnnotationNode* yqlType = NTypeAnnImpl::FromPgImpl(pos, firstKeyType, ctx, isUniversal);
+            YQL_ENSURE(!isUniversal && yqlType);
             rangeForType = yqlType;
             YQL_ENSURE(opNode->Tail().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg);
         }

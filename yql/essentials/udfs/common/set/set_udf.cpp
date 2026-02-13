@@ -160,7 +160,7 @@ extern const char SetResourceNameGeneric[] = "Set.SetResource.Generic";
 class TSetResource: public TBoxedResource<TSetGeneric, SetResourceNameGeneric> {
 public:
     template <typename... Args>
-    inline TSetResource(Args&&... args)
+    inline explicit TSetResource(Args&&... args)
         : TBoxedResource(std::forward<Args>(args)...)
     {
     }
@@ -336,7 +336,7 @@ private:
     class TSetResourceData<EDataSlot::slot>: public TBoxedResource<TSetData<EDataSlot::slot>, SetResourceName##slot> { \
     public:                                                                                                            \
         template <typename... Args>                                                                                    \
-        inline TSetResourceData(Args&&... args)                                                                        \
+        inline explicit TSetResourceData(Args&&... args)                                                               \
             : TBoxedResource(std::forward<Args>(args)...)                                                              \
         {                                                                                                              \
         }                                                                                                              \

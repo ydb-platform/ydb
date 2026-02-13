@@ -399,7 +399,7 @@ namespace NKikimr::NBsController {
                 TVSlotInfo *dstSlot = VSlots.ConstructInplaceNewEntry(newSlotId, newSlotId, destinationPDisk,
                     srcSlot->GroupId, srcSlot->GroupGeneration, group->Generation, srcSlot->Kind, srcSlot->RingIdx,
                     srcSlot->FailDomainIdx, srcSlot->VDiskIdx, TMood::Normal, group, &Self.VSlotReadyTimestampQ,
-                    TInstant::Zero(), TDuration::Zero());
+                    TInstant::Zero(), TDuration::Zero(), 0);
 
                 dstSlot->VDiskStatusTimestamp = Mono;
 

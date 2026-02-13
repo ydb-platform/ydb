@@ -67,6 +67,7 @@ PEERDIR(
     ydb/core/persqueue/public/write_meta
     ydb/core/protos
     ydb/core/raw_socket
+    ydb/core/security/sasl
     ydb/services/persqueue_v1
 )
 

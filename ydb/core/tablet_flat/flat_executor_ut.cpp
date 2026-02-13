@@ -31,8 +31,8 @@ namespace NTabletFlatExecutor {
 
                 txc.DB.Alter()
                     .AddTable("test" + ToString(ui32(TableId)), TableId)
-                    .AddColumn(TableId, "key", ColumnKeyId, NScheme::TInt64::TypeId, false)
-                    .AddColumn(TableId, "value", ColumnValueId, NScheme::TString::TypeId, false)
+                    .AddColumn(TableId, "key", ColumnKeyId, NScheme::TInt64::TypeId, false, false)
+                    .AddColumn(TableId, "value", ColumnValueId, NScheme::TString::TypeId, false, false)
                     .AddColumnToKey(TableId, ColumnKeyId)
                     .SetCompactionPolicy(TableId, *Policy);
 
@@ -2503,9 +2503,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedLargeBlobs) {
             // Values bigger than 128 bytes stored in large blobs
             txc.DB.Alter()
                 .AddTable("test", TableId)
-                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false)
-                .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false)
-                .AddColumn(TableId, "counter", CounterColumnId, NScheme::TInt64::TypeId, false)
+                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false, false)
+                .AddColumn(TableId, "counter", CounterColumnId, NScheme::TInt64::TypeId, false, false)
                 .AddColumnToKey(TableId, KeyColumnId)
                 .SetCompactionPolicy(TableId, *policy)
                 .SetFamilyBlobs(TableId, 0, -1, 128);
@@ -2847,8 +2847,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
 
             txc.DB.Alter()
                 .AddTable("test" + ToString(ui32(tableId)), tableId)
-                .AddColumn(tableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false)
-                .AddColumn(tableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false)
+                .AddColumn(tableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(tableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false, false)
                 .AddColumnToKey(tableId, TRowsModel::ColumnKeyId)
                 .SetCompactionPolicy(tableId, policy);
         }
@@ -3891,8 +3891,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
             for (ui32 tableId = 201; tableId <= 208; ++tableId) {
                 txc.DB.Alter()
                     .AddTable("test" + ToString(ui32(tableId)), tableId)
-                    .AddColumn(tableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false)
-                    .AddColumn(tableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false)
+                    .AddColumn(tableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false, false)
+                    .AddColumn(tableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false, false)
                     .AddColumnToKey(tableId, TRowsModel::ColumnKeyId)
                     .SetCompactionPolicy(tableId, *Policy);
             }
@@ -4098,8 +4098,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
 
             txc.DB.Alter()
                 .AddTable("test" + ToString(ui32(TRowsModel::TableId)), TRowsModel::TableId)
-                .AddColumn(TRowsModel::TableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false)
-                .AddColumn(TRowsModel::TableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false)
+                .AddColumn(TRowsModel::TableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(TRowsModel::TableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false, false)
                 .AddColumnToKey(TRowsModel::TableId, TRowsModel::ColumnKeyId)
                 .SetCompactionPolicy(TRowsModel::TableId, *Policy)
                 .SetColdBorrow(TRowsModel::TableId, true);
@@ -4306,9 +4306,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
 
             txc.DB.Alter()
                 .AddTable("test" + ToString(ui32(TableId)), TableId)
-                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false)
-                .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false)
-                .AddColumn(TableId, "value2", Value2ColumnId, NScheme::TString::TypeId, false)
+                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false, false)
+                .AddColumn(TableId, "value2", Value2ColumnId, NScheme::TString::TypeId, false, false)
                 .AddColumnToKey(TableId, KeyColumnId);
 
             if (Policy) {
@@ -5319,10 +5319,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTxAndBlobs) {
 
             txc.DB.Alter()
                 .AddTable("test" + ToString(ui32(TableId)), TableId)
-                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false)
-                .AddColumn(TableId, "value1", Value1ColumnId, NScheme::TString::TypeId, false)
-                .AddColumn(TableId, "value2", Value2ColumnId, NScheme::TString::TypeId, false)
-                .AddColumn(TableId, "value3", Value3ColumnId, NScheme::TString::TypeId, false)
+                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(TableId, "value1", Value1ColumnId, NScheme::TString::TypeId, false, false)
+                .AddColumn(TableId, "value2", Value2ColumnId, NScheme::TString::TypeId, false, false)
+                .AddColumn(TableId, "value3", Value3ColumnId, NScheme::TString::TypeId, false, false)
                 .AddColumnToKey(TableId, KeyColumnId);
 
             if (Policy) {
@@ -7368,7 +7368,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, /* followerId */ 1);
-    
+
         Cerr << "... wait first follower EvAttach" << Endl;
         followerFirstAttach.Wait(TDuration::Seconds(5));
 
@@ -8880,6 +8880,251 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
                     "Key 22 = Upsert value = Set value22\n");
             }
         }
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_SensitiveColumns) {
+    struct TTxSchema : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext&) override
+        {
+            const ui32 TableId = 200;
+            txc.DB.Alter()
+                .AddTable("test_sensitive", TableId)
+                .AddColumn(TableId, "key", 1, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(TableId, "value", 2, NScheme::TString::TypeId, false, false)
+                .AddColumn(TableId, "sensitive", 3, NScheme::TString::TypeId, false, true) // Sensitive column
+                .AddColumnToKey(TableId, 1);
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxAddData : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext&) override
+        {
+            const ui32 TableId = 200;
+            const auto key = NScheme::TInt64::TInstance(1);
+            const auto value = NScheme::TString::TInstance("normal_value");
+            const auto sensitive = NScheme::TString::TInstance("secret_data");
+            NTable::TUpdateOp valueOp{ 2, NTable::ECellOp::Set, value };
+            NTable::TUpdateOp sensitiveOp{ 3, NTable::ECellOp::Set, sensitive };
+            txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { valueOp, sensitiveOp });
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxCheckSensitive : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext&) override
+        {
+            const ui32 TableId = 200;
+            const auto& scheme = txc.DB.GetScheme();
+            const auto* tableInfo = scheme.GetTableInfo(TableId);
+            UNIT_ASSERT(tableInfo);
+
+            // Check that sensitive column is marked
+            bool hasSensitiveColumn = false;
+            for (const auto& pr : tableInfo->Columns) {
+                if (pr.second.IsSensitive) {
+                    hasSensitiveColumn = true;
+                    UNIT_ASSERT_VALUES_EQUAL(pr.first, 3u); // sensitive column ID
+                }
+            }
+            UNIT_ASSERT(hasSensitiveColumn);
+
+            // Verify column IDs
+            UNIT_ASSERT(tableInfo->Columns.find(1) != tableInfo->Columns.end()); // key
+            UNIT_ASSERT(tableInfo->Columns.find(2) != tableInfo->Columns.end()); // value
+            UNIT_ASSERT(tableInfo->Columns.find(3) != tableInfo->Columns.end()); // sensitive
+
+            // Verify sensitive column flag
+            const auto& keyCol = tableInfo->Columns.find(1)->second;
+            const auto& valueCol = tableInfo->Columns.find(2)->second;
+            const auto& sensitiveCol = tableInfo->Columns.find(3)->second;
+
+            UNIT_ASSERT(!keyCol.IsSensitive);
+            UNIT_ASSERT(!valueCol.IsSensitive);
+            UNIT_ASSERT(sensitiveCol.IsSensitive);
+
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(TestSensitiveColumnHidden) {
+        TMyEnvBase env;
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        // Create schema with sensitive column
+        env.SendSync(new NFake::TEvExecute{ new TTxSchema });
+
+        // Add data
+        env.SendSync(new NFake::TEvExecute{ new TTxAddData });
+
+        // Check that sensitive column is properly marked in schema
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckSensitive });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_CorruptedBlobs) {
+
+    static constexpr ui32 TableId = 200;
+    static constexpr ui32 KeyColumnId = 1;
+    static constexpr ui32 ValueColumnId = 2;
+
+    struct TTxSchema : public ITransaction {
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            txc.DB.Alter()
+                .AddTable("test_data", TableId)
+                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false, false)
+                .AddColumnToKey(TableId, 1);
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxWriteRow : public ITransaction {
+        i64 Key;
+        TString Value;
+
+        TTxWriteRow(i64 key, TString value) : Key(key), Value(std::move(value)) {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            const auto keyCell = NScheme::TInt64::TInstance(Key);
+
+            const auto valueCell = NScheme::TString::TInstance(Value);
+            NTable::TUpdateOp ops{ ValueColumnId, NTable::ECellOp::Set, valueCell };
+
+            txc.DB.Update(TableId, NTable::ERowOp::Upsert, { keyCell }, { ops });
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(TestCorruptedSchemaBlob) {
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        // Initialize table schema
+        env.SendSync(new NFake::TEvExecute{ new TTxSchema });
+
+        THashSet<TLogoBlobID> corruptedBlobs;
+        auto getResultObserver = env->AddObserver<TEvBlobStorage::TEvGetResult>([&](auto& ev) {
+            if (env->FindActorName(ev->GetRecipientRewrite()) != "FLAT_EXECUTOR") {
+                return;
+            }
+            auto* msg = ev->Get();
+            for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                auto& res = msg->Responses[i];
+                // Corrupt RedoLz4 blobs
+                if (res.Id.Cookie() == 0x2000 && corruptedBlobs.insert(res.Id).second) {
+                    Cerr << "... corrupting blob " << res.Id << Endl;
+                    TString data;
+                    data.resize(res.Buffer.size());
+                    for (size_t i = 0; i < data.size(); ++i) {
+                        data[i] = char((i + 1) & 0xff);
+                    }
+                    res.Buffer = TRope(std::move(data));
+                }
+            }
+        });
+
+        Cerr << "... rebooting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(corruptedBlobs.size() > 0, "did not corrupt any blobs");
+
+        env.WaitForGone();
+    }
+
+    Y_UNIT_TEST(TestCorruptedRedoCommit) {
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        // Initialize table schema
+        env.SendSync(new NFake::TEvExecute{ new TTxSchema });
+
+        // Write a large string value, which will become a large redo commit
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(1, TString(size_t(65536), 'x')) });
+
+        THashSet<TLogoBlobID> corruptedBlobs;
+        auto getResultObserver = env->AddObserver<TEvBlobStorage::TEvGetResult>([&](auto& ev) {
+            if (env->FindActorName(ev->GetRecipientRewrite()) != "FLAT_EXECUTOR") {
+                return;
+            }
+            auto* msg = ev->Get();
+            for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                auto& res = msg->Responses[i];
+                // Corrupt RedoLz4 blobs
+                if (res.Id.Cookie() == 0x6000 && corruptedBlobs.insert(res.Id).second) {
+                    Cerr << "... corrupting blob " << res.Id << Endl;
+                    TString data;
+                    data.resize(res.Buffer.size());
+                    for (size_t i = 0; i < data.size(); ++i) {
+                        data[i] = char((i + 1) & 0xff);
+                    }
+                    res.Buffer = TRope(std::move(data));
+                }
+            }
+        });
+
+        Cerr << "... rebooting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(corruptedBlobs.size() > 0, "did not corrupt any blobs");
+
+        env.WaitForGone();
     }
 
 }

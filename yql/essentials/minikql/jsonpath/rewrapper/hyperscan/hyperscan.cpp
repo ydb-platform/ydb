@@ -11,7 +11,7 @@ namespace {
 
 class THyperscan: public IRe {
 public:
-    THyperscan(::NHyperscan::TDatabase&& db)
+    explicit THyperscan(::NHyperscan::TDatabase&& db)
         : Database_(std::move(db))
     {
     }

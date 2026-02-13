@@ -349,7 +349,7 @@ TString SerializeToJson(TStringBuf binaryJson) {
 namespace {
 
 struct TPODReader {
-    TPODReader(TStringBuf buffer)
+    explicit TPODReader(TStringBuf buffer)
         : TPODReader(buffer, 0, buffer.size())
     {
     }
@@ -385,7 +385,7 @@ struct TPODReader {
 };
 
 struct TBinaryJsonValidator {
-    TBinaryJsonValidator(TStringBuf buffer)
+    explicit TBinaryJsonValidator(TStringBuf buffer)
         : Buffer_(buffer)
     {
     }

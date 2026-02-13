@@ -13,8 +13,8 @@ namespace NYql {
 
 class TPgOptimizer: public IOptimizer {
 public:
-    TPgOptimizer(const TInput& input, const std::function<void(const TString&)>& log = {});
-    ~TPgOptimizer();
+    explicit TPgOptimizer(const TInput& input, const std::function<void(const TString&)>& log = {});
+    ~TPgOptimizer() override;
 
     TOutput JoinSearch() override;
 

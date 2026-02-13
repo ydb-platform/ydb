@@ -5,13 +5,11 @@ namespace NDetail {
 
 void YqlPanic(const ::NPrivate::TStaticBuf& file, int line, const char* function,
               const TStringBuf& condition, const TStringBuf& message) {
-    auto err = TYqlPanic() << file.As<TStringBuf>() << ":" << line << "  "
-                           << function << "(): requirement " << condition << " failed";
-    if (!message.empty()) {
-        err << ", message: " << message;
-    }
-
-    throw err;
+    throw TYqlPanic()
+        << file.As<TStringBuf>() << ":" << line << "  "
+        << function << "(): requirement " << condition << " failed"
+        << (message.empty() ? "" : ", message: ")
+        << (message.empty() ? "" : message);
 }
 
 } // namespace NDetail

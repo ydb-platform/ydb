@@ -1,18 +1,21 @@
 #include "database_resolver.h"
 
-#include <util/string/split.h>
 #include <ydb/core/fq/libs/common/cache.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/util/tuples.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/core/util/exceptions.h>
+
+#include <yql/essentials/utils/url_builder.h>
+
 #include <library/cpp/json/json_reader.h>
+
+#include <util/string/split.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
@@ -213,7 +216,7 @@ private:
                 DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
                 result.ConstructInPlace(description);
                 return "";
-            } catch (const NYql::TCodeLineException& ex) {
+            } catch (const NKikimr::TCodeLineException& ex) {
                 LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << ex.what());
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
@@ -361,7 +364,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -409,7 +412,7 @@ public:
             }
             
             if (aliveHosts.empty()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -447,7 +450,7 @@ public:
             }
     
             if (aliveHost == "") {
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -497,7 +500,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {

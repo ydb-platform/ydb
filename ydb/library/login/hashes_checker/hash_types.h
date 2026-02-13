@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/login/protos/login.pb.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -12,14 +14,9 @@ enum class EHashClass {
     Scram,
 };
 
-enum class EHashType {
-    Argon,
-    ScramSha256,
-};
-
 struct THashTypeDescription {
     const EHashClass Class;
-    const EHashType Type;
+    const NLoginProto::EHashType::HashType Type;
     const TString Name;
     const ui32 IterationsCount;
     const ui32 SaltSize;
@@ -33,7 +30,7 @@ struct THashTypesRegistry {
 
     static const TVector<THashTypeDescription> HashTypeDescriptions;
 
-    THashMap<EHashType, const THashTypeDescription&> HashTypesMap;
+    THashMap<NLoginProto::EHashType::HashType, const THashTypeDescription&> HashTypesMap;
     THashMap<TStringBuf, const THashTypeDescription&> HashNamesMap;
 
 } const extern HashesRegistry;

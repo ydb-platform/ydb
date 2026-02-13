@@ -41,6 +41,7 @@ SRCS(
     multiget.cpp
     patch.cpp
     recovery.cpp
+    retro_tracing.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
     self_heal.cpp
@@ -71,6 +72,7 @@ RECURSE_FOR_TESTS(
     ut_bridge
     ut_check_integrity
     ut_comp_defrag
+    ut_ddisk
     ut_donor
     ut_group_reconfiguration
     ut_huge

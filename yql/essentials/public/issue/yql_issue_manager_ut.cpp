@@ -4,11 +4,15 @@
 
 using namespace NYql;
 
-static std::function<TIssuePtr()> CreateScopeIssueFunction(TString name, ui32 column, ui32 row) {
+namespace {
+
+std::function<TIssuePtr()> CreateScopeIssueFunction(TString name, ui32 column, ui32 row) {
     return [name, column, row]() {
         return new TIssue(TPosition(column, row), name);
     };
 }
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TIssueManagerTest) {
 Y_UNIT_TEST(NoErrorNoLevelTest) {

@@ -5,11 +5,11 @@
 namespace NYql {
 class TQWriterDecorator: public IQWriter {
 public:
-    TQWriterDecorator(IQWriterPtr&& underlying)
+    explicit TQWriterDecorator(IQWriterPtr&& underlying)
         : Underlying_(std::move(underlying))
     {
     }
-    NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) override final {
+    NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
         decltype(Underlying_) underlying;
         with_lock (Mutex_) {
             underlying = Underlying_;
@@ -29,7 +29,7 @@ public:
         }
     }
 
-    NThreading::TFuture<void> Commit() override final {
+    NThreading::TFuture<void> Commit() final {
         with_lock (Mutex_) {
             if (Exception_) {
                 throw yexception() << "QWriter exception while Put(): " << *Exception_ << ")";
@@ -51,7 +51,7 @@ public:
     }
 
     // Close all used files, doesn't commit anything
-    void Close() override final {
+    void Close() final {
         bool expected = false;
         if (Closed_.compare_exchange_strong(expected, true)) {
             with_lock (Mutex_) {

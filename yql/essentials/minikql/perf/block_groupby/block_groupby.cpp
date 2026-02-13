@@ -110,7 +110,7 @@ private:
     };
 
 public:
-    TAggregate(const std::vector<IAggregator*>& aggs)
+    explicit TAggregate(const std::vector<IAggregator*>& aggs)
         : Aggs_(aggs)
         , Rh_(sizeof(i64))
     {

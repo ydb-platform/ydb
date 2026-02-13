@@ -100,7 +100,7 @@ public:
 
     class TPreVisitor: public INodeVisitor {
     public:
-        TPreVisitor(TWriter& owner)
+        explicit TPreVisitor(TWriter& owner)
             : Owner_(owner)
             , IsProcessed0_(false)
         {
@@ -588,7 +588,7 @@ public:
 
     class TPostVisitor: public INodeVisitor {
     public:
-        TPostVisitor(TWriter& owner)
+        explicit TPostVisitor(TWriter& owner)
             : Owner_(owner)
         {
         }

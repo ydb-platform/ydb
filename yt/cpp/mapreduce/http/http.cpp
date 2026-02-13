@@ -18,22 +18,18 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/generic/singleton.h>
-#include <util/generic/algorithm.h>
-
-#include <util/stream/mem.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <util/string/escape.h>
 #include <util/string/printf.h>
 
 #include <util/system/byteorder.h>
 #include <util/system/getpid.h>
 
 #include <exception>
+#include <memory>
 
 
 namespace NYT {
@@ -120,7 +116,7 @@ private:
     }
 
     // In many cases http proxy stops reading request and resets connection
-    // if error has happend. This function tries to read error response
+    // if error has happened. This function tries to read error response
     // in such cases.
     void HandleWriteException(const std::exception& ex) {
         Y_ABORT_UNLESS(WriteError_ == nullptr);
@@ -530,7 +526,7 @@ TConnectionPtr TConnectionPool::Connect(
             if (connection->DeadLine < now) {
                 continue;
             }
-            if (!AtomicCas(&connection->Busy, 1, 0)) {
+            if (bool expected = false; !connection->Busy.compare_exchange_strong(expected, true)) {
                 continue;
             }
 
@@ -576,7 +572,7 @@ void TConnectionPool::Release(TConnectionPtr connection)
     }
 
     connection->Socket->SetSocketTimeout(socketTimeout.Seconds());
-    AtomicSet(connection->Busy, 0);
+    connection->Busy.store(false);
 
     Refresh();
 }
@@ -621,7 +617,7 @@ void TConnectionPool::Refresh()
     for (const auto& item : sortedConnections) {
         const auto& mapIterator = item.second;
         auto connection = mapIterator->second;
-        if (AtomicGet(connection->Busy)) {
+        if (connection->Busy.load()) {
             continue;
         }
 
@@ -703,34 +699,40 @@ class THttpResponse::THttpInputWrapped
 public:
     explicit THttpInputWrapped(TRequestContext context, IInputStream* input)
         : Context_(std::move(context))
-        , HttpInput_(input)
-    { }
+    {
+        try {
+            HttpInput_ = std::make_unique<THttpInput>(input);
+        } catch (const std::exception& ex) {
+            auto wrapped = WrapSystemError(Context_, ex);
+            std::rethrow_exception(wrapped);
+        }
+    }
 
     const THttpHeaders& Headers() const noexcept
     {
-        return HttpInput_.Headers();
+        return HttpInput_->Headers();
     }
 
     const TString& FirstLine() const noexcept
     {
-        return HttpInput_.FirstLine();
+        return HttpInput_->FirstLine();
     }
 
     bool IsKeepAlive() const noexcept
     {
-        return HttpInput_.IsKeepAlive();
+        return HttpInput_->IsKeepAlive();
     }
 
     const TMaybe<THttpHeaders>& Trailers() const noexcept
     {
-        return HttpInput_.Trailers();
+        return HttpInput_->Trailers();
     }
 
 private:
     size_t DoRead(void* buf, size_t len) override
     {
         try {
-            return HttpInput_.Read(buf, len);
+            return HttpInput_->Read(buf, len);
         } catch (const std::exception& ex) {
             auto wrapped = WrapSystemError(Context_, ex);
             std::rethrow_exception(wrapped);
@@ -740,7 +742,7 @@ private:
     size_t DoSkip(size_t len) override
     {
         try {
-            return HttpInput_.Skip(len);
+            return HttpInput_->Skip(len);
         } catch (const std::exception& ex) {
             auto wrapped = WrapSystemError(Context_, ex);
             std::rethrow_exception(wrapped);
@@ -749,7 +751,7 @@ private:
 
 private:
     const TRequestContext Context_;
-    THttpInput HttpInput_;
+    std::unique_ptr<THttpInput> HttpInput_;
 };
 
 THttpResponse::THttpResponse(

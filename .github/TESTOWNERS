@@ -46,9 +46,17 @@
 /ydb/tests/functional/tenants @ydb-platform/system-infra
 /ydb/services/ydb/table_split_ut @ydb-platform/system-infra
 
+/ydb/core/tx/schemeshard/olap @ydb-platform/cs
+/ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
+/ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
+
 #Security Team @azevaykin TEAM:@ydb-platform/security
 /ydb/core/security @ydb-platform/security
 /ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
+/ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
+/ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
@@ -91,6 +99,7 @@
 /ydb/tests/functional/config @ydb-platform/blobstorage
 /ydb/services/keyvalue/ut @ydb-platform/blobstorage
 /ydb/tests/functional/bridge @ydb-platform/blobstorage
+/ydb/tests/functional/dstool @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core

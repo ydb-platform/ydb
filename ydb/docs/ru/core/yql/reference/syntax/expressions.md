@@ -400,7 +400,6 @@ select $second;
 ```yql
 $_ = 1;
 select $_; --- ошибка: Unable to reference anonymous name $_
-export $_; --- ошибка: Can not export anonymous name $_
 ```
 
 {% if feature_mapreduce %}

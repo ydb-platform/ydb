@@ -84,7 +84,7 @@ TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx,
         pointPrefix = settings.PointPrefixLen;
     }
 
-    if (!kqpCtx.Config->EnablePointPredicateSortAutoSelectIndex){
+    if (!kqpCtx.Config->GetEnablePointPredicateSortAutoSelectIndex()){
         pointPrefix = 0;
     }
 

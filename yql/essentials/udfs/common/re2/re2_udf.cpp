@@ -333,7 +333,7 @@ private:
     const TOptionsSchema Schema_;
 
 public:
-    TOptions(const TOptionsSchema& schema)
+    explicit TOptions(const TOptionsSchema& schema)
         : Schema_(schema)
     {
     }
@@ -393,7 +393,7 @@ public:
 template <bool posix>
 class TIsValidRegexp: public TBoxedValue {
 public:
-    TIsValidRegexp(const TOptionsSchema optionsSchema)
+    explicit TIsValidRegexp(const TOptionsSchema optionsSchema)
         : OptionsSchema_(std::move(optionsSchema))
     {
     }

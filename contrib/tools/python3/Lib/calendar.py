@@ -10,7 +10,6 @@ import datetime
 from enum import IntEnum, global_enum
 import locale as _locale
 from itertools import repeat
-import warnings
 
 __all__ = ["IllegalMonthError", "IllegalWeekdayError", "setfirstweekday",
            "firstweekday", "isleap", "leapdays", "weekday", "monthrange",
@@ -46,6 +45,7 @@ class IllegalWeekdayError(ValueError):
 
 def __getattr__(name):
     if name in ('January', 'February'):
+        import warnings
         warnings.warn(f"The '{name}' attribute is deprecated, use '{name.upper()}' instead",
                       DeprecationWarning, stacklevel=2)
         if name == 'January':
@@ -593,8 +593,6 @@ class different_locale:
         _locale.setlocale(_locale.LC_TIME, self.locale)
 
     def __exit__(self, *args):
-        if self.oldlocale is None:
-            return
         _locale.setlocale(_locale.LC_TIME, self.oldlocale)
 
 
@@ -698,7 +696,7 @@ def timegm(tuple):
     return seconds
 
 
-def main(args):
+def main(args=None):
     import argparse
     parser = argparse.ArgumentParser()
     textgroup = parser.add_argument_group('text only arguments')
@@ -745,6 +743,11 @@ def main(args):
         help="output type (text or html)"
     )
     parser.add_argument(
+        "-f", "--first-weekday",
+        type=int, default=0,
+        help="weekday (0 is Monday, 6 is Sunday) to start each week (default 0)"
+    )
+    parser.add_argument(
         "year",
         nargs='?', type=int,
         help="year number"
@@ -755,7 +758,7 @@ def main(args):
         help="month number (1-12, text only)"
     )
 
-    options = parser.parse_args(args[1:])
+    options = parser.parse_args(args)
 
     if options.locale and not options.encoding:
         parser.error("if --locale is specified --encoding is required")
@@ -764,10 +767,14 @@ def main(args):
     locale = options.locale, options.encoding
 
     if options.type == "html":
+        if options.month:
+            parser.error("incorrect number of arguments")
+            sys.exit(1)
         if options.locale:
             cal = LocaleHTMLCalendar(locale=locale)
         else:
             cal = HTMLCalendar()
+        cal.setfirstweekday(options.first_weekday)
         encoding = options.encoding
         if encoding is None:
             encoding = sys.getdefaultencoding()
@@ -775,16 +782,14 @@ def main(args):
         write = sys.stdout.buffer.write
         if options.year is None:
             write(cal.formatyearpage(datetime.date.today().year, **optdict))
-        elif options.month is None:
-            write(cal.formatyearpage(options.year, **optdict))
         else:
-            parser.error("incorrect number of arguments")
-            sys.exit(1)
+            write(cal.formatyearpage(options.year, **optdict))
     else:
         if options.locale:
             cal = LocaleTextCalendar(locale=locale)
         else:
             cal = TextCalendar()
+        cal.setfirstweekday(options.first_weekday)
         optdict = dict(w=options.width, l=options.lines)
         if options.month is None:
             optdict["c"] = options.spacing
@@ -805,4 +810,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()

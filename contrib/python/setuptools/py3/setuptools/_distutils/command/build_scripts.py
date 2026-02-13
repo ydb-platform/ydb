@@ -5,7 +5,6 @@ Implements the Distutils 'build_scripts' command."""
 import os
 import re
 import tokenize
-from distutils import sysconfig
 from distutils._log import log
 from stat import ST_MODE
 from typing import ClassVar
@@ -32,7 +31,7 @@ class build_scripts(Command):
         ('executable=', 'e', "specify final destination interpreter path"),
     ]
 
-    boolean_options = ['force']
+    boolean_options: ClassVar[list[str]] = ['force']
 
     def initialize_options(self):
         self.build_dir = None
@@ -76,7 +75,7 @@ class build_scripts(Command):
 
         return outfiles, updated_files
 
-    def _copy_script(self, script, outfiles, updated_files):  # noqa: C901
+    def _copy_script(self, script, outfiles, updated_files):
         shebang_match = None
         script = convert_path(script)
         outfile = os.path.join(self.build_dir, os.path.basename(script))
@@ -106,18 +105,8 @@ class build_scripts(Command):
         if shebang_match:
             log.info("copying and adjusting %s -> %s", script, self.build_dir)
             if not self.dry_run:
-                if not sysconfig.python_build:
-                    executable = self.executable
-                else:
-                    executable = os.path.join(
-                        sysconfig.get_config_var("BINDIR"),
-                        "python{}{}".format(
-                            sysconfig.get_config_var("VERSION"),
-                            sysconfig.get_config_var("EXE"),
-                        ),
-                    )
                 post_interp = shebang_match.group(1) or ''
-                shebang = "#!" + executable + post_interp + "\n"
+                shebang = "#!" + self.executable + post_interp + "\n"
                 self._validate_shebang(shebang, f.encoding)
                 with open(outfile, "w", encoding=f.encoding) as outf:
                     outf.write(shebang)

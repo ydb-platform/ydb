@@ -1,7 +1,7 @@
 #include "model_base.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
@@ -14,9 +14,8 @@
 
 namespace NYdb::NConsoleClient::NAi {
 
-TModelBase::TModelBase(const TString& apiUrl, const TString& authToken, const TInteractiveLogger& log)
-    : Log(log)
-    , HttpExecutor(apiUrl, authToken, Log)
+TModelBase::TModelBase(const TString& apiUrl, const TString& authToken)
+    : HttpExecutor(apiUrl, authToken)
 {
     Y_VALIDATE(apiUrl, "Url should not be empty for model API");
     YDB_CLI_LOG(Notice, "Using model API url: \"" << apiUrl << "\" with " << (authToken ? TStringBuilder() << "auth token " << BlurSecret(authToken) : TStringBuilder() << "anonymous access"));

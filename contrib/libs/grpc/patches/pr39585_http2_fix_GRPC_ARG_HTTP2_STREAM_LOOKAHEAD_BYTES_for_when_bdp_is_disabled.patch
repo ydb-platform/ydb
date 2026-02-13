@@ -1,0 +1,26 @@
+--- contrib/libs/grpc/src/core/ext/transport/chttp2/transport/chttp2_transport.cc	(a0adae11dd5b6e38e17e66aad094833577d8619c)
++++ contrib/libs/grpc/src/core/ext/transport/chttp2/transport/chttp2_transport.cc	(24a33c939397e5e30c5d897458bd70872bb9481f)
+@@ -1072,6 +1072,9 @@ static void queue_setting_update(grpc_chttp2_transport* t,
+   if (use_value != t->settings[GRPC_LOCAL_SETTINGS][id]) {
+     t->settings[GRPC_LOCAL_SETTINGS][id] = use_value;
+     t->dirtied_local_settings = true;
++    if (id == GRPC_CHTTP2_SETTINGS_INITIAL_WINDOW_SIZE) {
++        t->flow_control.set_target_initial_window_size(use_value);
++    }
+   }
+ }
+ 
+--- contrib/libs/grpc/src/core/ext/transport/chttp2/transport/flow_control.h	(a0adae11dd5b6e38e17e66aad094833577d8619c)
++++ contrib/libs/grpc/src/core/ext/transport/chttp2/transport/flow_control.h	(24a33c939397e5e30c5d897458bd70872bb9481f)
+@@ -265,6 +265,11 @@ class TransportFlowControl final {
+ 
+   FlowControlAction SetAckedInitialWindow(uint32_t value);
+ 
++  void set_target_initial_window_size(uint32_t value) {
++    target_initial_window_size_ =
++        std::min(value, grpc_chttp2_settings_parameters[GRPC_CHTTP2_SETTINGS_INITIAL_WINDOW_SIZE].max_value);
++  }
++
+   // Getters
+   int64_t remote_window() const { return remote_window_; }
+   int64_t announced_window() const { return announced_window_; }

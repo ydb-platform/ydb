@@ -1,10 +1,9 @@
 
 #pragma once
 
-#include <util/generic/string.h>
-#include <util/generic/vector.h>
+
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_binary_yson_comparator.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 
 namespace NYql::NFmr {
 

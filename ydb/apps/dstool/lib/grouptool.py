@@ -68,8 +68,6 @@ def check_fail_model(coord_to_status, erasure):
             if not status:
                 nwdom[fr] += 1
         return len(nwdom) <= 1 or (len(nwdom) == 2 and any(v == 1 for v in nwdom.values()))
-    elif erasure == 'mirror-3':
-        return sum(status_per_fdom.values()) >= len(status_per_fdom) - 1
     else:
         assert False, 'unexpected erasure type %s' % erasure
 
@@ -122,7 +120,6 @@ class GroupMapper(object):
     _geom_for_erasure = {
         'mirror-3-dc': (3, 3, 1),
         'block-4-2': (1, 8, 1),
-        'mirror-3': (1, 4, 1),
         'none': (1, 1, 1),
         'mirror-3of4': (1, 8, 1),
     }
@@ -299,7 +296,8 @@ def parse_vdisk_storage_from_http_api(node_id, pdisk_id, vslot_id):
         tablet_id = int(tablet_info['tablet_id'])
         for channel, channel_info in enumerate(tablet_info['channels']):
             size = int(channel_info.get('data_size', 0))
-            res.append((tablet_id, channel, size))
+            count = int(channel_info.get('count', 0))
+            res.append((tablet_id, channel, size, count))
     return res
 
 

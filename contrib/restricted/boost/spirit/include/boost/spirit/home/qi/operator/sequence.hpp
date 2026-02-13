@@ -39,8 +39,8 @@ namespace boost { namespace spirit { namespace qi
     {
         friend struct sequence_base<sequence<Elements>, Elements>;
 
-        sequence(Elements const& elements)
-          : sequence_base<sequence<Elements>, Elements>(elements) {}
+        sequence(Elements const& elements_)
+          : sequence_base<sequence<Elements>, Elements>(elements_) {}
 
     private:
 

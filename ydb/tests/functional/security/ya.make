@@ -5,6 +5,8 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 TEST_SRCS(
     conftest.py
     test_grants.py
+    test_mon_endpoints_auth.py
+    test_mon_mtls_auth.py
     test_paths_lookup.py
 )
 

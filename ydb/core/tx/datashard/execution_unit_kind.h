@@ -79,6 +79,7 @@ enum class EExecutionUnitKind: ui32 {
     RotateCdcStream,
     MoveIndex,
     CreateIncrementalRestoreSrc,
+    Truncate,
     Count,
     Unspecified
 };

@@ -33,7 +33,6 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         auto createSetup = [=]() {
             NKikimrConfig::TFeatureFlags ff;
             ff.SetEnableTopicSplitMerge(true);
-            ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
             ff.SetEnableTopicServiceTx(true);
             ff.SetEnableTopicAutopartitioningForCDC(true);
             ff.SetEnableTopicAutopartitioningForReplication(true);

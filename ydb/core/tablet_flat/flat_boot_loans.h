@@ -53,6 +53,12 @@ namespace NBoot {
         void Flush()
         {
             for (TBody *head = nullptr; Queue && *(head = &Queue[0]); ) {
+                size_t decompressedSize = Codec->DecompressedLength(head->Body);
+                Y_ENSURE(decompressedSize <= MaxDecompressedBlobSize,
+                    "Loan entry " << NFmt::Do(head->LargeGlobId)
+                    << " has an unexpected decompressed size of " << decompressedSize << " bytes"
+                    << ", possible data corruption");
+
                 Apply(head->LargeGlobId.Lead, Codec->Decode(head->Body));
 
                 ++Skip, Queue.pop_front();

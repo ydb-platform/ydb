@@ -429,75 +429,115 @@ bool TActiveTransaction::BuildSchemeTx()
 {
     Y_ENSURE(TxBody);
     SchemeTx.Reset(new NKikimrTxDataShard::TFlatSchemeTransaction);
+
     bool res = SchemeTx->ParseFromArray(TxBody.data(), TxBody.size());
     if (!res)
         return false;
 
-    ui32 count = (ui32)SchemeTx->HasCreateTable()
-        + (ui32)SchemeTx->HasDropTable()
-        + (ui32)SchemeTx->HasAlterTable()
-        + (ui32)SchemeTx->HasBackup()
-        + (ui32)SchemeTx->HasRestore()
-        + (ui32)SchemeTx->HasSendSnapshot()
-        + (ui32)SchemeTx->HasCreatePersistentSnapshot()
-        + (ui32)SchemeTx->HasDropPersistentSnapshot()
-        + (ui32)SchemeTx->HasInitiateBuildIndex()
-        + (ui32)SchemeTx->HasFinalizeBuildIndex()
-        + (ui32)SchemeTx->HasDropIndexNotice()
-        + (ui32)SchemeTx->HasMoveTable()
-        + (ui32)SchemeTx->HasCreateCdcStreamNotice()
-        + (ui32)SchemeTx->HasAlterCdcStreamNotice()
-        + (ui32)SchemeTx->HasDropCdcStreamNotice()
-        + (ui32)SchemeTx->HasRotateCdcStreamNotice()
-        + (ui32)SchemeTx->HasMoveIndex()
-        + (ui32)SchemeTx->HasCreateIncrementalRestoreSrc()
-        + (ui32)SchemeTx->HasCreateIncrementalBackupSrc()
-        ;
-    if (count != 1)
-        return false;
+    size_t count = 0;
+    SchemeTxType = TSchemaOperation::ETypeUnknown;
 
-    if (SchemeTx->HasCreateTable())
+    if (SchemeTx->HasCreateTable()) {
         SchemeTxType = TSchemaOperation::ETypeCreate;
-    else if (SchemeTx->HasDropTable())
+        count++;
+    }
+    
+    if (SchemeTx->HasDropTable()) {
         SchemeTxType = TSchemaOperation::ETypeDrop;
-    else if (SchemeTx->HasAlterTable())
+        count++;
+    }
+    
+    if (SchemeTx->HasAlterTable()) {
         SchemeTxType = TSchemaOperation::ETypeAlter;
-    else if (SchemeTx->HasBackup())
+        count++;
+    }
+    
+    if (SchemeTx->HasBackup()) {
         SchemeTxType = TSchemaOperation::ETypeBackup;
-    else if (SchemeTx->HasRestore())
+        count++;
+    }
+    
+    if (SchemeTx->HasRestore()) {
         SchemeTxType = TSchemaOperation::ETypeRestore;
-    else if (SchemeTx->HasSendSnapshot())
+        count++;
+    }
+    
+    if (SchemeTx->HasSendSnapshot()) {
         SchemeTxType = TSchemaOperation::ETypeCopy;
-    else if (SchemeTx->HasCreatePersistentSnapshot())
+        count++;
+    }
+    
+    if (SchemeTx->HasCreatePersistentSnapshot()) {
         SchemeTxType = TSchemaOperation::ETypeCreatePersistentSnapshot;
-    else if (SchemeTx->HasDropPersistentSnapshot())
+        count++;
+    }
+    
+    if (SchemeTx->HasDropPersistentSnapshot()) {
         SchemeTxType = TSchemaOperation::ETypeDropPersistentSnapshot;
-    else if (SchemeTx->HasInitiateBuildIndex())
+        count++;
+    }
+    
+    if (SchemeTx->HasInitiateBuildIndex()) {
         SchemeTxType = TSchemaOperation::ETypeInitiateBuildIndex;
-    else if (SchemeTx->HasFinalizeBuildIndex())
+        count++;
+    }
+    
+    if (SchemeTx->HasFinalizeBuildIndex()) {
         SchemeTxType = TSchemaOperation::ETypeFinalizeBuildIndex;
-    else if (SchemeTx->HasDropIndexNotice())
+        count++;
+    }
+    
+    if (SchemeTx->HasDropIndexNotice()) {
         SchemeTxType = TSchemaOperation::ETypeDropIndexNotice;
-    else if (SchemeTx->HasMoveTable())
+        count++;
+    }
+    
+    if (SchemeTx->HasMoveTable()) {
         SchemeTxType = TSchemaOperation::ETypeMoveTable;
-    else if (SchemeTx->HasCreateCdcStreamNotice())
+        count++;
+    }
+    
+    if (SchemeTx->HasCreateCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeCreateCdcStream;
-    else if (SchemeTx->HasAlterCdcStreamNotice())
+        count++;
+    }
+    
+    if (SchemeTx->HasAlterCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeAlterCdcStream;
-    else if (SchemeTx->HasDropCdcStreamNotice())
+        count++;
+    }
+    
+    if (SchemeTx->HasDropCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeDropCdcStream;
-    else if (SchemeTx->HasRotateCdcStreamNotice())
+        count++;
+    }
+    
+    if (SchemeTx->HasRotateCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeRotateCdcStream;
-    else if (SchemeTx->HasMoveIndex())
+        count++;
+    }
+    
+    if (SchemeTx->HasMoveIndex()) {
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
-    else if (SchemeTx->HasCreateIncrementalRestoreSrc())
+        count++;
+    }
+    
+    if (SchemeTx->HasCreateIncrementalRestoreSrc()) {
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalRestoreSrc;
-    else if (SchemeTx->HasCreateIncrementalBackupSrc())
+        count++;
+    }
+    
+    if (SchemeTx->HasCreateIncrementalBackupSrc()) {
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalBackupSrc;
-    else
-        SchemeTxType = TSchemaOperation::ETypeUnknown;
+        count++;
+    }
+    
+    if (SchemeTx->HasTruncateTable()) {
+        SchemeTxType = TSchemaOperation::ETypeTruncate;
+        count++;
+    }
 
-    return SchemeTxType != TSchemaOperation::ETypeUnknown;
+    return count == 1;
 }
 
 bool TActiveTransaction::BuildSnapshotTx()
@@ -882,6 +922,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::DropCdcStream);
         plan.push_back(EExecutionUnitKind::RotateCdcStream);
         plan.push_back(EExecutionUnitKind::CreateIncrementalRestoreSrc);
+        plan.push_back(EExecutionUnitKind::Truncate);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else {

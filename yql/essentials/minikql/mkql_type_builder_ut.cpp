@@ -16,7 +16,7 @@ public:
         : Alloc_(__LOCATION__)
         , Env_(Alloc_)
         , TypeInfoHelper_(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, {})
+        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, NYql::NUdf::TSourcePosition())
     {
     }
 
@@ -373,7 +373,7 @@ struct TLogMessage {
 };
 
 struct TLogProviderSetup {
-    TLogProviderSetup(bool withoutLog = false)
+    explicit TLogProviderSetup(bool withoutLog = false)
         : Alloc(__LOCATION__)
         , Env(Alloc)
         , TypeInfoHelper(new TTypeInfoHelper())
@@ -381,7 +381,7 @@ struct TLogProviderSetup {
               [this](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
                   Messages.push_back({TString(component), level, TString(message)});
               }))
-        , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, Env, TypeInfoHelper, "module", nullptr, {}, nullptr, withoutLog ? nullptr : LogProvider.Get())
+        , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, Env, TypeInfoHelper, "module", nullptr, NYql::NUdf::TSourcePosition(), nullptr, withoutLog ? nullptr : LogProvider.Get())
     {
     }
 

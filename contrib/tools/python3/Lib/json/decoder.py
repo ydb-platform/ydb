@@ -201,10 +201,13 @@ def JSONObject(s_and_end, strict, scan_once, object_hook, object_pairs_hook,
             break
         elif nextchar != ',':
             raise JSONDecodeError("Expecting ',' delimiter", s, end - 1)
+        comma_idx = end - 1
         end = _w(s, end).end()
         nextchar = s[end:end + 1]
         end += 1
         if nextchar != '"':
+            if nextchar == '}':
+                raise JSONDecodeError("Illegal trailing comma before end of object", s, comma_idx)
             raise JSONDecodeError(
                 "Expecting property name enclosed in double quotes", s, end - 1)
     if object_pairs_hook is not None:
@@ -241,13 +244,17 @@ def JSONArray(s_and_end, scan_once, _w=WHITESPACE.match, _ws=WHITESPACE_STR):
             break
         elif nextchar != ',':
             raise JSONDecodeError("Expecting ',' delimiter", s, end - 1)
+        comma_idx = end - 1
         try:
             if s[end] in _ws:
                 end += 1
                 if s[end] in _ws:
                     end = _w(s, end + 1).end()
+            nextchar = s[end:end + 1]
         except IndexError:
             pass
+        if nextchar == ']':
+            raise JSONDecodeError("Illegal trailing comma before end of array", s, comma_idx)
 
     return values, end
 
@@ -290,10 +297,10 @@ class JSONDecoder(object):
         place of the given ``dict``.  This can be used to provide custom
         deserializations (e.g. to support JSON-RPC class hinting).
 
-        ``object_pairs_hook``, if specified will be called with the result of
-        every JSON object decoded with an ordered list of pairs.  The return
-        value of ``object_pairs_hook`` will be used instead of the ``dict``.
-        This feature can be used to implement custom decoders.
+        ``object_pairs_hook``, if specified will be called with the result
+        of every JSON object decoded with an ordered list of pairs.  The
+        return value of ``object_pairs_hook`` will be used instead of the
+        ``dict``.  This feature can be used to implement custom decoders.
         If ``object_hook`` is also defined, the ``object_pairs_hook`` takes
         priority.
 

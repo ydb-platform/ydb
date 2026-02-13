@@ -126,7 +126,7 @@ constexpr bool DEFAULT_USE_QL_FILTER = false;
 
 constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
 
-constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = false;
+constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = true;
 
 constexpr ERuntimeClusterSelectionMode DEFAULT_RUNTIME_CLUSTER_SELECTION = NYql::ERuntimeClusterSelectionMode::Disable;
 
@@ -146,8 +146,8 @@ constexpr bool DEFAULT_EARLY_PARTITION_PRUNING = false;
 
 constexpr bool DEFAULT_VALIDATE_CLUSTERS = false;
 
-constexpr bool DEFAULT_REQUEST_ONLY_REQUIRED_ATTRS = false;
-constexpr bool DEFAULT_CACHE_SCHEMA_BY_SCHEMA_ID = false;
+constexpr bool DEFAULT_REQUEST_ONLY_REQUIRED_ATTRS = true;
+constexpr bool DEFAULT_CACHE_SCHEMA_BY_SCHEMA_ID = true;
 
 constexpr ui64 DEFAULT_QUERY_DUMP_TABLE_SIZE_LIMIT = 100_GB;
 constexpr ui64 DEFAULT_QUERY_DUMP_TABLE_COUNT_PER_CLUSTER_LIMIT = 5;

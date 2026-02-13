@@ -35,8 +35,8 @@ namespace NFake {
                     delta.SetFamilyBlobs(table, 0, 6500, 7000);
                 }
 
-                delta.AddColumn(table, "key", KeyId, NScheme::TInt64::TypeId, false);
-                delta.AddColumn(table, "value", 200, NScheme::TString::TypeId, false);
+                delta.AddColumn(table, "key", KeyId, NScheme::TInt64::TypeId, false, false);
+                delta.AddColumn(table, "value", 200, NScheme::TString::TypeId, false, false);
                 delta.AddColumnToKey(table, KeyId);
 
                 if (table >= 2) { /* used { 0, 1, 2, 3 } tables */

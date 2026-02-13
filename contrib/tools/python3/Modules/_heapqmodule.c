@@ -445,11 +445,11 @@ siftup_max(PyListObject *heap, Py_ssize_t pos)
         return -1;
     }
 
-    /* Bubble up the smaller child until hitting a leaf. */
+    /* Bubble up the larger child until hitting a leaf. */
     arr = _PyList_ITEMS(heap);
     limit = endpos >> 1;         /* smallest pos that has no child */
     while (pos < limit) {
-        /* Set childpos to index of smaller child.   */
+        /* Set childpos to index of larger child.   */
         childpos = 2*pos + 1;    /* leftmost child position  */
         if (childpos + 1 < endpos) {
             PyObject* a = arr[childpos + 1];
@@ -469,7 +469,7 @@ siftup_max(PyListObject *heap, Py_ssize_t pos)
                 return -1;
             }
         }
-        /* Move the smaller child up. */
+        /* Move the larger child up. */
         tmp1 = arr[childpos];
         tmp2 = arr[pos];
         arr[childpos] = tmp2;
@@ -672,9 +672,7 @@ From all times, sorting has always been a Great Art! :-)\n");
 static int
 heapq_exec(PyObject *m)
 {
-    PyObject *about = PyUnicode_FromString(__about__);
-    if (PyModule_AddObject(m, "__about__", about) < 0) {
-        Py_DECREF(about);
+    if (PyModule_Add(m, "__about__", PyUnicode_FromString(__about__)) < 0) {
         return -1;
     }
     return 0;
@@ -683,6 +681,7 @@ heapq_exec(PyObject *m)
 static struct PyModuleDef_Slot heapq_slots[] = {
     {Py_mod_exec, heapq_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

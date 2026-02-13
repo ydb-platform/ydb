@@ -201,15 +201,15 @@ void ReopenLog();
 
 class YqlLoggerScope {
 public:
-    YqlLoggerScope(const TString& log, bool startAsDaemon = false) {
+    explicit YqlLoggerScope(const TString& log, bool startAsDaemon = false) {
         InitLogger(log, startAsDaemon);
     }
 
-    YqlLoggerScope(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true) {
+    explicit YqlLoggerScope(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true) {
         InitLogger(backend, std::move(formatter), isStrictFormatting);
     }
 
-    YqlLoggerScope(IOutputStream* out, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true) {
+    explicit YqlLoggerScope(IOutputStream* out, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true) {
         InitLogger(out, std::move(formatter), isStrictFormatting);
     }
 

@@ -22,6 +22,8 @@
 
 #include <yt/yt/client/bundle_controller_client/bundle_controller_client.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
+
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -115,8 +117,7 @@ public:
     TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull) override;
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
-    std::optional<std::string> ClusterName_;
+    NThreading::TAtomicObject<std::optional<std::string>> ClusterName_;
 
     TFuture<std::optional<std::string>> FetchClusterNameFromMasterCache();
 };

@@ -1,6 +1,7 @@
 #include "list_directory_tool.h"
 #include "tool_base.h"
 
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_path.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
@@ -10,6 +11,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/generic/scope.h>
+#include <util/string/builder.h>
 #include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -31,8 +33,8 @@ For example if called on directory "data/", which contains two tables "my_table1
     static constexpr char DIRECTORY_PROPERTY[] = "directory";
 
 public:
-    TListDirectoryTool(const TListDirectoryToolSettings& settings, const TInteractiveLogger& log)
-        : TBase(CreateParametersSchema(), DESCRIPTION, log)
+    explicit TListDirectoryTool(const TListDirectoryToolSettings& settings)
+        : TBase(CreateParametersSchema(), DESCRIPTION)
         , Database(CanonizeYdbPath(settings.Database))
         , Client(settings.Driver)
     {}
@@ -87,7 +89,7 @@ protected:
             item["type"] = EntryTypeToString(child.Type);
         }
 
-        if (Log.IsVerbose()) {
+        if (GetGlobalLogger().IsVerbose()) {
             Cout << TAdaptiveTabbedTable(children) << Endl;
         }
 
@@ -113,8 +115,8 @@ private:
 
 } // anonymous namespace
 
-ITool::TPtr CreateListDirectoryTool(const TListDirectoryToolSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TListDirectoryTool>(settings, log);
+ITool::TPtr CreateListDirectoryTool(const TListDirectoryToolSettings& settings) {
+    return std::make_shared<TListDirectoryTool>(settings);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

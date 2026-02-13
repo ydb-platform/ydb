@@ -134,10 +134,6 @@ Y_UNIT_TEST(TestBlock42GetIntervalsAllOk) {
 //    TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, true, false);
 //}
 
-Y_UNIT_TEST(TestMirror32GetIntervalsAllOk) {
-    TestIntervalsAndCrcAllOk(TErasureType::ErasureMirror3Plus2, false, false);
-}
-
 // With CRC
 Y_UNIT_TEST(TestBlock42GetBlobCrcCheck) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, true);
@@ -146,10 +142,6 @@ Y_UNIT_TEST(TestBlock42GetBlobCrcCheck) {
 //Y_UNIT_TEST(TestBlock42GetBlobCrcCheckVerbose) {
 //    TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, true, true);
 //}
-
-Y_UNIT_TEST(TestMirror32GetBlobCrcCheck) {
-    TestIntervalsAndCrcAllOk(TErasureType::ErasureMirror3Plus2, false, true);
-}
 
 class TTestWipedAllOkStep {
 public:
@@ -1070,10 +1062,6 @@ Y_UNIT_TEST(TestBlock42GetIntervalsWipedError) {
 
 Y_UNIT_TEST(TestBlock42WipedErrorWithTwoBlobs) {
     TestWipedErrorWithTwoBlobs(TErasureType::Erasure4Plus2Block);
-}
-
-Y_UNIT_TEST(TestMirror32GetIntervalsWipedAllOk) {
-    TestIntervalsWipedAllOk(TErasureType::ErasureMirror3Plus2, false);
 }
 
 void SpecificTest(ui32 badA, ui32 badB, ui32 blobSize, TMap<i64, i64> sizeForOffset) {

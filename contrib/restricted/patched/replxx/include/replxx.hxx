@@ -566,6 +566,12 @@ public:
 
 	void set_preload_buffer( std::string const& preloadText );
 
+	/*! \brief Set editable message after prompt if called before input()
+	 *
+	 * This function does not perform any validation and directly sets the editable message.
+	 */
+	void set_preload_buffer_without_changes( std::string const& preloadText );
+
 	/*! \brief Set set of word break characters.
 	 *
 	 * This setting influences word based cursor movement and line editing capabilities.

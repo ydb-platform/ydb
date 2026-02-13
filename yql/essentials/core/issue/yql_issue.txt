@@ -736,3 +736,15 @@ ids {
   code: CBO_MISSING_TABLE_STATS
   severity: S_WARNING
 }
+ids {
+  code: FMR_UNKNOWN_ERROR
+  severity: S_ERROR
+}
+ids {
+  code: FMR_NEED_FALLBACK
+  severity: S_ERROR
+}
+ids {
+  code: FMR_UDF_TERMINATE
+  severity: S_ERROR
+}

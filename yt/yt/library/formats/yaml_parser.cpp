@@ -486,7 +486,7 @@ private:
                 EYamlEventType::SequenceStart,
                 EYamlEventType::MappingStart,
                 EYamlEventType::Scalar,
-                EYamlEventType::Alias
+                EYamlEventType::Alias,
             });
             if (GetEventType() == EYamlEventType::SequenceEnd) {
                 break;

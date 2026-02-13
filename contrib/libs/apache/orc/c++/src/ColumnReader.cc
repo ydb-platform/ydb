@@ -421,7 +421,7 @@ namespace orc {
       int32_t bits = 0;
       if (bufferEnd_ - bufferPointer_ >= 4) {
         if (isLittleEndian) {
-          bits = *(reinterpret_cast<const int32_t*>(bufferPointer_));
+          memcpy(&bits, bufferPointer_, sizeof(bits));
         } else {
           bits = static_cast<unsigned char>(bufferPointer_[0]);
           bits |= static_cast<unsigned char>(bufferPointer_[1]) << 8;

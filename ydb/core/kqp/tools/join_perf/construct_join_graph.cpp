@@ -8,6 +8,10 @@
 namespace NKikimr::NMiniKQL {
 
 namespace {
+NYql::NUdf::TUniquePtr<NYql::NUdf::ILogProvider> testLogProvider =
+    NYql::NUdf::MakeLogProvider(+[](std::string_view component, NYql::NUdf::ELogLevel level, std::string_view message) {
+        Cout << std::format("LOG: component: {}, level: {}, message: {}\n", component, static_cast<std::string_view>(LevelToString(level)),  message);
+    });
 
 TRuntimeNode BuildBlockJoin(TDqProgramBuilder& pgmBuilder, EJoinKind joinKind, TRuntimeNode leftList,
                             TArrayRef<const ui32> leftKeyColumns, const TVector<ui32>& leftKeyDrops,
@@ -61,13 +65,12 @@ bool IsBlockJoin(ETestedJoinAlgo kind) {
     return kind == ETestedJoinAlgo::kBlockHash || kind == ETestedJoinAlgo::kBlockMap;
 }
 
-THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr) {
+THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
+                                                    bool withSpiller) {
 
     const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
     TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
-
-    ;
     TGraceJoinRenames renames;
     if (descr.CustomRenames) {
         renames = TGraceJoinRenames::FromDq(*descr.CustomRenames);
@@ -240,7 +243,11 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
         }
     }();
     auto graph = graphFrom(wideStream);
-    graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    if (withSpiller) {
+        graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    }
+
+    graph->GetContext().LogProvider = testLogProvider.Get();
     return graph;
 }
 

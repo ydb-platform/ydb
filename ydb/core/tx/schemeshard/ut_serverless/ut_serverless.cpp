@@ -18,14 +18,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TTestEnv env(runtime,
             TTestEnvOptions()
                 .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
-                .EnableRealSystemViewPaths(false)
         );
 
         ui64 txId = 100;
 
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"SharedDB\"");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
         const auto subDomainPathId = describeResult.GetPathId();
@@ -63,6 +66,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                 << "Name: \"ServerLess0\"";
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TString alterData = TStringBuilder()
                 << "PlanResolution: 50 "
@@ -103,6 +107,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "ServerLess0");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0/dir/table0"),
                            {NLs::PathNotExist});
@@ -112,7 +117,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         // Check that shards of ServerLess0 db are gone after its deletion.

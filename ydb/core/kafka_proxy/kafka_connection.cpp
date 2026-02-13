@@ -82,6 +82,7 @@ public:
     size_t InflightSize;
 
     TActorId ProduceActorId;
+    TActorId SaslAuthActorId;
 
     TContext::TPtr Context;
 
@@ -122,6 +123,9 @@ public:
         ConnectionEstablished = false;
         if (ProduceActorId) {
             Send(ProduceActorId, new TEvents::TEvPoison());
+        }
+        if (SaslAuthActorId) {
+            Send(SaslAuthActorId, new TEvents::TEvPoison());
         }
         if (Context->ReadSession.ProxyActorId) {
             Send(Context->ReadSession.ProxyActorId, new TEvents::TEvPoison());
@@ -279,8 +283,15 @@ protected:
         RegisterWithSameMailbox(CreateKafkaDescribeConfigsActor(Context, header->CorrelationId, message));
     }
 
+    void EnsureKafkaSaslAuthActor() {
+        if (!SaslAuthActorId) {
+            SaslAuthActorId = RegisterWithSameMailbox(CreateKafkaSaslAuthActor(Context, Address));
+        }
+    }
+
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
-        RegisterWithSameMailbox(CreateKafkaSaslAuthActor(Context, header->CorrelationId, Address, message));
+        EnsureKafkaSaslAuthActor();
+        Send(SaslAuthActorId, new TEvKafka::TEvAuthRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslHandshakeRequestData>& message) {
@@ -548,7 +559,7 @@ protected:
         Context->IsServerless = event->IsServerless;
         Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
 
-        KAFKA_LOG_D("Authentificated successful. SID=" << Context->UserToken->GetUserSID());
+        KAFKA_LOG_D("Authentication successful. SID=" << Context->UserToken->GetUserSID());
         Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
     }
 

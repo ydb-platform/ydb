@@ -1441,6 +1441,82 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
     Y_UNIT_TEST(CollectKeySampleFollower) {
         VerifyKeySampleCollection(true /* testFollower */);
     }
+
+    /**
+     * Execute the test, which verifies that the EvGetInfoRequest message
+     * is handled correctly by the DataShard leader/follower.
+     *
+     * @param[in] testFollower If true, use the follower for testing (the leader otherwise)
+     */
+    void VerifyGetInfo(bool testFollower) {
+        const ui64 followerId = (testFollower) ? 1 : 0;
+
+        // Create a table with a single follower
+        Cerr << "TEST Creating a sample table" << Endl;
+
+        auto serverSettings = TServerSettings(TPortManager().GetPort(2134))
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *(server->GetRuntime());
+        auto senderActorId = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, senderActorId);
+
+        auto [shards, tableId] = CreateShardedTable(
+            server,
+            senderActorId,
+            "/Root",
+            "table-1",
+            TShardedTableOptions()
+                .Followers(1)
+        );
+
+        const auto shardId = shards.at(0);
+
+        // Send TEvGetInfoRequest to the given leader/follower
+        Cerr << "TEST: Sending TEvGetInfoRequest to followerId " << followerId << Endl;
+
+        auto pipeConfig = GetPipeConfigWithRetries();
+        pipeConfig.ForceFollower = testFollower;
+
+        runtime.SendToPipe(
+            shardId,
+            senderActorId,
+            new TEvDataShard::TEvGetInfoRequest(),
+            0,
+            pipeConfig
+        );
+
+        auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(senderActorId);
+
+        Cerr << "TEST Received the TEvGetInfoResponse response from the tablet " << shardId
+            << ", useFollower=" << testFollower
+            << Endl
+            << ev->Get()->Record.DebugString()
+            << Endl;
+
+        UNIT_ASSERT(ev->Get()->Record.GetTabletInfo().HasFollowerId());
+        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTabletInfo().GetFollowerId(), followerId);
+    }
+
+    /**
+     * Verify that the EvGetInfoRequest message is handled correctly by the leader.
+     */
+    Y_UNIT_TEST(GetInfoLeader) {
+        VerifyGetInfo(false /* testFollower */);
+    }
+
+    /**
+     * Verify that the EvGetInfoRequest message is handled correctly by the follower.
+     */
+    Y_UNIT_TEST(GetInfoFollower) {
+        VerifyGetInfo(true /* testFollower */);
+    }
 }
 
 }

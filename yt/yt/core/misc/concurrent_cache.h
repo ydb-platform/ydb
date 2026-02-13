@@ -43,7 +43,7 @@ public:
 
         TLookuper(TLookuper&& other) = default;
 
-        TLookuper& operator= (TLookuper&& other);
+        TLookuper& operator=(TLookuper&& other);
 
         TLookuper(
             TConcurrentCache* parent,
@@ -51,7 +51,7 @@ public:
             TIntrusivePtr<TLookupTable> secondary);
 
         template <class TKey>
-        TCachedItemRef operator() (const TKey& key);
+        TCachedItemRef operator()(const TKey& key);
 
         explicit operator bool ();
 
@@ -75,7 +75,7 @@ public:
 
         TInserter(TInserter&& other) = default;
 
-        TInserter& operator= (TInserter&& other);
+        TInserter& operator=(TInserter&& other);
 
         TInserter(
             TConcurrentCache* parent,

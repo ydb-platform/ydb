@@ -12,9 +12,10 @@ _Py_trampoline_func_start:
 #if defined(__CET__) && (__CET__ & 1)
     endbr64
 #endif
-    sub    $8, %rsp
-    call    *%rcx
-    add    $8, %rsp
+    push   %rbp
+    mov    %rsp, %rbp
+    call   *%rcx
+    pop    %rbp
     ret
 #endif // __x86_64__
 #if defined(__aarch64__) && defined(__AARCH64EL__) && !defined(__ILP32__)
@@ -25,6 +26,14 @@ _Py_trampoline_func_start:
     blr     x3
     ldp     x29, x30, [sp], 16
     ret
+#endif
+#ifdef __riscv
+    addi    sp,sp,-16
+    sd      ra,8(sp)
+    jalr    a3
+    ld      ra,8(sp)
+    addi    sp,sp,16
+    jr      ra
 #endif
     .globl	_Py_trampoline_func_end
 _Py_trampoline_func_end:

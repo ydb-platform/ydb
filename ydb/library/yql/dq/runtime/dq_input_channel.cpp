@@ -38,6 +38,10 @@ public:
         Y_UNUSED(inputActorId);
     }
 
+    bool IsLocal() const override {
+        return false;
+    }
+
 private:
     void Push(TDqSerializedBatch&&) override {
         Y_ABORT("Not implemented");
@@ -198,14 +202,18 @@ public:
         Impl.Finish();
     }
 
-    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
-        Y_UNUSED(outputActorId);
-        Y_UNUSED(inputActorId);
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override {
+        IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
+    }
+
+    bool IsLocal() const override {
+        return IsLocalChannel;
     }
 
 private:
     TDqInputChannelImpl Impl;
     TDqDataSerializer DataSerializer;
+    bool IsLocalChannel = false;
 };
 
 IDqInputChannel::TPtr CreateDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)

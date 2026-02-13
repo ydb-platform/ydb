@@ -6,6 +6,16 @@
 
 namespace NSQLTranslationPG {
 
+NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TStmtParseInfo* stmtParseInfo) {
+    Y_UNUSED(parseResult);
+    Y_UNUSED(query);
+    Y_UNUSED(settings);
+    Y_UNUSED(stmtParseInfo);
+    NYql::TAstParseResult result;
+    result.Issues.AddIssue(NYql::TIssue("PostgreSQL parser is not available"));
+    return result;
+}
+
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TStmtParseInfo* stmtParseInfo) {
     Y_UNUSED(query);
     Y_UNUSED(settings);

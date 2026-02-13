@@ -210,6 +210,11 @@ message TIssuesIds {
         CBO_ENUM_LIMIT_REACHED = 8000;
         CBO_MISSING_TABLE_STATS = 8001;
 
+// Fmr
+        FMR_UNKNOWN_ERROR = 9000;
+        FMR_NEED_FALLBACK = 9001;
+        FMR_UDF_TERMINATE = 9002;
+
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 
     }

@@ -35,7 +35,7 @@ using namespace NKikimr::NMiniKQL;
 using namespace NYql::NUdf;
 
 struct TPickleInputSpec: public TInputSpecBase {
-    TPickleInputSpec(const TVector<NYT::TNode>& schemas)
+    explicit TPickleInputSpec(const TVector<NYT::TNode>& schemas)
         : Schemas(schemas)
     {
     }
@@ -123,7 +123,7 @@ struct TInputSpecTraits<TPickleInputSpec> {
 };
 
 struct TPickleOutputSpec: public TOutputSpecBase {
-    TPickleOutputSpec(const NYT::TNode& schema)
+    explicit TPickleOutputSpec(const NYT::TNode& schema)
         : Schema(schema)
     {
     }
@@ -144,7 +144,7 @@ public:
 
 class TPickleOutputHandle final: public TStreamOutputHandle {
 public:
-    TPickleOutputHandle(TWorkerHolder<IPullListWorker> worker)
+    explicit TPickleOutputHandle(TWorkerHolder<IPullListWorker> worker)
         : Worker_(std::move(worker))
         , Packer_(false, Worker_->GetOutputType())
     {
@@ -195,7 +195,7 @@ struct TOutputSpecTraits<TPickleOutputSpec> {
 };
 
 struct TPrintOutputSpec: public TOutputSpecBase {
-    TPrintOutputSpec(const NYT::TNode& schema)
+    explicit TPrintOutputSpec(const NYT::TNode& schema)
         : Schema(schema)
     {
     }
@@ -209,7 +209,7 @@ struct TPrintOutputSpec: public TOutputSpecBase {
 
 class TPrintOutputHandle final: public TStreamOutputHandle {
 public:
-    TPrintOutputHandle(TWorkerHolder<IPullListWorker> worker)
+    explicit TPrintOutputHandle(TWorkerHolder<IPullListWorker> worker)
         : Worker_(std::move(worker))
     {
     }

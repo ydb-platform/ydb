@@ -23,6 +23,11 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 
 * {% include [x](../_includes/transfer_flush.md) %}
 
+* {% include [x](../_includes/transfer_metrics_level_internal.md) %}
+* Настройки для аутентификации в базе топика одним из способов:
+
+  {% include [x](_includes/async_replication_authentification.md) %}
+
 ## Разрешения
 
 Для изменения трансфера требуется [право](grant.md#permissions-list) изменять схемные объекты (`ALTER SCHEMA`).
@@ -57,6 +62,14 @@ ALTER TRANSFER my_transfer SET (STATE = "PAUSED");
 ALTER TRANSFER my_transfer SET (
     BATCH_SIZE_BYTES = 1048576,
     FLUSH_INTERVAL = Interval('PT60S')
+);
+```
+
+Следующий запрос изменяет секрет:
+
+```yql
+ALTER TRANSFER my_transfer SET (
+    TOKEN_SECRET_PATH = "my_token"
 );
 ```
 

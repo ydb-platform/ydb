@@ -55,8 +55,13 @@ struct TConnectionConfig
     TDuration DefaultTransactionTimeout;
     TDuration DefaultLookupRowsTimeout;
     TDuration DefaultSelectRowsTimeout;
+
     TDuration DefaultTotalStreamingTimeout;
     TDuration DefaultStreamingStallTimeout;
+    /// NB(achains): Some reads may be stall by default (e.g. reconstructing erasure-coded chunks).
+    ///              If set use DefaultTotalStreamingTimeout for read requests until ping mechanism is designed in YT-26196.
+    bool UseTotalStreamingTimeoutForHeavyReads;
+
     TDuration DefaultPingPeriod;
     TDuration DefaultChaosLeaseTimeout;
 

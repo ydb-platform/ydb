@@ -20,14 +20,14 @@ class TUrlPreprocessing: public IUrlPreprocessing {
 public:
     using TPtr = TIntrusivePtr<TUrlPreprocessing>;
 
-    TUrlPreprocessing(const TGatewaysConfig& cfg) {
+    explicit TUrlPreprocessing(const TGatewaysConfig& cfg) {
         Configure(false, cfg);
     }
     TUrlPreprocessing() = default;
-    ~TUrlPreprocessing() = default;
+    ~TUrlPreprocessing() override = default;
 
     void Configure(bool restrictedUser, const TGatewaysConfig& cfg);
-    std::pair<TString, TString> Preprocess(const TString& url);
+    std::pair<TString, TString> Preprocess(const TString& url) override;
 
 private:
     bool RestrictedUser_ = false;

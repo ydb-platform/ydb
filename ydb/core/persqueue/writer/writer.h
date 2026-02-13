@@ -175,6 +175,12 @@ struct TEvPartitionWriter {
 
 
 struct TPartitionWriterOpts {
+    class IGetter {
+    public:
+        virtual ~IGetter() = default;
+        virtual const TPartitionWriterOpts& GetOpts() const = 0;
+    };
+
     bool CheckState = false;
     bool AutoRegister = false;
     bool UseDeduplication = true;

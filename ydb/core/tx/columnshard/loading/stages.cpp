@@ -136,6 +136,15 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         }
         Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
     }
+    
+    TString serializedLastCompletedBackupTransaction;
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedBackupTransaction, serializedLastCompletedBackupTransaction)) {
+        return false;
+    }
+
+    if (serializedLastCompletedBackupTransaction) {
+        Y_VERIFY(Self->LastCompletedBackupTransaction.ParseFromString(serializedLastCompletedBackupTransaction));
+    }
 
     return true;
 }

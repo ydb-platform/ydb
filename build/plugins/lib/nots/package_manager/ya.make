@@ -6,16 +6,24 @@ STYLE_PYTHON()
 
 PY_SRCS(
     __init__.py
+    constants.py
+    lockfile.py
+    node_modules_bundler.py
+    package_json.py
+    package_manager.py
+    pnpm_workspace.py
+    timeit.py
+    utils.py
 )
 
 PEERDIR(
-    build/plugins/lib/nots/package_manager/base
-    build/plugins/lib/nots/package_manager/pnpm
+    library/python/archive
+    contrib/python/PyYAML
+    devtools/frontend_build_platform/libraries/logging
 )
 
 END()
 
-RECURSE(
-    base
-    pnpm
+RECURSE_FOR_TESTS(
+    tests
 )

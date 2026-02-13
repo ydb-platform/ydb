@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         return results;
     }
 
-    TSession CreateTableForVectorSearch(TTableClient& db, bool nullable, const TString& dataCol = "data") {
+    TSession CreateTableForVectorSearch(TTableClient& db, bool nullable, const TString& dataCol = "data", bool singlePartition = false) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
@@ -55,13 +55,17 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                     .AddNonNullableColumn(dataCol, EPrimitiveType::String);
             }
             tableBuilder.SetPrimaryKeyColumns({"pk"});
-            tableBuilder.BeginPartitioningSettings()
-                .SetMinPartitionsCount(3)
-            .EndPartitioningSettings();
-            auto partitions = TExplicitPartitions{}
-                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(4).EndTuple().Build())
-                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(6).EndTuple().Build());
-            tableBuilder.SetPartitionAtKeys(partitions);
+
+            if (!singlePartition) {
+                tableBuilder.BeginPartitioningSettings()
+                    .SetMinPartitionsCount(3)
+                .EndPartitioningSettings();
+                auto partitions = TExplicitPartitions{}
+                    .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(4).EndTuple().Build())
+                    .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(6).EndTuple().Build());
+                tableBuilder.SetPartitionAtKeys(partitions);
+            }
+
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -88,6 +92,42 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         return session;
     }
 
+    template <bool Nullable>
+    void VerifyVectorSearchResults(TKikimrRunner& kikimr, TSession& session, TTxSettings txSettings = TTxSettings::SerializableRW(), bool useRunCall = true) {
+        // Verify actual results - check that top 3 PKs are correct
+        // Target vector is 0x67, 0x71 (103, 113)
+        // Cosine distances calculated:
+        //   pk=8 (117, 118): 0.000882 - closest
+        //   pk=5 (80, 96):   0.000985
+        //   pk=9 (118, 118): 0.001070
+
+        const TString query = Q_(R"(
+            $TargetEmbedding = String::HexDecode("677102");
+            SELECT pk, Knn::CosineDistance(emb, $TargetEmbedding) AS distance FROM `/Root/TestTable`
+            ORDER BY distance
+            LIMIT 3
+        )");
+
+        auto result = useRunCall
+            ? kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+            })
+            : session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Extract PKs and distances from result
+        auto results = ExtractPksAndScores<Nullable>(result.GetResultSetParser(0));
+
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(results[0].first, 8);
+        UNIT_ASSERT_VALUES_EQUAL(results[1].first, 5);
+        UNIT_ASSERT_VALUES_EQUAL(results[2].first, 9);
+        CheckDistance(results[0].second, 0.000882f);
+        CheckDistance(results[1].second, 0.000985f);
+        CheckDistance(results[2].second, 0.001070f);
+    }
+
     Y_UNIT_TEST_TWIN(VectorSearchKnnPushdown, Nullable) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -96,7 +136,6 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
         TKikimrRunner kikimr(serverSettings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
-        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
         auto session = kikimr.RunCall([&] { return CreateTableForVectorSearch(db, Nullable, "___data"); });
@@ -133,15 +172,6 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        };
-
-        auto runQueryWithResult = [&](const TString& query) {
-            auto result = kikimr.RunCall([&] {
-                return session.ExecuteDataQuery(query,
-                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            });
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            return result;
         };
 
         auto runQueryWithParams = [&](const TString& query, TParams params) {
@@ -234,6 +264,22 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                 .Build()
             .Build());
 
+        // Tagged vector converted from a parameter
+        runQueryWithParams(Q_(R"(
+            DECLARE $embedding AS List<Uint8>;
+            $TargetEmbedding = Knn::ToBinaryStringUint8($embedding);
+            SELECT * FROM `/Root/TestTable`
+            ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+            LIMIT 3
+        )"), db.GetParamsBuilder()
+            .AddParam("$embedding")
+                .BeginList()
+                    .AddListItem().Uint8(0x67)
+                    .AddListItem().Uint8(0x71)
+                .EndList()
+                .Build()
+            .Build());
+
         // LIMIT 1
         expectedLimit = 1;
         runQuery(Q_(R"(
@@ -271,31 +317,8 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             LIMIT 3;
         )"));
 
-        // Verify actual results - check that top 3 PKs are correct
-        // Target vector is 0x67, 0x71 (103, 113)
-        // Cosine distances calculated:
-        //   pk=8 (117, 118): 0.000882 - closest
-        //   pk=5 (80, 96):   0.000985
-        //   pk=9 (118, 118): 0.001070
-        {
-            auto result = runQueryWithResult(Q_(R"(
-                $TargetEmbedding = String::HexDecode("677102");
-                SELECT pk, Knn::CosineDistance(emb, $TargetEmbedding) AS distance FROM `/Root/TestTable`
-                ORDER BY distance
-                LIMIT 3
-            )"));
-
-            // Extract PKs and distances from result
-            auto results = ExtractPksAndScores<Nullable>(result.GetResultSetParser(0));
-
-            UNIT_ASSERT_VALUES_EQUAL(results.size(), 3u);
-            UNIT_ASSERT_VALUES_EQUAL(results[0].first, 8);
-            UNIT_ASSERT_VALUES_EQUAL(results[1].first, 5);
-            UNIT_ASSERT_VALUES_EQUAL(results[2].first, 9);
-            CheckDistance(results[0].second, 0.000882f);
-            CheckDistance(results[1].second, 0.000985f);
-            CheckDistance(results[2].second, 0.001070f);
-        }
+        // Verify actual results
+        VerifyVectorSearchResults<Nullable>(kikimr, session);
 
         // Test with subquery: target vector from another table
         {
@@ -534,8 +557,67 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         DoVectorKnnPushdownTest(EVectorType::Int8);
     }
 
+    Y_UNIT_TEST_TWIN(VectorSearchKnnPushdownFollower, StaleRO) {
+        const TString tableName = "/Root/TestTable";
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableForceFollowers(true)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.GetTableClient();
+        auto session = CreateTableForVectorSearch(db, false, "data", true); // singlePartition = true for followers
+
+        // Setup observer to verify VectorTopK pushdown
+        auto observer = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            auto& read = ev->Get()->Record;
+            UNIT_ASSERT(read.HasVectorTopK());
+            UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetLimit(), 3u);
+        });
+
+        // Enable followers on the table
+        {
+            const TString alterTable(Q_(Sprintf(R"(
+                ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:1");
+            )", tableName.c_str())));
+
+            auto result = session.ExecuteSchemeQuery(alterTable).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Verify followers are configured
+        {
+            auto result = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto& table = result.GetTableDescription();
+            UNIT_ASSERT(table.GetReadReplicasSettings()->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz);
+            UNIT_ASSERT_VALUES_EQUAL(table.GetReadReplicasSettings()->GetReadReplicasCount(), 1);
+        }
+
+        // Perform read
+        VerifyVectorSearchResults<false>(kikimr, session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW(), false);
+
+        if (StaleRO) {
+            // from leader - should NOT read
+            CheckTableReads(session, tableName, false, false);
+            // from followers - should read
+            CheckTableReads(session, tableName, true, true);
+        } else {
+            // from leader - should read
+            CheckTableReads(session, tableName, false, true);
+            // from followers - should NOT read
+            CheckTableReads(session, tableName, true, false);
+        }
+
+        // Observer is automatically removed when it goes out of scope
+        observer.Remove();
+    }
+
 }
 
 }
 }
-

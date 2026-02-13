@@ -9,7 +9,7 @@
 namespace boost { namespace program_options { namespace command_line_style {
     /** Various possible styles of options.
         
-    There are "long" options, which start with "--" and "short",
+    There are "long" options, which start with "--", and "short",
     which start with either "-" or "/". Both kinds can be allowed or
     disallowed, see allow_long and allow_short. The allowed character
     for short options is also configurable.
@@ -51,7 +51,7 @@ namespace boost { namespace program_options { namespace command_line_style {
         /** Allow to merge several short options together,
             so that "-s -k" become "-sk". All of the options
             but last should accept no parameter. For example, if
-            "-s" accept a parameter, then "k" will be taken as
+            "-s" accepts a parameter, then "k" will be taken as
             parameter, not another short option. 
             Dos-style short options cannot be sticky.
         */

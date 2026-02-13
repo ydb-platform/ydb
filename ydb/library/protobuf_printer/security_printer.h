@@ -3,6 +3,7 @@
 #include "hide_field_printer.h"
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
 
+#include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/text_format.h>
 
@@ -12,23 +13,29 @@ namespace NKikimr {
 
 class TSecurityTextFormatPrinterBase : public google::protobuf::TextFormat::Printer {
 public:
-    TSecurityTextFormatPrinterBase(const google::protobuf::Descriptor* desc) {
-        TSet<std::pair<TString, int>> visited;
-        Walk(desc, visited);
+    using THideField = bool (*)(const google::protobuf::Descriptor*, const google::protobuf::FieldDescriptor*);
+
+    static bool IsSensitive(const google::protobuf::Descriptor*, const google::protobuf::FieldDescriptor* field) {
+        const auto& options = field->options();
+        return options.GetExtension(Ydb::sensitive);
     }
 
-    void Walk(const google::protobuf::Descriptor* desc, TSet<std::pair<TString, int>>& visited) {
+    TSecurityTextFormatPrinterBase(const google::protobuf::Descriptor* desc, THideField hideField = &TSecurityTextFormatPrinterBase::IsSensitive) {
+        TSet<std::pair<TString, int>> visited;
+        Walk(desc, visited, hideField);
+    }
+
+    void Walk(const google::protobuf::Descriptor* desc, TSet<std::pair<TString, int>>& visited, THideField hideField) {
         if (!desc || visited.contains(std::pair<TString, int>{desc->full_name(), desc->index()})) {
             return;
         }
         visited.insert({desc->full_name(), desc->index()});
         for (int i = 0; i < desc->field_count(); i++) {
             const auto field = desc->field(i);
-            const auto options = field->options();
-            if (options.GetExtension(Ydb::sensitive)) {
+            if (hideField && hideField(desc, field)) {
                 RegisterFieldValuePrinter(field, new THideFieldValuePrinter());
             }
-            Walk(field->message_type(), visited);
+            Walk(field->message_type(), visited, hideField);
         }
     }
 };

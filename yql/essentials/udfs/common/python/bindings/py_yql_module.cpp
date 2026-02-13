@@ -13,9 +13,13 @@
 
 namespace NPython {
 
-static PyMethodDef ModuleMethods[] = {
+namespace {
+
+PyMethodDef ModuleMethods[] = {
     {nullptr, nullptr, 0, nullptr} /* sentinel */
 };
+
+} // namespace
 
 #define MODULE_NAME "yql"
 
@@ -70,7 +74,7 @@ PyDoc_STRVAR(StopIterationException_doc,
     } while (0)
 
 #if PY_MAJOR_VERSION >= 3
-static PyModuleDef ModuleDefinition = {
+PyModuleDef ModuleDefinition = {
     PyModuleDef_HEAD_INIT,
     INIT_MEMBER(m_name, MODULE_NAME),
     INIT_MEMBER(m_doc, ModuleDoc),
@@ -82,7 +86,7 @@ static PyModuleDef ModuleDefinition = {
     INIT_MEMBER(m_free, nullptr),
 };
 
-static PyModuleDef ModuleDefinitionTyping = {
+PyModuleDef ModuleDefinitionTyping = {
     PyModuleDef_HEAD_INIT,
     INIT_MEMBER(m_name, MODULE_NAME_TYPING),
     INIT_MEMBER(m_doc, ModuleDocTyping),

@@ -261,7 +261,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 if (forceTraversalOperation) {
                     forceTraversalOperation->Tables.emplace_back(operationTable);
                 } else {
-                    SA_LOG_E("[" << Self->TabletID() << "] ForceTraversalTables contains unknown operationId: " << operationId);
+                    SA_LOG_E("[" << Self->TabletID() << "] ForceTraversalTables contains unknown operationId: " << operationId.Quote());
                 }
 
                 if (!rowset.Next()) {

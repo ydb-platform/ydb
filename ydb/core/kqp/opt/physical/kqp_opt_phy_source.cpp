@@ -19,7 +19,7 @@ using namespace NYql::NNodes;
 
 
 bool UseSource(const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrTableDescription& tableDesc) {
-    bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
+    bool useSource = kqpCtx.Config->GetEnableKqpScanQuerySourceRead() && kqpCtx.IsScanQuery();
     useSource = useSource || kqpCtx.IsDataQuery();
     useSource = useSource || kqpCtx.IsGenericQuery();
     useSource = useSource &&
@@ -75,7 +75,7 @@ TExprBase KqpRewriteReadTableFullText(TExprBase node, TExprContext& ctx, const T
                 .Index(physicalRead.Cast().Index())
                 .Columns(physicalRead.Cast().Columns())
                 .Query(physicalRead.Cast().Query())
-                .ResultColumns(physicalRead.Cast().ResultColumns())
+                .QueryColumns(physicalRead.Cast().QueryColumns())
                 .Settings(physicalRead.Cast().Settings())
             .Build()
             .DataSource<TCoDataSource>()
@@ -118,7 +118,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     };
     TMaybe<TMatchedRead> matched;
 
-    bool stageContainsSimpleProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms;
+    bool stageContainsSimpleProgram = kqpCtx.Config->GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms();
 
     VisitExpr(stage.Program().Body().Ptr(), [&](const TExprNode::TPtr& node) {
             TExprBase expr(node);
@@ -161,7 +161,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         return node;
     }
 
-    bool stageContainsEmptyProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization;
+    bool stageContainsEmptyProgram = kqpCtx.Config->GetEnableSimpleProgramsSinglePartitionOptimization();
     if (stage.Program().Body().Raw() != matched->Expr.Raw()) {
         stageContainsEmptyProgram = false;
     }

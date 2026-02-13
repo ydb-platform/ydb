@@ -664,6 +664,10 @@
     "kind": "Normal"
   },
   {
+    "name": "LinearDestroy",
+    "kind": "Normal"
+  },
+  {
     "name": "LinearHistogram",
     "kind": "Agg"
   },

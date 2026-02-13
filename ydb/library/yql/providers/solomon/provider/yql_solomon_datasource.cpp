@@ -75,6 +75,10 @@ public:
         return &State_->Configuration->Tokens;
     }
 
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
+    }
+
     IGraphTransformer& GetConfigurationTransformer() override {
         return *ConfigurationTransformer_;
     }

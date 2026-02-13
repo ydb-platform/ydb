@@ -7,8 +7,6 @@ SRCS(
     chunked_buffer.h
     debug_info.cpp
     debug_info.h
-    exceptions.cpp
-    exceptions.h
     future_action.cpp
     future_action.h
     hash.cpp
@@ -30,6 +28,7 @@ SRCS(
     resetable_setting.h
     retry.cpp
     retry.h
+    checked_deref_ptr.h
     runnable.h
     sort.cpp
     sort.h
@@ -73,6 +72,7 @@ IF (OPENSOURCE_PROJECT != "yt")
         network
         oom_helper
         signals
+        string
         sys
         test_http_server
         threading

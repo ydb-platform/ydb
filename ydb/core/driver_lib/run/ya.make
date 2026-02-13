@@ -75,7 +75,7 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/keyvalue
     ydb/core/kqp
-    ydb/core/kqp/federated_query
+    ydb/core/kqp/federated_query/actors
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
@@ -94,6 +94,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
+    ydb/core/retro_tracing_impl
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/security
@@ -139,6 +140,7 @@ PEERDIR(
     ydb/library/actors/memory_log
     ydb/library/actors/prof
     ydb/library/actors/protos
+    ydb/library/actors/retro_tracing
     ydb/library/actors/util
     ydb/library/folder_service
     ydb/library/folder_service/proto
@@ -186,6 +188,14 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/dq/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16
 )
+
+IF (OS_LINUX)
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/bootstrap
+
+        ydb/services/nbs
+    )
+ENDIF()
 
 IF (NOT OS_WINDOWS)
     PEERDIR(

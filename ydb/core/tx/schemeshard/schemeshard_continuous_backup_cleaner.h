@@ -4,6 +4,8 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 
+#include <util/generic/maybe.h>
+
 namespace NKikimr::NSchemeShard {
 
 IActor* CreateContinuousBackupCleaner(TActorId txAllocatorClient,

@@ -39,6 +39,7 @@ host=:
                         name=topic.storage_bytes: 0
 
                         consumer=client:
+                            name=topic.committed_lag_messages: 30
                             name=topic.partition.alive_count: 1
                             name=topic.partition.committed_end_to_end_lag_milliseconds_max: 0
                             name=topic.partition.committed_lag_messages_max: 30

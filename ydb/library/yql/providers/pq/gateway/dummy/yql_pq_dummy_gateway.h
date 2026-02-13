@@ -1,5 +1,7 @@
 #pragma once
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/file/yql_pq_file_topic_defs.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -8,51 +10,32 @@
 
 namespace NYql {
 
-struct TDummyTopic {
-    TDummyTopic(const TString& cluster, const TString& topicName, const TMaybe<TString>& path = {}, size_t partitionCount = 1)
-        : Cluster(cluster)
-        , TopicName(topicName)
-        , Path(path)
-        , PartitionsCount(partitionCount)
-    {
-    }
-
-    TDummyTopic& SetPartitionsCount(size_t count) {
-        PartitionsCount = count;
-        return *this;
-    }
-
-    TString Cluster;
-    TString TopicName;
-    TMaybe<TString> Path;
-    size_t PartitionsCount;
-    bool CancelOnFileFinish = false;
-};
-
-// Dummy Pq gateway for tests.
-class TDummyPqGateway : public IPqGateway {
+// Dummy PQ gateway for tests.
+class TDummyPqGateway final : public IPqGateway {
 public:
+    using TPtr = TIntrusivePtr<TDummyPqGateway>;
+
     explicit TDummyPqGateway(bool skipDatabasePrefix = false);
 
     TDummyPqGateway& AddDummyTopic(const TDummyTopic& topic);
-    ~TDummyPqGateway() {}
 
-    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override;
-    NThreading::TFuture<void> CloseSession(const TString& sessionId) override;
+    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) final;
+
+    NThreading::TFuture<void> CloseSession(const TString& sessionId) final;
 
     ::NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
         const TString& sessionId,
         const TString& cluster,
         const TString& database,
         const TString& path,
-        const TString& token) override;
+        const TString& token) final;
 
     IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(
         const TString& sessionId,
         const TString& cluster,
         const TString& database,
         const TString& path,
-        const TString& token) override;
+        const TString& token) final;
 
     NThreading::TFuture<TListStreams> ListStreams(
         const TString& sessionId,
@@ -60,38 +43,35 @@ public:
         const TString& database,
         const TString& token,
         ui32 limit,
-        const TString& exclusiveStartStreamName = {}) override;
+        const TString& exclusiveStartStreamName) final;
 
     void UpdateClusterConfigs(
         const TString& clusterName,
         const TString& endpoint,
         const TString& database,
-        bool secure) override;
+        bool secure) final;
 
-    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) override;
+    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final;
 
-    void AddCluster(const NYql::TPqClusterConfig& /*cluster*/) override {}
+    void AddCluster(const NYql::TPqClusterConfig& cluster) final;
 
-    ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
-    IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) override;
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;
-    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override;
+    ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) final;
 
-    using TClusterNPath = std::pair<TString, TString>;
+    IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) final;
 
-private:
-    TString CanonizeCluster(const TString& cluster, const TString& database) const;
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const final;
+
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const final;
 
 private:
+    TString SkipDatabasePrefix(const TString& path, const TString& database) const;
+
     mutable TMutex Mutex;
-    const bool SkipDatabasePrefix = false;
+    const bool AllowSkipDatabasePrefix = false;
     THashMap<TClusterNPath, TDummyTopic> Topics;
-
     THashSet<TString> OpenedSessions;
 };
 
-IPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix = false);
-
-IPqGatewayFactory::TPtr CreatePqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway);
+TDummyPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix = false);
 
 } // namespace NYql

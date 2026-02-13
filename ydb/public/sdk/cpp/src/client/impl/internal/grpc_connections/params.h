@@ -25,6 +25,7 @@ public:
     virtual EDiscoveryMode GetDiscoveryMode() const = 0;
     virtual size_t GetMaxQueuedRequests() const = 0;
     virtual NYdbGrpc::TTcpKeepAliveSettings GetTcpKeepAliveSettings() const = 0;
+    virtual bool GetTcpNoDelay() const = 0;
     virtual bool GetDrinOnDtors() const = 0;
     virtual TBalancingPolicy::TImpl GetBalancingSettings() const = 0;
     virtual TDuration GetGRpcKeepAliveTimeout() const = 0;

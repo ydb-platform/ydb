@@ -88,6 +88,11 @@ std::stop_source& GetGlobalInterruptSource() {
     return StopByInterrupt;
 }
 
+std::atomic<bool>& GetGlobalErrorVariable() {
+    static std::atomic<bool> errorFlag = {false};
+    return errorFlag;
+}
+
 #if defined(_linux_)
 size_t NumberOfMyCpus() {
     cpu_set_t set;

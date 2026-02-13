@@ -2,7 +2,9 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_settings.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #if defined(YDB_CLI_AI_ENABLED)
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/ai_session_runner.h>
@@ -33,11 +35,9 @@ TInteractiveCLI::TInteractiveCLI(const TString& profileName)
 {}
 
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
-    Log.Setup(config);
-
     const TDriver driver(config.CreateDriverConfig());
     const auto versionInfo = ResolveVersionInfo(driver);
-    const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, Log);
+    const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile);
 
     if (config.EnableAiInteractive) {
         configurationManager->EnsurePredefinedProfiles(config.AiPredefinedProfiles, config.AiTokenGetter);
@@ -45,12 +45,12 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     Cout << "Welcome to YDB CLI";
     if (versionInfo.CliVersion) {
-        Cout << " " << Log.EntityName(versionInfo.CliVersion);
+        Cout << " " << TLogger::EntityName(versionInfo.CliVersion);
     }
     Cout << " " << configurationManager->ModeToString(configurationManager->GetDefaultMode()) << " interactive mode";
 
     if (versionInfo.ServerVersion) {
-        Cout << " (YDB Server " << Log.EntityName(versionInfo.ServerVersion) << ")" << Endl;
+        Cout << " (YDB Server " << TLogger::EntityName(versionInfo.ServerVersion) << ")" << Endl;
     } else if (versionInfo.ServerAvailableCheckFail) {
         Cout << Endl;
         Cerr << Colors.Red() << "Couldn't connect to YDB server:\n" << versionInfo.ServerAvailableCheckFail << Colors.OldColor() << Endl;
@@ -58,15 +58,15 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     }
 
     if (Profile) {
-        Cout << "Connection profile: " << Log.EntityName(Profile) << Endl;
+        Cout << "Connection profile: " << TLogger::EntityName(Profile) << Endl;
     } else {
-        Cout << "Endpoint: " << Log.EntityName(config.Address) << Endl;
-        Cout << "Database: " << Log.EntityName(config.Database) << Endl;
+        Cout << "Endpoint: " << TLogger::EntityName(config.Address) << Endl;
+        Cout << "Database: " << TLogger::EntityName(config.Database) << Endl;
     }
 
     if (config.EnableAiInteractive) {
         if (const auto& aiProfile = configurationManager->GetAiProfile(configurationManager->GetActiveAiProfileName())) {
-            Cout << "AI profile: " << Log.EntityName(aiProfile->GetName()) << Endl;
+            Cout << "AI profile: " << TLogger::EntityName(aiProfile->GetName()) << Endl;
         }
     }
 
@@ -91,9 +91,9 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     }
 
     if (!activeSession && config.EnableAiInteractive) {
-        Cout << "Type YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
+        Cout << "Type YQL query text or type " << TLogger::EntityNameQuoted("/help") << " for more info." << Endl << Endl;
     } else {
-        Cout << "Type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
+        Cout << "Type " << TLogger::EntityNameQuoted("/help") << " for more info." << Endl << Endl;
     }
 
     Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);
@@ -104,7 +104,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         .Driver = driver,
         .Database = config.Database,
         .EnableAiInteractive = config.EnableAiInteractive,
-    }, Log));
+    }));
 
 #if defined(YDB_CLI_AI_ENABLED)
     if (config.EnableAiInteractive) {
@@ -113,7 +113,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
             .Database = config.Database,
             .Driver = driver,
             .ConnectionString = connectionString,
-        }, Log));
+        }));
     }
 #else
     Y_UNUSED(connectionString);

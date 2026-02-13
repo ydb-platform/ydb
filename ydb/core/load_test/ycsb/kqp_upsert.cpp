@@ -194,7 +194,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
         CloseSession(ctx);
         Die(ctx);
     }
@@ -408,7 +408,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
         Stop(ctx);
     }
 

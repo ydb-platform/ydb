@@ -23,6 +23,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/interop
     library/cpp/random_provider
     library/cpp/time_provider
 
@@ -37,6 +38,7 @@ PEERDIR(
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/expr_nodes
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/proto
     ydb/public/sdk/cpp/src/client/driver
 

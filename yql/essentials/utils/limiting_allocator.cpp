@@ -10,7 +10,7 @@ public:
         : Alloc_(allocator)
         , Limit_(limit)
     {};
-    TBlock Allocate(size_t len) override final {
+    TBlock Allocate(size_t len) final {
         if (Allocated_ + len > Limit_) {
             throw std::runtime_error("Out of memory");
         }
@@ -18,7 +18,7 @@ public:
         return Alloc_->Allocate(len);
     }
 
-    void Release(const TBlock& block) override final {
+    void Release(const TBlock& block) final {
         Y_ENSURE(Allocated_ >= block.Len);
         Allocated_ -= block.Len;
         Alloc_->Release(block);

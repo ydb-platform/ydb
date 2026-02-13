@@ -20,8 +20,8 @@ class TModelOpenAi final : public TModelBase {
     static constexpr ui64 MAX_COMPLETION_TOKENS = 1024;
 
 public:
-    TModelOpenAi(const TOpenAiModelSettings& settings, const TInteractiveLogger& log)
-        : TBlase(CreateApiUrl(settings.BaseUrl, "/chat/completions"), settings.ApiKey, log)
+    explicit TModelOpenAi(const TOpenAiModelSettings& settings)
+        : TBlase(CreateApiUrl(settings.BaseUrl, "/chat/completions"), settings.ApiKey)
         , Tools(ChatCompletionRequest["tools"].SetType(NJson::JSON_ARRAY).GetArraySafe())
         , Conversation(ChatCompletionRequest["messages"].SetType(NJson::JSON_ARRAY).GetArraySafe())
     {
@@ -147,8 +147,8 @@ private:
 
 } // anonymous namespace
 
-IModel::TPtr CreateOpenAiModel(const TOpenAiModelSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TModelOpenAi>(settings, log);
+IModel::TPtr CreateOpenAiModel(const TOpenAiModelSettings& settings) {
+    return std::make_shared<TModelOpenAi>(settings);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

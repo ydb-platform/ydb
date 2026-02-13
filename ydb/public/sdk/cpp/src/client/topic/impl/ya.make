@@ -27,6 +27,7 @@ SRCS(
 PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/monlib/dynamic_counters
+    library/cpp/threading/future/subscription
     library/cpp/monlib/metrics
     library/cpp/string_utils/url
     ydb/public/sdk/cpp/src/library/persqueue/obfuscate

@@ -42,12 +42,12 @@ public:
         page = Max(page, DefaultPage);
         const ui64 pageSize = Min(record.GetPageSize() ? Max(record.GetPageSize(), MinPageSize) : DefaultPageSize, MaxPageSize);
 
-
-        auto it = Self->IndexBuilds.end();
+        auto it = Self->IndexBuildsByTime.end();
         ui64 skip = (page - 1) * pageSize;
-        while ((it != Self->IndexBuilds.begin()) && skip) {
+        while ((it != Self->IndexBuildsByTime.begin()) && skip) {
             --it;
-            if (it->second->DomainPathId == domainPathId) {
+            auto buildInfo = Self->IndexBuilds.at(it->second);
+            if (buildInfo->DomainPathId == domainPathId) {
                 --skip;
             }
         }
@@ -56,15 +56,16 @@ public:
         respRecord.SetStatus(Ydb::StatusIds::SUCCESS);
 
         ui64 size = 0;
-        while ((it != Self->IndexBuilds.begin()) && size < pageSize) {
+        while ((it != Self->IndexBuildsByTime.begin()) && size < pageSize) {
             --it;
-            if (it->second->DomainPathId == domainPathId) {
-                Fill(*respRecord.MutableEntries()->Add(), *it->second);
+            auto buildInfo = Self->IndexBuilds.at(it->second);
+            if (buildInfo->DomainPathId == domainPathId) {
+                Fill(*respRecord.MutableEntries()->Add(), *buildInfo);
                 ++size;
             }
         }
 
-        if (it == Self->IndexBuilds.begin()) {
+        if (it == Self->IndexBuildsByTime.begin()) {
             respRecord.SetNextPageToken("0");
         } else {
             respRecord.SetNextPageToken(ToString(page + 1));

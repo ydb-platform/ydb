@@ -27,6 +27,7 @@ $src = (
 );
 
 $init = ($row) -> (AsStruct($row.ts ?? 0 AS value, 1 AS count));
+
 $calculate = ($_row, $state) -> ($state.value);
 
 -- split partition into two-element groups, make session key to be cumulative sum of ts from partition start

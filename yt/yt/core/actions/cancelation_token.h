@@ -48,7 +48,7 @@ public:
     ~TCurrentCancelationTokenGuard();
 
     TCurrentCancelationTokenGuard(const TCurrentCancelationTokenGuard& other) = delete;
-    TCurrentCancelationTokenGuard& operator= (const TCurrentCancelationTokenGuard& other) = delete;
+    TCurrentCancelationTokenGuard& operator=(const TCurrentCancelationTokenGuard& other) = delete;
 
 private:
     TAnyCancelationToken PrevToken_;

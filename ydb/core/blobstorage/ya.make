@@ -33,6 +33,7 @@ RECURSE(
     base
     bridge
     crypto
+    ddisk
     dsproxy
     groupinfo
     incrhuge

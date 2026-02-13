@@ -11,7 +11,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 namespace NKikimr::NKqp::NWorkload {
 
@@ -245,7 +246,44 @@ IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
     return new TFakeTicketParserActor();
 }
 
+///
+/// The HttpGateway is created as a singleton and stored in a shared_ptr.
+/// The HttpGateway is destroyed when its reference count reaches zero.
+///
+/// Destruction triggers the cleanup of libcurl, which in turn clears c-ares.
+/// During tests, this can race with gRPC threads that also use c-ares.
+///
+/// This class holds a reference to the HttpGateway during test execution
+/// to prevent repeated create/destroy/create cycles.
+///
+/// HttpGateway requires logging, so LoggerScope must be created before
+/// the HttpGateway is initialized
+///
+struct TGlobalObjectHolder {
+    std::shared_ptr<NYql::NLog::YqlLoggerScope> LoggerScope;
+    NYql::IHTTPGateway::TPtr HttpGateway;
+
+    TGlobalObjectHolder()
+        : LoggerScope(std::make_shared<NYql::NLog::YqlLoggerScope>(
+            new NYql::NLog::TTlsLogBackend(new TNullLogBackend())
+          ))
+        , HttpGateway(NYql::IHTTPGateway::Make())
+    {}
+
+    ~TGlobalObjectHolder() {
+        // By this point, all threads using c-ares must be stopped.
+        // Use this line to set a breakpoint while debugging c-ares races.
+        HttpGateway.reset();
+        LoggerScope.reset();
+    }
+};
+
 // Ydb setup
+const TGlobalObjectHolder& GetGlobalObjectHolder() {
+    static const TGlobalObjectHolder holder_;
+    Y_ENSURE(holder_.HttpGateway);
+    return holder_;
+}
 
 class TWorkloadServiceYdbSetup : public IYdbSetup {
 private:
@@ -261,6 +299,7 @@ private:
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableResourcePoolsCounters(true);
         featureFlags.SetEnableStreamingQueries(true);
+        featureFlags.SetEnableResourcePoolsScheduler(Settings_.EnableResourcePoolsScheduler_);
 
         auto& queryServiceConfig = *appConfig.MutableQueryServiceConfig();
         queryServiceConfig.SetAllExternalDataSourcesAreAvailable(true);
@@ -276,6 +315,7 @@ private:
     void SetLoggerSettings(TServerSettings& serverSettings) const {
         auto loggerInitializer = [](TTestActorRuntime& runtime) {
             runtime.SetLogPriority(NKikimrServices::KQP_WORKLOAD_SERVICE, NLog::EPriority::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE_SCHEDULER, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::EPriority::PRI_TRACE);
         };
 
@@ -294,6 +334,10 @@ private:
             .SetFeatureFlags(appConfig.GetFeatureFlags())
             .SetInitializeFederatedQuerySetupFactory(true);
 
+        if (Settings_.WorkSafeWithGlobalObjects_) {
+            serverSettings.SetKqpLoggerScope(GetGlobalObjectHolder().LoggerScope);
+        }
+
         if (Settings_.CreateSampleTenants_) {
             const auto dedicatedPoolKind = SplitPath(Settings_.GetDedicatedTenantName()).back();
             const auto sharedPoolKind = SplitPath(Settings_.GetSharedTenantName()).back();
@@ -306,7 +350,6 @@ private:
         SetLoggerSettings(serverSettings);
 
         serverSettings.CreateTicketParser = CreateFakeTicketParser;
-
         return serverSettings;
     }
 
@@ -390,9 +433,21 @@ public:
     explicit TWorkloadServiceYdbSetup(const TYdbSetupSettings& settings)
         : Settings_(settings)
     {
+        if (Settings_.WorkSafeWithGlobalObjects_) {
+            GetGlobalObjectHolder();
+        }
+
         EnableYDBBacktraceFormat();
         InitializeServer();
         CreateSamplePool();
+    }
+
+    virtual ~TWorkloadServiceYdbSetup() {
+        if (YdbDriver_) {
+            // Stop requests and wait for their completion
+            YdbDriver_->Stop(true);
+            YdbDriver_.reset();
+        }
     }
 
     void UpdateNodeCpuInfo(double usage, ui32 threads, ui64 nodeIndex = 0) override {
@@ -436,7 +491,8 @@ public:
 
     void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const override {
         TStatus status = TableClientSession_->ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus,
+            TStringBuilder() << "Query: " << query << Endl << status.GetIssues().ToOneLineString());
         if (expectedStatus != NYdb::EStatus::SUCCESS) {
             UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), expectedMessage);
         }
@@ -509,6 +565,14 @@ public:
     }
 
     // Pools actions
+    void CreateResourcePool(const TString& poolId, const NResourcePool::TPoolSettings& settings) const override {
+        auto edgeActor = GetRuntime()->AllocateEdgeActor();
+
+        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, poolId, settings, nullptr, {}));
+        auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+    }
+
     void CreateSamplePoolOn(const TString& databaseId) const override {
         auto edgeActor = GetRuntime()->AllocateEdgeActor();
         auto actor = CreatePoolCreatorActor(

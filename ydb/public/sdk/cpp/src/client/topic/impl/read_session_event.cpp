@@ -191,7 +191,7 @@ bool TMessage::HasException() const {
 }
 
 void TMessage::Commit() {
-    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
+    static_cast<TPartitionSessionControl*>(PartitionSession.Get())
         ->Commit(Information.Offset, Information.Offset + 1);
 }
 
@@ -225,7 +225,7 @@ uint64_t TCompressedMessage::GetUncompressedSize() const {
 }
 
 void TCompressedMessage::Commit() {
-    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
+    static_cast<TPartitionSessionControl*>(PartitionSession.Get())
         ->Commit(Information.Offset, Information.Offset + 1);
 }
 
@@ -264,7 +264,7 @@ void TDataReceivedEvent::Commit() {
     }
 
     for (auto [from, to] : OffsetRanges) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<TPartitionSessionControl*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 
@@ -317,7 +317,7 @@ TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr
 
 void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) {
     if (PartitionSession) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
+        static_cast<TPartitionSessionControl*>(PartitionSession.Get())
             ->ConfirmCreate(readOffset, commitOffset);
     }
 }
@@ -342,7 +342,7 @@ TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr p
 
 void TStopPartitionSessionEvent::Confirm() {
     if (PartitionSession) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmDestroy();
+        static_cast<TPartitionSessionControl*>(PartitionSession.Get())->ConfirmDestroy();
     }
 }
 
@@ -366,7 +366,7 @@ TEndPartitionSessionEvent::TEndPartitionSessionEvent(TPartitionSession::TPtr par
 
 void TEndPartitionSessionEvent::Confirm() {
     if (PartitionSession) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmEnd(GetChildPartitionIds());
+        static_cast<TPartitionSessionControl*>(PartitionSession.Get())->ConfirmEnd(GetChildPartitionIds());
     }
 }
 
@@ -454,4 +454,4 @@ std::string DebugString(const TReadSessionEvent::TEvent& event) {
     return std::visit([](const auto& ev) { return ev.DebugString(); }, event);
 }
 
-} // namespace NYdb::NPersQueue
+} // namespace NYdb::NTopic

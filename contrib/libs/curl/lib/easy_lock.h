@@ -30,12 +30,6 @@
 
 #if defined(_WIN32_WINNT) && _WIN32_WINNT >= 0x600
 
-#ifdef __MINGW32__
-#ifndef SRWLOCK_INIT
-#define SRWLOCK_INIT NULL
-#endif
-#endif /* __MINGW32__ */
-
 #define curl_simple_lock SRWLOCK
 #define CURL_SIMPLE_LOCK_INIT SRWLOCK_INIT
 
@@ -44,7 +38,7 @@
 
 #elif defined(HAVE_ATOMIC) && defined(HAVE_STDATOMIC_H)
 #include <stdatomic.h>
-#if defined(HAVE_SCHED_YIELD)
+#ifdef HAVE_SCHED_YIELD
 #include <sched.h>
 #endif
 
@@ -69,7 +63,7 @@
 
 #endif
 
-static inline void curl_simple_lock_lock(curl_simple_lock *lock)
+static CURL_INLINE void curl_simple_lock_lock(curl_simple_lock *lock)
 {
   for(;;) {
     if(!atomic_exchange_explicit(lock, true, memory_order_acquire))
@@ -81,6 +75,8 @@ static inline void curl_simple_lock_lock(curl_simple_lock *lock)
       __builtin_ia32_pause();
 #elif defined(__aarch64__)
       __asm__ volatile("yield" ::: "memory");
+#elif defined(_WIN32)
+      Sleep(1);
 #elif defined(HAVE_SCHED_YIELD)
       sched_yield();
 #endif
@@ -88,7 +84,7 @@ static inline void curl_simple_lock_lock(curl_simple_lock *lock)
   }
 }
 
-static inline void curl_simple_lock_unlock(curl_simple_lock *lock)
+static CURL_INLINE void curl_simple_lock_unlock(curl_simple_lock *lock)
 {
   atomic_store_explicit(lock, false, memory_order_release);
 }

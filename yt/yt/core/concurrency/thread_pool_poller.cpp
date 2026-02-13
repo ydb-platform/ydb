@@ -381,7 +381,7 @@ private:
     TNotificationHandle WakeupHandle_;
     TMpscStack<IPollablePtr> RegisterQueue_;
     TMpscStack<IPollablePtr> UnregisterQueue_;
-    THashSet<IPollablePtr> Pollables_;
+    THashMap<IPollable*, IPollablePtr> Pollables_;
 
     std::array<TPollerImpl::TEvent, MaxEventsPerPoll> PooledImplEvents_;
 
@@ -436,11 +436,13 @@ private:
                 continue;
             }
 
+            // These can trigger if user forgot to unarm the pollable.
+            YT_VERIFY(Pollables_.contains(pollable));
+            YT_VERIFY(pollable->GetRefCount() > 0);
+
             YT_LOG_TRACE("Got pollable event (Pollable: %v, Control: %v)",
                 pollable->GetLoggingTag(),
                 control);
-
-            YT_VERIFY(pollable->GetRefCount() > 0);
 
             ScheduleEvent(pollable, control);
         }
@@ -470,13 +472,13 @@ private:
                 });
 
                 RegisterQueue_.DequeueAll(false, [&] (auto& pollable) {
-                    InsertOrCrash(Pollables_, std::move(pollable));
+                    EmplaceOrCrash(Pollables_, pollable.Get(), pollable);
                 });
 
                 HandleEvents(eventCount);
 
                 for (const auto& pollable : unregisterItems) {
-                    EraseOrCrash(Pollables_, pollable);
+                    EraseOrCrash(Pollables_, pollable.Get());
                 }
 
                 unregisterItems.clear();
@@ -486,7 +488,7 @@ private:
                         break;
                     }
                     // Need to unregister pollables when stopping to break reference cycles between pollables and poller.
-                    for (const auto& pollable : Pollables_) {
+                    for (const auto& [rawPollable, pollable] : Pollables_) {
                         DoUnregister(pollable);
                     }
                 }

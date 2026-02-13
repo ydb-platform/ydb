@@ -6,6 +6,7 @@ Implements the Distutils 'clean' command."""
 
 import os
 from distutils._log import log
+from typing import ClassVar
 
 from ..core import Command
 from ..dir_util import remove_tree
@@ -30,7 +31,7 @@ class clean(Command):
         ('all', 'a', "remove all build output, not just temporary by-products"),
     ]
 
-    boolean_options = ['all']
+    boolean_options: ClassVar[list[str]] = ['all']
 
     def initialize_options(self):
         self.build_base = None

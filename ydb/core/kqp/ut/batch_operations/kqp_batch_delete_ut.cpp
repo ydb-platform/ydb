@@ -1,10 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <format>
-#include <ydb/core/kqp/counters/kqp_counters.h>
-
-#include <library/cpp/json/json_reader.h>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -13,18 +8,27 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-NKikimrConfig::TAppConfig GetAppConfig(size_t maxBatchSize = 10000, size_t partitionLimit = 10, bool enableOltpSink = true, bool enableBatchUpdates = true) {
+TKikimrSettings GetTestSettings(size_t maxBatchSize = 10000, size_t partitionLimit = 10,
+    bool enableOltpSink = true, bool enableBatchUpdates = true, bool enableIndexStreamWrite = true)
+{
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
     app.MutableTableServiceConfig()->SetEnableOltpSink(enableOltpSink);
+    app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
     app.MutableTableServiceConfig()->SetEnableBatchUpdates(enableBatchUpdates);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(maxBatchSize);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetPartitionExecutionLimit(partitionLimit);
-    return app;
+
+    auto logConfig = TTestLogSettings()
+        .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_EXECUTER, NLog::EPriority::PRI_TRACE)
+        .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPUTE, NLog::EPriority::PRI_INFO);
+
+    logConfig.DefaultLogPriority = NLog::EPriority::PRI_CRIT;
+    return TKikimrSettings(std::move(app)).SetLogSettings(std::move(logConfig));
 }
 
 void TestSimpleOnePartition(size_t maxBatchSize) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
+    TKikimrRunner kikimr(GetTestSettings(maxBatchSize));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -79,7 +83,7 @@ void TestSimpleOnePartition(size_t maxBatchSize) {
 }
 
 void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize, partitionLimit));
+    TKikimrRunner kikimr(GetTestSettings(maxBatchSize, partitionLimit));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -178,7 +182,7 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
 }
 
 void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards, size_t partitionLimit) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize, partitionLimit));
+    TKikimrRunner kikimr(GetTestSettings(maxBatchSize, partitionLimit));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -200,7 +204,7 @@ void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards, si
 }
 
 void TestLarge(size_t maxBatchSize, size_t rowsPerShard) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
+    TKikimrRunner kikimr(GetTestSettings(maxBatchSize));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -286,7 +290,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(TableWithIndex) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
 
         {
             auto db = kikimr.GetTableClient();
@@ -382,7 +386,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(MultiStatement) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -446,7 +450,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(Returning) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -464,7 +468,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(DeleteOn) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -481,7 +485,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(ColumnTable) {
-        TKikimrRunner kikimr(TKikimrSettings(GetAppConfig()).SetWithSampleTables(false));
+        TKikimrRunner kikimr(GetTestSettings().SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -526,7 +530,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(TableNotExists) {
-        TKikimrRunner kikimr(TKikimrSettings(GetAppConfig()).SetWithSampleTables(false));
+        TKikimrRunner kikimr(GetTestSettings().SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -552,7 +556,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(UnknownColumn) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -567,7 +571,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(HasTxControl) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(GetTestSettings());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -584,7 +588,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST_QUAD(DisableFlags, UseSink, UseBatchUpdates) {
-        TKikimrRunner kikimr(GetAppConfig(10000, 10, UseSink, UseBatchUpdates));
+        TKikimrRunner kikimr(GetTestSettings(10000, 10, UseSink, UseBatchUpdates));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -601,6 +605,309 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
                 UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operations are not supported at the current time.", result.GetIssues().ToString());
             }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TableWithSyncIndex, EnableIndexStreamWrite) {
+        TKikimrRunner kikimr(GetTestSettings(10000, 10, true, true, EnableIndexStreamWrite).SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE global_sync_idx (
+                    k Int32 NOT NULL,
+                    v1 String,
+                    v2 String,
+                    v3 String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL SYNC ON (v1) COVER (v2)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                UPSERT INTO global_sync_idx (k, v1, v2, v3) VALUES
+                    (1, "123", "456", "789"),
+                    (2, "123", "456", "789"),
+                    (3, "123", "456", "789"),
+                    (4, "123", "456", "789"),
+                    (5, "123", "456", "789");
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM global_sync_idx
+                    WHERE v1 = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM global_sync_idx
+                WHERE v1 = "123";
+        )");
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM `/Root/global_sync_idx/idx/indexImplTable`
+                WHERE v1 = "123";
+        )");
+    }
+
+    Y_UNIT_TEST_TWIN(TableWithUniqueSyncIndex, EnableIndexStreamWrite) {
+        TKikimrRunner kikimr(GetTestSettings(10000, 10, true, true, EnableIndexStreamWrite).SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE global_unique_sync_idx (
+                    k Int32 NOT NULL,
+                    v1 String,
+                    v2 String,
+                    v3 String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL UNIQUE SYNC ON (v1) COVER (v2)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                UPSERT INTO global_unique_sync_idx (k, v1, v2, v3) VALUES
+                    (1, "123", "456", "787"),
+                    (2, "124", "456", "789"),
+                    (3, "125", "457", "787"),
+                    (4, "126", "457", "789"),
+                    (5, "127", "458", "787");
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM global_unique_sync_idx WHERE v1 = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            if (EnableIndexStreamWrite) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operations are not supported for tables with global sync unique secondary indexes (index: `idx`)", result.GetIssues().ToString());
+            }
+        }
+
+        if (!EnableIndexStreamWrite) {
+            return;
+        }
+
+        {
+            const auto query = R"(
+                BATCH DELETE FROM global_unique_sync_idx WHERE v2 = "456";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = R"(
+                BATCH DELETE FROM global_unique_sync_idx WHERE v3 = "787";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM global_unique_sync_idx WHERE v1 = "123";
+        )");
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM global_unique_sync_idx WHERE v2 = "456";
+        )");
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM global_unique_sync_idx WHERE v3 = "787";
+        )");
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM `/Root/global_unique_sync_idx/idx/indexImplTable` WHERE v1 = "123";
+        )");
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM `/Root/global_unique_sync_idx/idx/indexImplTable` WHERE v2 = "456";
+        )");
+
+        {
+            const auto query = R"(
+                BATCH DELETE FROM global_unique_sync_idx;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM global_unique_sync_idx;
+        )");
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM `/Root/global_unique_sync_idx/idx/indexImplTable`;
+        )");
+    }
+
+    Y_UNIT_TEST_TWIN(TableWithAsyncIndex, EnableIndexStreamWrite) {
+        TKikimrRunner kikimr(GetTestSettings(10000, 10, true, true, EnableIndexStreamWrite).SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE global_async_idx (
+                    k Int32 NOT NULL,
+                    v1 String,
+                    v2 String,
+                    v3 String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL ASYNC ON (v1) COVER (v2)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                UPSERT INTO global_async_idx (k, v1, v2, v3) VALUES
+                    (1, "123", "456", "789"),
+                    (2, "123", "456", "789"),
+                    (3, "123", "456", "789"),
+                    (4, "123", "456", "789"),
+                    (5, "123", "456", "789");
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM global_async_idx WHERE v1 = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM global_async_idx WHERE v1 = "123";
+        )");
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM `/Root/global_async_idx/idx/indexImplTable` WHERE v1 = "123";
+        )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx());
+    }
+
+    Y_UNIT_TEST(TableWithVectorIndex) {
+        TKikimrRunner kikimr(GetTestSettings().SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE vector_idx (
+                    k Int32 NOT NULL,
+                    v String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL SYNC USING vector_kmeans_tree ON (v) WITH (
+                        distance="cosine",
+                        vector_type="uint8",
+                        vector_dimension=3,
+                        clusters=2,
+                        levels=3
+                    )
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM vector_idx WHERE v = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "BATCH operations are not supported for tables with global sync vector_kmeans_tree indexes (index: `idx`)");
+        }
+    }
+
+    Y_UNIT_TEST(TableWithFullTextIndex) {
+        auto settings = GetTestSettings().SetWithSampleTables(false);
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableFulltextIndex(true);
+        settings.SetFeatureFlags(featureFlags);
+
+        auto kikimr = TKikimrRunner(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE fulltext_plain_idx (
+                    k Int32 NOT NULL,
+                    v1 String,
+                    v2 String,
+                    v3 String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL SYNC USING fulltext_plain ON (v1) COVER (v2) WITH (
+                        tokenizer=standard,
+                        use_filter_lowercase=true
+                    )
+                );
+
+                CREATE TABLE fulltext_relevance_idx (
+                    k Int32 NOT NULL,
+                    v1 String,
+                    v2 String,
+                    v3 String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL SYNC USING fulltext_relevance ON (v1) COVER (v2) WITH (
+                        tokenizer=standard,
+                        use_filter_lowercase=true
+                    )
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM fulltext_plain_idx WHERE v1 = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "BATCH operations are not supported for tables with global sync fulltext_plain indexes (index: `idx`)");
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM fulltext_relevance_idx WHERE v1 = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "BATCH operations are not supported for tables with global sync fulltext_relevance indexes (index: `idx`)");
         }
     }
 }

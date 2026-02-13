@@ -9,7 +9,8 @@ Y_UNIT_TEST_LLVM(TestDynamicConvert) {
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
     const auto arg = pb.Arg(pb.NewLinearType(dataType, false));
-    const auto pgmReturn = pb.FromDynamicLinear(pb.ToDynamicLinear(arg), "foo.sql", 5, 6);
+    const auto linear = pb.ToDynamicLinear(arg, "foo.sql", 3, 4);
+    const auto pgmReturn = pb.FromDynamicLinear(linear, "foo.sql", 5, 6);
     const auto graph = setup.BuildGraph(pgmReturn, {arg.GetNode()});
     auto& ctx = graph->GetContext();
     graph->GetEntryPoint(0, true)->SetValue(ctx, NUdf::TUnboxedValuePod(1));
@@ -21,7 +22,7 @@ Y_UNIT_TEST_LLVM(TestDynamicConvertTwice) {
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
     const auto arg = pb.Arg(pb.NewLinearType(dataType, false));
-    const auto linear = pb.ToDynamicLinear(arg);
+    const auto linear = pb.ToDynamicLinear(arg, "foo.sql", 3, 4);
     const auto use1 = pb.FromDynamicLinear(linear, "foo.sql", 5, 6);
     const auto use2 = pb.FromDynamicLinear(linear, "foo.sql", 8, 9);
     const auto pgmReturn = pb.NewTuple({use1, use2});

@@ -172,7 +172,7 @@ TTableMountCacheBase::TTableMountCacheBase(
     NProfiling::TProfiler profiler)
     : TAsyncExpiringCache(
         config,
-        NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker(),
+        NRpc::TDispatcher::Get()->GetHeavyInvoker(),
         logger.WithTag("Cache: TableMount"),
         profiler)
     , Logger(std::move(logger))

@@ -18,7 +18,7 @@ __all__ = [
     'b64encode', 'b64decode', 'b32encode', 'b32decode',
     'b32hexencode', 'b32hexdecode', 'b16encode', 'b16decode',
     # Base85 and Ascii85 encodings
-    'b85encode', 'b85decode', 'a85encode', 'a85decode',
+    'b85encode', 'b85decode', 'a85encode', 'a85decode', 'z85encode', 'z85decode',
     # Standard Base64 encoding
     'standard_b64encode', 'standard_b64decode',
     # Some common Base64 alternatives.  As referenced by RFC 3458, see thread
@@ -164,7 +164,6 @@ _b32tab2 = {}
 _b32rev = {}
 
 def _b32encode(alphabet, s):
-    global _b32tab2
     # Delay the initialization of the table to not waste memory
     # if the function is never called
     if alphabet not in _b32tab2:
@@ -200,7 +199,6 @@ def _b32encode(alphabet, s):
     return bytes(encoded)
 
 def _b32decode(alphabet, s, casefold=False, map01=None):
-    global _b32rev
     # Delay the initialization of the table to not waste memory
     # if the function is never called
     if alphabet not in _b32rev:
@@ -467,9 +465,12 @@ def b85decode(b):
     # Delay the initialization of tables to not waste memory
     # if the function is never called
     if _b85dec is None:
-        _b85dec = [None] * 256
+        # we don't assign to _b85dec directly to avoid issues when
+        # multiple threads call this function simultaneously
+        b85dec_tmp = [None] * 256
         for i, c in enumerate(_b85alphabet):
-            _b85dec[c] = i
+            b85dec_tmp[c] = i
+        _b85dec = b85dec_tmp
 
     b = _bytes_from_decode_data(b)
     padding = (-len(b)) % 5
@@ -498,6 +499,33 @@ def b85decode(b):
     if padding:
         result = result[:-padding]
     return result
+
+_z85alphabet = (b'0123456789abcdefghijklmnopqrstuvwxyz'
+                b'ABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#')
+# Translating b85 valid but z85 invalid chars to b'\x00' is required
+# to prevent them from being decoded as b85 valid chars.
+_z85_b85_decode_diff = b';_`|~'
+_z85_decode_translation = bytes.maketrans(
+    _z85alphabet + _z85_b85_decode_diff,
+    _b85alphabet + b'\x00' * len(_z85_b85_decode_diff)
+)
+_z85_encode_translation = bytes.maketrans(_b85alphabet, _z85alphabet)
+
+def z85encode(s):
+    """Encode bytes-like object b in z85 format and return a bytes object."""
+    return b85encode(s).translate(_z85_encode_translation)
+
+def z85decode(s):
+    """Decode the z85-encoded bytes-like object or ASCII string b
+
+    The result is returned as a bytes object.
+    """
+    s = _bytes_from_decode_data(s)
+    s = s.translate(_z85_decode_translation)
+    try:
+        return b85decode(s)
+    except ValueError as e:
+        raise ValueError(e.args[0].replace('base85', 'z85')) from None
 
 # Legacy interface.  This code could be cleaned up since I don't believe
 # binascii has any line length limitations.  It just doesn't seem worth it
@@ -579,7 +607,14 @@ def main():
         with open(args[0], 'rb') as f:
             func(f, sys.stdout.buffer)
     else:
-        func(sys.stdin.buffer, sys.stdout.buffer)
+        if sys.stdin.isatty():
+            # gh-138775: read terminal input data all at once to detect EOF
+            import io
+            data = sys.stdin.buffer.read()
+            buffer = io.BytesIO(data)
+        else:
+            buffer = sys.stdin.buffer
+        func(buffer, sys.stdout.buffer)
 
 
 if __name__ == '__main__':

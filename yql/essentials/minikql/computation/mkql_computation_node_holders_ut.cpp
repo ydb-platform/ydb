@@ -23,7 +23,7 @@ struct TSetup {
 
 struct TTestedSets {
     TTestedSets() = default;
-    TTestedSets(const TType* type)
+    explicit TTestedSets(const TType* type)
         : HashSetHelper(type)
         , HashSet(0, HashSetHelper.GetValueHash(), HashSetHelper.GetValueEqual())
         , CmpSetHelper(type)

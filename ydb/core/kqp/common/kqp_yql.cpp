@@ -223,6 +223,12 @@ TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(con
         } else if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.K1Factor = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.DefaultOperator = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.MinimumShouldMatch = tuple.Value().Cast().Ptr();
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
         }
@@ -260,6 +266,20 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(K1FactorSettingName)
             .Value(K1Factor)
+            .Done());
+    }
+
+    if (DefaultOperator) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(DefaultOperatorSettingName)
+            .Value(DefaultOperator)
+            .Done());
+    }
+
+    if (MinimumShouldMatch) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(MinimumShouldMatchSettingName)
+            .Value(MinimumShouldMatch)
             .Done());
     }
 
@@ -813,18 +833,18 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
         .Done();
 }
 
-bool TKqpStreamLookupSettings::HasVectorTopDistinct(const NNodes::TCoNameValueTupleList& list) {
+bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TCoNameValueTupleList& list) {
     for (const auto& tuple : list) {
         auto name = tuple.Name().Value();
-        if (name == VectorTopDistinctSettingName) {
+        if (name == VectorTopColumnSettingName) {
             return true;
         }
     }
     return false;
 }
 
-bool TKqpStreamLookupSettings::HasVectorTopDistinct(const NNodes::TKqlStreamLookupTable& node) {
-    return TKqpStreamLookupSettings::HasVectorTopDistinct(node.Settings());
+bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TKqlStreamLookupTable& node) {
+    return TKqpStreamLookupSettings::HasVectorTopColumn(node.Settings());
 }
 
 TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameValueTupleList& list) {

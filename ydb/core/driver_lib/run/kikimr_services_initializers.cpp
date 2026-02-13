@@ -84,7 +84,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 
 #include <ydb/core/load_test/service_actor.h>
 
@@ -103,6 +103,10 @@
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
+
+#if defined(OS_LINUX)
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#endif
 
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon_alloc/monitor.h>
@@ -242,6 +246,7 @@
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/retro_tracing/retro_collector.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/slide_limiter/service/service.h>
@@ -313,6 +318,7 @@ static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSyste
                                                 const NKikimr::TAppData* appData)
 {
     TCpuManagerConfig cpuManager;
+    cpuManager.Shared.United = config.GetUseUnitedPool();
     cpuManager.PingInfoByPool.resize(config.GetExecutor().size());
     for (int poolId = 0; poolId < config.GetExecutor().size(); poolId++) {
         AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, appData);
@@ -996,6 +1002,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 TActorSetupCmd(wilsonUploader.release(), TMailboxType::ReadAsFilled, appData->BatchPoolId));
         }
     }
+
+    { // create retro collector
+        setup->LocalServices.emplace_back(
+                NRetroTracing::MakeRetroCollectorId(),
+                TActorSetupCmd(NRetroTracing::CreateRetroCollector(), TMailboxType::ReadAsFilled,
+                        appData->BatchPoolId));
+    }
 }
 
 // TImmediateControlBoardInitializer
@@ -1556,45 +1569,9 @@ void TBootstrapperInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
     if (Config.HasBootstrapConfig()) {
-        bool hasDynamicTablets = false;
-        for (const auto &boot : Config.GetBootstrapConfig().GetTablet()) {
-            if (boot.GetAllowDynamicConfiguration()) {
-                hasDynamicTablets = true;
-            } else {
-                const bool standby = boot.HasStandBy() && boot.GetStandBy();
-                if (Find(boot.GetNode(), NodeId) != boot.GetNode().end()) {
-                    TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
-                    if (boot.HasBootType()) {
-                        info->BootType = BootTypeFromProto(boot.GetBootType());
-                    }
-
-                    auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
-
-                    auto tabletSetupInfo = CreateTablet(
-                        TTabletTypes::TypeToStr(tabletType),
-                        info,
-                        appData);
-
-                    TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get());
-                    bi->Nodes.reserve(boot.NodeSize());
-                    for (ui32 x : boot.GetNode())
-                        bi->Nodes.push_back(x);
-                    if (boot.HasWatchThreshold())
-                        bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold());
-                    if (boot.HasStartFollowers())
-                        bi->StartFollowers = boot.GetStartFollowers();
-
-                    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-                        MakeBootstrapperID(info->TabletID, NodeId),
-                        TActorSetupCmd(CreateBootstrapper(info.Get(), bi.Get(), standby), TMailboxType::HTSwap, appData->SystemPoolId)));
-                }
-            }
-        }
-        if (hasDynamicTablets) {
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-                TActorId(),
-                TActorSetupCmd(CreateConfiguredTabletBootstrapper(Config.GetBootstrapConfig()), TMailboxType::HTSwap, appData->SystemPoolId)));
-        }
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+            TActorId(),
+            TActorSetupCmd(CreateConfiguredTabletBootstrapper(Config.GetBootstrapConfig()), TMailboxType::HTSwap, appData->SystemPoolId)));
     }
 }
 
@@ -3191,5 +3168,20 @@ void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup*
     setup->LocalServices.push_back(std::make_pair(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
         TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));
 }
+
+#if defined(OS_LINUX)
+
+TNbsServiceInitializer::TNbsServiceInitializer(const TKikimrRunConfig &runConfig)
+     : IKikimrServicesInitializer(runConfig) {
+}
+
+void TNbsServiceInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
+    Y_UNUSED(setup);
+    Y_UNUSED(appData);
+
+    NYdb::NBS::NBlockStore::CreateNbsService();
+}
+
+#endif
 
 } // namespace NKikimr::NKikimrServicesInitializers

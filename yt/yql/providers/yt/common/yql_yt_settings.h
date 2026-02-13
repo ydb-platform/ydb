@@ -442,7 +442,7 @@ private:
     std::unordered_map<ui64, size_t> NodeIdToVer;
 };
 
-bool ValidateCompressionCodecValue(const TStringBuf& codec);
+bool ValidateCompressionCodecValue(const TString& codec);
 void MediaValidator(const NYT::TNode& value);
 
 } // NYql

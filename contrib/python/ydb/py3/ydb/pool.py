@@ -1,35 +1,43 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import abc
 import threading
 import logging
 from concurrent import futures
 import collections
 import random
-import typing
+from typing import Any, Callable, ContextManager, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from . import connection as connection_impl, issues, resolver, _utilities, tracing
 from abc import abstractmethod
 
 from .connection import Connection, EndpointKey
 
+if TYPE_CHECKING:
+    from .driver import DriverConfig
+    from .settings import BaseRequestSettings
+
 logger = logging.getLogger(__name__)
 
 
-class ConnectionsCache(object):
-    def __init__(self, use_all_nodes=False, tracer=tracing.Tracer(None)):
+class ConnectionsCache:
+    lock: ContextManager[Any]
+
+    def __init__(self, use_all_nodes: bool = False, tracer: tracing.Tracer = tracing.Tracer(None)) -> None:
         self.tracer = tracer
         self.lock = threading.RLock()
-        self.connections = collections.OrderedDict()
-        self.connections_by_node_id = collections.OrderedDict()
-        self.outdated = collections.OrderedDict()
-        self.subscriptions = set()
-        self.preferred = collections.OrderedDict()
+        self.connections: collections.OrderedDict[str, Connection] = collections.OrderedDict()
+        self.connections_by_node_id: collections.OrderedDict[Optional[int], Connection] = collections.OrderedDict()
+        self.outdated: collections.OrderedDict[str, Connection] = collections.OrderedDict()
+        self.subscriptions: Set["futures.Future[None]"] = set()
+        self.preferred: collections.OrderedDict[str, Connection] = collections.OrderedDict()
         self.logger = logging.getLogger(__name__)
         self.use_all_nodes = use_all_nodes
         self.conn_lst_order = (self.connections,) if self.use_all_nodes else (self.preferred, self.connections)
-        self.fast_fail_subscriptions = set()
+        self.fast_fail_subscriptions: Set["futures.Future[None]"] = set()
 
-    def add(self, connection, preferred=False):
+    def add(self, connection: Optional[Connection], preferred: bool = False) -> bool:
         if connection is None:
             return False
 
@@ -50,7 +58,7 @@ class ConnectionsCache(object):
             subscription.set_result(None)
         return True
 
-    def _on_done_callback(self, subscription):
+    def _on_done_callback(self, subscription: "futures.Future[None]") -> Optional["futures.Future[None]"]:
         """
         A done callback for the subscription future
         :param subscription: A subscription
@@ -61,39 +69,40 @@ class ConnectionsCache(object):
                 self.subscriptions.remove(subscription)
             except KeyError:
                 return subscription
+        return None
 
     @property
-    def size(self):
+    def size(self) -> int:
         with self.lock:
             return len(self.connections) - len(self.outdated)
 
-    def already_exists(self, endpoint):
+    def already_exists(self, endpoint: str) -> bool:
         with self.lock:
             return endpoint in self.connections
 
-    def values(self):
+    def values(self) -> List[Connection]:
         with self.lock:
             return list(self.connections.values())
 
-    def make_outdated(self, connection):
+    def make_outdated(self, connection: Connection) -> "ConnectionsCache":
         with self.lock:
             self.outdated[connection.endpoint] = connection
             return self
 
-    def cleanup_outdated(self):
+    def cleanup_outdated(self) -> "ConnectionsCache":
         with self.lock:
             outdated_connections = list(self.outdated.values())
             for outdated_connection in outdated_connections:
                 outdated_connection.close()
         return self
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         with self.lock:
             actual_connections = list(self.connections.values())
             for connection in actual_connections:
                 connection.close()
 
-    def complete_discovery(self, error):
+    def complete_discovery(self, error: Optional[Exception]) -> None:
         with self.lock:
             for subscription in self.fast_fail_subscriptions:
                 if error is None:
@@ -103,9 +112,9 @@ class ConnectionsCache(object):
 
             self.fast_fail_subscriptions.clear()
 
-    def add_fast_fail(self):
+    def add_fast_fail(self) -> "futures.Future[None]":
         with self.lock:
-            subscription = futures.Future()
+            subscription: "futures.Future[None]" = futures.Future()
             if len(self.connections) > 0:
                 subscription.set_result(None)
                 return subscription
@@ -113,9 +122,9 @@ class ConnectionsCache(object):
             self.fast_fail_subscriptions.add(subscription)
             return subscription
 
-    def subscribe(self):
+    def subscribe(self) -> "futures.Future[None]":
         with self.lock:
-            subscription = futures.Future()
+            subscription: "futures.Future[None]" = futures.Future()
             if len(self.connections) > 0:
                 subscription.set_result(None)
                 return subscription
@@ -124,7 +133,7 @@ class ConnectionsCache(object):
             return subscription
 
     @tracing.with_trace()
-    def get(self, preferred_endpoint: typing.Optional[EndpointKey] = None) -> Connection:
+    def get(self, preferred_endpoint: Optional[EndpointKey] = None) -> Connection:
         with self.lock:
             if preferred_endpoint is not None and preferred_endpoint.node_id in self.connections_by_node_id:
                 return self.connections_by_node_id[preferred_endpoint.node_id]
@@ -143,7 +152,7 @@ class ConnectionsCache(object):
 
             raise issues.ConnectionLost("Couldn't find valid connection")
 
-    def remove(self, connection):
+    def remove(self, connection: Connection) -> None:
         with self.lock:
             self.connections_by_node_id.pop(connection.node_id, None)
             self.preferred.pop(connection.endpoint, None)
@@ -152,7 +161,7 @@ class ConnectionsCache(object):
 
 
 class Discovery(threading.Thread):
-    def __init__(self, store, driver_config):
+    def __init__(self, store: ConnectionsCache, driver_config: "DriverConfig") -> None:
         """
         A timer thread that implements endpoints discovery logic
         :param store: A store with endpoints
@@ -175,19 +184,19 @@ class Discovery(threading.Thread):
         if driver_config.root_certificates is not None or driver_config.secure_channel:
             self._ssl_required = True
 
-    def discovery_debug_details(self):
+    def discovery_debug_details(self) -> str:
         return self._resolver.debug_details()
 
-    def _emergency_retry_interval(self):
+    def _emergency_retry_interval(self) -> float:
         return (1 + random.random()) * self._base_emergency_retry_interval
 
-    def _discovery_interval(self):
+    def _discovery_interval(self) -> float:
         return (1 + random.random()) * self._base_discovery_interval
 
-    def notify_disconnected(self):
+    def notify_disconnected(self) -> None:
         self._send_wake_up()
 
-    def _send_wake_up(self):
+    def _send_wake_up(self) -> None:
         acquired = self.condition.acquire(blocking=False)
 
         if not acquired:
@@ -196,7 +205,7 @@ class Discovery(threading.Thread):
         self.condition.notify_all()
         self.condition.release()
 
-    def _handle_empty_database(self):
+    def _handle_empty_database(self) -> bool:
         if self._cache.size > 0:
             return True
 
@@ -206,7 +215,7 @@ class Discovery(threading.Thread):
             )
         )
 
-    def execute_discovery(self):
+    def execute_discovery(self) -> bool:
         if self._driver_config.database is None:
             return self._handle_empty_database()
 
@@ -251,11 +260,11 @@ class Discovery(threading.Thread):
 
         return self._cache.size > 0
 
-    def stop(self):
+    def stop(self) -> None:
         self._should_stop.set()
         self._send_wake_up()
 
-    def run(self):
+    def run(self) -> None:
         with self.condition:
             while True:
                 if self._should_stop.is_set():
@@ -279,7 +288,7 @@ class Discovery(threading.Thread):
 
 class IConnectionPool(abc.ABC):
     @abstractmethod
-    def __init__(self, driver_config):
+    def __init__(self, driver_config: "DriverConfig") -> None:
         """
         An object that encapsulates discovery logic and provides ability to execute user requests
         on discovered endpoints.
@@ -288,7 +297,7 @@ class IConnectionPool(abc.ABC):
         pass
 
     @abstractmethod
-    def stop(self, timeout=10):
+    def stop(self, timeout: int = 10) -> None:
         """
         Stops underlying discovery process and cleanups
         :param timeout: A timeout to wait for stop completion
@@ -297,7 +306,7 @@ class IConnectionPool(abc.ABC):
         pass
 
     @abstractmethod
-    def wait(self, timeout=None, fail_fast=False):
+    def wait(self, timeout: Optional[float] = None, fail_fast: bool = False) -> None:
         """
         Waits for endpoints to be are available to serve user requests
         :param timeout: A timeout to wait in seconds
@@ -306,7 +315,7 @@ class IConnectionPool(abc.ABC):
         """
 
     @abstractmethod
-    def discovery_debug_details(self):
+    def discovery_debug_details(self) -> str:
         """
         Returns debug string about last errors
         :return:
@@ -316,14 +325,14 @@ class IConnectionPool(abc.ABC):
     @abstractmethod
     def __call__(
         self,
-        request,
-        stub,
-        rpc_name,
-        wrap_result=None,
-        settings=None,
-        wrap_args=(),
-        preferred_endpoint=None,
-    ):
+        request: Any,
+        stub: Any,
+        rpc_name: str,
+        wrap_result: Optional[Callable[..., Any]] = None,
+        settings: Optional["BaseRequestSettings"] = None,
+        wrap_args: Tuple[Any, ...] = (),
+        preferred_endpoint: Optional[EndpointKey] = None,
+    ) -> Any:
         """
         Sends request constructed by client library
         :param request: A request constructed by client
@@ -339,7 +348,7 @@ class IConnectionPool(abc.ABC):
 
 
 class ConnectionPool(IConnectionPool):
-    def __init__(self, driver_config):
+    def __init__(self, driver_config: "DriverConfig") -> None:
         """
         An object that encapsulates discovery logic and provides ability to execute user requests
         on discovered endpoints.
@@ -368,7 +377,7 @@ class ConnectionPool(IConnectionPool):
         self._stopped = False
         self._stop_guard = threading.Lock()
 
-    def stop(self, timeout=10):
+    def stop(self, timeout: int = 10) -> None:
         """
         Stops underlying discovery process and cleanups
 
@@ -386,7 +395,7 @@ class ConnectionPool(IConnectionPool):
         if self._discovery_thread:
             self._discovery_thread.join(timeout)
 
-    def async_wait(self, fail_fast=False):
+    def async_wait(self, fail_fast: bool = False) -> "futures.Future[None]":
         """
         Returns a future to subscribe on endpoints availability.
 
@@ -396,7 +405,7 @@ class ConnectionPool(IConnectionPool):
             return self._store.add_fast_fail()
         return self._store.subscribe()
 
-    def wait(self, timeout=None, fail_fast=False):
+    def wait(self, timeout: Optional[float] = None, fail_fast: bool = False) -> None:
         """
         Waits for endpoints to be are available to serve user requests
 
@@ -408,7 +417,7 @@ class ConnectionPool(IConnectionPool):
         else:
             self._store.subscribe().result(timeout)
 
-    def _on_disconnected(self, connection):
+    def _on_disconnected(self, connection: Connection) -> None:
         """
         Removes bad discovered endpoint and triggers discovery process
 
@@ -419,7 +428,7 @@ class ConnectionPool(IConnectionPool):
         if self._discovery_thread:
             self._discovery_thread.notify_disconnected()
 
-    def discovery_debug_details(self):
+    def discovery_debug_details(self) -> str:
         """
         Returns debug string about last errors
         :return: str
@@ -431,14 +440,14 @@ class ConnectionPool(IConnectionPool):
     @tracing.with_trace()
     def __call__(
         self,
-        request,
-        stub,
-        rpc_name,
-        wrap_result=None,
-        settings=None,
-        wrap_args=(),
-        preferred_endpoint=None,
-    ):
+        request: Any,
+        stub: Any,
+        rpc_name: str,
+        wrap_result: Optional[Callable[..., Any]] = None,
+        settings: Optional["BaseRequestSettings"] = None,
+        wrap_args: Tuple[Any, ...] = (),
+        preferred_endpoint: Optional[EndpointKey] = None,
+    ) -> Any:
         """
         Synchronously sends request constructed by client library
 
@@ -459,7 +468,8 @@ class ConnectionPool(IConnectionPool):
         try:
             connection = self._store.get(preferred_endpoint)
         except Exception:
-            self._discovery_thread.notify_disconnected()
+            if self._discovery_thread:
+                self._discovery_thread.notify_disconnected()
             raise
 
         res = connection(
@@ -479,14 +489,14 @@ class ConnectionPool(IConnectionPool):
     @_utilities.wrap_async_call_exceptions
     def future(
         self,
-        request,
-        stub,
-        rpc_name,
-        wrap_result=None,
-        settings=None,
-        wrap_args=(),
-        preferred_endpoint=None,
-    ):
+        request: Any,
+        stub: Any,
+        rpc_name: str,
+        wrap_result: Optional[Callable[..., Any]] = None,
+        settings: Optional["BaseRequestSettings"] = None,
+        wrap_args: Tuple[Any, ...] = (),
+        preferred_endpoint: Optional[EndpointKey] = None,
+    ) -> "futures.Future[Any]":
         """
         Sends request constructed by client
 
@@ -503,7 +513,8 @@ class ConnectionPool(IConnectionPool):
         try:
             connection = self._store.get(preferred_endpoint)
         except Exception:
-            self._discovery_thread.notify_disconnected()
+            if self._discovery_thread:
+                self._discovery_thread.notify_disconnected()
             raise
 
         return connection.future(
@@ -516,7 +527,7 @@ class ConnectionPool(IConnectionPool):
             lambda: self._on_disconnected(connection),
         )
 
-    def __enter__(self):
+    def __enter__(self) -> "ConnectionPool":
         """
         In some cases (scripts, for example) this context manager can be used.
 
@@ -524,5 +535,5 @@ class ConnectionPool(IConnectionPool):
         """
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.stop()

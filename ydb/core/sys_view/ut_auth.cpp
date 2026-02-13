@@ -178,14 +178,33 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
 
 
         {
-            auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
-            UNIT_ASSERT_EQUAL(loginResult.GetError(), "");
+            // login operation occurs implicitly when driver is created
+            // but to check whether a login attempt was successful we need to execute a simple query
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+
+            NQuery::TQueryClient client(driver);
+            auto result = client.ExecuteQuery("SELECT 1;", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
+            // login operation occurs implicitly when driver is created
             for (size_t i = 0; i < 4; i++) {
-                auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "wrongPassword");
-                UNIT_ASSERT_EQUAL(loginResult.GetError(), "Invalid password");
+                auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "wrongPassword",
+                }));
+                auto driver = TDriver(driverConfig);
             }
         }
 
@@ -205,8 +224,21 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
 
         // Check that user is locked out and cannot login
         {
-            auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
-            UNIT_ASSERT_EQUAL(loginResult.GetError(), "User user1 login denied: too many failed password attempts");
+            // login operation occurs implicitly when driver is created
+            // but to check whether a login attempt was successful we need to execute a simple query
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+
+            NQuery::TQueryClient client(driver);
+            auto result = client.ExecuteQuery("SELECT 1;", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "User user1 login denied: too many failed password attempts");
         }
 
         Sleep(TDuration::Seconds(5));
@@ -227,8 +259,20 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
 
         // User can login
         {
-            auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
-            UNIT_ASSERT_EQUAL(loginResult.GetError(), "");
+            // login operation occurs implicitly when driver is created
+            // but to check whether a login attempt was successful we need to execute a simple query
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+
+            NQuery::TQueryClient client(driver);
+            auto result = client.ExecuteQuery("SELECT 1;", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         // Check that FailedAttemptCount is reset

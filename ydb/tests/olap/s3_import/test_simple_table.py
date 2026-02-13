@@ -201,14 +201,22 @@ class TestSimpleTable(S3ImportTestBase):
         query_failed = False
         try:
             self.ydb_client.query(f"INSERT INTO {s3_table} SELECT * FROM `{self.olap_table}`", request_settings=request_settings)
-        except grpc.RpcError as rpc_error:
+        except (grpc.RpcError, ydb.issues.DeadlineExceed) as error:
             query_failed = True
-            assert rpc_error.code() == grpc.StatusCode.DEADLINE_EXCEEDED
+            if isinstance(error, grpc.RpcError):
+                assert error.code() == grpc.StatusCode.DEADLINE_EXCEEDED
 
         assert query_failed
 
+        _cont_s3(s3_pid)
+        query_failed = False
         logger.info("Exporting into s3...")
-        self.ydb_client.query(f"INSERT INTO {s3_table} SELECT * FROM `{self.olap_table}`")
+        try:
+            self.ydb_client.query(f"INSERT INTO {s3_table} SELECT * FROM `{self.olap_table}`")
+        except Exception:
+            query_failed = True
+
+        assert not query_failed
         logger.info(f"Exporting finished, bucket stats: {self.s3_client.get_bucket_stat(test_bucket)}")
 
         logger.info("Importing into ydb...")
@@ -222,9 +230,10 @@ class TestSimpleTable(S3ImportTestBase):
                     STORE = COLUMN
                 ) AS SELECT * FROM {s3_table}
             """, request_settings=request_settings)
-        except grpc.RpcError as rpc_error:
+        except (grpc.RpcError, ydb.issues.DeadlineExceed) as error:
             query_failed = True
-            assert rpc_error.code() == grpc.StatusCode.DEADLINE_EXCEEDED
+            if isinstance(error, grpc.RpcError):
+                assert error.code() == grpc.StatusCode.DEADLINE_EXCEEDED
 
         assert query_failed
 
@@ -316,8 +325,8 @@ class TestSimpleTable(S3ImportTestBase):
 
         access_key_id_secret_name = f"{test_bucket}_key_id"
         access_key_secret_secret_name = f"{test_bucket}_key_secret"
-        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH value=('{self.s3_client.key_id}')")
-        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH value=('{self.s3_client.key_secret}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH (value='{self.s3_client.key_id}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH (value='{self.s3_client.key_secret}')")
 
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE {s3_source} WITH (
@@ -422,8 +431,8 @@ class TestSimpleTable(S3ImportTestBase):
 
         access_key_id_secret_name = f"{test_bucket}_key_id"
         access_key_secret_secret_name = f"{test_bucket}_key_secret"
-        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH value=('{self.s3_client.key_id}')")
-        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH value=('{self.s3_client.key_secret}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH (value='{self.s3_client.key_id}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH (value='{self.s3_client.key_secret}')")
 
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE {s3_source} WITH (
@@ -476,8 +485,8 @@ class TestSimpleTable(S3ImportTestBase):
 
         access_key_id_secret_name = f"{test_bucket}_key_id"
         access_key_secret_secret_name = f"{test_bucket}_key_secret"
-        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH value=('{self.s3_client.key_id}')")
-        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH value=('{self.s3_client.key_secret}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH (value='{self.s3_client.key_id}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH (value='{self.s3_client.key_secret}')")
 
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE {s3_source} WITH (

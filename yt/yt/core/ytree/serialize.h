@@ -177,8 +177,8 @@ void Serialize(
     const T& message,
     NYson::IYsonConsumer* consumer);
 
-template <class T, class TTag>
-void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Serialize(const TStrongTypedef<T, TTag, Options>& value, NYson::IYsonConsumer* consumer);
 
 void Serialize(const NStatisticPath::TStatisticPath& path, NYson::IYsonConsumer* consumer);
 
@@ -296,8 +296,8 @@ void Deserialize(
     T& message,
     const INodePtr& node);
 
-template <class T, class TTag>
-void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Deserialize(TStrongTypedef<T, TTag, Options>& value, INodePtr node);
 
 void Deserialize(NStatisticPath::TStatisticPath& path, INodePtr node);
 

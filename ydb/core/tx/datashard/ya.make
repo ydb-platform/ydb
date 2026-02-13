@@ -213,6 +213,7 @@ SRCS(
     store_snapshot_tx_unit.cpp
     store_write_unit.cpp
     stream_scan_common.cpp
+    truncate_unit.cpp
     type_serialization.cpp
     upload_stats.cpp
     volatile_tx.cpp
@@ -314,7 +315,7 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
-    ut_background_compaction
+    ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
     ut_column_stats
@@ -347,6 +348,7 @@ RECURSE_FOR_TESTS(
     ut_snapshot_isolation
     ut_stats
     ut_trace
+    ut_truncate
     ut_upload_rows
     ut_vacuum
     ut_volatile

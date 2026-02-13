@@ -1,6 +1,7 @@
 """
 Define names for built-in types that aren't directly accessible as a builtin.
 """
+
 import sys
 
 # Iterators in Python aren't a matter of type but of protocol.  A large
@@ -260,10 +261,14 @@ class _GeneratorWrapper:
     @property
     def gi_yieldfrom(self):
         return self.__wrapped.gi_yieldfrom
+    @property
+    def gi_suspended(self):
+        return self.__wrapped.gi_suspended
     cr_code = gi_code
     cr_frame = gi_frame
     cr_running = gi_running
     cr_await = gi_yieldfrom
+    cr_suspended = gi_suspended
     def __next__(self):
         return next(self.__wrapped)
     def __iter__(self):
@@ -330,4 +335,11 @@ EllipsisType = type(Ellipsis)
 NoneType = type(None)
 NotImplementedType = type(NotImplemented)
 
+def __getattr__(name):
+    if name == 'CapsuleType':
+        import _socket
+        return type(_socket.CAPI)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 __all__ = [n for n in globals() if n[:1] != '_']
+__all__ += ['CapsuleType']

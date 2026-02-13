@@ -32,7 +32,7 @@ public:
     virtual void RemoveTransaction(const TPingableTransaction& pingableTx) = 0;
 };
 
-ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config);
+ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config, bool useTLS = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

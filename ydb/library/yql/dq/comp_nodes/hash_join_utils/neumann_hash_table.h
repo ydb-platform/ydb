@@ -10,7 +10,7 @@
 #include <util/generic/buffer.h>
 
 #include "tuple.h"
-
+#include "join_defs.h"
 namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {
@@ -64,8 +64,7 @@ template <class T> class TBloomFilterMasks {
     }
 };
 
-template <bool ConsecutiveDuplicates = false, bool Prefetch = true,
-          typename TAllocator = TMKQLAllocator<ui8>>
+template <bool ConsecutiveDuplicates = false, bool Prefetch = true>
 class TNeumannHashTable {
     /// hash = [...] [directory_bits] [...] [bloom_filter_bits]
     using Hash = ui32;
@@ -154,10 +153,7 @@ class TNeumannHashTable {
   public:
     using TIterator = TIteratorImpl<ConsecutiveDuplicates>;
   
-    TNeumannHashTable()
-        : DirectoriesData_(Allocator_)
-        , Buffer_(Allocator_) 
-    {}
+    TNeumannHashTable() = default;
 
     explicit TNeumannHashTable(const TTupleLayout *layout): TNeumannHashTable() {
         SetTupleLayout(layout);
@@ -214,8 +210,7 @@ class TNeumannHashTable {
         DirectoryHashMask_ = (1ul << DirectoryHashBits_) - 1;
         
         const ui32 dirsSize = (1ul << DirectoryHashBits_) + 1;
-        DirectoriesData_.resize(dirsSize * sizeof(TDirectory));
-        Directories_ = std::span((TDirectory *)DirectoriesData_.data(), dirsSize);
+        Directories_.resize(dirsSize, TDirectory{});
         for (auto& directory : Directories_) {
             directory = {};
         }
@@ -276,9 +271,9 @@ class TNeumannHashTable {
                 std::memcpy(bufRow, row,
                             RowIndexSize_);
             } else {
-                auto *const outRow = reinterpret_cast<TOutplace *>(bufRow);
-                outRow->Hash = *thash;
-                outRow->Index = ind;
+                TOutplace row {.Hash = *thash, .Index = static_cast<ui32>(ind)};
+            
+                WriteUnaligned<TOutplace>(bufRow, row);
             }
             
             if constexpr (ConsecutiveDuplicates) {
@@ -297,9 +292,8 @@ class TNeumannHashTable {
                 std::memcpy(bufRow, row,
                             RowIndexSize_);
             } else {
-                auto *const outRow = reinterpret_cast<TOutplace *>(bufRow);
-                outRow->Hash = *thash;
-                outRow->Index = ind;
+                TOutplace val{.Hash = *thash, .Index = static_cast<ui32>(ind)};
+                WriteUnaligned<TOutplace>(bufRow, val);
             }
             
             if constexpr (ConsecutiveDuplicates) {
@@ -381,7 +375,7 @@ class TNeumannHashTable {
 
         TIterator iter;
 
-        const THash &thash = reinterpret_cast<const THash &>(row[0]);
+        const THash thash = ReadUnaligned<THash>(row);
         const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
 
         const Hash dirSlot = getDirectorySlot(thash);
@@ -424,15 +418,15 @@ class TNeumannHashTable {
     std::array<TIterator, Size> FindBatch(const std::array<const ui8 *, Size> &rows,
                                           const ui8 *const overflow) const {
         if constexpr (Prefetch) {
-            if (Directories_.size_bytes() > 1024 * 1024) {
+            if (Directories_.size() > 1024 * 1024 / sizeof(TDirectory)) {
                 for (ui32 index = 0; index < Size && rows[index]; ++index) {
-                    const THash &thash = reinterpret_cast<const THash &>(rows[index][0]);
+                    const THash &thash = ReadUnaligned<THash>(rows[index]);
                     const Hash dirSlot = getDirectorySlot(thash);
                     NYql::PrefetchForRead(&Directories_[dirSlot]);
                 }    
             } else {
                 for (ui32 index = 0; index < Size && rows[index]; ++index) {
-                    const THash &thash = reinterpret_cast<const THash &>(rows[index][0]);
+                    const THash &thash = ReadUnaligned<THash>(rows[index]);
                     const Hash dirSlot = getDirectorySlot(thash);
                     const TDirectory dir = Directories_[dirSlot]; 
                     const ui8 *ptr = Buffer_.data() + BufferSlotSize_ * dir.BufferSlot;
@@ -457,7 +451,7 @@ class TNeumannHashTable {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
-        const THash &thash = reinterpret_cast<const THash &>(row[0]);
+        const THash thash = ReadUnaligned<THash>(row);
         const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
 
         const Hash dirSlot = getDirectorySlot(thash);
@@ -499,8 +493,7 @@ class TNeumannHashTable {
     }
 
     void Clear() {
-        Directories_ = {};
-        DirectoriesData_.clear();
+        Directories_.clear();
         Buffer_.clear();
 
         Tuples_ = nullptr;
@@ -512,15 +505,14 @@ class TNeumannHashTable {
         if (IsInplace_) {
             return it;
         } else {
-            const auto *const outRow =
-                reinterpret_cast<const TOutplace *>(it);
-            it = Tuples_ + Layout_->TotalRowSize * outRow->Index;
+            TOutplace outRow = ReadUnaligned<TOutplace>(it);
+            it = Tuples_ + Layout_->TotalRowSize * outRow.Index;
             return it;
         }
     } 
 
     bool GetRowMatch(const ui8 *const it, const ui8 *const row, const ui8 *const overflow, const ui8 **matchedRow) const {
-        const THash &thash = reinterpret_cast<const THash &>(row[0]);
+        const THash &thash = ReadUnaligned<THash>(row);
 
         if (IsInplace_) {
             const Hash matchRowHash = ReadUnaligned<Hash>(it);
@@ -529,12 +521,12 @@ class TNeumannHashTable {
             }
             *matchedRow = it;
         } else {
-            const auto *const outRow =
-                reinterpret_cast<const TOutplace *>(it);
-            if (outRow->Hash != *thash) {
+            TOutplace outRow =
+                ReadUnaligned<TOutplace>(it);
+            if (outRow.Hash != *thash) {
                 return false;
             }
-            *matchedRow = Tuples_ + Layout_->TotalRowSize * outRow->Index;
+            *matchedRow = Tuples_ + Layout_->TotalRowSize * outRow.Index;
         }
 
         if (Layout_->KeysEqual(row, overflow, *matchedRow, Overflow_)) {
@@ -557,10 +549,8 @@ class TNeumannHashTable {
     unsigned DirectoryHashShift_;
     Hash DirectoryHashMask_;
 
-    TAllocator Allocator_;
-    std::span<TDirectory> Directories_;
-    std::vector<ui8, TAllocator> DirectoriesData_;
-    std::vector<ui8, TAllocator> Buffer_;
+    TMKQLVector<TDirectory> Directories_;
+    TMKQLVector<ui8> Buffer_;
 };
 
 } // namespace NPackedTuple

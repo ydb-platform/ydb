@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    defs.cpp
     defs.h
     flat_backup.cpp
     flat_backup.h

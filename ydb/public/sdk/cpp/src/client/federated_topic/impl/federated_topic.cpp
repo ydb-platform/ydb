@@ -73,10 +73,10 @@ std::shared_ptr<IFederatedReadSession> TFederatedTopicClient::CreateReadSession(
     return Impl_->CreateReadSession(settings);
 }
 
-// std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingWriteSession(
-//     const TFederatedWriteSessionSettings& settings) {
-//     return Impl_->CreateSimpleBlockingWriteSession(settings);
-// }
+std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingWriteSession(
+    const TFederatedWriteSessionSettings& settings) {
+    return Impl_->CreateSimpleBlockingWriteSession(settings);
+}
 
 std::shared_ptr<NTopic::IWriteSession> TFederatedTopicClient::CreateWriteSession(const TFederatedWriteSessionSettings& settings) {
     return Impl_->CreateWriteSession(settings);

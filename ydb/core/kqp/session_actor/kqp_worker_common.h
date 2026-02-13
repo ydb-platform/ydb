@@ -87,7 +87,7 @@ inline TIntrusivePtr<NYql::TKikimrConfiguration> CreateConfig(const TKqpSettings
         cfg->_KqpTablePathPrefix = workerSettings.Database;
     }
 
-    ApplyServiceConfig(*cfg, workerSettings.TableService);
+    cfg->ApplyServiceConfig(workerSettings.TableService);
 
     cfg->FreezeDefaults();
     return cfg;

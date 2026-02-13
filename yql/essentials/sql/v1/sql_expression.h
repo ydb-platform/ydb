@@ -141,7 +141,9 @@ private:
     }
 
     bool IsTopLevelGroupBy() const;
+    bool EnsureSubSelectAvailable(const ISource& source);
     TSourcePtr LangVersionedSubSelect(TSourcePtr source);
+    TNodePtr ToSubSelectNode(TSourcePtr source);
     TNodeResult SelectSubExpr(const TRule_select_subexpr& node);
     TNodeResult SelectOrExpr(const TRule_select_or_expr& node);
     TNodeResult TupleOrExpr(const TRule_tuple_or_expr& node);

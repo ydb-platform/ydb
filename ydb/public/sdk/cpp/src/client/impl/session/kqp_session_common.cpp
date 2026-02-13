@@ -6,9 +6,7 @@
 
 namespace NYdb::inline Dev {
 
-using std::string;
-
-ui64 GetNodeIdFromSession(const std::string& sessionId) {
+std::uint64_t GetNodeIdFromSession(const std::string& sessionId) {
     if (sessionId.empty()) {
         return 0;
     }
@@ -20,8 +18,7 @@ ui64 GetNodeIdFromSession(const std::string& sessionId) {
             return 0;
         }
 
-        return FromStringWithDefault<ui64>(*nodeIds[0], 0);
-
+        return FromStringWithDefault<std::uint64_t>(*nodeIds[0], 0);
     } catch (...) {
         return 0;
     }
@@ -50,7 +47,7 @@ const std::string& TKqpSessionCommon::GetId() const {
     return SessionId_;
 }
 
-const string& TKqpSessionCommon::GetEndpoint() const {
+const std::string& TKqpSessionCommon::GetEndpoint() const {
     return EndpointKey_.GetEndpoint();
 }
 
@@ -111,9 +108,10 @@ void TKqpSessionCommon::ScheduleTimeToTouch(TDuration interval,
     bool updateTimeInPast)
 {
     auto now = TInstant::Now();
+
     std::lock_guard guard(Lock_);
     if (updateTimeInPast) {
-            TimeInPast_ = now;
+        TimeInPast_ = now;
     }
     TimeToTouch_.store(now + interval, std::memory_order_relaxed);
 }
@@ -134,15 +132,6 @@ TInstant TKqpSessionCommon::GetTimeToTouchFast() const {
 
 TInstant TKqpSessionCommon::GetTimeInPastFast() const {
     return TimeInPast_;
-}
-
-// SetTimeInterval/GetTimeInterval, are not atomic!
-void TKqpSessionCommon::SetTimeInterval(TDuration interval) {
-    TimeInterval_ = interval;
-}
-
-TDuration TKqpSessionCommon::GetTimeInterval() const {
-    return TimeInterval_;
 }
 
 void TKqpSessionCommon::UpdateServerCloseHandler(IServerCloseHandler* handler) {

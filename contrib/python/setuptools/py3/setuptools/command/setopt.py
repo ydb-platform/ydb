@@ -27,7 +27,7 @@ def config_file(kind="local"):
     raise ValueError("config_file() type must be 'local', 'global', or 'user'", kind)
 
 
-def edit_config(filename, settings, dry_run=False):
+def edit_config(filename, settings, dry_run=False) -> None:
     """Edit a configuration file to include `settings`
 
     `settings` is a dictionary of dictionaries or ``None`` values, keyed by
@@ -88,7 +88,7 @@ class option_base(Command):
         self.user_config = None
         self.filename = None
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         filenames = []
         if self.global_config:
             filenames.append(config_file('global'))

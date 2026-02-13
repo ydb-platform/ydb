@@ -289,6 +289,7 @@ struct TActorBenchmark {
         basic.PoolId = setup->GetExecutorsCount();
         basic.PoolName = TStringBuilder() << "b" << basic.PoolId;
         basic.Threads = threads;
+        basic.MaxThreadCount = threads;
         basic.SpinThreshold = TSettings::DefaultSpinThreshold;
         basic.TimePerMailbox = TDuration::Hours(1);
         basic.HasSharedThread = hasSharedThread;
@@ -736,13 +737,13 @@ struct TActorBenchmark {
     }
 
 
-    static void RunStarSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &starsList) {
+    static void RunStarSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &starsList, TDuration duration = TDuration::Seconds(1)) {
         Cout << "threads,actorPairs,star_multiply,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs" << Endl;
         for (ui32 threads : threadsList) {
             for (ui32 actorPairs : actorPairsList) {
                 for (ui32 stars : starsList) {
-                    auto stats = CountStats([threads, actorPairs, stars] {
-                        return BenchStarContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common, TDuration::Seconds(1), stars);
+                    auto stats = CountStats([threads, actorPairs, stars, duration] {
+                        return BenchStarContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common, duration, stars);
                     }, 3);
                     double elapsedSeconds = stats.ElapsedTime.Mean / 1e9;
                     ui64 eventsPerSecond = stats.SentEvents.Mean / elapsedSeconds;

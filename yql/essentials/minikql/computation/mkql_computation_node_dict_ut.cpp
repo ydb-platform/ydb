@@ -18,7 +18,7 @@ namespace NMiniKQL {
 
 namespace {
 struct TSetup {
-    TSetup(TScopedAlloc& alloc)
+    explicit TSetup(TScopedAlloc& alloc)
         : Alloc(alloc)
     {
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());

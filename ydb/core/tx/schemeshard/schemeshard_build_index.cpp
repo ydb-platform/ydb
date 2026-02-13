@@ -120,7 +120,8 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
                 *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
                     std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
                 break;
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 *serializableRepresentation.MutableFulltextIndexDescription() =
                     std::get<NKikimrSchemeOp::TFulltextIndexDescription>(info.SpecializedIndexDescription);
                 break;

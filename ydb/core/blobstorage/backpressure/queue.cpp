@@ -226,8 +226,10 @@ void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus s
         << " cookie# " << item.Event.GetCookie()
         << " processingTime# " << processingTime);
 
-    item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
-    item.Span = {};
+    if (item.Span) {
+        item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
+        item.Span.Reset();
+    }
 
     ctx.Send(item.Event.GetSender(), item.Event.MakeErrorReply(status, errorReason, QueueDeserializedItems,
             QueueDeserializedBytes), 0, item.Event.GetCookie());

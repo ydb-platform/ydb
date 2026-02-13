@@ -9,17 +9,18 @@
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/signer/signer.h>
 
-#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
-#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <yql/essentials/providers/common/metrics/service_counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
+
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>

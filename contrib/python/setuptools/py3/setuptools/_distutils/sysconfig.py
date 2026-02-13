@@ -9,18 +9,30 @@ Written by:   Fred L. Drake, Jr.
 Email:        <fdrake@acm.org>
 """
 
+from __future__ import annotations
+
 import functools
 import os
 import pathlib
 import re
 import sys
 import sysconfig
+from typing import TYPE_CHECKING, Literal, overload
 
 from jaraco.functools import pass_none
 
+from .ccompiler import CCompiler
 from .compat import py39
 from .errors import DistutilsPlatformError
 from .util import is_mingw
+
+if TYPE_CHECKING:
+    from typing_extensions import deprecated
+else:
+
+    def deprecated(message):
+        return lambda fn: fn
+
 
 IS_PYPY = '__pypy__' in sys.builtin_module_names
 
@@ -110,7 +122,7 @@ def get_python_version():
     return f'{sys.version_info.major}.{sys.version_info.minor}'
 
 
-def get_python_inc(plat_specific=False, prefix=None):
+def get_python_inc(plat_specific: bool = False, prefix: str | None = None) -> str:
     """Return the directory containing installed Python header files.
 
     If 'plat_specific' is false (the default), this is the path to the
@@ -144,8 +156,6 @@ def _extant(path):
 
 
 def _get_python_inc_posix(prefix, spec_prefix, plat_specific):
-    if IS_PYPY and sys.version_info < (3, 8):
-        return os.path.join(prefix, 'include')
     return (
         _get_python_inc_posix_python(plat_specific)
         or _extant(_get_python_inc_from_config(plat_specific, spec_prefix))
@@ -217,7 +227,9 @@ def _posix_lib(standard_lib, libpython, early_prefix, prefix):
         return os.path.join(libpython, "site-packages")
 
 
-def get_python_lib(plat_specific=False, standard_lib=False, prefix=None):
+def get_python_lib(
+    plat_specific: bool = False, standard_lib: bool = False, prefix: str | None = None
+) -> str:
     """Return the directory containing the Python library (standard or
     site additions).
 
@@ -231,14 +243,6 @@ def get_python_lib(plat_specific=False, standard_lib=False, prefix=None):
     If 'prefix' is supplied, use it instead of sys.base_prefix or
     sys.base_exec_prefix -- i.e., ignore 'plat_specific'.
     """
-
-    if IS_PYPY and sys.version_info < (3, 8):
-        # PyPy-specific schema
-        if prefix is None:
-            prefix = PREFIX
-        if standard_lib:
-            return os.path.join(prefix, "lib-python", sys.version_info.major)
-        return os.path.join(prefix, 'site-packages')
 
     early_prefix = prefix
 
@@ -288,7 +292,7 @@ def _customize_macos():
     )
 
 
-def customize_compiler(compiler):
+def customize_compiler(compiler: CCompiler) -> None:
     """Do any platform-specific customization of a CCompiler instance.
 
     Mainly needed on Unix, so we can plug in the information that
@@ -375,12 +379,12 @@ def customize_compiler(compiler):
         compiler.shared_lib_extension = shlib_suffix
 
 
-def get_config_h_filename():
+def get_config_h_filename() -> str:
     """Return full pathname of installed pyconfig.h file."""
     return sysconfig.get_config_h_filename()
 
 
-def get_makefile_filename():
+def get_makefile_filename() -> str:
     """Return full pathname of installed Makefile from the Python build."""
     return sysconfig.get_makefile_filename()
 
@@ -542,7 +546,11 @@ def expand_makefile_vars(s, vars):
 _config_vars = None
 
 
-def get_config_vars(*args):
+@overload
+def get_config_vars() -> dict[str, str | int]: ...
+@overload
+def get_config_vars(arg: str, /, *args: str) -> list[str | int]: ...
+def get_config_vars(*args: str) -> list[str | int] | dict[str, str | int]:
     """With no arguments, return a dictionary of all configuration
     variables relevant for the current platform.  Generally this includes
     everything needed to build extensions and install both pure modules and
@@ -560,7 +568,14 @@ def get_config_vars(*args):
     return [_config_vars.get(name) for name in args] if args else _config_vars
 
 
-def get_config_var(name):
+@overload
+@deprecated(
+    "SO is deprecated, use EXT_SUFFIX. Support will be removed when this module is synchronized with stdlib Python 3.11"
+)
+def get_config_var(name: Literal["SO"]) -> int | str | None: ...
+@overload
+def get_config_var(name: str) -> int | str | None: ...
+def get_config_var(name: str) -> int | str | None:
     """Return the value of a single variable using the dictionary
     returned by 'get_config_vars()'.  Equivalent to
     get_config_vars().get(name)

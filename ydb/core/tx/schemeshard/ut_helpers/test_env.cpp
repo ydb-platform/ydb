@@ -592,7 +592,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
-    app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
@@ -602,7 +601,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
     app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
-    app.SetEnablePQConfigTransactionsAtSchemeShard(opts.EnablePQConfigTransactionsAtSchemeShard_);
     app.SetEnableTopicSplitMerge(opts.EnableTopicSplitMerge_);
     app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
@@ -636,6 +634,14 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+    }
+
+    app.FeatureFlags.SetEnableConditionalEraseResponseBatching(opts.EnableConditionalEraseResponseBatching_);
+    if (opts.CondEraseResponseBatchSize_) {
+        app.SchemeShardConfig.SetCondEraseResponseBatchSize(*opts.CondEraseResponseBatchSize_);
+    }
+    if (opts.CondEraseResponseBatchMaxTimeMs_) {
+        app.SchemeShardConfig.SetCondEraseResponseBatchMaxTimeMs(*opts.CondEraseResponseBatchMaxTimeMs_);
     }
 
     // graph settings

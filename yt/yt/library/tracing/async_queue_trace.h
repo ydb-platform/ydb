@@ -65,7 +65,7 @@ public:
     ~TAsyncQueueTraceGuard();
 
     // Support only move construction. Delete all other copy/move operators.
-    TAsyncQueueTraceGuard operator = (TAsyncQueueTraceGuard&& other) = delete;
+    TAsyncQueueTraceGuard operator=(TAsyncQueueTraceGuard&& other) = delete;
 
     void OnError();
 

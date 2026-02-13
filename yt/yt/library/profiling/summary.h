@@ -13,11 +13,11 @@ public:
     void Record(T value);
     void Add(const TSummarySnapshot& other);
 
-    TSummarySnapshot<T>& operator += (const TSummarySnapshot& other);
+    TSummarySnapshot<T>& operator+=(const TSummarySnapshot& other);
     TSummarySnapshot() = default;
     TSummarySnapshot(T sum, T min, T max, T last, i64 count);
 
-    bool operator == (const TSummarySnapshot& other) const = default;
+    bool operator==(const TSummarySnapshot& other) const = default;
 
     T Sum() const;
     T Min() const;

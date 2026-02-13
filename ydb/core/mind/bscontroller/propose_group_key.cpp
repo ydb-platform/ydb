@@ -63,10 +63,7 @@ public:
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK02, "Can't find group for key proposition", (GroupId, GroupId));
         }
 
-        if (TString error; State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-            State->Rollback();
-            State.reset();
-        }
+        Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc);
 
         return true;
     }

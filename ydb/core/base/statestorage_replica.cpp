@@ -37,13 +37,28 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     };
 
     struct TFollowerEntryInfo {
+        /**
+         * The follower ID for this follower.
+         *
+         * @warning There are some situations, when this value is not known.
+         *          For example, this may happen, if the given follower is running
+         *          on an older node, which does not support reporting follower IDs.
+         */
+        TEvStateStorage::TEvInfo::TFollowerIdHolder FollowerId;
+
         TActorId FollowerSys;
         TActorId FollowerTablet;
         bool Candidate = false;
 
         TFollowerEntryInfo() = default;
-        TFollowerEntryInfo(TActorId sys, TActorId tablet, bool candidate)
-            : FollowerSys(sys)
+        TFollowerEntryInfo(
+            TEvStateStorage::TEvInfo::TFollowerIdHolder followerId,
+            const TActorId& sys,
+            const TActorId& tablet,
+            bool candidate
+        )
+            : FollowerId(followerId)
+            , FollowerSys(sys)
             , FollowerTablet(tablet)
             , Candidate(candidate)
         {}
@@ -90,13 +105,48 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
             auto now = TActivationContext::Now();
 
             const ui64 lockedFor = (locked && (now.MicroSeconds() > entry->LockedFrom)) ? (now.MicroSeconds() - entry->LockedFrom) : 0;
-            msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, entry->CurrentLeader, entry->CurrentLeaderTablet, entry->CurrentGeneration
-                , entry->CurrentStep, locked, lockedFor, Info ? Info->ClusterStateGeneration : 0, Info ? Info->ClusterStateGuid : 0));
+            msg.Reset(
+                new TEvStateStorage::TEvReplicaInfo(
+                    tabletId,
+                    entry->CurrentLeader,
+                    entry->CurrentLeaderTablet,
+                    entry->CurrentGeneration,
+                    entry->CurrentStep,
+                    locked,
+                    lockedFor,
+                    Info ? Info->ClusterStateGeneration : 0,
+                    Info ? Info->ClusterStateGuid : 0
+                )
+            );
+
             if (entry->Followers.size()) {
+                // NOTE: The Follower, FollowerTablet and FollowerCandidate fields
+                //       are deprecated and will be removed from the API at some point.
+                //       The new code should use the FollowerInfo field instead.
+                //       For now, both the new field and the old fields are populated
+                //       to allow old nodes to handle messages from the new code.
+                //
+                msg->Record.MutableFollowerInfo()->Reserve(entry->Followers.size());
+
+                // TODO: Remove the code, which populated the old deprecated fields
                 msg->Record.MutableFollowerTablet()->Reserve(entry->Followers.size());
                 msg->Record.MutableFollower()->Reserve(entry->Followers.size());
-                for (const auto &xpair : entry->Followers) {
-                    const TFollowerEntryInfo &followerInfo = xpair.second;
+
+                for (const auto& [key, followerInfo] : entry->Followers) {
+                    auto followerInfoRecord = msg->Record.AddFollowerInfo();
+
+                    ActorIdToProto(followerInfo.FollowerSys, followerInfoRecord->MutableFollower());
+                    followerInfoRecord->SetIsCandidate(followerInfo.Candidate);
+
+                    if (!followerInfo.Candidate) {
+                        ActorIdToProto(followerInfo.FollowerTablet, followerInfoRecord->MutableFollowerTablet());
+                    }
+
+                    if (followerInfo.FollowerId.Defined()) {
+                        followerInfoRecord->SetFollowerId(followerInfo.FollowerId.Get());
+                    }
+
+                    // TODO: Remove the code, which populated the old deprecated fields
                     if (followerInfo.Candidate) {
                         ActorIdToProto(followerInfo.FollowerSys, msg->Record.AddFollowerCandidates());
                     } else {
@@ -183,7 +233,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaLookup::TPtr &ev) {
         TEvStateStorage::TEvReplicaLookup *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
-        
+
         CheckConfigVersion(ev->Sender, msg);
 
         const ui64 tabletId = msg->Record.GetTabletID();
@@ -307,7 +357,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         Y_ABORT_UNLESS(Info);
         if (Info->ClusterStateGeneration < msgGeneration || (Info->ClusterStateGeneration == msgGeneration && Info->ClusterStateGuid != msgGuid)) {
             BLOG_D("Replica TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " msgGuid=" << msgGuid);
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }
     }
@@ -350,24 +400,40 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
     void Handle(TEvStateStorage::TEvReplicaRegFollower::TPtr &ev) {
         const NKikimrStateStorage::TEvRegisterFollower &record = ev->Get()->Record;
+
+        BLOG_D("Replica::Handle received TEvReplicaRegFollower for tabletId " << record.GetTabletID()
+            << ", followerId " << ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")
+            << ", followerActorId " << record.GetFollower()
+            << ", followerTabletActorId " << record.GetFollowerTablet());
+
         CheckConfigVersion(ev->Sender, ev->Get());
         const ui64 tabletId = record.GetTabletID();
         TEntry &x = Tablets[tabletId]; // could lead to creation of zombie entries when follower exist w/o leader so we must filter on info
+
+        const TEvStateStorage::TEvInfo::TFollowerIdHolder followerId =
+            (record.HasFollowerId())
+                ? TEvStateStorage::TEvInfo::TFollowerIdHolder(record.GetFollowerId())
+                : TEvStateStorage::TEvInfo::TFollowerIdHolder();
 
         const TActorId follower = ActorIdFromProto(record.GetFollower());
         const TActorId tablet = ActorIdFromProto(record.GetFollowerTablet());
         const bool isCandidate = record.HasCandidate() && record.GetCandidate();
 
-        auto insIt = x.Followers.emplace(ev->Sender, TFollowerEntryInfo(follower, tablet, isCandidate));
+        auto insIt = x.Followers.emplace(ev->Sender, TFollowerEntryInfo(followerId, follower, tablet, isCandidate));
         TFollowerEntryInfo &followerInfo = insIt.first->second;
 
         if (insIt.second == false) { // already known
             Y_ABORT_UNLESS(insIt.first->second.FollowerSys == follower);
 
-            const bool hasChanges = (followerInfo.FollowerTablet != tablet) || (followerInfo.Candidate != isCandidate);
+            const bool hasChanges =
+                (followerInfo.FollowerId != followerId)
+                || (followerInfo.FollowerTablet != tablet)
+                || (followerInfo.Candidate != isCandidate);
+
             if (!hasChanges)
                 return;
 
+            followerInfo.FollowerId = followerId;
             followerInfo.Candidate = isCandidate;
             followerInfo.FollowerTablet = tablet;
         } else { // new entry
@@ -387,9 +453,14 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaUnregFollower::TPtr &ev) {
-        const TEvStateStorage::TEvReplicaUnregFollower *msg = ev->Get();
-        const ui64 tabletId = msg->Record.GetTabletID();
-        CheckConfigVersion(ev->Sender, msg);
+        const NKikimrStateStorage::TEvUnregisterFollower &record = ev->Get()->Record;
+
+        BLOG_D("Replica::Handle received TEvReplicaUnregFollower for tabletId " << record.GetTabletID()
+            << ", followerId " << ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")
+            << ", followerActorId " << record.GetFollower());
+
+        const ui64 tabletId = record.GetTabletID();
+        CheckConfigVersion(ev->Sender, ev->Get());
         ForgetFollower(tabletId, ev->Sender);
     }
 

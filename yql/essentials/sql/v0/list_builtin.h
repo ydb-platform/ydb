@@ -173,7 +173,7 @@ public:
         return new TListCountBuiltin(Pos_, CloneContainer(Args_));
     }
 private:
-    virtual TNodePtr GetUpdateLambda();
+    TNodePtr GetUpdateLambda() override;
 };
 
 class TListAvgBuiltin final: public TListFoldBuiltin {

@@ -91,27 +91,37 @@ Y_FORCE_INLINE void FromProto(TChunkReplicaWithMedium* replica, ui64 protoReplic
 Y_FORCE_INLINE TChunkReplicaWithLocation::TChunkReplicaWithLocation()
     : TChunkReplicaWithMedium()
     , ChunkLocationUuid_(InvalidChunkLocationUuid)
+    , ChunkLocationIndex_(NNodeTrackerClient::InvalidChunkLocationIndex)
 { }
 
 Y_FORCE_INLINE TChunkReplicaWithLocation::TChunkReplicaWithLocation(
     TChunkReplicaWithMedium replica,
-    TChunkLocationUuid locationUuid)
+    TChunkLocationUuid locationUuid,
+    NNodeTrackerClient::TChunkLocationIndex locationIndex)
     : TChunkReplicaWithMedium(replica)
     , ChunkLocationUuid_(locationUuid)
+    , ChunkLocationIndex_(locationIndex)
 { }
 
 Y_FORCE_INLINE TChunkReplicaWithLocation::TChunkReplicaWithLocation(
     NNodeTrackerClient::TNodeId nodeId,
     int replicaIndex,
     int mediumIndex,
-    TChunkLocationUuid locationUuid)
+    TChunkLocationUuid locationUuid,
+    NNodeTrackerClient::TChunkLocationIndex locationIndex)
     : TChunkReplicaWithMedium(nodeId, replicaIndex, mediumIndex)
     , ChunkLocationUuid_(locationUuid)
+    , ChunkLocationIndex_(locationIndex)
 { }
 
 Y_FORCE_INLINE TChunkLocationUuid TChunkReplicaWithLocation::GetChunkLocationUuid() const
 {
     return ChunkLocationUuid_;
+}
+
+Y_FORCE_INLINE NNodeTrackerClient::TChunkLocationIndex TChunkReplicaWithLocation::GetChunkLocationIndex() const
+{
+    return ChunkLocationIndex_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

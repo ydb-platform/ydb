@@ -17,7 +17,7 @@ class SpanId final
 {
 public:
   // The size in bytes of the SpanId.
-  static constexpr int kSize = 8;
+  static constexpr size_t kSize = 8;
 
   // An invalid SpanId (all zeros).
   SpanId() noexcept : rep_{0} {}
@@ -29,7 +29,7 @@ public:
   void ToLowerBase16(nostd::span<char, 2 * kSize> buffer) const noexcept
   {
     constexpr char kHex[] = "0123456789abcdef";
-    for (int i = 0; i < kSize; ++i)
+    for (size_t i = 0; i < kSize; ++i)
     {
       buffer[i * 2 + 0] = kHex[(rep_[i] >> 4) & 0xF];
       buffer[i * 2 + 1] = kHex[(rep_[i] >> 0) & 0xF];

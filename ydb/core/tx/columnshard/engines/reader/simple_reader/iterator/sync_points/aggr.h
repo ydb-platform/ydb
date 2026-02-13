@@ -141,13 +141,19 @@ private:
                 Collection->OnSourceFinished(i);
                 --SourcesCount;
             }
-            cursor = std::make_shared<TNotSortedSimpleScanCursor>(
-                aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount(), source->GetPortionIdOptional());
+            cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
+                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
+                               aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount(), source->GetPortionIdOptional()))
+                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
+                               aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount()));
         } else {
             AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
-            cursor =
-                std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional());
+            cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
+                                  ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
+                                        source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional()))
+                                  : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
+                                        source->GetDeprecatedPortionId(), source->GetRecordsCount()));
             --SourcesCount;
         }
         AFL_VERIFY(!source->GetStageResult().IsEmpty());

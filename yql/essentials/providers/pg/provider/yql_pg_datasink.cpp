@@ -11,7 +11,7 @@ using namespace NNodes;
 
 class TPgDataSinkImpl: public TDataProviderBase {
 public:
-    TPgDataSinkImpl(TPgState::TPtr state)
+    explicit TPgDataSinkImpl(TPgState::TPtr state)
         : State_(state)
         , TypeAnnotationTransformer_(CreatePgDataSinkTypeAnnotationTransformer(state))
         , ExecutionTransformer_(CreatePgDataSinkExecTransformer(state))

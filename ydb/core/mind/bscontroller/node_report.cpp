@@ -120,11 +120,7 @@ public:
         }
 
         State->CheckConsistency();
-        TString error;
-        if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
-            State->Rollback();
-            State.reset();
-        }
+        Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags(), txc);
         return true;
     }
 

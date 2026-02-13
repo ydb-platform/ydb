@@ -14,5 +14,11 @@ IComputationNode* WrapQueuePeek(TCallable& callable, const TComputationNodeFacto
 IComputationNode* WrapQueueRange(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapPreserveStream(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
+// #############################################################################
+// ###### Wrappers that are used by CoreWinFramesCollector API #######
+// #############################################################################
+IComputationNode* WrapWinFramesCollector(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapWinFrame(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+
 } // namespace NMiniKQL
 } // namespace NKikimr

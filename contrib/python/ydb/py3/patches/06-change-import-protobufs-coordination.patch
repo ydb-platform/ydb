@@ -17,9 +17,9 @@
 
 --- contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_coordination_public_types.py	(index)
 +++ contrib/python/ydb/py3/ydb/_grpc/grpcwrapper/ydb_coordination_public_types.py	(working tree)
-@@ -3,10 +3,10 @@ from enum import IntEnum
+@@ -2,10 +2,10 @@ from dataclasses import dataclass
+ from enum import IntEnum
  import typing
-
 
 -if typing.TYPE_CHECKING:
 -    from ..v4.protos import ydb_coordination_pb2

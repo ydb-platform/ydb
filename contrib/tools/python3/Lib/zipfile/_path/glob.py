@@ -1,31 +1,104 @@
+import os
 import re
 
-
-def translate(pattern):
-    return match_dirs(translate_core(pattern))
+_default_seps = os.sep + str(os.altsep) * bool(os.altsep)
 
 
-def match_dirs(pattern):
+class Translator:
     """
-    Ensure that zipfile.Path directory names are matched.
+    >>> Translator('xyz')
+    Traceback (most recent call last):
+    ...
+    AssertionError: Invalid separators
 
-    zipfile.Path directory names always end in a slash.
+    >>> Translator('')
+    Traceback (most recent call last):
+    ...
+    AssertionError: Invalid separators
     """
-    return rf'{pattern}[/]?'
 
+    seps: str
 
-def translate_core(pattern):
-    r"""
-    Given a glob pattern, produce a regex that matches it.
+    def __init__(self, seps: str = _default_seps):
+        assert seps and set(seps) <= set(_default_seps), "Invalid separators"
+        self.seps = seps
 
-    >>> translate('*.txt')
-    '[^/]*\\.txt'
-    >>> translate('a?txt')
-    'a.txt'
-    >>> translate('**/*')
-    '.*/[^/]*'
-    """
-    return ''.join(map(replace, separate(pattern)))
+    def translate(self, pattern):
+        """
+        Given a glob pattern, produce a regex that matches it.
+        """
+        return self.extend(self.match_dirs(self.translate_core(pattern)))
+
+    def extend(self, pattern):
+        r"""
+        Extend regex for pattern-wide concerns.
+
+        Apply '(?s:)' to create a non-matching group that
+        matches newlines (valid on Unix).
+
+        Append '\Z' to imply fullmatch even when match is used.
+        """
+        return rf'(?s:{pattern})\Z'
+
+    def match_dirs(self, pattern):
+        """
+        Ensure that zipfile.Path directory names are matched.
+
+        zipfile.Path directory names always end in a slash.
+        """
+        return rf'{pattern}[/]?'
+
+    def translate_core(self, pattern):
+        r"""
+        Given a glob pattern, produce a regex that matches it.
+
+        >>> t = Translator()
+        >>> t.translate_core('*.txt').replace('\\\\', '')
+        '[^/]*\\.txt'
+        >>> t.translate_core('a?txt')
+        'a[^/]txt'
+        >>> t.translate_core('**/*').replace('\\\\', '')
+        '.*/[^/][^/]*'
+        """
+        self.restrict_rglob(pattern)
+        return ''.join(map(self.replace, separate(self.star_not_empty(pattern))))
+
+    def replace(self, match):
+        """
+        Perform the replacements for a match from :func:`separate`.
+        """
+        return match.group('set') or (
+            re.escape(match.group(0))
+            .replace('\\*\\*', r'.*')
+            .replace('\\*', rf'[^{re.escape(self.seps)}]*')
+            .replace('\\?', r'[^/]')
+        )
+
+    def restrict_rglob(self, pattern):
+        """
+        Raise ValueError if ** appears in anything but a full path segment.
+
+        >>> Translator().translate('**foo')
+        Traceback (most recent call last):
+        ...
+        ValueError: ** must appear alone in a path segment
+        """
+        seps_pattern = rf'[{re.escape(self.seps)}]+'
+        segments = re.split(seps_pattern, pattern)
+        if any('**' in segment and segment != '**' for segment in segments):
+            raise ValueError("** must appear alone in a path segment")
+
+    def star_not_empty(self, pattern):
+        """
+        Ensure that * will not match an empty segment.
+        """
+
+        def handle_segment(match):
+            segment = match.group(0)
+            return '?*' if segment == '*' else segment
+
+        not_seps_pattern = rf'[^{re.escape(self.seps)}]+'
+        return re.sub(not_seps_pattern, handle_segment, pattern)
 
 
 def separate(pattern):
@@ -38,16 +111,3 @@ def separate(pattern):
     ['a', '[?]', 'txt']
     """
     return re.finditer(r'([^\[]+)|(?P<set>[\[].*?[\]])|([\[][^\]]*$)', pattern)
-
-
-def replace(match):
-    """
-    Perform the replacements for a match from :func:`separate`.
-    """
-
-    return match.group('set') or (
-        re.escape(match.group(0))
-        .replace('\\*\\*', r'.*')
-        .replace('\\*', r'[^/]*')
-        .replace('\\?', r'.')
-    )

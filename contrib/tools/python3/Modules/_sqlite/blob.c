@@ -1,5 +1,10 @@
+#ifndef Py_BUILD_CORE_BUILTIN
+#  define Py_BUILD_CORE_MODULE 1
+#endif
+
 #include "blob.h"
 #include "util.h"
+#include "pycore_weakref.h"    // FT_CLEAR_WEAKREFS()
 
 #define clinic_state() (pysqlite_get_state_by_type(Py_TYPE(self)))
 #include "clinic/blob.c.h"
@@ -47,9 +52,7 @@ blob_dealloc(pysqlite_Blob *self)
 
     close_blob(self);
 
-    if (self->in_weakreflist != NULL) {
-        PyObject_ClearWeakRefs((PyObject*)self);
-    }
+    FT_CLEAR_WEAKREFS((PyObject*)self, self->in_weakreflist);
     tp->tp_clear((PyObject *)self);
     tp->tp_free(self);
     Py_DECREF(tp);
@@ -97,10 +100,12 @@ pysqlite_close_all_blobs(pysqlite_Connection *self)
 {
     for (int i = 0; i < PyList_GET_SIZE(self->blobs); i++) {
         PyObject *weakref = PyList_GET_ITEM(self->blobs, i);
-        PyObject *blob = PyWeakref_GetObject(weakref);
-        if (!Py_IsNone(blob)) {
-            close_blob((pysqlite_Blob *)blob);
+        PyObject *blob;
+        if (!PyWeakref_GetRef(weakref, &blob)) {
+            continue;
         }
+        close_blob((pysqlite_Blob *)blob);
+        Py_DECREF(blob);
     }
 }
 
@@ -108,14 +113,6 @@ static void
 blob_seterror(pysqlite_Blob *self, int rc)
 {
     assert(self->connection != NULL);
-#if SQLITE_VERSION_NUMBER < 3008008
-    // SQLite pre 3.8.8 does not set this blob error on the connection
-    if (rc == SQLITE_ABORT) {
-        PyErr_SetString(self->connection->OperationalError,
-                        "Cannot operate on an expired blob handle");
-        return;
-    }
-#endif
     _pysqlite_seterror(self->connection->state, self->connection->db);
 }
 
@@ -578,7 +575,7 @@ static PyMethodDef blob_methods[] = {
 };
 
 static struct PyMemberDef blob_members[] = {
-    {"__weaklistoffset__", T_PYSSIZET, offsetof(pysqlite_Blob, in_weakreflist), READONLY},
+    {"__weaklistoffset__", Py_T_PYSSIZET, offsetof(pysqlite_Blob, in_weakreflist), Py_READONLY},
     {NULL},
 };
 

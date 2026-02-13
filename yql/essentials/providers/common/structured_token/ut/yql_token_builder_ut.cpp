@@ -101,6 +101,7 @@ Y_UNIT_TEST(TokenAuthWithSecret) {
     UNIT_ASSERT(!p.HasServiceAccountIdAuth());
     UNIT_ASSERT(!p.HasBasicAuth());
     UNIT_ASSERT(p.HasIAMToken());
+    UNIT_ASSERT(!p.HasTransientToken());
     UNIT_ASSERT(!p.IsNoAuth());
     UNIT_ASSERT(p.GetIAMToken() == "my_token");
     TSet<TString> references;
@@ -109,6 +110,7 @@ Y_UNIT_TEST(TokenAuthWithSecret) {
     UNIT_ASSERT(references.contains("my_token_reference"));
     b.RemoveSecrets();
     UNIT_ASSERT_VALUES_EQUAL(R"({"token_ref":"my_token_reference"})", b.ToJson());
+    UNIT_ASSERT(!CreateStructuredTokenParser(b.ToJson()).HasIAMToken());
     b.ReplaceReferences({{"my_token_reference", "my_token"}});
     UNIT_ASSERT_VALUES_EQUAL(R"({"token":"my_token"})", b.ToJson());
 }
@@ -124,6 +126,26 @@ Y_UNIT_TEST(IAMToken) {
     UNIT_ASSERT(!p.IsNoAuth());
     TString token = p.GetIAMToken();
     UNIT_ASSERT_VALUES_EQUAL(token, "my_token");
+}
+
+Y_UNIT_TEST(TransientToken) {
+    TStructuredTokenBuilder b;
+    b.SetTransientTokenAuth("my_token");
+    UNIT_ASSERT_VALUES_EQUAL(R"({"transient_token":"my_token"})", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(!p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(!p.HasBasicAuth());
+    UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(p.HasTransientToken());
+    UNIT_ASSERT(!p.IsNoAuth());
+    TSet<TString> references;
+    p.ListReferences(references);
+    UNIT_ASSERT_VALUES_EQUAL(references.size(), 0);
+    TString token = p.GetTransientToken();
+    UNIT_ASSERT_VALUES_EQUAL(token, "my_token");
+    b.RemoveSecrets();
+    UNIT_ASSERT_VALUES_EQUAL(R"({"transient_token":""})", b.ToJson());
+    UNIT_ASSERT(CreateStructuredTokenParser(b.ToJson()).HasTransientToken());
 }
 
 Y_UNIT_TEST(NoAuth) {
@@ -174,5 +196,14 @@ Y_UNIT_TEST(ComposeForBasicAuth) {
     TString json4 = ComposeStructuredTokenJsonForBasicAuth("", "");
     UNIT_ASSERT_VALUES_EQUAL(json4, R"({"no_auth":""})");
 }
+
+Y_UNIT_TEST(ComposeForTransientTokenAuth) {
+    TString json1 = ComposeStructuredTokenJsonForTransientTokenAuth("token1");
+    UNIT_ASSERT_VALUES_EQUAL(json1, R"({"transient_token":"token1"})");
+
+    TString json2 = ComposeStructuredTokenJsonForTransientTokenAuth("");
+    UNIT_ASSERT_VALUES_EQUAL(json2, R"({"no_auth":""})");
+}
+
 } // Y_UNIT_TEST_SUITE(TokenBuilderTest)
 } // namespace NYql

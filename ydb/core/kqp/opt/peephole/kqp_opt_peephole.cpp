@@ -206,6 +206,7 @@ class TKqpPeepholeNewOperatorTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPeepholeNewOperatorTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
         : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+        , DqHashOperatorsUseBlocks(config->GetDqHashOperatorsUseBlocks())
     {
 #define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
         if (config->GetUseDqHashCombine()) {
@@ -218,16 +219,19 @@ public:
     }
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashCombiner(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashCombiner(node, ctx);
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashCombiner(node, ctx, DqHashOperatorsUseBlocks);
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashAggregator(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashAggregator(node, ctx);
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashAggregator(node, ctx, DqHashOperatorsUseBlocks);
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }
+
+private:
+    bool DqHashOperatorsUseBlocks;
 };
 
 class TKqpPeepholeFinalTransformer : public TOptimizeTransformerBase {
@@ -382,7 +386,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         // Propagate "WideFromBlock" through connections.
         // TODO(ilezhankin): this peephole optimization should be implemented instead as
         //       the original whole-graph transformer |CreateDqBuildWideBlockChannelsTransformer|.
-        if (config->BlockChannelsMode == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
+        if (config->GetBlockChannelsMode() == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
             TNodeOnNodeOwnedMap argsMap;
 
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
@@ -394,7 +398,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
                 if (connection) {
-                    auto hashFuncType = config->DefaultHashShuffleFuncType;
+                    auto hashFuncType = config->GetDqDefaultHashShuffleFuncType();
                     if (connection.Cast().HashFunc().IsValid()) {
                         hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
                     }

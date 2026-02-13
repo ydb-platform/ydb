@@ -5,6 +5,7 @@
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_state.h"
 
+#include <ydb/core/util/random.h>
 #include <ydb/core/util/text.h>
 
 namespace NKikimr {
@@ -598,7 +599,7 @@ enum EFormatFlags {
     FormatFlagErasureEncodeFormat = 1 << 3,  // Always on, flag is useless
     FormatFlagErasureEncodeNextChunkReference = 1 << 4,  // Always on, flag is useless
     FormatFlagEncryptFormat = 1 << 5,  // Always on, flag is useless
-    FormatFlagEncryptData = 1 << 6,  // Always on, flag is useless
+    FormatFlagEncryptData = 1 << 6,
     FormatFlagFormatInProgress = 1 << 7,  // Not implemented (Must be OFF for a formatted disk)
 
     FormatFlagPlainDataChunks = 1 << 8,  // Default is off, means "encrypted", for backward compatibility
@@ -741,6 +742,14 @@ struct TDiskFormat {
         }
     }
 
+    void SetEncryptFormat(bool encrypt) {
+        if (encrypt) {
+            FormatFlags |= FormatFlagEncryptFormat;
+        } else {
+            FormatFlags &= ~FormatFlagEncryptFormat;
+        }
+    }
+
     ui64 Offset(TChunkIdx chunkIdx, ui32 sectorIdx, ui64 offset) const {
         return (ui64)ChunkSize * chunkIdx + (ui64)SectorSize * sectorIdx + offset;
     }
@@ -786,16 +795,21 @@ struct TDiskFormat {
     }
 
     void PrepareMagic(TKey &key, ui64 nonce, ui64 &magic) {
-        NPDisk::TPDiskStreamCypher cypher(true);
+        NPDisk::TPDiskStreamCypher cypher(IsEncryptFormat());
         cypher.SetKey(key);
         cypher.StartMessage(nonce);
         cypher.InplaceEncrypt(&magic, sizeof(magic));
     }
 
-    void InitMagic() {
+    void InitMagic(bool randomizeMagic = false) {
         MagicFormatChunk = MagicFormatChunkId;
         NPDisk::TPDiskHashCalculator hash;
         hash.Hash(&Guid, sizeof(Guid));
+        if (randomizeMagic) {
+            ui64 formatMagicSalt = 0;
+            SafeEntropyPoolRead(&formatMagicSalt, sizeof(formatMagicSalt));
+            hash.Hash(&formatMagicSalt, sizeof(formatMagicSalt));
+        }
         hash.Hash(&MagicNextLogChunkReferenceId, sizeof(MagicNextLogChunkReferenceId));
         MagicNextLogChunkReference = hash.GetHashResult();
         hash.Hash(&MagicLogChunkId, sizeof(MagicLogChunkId));
@@ -866,7 +880,7 @@ struct TDiskFormat {
         }
     }
 
-    void Clear() {
+    void Clear(bool enableFormatEncryption) {
         Version = PDISK_FORMAT_VERSION;
         DiskSize = 0;
         Guid = 0;
@@ -886,8 +900,11 @@ struct TDiskFormat {
             FormatFlagErasureEncodeSysLog |
             FormatFlagErasureEncodeFormat |
             FormatFlagErasureEncodeNextChunkReference |
-            FormatFlagEncryptFormat |
             FormatFlagEncryptData;
+
+        if (enableFormatEncryption) {
+            FormatFlags |= FormatFlagEncryptFormat;
+        }
 
         Hash = 0;
 
@@ -896,7 +913,7 @@ struct TDiskFormat {
     }
 
     void UpgradeFrom(const TDiskFormat &format) {
-        Clear();
+        Clear(IsEncryptFormat());
         // Upgrade from version 2
         TimestampUs = 0;
         // Fill the flags according to actual Version2 settings
@@ -908,6 +925,7 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
+        SetEncryptFormat(format.IsEncryptFormat());
         SetPlainDataChunks(format.IsPlainDataChunks());
 
         Y_VERIFY(format.Version <= Version);

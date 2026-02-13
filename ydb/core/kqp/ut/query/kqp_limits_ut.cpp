@@ -251,6 +251,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+        app.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
+        app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
 
         app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
 
@@ -1452,6 +1455,82 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             const ui32 limit = (std::numeric_limits<ui32>::max() / 5000) * 1100 + 1;
             UNIT_ASSERT(current < limit);
             last = current;
+        }
+    }
+
+    Y_UNIT_TEST(BigSortingLimitInParam) {
+        SetRandomSeed(42);
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+        auto sessionResult = tableClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        auto res = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE TableWithIndex (
+                Id Utf8,
+                ForeignId Utf8,
+                Name Utf8,
+                Description Utf8,
+                PRIMARY KEY (Id),
+                INDEX Index GLOBAL ON (ForeignId, Name)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        for (const char* additionalColumn : {"", ", Description"}) {
+            NYdb::NQuery::TExecuteQuerySettings querySettings;
+            querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+            auto result = db.ExecuteQuery(
+                Sprintf(R"(
+                    DECLARE $ForeignId AS Utf8;
+                    DECLARE $Name     AS Utf8;
+                    DECLARE $Id       AS Utf8;
+                    DECLARE $Limit    AS Uint64;
+
+                    SELECT
+                        Id,
+                        ForeignId,
+                        Name
+                        %s
+                    FROM
+                        TableWithIndex
+                    VIEW
+                        Index
+                    WHERE
+                        ForeignId = $ForeignId AND ((Name = $Name AND Id > $Id) OR Name > $Name)
+                    ORDER BY
+                        ForeignId, Name, Id
+                    LIMIT
+                        $Limit
+                )", additionalColumn),
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            NYdb::TParamsBuilder()
+                .AddParam("$ForeignId")
+                    .Utf8("")
+                    .Build()
+                .AddParam("$Name")
+                    .Utf8("")
+                    .Build()
+                .AddParam("$Id")
+                    .Utf8("")
+                    .Build()
+                .AddParam("$Limit")
+                    .Uint64(ui32(-1)) // big limit, but YDB does not fail
+                    .Build()
+                .Build(),
+            querySettings).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, "AdditionalColumn parameter: \"" << additionalColumn << "\". Issues:\n" << result.GetIssues().ToString());
+
+            const auto resultSet = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
         }
     }
 

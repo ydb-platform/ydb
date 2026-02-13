@@ -28,19 +28,23 @@ using namespace NNodes;
 
 const TString EvaluationComponent = "Evaluation";
 
-static THashSet<TStringBuf> EvaluationFuncs = {
+namespace {
+
+THashSet<TStringBuf> EvaluationFuncs = {
     TStringBuf("EvaluateAtom"),
     TStringBuf("EvaluateExpr"),
     TStringBuf("EvaluateType"),
     TStringBuf("EvaluateCode")};
 
-static THashSet<TStringBuf> SubqueryExpandFuncs = {
+THashSet<TStringBuf> SubqueryExpandFuncs = {
     TStringBuf("SubqueryExtendFor"),
     TStringBuf("SubqueryUnionAllFor"),
     TStringBuf("SubqueryMergeFor"),
     TStringBuf("SubqueryUnionMergeFor"),
     TStringBuf("SubqueryOrderBy"),
     TStringBuf("SubqueryAssumeOrderBy")};
+
+} // namespace
 
 bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const TExprNode*>& activeArgs, const TNodeMap<ui32>& externalWorlds, TExprContext& ctx,
                       bool underTypeOf, bool& hasUnresolvedTypes) {

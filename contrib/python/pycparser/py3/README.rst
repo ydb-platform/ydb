@@ -1,5 +1,5 @@
 ===============
-pycparser v2.23
+pycparser v3.00
 ===============
 
 
@@ -13,7 +13,6 @@ pycparser v2.23
     :backlinks: none
 
 .. sectnum::
-
 
 Introduction
 ============
@@ -83,18 +82,11 @@ Installing
 Prerequisites
 -------------
 
-* **pycparser** was tested with Python 3.8+ on Linux, macOS and Windows.
+**pycparser** is being tested with modern versions of Python on
+Linux, macOS and Windows. See `the CI dashboard <https://github.com/eliben/pycparser/actions/workflows/ci.yml>`__
+for details.
 
-* **pycparser** has no external dependencies. The only non-stdlib library it
-  uses is PLY, which is bundled in ``pycparser/ply``. The current PLY version is
-  3.10, retrieved from `<http://www.dabeaz.com/ply/>`_
-
-Note that **pycparser** (and PLY) uses docstrings for grammar specifications.
-Python installations that strip docstrings (such as when using the Python
-``-OO`` option) will fail to instantiate and use **pycparser**. You can try to
-work around this problem by making sure the PLY parsing tables are pre-generated
-in normal mode; this isn't an officially supported/tested mode of operation,
-though.
+**pycparser** has no external dependencies.
 
 Installation process
 --------------------
@@ -146,7 +138,7 @@ See `this blog post
 for more details.
 
 Note that the fake headers are not included in the ``pip`` package nor installed
-via ``setup.py`` (`#224 <https://github.com/eliben/pycparser/issues/224>`_).
+via the package build (`#224 <https://github.com/eliben/pycparser/issues/224>`_).
 
 Basic usage
 -----------
@@ -180,11 +172,10 @@ There are a few points to keep in mind when modifying **pycparser**:
 * The code for **pycparser**'s AST nodes is automatically generated from a
   configuration file - ``_c_ast.cfg``, by ``_ast_gen.py``. If you modify the AST
   configuration, make sure to re-generate the code. This can be done by running
-  the ``_build_tables.py`` script from the ``pycparser`` directory.
-* Make sure you understand the optimized mode of **pycparser** - for that you
-  must read the docstring in the constructor of the ``CParser`` class. For
-  development you should create the parser without optimizations, so that it
-  will regenerate the Yacc and Lex tables when you change the grammar.
+  the ``_ast_gen.py`` script (from the repository root or the
+  ``pycparser`` directory).
+* Read the docstring in the constructor of the ``CParser`` class for details
+  on configuration and compatibility arguments.
 
 
 Package contents
@@ -200,7 +191,10 @@ LICENSE:
   The pycparser license
 
 setup.py:
-  Installation script
+  Legacy installation script (build metadata lives in ``pyproject.toml``).
+
+pyproject.toml:
+  Package metadata and build configuration.
 
 examples/:
   A directory with some examples of using **pycparser**
@@ -228,5 +222,3 @@ found and/or submitting patches. The list of contributors is in the CONTRIBUTORS
 file in the source distribution. After **pycparser** moved to Github I stopped
 updating this list because Github does a much better job at tracking
 contributions.
-
-

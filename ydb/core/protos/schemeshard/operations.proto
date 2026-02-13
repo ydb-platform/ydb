@@ -208,5 +208,8 @@ enum EOperationType {
     ESchemeOpDropStreamingQuery = 131;
     ESchemeOpAlterStreamingQuery = 132;
 
+    // Truncate table
+    ESchemeOpTruncateTable = 133;
+
     // Some entries are grouped by semantics, so are out of order
 }

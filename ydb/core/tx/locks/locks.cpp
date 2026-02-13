@@ -862,6 +862,20 @@ TLockInfo::TPtr TLockLocker::RestoreInMemoryLock(const ILocksDb::TLockRow& row) 
         // This includes coarse ranges, flags and break versions which could fail to persist
         auto it = Locks.find(row.LockId);
         if (it != Locks.end() && it->second->IsPersistent()) {
+            if (!!(flags & ELockFlags::Removed)) {
+                // Lock was removed in the previous generation, but that removal
+                // has failed to commit. Since subsequent reads may not have
+                // detected conflicts we need to repeat the removal.
+                PendingRestoreRemoveQueue.PushBack(it->second.Get());
+                return nullptr;
+            }
+            if (!it->second->BreakVersion && (row.BreakVersion != TRowVersion::Max() || row.Counter == Max<ui64>())) {
+                // Lock was broken in the previous generation, but that break
+                // has failed to commit. Since subsequent reads may not have
+                // detected conflicts we need to repeat the break.
+                PendingRestoreBreakQueue.PushBack(it->second.Get());
+                return nullptr;
+            }
             // Accurate ranges are not persistent, this will attempt to restore them
             if (it->second->RestoreInMemoryState(row)) {
                 return it->second;
@@ -1621,5 +1635,25 @@ void TSysLocks::RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows) 
     }
 }
 
+bool TSysLocks::RestorePersistentState(ILocksDb* db) {
+    while (Locker.PendingRestoreRemoveQueue) {
+        TLockInfo* lock = Locker.PendingRestoreRemoveQueue.PopFront();
+        ui64 lockId = lock->GetLockId();
+        Locker.RemoveOneLock(lockId, db);
+        if (db->HasChanges()) {
+            return true;
+        }
+    }
+    while (Locker.PendingRestoreBreakQueue) {
+        TLockInfo* lock = Locker.PendingRestoreBreakQueue.PopFront();
+        lock->SetBroken(TRowVersion::Min());
+        Locker.RemoveBrokenRanges();
+        Locker.SaveBrokenPersistentLocks(db);
+        if (db->HasChanges()) {
+            return true;
+        }
+    }
+    return false;
+}
 
 }}

@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.11.0)
+VERSION(1.12.0)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/nghttp3/releases/download/v1.11.0/nghttp3-1.11.0.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/nghttp3/releases/download/v1.12.0/nghttp3-1.12.0.tar.xz)
 
 LICENSE(
     FSFAP AND
@@ -58,6 +58,7 @@ SRCS(
     lib/nghttp3_qpack_huffman.c
     lib/nghttp3_qpack_huffman_data.c
     lib/nghttp3_range.c
+    lib/nghttp3_ratelim.c
     lib/nghttp3_rcbuf.c
     lib/nghttp3_ringbuf.c
     lib/nghttp3_settings.c

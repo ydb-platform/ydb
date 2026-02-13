@@ -13,15 +13,15 @@ std::vector<TStringBuf> TokenizeTriePath(const TYPath &path Y_LIFETIME_BOUND);
 ////////////////////////////////////////////////////////////////////////////////
 
 DEFINE_ENUM(ETrieNodeType,
-    ((Outlier)      (0))
-    ((Intermediary) (1))
-    ((Leaf)         (2))
-    ((AfterLeaf)    (3))
+    (Outlier)
+    (Intermediary)
+    (Leaf)
+    (AfterLeaf)
 );
 
 DEFINE_ENUM(ETrieNestedPathPolicy,
-    ((Shorten)    (0))
-    ((Extend)     (1))
+    (Shorten)
+    (Extend)
 );
 
 ////////////////////////////////////////////////////////////////////////////////

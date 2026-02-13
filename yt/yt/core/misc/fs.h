@@ -29,67 +29,67 @@ YT_DEFINE_ERROR_ENUM(
 constexpr auto TempFileSuffix = TStringBuf("~");
 
 //! Returns |true| if a given path points to an existing file or directory.
-bool Exists(const TString& path);
+bool Exists(const std::string& path);
 
 //! Returns |true| if a given path to an empty directory.
-bool IsDirEmpty(const TString& path);
+bool IsDirEmpty(const std::string& path);
 
 //! Removes a given file or directory.
-void Remove(const TString& path);
+void Remove(const std::string& path);
 
 //! Removes #destination if it exists. Then renames #destination into #source.
-void Replace(const TString& source, const TString& destination);
+void Replace(const std::string& source, const std::string& destination);
 
 //! Removes a given directory recursively.
-void RemoveRecursive(const TString& path);
+void RemoveRecursive(const std::string& path);
 
 //! Renames a given file or directory.
-void Rename(const TString& source, const TString& destination);
+void Rename(const std::string& source, const std::string& destination);
 
 //! Returns name of file.
-TString GetFileName(std::string_view path);
+std::string GetFileName(const std::string& path);
 
 //! Returns extension of file.
-TString GetFileExtension(std::string_view path);
+std::string GetFileExtension(const std::string& path);
 
 //! Returns name of file without extension.
-TString GetFileNameWithoutExtension(std::string_view path);
+std::string GetFileNameWithoutExtension(const std::string& path);
 
 //! Returns path of directory containing the file.
-TString GetDirectoryName(std::string_view path);
+std::string GetDirectoryName(const std::string& path);
 
 //! Returns the absolute path for the given (possibly relative) path.
-TString GetRealPath(std::string_view path);
+std::string GetRealPath(const std::string& path);
 
 //! Checks that given path is relative and points somewhere inside the root directory.
-bool IsPathRelativeAndInvolvesNoTraversal(std::string_view path);
+bool IsPathRelativeAndInvolvesNoTraversal(const std::string& path);
 
 //! Combines two strings into a path. Returns second path if it is absolute.
-TString CombinePaths(std::string_view path1, std::string_view path2);
+std::string CombinePaths(const std::string& path1, const std::string& path2);
 
 //! Appends second path to the first one, handling delimiters.
-TString JoinPaths(std::string_view path1, std::string_view path2);
+std::string JoinPaths(const std::string& path1, const std::string& path2);
 
 //! Combines a bunch of strings into a path.
-TString CombinePaths(const std::vector<std::string>& paths);
+std::string CombinePaths(const std::vector<std::string>& paths);
 
 //! Deletes all files with extension #TempFileSuffix in a given directory.
-void CleanTempFiles(const TString& path);
+void CleanTempFiles(const std::string& path);
 
 //! Returns all files in a given directory.
-std::vector<TString> EnumerateFiles(const TString& path, int depth = 1, bool sortByName = false);
+std::vector<std::string> EnumerateFiles(const std::string& path, int depth = 1, bool sortByName = false);
 
 //! Returns all directories in a given directory.
-std::vector<TString> EnumerateDirectories(const TString& path, int depth = 1);
+std::vector<std::string> EnumerateDirectories(const std::string& path, int depth = 1);
 
 //! Returns path to `to` relative to `from`.
-TString GetRelativePath(std::string_view from, std::string_view to);
+std::string GetRelativePath(const std::string& from, const std::string& to);
 
 //! Returns path to `path` relative to working directory.
-TString GetRelativePath(std::string_view path);
+std::string GetRelativePath(const std::string& path);
 
 //! Returns the shortest among absolute and relative to working directory path to `path`.
-TString GetShortestPath(std::string_view path);
+std::string GetShortestPath(const std::string& path);
 
 //! Describes total, free, and available space on a disk drive.
 struct TDiskSpaceStatistics
@@ -100,10 +100,10 @@ struct TDiskSpaceStatistics
 };
 
 //! Computes the space statistics for disk drive containing #path.
-TDiskSpaceStatistics GetDiskSpaceStatistics(const TString& path);
+TDiskSpaceStatistics GetDiskSpaceStatistics(const std::string& path);
 
 //! Creates the #path and parent directories if they don't exists.
-void MakeDirRecursive(const TString& path, int mode = 0777);
+void MakeDirRecursive(const std::string& path, int mode = 0777);
 
 constexpr ui32 UnnamedDeviceMajor = 0;
 
@@ -120,60 +120,60 @@ struct TPathStatistics
 };
 
 //! Returns the path statistics.
-TPathStatistics GetPathStatistics(const TString& path);
+TPathStatistics GetPathStatistics(const std::string& path);
 
 //! Recursively calculates size of all regular files inside the directory.
 i64 GetDirectorySize(
-    const TString& path,
+    const std::string& path,
     bool ignoreUnavailableFiles = true,
     bool deduplicateByINodes = false,
     bool checkDeviceId = false);
 
 //! Sets the access and modification times to now.
-void Touch(const TString& path);
+void Touch(const std::string& path);
 
 //! Converts all path separators to platform path separators.
-TString NormalizePathSeparators(std::string_view path);
+std::string NormalizePathSeparators(const std::string& path);
 
 //! Sets permissions for a file.
-void SetPermissions(const TString& path, int permissions);
+void SetPermissions(const std::string& path, int permissions);
 
 //! Sets permissions for an fd.
 void SetPermissions(int fd, int permissions);
 
 //! Makes a symbolic link on file #fileName with #linkName.
-void MakeSymbolicLink(const TString& filePath, const TString& linkPath);
+void MakeSymbolicLink(const std::string& filePath, const std::string& linkPath);
 
 //! Returns |true| if given paths refer to the same inode.
 //! Always returns |false| under Windows.
-bool AreInodesIdentical(const TString& lhsPath, const TString& rhsPath);
+bool AreInodesIdentical(const std::string& lhsPath, const std::string& rhsPath);
 
 //! Returns the home directory of the current user.
 //! Interestingly, implemented for both Windows and *nix.
-TString GetHomePath();
+std::string GetHomePath();
 
 //! Flushes the directory's metadata. Useful for, e.g., committing renames happened in #path.
-void FlushDirectory(const TString& path);
+void FlushDirectory(const std::string& path);
 
 struct TMountPoint
 {
-    TString Name;
-    TString Path;
+    std::string Name;
+    std::string Path;
 };
 
-std::vector<TMountPoint> GetMountPoints(const TString& mountsFile = "/proc/mounts");
+std::vector<TMountPoint> GetMountPoints(const std::string& mountsFile = "/proc/mounts");
 
 //! Mount tmpfs at given path.
-void MountTmpfs(const TString& path, int userId, i64 size);
+void MountTmpfs(const std::string& path, int userId, i64 size);
 
 //! Unmount given path.
-void Umount(const TString& path, bool detach);
+void Umount(const std::string& path, bool detach);
 
 //! Set disk space and inodes quota for given user on filesystem determined by pathInFs.
 //! The filesystem must be mounted with quotas enabled.
 void SetQuota(
     int userId,
-    TStringBuf path,
+    const std::string& path,
     std::optional<i64> diskSpaceLimit,
     std::optional<i64> inodeLimit);
 
@@ -183,12 +183,12 @@ void SetQuota(
 void WrapIOErrors(std::function<void()> func);
 
 //! Sets a given mode on the path.
-void Chmod(const TString& path, int mode);
+void Chmod(const std::string& path, int mode);
 
 //! Copies file chunk after chunk, releasing thread between chunks.
 void SendfileChunkedCopy(
-    const TString& existingPath,
-    const TString& newPath,
+    const std::string& existingPath,
+    const std::string& newPath,
     i64 chunkSize);
 
 void SendfileChunkedCopy(
@@ -210,8 +210,8 @@ TFuture<void> WriteBuffer(
     int readSize);
 
 TFuture<void> ReadWriteCopyAsync(
-    const TString& existingPath,
-    const TString& newPath,
+    const std::string& existingPath,
+    const std::string& newPath,
     i64 chunkSize);
 
 TFuture<void> ReadWriteCopyAsync(
@@ -220,8 +220,8 @@ TFuture<void> ReadWriteCopyAsync(
     i64 chunkSize);
 
 void ReadWriteCopySync(
-    const TString& existingPath,
-    const TString& newPath,
+    const std::string& existingPath,
+    const std::string& newPath,
     i64 chunkSize);
 
 void ReadWriteCopySync(
@@ -236,13 +236,13 @@ void Splice(
     const TFile& destination,
     i64 chunkSize);
 
-TError AttachLsofOutput(TError error, const TString& path);
-TError AttachFindOutput(TError error, const TString& path);
+TError AttachLsofOutput(TError error, const std::string& path);
+TError AttachFindOutput(TError error, const std::string& path);
 
 //! Returns id of device (major:minor) path belongs to.
-TDeviceId GetDeviceId(const TString& path);
+TDeviceId GetDeviceId(const std::string& path);
 
-std::optional<TString> FindBinaryPath(const TString& binary);
+std::optional<std::string> FindBinaryPath(const std::string& binary);
 
 ////////////////////////////////////////////////////////////////////////////////
 

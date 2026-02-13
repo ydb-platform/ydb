@@ -59,4 +59,13 @@ namespace NKikimr::NSqsTopic {
         const TString& consumer,
         const TString& method
     );
+
+    TVector<std::pair<TString, TString>> GetRequestSizeMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    );
+
+    ui64 SampleIdFromRequestId(const TStringBuf requestId);
 } // namespace NKikimr::NSqsTopic

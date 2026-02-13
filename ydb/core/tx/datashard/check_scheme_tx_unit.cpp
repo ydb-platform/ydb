@@ -42,6 +42,7 @@ private:
     bool CheckRotateCdcStream(TActiveTransaction *activeTx);
     bool CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx);
     bool CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx);
+    bool CheckTruncate(TActiveTransaction *activeTx);
 
     bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion);
 
@@ -392,6 +393,9 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         break;
     case TSchemaOperation::ETypeCreateIncrementalBackupSrc:
         res = CheckCreateIncrementalBackupSrc(activeTx);
+        break;
+    case TSchemaOperation::ETypeTruncate:
+        res = CheckTruncate(activeTx);
         break;
     default:
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
@@ -807,6 +811,28 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *act
         if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Create)")) {
             return false;
         }
+    }
+
+    return true;
+}
+
+bool TCheckSchemeTxUnit::CheckTruncate(TActiveTransaction *activeTx) {
+    const auto& tx = activeTx->GetSchemeTx();
+
+    if (HasDuplicate(activeTx, "Truncate", &TPipeline::HasTruncate)) {
+        return false;
+    }
+
+    const auto& truncate = tx.GetTruncateTable();
+    if (!HasPathId(activeTx, truncate, "Truncate")) {
+        return false;
+    }
+
+    const auto pathId = GetPathId(truncate);
+    const auto tablePtr = DataShard.GetUserTables().FindPtr(pathId.LocalPathId);
+    if (!tablePtr) {
+        BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+        return false;
     }
 
     return true;

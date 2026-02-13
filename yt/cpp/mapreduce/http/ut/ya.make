@@ -11,4 +11,7 @@ PEERDIR(
     library/cpp/testing/common
 )
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(4)
+
 END()

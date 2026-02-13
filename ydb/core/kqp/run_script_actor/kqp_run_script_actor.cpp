@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -128,6 +129,8 @@ public:
         , CheckpointId(settings.CheckpointId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
         , StreamingQueryPath(settings.StreamingQueryPath)
+        , CustomerSuppliedId(std::move(settings.CustomerSuppliedId))
+        , StreamingDisposition(std::move(settings.StreamingDisposition))
         , Counters(settings.Counters)
     {}
 
@@ -140,14 +143,18 @@ public:
             Database,
             /* SessionId*/ "",
             ExecutionId,
-            /* CustomerSuppliedId */ traceId,
+            /* CustomerSuppliedId */ CustomerSuppliedId ? CustomerSuppliedId : traceId,
             SelfId()
         );
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
         UserRequestContext->CheckpointId = CheckpointId;
         UserRequestContext->StreamingQueryPath = StreamingQueryPath;
+        UserRequestContext->StreamingDisposition = StreamingDisposition;
 
-        LOG_I("Bootstrap");
+        LOG_I("Bootstrap "
+            << "StreamingQueryPath: " << StreamingQueryPath
+            << ", CheckpointId: " << CheckpointId
+            << ", StreamingDisposition: " << (StreamingDisposition ? StreamingDisposition->DebugString() : "null"));
 
         Become(&TRunScriptActor::StateFunc);
     }
@@ -694,7 +701,7 @@ private:
         }
 
         if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
-            const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);
+            const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig, DisableDefaultTimeout);
             NYql::TIssue timeoutIssue(TStringBuilder() << "Current request timeout is " << timeout.MilliSeconds() << "ms");
             timeoutIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             Issues.AddIssue(std::move(timeoutIssue));
@@ -982,6 +989,8 @@ private:
     const TString CheckpointId;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     const TString StreamingQueryPath;
+    const TString CustomerSuppliedId;
+    const std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;

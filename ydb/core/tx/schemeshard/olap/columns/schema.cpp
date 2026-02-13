@@ -16,7 +16,7 @@ void TOlapColumnSchema::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescr
 }
 
 bool TOlapColumnsDescription::ApplyUpdate(
-    const TOlapColumnsUpdate& schemaUpdate, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors, ui32& nextEntityId) {
+    const TOlapColumnsUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
     if (Columns.empty() && schemaUpdate.GetAddColumns().empty()) {
         errors.AddError(NKikimrScheme::StatusSchemeError, "No add columns specified");
         return false;
@@ -39,26 +39,15 @@ bool TOlapColumnsDescription::ApplyUpdate(
                 return false;
             }
         }
-        std::optional<ui32> columnFamilyId;
-        if (column.GetColumnFamilyName().has_value()) {
-            TString familyName = column.GetColumnFamilyName().value();
-            const TOlapColumnFamily* columnFamily = columnFamilies.GetByName(familyName);
 
-            if (!columnFamily) {
-                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
-                                                                      << "Cannot set column family `" << familyName << "` for column `"
-                                                                      << column.GetName() << "`. Family not found");
-                return false;
-            }
-            columnFamilyId = columnFamily->GetId();
+        if (column.GetColumnFamilyName().has_value()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "Column FAMILY is not supported for column tables");
+            return false;
         }
-        TOlapColumnSchema newColumn(column, nextEntityId++, columnFamilyId);
+        TOlapColumnSchema newColumn(column, nextEntityId++);
         if (newColumn.GetKeyOrder()) {
             Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
-        }
-        if (!newColumn.GetSerializer().HasObject() && !columnFamilies.GetColumnFamilies().empty() &&
-            !newColumn.ApplySerializerFromColumnFamily(columnFamilies, errors)) {
-            return false;
         }
 
         Y_ABORT_UNLESS(ColumnsByName.emplace(newColumn.GetName(), newColumn.GetId()).second);
@@ -74,7 +63,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
             auto itColumn = Columns.find(it->second);
             Y_ABORT_UNLESS(itColumn != Columns.end());
             TOlapColumnSchema& newColumn = itColumn->second;
-            if (!newColumn.ApplyDiff(columnDiff, columnFamilies, errors)) {
+            if (!newColumn.ApplyDiff(columnDiff, errors)) {
                 return false;
             }
         }
@@ -114,21 +103,6 @@ bool TOlapColumnsDescription::ApplyUpdate(
         }
         ColumnsByName.erase(columnName);
         Columns.erase(columnInfo->GetId());
-    }
-
-    auto alterColumnFamiliesId = columnFamilies.GetAlterColumnFamiliesId();
-    if (!alterColumnFamiliesId.empty()) {
-        for (auto& [_, column] : Columns) {
-            if (!column.GetColumnFamilyId().has_value()) {
-                errors.AddError(NKikimrScheme::StatusSchemeError,
-                    TStringBuilder() << "Cannot alter family for column `" << column.GetName() << "`. Column family is not set");
-                return false;
-            }
-            ui32 id = column.GetColumnFamilyId().value();
-            if (alterColumnFamiliesId.contains(id)) {
-                column.SetSerializer(columnFamilies.GetByIdVerified(id)->GetSerializerContainer());
-            }
-        }
     }
 
     return true;
@@ -195,9 +169,9 @@ bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTab
             return false;
         }
 
-        if (colProto.HasColumnFamilyId() && colProto.GetColumnFamilyId() != col->GetColumnFamilyId()) {
-            errors.AddError(TStringBuilder() << "Column '" << colName << "' has column family id " << colProto.GetColumnFamilyId()
-                                             << " that does not match schema preset");
+        if (colProto.HasColumnFamilyId()) {
+            errors.AddError(TStringBuilder()
+                << "Column FAMILY is not supported for column tables");
             return false;
         }
 

@@ -44,13 +44,13 @@ public:
     struct TAny
     {
         std::string Value;
-        friend bool operator ==(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs) = default;
+        friend bool operator==(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs) = default;
     };
 
     struct TComposite
     {
         std::string Value;
-        friend bool operator ==(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs) = default;
+        friend bool operator==(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs) = default;
     };
 
     using TValue = std::variant<std::nullptr_t, i64, ui64, double, bool, std::string, TAny, TComposite>;
@@ -95,7 +95,7 @@ private:
     std::string Name_;
     TValue Value_;
 
-    friend bool operator ==(const TNamedValue& lhs, const TNamedValue& rhs) = default;
+    friend bool operator==(const TNamedValue& lhs, const TNamedValue& rhs) = default;
     friend void PrintTo(const TNamedValue& value, std::ostream* os);
     friend void FormatValue(TStringBuilderBase* builder, const TNamedValue& value, TStringBuf spec);
 };

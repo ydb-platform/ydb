@@ -40,7 +40,7 @@ public:
 
     void Persist(const TStreamPersistenceContext& context);
 
-    bool operator == (const TSummary& other) const;
+    bool operator==(const TSummary& other) const;
 
     friend class TStatisticsBuildingConsumer;
 };

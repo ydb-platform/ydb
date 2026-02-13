@@ -9,7 +9,7 @@ namespace NUdf {
 
 class TInputBuffer {
 public:
-    TInputBuffer(TStringBuf buf)
+    explicit TInputBuffer(TStringBuf buf)
         : Buf_(buf)
     {
     }

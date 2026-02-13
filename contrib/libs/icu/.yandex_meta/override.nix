@@ -1,9 +1,9 @@
 self: super: with self; rec {
-  version = "78.1";
+  version = "78.2";
 
   src = fetchurl {
     url = "https://github.com/unicode-org/icu/releases/download/release-${version}/icu4c-${version}-sources.tgz";
-    hash = "sha256-Yhf1jKObIxJ2Bc/Gx+DTR1/ksNYxVwETg9cWy0FheIY=";
+    hash = "sha256-Pploe1xDXUsgljDi0uu3mQbJhGheeGNQeLZy4DyJ3zU=";
   };
 
   sourceRoot = "icu/source";

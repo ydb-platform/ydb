@@ -993,7 +993,7 @@ WITH (
     }
 
     Y_UNIT_TEST(ShowCreateTableColumn) {
-        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableOlapCompression = true});
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1005,21 +1005,12 @@ WITH (
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
                 Key1 Uint64 NOT NULL,
-                Key2 Utf8 NOT NULL,
-                Key3 Int32 NOT NULL,
-                Value1 Utf8 FAMILY Family1,
-                Value2 Int16 FAMILY Family2,
-                Value3 String FAMILY Family2,
+                Key2 Utf8 NOT NULL COMPRESSION (),
+                Key3 Int32 NOT NULL COMPRESSION (algorithm = off),
+                Value1 Utf8 COMPRESSION (algorithm = lz4),
+                Value2 Int16 COMPRESSION (algorithm = zstd),
+                Value3 String COMPRESSION (algorithm = zstd, level = 10),
                 PRIMARY KEY (Key1, Key2, Key3),
-                FAMILY default (
-                    COMPRESSION = "zstd"
-                ),
-                FAMILY Family1 (
-                    COMPRESSION = "off"
-                ),
-                FAMILY Family2 (
-                    COMPRESSION = "lz4"
-                )
             )
             PARTITION BY HASH(`Key1`, `Key2`)
             WITH (
@@ -1034,13 +1025,10 @@ WITH (
 R"(CREATE TABLE `test_show_create` (
     `Key1` Uint64 NOT NULL,
     `Key2` Utf8 NOT NULL,
-    `Key3` Int32 NOT NULL,
-    `Value1` Utf8,
-    `Value2` Int16,
-    `Value3` String,
-    FAMILY `default` (COMPRESSION = 'zstd'),
-    FAMILY `Family1` (COMPRESSION = 'off'),
-    FAMILY `Family2` (COMPRESSION = 'lz4'),
+    `Key3` Int32 NOT NULL COMPRESSION (algorithm = off),
+    `Value1` Utf8 COMPRESSION (algorithm = lz4),
+    `Value2` Int16 COMPRESSION (algorithm = zstd, level = 1),
+    `Value3` String COMPRESSION (algorithm = zstd, level = 10),
     PRIMARY KEY (`Key1`, `Key2`, `Key3`)
 )
 PARTITION BY HASH (`Key1`, `Key2`)
@@ -1351,7 +1339,7 @@ R"(CREATE TEMPORARY TABLE `test_show_create` (
                 Text String,
                 Data String,
                 PRIMARY KEY (Key),
-                INDEX fulltext_idx GLOBAL USING fulltext ON (Text) WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_min=3)
+                INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_min=3)
             );
             ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Data);
         )", "test_show_create");
@@ -1998,11 +1986,11 @@ ALTER TABLE `test_show_create`
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `ENCODING.DICTIONARY.ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
     `Col1` Uint64 NOT NULL,
-    `Col2` JsonDocument,
+    `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
     `Col3` Uint32,
     PRIMARY KEY (`Col1`)
 )
@@ -2012,7 +2000,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
 );
 
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`, `SERIALIZER.CLASS_NAME` = `ARROW_SERIALIZER`, `COMPRESSION.TYPE` = `zstd`, `COMPRESSION.LEVEL` = `4`);
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
 )"
@@ -2147,7 +2135,6 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, N
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `ENCODING.DICTIONARY.ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DEFAULT_VALUE`=`100`);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`lz4`);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
     `Col1` Uint64 NOT NULL,
@@ -2163,7 +2150,7 @@ WITH (
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DEFAULT_VALUE` = `100`);
 
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`, `SERIALIZER.CLASS_NAME` = `ARROW_SERIALIZER`, `COMPRESSION.TYPE` = `lz4`);
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = max_index, TYPE = MAX, FEATURES = `{"column_name":"Col2"}`);
 
@@ -2304,6 +2291,84 @@ R"(CREATE TABLE `test_show_create` (
 );
 )"
         );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableSystemTableWithEmptyKeyColumnIds) {
+        // This test reproduces the crash from issue #30332
+        // When trying to SHOW CREATE TABLE on a system table that has empty key column IDs,
+        // the formatter crashes at line 347 with: Y_ENSURE(!tableDesc.GetKeyColumnIds().empty())
+        //
+        // The issue specifically mentions `.sys/tables` as causing the crash.
+        // This test verifies that SHOW CREATE TABLE on system tables either succeeds
+        // or returns a proper error status, but does not crash the server.
+
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        NQuery::TQueryClient queryClient(env.GetDriver());
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+        // The issue specifically mentions .sys/tables as the problematic table
+        // We test this and a few other system tables to ensure robustness
+        TVector<TString> systemTablesToTest = {
+            "/Root/.sys/tables",  // The specific table mentioned in issue #30332
+            "/Root/.sys/partition_stats",
+            "/Root/.sys/nodes"
+        };
+
+        for (const auto& systemTable : systemTablesToTest) {
+            Cerr << "Testing SHOW CREATE TABLE on " << systemTable << Endl;
+
+            // Try to execute SHOW CREATE TABLE on the system table
+            // Before the fix, this would crash with Y_ENSURE at line 347
+            // After the fix, this should either succeed or return a proper error status
+            auto result = session.ExecuteQuery(
+                TStringBuilder() << "SHOW CREATE TABLE `" << systemTable << "`;",
+                NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+
+            if (!result.IsSuccess()) {
+                // If it fails, verify it's a proper error status, not an internal error from a crash
+                // The formatter should handle empty key column IDs gracefully and return UNSUPPORTED
+                // or SCHEME_ERROR, not crash with an internal error
+                UNIT_ASSERT_C(
+                    result.GetStatus() == EStatus::SCHEME_ERROR ||
+                    result.GetStatus() == EStatus::BAD_REQUEST,
+                    "SHOW CREATE TABLE on " << systemTable
+                    << " should return a proper error status (SCHEME_ERROR or BAD_REQUEST), "
+                    << "not an internal error from a crash. Got status: " << result.GetStatus()
+                    << ", issues: " << result.GetIssues().ToString()
+                );
+
+                // Verify the error message is meaningful
+                UNIT_ASSERT_C(
+                    !result.GetIssues().ToString().empty(),
+                    "Error message should not be empty for " << systemTable
+                );
+
+                Cerr << "SHOW CREATE TABLE on " << systemTable << " returned expected error: "
+                     << result.GetStatus() << " - " << result.GetIssues().ToString() << Endl;
+            } else {
+                // If it succeeds, verify we got a valid result with the expected structure
+                UNIT_ASSERT_C(
+                    result.GetResultSets().size() > 0,
+                    "SHOW CREATE TABLE on " << systemTable << " should return at least one result set"
+                );
+
+                auto resultSet = result.GetResultSet(0);
+                auto columnsMeta = resultSet.GetColumnsMeta();
+                UNIT_ASSERT_C(
+                    columnsMeta.size() == 3,
+                    "SHOW CREATE TABLE result should have 3 columns (Path, PathType, CreateQuery), got: "
+                    << columnsMeta.size()
+                );
+
+                Cerr << "SHOW CREATE TABLE on " << systemTable << " succeeded" << Endl;
+            }
+        }
     }
 
     Y_UNIT_TEST(Nodes) {
@@ -3007,7 +3072,6 @@ R"(CREATE TABLE `test_show_create` (
                     DecommitStatus,
                     ExpectedSlotCount,
                     Guid,
-                    InferPDiskSlotCountFromUnitSize,
                     Kind,
                     NodeId,
                     NumActiveSlots,
@@ -3037,14 +3101,13 @@ R"(CREATE TABLE `test_show_create` (
             }
         }
 
-        TYsonFieldChecker check(ysonString, 19);
+        TYsonFieldChecker check(ysonString, 18);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.String("DECOMMIT_NONE"); // DecommitStatus
         check.Uint64(16); // ExpectedSlotCount
         check.Uint64(123u); // Guid
-        check.Uint64(0); // InferPDiskSlotCountFromUnitSize
         check.Uint64(0u); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(2); // NumActiveSlots
@@ -4343,134 +4406,6 @@ R"(CREATE TABLE `test_show_create` (
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);
-    }
-
-    Y_UNIT_TEST_TWIN(QueryMetricsLocksBroken, UseSink) {
-        TTestEnvSettings settings;
-        settings.EnableSVP = true;
-        settings.TableServiceConfig.SetEnableOltpSink(UseSink);
-        TTestEnv env(1, 2, settings);
-        CreateTenant(env, "Tenant1", true);
-
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off)
-            .SetDatabase("/Root/Tenant1");
-        auto driver = TDriver(driverConfig);
-
-        TTableClient client(driver);
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        auto victimSession = client.CreateSession().GetValueSync().GetSession();
-
-        // Create table and insert initial data
-        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/Tenant1/TableLocks` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-        )").GetValueSync());
-
-        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"Initial\")",
-            TTxControl::BeginTx().CommitTx()
-        ).GetValueSync());
-
-        // Establish locks by reading in a transaction (victim)
-        std::optional<TTransaction> victimTx;
-        while (!victimTx) {
-            auto result = victimSession.ExecuteDataQuery(
-                "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u /* victim-query */",
-                TTxControl::BeginTx()
-            ).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-
-            TString yson = FormatResultSetYson(result.GetResultSet(0));
-            if (yson == "[]") {
-                continue;  // Data not visible yet, retry
-            }
-
-            victimTx = result.GetTransaction();
-            UNIT_ASSERT(victimTx);
-        }
-
-        // Breaker transaction: writes to key 1, breaking victim's read lock
-        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\") /* lock-breaker */",
-            TTxControl::BeginTx().CommitTx()
-        ).GetValueSync());
-
-        // Victim tries to commit with write to the same key
-        // This triggers lock validation, which fails because the lock on key 1 was broken
-        auto commitResult = victimSession.ExecuteDataQuery(
-            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\") /* victim-commit */",
-            TTxControl::Tx(*victimTx).CommitTx()
-        ).ExtractValueSync();
-
-        // Victim should be ABORTED because its locks were broken
-        UNIT_ASSERT_VALUES_EQUAL(commitResult.GetStatus(), EStatus::ABORTED);
-
-        // Wait for stats to be collected and check both LocksBrokenAsBreaker and LocksBrokenAsVictim
-        ui64 locksBrokenAsBreaker = 0;
-        ui64 locksBrokenAsVictim = 0;
-        bool foundBreaker = false;
-        bool foundVictim = false;
-
-        for (size_t iter = 0; iter < 30 && (!foundBreaker || !foundVictim); ++iter) {
-            // Query both breaker and victim metrics in one pass
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT QueryText, LocksBrokenAsBreaker, LocksBrokenAsVictim
-                FROM `/Root/Tenant1/.sys/query_metrics_one_minute`
-                WHERE QueryText LIKE '%lock-breaker%' OR QueryText LIKE '%victim-commit%';
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString ysonString = NKqp::StreamResultToYson(it);
-            Cerr << "Query metrics result: " << ysonString << Endl;
-
-            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
-            UNIT_ASSERT(node.IsList());
-
-            for (const auto& row : node.AsList()) {
-                if (!row.IsList() || row.AsList().size() < 3) continue;
-
-                auto getStringValue = [](const NYT::TNode& n) -> TString {
-                    if (n.IsList() && !n.AsList().empty()) {
-                        return n.AsList()[0].AsString();
-                    }
-                    return n.AsString();
-                };
-                auto getUint64Value = [](const NYT::TNode& n) -> ui64 {
-                    if (n.IsList() && !n.AsList().empty()) {
-                        return n.AsList()[0].AsUint64();
-                    }
-                    return n.AsUint64();
-                };
-
-                TString queryText = getStringValue(row.AsList()[0]);
-                ui64 breaker = getUint64Value(row.AsList()[1]);
-                ui64 victim = getUint64Value(row.AsList()[2]);
-
-                if (queryText.Contains("lock-breaker") && !queryText.Contains("query_metrics")) {
-                    locksBrokenAsBreaker = breaker;
-                    foundBreaker = true;
-                }
-                if (queryText.Contains("victim-commit") && !queryText.Contains("query_metrics")) {
-                    locksBrokenAsVictim = victim;
-                    foundVictim = true;
-                }
-            }
-
-            if (!foundBreaker || !foundVictim) {
-                Sleep(TDuration::Seconds(5));
-            }
-        }
-
-        UNIT_ASSERT_C(foundBreaker, "Breaker not found in metrics");
-        UNIT_ASSERT_C(foundVictim, "Victim not found in metrics");
-
-        UNIT_ASSERT_VALUES_EQUAL(locksBrokenAsBreaker, 1u);
-        UNIT_ASSERT_VALUES_EQUAL(locksBrokenAsVictim, 1u);
     }
 }
 

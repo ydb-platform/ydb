@@ -62,4 +62,35 @@ TAllocationInfo::~TAllocationInfo() {
     AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier)("stage", Stage->GetName());
 }
 
+TString TAllocationInfo::DebugString() const {
+    TStringBuilder sb;
+    sb << "TAllocationInfo{" << Endl
+       << "  Identifier=" << Identifier << Endl
+       << "  ProcessId=" << ProcessId << Endl
+       << "  ScopeId=" << ScopeId << Endl
+       << "  AllocationExternalGroupId=" << AllocationExternalGroupId << Endl
+       << "  AllocatedVolume=" << AllocatedVolume << Endl
+       << "  AllocationStatus=";
+    
+    switch (GetAllocationStatus()) {
+        case EAllocationStatus::Allocated:
+            sb << "Allocated";
+            break;
+        case EAllocationStatus::Waiting:
+            sb << "Waiting";
+            break;
+        case EAllocationStatus::Failed:
+            sb << "Failed";
+            break;
+    }
+    
+    sb << Endl
+       << "  AllocationTime=" << GetAllocationTime().ToString() << Endl
+       << "  Stage=" << (Stage ? Stage->DebugString() : "null") << Endl
+       << "  Allocation=" << (Allocation ? Allocation->DebugString() : "null") << Endl
+       << "}";
+    
+    return sb;
+}
+
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

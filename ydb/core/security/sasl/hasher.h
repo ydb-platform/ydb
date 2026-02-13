@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/login/hashes_checker/hash_types.h>
 #include <ydb/library/login/password_checker/password_checker.h>
+#include <ydb/library/login/protos/login.pb.h>
 
 namespace NKikimr::NSasl {
 
@@ -13,7 +13,7 @@ struct TStaticCredentials {
 
 std::unique_ptr<NActors::IActor> CreateHasher(
     NActors::TActorId sender, const TStaticCredentials& creds,
-    const std::vector<NLogin::EHashType>& hashTypes,
+    const std::vector<NLoginProto::EHashType::HashType>& hashTypes,
     NLogin::TPasswordComplexity passwordComplexity = NLogin::TPasswordComplexity()
 );
 

@@ -32,6 +32,7 @@ SRCS(
     aggregated_result.cpp
     archive.cpp
     config_examples.cpp
+    ddisk_write.cpp
     interconnect_load.cpp
     keyvalue_write.cpp
     kqp.cpp
@@ -57,6 +58,20 @@ SRCS(
     ycsb/test_load_actor.h
     ycsb/test_load_read_iterator.cpp
 )
+
+IF (OS_LINUX)
+    SRCS(
+        nbs2_load_actor.cpp
+    )
+
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/libs/common
+        ydb/core/nbs/cloud/blockstore/libs/service
+        ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib
+        ydb/core/nbs/cloud/storage/core/libs/common
+        ydb/core/nbs/cloud/storage/core/libs/diagnostics
+    )
+ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(percentile.h)
 

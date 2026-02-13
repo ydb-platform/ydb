@@ -2195,7 +2195,7 @@ private:
             auto fieldType = rowType->GetMemberType(i);
 
             auto columnConverter = MakeYtOutputColumnConverter(fieldType, pool);
-            arrowFields.emplace_back(arrow::field(static_cast<std::string>(name), columnConverter->GetOutputType(), fieldType->IsOptional()));
+            arrowFields.emplace_back(columnConverter->BuildSchemaField(std::string(name)));
             ColumnConverters_.emplace_back(std::move(columnConverter));
         }
 

@@ -10,13 +10,24 @@ import logging
 import os
 import re
 import sys
-from collections.abc import Callable
-from typing import Any, ClassVar, TypeVar, overload
+from abc import abstractmethod
+from collections.abc import Callable, MutableSequence
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, overload
 
 from . import _modified, archive_util, dir_util, file_util, util
 from ._log import log
 from .errors import DistutilsOptionError
 
+if TYPE_CHECKING:
+    # type-only import because of mutual dependence between these classes
+    from distutils.dist import Distribution
+
+    from typing_extensions import TypeVarTuple, Unpack
+
+    _Ts = TypeVarTuple("_Ts")
+
+_StrPathT = TypeVar("_StrPathT", bound="str | os.PathLike[str]")
+_BytesPathT = TypeVar("_BytesPathT", bound="bytes | os.PathLike[bytes]")
 _CommandT = TypeVar("_CommandT", bound="Command")
 
 
@@ -61,7 +72,7 @@ class Command:
 
     # -- Creation/initialization methods -------------------------------
 
-    def __init__(self, dist):
+    def __init__(self, dist: Distribution) -> None:
         """Create and initialize a new Command object.  Most importantly,
         invokes the 'initialize_options()' method, which is the real
         initializer and depends on the actual command being
@@ -119,7 +130,7 @@ class Command:
         else:
             raise AttributeError(attr)
 
-    def ensure_finalized(self):
+    def ensure_finalized(self) -> None:
         if not self.finalized:
             self.finalize_options()
         self.finalized = True
@@ -137,7 +148,8 @@ class Command:
     #     run the command: do whatever it is we're here to do,
     #     controlled by the command's various option values
 
-    def initialize_options(self):
+    @abstractmethod
+    def initialize_options(self) -> None:
         """Set default values for all the options that this command
         supports.  Note that these defaults may be overridden by other
         commands, by the setup script, by config files, or by the
@@ -151,7 +163,8 @@ class Command:
             f"abstract method -- subclass {self.__class__} must override"
         )
 
-    def finalize_options(self):
+    @abstractmethod
+    def finalize_options(self) -> None:
         """Set final values for all the options that this command supports.
         This is always called as late as possible, ie.  after any option
         assignments from the command-line or from other commands have been
@@ -180,7 +193,8 @@ class Command:
             value = getattr(self, option)
             self.announce(indent + f"{option} = {value}", level=logging.INFO)
 
-    def run(self):
+    @abstractmethod
+    def run(self) -> None:
         """A command's raison d'etre: carry out the action it exists to
         perform, controlled by the options initialized in
         'initialize_options()', customized by other commands, the setup
@@ -194,10 +208,10 @@ class Command:
             f"abstract method -- subclass {self.__class__} must override"
         )
 
-    def announce(self, msg, level=logging.DEBUG):
+    def announce(self, msg: object, level: int = logging.DEBUG) -> None:
         log.log(level, msg)
 
-    def debug_print(self, msg):
+    def debug_print(self, msg: object) -> None:
         """Print 'msg' to stdout if the global DEBUG (taken from the
         DISTUTILS_DEBUG environment variable) flag is true.
         """
@@ -229,13 +243,13 @@ class Command:
             raise DistutilsOptionError(f"'{option}' must be a {what} (got `{val}`)")
         return val
 
-    def ensure_string(self, option, default=None):
+    def ensure_string(self, option: str, default: str | None = None) -> None:
         """Ensure that 'option' is a string; if not defined, set it to
         'default'.
         """
         self._ensure_stringlike(option, "string", default)
 
-    def ensure_string_list(self, option):
+    def ensure_string_list(self, option: str) -> None:
         r"""Ensure that 'option' is a list of strings.  If 'option' is
         currently a string, we split it either on /,\s*/ or /\s+/, so
         "foo bar baz", "foo,bar,baz", and "foo,   bar baz" all become
@@ -263,13 +277,13 @@ class Command:
                 ("error in '%s' option: " + error_fmt) % (option, val)
             )
 
-    def ensure_filename(self, option):
+    def ensure_filename(self, option: str) -> None:
         """Ensure that 'option' is the name of an existing file."""
         self._ensure_tested_string(
             option, os.path.isfile, "filename", "'%s' does not exist or is not a file"
         )
 
-    def ensure_dirname(self, option):
+    def ensure_dirname(self, option: str) -> None:
         self._ensure_tested_string(
             option,
             os.path.isdir,
@@ -279,13 +293,15 @@ class Command:
 
     # -- Convenience methods for commands ------------------------------
 
-    def get_command_name(self):
+    def get_command_name(self) -> str:
         if hasattr(self, 'command_name'):
             return self.command_name
         else:
             return self.__class__.__name__
 
-    def set_undefined_options(self, src_cmd, *option_pairs):
+    def set_undefined_options(
+        self, src_cmd: str, *option_pairs: tuple[str, str]
+    ) -> None:
         """Set the values of any "undefined" options from corresponding
         option values in some other command object.  "Undefined" here means
         "is None", which is the convention used to indicate that an option
@@ -306,7 +322,9 @@ class Command:
             if getattr(self, dst_option) is None:
                 setattr(self, dst_option, getattr(src_cmd_obj, src_option))
 
-    def get_finalized_command(self, command, create=True):
+    # NOTE: Because distutils is private to Setuptools and not all commands are exposed here,
+    # not every possible command is enumerated in the signature.
+    def get_finalized_command(self, command: str, create: bool = True) -> Command:
         """Wrapper around Distribution's 'get_command_obj()' method: find
         (create if necessary and 'create' is true) the command object for
         'command', call its 'ensure_finalized()' method, and return the
@@ -331,14 +349,14 @@ class Command:
     ) -> Command:
         return self.distribution.reinitialize_command(command, reinit_subcommands)
 
-    def run_command(self, command):
+    def run_command(self, command: str) -> None:
         """Run some other command: uses the 'run_command()' method of
         Distribution, which creates and finalizes the command object if
         necessary and then invokes its 'run()' method.
         """
         self.distribution.run_command(command)
 
-    def get_sub_commands(self):
+    def get_sub_commands(self) -> list[str]:
         """Determine the sub-commands that are relevant in the current
         distribution (ie., that need to be run).  This is based on the
         'sub_commands' class attribute: each tuple in that list may include
@@ -353,24 +371,50 @@ class Command:
 
     # -- External world manipulation -----------------------------------
 
-    def warn(self, msg):
+    def warn(self, msg: object) -> None:
         log.warning("warning: %s: %s\n", self.get_command_name(), msg)
 
-    def execute(self, func, args, msg=None, level=1):
+    def execute(
+        self,
+        func: Callable[[Unpack[_Ts]], object],
+        args: tuple[Unpack[_Ts]],
+        msg: object = None,
+        level: int = 1,
+    ) -> None:
         util.execute(func, args, msg, dry_run=self.dry_run)
 
-    def mkpath(self, name, mode=0o777):
+    def mkpath(self, name: str, mode: int = 0o777) -> None:
         dir_util.mkpath(name, mode, dry_run=self.dry_run)
 
+    @overload
     def copy_file(
         self,
-        infile,
-        outfile,
-        preserve_mode=True,
-        preserve_times=True,
-        link=None,
-        level=1,
-    ):
+        infile: str | os.PathLike[str],
+        outfile: _StrPathT,
+        preserve_mode: bool = True,
+        preserve_times: bool = True,
+        link: str | None = None,
+        level: int = 1,
+    ) -> tuple[_StrPathT | str, bool]: ...
+    @overload
+    def copy_file(
+        self,
+        infile: bytes | os.PathLike[bytes],
+        outfile: _BytesPathT,
+        preserve_mode: bool = True,
+        preserve_times: bool = True,
+        link: str | None = None,
+        level: int = 1,
+    ) -> tuple[_BytesPathT | bytes, bool]: ...
+    def copy_file(
+        self,
+        infile: str | os.PathLike[str] | bytes | os.PathLike[bytes],
+        outfile: str | os.PathLike[str] | bytes | os.PathLike[bytes],
+        preserve_mode: bool = True,
+        preserve_times: bool = True,
+        link: str | None = None,
+        level: int = 1,
+    ) -> tuple[str | os.PathLike[str] | bytes | os.PathLike[bytes], bool]:
         """Copy a file respecting verbose, dry-run and force flags.  (The
         former two default to whatever is in the Distribution object, and
         the latter defaults to false for commands that don't define it.)"""
@@ -386,13 +430,13 @@ class Command:
 
     def copy_tree(
         self,
-        infile,
-        outfile,
-        preserve_mode=True,
-        preserve_times=True,
-        preserve_symlinks=False,
-        level=1,
-    ):
+        infile: str | os.PathLike[str],
+        outfile: str,
+        preserve_mode: bool = True,
+        preserve_times: bool = True,
+        preserve_symlinks: bool = False,
+        level: int = 1,
+    ) -> list[str]:
         """Copy an entire directory tree respecting verbose, dry-run,
         and force flags.
         """
@@ -406,19 +450,60 @@ class Command:
             dry_run=self.dry_run,
         )
 
-    def move_file(self, src, dst, level=1):
+    @overload
+    def move_file(
+        self, src: str | os.PathLike[str], dst: _StrPathT, level: int = 1
+    ) -> _StrPathT | str: ...
+    @overload
+    def move_file(
+        self, src: bytes | os.PathLike[bytes], dst: _BytesPathT, level: int = 1
+    ) -> _BytesPathT | bytes: ...
+    def move_file(
+        self,
+        src: str | os.PathLike[str] | bytes | os.PathLike[bytes],
+        dst: str | os.PathLike[str] | bytes | os.PathLike[bytes],
+        level: int = 1,
+    ) -> str | os.PathLike[str] | bytes | os.PathLike[bytes]:
         """Move a file respecting dry-run flag."""
         return file_util.move_file(src, dst, dry_run=self.dry_run)
 
-    def spawn(self, cmd, search_path=True, level=1):
+    def spawn(
+        self, cmd: MutableSequence[str], search_path: bool = True, level: int = 1
+    ) -> None:
         """Spawn an external command respecting dry-run flag."""
         from distutils.spawn import spawn
 
         spawn(cmd, search_path, dry_run=self.dry_run)
 
+    @overload
     def make_archive(
-        self, base_name, format, root_dir=None, base_dir=None, owner=None, group=None
-    ):
+        self,
+        base_name: str,
+        format: str,
+        root_dir: str | os.PathLike[str] | bytes | os.PathLike[bytes] | None = None,
+        base_dir: str | None = None,
+        owner: str | None = None,
+        group: str | None = None,
+    ) -> str: ...
+    @overload
+    def make_archive(
+        self,
+        base_name: str | os.PathLike[str],
+        format: str,
+        root_dir: str | os.PathLike[str] | bytes | os.PathLike[bytes],
+        base_dir: str | None = None,
+        owner: str | None = None,
+        group: str | None = None,
+    ) -> str: ...
+    def make_archive(
+        self,
+        base_name: str | os.PathLike[str],
+        format: str,
+        root_dir: str | os.PathLike[str] | bytes | os.PathLike[bytes] | None = None,
+        base_dir: str | None = None,
+        owner: str | None = None,
+        group: str | None = None,
+    ) -> str:
         return archive_util.make_archive(
             base_name,
             format,
@@ -430,8 +515,15 @@ class Command:
         )
 
     def make_file(
-        self, infiles, outfile, func, args, exec_msg=None, skip_msg=None, level=1
-    ):
+        self,
+        infiles: str | list[str] | tuple[str, ...],
+        outfile: str | os.PathLike[str] | bytes | os.PathLike[bytes],
+        func: Callable[[Unpack[_Ts]], object],
+        args: tuple[Unpack[_Ts]],
+        exec_msg: object = None,
+        skip_msg: object = None,
+        level: int = 1,
+    ) -> None:
         """Special case of 'execute()' for operations that process one or
         more input files and generate one output file.  Works just like
         'execute()', except the operation is skipped and a different

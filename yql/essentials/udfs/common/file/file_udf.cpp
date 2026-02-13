@@ -186,7 +186,7 @@ public:
     typedef TBuffered<TUnbufferedFileInput> TStream;
     typedef TIntrusivePtr<TStreamMeta> TPtr;
 
-    TStreamMeta(TString filePath)
+    explicit TStreamMeta(TString filePath)
         : FilePath_(filePath)
     {
         // work in greedy mode to catch error on creation
@@ -247,7 +247,7 @@ private:
     }
 
 public:
-    TEmptyIter(TTerminateFunc terminateFunc)
+    explicit TEmptyIter(TTerminateFunc terminateFunc)
         : TerminateFunc_(terminateFunc)
     {
     }
@@ -391,7 +391,7 @@ class TByLinesFunc: public TBoxedValue {
 private:
     TSourcePosition Pos_;
 
-    TByLinesFunc(TSourcePosition pos)
+    explicit TByLinesFunc(TSourcePosition pos)
         : Pos_(pos)
     {
     }

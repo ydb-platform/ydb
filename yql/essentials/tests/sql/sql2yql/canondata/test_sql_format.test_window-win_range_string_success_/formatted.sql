@@ -1,0 +1,37 @@
+PRAGMA WindowNewPipeline;
+PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
+
+$data = [
+    <|a: NULL, b: 1, count: 2|>,
+    <|a: NULL, b: 1, count: 2|>,
+    <|a: 'apple', b: 1, count: 3|>,
+    <|a: 'banana', b: 1, count: 4|>,
+    <|a: 'cherry', b: 1, count: 6|>,
+    <|a: 'cherry', b: 1, count: 6|>,
+];
+
+$win_result = (
+    SELECT
+        COUNT(*) OVER w1 AS actual_count,
+        count,
+    FROM
+        AS_TABLE($data)
+    WINDOW
+        w1 AS (
+            PARTITION COMPACT BY
+                b
+            ORDER BY
+                a ASC
+            RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        )
+);
+
+$str = ($x) -> {
+    RETURN CAST($x AS String) ?? 'null';
+};
+
+SELECT
+    Ensure(count, count IS NOT DISTINCT FROM actual_count, $str(actual_count))
+FROM
+    $win_result
+;

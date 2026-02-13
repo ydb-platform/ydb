@@ -1,5 +1,6 @@
 #include "kqp_program_builder.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
@@ -359,7 +360,7 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     // Validate text argument - should be a String or Utf8 or optional String or Utf8
     const auto& textType = text.GetStaticType();
     const TDataType* textDataType = nullptr;
-    
+
     if (textType->IsOptional()) {
         auto optionalType = static_cast<const TOptionalType*>(textType);
         auto itemType = optionalType->GetItemType();
@@ -369,13 +370,18 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
         MKQL_ENSURE(textType->IsData(), "Expected data or optional data type for text.");
         textDataType = static_cast<const TDataType*>(textType);
     }
-    
+
     MKQL_ENSURE(textDataType->GetSchemeType() == NScheme::NTypeIds::String
         || textDataType->GetSchemeType() == NScheme::NTypeIds::Utf8, "Expected String or Utf8 for text column.");
 
-    // Return type: List<String or Utf8>
+    // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>
     auto stringType = TDataType::Create(textDataType->GetSchemeType(), Env);
-    auto listType = TListType::Create(stringType, Env);
+    auto freqType = TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment());
+    TStructTypeBuilder rowTypeBuilder(GetTypeEnvironment());
+    rowTypeBuilder.Add(NTableIndex::NFulltext::FreqColumn, freqType);
+    rowTypeBuilder.Add(NTableIndex::NFulltext::TokenColumn, stringType);
+    auto rowType = rowTypeBuilder.Build();
+    auto listType = TListType::Create(rowType, Env);
 
     // Validate settings argument - should be a string (serialized proto)
     const auto& settingsType = settings.GetStaticType();

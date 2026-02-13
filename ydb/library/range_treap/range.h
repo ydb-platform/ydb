@@ -40,10 +40,6 @@ public:
     static int CompareEqualPoint(const EBorderMode lhs, const EBorderMode rhs) {
         return (int)lhs - (int)rhs;
     }
-
-private:
-    static const ui8 FlagInclusive = (1 << 0);
-    static const ui8 FlagRight = (1 << 1);
 };
 
 template <class TKeyView>

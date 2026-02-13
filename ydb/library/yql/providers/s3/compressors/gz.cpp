@@ -4,8 +4,8 @@
 #include <util/generic/size_literals.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+#include <ydb/core/util/exceptions.h>
 
-#include <yql/essentials/utils/exceptions.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <zlib.h>
@@ -13,6 +13,8 @@
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
 namespace NYql::NGz {
+
+using namespace NKikimr;
 
 namespace {
 
@@ -129,7 +131,7 @@ private:
             Z_.avail_out = OutputBufferSize;
 
             const auto code = deflate(&Z_, done ? Z_FINISH : Z_BLOCK);
-            YQL_ENSURE_CODELINE((done ? Z_STREAM_END : Z_OK) == code, NYql::NDqProto::StatusIds::BAD_REQUEST, "code: " << code << ", error: " << GetErrMsg(Z_));
+            Y_ENSURE_CODELINE((done ? Z_STREAM_END : Z_OK) == code, NYql::NDqProto::StatusIds::BAD_REQUEST, "code: " << code << ", error: " << GetErrMsg(Z_));
 
             if (const auto size = OutputBufferSize - Z_.avail_out)
                 TOutputQueue::Push(TString(OutputBuffer.get(), size));

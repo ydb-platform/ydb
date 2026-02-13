@@ -105,7 +105,7 @@ virtual void Scenario(const TActorContext &ctx) {
     LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed");
 
     // check actually freed chunks
-    UNIT_ASSERT_VALUES_EQUAL(freedChunks.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(freedChunks.size(), 6);
 }
 SYNC_TEST_END(TDefrag50PercentGarbage, TSyncTestBase)
 

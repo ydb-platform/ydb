@@ -10,7 +10,7 @@ void TDialerConfig::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_aggressive_reconnect", &TThis::EnableAggressiveReconnect)
         .Default(false);
-    registrar.Parameter("allow_bypass_tls", &TThis::AllowBypassTLS)
+    registrar.Parameter("allow_bypass_tls", &TThis::AllowBypassTls)
         .Default(false);
     registrar.Parameter("min_rto", &TThis::MinRto)
         .Default(TDuration::MilliSeconds(100));

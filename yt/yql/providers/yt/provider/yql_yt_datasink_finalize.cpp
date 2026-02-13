@@ -19,6 +19,11 @@ public:
 
         bool fullCaptureReady = false;
         if (State_->FullCapture_) {
+            if (!State_->HybridStatistics.empty() && State_->FullHybridExecution) {
+                State_->FullCapture_->ReportError(
+                    yexception() << "full hybrid execution"
+                );
+            }
             fullCaptureReady = State_->FullCapture_->Seal();
         }
         auto future = State_->Gateway->Finalize(

@@ -643,6 +643,7 @@ TMaybeNode<TDqStage> DqPushLambdasToStage(const TDqStage& stage, const std::map<
                 .Body(ctx.ReplaceNodes(newProgram->TailPtr(), inputArgReplaces))
             .Build()
             .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos()))
+            .Outputs(stage.Outputs())
             .Done();
 
     optCtx.RemapNode(stage.Ref(), newStage.Ptr());
@@ -1122,7 +1123,7 @@ TExprBase DqBuildLMapOverMuxStage(TExprBase node, TExprContext& ctx, IOptimizati
 
 
 TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+    const TParentsMap& parentsMap, bool allowStageMultiUsage, bool createStageForAggregation)
 {
     if (!node.Maybe<TCoCombineByKey>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
@@ -1174,7 +1175,8 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
             .Done();
     }
 
-    if (IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()) ||
+    if (createStageForAggregation ||
+        IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.UpdateHandlerLambda(), dqUnion.Output().Stage()) ||
@@ -3091,7 +3093,7 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
         return node;
     }
 
-    auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
+    auto typeAnn = precompute.Connection().Raw()->GetTypeAnn();
 
     YQL_ENSURE(typeAnn);
     typeAnn = GetSeqItemType(typeAnn);

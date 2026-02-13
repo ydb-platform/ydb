@@ -21,7 +21,7 @@ public:
         }
     };
 
-    TScopedMemoryMapper(bool aligned) {
+    explicit TScopedMemoryMapper(bool aligned) {
         Aligned_ = aligned;
         TFakeMmap::OnMunmap = [this](void* addr, size_t s) {
             Munmaps_.push_back({addr, s});

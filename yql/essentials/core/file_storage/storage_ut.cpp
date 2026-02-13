@@ -14,8 +14,12 @@
 using namespace NYql;
 using namespace NThreading;
 
-static TString DATA = "1234567890";
-static TString DATA_MD5 = "e807f1fcf82d132f9bb018ca6738a19f";
+namespace {
+
+TString DATA = "1234567890";
+TString DATA_MD5 = "e807f1fcf82d132f9bb018ca6738a19f";
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TStorageTests) {
 
@@ -24,7 +28,7 @@ private:
     TFsPath Path_;
 
 public:
-    TTestDir(const TString& name) {
+    explicit TTestDir(const TString& name) {
         Y_ENSURE(name.length() > 0, "have to specify name");
         Y_ENSURE(name.find('.') == TString::npos, "must be simple name");
         Y_ENSURE(name.find('/') == TString::npos, "must be simple name");

@@ -331,7 +331,6 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
     info->SetSlotSizeInUnits(slotSizeInUnits);
-    info->SetInferPDiskSlotCountFromUnitSize(pDiskInfo->InferPDiskSlotCountFromUnitSize);
 }
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
@@ -559,7 +558,6 @@ void TBlobStorageController::UpdateSystemViews() {
 
                 pb->SetExpectedSlotCount(slotCount);
                 pb->SetSlotSizeInUnits(slotSizeInUnits);
-                pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);
             }
         }

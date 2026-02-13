@@ -793,11 +793,19 @@ void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, c
 }
 
 void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
-    Impl_->AddFulltextIndex(indexName, EIndexType::GlobalFulltext, indexColumns, indexSettings);
+    EIndexType indexType = EIndexType::GlobalFulltextPlain;
+    if (indexSettings.Layout.has_value() && indexSettings.Layout.value() == TFulltextIndexSettings::ELayout::FlatRelevance) {
+        indexType = EIndexType::GlobalFulltextRelevance;
+    }
+    Impl_->AddFulltextIndex(indexName, indexType, indexColumns, indexSettings);
 }
 
 void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
-    Impl_->AddFulltextIndex(indexName, EIndexType::GlobalFulltext, indexColumns, dataColumns, indexSettings);
+    EIndexType indexType = EIndexType::GlobalFulltextPlain;
+    if (indexSettings.Layout.has_value() && indexSettings.Layout.value() == TFulltextIndexSettings::ELayout::FlatRelevance) {
+        indexType = EIndexType::GlobalFulltextRelevance;
+    }
+    Impl_->AddFulltextIndex(indexName, indexType, indexColumns, dataColumns, indexSettings);
 }
 
 void TTableDescription::AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
@@ -2594,7 +2602,7 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
 
     TAnalyzers result;
     result.Tokenizer = convertTokenizer();
-    
+
     if (proto.has_language()) {
         result.Language = proto.language();
     }
@@ -2625,13 +2633,13 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
     if (proto.has_filter_length_max()) {
         result.FilterLengthMax = proto.filter_length_max();
     }
-    
+
     return result;
 }
 
 Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSettings::TAnalyzers& analyzers) {
     using ETokenizer = TFulltextIndexSettings::ETokenizer;
-    
+
     auto convertTokenizer = [&] {
         switch (*analyzers.Tokenizer) {
         case ETokenizer::Whitespace:
@@ -2743,7 +2751,7 @@ void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& sett
     if (Layout.has_value()) {
         settings.set_layout(convertLayout());
     }
-    
+
     for (const auto& column : Columns) {
         *settings.add_columns() = ToProto(column);
     }
@@ -2789,9 +2797,16 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
     }
-    case TProto::kGlobalFulltextIndex: {
-        type = EIndexType::GlobalFulltext;
-        const auto& fulltextProto = proto.global_fulltext_index();
+    case TProto::kGlobalFulltextPlainIndex: {
+        type = EIndexType::GlobalFulltextPlain;
+        const auto& fulltextProto = proto.global_fulltext_plain_index();
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(fulltextProto.settings()));
+        specializedIndexSettings = TFulltextIndexSettings::FromProto(fulltextProto.fulltext_settings());
+        break;
+    }
+    case TProto::kGlobalFulltextRelevanceIndex: {
+        type = EIndexType::GlobalFulltextRelevance;
+        const auto& fulltextProto = proto.global_fulltext_relevance_index();
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(fulltextProto.settings()));
         specializedIndexSettings = TFulltextIndexSettings::FromProto(fulltextProto.fulltext_settings());
         break;
@@ -2851,8 +2866,20 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
-    case EIndexType::GlobalFulltext: {
-        auto* global_fulltext_index = proto.mutable_global_fulltext_index();
+    case EIndexType::GlobalFulltextPlain: {
+        auto* global_fulltext_index = proto.mutable_global_fulltext_plain_index();
+        auto& settings = *global_fulltext_index->mutable_settings();
+        auto& fulltext_settings = *global_fulltext_index->mutable_fulltext_settings();
+        if (GlobalIndexSettings_.size() == 1) {
+            GlobalIndexSettings_[0].SerializeTo(settings);
+        }
+        if (const auto* ftSettings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
+            ftSettings->SerializeTo(fulltext_settings);
+        }
+        break;
+    }
+    case EIndexType::GlobalFulltextRelevance: {
+        auto* global_fulltext_index = proto.mutable_global_fulltext_relevance_index();
         auto& settings = *global_fulltext_index->mutable_settings();
         auto& fulltext_settings = *global_fulltext_index->mutable_fulltext_settings();
         if (GlobalIndexSettings_.size() == 1) {
@@ -2895,7 +2922,8 @@ void TIndexDescription::Out(IOutputStream& o) const {
             o << ", vector_settings: " << *settings;
         }
         break;
-    case EIndexType::GlobalFulltext:
+    case EIndexType::GlobalFulltextPlain:
+    case EIndexType::GlobalFulltextRelevance:
         if (auto settings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
             o << ", fulltext_settings: " << *settings;
         }

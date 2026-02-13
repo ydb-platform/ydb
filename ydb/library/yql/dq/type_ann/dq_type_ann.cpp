@@ -99,7 +99,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             return TStatus::Error;
         }
 
-        auto* argType = input->GetTypeAnn();
+        auto argType = input->GetTypeAnn();
         if constexpr (std::is_same_v<TStage, TDqPhyStage>) {
             if (TDqConnection::Match(input.Get()) && argType->GetKind() == ETypeAnnotationKind::List) {
                 auto* itemType = argType->Cast<TListExprType>()->GetItemType();
@@ -147,7 +147,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    auto* resultType = programLambda->GetTypeAnn();
+    auto resultType = programLambda->GetTypeAnn();
     if (!resultType) {
         return TStatus::Repeat;
     }
@@ -249,7 +249,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
         } else {
             for (auto transform : transforms) {
-                auto* type = transform->GetTypeAnn();
+                auto type = transform->GetTypeAnn();
                 if (!EnsureListType(transform->Pos(), *type, ctx)) {
                     return TStatus::Error;
                 }
@@ -1211,9 +1211,9 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
         return IGraphTransformer::TStatus(TStatus::Error);
     }
     const auto joinType = joinTypeNode.Content();
-    if (joinType != "Inner") {
+    if (joinType != "Inner" && joinType != "Left" && joinType != "LeftSemi" && joinType != "LeftOnly") {
         ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
-                    << ", supported: Inner"));
+                    << ", supported: Inner, Left, LeftSemi, LeftOnly"));
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -1251,8 +1251,15 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     }
 
     // Add right side columns
-    for (auto itemType : rightItemTypes) {
-        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    if (joinType != "LeftSemi" && joinType != "LeftOnly") {
+        for (auto itemType : rightItemTypes) {
+            if (joinType == "Left") {
+                if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
+                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                }
+            }
+            resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+        }
     }
 
     // Add scalar length column at the end
@@ -1290,7 +1297,31 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
         return TStatus::Error;
     }
 
+    bool needBlockWrap = false;
+
     auto itemTypes = multiType->Cast<TMultiExprType>()->GetItems();
+
+    auto firstInputColumn = itemTypes.at(0);
+    if (firstInputColumn->IsBlockOrScalar()) {
+        needBlockWrap = true;
+        TTypeAnnotationNode::TListType unwrappedTypes;
+        for (size_t i = 0; i < itemTypes.size() - 1; ++i) {
+            auto colType = itemTypes.at(i);
+            if (!EnsureBlockOrScalarType(inputStream->Pos(), *colType, ctx)) {
+                return TStatus::Error;
+            }
+            const TTypeAnnotationNode* blockContentType = nullptr;
+            if (colType->IsBlock()) {
+                blockContentType = colType->Cast<TBlockExprType>()->GetItemType();
+            } else if (colType->IsScalar()) {
+                blockContentType = colType->Cast<TScalarExprType>()->GetItemType();
+            } else {
+                YQL_ENSURE(false, "Block or scalar type expected after EnsureBlockOrScalarType");
+            }
+            unwrappedTypes.push_back(blockContentType);
+        }
+        itemTypes.swap(unwrappedTypes);
+    }
 
     // key extractor lambda
     auto& keyExtractor = input->ChildRef(TDqPhyHashCombine::idx_KeyExtractor);
@@ -1374,7 +1405,15 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     // Derive the output type from the finishHandler
     TTypeAnnotationNode::TListType finishOutputTypes;
     for (ui32 i = 1; i < finishHandler->ChildrenSize(); ++i) {
-        finishOutputTypes.emplace_back(finishHandler->Child(i)->GetTypeAnn());
+        const auto colType = finishHandler->Child(i)->GetTypeAnn();
+        if (!needBlockWrap) {
+            finishOutputTypes.emplace_back(colType);
+        } else {
+            finishOutputTypes.emplace_back(ctx.MakeType<TBlockExprType>(colType));
+        }
+    }
+    if (needBlockWrap) {
+        finishOutputTypes.emplace_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64)));
     }
     auto finishOutputType = ctx.MakeType<TMultiExprType>(finishOutputTypes);
 

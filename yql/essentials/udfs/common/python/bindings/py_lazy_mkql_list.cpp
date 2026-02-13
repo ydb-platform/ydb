@@ -62,7 +62,7 @@ class TBaseLazyList: public NUdf::TBoxedValue {
         {
         }
 
-        ~TIterator() {
+        ~TIterator() override {
             const TPyGilLocker lock;
             PyIter_.Reset();
         }
@@ -118,7 +118,7 @@ public:
     {
     }
 
-    ~TBaseLazyList() {
+    ~TBaseLazyList() override {
         TPyGilLocker lock;
         PyObject_.Reset();
     }
@@ -330,7 +330,7 @@ public:
         }
     }
 
-    ~TLazyGenerator() {
+    ~TLazyGenerator() override {
         const TPyGilLocker lock;
         Closure_.Reset();
     }

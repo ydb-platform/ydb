@@ -1,5 +1,7 @@
 #include "helpers.h"
 
+#include "config.h"
+
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/operation_client.h>
 #include <yt/yt/client/api/rowset.h>
@@ -34,17 +36,18 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void PatchProxyForStallRequests(TApiServiceProxy* proxy)
+void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceProxy* proxy)
 {
-    /// NB(achains): Some reads may be stall by default (e.g. reconstructing erasure-coded chunks).
-    ///              Increase default timeout until ping mechanism is designed in YT-26196.
-    static const auto StallTimeout = TDuration::Minutes(15);
-    static const NRpc::TStreamingParameters StallStreamParameters{
-        .ReadTimeout = StallTimeout,
-        .WriteTimeout = StallTimeout};
+    if (config->UseTotalStreamingTimeoutForHeavyReads) {
+        auto totalStreamingTimeout = config->DefaultTotalStreamingTimeout;
+        NRpc::TStreamingParameters patchedParameters{
+            .ReadTimeout = totalStreamingTimeout,
+            .WriteTimeout = totalStreamingTimeout,
+        };
 
-    proxy->DefaultClientAttachmentsStreamingParameters() = StallStreamParameters;
-    proxy->DefaultServerAttachmentsStreamingParameters() = StallStreamParameters;
+        proxy->DefaultClientAttachmentsStreamingParameters() = patchedParameters;
+        proxy->DefaultServerAttachmentsStreamingParameters() = patchedParameters;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,6 +80,7 @@ void ToProto(
     proto->set_ping_ancestors(options.PingAncestors);
     proto->set_suppress_transaction_coordinator_sync(options.SuppressTransactionCoordinatorSync);
     proto->set_suppress_upstream_sync(options.SuppressUpstreamSync);
+    proto->set_suppress_strongly_ordered_transaction_barrier(options.SuppressStronglyOrderedTransactionBarrier);
 }
 
 void FromProto(
@@ -88,6 +92,7 @@ void FromProto(
     options->PingAncestors = proto.ping_ancestors();
     options->SuppressTransactionCoordinatorSync = proto.suppress_transaction_coordinator_sync();
     options->SuppressUpstreamSync = proto.suppress_upstream_sync();
+    options->SuppressStronglyOrderedTransactionBarrier = proto.suppress_strongly_ordered_transaction_barrier();
 }
 
 void ToProto(
@@ -2237,8 +2242,8 @@ void FillRequest(
 {
     ToProto(req->mutable_path(), path);
     req->set_cookie_count(options.CookieCount);
-    if (options.Timeout) {
-        req->set_timeout(options.Timeout->GetValue());
+    if (options.SessionTimeout) {
+        req->set_session_timeout(options.SessionTimeout->GetValue());
     }
 
     if (options.TransactionId) {
@@ -2253,8 +2258,8 @@ void ParseRequest(
 {
     *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
     mutableOptions->CookieCount = req.cookie_count();
-    if (req.has_timeout()) {
-        mutableOptions->Timeout = TDuration::FromValue(req.timeout());
+    if (req.has_session_timeout()) {
+        mutableOptions->SessionTimeout = TDuration::FromValue(req.session_timeout());
     }
     if (req.has_transactional_options()) {
         FromProto(mutableOptions, req.transactional_options());
@@ -2348,8 +2353,8 @@ void FillRequest(
 {
     ToProto(req->mutable_path(), path);
     req->set_cookie_count(options.CookieCount);
-    if (options.Timeout) {
-        req->set_timeout(options.Timeout->GetValue());
+    if (options.SessionTimeout) {
+        req->set_session_timeout(options.SessionTimeout->GetValue());
     }
 
     if (options.TransactionId) {
@@ -2364,8 +2369,8 @@ void ParseRequest(
 {
     *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
     mutableOptions->CookieCount = req.cookie_count();
-    if (req.has_timeout()) {
-        mutableOptions->Timeout = TDuration::FromValue(req.timeout());
+    if (req.has_session_timeout()) {
+        mutableOptions->SessionTimeout = TDuration::FromValue(req.session_timeout());
     }
     if (req.has_transactional_options()) {
         FromProto(mutableOptions, req.transactional_options());

@@ -162,8 +162,11 @@ public:
         PDiskGuid = 1;
         PDiskKey = 1;
         MainKey = NPDisk::TMainKey{ .Keys = { 1 } };
-        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.Keys.back(), "queue_test",
-                false, false, SectorMap, false);
+        TFormatOptions options;
+        options.SectorMap = SectorMap;
+        options.EnableSmallDiskOptimization = false;
+        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.Keys.back(),
+                "queue_test", options);
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);
         ui64 pDiskCategory = 0;

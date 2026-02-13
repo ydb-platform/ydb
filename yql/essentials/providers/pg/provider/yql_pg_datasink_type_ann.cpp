@@ -15,7 +15,7 @@ using namespace NNodes;
 
 class TPgDataSinkTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
-    TPgDataSinkTypeAnnotationTransformer(TPgState::TPtr state)
+    explicit TPgDataSinkTypeAnnotationTransformer(TPgState::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {

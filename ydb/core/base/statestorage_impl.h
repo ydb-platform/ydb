@@ -16,7 +16,7 @@ inline TActorId MakeStateStorageReplicaID(ui32 node, ui32 replicaIndex) {
     return TActorId(node, TStringBuf(x, 12));
 }
 
-struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvReplicaInfo, NKikimrStateStorage::TEvInfo, TEvStateStorage::EvReplicaInfo> {
+struct TEvStateStorage::TEvReplicaInfo : public TEventPBWithArena<TEvStateStorage::TEvReplicaInfo, NKikimrStateStorage::TEvInfo, TEvStateStorage::EvReplicaInfo> {
     TEvReplicaInfo()
     {}
 

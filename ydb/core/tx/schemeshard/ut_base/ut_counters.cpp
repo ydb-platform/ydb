@@ -15,7 +15,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardCountersTest) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
-        opts.EnableRealSystemViewPaths(false);
         TTestEnv env(runtime, opts, ssFactory);
         runtime.GetAppData().FeatureFlags.SetEnableAlterDatabase(true);
         ui64 txId = 100;
@@ -28,10 +27,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardCountersTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        ui64 initPathsCount = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription()
+                                                                 .GetPathsInside();
+
         TSchemeLimits defaultLimits;
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::DomainLimitsIs(1, defaultLimits.MaxShards),
-            NLs::PathsInsideDomain(0)
+            NLs::PathsInsideDomain(initPathsCount)
         });
 
         UNIT_ASSERT_VALUES_EQUAL(schemeshard->TabletCounters->Simple()[COUNTER_PATHS].Get(), 0);
@@ -44,7 +46,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardCountersTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-            NLs::PathsInsideDomain(0)
+            NLs::PathsInsideDomain(initPathsCount)
         });
         UNIT_ASSERT_VALUES_EQUAL(schemeshard->TabletCounters->Simple()[COUNTER_PATHS].Get(), 0);
     }

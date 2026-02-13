@@ -3,8 +3,11 @@
 Provides the Extension class, used to describe C/C++ extension
 modules in setup scripts."""
 
+from __future__ import annotations
+
 import os
 import warnings
+from collections.abc import Iterable
 
 # This class is really only used by the "build_ext" command, so it might
 # make sense to put it in distutils.command.build_ext.  However, that
@@ -88,22 +91,22 @@ class Extension:
     # setup_keywords in core.py.
     def __init__(
         self,
-        name,
-        sources,
-        include_dirs=None,
-        define_macros=None,
-        undef_macros=None,
-        library_dirs=None,
-        libraries=None,
-        runtime_library_dirs=None,
-        extra_objects=None,
-        extra_compile_args=None,
-        extra_link_args=None,
-        export_symbols=None,
-        swig_opts=None,
-        depends=None,
-        language=None,
-        optional=None,
+        name: str,
+        sources: Iterable[str | os.PathLike[str]],
+        include_dirs: list[str] | None = None,
+        define_macros: list[tuple[str, str | None]] | None = None,
+        undef_macros: list[str] | None = None,
+        library_dirs: list[str] | None = None,
+        libraries: list[str] | None = None,
+        runtime_library_dirs: list[str] | None = None,
+        extra_objects: list[str] | None = None,
+        extra_compile_args: list[str] | None = None,
+        extra_link_args: list[str] | None = None,
+        export_symbols: list[str] | None = None,
+        swig_opts: list[str] | None = None,
+        depends: list[str] | None = None,
+        language: str | None = None,
+        optional: bool | None = None,
         **kw,  # To catch unknown keywords
     ):
         if not isinstance(name, str):

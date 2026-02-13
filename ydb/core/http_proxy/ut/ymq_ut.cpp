@@ -13,6 +13,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <thread>
+
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;
 using namespace NActors;

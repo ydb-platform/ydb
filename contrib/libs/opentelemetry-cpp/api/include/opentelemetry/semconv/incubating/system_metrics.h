@@ -603,98 +603,95 @@ CreateAsyncDoubleMetricSystemFilesystemUtilization(metrics::Meter *meter)
 }
 
 /**
-  An estimate of how much memory is available for starting new applications, without causing
-  swapping. <p> This is an alternative to @code system.memory.usage @endcode metric with @code
-  state=free @endcode. Linux starting from 3.14 exports "available" memory. It takes "free" memory
-  as a baseline, and then factors in kernel-specific values. This is supposed to be more accurate
-  than just "free" memory. For reference, see the calculations <a
-  href="https://superuser.com/a/980821">here</a>. See also @code MemAvailable @endcode in <a
-  href="https://man7.org/linux/man-pages/man5/proc.5.html">/proc/meminfo</a>. <p> updowncounter
- */
-static constexpr const char *kMetricSystemLinuxMemoryAvailable = "system.linux.memory.available";
-static constexpr const char *descrMetricSystemLinuxMemoryAvailable =
-    "An estimate of how much memory is available for starting new applications, without causing "
-    "swapping.";
-static constexpr const char *unitMetricSystemLinuxMemoryAvailable = "By";
+  The number of packets transferred.
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+  @deprecated
+  {"note": "Replaced by @code system.memory.linux.available @endcode.", "reason": "renamed",
+  "renamed_to": "system.memory.linux.available"} <p> counter
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricSystemLinuxMemoryAvailable =
+    "system.linux.memory.available";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricSystemLinuxMemoryAvailable =
+    "The number of packets transferred.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemLinuxMemoryAvailable =
+    "{packet}";
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricSystemLinuxMemoryAvailable(metrics::Meter *meter)
 {
-  return meter->CreateInt64UpDownCounter(kMetricSystemLinuxMemoryAvailable,
-                                         descrMetricSystemLinuxMemoryAvailable,
-                                         unitMetricSystemLinuxMemoryAvailable);
+  return meter->CreateUInt64Counter(kMetricSystemLinuxMemoryAvailable,
+                                    descrMetricSystemLinuxMemoryAvailable,
+                                    unitMetricSystemLinuxMemoryAvailable);
 }
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricSystemLinuxMemoryAvailable(metrics::Meter *meter)
 {
-  return meter->CreateDoubleUpDownCounter(kMetricSystemLinuxMemoryAvailable,
-                                          descrMetricSystemLinuxMemoryAvailable,
-                                          unitMetricSystemLinuxMemoryAvailable);
+  return meter->CreateDoubleCounter(kMetricSystemLinuxMemoryAvailable,
+                                    descrMetricSystemLinuxMemoryAvailable,
+                                    unitMetricSystemLinuxMemoryAvailable);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemLinuxMemoryAvailable(metrics::Meter *meter)
 {
-  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemLinuxMemoryAvailable,
-                                                   descrMetricSystemLinuxMemoryAvailable,
-                                                   unitMetricSystemLinuxMemoryAvailable);
+  return meter->CreateInt64ObservableCounter(kMetricSystemLinuxMemoryAvailable,
+                                             descrMetricSystemLinuxMemoryAvailable,
+                                             unitMetricSystemLinuxMemoryAvailable);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemLinuxMemoryAvailable(metrics::Meter *meter)
 {
-  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemLinuxMemoryAvailable,
-                                                    descrMetricSystemLinuxMemoryAvailable,
-                                                    unitMetricSystemLinuxMemoryAvailable);
+  return meter->CreateDoubleObservableCounter(kMetricSystemLinuxMemoryAvailable,
+                                              descrMetricSystemLinuxMemoryAvailable,
+                                              unitMetricSystemLinuxMemoryAvailable);
 }
 
 /**
-  Reports the memory used by the Linux kernel for managing caches of frequently used objects.
-  <p>
-  The sum over the @code reclaimable @endcode and @code unreclaimable @endcode state values in @code
-  linux.memory.slab.usage @endcode SHOULD be equal to the total slab memory available on the system.
-  Note that the total slab memory is not constant and may vary over time.
-  See also the <a
-  href="https://blogs.oracle.com/linux/post/understanding-linux-kernel-memory-statistics">Slab
-  allocator</a> and @code Slab @endcode in <a
-  href="https://man7.org/linux/man-pages/man5/proc.5.html">/proc/meminfo</a>. <p> updowncounter
- */
-static constexpr const char *kMetricSystemLinuxMemorySlabUsage = "system.linux.memory.slab.usage";
-static constexpr const char *descrMetricSystemLinuxMemorySlabUsage =
-    "Reports the memory used by the Linux kernel for managing caches of frequently used objects.";
-static constexpr const char *unitMetricSystemLinuxMemorySlabUsage = "By";
+  The number of packets transferred.
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+  @deprecated
+  {"note": "Replaced by @code system.memory.linux.slab.usage @endcode.", "reason": "renamed",
+  "renamed_to": "system.memory.linux.slab.usage"} <p> counter
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricSystemLinuxMemorySlabUsage =
+    "system.linux.memory.slab.usage";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricSystemLinuxMemorySlabUsage =
+    "The number of packets transferred.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemLinuxMemorySlabUsage =
+    "{packet}";
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricSystemLinuxMemorySlabUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64UpDownCounter(kMetricSystemLinuxMemorySlabUsage,
-                                         descrMetricSystemLinuxMemorySlabUsage,
-                                         unitMetricSystemLinuxMemorySlabUsage);
+  return meter->CreateUInt64Counter(kMetricSystemLinuxMemorySlabUsage,
+                                    descrMetricSystemLinuxMemorySlabUsage,
+                                    unitMetricSystemLinuxMemorySlabUsage);
 }
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricSystemLinuxMemorySlabUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleUpDownCounter(kMetricSystemLinuxMemorySlabUsage,
-                                          descrMetricSystemLinuxMemorySlabUsage,
-                                          unitMetricSystemLinuxMemorySlabUsage);
+  return meter->CreateDoubleCounter(kMetricSystemLinuxMemorySlabUsage,
+                                    descrMetricSystemLinuxMemorySlabUsage,
+                                    unitMetricSystemLinuxMemorySlabUsage);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemLinuxMemorySlabUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemLinuxMemorySlabUsage,
-                                                   descrMetricSystemLinuxMemorySlabUsage,
-                                                   unitMetricSystemLinuxMemorySlabUsage);
+  return meter->CreateInt64ObservableCounter(kMetricSystemLinuxMemorySlabUsage,
+                                             descrMetricSystemLinuxMemorySlabUsage,
+                                             unitMetricSystemLinuxMemorySlabUsage);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemLinuxMemorySlabUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemLinuxMemorySlabUsage,
-                                                    descrMetricSystemLinuxMemorySlabUsage,
-                                                    unitMetricSystemLinuxMemorySlabUsage);
+  return meter->CreateDoubleObservableCounter(kMetricSystemLinuxMemorySlabUsage,
+                                              descrMetricSystemLinuxMemorySlabUsage,
+                                              unitMetricSystemLinuxMemorySlabUsage);
 }
 
 /**
@@ -733,6 +730,101 @@ CreateAsyncDoubleMetricSystemMemoryLimit(metrics::Meter *meter)
 {
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricSystemMemoryLimit, descrMetricSystemMemoryLimit, unitMetricSystemMemoryLimit);
+}
+
+/**
+  An estimate of how much memory is available for starting new applications, without causing
+  swapping. <p> This is an alternative to @code system.memory.usage @endcode metric with @code
+  state=free @endcode. Linux starting from 3.14 exports "available" memory. It takes "free" memory
+  as a baseline, and then factors in kernel-specific values. This is supposed to be more accurate
+  than just "free" memory. For reference, see the calculations <a
+  href="https://superuser.com/a/980821">here</a>. See also @code MemAvailable @endcode in <a
+  href="https://man7.org/linux/man-pages/man5/proc.5.html">/proc/meminfo</a>. <p> updowncounter
+ */
+static constexpr const char *kMetricSystemMemoryLinuxAvailable = "system.memory.linux.available";
+static constexpr const char *descrMetricSystemMemoryLinuxAvailable =
+    "An estimate of how much memory is available for starting new applications, without causing "
+    "swapping.";
+static constexpr const char *unitMetricSystemMemoryLinuxAvailable = "By";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxAvailable(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemMemoryLinuxAvailable,
+                                         descrMetricSystemMemoryLinuxAvailable,
+                                         unitMetricSystemMemoryLinuxAvailable);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxAvailable(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryLinuxAvailable,
+                                          descrMetricSystemMemoryLinuxAvailable,
+                                          unitMetricSystemMemoryLinuxAvailable);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxAvailable(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemMemoryLinuxAvailable,
+                                                   descrMetricSystemMemoryLinuxAvailable,
+                                                   unitMetricSystemMemoryLinuxAvailable);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxAvailable(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemMemoryLinuxAvailable,
+                                                    descrMetricSystemMemoryLinuxAvailable,
+                                                    unitMetricSystemMemoryLinuxAvailable);
+}
+
+/**
+  Reports the memory used by the Linux kernel for managing caches of frequently used objects.
+  <p>
+  The sum over the @code reclaimable @endcode and @code unreclaimable @endcode state values in @code
+  memory.linux.slab.usage @endcode SHOULD be equal to the total slab memory available on the system.
+  Note that the total slab memory is not constant and may vary over time.
+  See also the <a
+  href="https://blogs.oracle.com/linux/post/understanding-linux-kernel-memory-statistics">Slab
+  allocator</a> and @code Slab @endcode in <a
+  href="https://man7.org/linux/man-pages/man5/proc.5.html">/proc/meminfo</a>. <p> updowncounter
+ */
+static constexpr const char *kMetricSystemMemoryLinuxSlabUsage = "system.memory.linux.slab.usage";
+static constexpr const char *descrMetricSystemMemoryLinuxSlabUsage =
+    "Reports the memory used by the Linux kernel for managing caches of frequently used objects.";
+static constexpr const char *unitMetricSystemMemoryLinuxSlabUsage = "By";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxSlabUsage(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemMemoryLinuxSlabUsage,
+                                         descrMetricSystemMemoryLinuxSlabUsage,
+                                         unitMetricSystemMemoryLinuxSlabUsage);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxSlabUsage(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryLinuxSlabUsage,
+                                          descrMetricSystemMemoryLinuxSlabUsage,
+                                          unitMetricSystemMemoryLinuxSlabUsage);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxSlabUsage(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemMemoryLinuxSlabUsage,
+                                                   descrMetricSystemMemoryLinuxSlabUsage,
+                                                   unitMetricSystemMemoryLinuxSlabUsage);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxSlabUsage(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemMemoryLinuxSlabUsage,
+                                                    descrMetricSystemMemoryLinuxSlabUsage,
+                                                    unitMetricSystemMemoryLinuxSlabUsage);
 }
 
 /**

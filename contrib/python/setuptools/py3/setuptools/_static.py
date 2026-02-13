@@ -27,7 +27,7 @@ class Static:
 def _prevent_modification(target: type, method: str, copying: str) -> None:
     """
     Because setuptools is very flexible we cannot fully prevent
-    plugins and user customisations from modifying static values that were
+    plugins and user customizations from modifying static values that were
     parsed from config files.
     But we can attempt to block "in-place" mutations and identify when they
     were done.

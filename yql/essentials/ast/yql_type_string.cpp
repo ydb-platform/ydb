@@ -1347,7 +1347,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 class TTypePrinter: public TTypeAnnotationVisitor {
 public:
-    TTypePrinter(IOutputStream& out)
+    explicit TTypePrinter(IOutputStream& out)
         : Out_(out)
     {
     }

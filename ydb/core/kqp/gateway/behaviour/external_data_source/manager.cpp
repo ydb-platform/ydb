@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>

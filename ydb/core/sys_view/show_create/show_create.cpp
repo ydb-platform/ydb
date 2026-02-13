@@ -50,7 +50,7 @@ bool RewriteTemporaryTablePath(const TString& database, TString& tablePath, TStr
     return true;
 }
 
-class TShowCreate : public TScanActorWithoutBackPressure<TShowCreate> {
+class TShowCreate : public TScanActorWithoutBackPressure<TShowCreate>, public NActors::IActorExceptionHandler {
 public:
     using TBase = TScanActorWithoutBackPressure<TShowCreate>;
 
@@ -108,6 +108,24 @@ private:
 
         ProceedToScan();
         return;
+    }
+
+    bool OnUnhandledException(const std::exception_ptr& exception) override {
+        try {
+            if (exception) {
+                std::rethrow_exception(exception);
+            }
+        } catch (const TFormatFail& ex) {
+            ReplyErrorAndDie(ex.Status, ex.Error);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool OnUnhandledException(const std::exception& ex) override {
+        ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, ex.what());
+        return true;
     }
 
     void StartScan() final {
@@ -243,6 +261,19 @@ private:
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
+                switch (pathDescription.GetSelf().GetPathType()) {
+                    case NKikimrSchemeOp::EPathTypeTable:
+                    case NKikimrSchemeOp::EPathTypeColumnTable:
+                    case NKikimrSchemeOp::EPathTypeView:
+                        break;
+
+                    default: {
+                        return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                            << "Cannot display show create table result, unsupported path type: " << NKikimrSchemeOp::EPathType_Name(pathDescription.GetSelf().GetPathType())
+                        );
+                    }
+                }
+
                 if (auto pathType = ToString(pathDescription.GetSelf().GetPathType()); pathType != PathType) {
                     return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                         << "Path type mismatch, expected: " << PathType << ", found: " << pathType

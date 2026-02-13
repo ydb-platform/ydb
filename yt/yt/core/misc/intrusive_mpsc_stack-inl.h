@@ -20,7 +20,7 @@ template <class T, class Tag>
 void TIntrusiveMpscStack<T, Tag>::Push(TNode* item) noexcept
 {
     YT_VERIFY(item->Empty());
-    // Past this line item is not a valid instance of TInstrusiveListItem.
+    // Past this line item is not a valid instance of TIntrusiveListItem.
 
     // NB: This saves up extra CAS in case of non-empty stack.
     item->MutableNext() = Head_.load(std::memory_order::relaxed);

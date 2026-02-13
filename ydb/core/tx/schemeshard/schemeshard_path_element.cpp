@@ -1,5 +1,7 @@
 #include "schemeshard_path_element.h"
 
+#include <ydb/core/sys_view/common/path.h>
+
 #include <library/cpp/json/json_reader.h>
 
 namespace NKikimr::NSchemeShard {
@@ -107,6 +109,10 @@ bool TPathElement::IsRoot() const {
 
 bool TPathElement::IsDirectory() const {
     return PathType == EPathType::EPathTypeDir;
+}
+
+bool TPathElement::IsSystemDirectory() const {
+    return IsDirectory() && Name == NSysView::SysPathName;
 }
 
 bool TPathElement::IsTableIndex() const {

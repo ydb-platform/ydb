@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 
 namespace NTestUtils {
 

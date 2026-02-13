@@ -1,0 +1,55 @@
+diff --git a/contrib/restricted/patched/replxx/include/replxx.hxx b/contrib/restricted/patched/replxx/include/replxx.hxx
+--- a/contrib/restricted/patched/replxx/include/replxx.hxx
++++ b/contrib/restricted/patched/replxx/include/replxx.hxx
+@@ -566,6 +566,12 @@ public:
+ 
+ 	void set_preload_buffer( std::string const& preloadText );
+ 
++	/*! \brief Set editable message after prompt if called before input()
++	 *
++	 * This function does not perform any validation and directly sets the editable message.
++	 */
++	void set_preload_buffer_without_changes( std::string const& preloadText );
++
+ 	/*! \brief Set set of word break characters.
+ 	 *
+ 	 * This setting influences word based cursor movement and line editing capabilities.
+diff --git a/contrib/restricted/patched/replxx/src/replxx.cxx b/contrib/restricted/patched/replxx/src/replxx.cxx
+--- a/contrib/restricted/patched/replxx/src/replxx.cxx
++++ b/contrib/restricted/patched/replxx/src/replxx.cxx
+@@ -190,6 +190,10 @@ void Replxx::set_preload_buffer( std::string const& preloadText ) {
+ 	_impl->set_preload_buffer( preloadText );
+ }
+ 
++void Replxx::set_preload_buffer_without_changes( std::string const& preloadText ) {
++	_impl->set_preload_buffer_without_changes( preloadText );
++}
++
+ void Replxx::set_word_break_characters( char const* wordBreakers ) {
+ 	_impl->set_word_break_characters( wordBreakers );
+ }
+diff --git a/contrib/restricted/patched/replxx/src/replxx_impl.cxx b/contrib/restricted/patched/replxx/src/replxx_impl.cxx
+--- a/contrib/restricted/patched/replxx/src/replxx_impl.cxx
++++ b/contrib/restricted/patched/replxx/src/replxx_impl.cxx
+@@ -603,6 +603,10 @@ void Replxx::ReplxxImpl::set_preload_buffer( std::string const& preloadText ) {
+ 	}
+ }
+ 
++void Replxx::ReplxxImpl::set_preload_buffer_without_changes( std::string const& preloadText ) {
++	_preloadedBuffer = preloadText;
++}
++
+ char const* Replxx::ReplxxImpl::read_from_stdin( void ) {
+ 	if ( _preloadedBuffer.empty() ) {
+ 		getline( cin, _preloadedBuffer );
+diff --git a/contrib/restricted/patched/replxx/src/replxx_impl.hxx b/contrib/restricted/patched/replxx/src/replxx_impl.hxx
+--- a/contrib/restricted/patched/replxx/src/replxx_impl.hxx
++++ b/contrib/restricted/patched/replxx/src/replxx_impl.hxx
+@@ -176,6 +176,7 @@ public:
+ 	Replxx::HistoryScan::impl_t history_scan( void ) const;
+ 	int history_size( void ) const;
+ 	void set_preload_buffer(std::string const& preloadText);
++	void set_preload_buffer_without_changes(std::string const& preloadText);
+ 	void set_word_break_characters( char const* wordBreakers );
+ 	void set_subword_break_characters( char const* subwordBreakers );
+ 	void set_max_hint_rows( int count );

@@ -424,7 +424,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
     TVector<const NKikimrKqp::TKqpNodeResources*> executerDcNodes;
     allNodes.reserve(ResourcesSnapshot.size());
 
-    for(auto& snapNode: ResourcesSnapshot) {
+    for (const auto& snapNode: ResourcesSnapshot) {
         const TString& dc = snapNode.GetKqpProxyNodeResources().GetDataCenterId();
         if (snapNode.GetNodeId() == selfNodeId) {
             selfNodeDC = dc;
@@ -432,7 +432,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         }
     }
 
-    for(auto& snapNode: ResourcesSnapshot) {
+    for (const auto& snapNode: ResourcesSnapshot) {
         allNodes.push_back(&snapNode);
         if (selfNodeDC == snapNode.GetKqpProxyNodeResources().GetDataCenterId()) {
             executerDcNodes.push_back(&snapNode);

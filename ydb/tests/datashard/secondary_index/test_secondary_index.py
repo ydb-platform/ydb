@@ -18,9 +18,9 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_three_sync_not_Bool,
     index_four_sync,
     index_zero_sync,
-    pk_pg_types,
-    pk_pg_types_no_bool,
-    non_pk_pg_types,
+    pk_pg_types_mixed,
+    pk_pg_types_no_bool_mixed,
+    non_pk_pg_types_mixed,
 )
 
 
@@ -43,7 +43,14 @@ class TestSecondaryIndexBase(TestBase):
             expected_rows = len(pk_types) + len(all_types) + len(index)
 
             def has_rows():
-                return len(dml.query(f"select * from {table_name}")) == expected_rows
+                for type_name in index.keys():
+                    rows = dml.transactional(lambda session: self.query(
+                        f"SELECT * FROM {table_name} VIEW idx_col_index_{cleanup_type_name(type_name)};",
+                        tx=session.transaction(tx_mode=ydb.QueryStaleReadOnly())
+                    ))
+                    if len(rows) != expected_rows:
+                        return False
+                return True
 
             assert wait_for(has_rows, timeout_seconds=10), f"Expected {expected_rows} rows after insert"
 
@@ -67,7 +74,7 @@ class TestSecondaryIndexBase(TestBase):
                     if type_name in ("Bool", "pgbool"):
                         assert (
                             len(rows) == 1 and rows[0].count == (0 if i > 3 else count_col - 3)  # value is False for first 3 rows
-                        ), f"there were not enough columns by type {type_name}"
+                        ), f"there were not enough rows by type {type_name}"
                     elif type_name in ("String", "Utf8", "pgbytea", "pgtext", "pgvarchar"):
                         if i < 10:
                             if i * 10 > count_col:
@@ -78,11 +85,11 @@ class TestSecondaryIndexBase(TestBase):
                             count = i - (9 - i // 10)
                         assert (
                             len(rows) == 1 and rows[0].count == count_col - count
-                        ), f"there were not enough columns by type {type_name}, numb {i}"
+                        ), f"there were not enough rows by type {type_name}, numb {i}"
                     else:
                         assert (
                             len(rows) == 1 and rows[0].count == count_col - i
-                        ), f"there were not enough columns by type {type_name}"
+                        ), f"there were not enough rows by type {type_name}"
 
                 dml.transactional(process)
 
@@ -308,9 +315,9 @@ class TestPgSecondaryIndex(TestPgBase, TestSecondaryIndexBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
-            ("table_index_0_UNIQUE_SYNC", pk_pg_types, {}, pk_pg_types_no_bool, "", "UNIQUE", "SYNC"),
-            ("table_index_0__SYNC", pk_pg_types, {}, pk_pg_types, "", "", "SYNC"),
-            ("table_index_0__ASYNC", pk_pg_types, {}, pk_pg_types, "", "", "ASYNC"),
+            ("table_index_0_UNIQUE_SYNC", pk_pg_types_mixed, {}, pk_pg_types_no_bool_mixed, "", "UNIQUE", "SYNC"),
+            ("table_index_0__SYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "SYNC"),
+            ("table_index_0__ASYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "ASYNC"),
         ],
     )
     def test_secondary_index(
@@ -330,15 +337,15 @@ class TestPgSecondaryIndex(TestPgBase, TestSecondaryIndexBase):
         [
             (
                 "table_index_0_UNIQUE_SYNC",
-                pk_pg_types,
-                {**pk_pg_types, **non_pk_pg_types},
-                pk_pg_types_no_bool,
+                pk_pg_types_mixed,
+                {**pk_pg_types_mixed, **non_pk_pg_types_mixed},
+                pk_pg_types_no_bool_mixed,
                 "",
                 "UNIQUE",
                 "SYNC",
             ),
-            ("table_index_0__SYNC", pk_pg_types, {**pk_pg_types, **non_pk_pg_types}, pk_pg_types, "", "", "SYNC"),
-            ("table_index_0__ASYNC", pk_pg_types, {**pk_pg_types, **non_pk_pg_types}, pk_pg_types, "", "", "ASYNC"),
+            ("table_index_0__SYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "", "", "SYNC"),
+            ("table_index_0__ASYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "", "", "ASYNC"),
         ],
     )
     def test_secondary_index_cover(

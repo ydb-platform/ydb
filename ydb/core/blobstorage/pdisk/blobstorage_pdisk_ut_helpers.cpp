@@ -63,7 +63,9 @@ TString CreateFile(const char *baseDir, ui32 dataSize) {
 }
 
 void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization, bool plainDataChunks) {
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization, bool plainDataChunks,
+        bool enableFormatEncryption, std::optional<bool> enableSectorEncryption,
+        std::optional<bool> forceRandomizeMagic) {
     if (!diskSize) {
         diskSize = (ui64)chunkSize * 1000;
     }
@@ -75,14 +77,21 @@ void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize,
     SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
     SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
+    TFormatOptions options;
+    options.IsErasureEncodeUserLog = isErasureEncodeUserLog;
+    options.SectorMap = sectorMap;
+    options.EnableSmallDiskOptimization = enableSmallDiskOptimization;
+    options.PlainDataChunks = plainDataChunks;
+    options.EnableFormatEncryption = enableFormatEncryption;
+    options.EnableSectorEncryption = enableSectorEncryption;
+    options.ForceRandomizeMagic = forceRandomizeMagic;
+
     try {
         FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid, chunkKey, logKey, sysLogKey,
-                NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap,
-                enableSmallDiskOptimization, {}, plainDataChunks);
+                NPDisk::YdbDefaultPDiskSequence, "Info", options);
     } catch (NPDisk::TPDiskFormatBigChunkException) {
         FormatPDisk(path, diskSize, 4 << 10, NPDisk::SmallDiskMaximumChunkSize, guid, chunkKey, logKey, sysLogKey,
-                NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap,
-                enableSmallDiskOptimization, {}, plainDataChunks);
+                NPDisk::YdbDefaultPDiskSequence, "Info", options);
     }
 }
 

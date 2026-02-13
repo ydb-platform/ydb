@@ -373,7 +373,7 @@ public:
     void WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, const ui64 &diskGuid,
             const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
             TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
-            std::optional<TRcBuf> metadata, bool plainDataChunks);
+            std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
     void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status = NKikimrProto::ERROR);
@@ -386,7 +386,7 @@ public:
 
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);
-    void SchedulerConfigure(const TConfigureScheduler &conf);
+    void SchedulerConfigure(const TPDiskSchedulerConfig& cfg, ui32 ownerId);
     void SendCutLog(TAskForCutLog &reqest);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Free space check
@@ -448,8 +448,8 @@ public:
     bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
 
     static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len,
-        const TMainKey& mainKey, const TString& logPrefix);
-    static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format);
+        const TMainKey& mainKey, const TString& logPrefix, bool encryption);
+    static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format, bool encryption);
 
     NMeta::TFormatted& GetFormattedMeta();
     NMeta::TUnformatted& GetUnformattedMeta();

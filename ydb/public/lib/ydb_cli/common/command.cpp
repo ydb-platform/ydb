@@ -51,45 +51,6 @@ TClientCommand::TClientCommand(
     Opts.GetOpts().SetWrap(Max(Opts.GetOpts().Wrap_, static_cast<ui32>(lineLength)));
 }
 
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPrioritySilent(ui32 lvl) {
-    switch (lvl) {
-        case 0:
-            return ELogPriority::TLOG_CRIT;
-        case 1:
-            return ELogPriority::TLOG_ERR;
-        case 2:
-            return ELogPriority::TLOG_WARNING;
-        case 3:
-            return ELogPriority::TLOG_NOTICE;
-        case 4:
-            return ELogPriority::TLOG_INFO;
-        default:
-            return ELogPriority::TLOG_DEBUG;
-    }
-}
-
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(ui32 lvl) {
-    switch (lvl) {
-        case 0:
-            return ELogPriority::TLOG_WARNING;
-        case 1:
-            return ELogPriority::TLOG_NOTICE;
-        case 2:
-            return ELogPriority::TLOG_INFO;
-        case 3:
-        default:
-            return ELogPriority::TLOG_DEBUG;
-    }
-}
-
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriorityChatty(ui32 lvl) {
-    switch (lvl) {
-        case 0:
-            return ELogPriority::TLOG_INFO;
-        default:
-            return ELogPriority::TLOG_DEBUG;
-    }
-}
 
 size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
     size_t cnt = 0;

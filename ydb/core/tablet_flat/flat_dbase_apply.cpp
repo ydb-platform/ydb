@@ -60,7 +60,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             typeInfoProto = NKikimr::NScheme::DefaultDecimalProto();
         }
         changes |= AddColumnWithTypeInfo(table, delta.GetColumnName(), delta.GetColumnId(),
-            delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), null);
+            delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), delta.GetIsSensitive(), null);
     } else if (action == TAlterRecord::DropColumn) {
         changes |= DropColumn(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddColumnToKey) {
@@ -265,13 +265,14 @@ bool TSchemeModifier::DropTable(ui32 id)
     return false;
 }
 
-bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
+bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null)
 {
     Y_ENSURE(!NScheme::NTypeIds::IsParametrizedType(type));
-    return AddColumnWithTypeInfo(tid, name, id, type, {}, notNull, null);
+    return AddColumnWithTypeInfo(tid, name, id, type, {}, notNull, isSensitive, null);
 }
 
-bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null)
+bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 id, ui32 type,
+        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null)
 {
     auto *table = Table(tid);
 
@@ -318,7 +319,14 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
             << "' expected type " << NScheme::TypeName(typeInfo, pgTypeMod)
             << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
-        return false;
+
+        bool changes = false;
+        // We check if some properties have changed in the new scheme and update them if needed
+        if (it->second.IsSensitive != isSensitive) {
+            changes |= ChangeTableSetting(tid, it->second.IsSensitive, isSensitive);
+        }
+
+        return changes;
     }
 
     PreserveTable(tid);
@@ -335,7 +343,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
         return true;
     }
 
-    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull));
+    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull, isSensitive));
     Y_ENSURE(pr.second);
     it = pr.first;
     table->ColumnNames.emplace(name, id);

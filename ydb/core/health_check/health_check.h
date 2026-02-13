@@ -2,6 +2,7 @@
 
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 namespace NKikimr {
 namespace NHealthCheck {
@@ -52,6 +53,29 @@ void RemoveUnrequestedEntries(Ydb::Monitoring::SelfCheckResult& result, const Yd
 
 inline NActors::TActorId MakeHealthCheckID() { return NActors::TActorId(0, "healthcheck"); }
 IActor* CreateHealthCheckService();
+
+struct TEvPrivate {
+    enum EEv {
+        EvRetryNodeWhiteboard = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvRetryNodeWhiteboard : NActors::TEventLocal<TEvRetryNodeWhiteboard, EvRetryNodeWhiteboard> {
+        NNodeWhiteboard::TNodeId NodeId;
+        int EventId;
+
+        TEvRetryNodeWhiteboard(NNodeWhiteboard::TNodeId nodeId, int eventId)
+            : NodeId(nodeId)
+            , EventId(eventId)
+        {}
+    };
+};
+
+extern const TString NONE;
+extern const TString BLOCK_4_2;
+extern const TString MIRROR_3_DC;
 
 }
 }

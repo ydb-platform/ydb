@@ -273,7 +273,7 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
 }
 
 void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    // can be recieved only from TCreateTopicActor
+    // can be received only from TCreateTopicActor
     TActorId& creatorActorId = ev->Sender;
     const TTopicNameToIndex& topicNameToIndex = CreateTopicRequests[creatorActorId];
     const TString& topicName = topicNameToIndex.TopicName;

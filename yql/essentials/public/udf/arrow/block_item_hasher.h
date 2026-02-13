@@ -87,7 +87,7 @@ public:
 template <bool Nullable>
 class TTupleBlockItemHasher: public TBlockItemHasherBase<TTupleBlockItemHasher<Nullable>, Nullable> {
 public:
-    TTupleBlockItemHasher(TVector<std::unique_ptr<IBlockItemHasher>>&& children)
+    explicit TTupleBlockItemHasher(TVector<std::unique_ptr<IBlockItemHasher>>&& children)
         : Children_(std::move(children))
     {
     }
@@ -109,7 +109,7 @@ private:
 
 class TExternalOptionalBlockItemHasher: public TBlockItemHasherBase<TExternalOptionalBlockItemHasher, true> {
 public:
-    TExternalOptionalBlockItemHasher(std::unique_ptr<IBlockItemHasher>&& inner)
+    explicit TExternalOptionalBlockItemHasher(std::unique_ptr<IBlockItemHasher>&& inner)
         : Inner_(std::move(inner))
     {
     }

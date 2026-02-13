@@ -3,7 +3,7 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
@@ -24,9 +24,8 @@ class TQueryRunner final : public TExecuteGenericQuery {
     using TBase = TExecuteGenericQuery;
 
 public:
-    TQueryRunner(const TDriver& driver, const TInteractiveLogger& log)
+    explicit TQueryRunner(const TDriver& driver)
         : TBase(driver)
-        , Log(log)
     {}
 
     NJson::TJsonValue ExtractResults() {
@@ -65,7 +64,6 @@ protected:
     }
 
 private:
-    const TInteractiveLogger Log;
     NJson::TJsonValue ResultSets;
     std::unordered_set<ui64> InittedResultSets;
 };
@@ -146,13 +144,13 @@ Tool will return:
     }
 
 public:
-    TExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log)
-        : TBase(CreateParametersSchema(), DESCRIPTION, log)
+    explicit TExecQueryTool(const TExecQueryToolSettings& settings)
+        : TBase(CreateParametersSchema(), DESCRIPTION)
         , YQLHighlighter(MakeYQLHighlighter(GetColorSchema()))
         , Prompt(settings.Prompt)
         , Database(settings.Database)
         , Driver(settings.Driver)
-        , ExecuteRunner(settings.Driver, Log)
+        , ExecuteRunner(settings.Driver)
     {}
 
 protected:
@@ -235,7 +233,7 @@ private:
             .Prompt = TStringBuilder() << Prompt << Colors.Yellow() << "YQL" << Colors.OldColor() << "> ",
             .EnableSwitchMode = false,
             .ContinueAfterCancel = false,
-        }, Log);
+        });
 
         auto response = lineReader->ReadLine(Query);
         lineReader->Finish(false);
@@ -278,8 +276,8 @@ private:
 
 } // anonymous namespace
 
-ITool::TPtr CreateExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TExecQueryTool>(settings, log);
+ITool::TPtr CreateExecQueryTool(const TExecQueryToolSettings& settings) {
+    return std::make_shared<TExecQueryTool>(settings);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

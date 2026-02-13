@@ -19,6 +19,6 @@
                 /* forceFork = */ false);                                                             \
         }                                                                                             \
     };                                                                                                \
-    static TTestRegistration##N testRegistration##N;                                                  \
+    static TTestRegistration##N testRegistration##N; /* NOLINT(misc-use-anonymous-namespace) */       \
     template <TLogRow (*ParseLogRow)(TStringBuf str), TString (*Format)(const TLogRecord&)>           \
     void N(NUnitTest::TTestContext&)

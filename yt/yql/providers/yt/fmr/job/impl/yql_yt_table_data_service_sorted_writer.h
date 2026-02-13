@@ -12,15 +12,14 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_index_serialisation.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_base_writer.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_binary_yson_comparator.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_binary_yson_comparator.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 
 namespace NYql::NFmr {
 
 struct TSortingColumns {
     TVector<TString> Columns;
     TVector<ESortOrder> SortOrders;
-    bool operator == (const TSortingColumns&) const = default;
+    bool operator==(const TSortingColumns&) const = default;
 };
 
 class TFmrTableDataServiceSortedWriter: public TFmrTableDataServiceBaseWriter {

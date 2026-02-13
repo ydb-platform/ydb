@@ -27,7 +27,7 @@ using namespace NNodes;
 
 class TYsonResultWriter: public IResultWriter {
 public:
-    TYsonResultWriter(NYson::EYsonFormat format)
+    explicit TYsonResultWriter(NYson::EYsonFormat format)
         : Writer_(new NYson::TYsonWriter(&PartialStream_, format, ::NYson::EYsonType::Node, true))
     {
     }
@@ -228,7 +228,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
 
 class TResultCallableExecutionTransformer: public TGraphTransformerBase {
 public:
-    TResultCallableExecutionTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
+    explicit TResultCallableExecutionTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
         : Config_(config)
     {
         YQL_ENSURE(!Config_->Types.AvailablePureResultDataSources.empty());
@@ -678,7 +678,7 @@ bool& TResultCallableExecutionTransformer::GetOverflowFlagAndCommitedSize<TPull>
 
 class TResultTrackableNodeProcessor: public TTrackableNodeProcessorBase {
 public:
-    TResultTrackableNodeProcessor(const TIntrusivePtr<TResultProviderConfig>& config)
+    explicit TResultTrackableNodeProcessor(const TIntrusivePtr<TResultProviderConfig>& config)
         : Config_(config)
     {
     }
@@ -698,7 +698,7 @@ private:
 
 class TPhysicalFinalizingTransformer final: public TSyncTransformerBase {
 public:
-    TPhysicalFinalizingTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
+    explicit TPhysicalFinalizingTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
         : Config_(config)
     {
     }
@@ -945,7 +945,7 @@ public:
         }
     };
 
-    TResultProvider(const TIntrusivePtr<TResultProviderConfig>& config)
+    explicit TResultProvider(const TIntrusivePtr<TResultProviderConfig>& config)
         : Config_(config)
         , TrackableNodeProcessor_(config)
     {

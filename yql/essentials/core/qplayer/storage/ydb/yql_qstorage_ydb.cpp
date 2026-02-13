@@ -223,7 +223,7 @@ private:
 
 class TStorage: public IQStorage {
 public:
-    TStorage(const TYdbQStorageSettings& settings)
+    explicit TStorage(const TYdbQStorageSettings& settings)
         : Settings_(settings)
     {
     }

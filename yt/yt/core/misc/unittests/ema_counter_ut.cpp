@@ -135,6 +135,49 @@ TEST(TEmaCounterTest, RealTime)
     EXPECT_TRUE(counter.GetRate(0));
 }
 
+TEST(TEmaCounterTest, Merge)
+{
+    const auto min = TDuration::Minutes(1);
+    TEmaCounter<i64> base({min});
+    TEmaCounter<i64> delta({min});
+
+    auto startTimestamp = TInstant::Now();
+
+    delta.Count = 1;
+    delta.ImmediateRate = 1.0;
+    delta.WindowRates[0] = 1.0;
+    delta.StartTimestamp = startTimestamp;
+    delta.LastTimestamp = startTimestamp;
+
+    base.Merge(delta, startTimestamp + 0.5 * min);
+
+    EXPECT_EQ(1, base.Count);
+    EXPECT_EQ(0.0, base.ImmediateRate);
+    EXPECT_EQ(base.LastTimestamp, startTimestamp + 0.5 * min);
+    EXPECT_EQ(base.StartTimestamp, startTimestamp + 0.5 * min);
+    EXPECT_NEAR(0.368, base.WindowRates[0], 1e-3);
+
+    delta.Count = 2;
+    delta.WindowRates[0] = 2.0;
+
+    base.Merge(delta);
+
+    EXPECT_EQ(3, base.Count);
+    EXPECT_EQ(0.0, base.ImmediateRate);
+    EXPECT_EQ(base.LastTimestamp, startTimestamp + 0.5 * min);
+    EXPECT_EQ(base.StartTimestamp, startTimestamp + 0.5 * min);
+    EXPECT_NEAR(0.968, base.WindowRates[0], 1e-3);
+
+    delta.LastTimestamp = startTimestamp + 1.5 * min;
+    base.Merge(delta);
+
+    EXPECT_EQ(3, base.Count);
+    EXPECT_EQ(0.0, base.ImmediateRate);
+    EXPECT_EQ(base.StartTimestamp, startTimestamp + 0.5 * min);
+    EXPECT_EQ(base.LastTimestamp, startTimestamp + 0.5 * min);
+    EXPECT_NEAR(0.968, base.WindowRates[0], 1e-3);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

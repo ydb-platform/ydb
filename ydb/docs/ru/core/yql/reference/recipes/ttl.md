@@ -30,15 +30,15 @@ ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON modified_at AS SECONDS);
 В приведённом ниже примере создаётся external data source `/Root/s3_cold_data`: он описывает подключение к бакету `test_cold_data`, расположенному в Yandex Object Storage, с авторизацией через статический ключ доступа, данные которого хранятся в секретах `access_key` и `secret_key`.
 
 ```yql
-CREATE OBJECT access_key (TYPE SECRET) WITH (value="...");
-CREATE OBJECT secret_key (TYPE SECRET) WITH (value="...");
+CREATE SECRET access_key WITH (value="...");
+CREATE SECRET secret_key WITH (value="...");
 
 CREATE EXTERNAL DATA SOURCE `/Root/s3_cold_data` WITH (
     SOURCE_TYPE="ObjectStorage",
     AUTH_METHOD="AWS",
     LOCATION="http://storage.yandexcloud.net/test_cold_data",
-    AWS_ACCESS_KEY_ID_SECRET_NAME="access_key",
-    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key",
+    AWS_ACCESS_KEY_ID_SECRET_PATH="access_key",
+    AWS_SECRET_ACCESS_KEY_SECRET_PATH="secret_key",
     AWS_REGION="ru-central1"
 )
 ```

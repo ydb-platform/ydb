@@ -42,11 +42,9 @@ message TKqpLocks {
 
     optional uint64 ArbiterColumnShard = 6;
 
-    // For distributed transactions with separate commit, this field carries the QuerySpanId
-    // of the first query in the transaction. This is used for accurate lock-breaking attribution,
-    // since the TEvWrite during commit has the commit operation's QuerySpanId, not the original
-    // breaking query's QuerySpanId.
-    optional uint64 FirstQuerySpanId = 7;
+    // All QuerySpanIds of queries that wrote to this shard. Used for lock-breaking attribution
+    // so the DataShard can report all breaker queries, not just one.
+    repeated uint64 AllQuerySpanIds = 8;
 }
 
 message TTableId {

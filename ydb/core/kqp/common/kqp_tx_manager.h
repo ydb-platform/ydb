@@ -98,11 +98,7 @@ public:
     virtual void SetVictimQuerySpanId(ui64 querySpanId) = 0;
     virtual std::optional<ui64> GetVictimQuerySpanId() const = 0;
     virtual void SetShardBreakerQuerySpanId(ui64 shardId, ui64 querySpanId) = 0;
-    virtual std::optional<ui64> GetShardBreakerQuerySpanId(ui64 shardId) const = 0;
-
-    // First query's QuerySpanId - used for lock-breaking attribution in separate commit scenarios
-    virtual void SetFirstQuerySpanId(ui64 querySpanId) = 0;
-    virtual ui64 GetFirstQuerySpanId() const = 0;
+    virtual TVector<ui64> GetShardBreakerQuerySpanIds(ui64 shardId) const = 0;
 
     virtual const THashSet<ui64>& GetShards() const = 0;
     virtual ui64 GetShardsCount() const = 0;

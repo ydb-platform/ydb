@@ -2402,8 +2402,10 @@ private:
             switch (Request.LocksOp) {
                 case ELocksOp::Commit:
                     locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (Request.FirstQuerySpanId != 0) {
-                        locks->SetFirstQuerySpanId(Request.FirstQuerySpanId);
+                    if (TxManager) {
+                        for (ui64 spanId : TxManager->GetShardBreakerQuerySpanIds(shardId)) {
+                            locks->AddAllQuerySpanIds(spanId);
+                        }
                     }
                     break;
                 case ELocksOp::Rollback:
@@ -2597,8 +2599,10 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (Request.FirstQuerySpanId != 0) {
-                        shardTx->MutableLocks()->SetFirstQuerySpanId(Request.FirstQuerySpanId);
+                    if (TxManager) {
+                        for (ui64 spanId : TxManager->GetShardBreakerQuerySpanIds(shardId)) {
+                            shardTx->MutableLocks()->AddAllQuerySpanIds(spanId);
+                        }
                     }
                     if (!columnShardArbiter) {
                         *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
@@ -2627,8 +2631,10 @@ private:
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (Request.FirstQuerySpanId != 0) {
-                        tx->MutableLocks()->SetFirstQuerySpanId(Request.FirstQuerySpanId);
+                    if (TxManager) {
+                        for (ui64 spanId : TxManager->GetShardBreakerQuerySpanIds(shardId)) {
+                            tx->MutableLocks()->AddAllQuerySpanIds(spanId);
+                        }
                     }
                     if (!columnShardArbiter) {
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;

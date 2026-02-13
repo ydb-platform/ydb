@@ -169,10 +169,7 @@ public:
         NWilson::TTraceId TraceId;
         TString UserTraceId;
         ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
-        // QuerySpanId of the first query in this transaction. Passed to DataShard during commit
-        // so it can attribute lock breaks to the original victim query in deferred lock scenarios,
-        // where the conflicting write happened between the first SELECT and the commit.
-        ui64 FirstQuerySpanId = 0;
+        TVector<ui64> AllQuerySpanIds;  // All QuerySpanIds collected in the current transaction
 
         NTopic::TTopicOperations TopicOperations;
 

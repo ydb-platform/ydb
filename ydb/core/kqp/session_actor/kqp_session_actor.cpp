@@ -1981,7 +1981,6 @@ public:
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         request.QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0;
-        request.FirstQuerySpanId = ResolveFirstQuerySpanId(*txCtx);
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
@@ -1993,8 +1992,6 @@ public:
         if (txCtx->EnableOltpSink.value_or(false) && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
-            // OnBeginQuery was called before TxManager was created, propagate FirstQuerySpanId
-            txCtx->TxManager->SetFirstQuerySpanId(ResolveFirstQuerySpanId(*txCtx));
         }
 
         if (txCtx->EnableOltpSink.value_or(false)
@@ -2266,24 +2263,6 @@ public:
         QueryState->Issues.AddIssues(issues);
     }
 
-    // Resolve FirstQuerySpanId from TxManager or QueryTextCollector.
-    // Used for lock-breaking attribution in separate commit scenarios.
-    static ui64 ResolveFirstQuerySpanId(const TKqpTransactionContext& txCtx) {
-        if (txCtx.TxManager) {
-            ui64 id = txCtx.TxManager->GetFirstQuerySpanId();
-            if (id != 0) {
-                return id;
-            }
-        }
-        if (txCtx.QueryTextCollector.GetQueryCount() > 0) {
-            auto maybeId = txCtx.QueryTextCollector.GetFirstQuerySpanId();
-            if (maybeId) {
-                return *maybeId;
-            }
-        }
-        return 0;
-    }
-
     // Emit TLI breaker logs for direct lock breaks (one log per shard that broke locks).
     void EmitBreakerTliLogs(TEvKqpExecuter::TEvTxResponse* ev) {
         if (ev->LocksBrokenAsBreaker == 0 || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
@@ -2379,17 +2358,23 @@ public:
         } else if (brokenLockQuerySpanId) {
             victimQuerySpanId = *brokenLockQuerySpanId;
             victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(*brokenLockQuerySpanId);
-        } else if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 0) {
-            victimQuerySpanId = QueryState->TxCtx->QueryTextCollector.GetFirstQuerySpanId();
-            victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
         }
 
-        // In deferred lock scenarios, the VictimQuerySpanId might differ from the query that
-        // originally established the MVCC snapshot. Fall back to FirstQuerySpanId for text lookup.
-        if (victimQueryText.empty() && QueryState->TxCtx->TxManager) {
-            ui64 firstQuerySpanId = QueryState->TxCtx->TxManager->GetFirstQuerySpanId();
-            if (firstQuerySpanId != 0) {
-                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(firstQuerySpanId);
+        // Fallback for query text: the lock-derived VictimQuerySpanId may differ from the
+        // session-level QuerySpanId (e.g. with OLTP sink where the shard-side SpanId diverges
+        // from the session's). Preserve the lock-derived SpanId for DataShard linkage but
+        // resolve the text from the transaction's collected queries.
+        if (victimQueryText.empty() && QueryState->TxCtx) {
+            auto allSpanIds = QueryState->TxCtx->QueryTextCollector.GetAllQuerySpanIds();
+            for (ui64 spanId : allSpanIds) {
+                TString text = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(spanId);
+                if (!text.empty()) {
+                    victimQueryText = text;
+                    if (!victimQuerySpanId) {
+                        victimQuerySpanId = spanId;
+                    }
+                    break;
+                }
             }
         }
 
@@ -2483,20 +2468,6 @@ public:
                         YQL_ENSURE(!issues.Empty());
                         auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
                         EmitVictimTliLog(brokenLockQuerySpanId, ev->BrokenLockQuerySpanId, ev->LocksBrokenAsVictim);
-                    } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {
-                        YQL_ENSURE(!QueryState->TxCtx->TxManager);
-                        // Get victim QuerySpanId from the broken lock or first query in transaction
-                        TMaybe<ui64> victimQuerySpanId = ev->BrokenLockQuerySpanId
-                            ? TMaybe<ui64>(*ev->BrokenLockQuerySpanId)
-                            : QueryState->TxCtx->QueryTextCollector.GetFirstQuerySpanId();
-                        if (ev->BrokenLockPathId) {
-                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId,
-                                victimQuerySpanId));
-                        } else {
-                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId,
-                                victimQuerySpanId));
-                        }
-                        EmitVictimTliLog(std::nullopt, ev->BrokenLockQuerySpanId, ev->LocksBrokenAsVictim);
                     }
                     break;
                 }

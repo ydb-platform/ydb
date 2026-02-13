@@ -227,10 +227,6 @@ public:
         ++QueriesCount;
         BeginQueryTime = TInstant::Now();
         QueryTextCollector.AddQueryText(querySpanId, queryText);
-        // Track the first query's QuerySpanId in TxManager for lock-breaking attribution
-        if (TxManager && querySpanId != 0) {
-            TxManager->SetFirstQuerySpanId(querySpanId);
-        }
     }
 
     void OnEndQuery() {

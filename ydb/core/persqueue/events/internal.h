@@ -50,6 +50,7 @@ namespace NPQ {
         {}
     };
 
+    // this struct is not used concurrently
     struct TRequestedBlob {
         mutable TKey Key;
         mutable TString RawValue;
@@ -61,7 +62,6 @@ namespace NPQ {
         bool Cached;
         ui64 CreationUnixTime;
         // mutable is needed for lazy initialization
-        // We can change pointer to batches, but not the content of the batches
         mutable std::shared_ptr<const TVector<TBatch>> Batches;
 
         TRequestedBlob() = delete;

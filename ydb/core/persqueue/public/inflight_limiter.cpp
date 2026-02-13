@@ -3,6 +3,72 @@
 
 namespace NKikimr::NPQ {
 
+namespace NDetail {
+
+void TSlidingWindow::StartRecord() {
+    if (RecordingStart != TInstant::Zero()) {
+        return;
+    }
+
+    RecordingStart = TInstant::Now();
+}
+
+void TSlidingWindow::RemoveOldRecords(TInstant now) {
+    auto startWindow = now - WindowSize;
+    while (!Records.empty() && Records.front().Start < startWindow) {
+        auto& firstRecord = Records.front();
+        if (firstRecord.Start + firstRecord.Duration > startWindow) {
+            firstRecord.Duration -= startWindow - firstRecord.Start;
+            firstRecord.Start = startWindow;
+            break;
+        }
+        
+        Records.pop_front();
+    }
+}
+
+TDuration TSlidingWindow::GetValueOnWindow() {
+    auto now = TInstant::Now();
+    RemoveOldRecords(now);
+
+    auto carry = TDuration::Zero();
+    if (RecordingStart != TInstant::Zero()) {
+        carry = now - RecordingStart;
+    }
+
+    return std::accumulate(Records.begin(), Records.end(), TDuration::Zero(), [](TDuration acc, const TSlidingWindowRecord& record) {
+        return acc + record.Duration;
+    }) + carry;
+}
+
+void TSlidingWindow::Reset() {
+    if (RecordingStart == TInstant::Zero()) {
+        return;
+    }
+
+    auto now = TInstant::Now();
+    RemoveOldRecords(now);
+
+    RecordingStart = Max(RecordingStart, now - WindowSize);
+
+    if (!Records.empty()) {
+        auto lastRecordUnitEnd = Records.back().Start + UnitSize;
+        if (RecordingStart < lastRecordUnitEnd) {
+            // check if we need to add sth to last record
+            Records.back().Duration += Min(lastRecordUnitEnd, now) - RecordingStart;
+            RecordingStart = Min(lastRecordUnitEnd, now);
+        }
+    }
+
+    if (RecordingStart < now) {
+        Records.push_back(TSlidingWindowRecord{RecordingStart, now - RecordingStart});
+    }
+
+    RecordingStart = TInstant::Zero();
+}
+
+} // namespace NDetail
+
 TInFlightController::TInFlightController(ui64 MaxAllowedSize)
     : LayoutUnitSize(MaxAllowedSize / MAX_LAYOUT_COUNT)
     , TotalSize(0)
@@ -42,7 +108,7 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
 
     bool isMemoryLimitReached = IsMemoryLimitReached();
     if (!wasMemoryLimitReached && isMemoryLimitReached) {
-        InFlightFullSince = TInstant::Now();
+        SlidingWindow.StartRecord();
     }
 
     return !isMemoryLimitReached;
@@ -69,8 +135,8 @@ bool TInFlightController::Remove(ui64 Offset) {
     }
 
     auto isMemoryLimitReached = IsMemoryLimitReached();
-    if (wasMemoryLimitReached && !isMemoryLimitReached && InFlightFullSince != TInstant::Zero()) {
-        InFlightFullnessDuration += (TInstant::Now() - std::exchange(InFlightFullSince, TInstant::Zero()));
+    if (wasMemoryLimitReached && !isMemoryLimitReached) {
+        SlidingWindow.Reset();
     }
 
     return !isMemoryLimitReached;
@@ -86,13 +152,7 @@ bool TInFlightController::IsMemoryLimitReached() const {
 }
 
 TDuration TInFlightController::GetFullnessDuration() {
-    auto now = TInstant::Now();
-    if (InFlightFullSince != TInstant::Zero()) {
-        InFlightFullnessDuration += (now - InFlightFullSince);
-        InFlightFullSince = now;
-    }
-
-    return std::exchange(InFlightFullnessDuration, TDuration::Zero());
+    return SlidingWindow.GetValueOnWindow();
 }
 
 } // namespace NKikimr::NPQ

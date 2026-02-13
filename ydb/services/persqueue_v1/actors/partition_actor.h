@@ -63,7 +63,7 @@ private:
 
     static constexpr TDuration WAIT_DATA = TDuration::Seconds(10);
     static constexpr TDuration PREWAIT_DATA = TDuration::Seconds(9);
-    static constexpr TDuration READ_METRICS_UPDATE_INTERVAL = TDuration::Seconds(60);
+    static constexpr TDuration READ_METRICS_UPDATE_INTERVAL = TDuration::Seconds(10);
     static constexpr TDuration WAIT_DELTA = TDuration::MilliSeconds(500);
 
     static constexpr ui64 INIT_COOKIE = Max<ui64>(); //some identifier

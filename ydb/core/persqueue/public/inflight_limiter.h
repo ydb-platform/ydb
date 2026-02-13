@@ -4,6 +4,30 @@
 
 namespace NKikimr::NPQ {
 
+namespace NDetail {
+
+struct TSlidingWindow {
+private:
+    struct TSlidingWindowRecord {
+        TInstant Start;
+        TDuration Duration;
+    };
+    std::deque<TSlidingWindowRecord> Records;
+
+    void RemoveOldRecords(TInstant now);
+
+public:
+    TDuration WindowSize = TDuration::Seconds(60);
+    TDuration UnitSize = TDuration::Seconds(1);
+    TInstant RecordingStart = TInstant::Zero();
+
+    void StartRecord();
+    TDuration GetValueOnWindow();
+    void Reset();
+};
+
+} // namespace NDetail
+
 // This class is used to control in-flight data.
 // Contoller handles layout of data units, max units count is MAX_LAYOUT_COUNT constant.
 // Layout is a deque of offsets
@@ -29,8 +53,8 @@ struct TInFlightController {
     ui64 TotalSize = 0;
     ui64 MaxAllowedSize = 0;
 
-    TDuration InFlightFullnessDuration = TDuration::Zero();
     TInstant InFlightFullSince = TInstant::Zero();
+    NDetail::TSlidingWindow SlidingWindow;
 
     // Adds an offset with size
     bool Add(ui64 Offset, ui64 Size);

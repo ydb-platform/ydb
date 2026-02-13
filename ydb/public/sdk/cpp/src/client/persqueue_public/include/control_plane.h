@@ -116,7 +116,6 @@ struct TDescribeTopicResult : public TStatus {
         GETTER(std::optional<ui32>, MetricsLevel);
         GETTER(std::string, AdvancedMonitoringSettings);
 
-
         const std::vector<TReadRule>& ReadRules() const {
             return ReadRules_;
         }
@@ -284,7 +283,6 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         FederationAccount_ = settings.FederationAccount();
         MetricsLevel_ = settings.MetricsLevel();
         AdvancedMonitoringSettings_ = settings.AdvancedMonitoringSettings();
-
         ReadRules_.clear();
         for (const auto& readRule : settings.ReadRules()) {
             ReadRules_.push_back({});

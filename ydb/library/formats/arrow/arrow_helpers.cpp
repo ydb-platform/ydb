@@ -401,6 +401,45 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
     return ScalarCompare(x, y) < 0;
 }
 
+bool ScalarGreater(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    Y_ABORT_UNLESS(x);
+    Y_ABORT_UNLESS(y);
+    return ScalarGreater(*x, *y);
+}
+
+bool ScalarGreater(const arrow::Scalar& x, const arrow::Scalar& y) {
+    return ScalarCompare(x, y) > 0;
+}
+
+bool ScalarLessOrEqual(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    Y_ABORT_UNLESS(x);
+    Y_ABORT_UNLESS(y);
+    return ScalarLessOrEqual(*x, *y);
+}
+
+bool ScalarLessOrEqual(const arrow::Scalar& x, const arrow::Scalar& y) {
+    return ScalarCompare(x, y) <= 0;
+}
+
+bool ScalarGreaterOrEqual(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    Y_ABORT_UNLESS(x);
+    Y_ABORT_UNLESS(y);
+    return ScalarGreaterOrEqual(*x, *y);
+}
+
+bool ScalarGreaterOrEqual(const arrow::Scalar& x, const arrow::Scalar& y) {
+    return ScalarCompare(x, y) >= 0;
+}
+namespace {
+
+bool AreComparable(const arrow::DataType& lhs, const arrow::DataType& rhs) {
+    bool equal = lhs.Equals(rhs);
+    bool both_string_like = arrow::is_base_binary_like(lhs.id()) && arrow::is_base_binary_like(rhs.id());
+
+    return equal || both_string_like;
+}
+}
+
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s) {
     AFL_VERIFY(c);
     if (!s) {
@@ -433,7 +472,7 @@ bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 posit
 }
 
 int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
-    Y_VERIFY_S(x.type->Equals(y.type), x.type->ToString() + " vs " + y.type->ToString());
+    Y_VERIFY_S(AreComparable(*x.type, *y.type), std::string{"Incomparable types: "} + x.type->ToString() + " vs " + y.type->ToString());
 
     return SwitchTypeImpl<int, 0>(x.type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
@@ -441,8 +480,8 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
         using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
 
         if constexpr (arrow::has_string_view<typename TWrap::T>()) {
-            const auto& xval = static_cast<const TScalar&>(x).value;
-            const auto& yval = static_cast<const TScalar&>(y).value;
+            const auto& xval = static_cast<const arrow::BaseBinaryScalar&>(x).value;
+            const auto& yval = static_cast<const arrow::BaseBinaryScalar&>(y).value;
             Y_ABORT_UNLESS(xval);
             Y_ABORT_UNLESS(yval);
             TStringBuf xBuf(reinterpret_cast<const char*>(xval->data()), xval->size());

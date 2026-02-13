@@ -367,6 +367,8 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<
         case TSkipIndex::EOperation::EndsWith:
             opLike = NRequest::TLikePart::EOperation::EndsWith;
             break;
+        default:
+            AFL_VERIFY(false);
     }
     auto strVal = std::static_pointer_cast<arrow::BinaryScalar>(value);
     const TString valString((const char*)strVal->value->data(), strVal->value->size());

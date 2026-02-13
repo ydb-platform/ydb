@@ -460,6 +460,11 @@ message TRequestedMaxIndex {
     optional string ColumnName = 1;
 }
 
+message TRequestedMinMaxIndex {
+    optional string ColumnName = 3;
+    optional TIndexDataExtractor DataExtractor = 4;
+}
+
 message TRequestedCountMinSketch {
     // sketch built on the combined data from the set of columns
     repeated string ColumnNames = 1;
@@ -477,6 +482,7 @@ message TOlapIndexRequested {
         TRequestedMaxIndex MaxIndex = 41;
         TRequestedCountMinSketch CountMinSketch = 42;
         TRequestedBloomNGrammFilter BloomNGrammFilter = 43;
+        TRequestedMinMaxIndex MinMaxIndex = 44;
     }
 }
 
@@ -503,6 +509,12 @@ message TMaxIndex {
     optional uint32 ColumnId = 1;
 }
 
+message TMinMaxIndex {
+    optional uint32 ColumnId = 1;
+    optional TIndexDataExtractor DataExtractor = 4;
+
+}
+
 message TCountMinSketch {
     repeated uint32 ColumnIds = 1;
 }
@@ -523,6 +535,7 @@ message TOlapIndexDescription {
         TMaxIndex MaxIndex = 42;
         TCountMinSketch CountMinSketch = 43;
         TBloomNGrammFilter BloomNGrammFilter = 44;
+        TMinMaxIndex MinMaxIndex = 45;
     }
 }
 

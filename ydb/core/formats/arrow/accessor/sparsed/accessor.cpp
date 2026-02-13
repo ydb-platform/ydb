@@ -73,6 +73,10 @@ std::shared_ptr<arrow::Scalar> TSparsedArray::DoGetMaxScalar() const {
     return Record.GetMaxScalar();
 }
 
+std::shared_ptr<arrow::Scalar> TSparsedArray::DoGetMinScalar() const {
+    return Record.GetMinScalar();
+}
+
 ui32 TSparsedArray::GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch) {
     AFL_VERIFY(batch);
     AFL_VERIFY(batch->num_rows());
@@ -197,6 +201,18 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
     } else {
         return GetRecordsCount();
     }
+}
+
+std::shared_ptr<arrow::Scalar> TSparsedArrayChunk::GetMinScalar() const {
+    if (!ColValue->length()) {
+        return DefaultValue;
+    }
+    auto minMax = NArrow::FindMinMaxPosition(ColValue);
+    auto currentScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.first));
+    if (!DefaultValue || ScalarCompare(DefaultValue, currentScalar) > 0) {
+        return currentScalar;
+    }
+    return DefaultValue;
 }
 
 std::shared_ptr<arrow::Scalar> TSparsedArrayChunk::GetMaxScalar() const {

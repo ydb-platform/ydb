@@ -1,5 +1,6 @@
 #include "index_info.h"
 
+#include <ydb/core/tx/columnshard/common/print_debug.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
@@ -14,7 +15,6 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <util/string/join.h>
-
 namespace NKikimr::NOlap {
 
 TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
@@ -275,6 +275,9 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         for (const auto& idx : schema.GetIndexes()) {
             NIndexes::TIndexMetaContainer meta;
             AFL_VERIFY(meta.DeserializeFromProto(idx));
+            AFL_VERIFY(false);
+            
+            // Cerr << "emplace index: " << idx.DebugString() << Indexes.size();
             Indexes.emplace(meta->GetIndexId(), meta);
         }
     }
@@ -490,7 +493,7 @@ std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui
         if (i.second->GetClassName() != NIndexes::NMax::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
-        auto maxIndex = static_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
+        auto maxIndex = dynamic_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
         if (maxIndex->GetColumnId() == columnId) {
             return maxIndex;
         }
@@ -503,7 +506,7 @@ std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexMetaC
         if (i.second->GetClassName() != NIndexes::NCountMinSketch::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
-        auto index = static_pointer_cast<NIndexes::NCountMinSketch::TIndexMeta>(i.second.GetObjectPtr());
+        auto index = dynamic_pointer_cast<NIndexes::NCountMinSketch::TIndexMeta>(i.second.GetObjectPtr());
         if (index->GetColumnIds() == columnIds) {
             return index;
         }
@@ -549,6 +552,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     const std::shared_ptr<TSchemaObjectsCache>& cache)
     : PresetId(original.PresetId)
 {
+    // Cerr << Sprintf("TIndexInfo ctor, obj: %i, Indexes.size(): %i, original.Indexes.size(): %i\n", this, Indexes.size(), original.Indexes.size());
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {
@@ -591,6 +595,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     {
         TMemoryProfileGuard g("TIndexInfo::ApplyDiff::Indexes");
         Indexes = original.Indexes;
+        // AFL_VERIFY(false);
         for (auto&& i : diff.GetModifiedIndexes()) {
             if (!i.second) {
                 // It is possible to have a non-existent element here after merging schemas
@@ -599,6 +604,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
                 auto it = Indexes.find(i.first);
                 NIndexes::TIndexMetaContainer meta;
                 AFL_VERIFY(meta.DeserializeFromProto(*i.second));
+                // Cerr << MySprintf("adding index through modification(Indexes.size(): %i). proto debug string: %s, index name: %s\n",Indexes.size(), i.second->DebugString(), meta->GetClassName());
                 if (it != Indexes.end()) {
                     it->second = std::move(meta);
                 } else {
@@ -700,15 +706,35 @@ ui32 TIndexInfo::GetColumnIndexVerified(const ui32 id) const {
 std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(
     const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const {
     std::vector<std::shared_ptr<NIndexes::TSkipIndex>> result;
+    // Cerr << MySprintf("FindSkipIndexes. this: %p, &result: %p, thread id: %i, Indexes.size(): %i", this, &result, TThread::CurrentThreadId(), Indexes.size());
     for (auto&& [_, i] : Indexes) {
+        // Cerr << MySprintf("FindSkipIndexes 1,&result: %p,\n", &result);
         if (!i->IsSkipIndex()) {
+            // Cerr << MySprintf("FindSkipIndexes 2\n");
             continue;
         }
-        auto skipIndex = std::static_pointer_cast<NIndexes::TSkipIndex>(i.GetObjectPtrVerified());
+        // Cerr << MySprintf("FindSkipIndexes 3,&result: %p,\n", &result);
+        auto skipIndex = std::dynamic_pointer_cast<NIndexes::TSkipIndex>(i.GetObjectPtrVerified());
+        // Cerr << MySprintf("FindSkipIndexes 4,&result: %p,\n", &result);
+
+        AFL_VERIFY(skipIndex != nullptr);
+        // Cerr << MySprintf("FindSkipIndexes 5,&result: %p,\n", &result);
+        // Cerr << Sprintf("skipIndex type: %s, or this way: %s", typeid(skipIndex.get()).name(), skipIndex->GetClassName().c_str()) << Endl;
         if (skipIndex->IsAppropriateFor(originalDataAddress, op)) {
+            // Cerr << MySprintf("FindSkipIndexes 6,branch: true, &result: %p,\n", &result);
             result.emplace_back(skipIndex);
+            // Cerr << MySprintf("FindSkipIndexes 7,branch: true, &result: %p,\n", &result);
+        } else {
+            // Cerr << MySprintf("FindSkipIndexes 6,branch: false, &result: %p,\n", &result);
+            // Cerr << MySprintf("FindSkipIndexes 7,branch: false, &result: %p,\n", &result);
+
         }
     }
+    // Cerr << MySprintf("FindSkipIndexes 8,&result: %p,\n", &result);
+
+    // Cerr << MySprintf("FindSkipIndexes end. obj: %i, Indexes.size(): %i", this, Indexes.size());
+
+
     return result;
 }
 

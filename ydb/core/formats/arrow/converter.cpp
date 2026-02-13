@@ -51,22 +51,30 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
 }
 
 static arrow::Status ConvertColumn(
-    const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field, const bool allowInfDouble) {
+    const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field, const bool allowInfDouble)
+{
+    const static TSet<arrow::Type::type> serializedArrowTypes{ arrow::Type::BINARY, arrow::Type::STRING };
+
     switch (colType.GetTypeId()) {
-    case NScheme::NTypeIds::Decimal:
-        return arrow::Status::OK();
-    case NScheme::NTypeIds::JsonDocument: {
-        const static TSet<arrow::Type::type> jsonDocArrowTypes{ arrow::Type::BINARY, arrow::Type::STRING };
-        if (!jsonDocArrowTypes.contains(column->type()->id())) {
-            return arrow::Status::TypeError("Cannot convert JsonDocument to ", column->type()->ToString());
+        case NScheme::NTypeIds::Decimal:
+            return arrow::Status::OK();
+        case NScheme::NTypeIds::DyNumber: {
+            if (!serializedArrowTypes.contains(column->type()->id())) {
+                return arrow::Status::TypeError("Cannot convert DyNumber to ", column->type()->ToString());
+            }
+            break;
         }
-        break;
-    }
-    default:
-        if (column->type()->id() != arrow::Type::BINARY) {
-            return arrow::Status::TypeError("Cannot convert ", NScheme::TypeName(colType), " to ", column->type()->ToString());
+        case NScheme::NTypeIds::JsonDocument: {
+            if (!serializedArrowTypes.contains(column->type()->id())) {
+                return arrow::Status::TypeError("Cannot convert JsonDocument to ", column->type()->ToString());
+            }
+            break;
         }
-        break;
+        default:
+            if (column->type()->id() != arrow::Type::BINARY) {
+                return arrow::Status::TypeError("Cannot convert ", NScheme::TypeName(colType), " to ", column->type()->ToString());
+            }
+            break;
     }
 
     auto& binaryArray = static_cast<arrow::BinaryArray&>(*column);
@@ -87,7 +95,7 @@ static arrow::Status ConvertColumn(
                     return appendResult;
                 }
             }
-	    break;
+	        break;
         }
         case NScheme::NTypeIds::JsonDocument: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
@@ -115,7 +123,7 @@ static arrow::Status ConvertColumn(
                     }
                 }
             }
-	    break;
+	        break;
         }
         default:
             break;
@@ -128,8 +136,15 @@ static arrow::Status ConvertColumn(
     }
 
     column = result;
-    if (colType.GetTypeId() == NScheme::NTypeIds::JsonDocument && field->type()->id() == arrow::Type::STRING) {
-        field = std::make_shared<arrow::Field>(field->name(), std::make_shared<arrow::BinaryType>());
+    switch (colType.GetTypeId()) {
+        case NScheme::NTypeIds::DyNumber:
+        case NScheme::NTypeIds::JsonDocument:
+            if (field->type()->id() == arrow::Type::STRING) {
+                field = std::make_shared<arrow::Field>(field->name(), std::make_shared<arrow::BinaryType>(), field->nullable());
+            }
+            break;
+        default:
+            break;
     }
 
     return arrow::Status::OK();
@@ -257,7 +272,13 @@ bool TArrowToYdbConverter::NeedInplaceConversion(const NScheme::TTypeInfo& typeI
         case NScheme::NTypeIds::Date32:
         case NScheme::NTypeIds::Datetime:
             return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int32;
+        case NScheme::NTypeIds::Interval:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int64;
         case NScheme::NTypeIds::Timestamp:
+            if (typeInRequest.GetTypeId() == NScheme::NTypeIds::Uint64) {
+                return true;
+            }
+            [[fallthrough]];
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
         case NScheme::NTypeIds::Datetime64:
@@ -270,6 +291,8 @@ bool TArrowToYdbConverter::NeedInplaceConversion(const NScheme::TTypeInfo& typeI
 
 bool TArrowToYdbConverter::NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
     switch (expectedType.GetTypeId()) {
+        case NScheme::NTypeIds::DyNumber:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
         case NScheme::NTypeIds::JsonDocument:
             return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
         default:

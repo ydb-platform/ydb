@@ -991,12 +991,9 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             auto lastOffsetHasBeenCommited = LastOffsetHasBeenCommited(userInfo);
             clientInfo->SetReadingFinished(lastOffsetHasBeenCommited);
 
-            clientInfo->SetUseForReading(false);
-            if (!lastOffsetHasBeenCommited) {
-                auto mit = MLPConsumers.find(userInfo.User);
-                if (mit != MLPConsumers.end()) {
-                    clientInfo->SetUseForReading(mit->second.UseForReading);
-                }
+            auto mit = MLPConsumers.find(userInfo.User);
+            if (mit != MLPConsumers.end()) {
+                clientInfo->SetUseForReading(mit->second.UseForReading);
             }
         }
     }

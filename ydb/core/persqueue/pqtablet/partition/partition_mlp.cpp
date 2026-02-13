@@ -97,10 +97,14 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
     LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << record.ShortDebugString());
 
-    const auto* userInfo = UsersInfoStorage->GetIfExists(record.GetConsumer());
-    if (userInfo && LastOffsetHasBeenCommited(*userInfo)) {
-        record.SetUseForReading(false);
+    auto it = MLPConsumers.find(record.GetConsumer());
+    if (it == MLPConsumers.end()) {
+        return;
     }
+
+    auto& consumerInfo = it->second;
+    consumerInfo.UseForReading = record.GetUseForReading();
+
     record.SetGeneration(TabletGeneration);
     record.SetCookie(++PQRBCookie);
     Forward(ev, TabletActorId);

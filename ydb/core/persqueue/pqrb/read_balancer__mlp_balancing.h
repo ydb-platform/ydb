@@ -15,7 +15,8 @@ public:
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
 
-    bool SetUseForReading(ui32 partitionId, ui64 messages, bool useForReading, ui32 generation, ui64 cookie);
+    bool SetUseForReading(ui32 partitionId, ui64 messages, std::optional<bool> readingIsFinished,
+        std::optional<bool> useForReading, ui32 generation, ui64 cookie);
     void Rebuild();
 
 private:
@@ -28,6 +29,9 @@ private:
         ui64 Messages = 0;
         ui64 Cookie = 0;
         ui32 Generation = 0;
+        // True if the reading of the partition is inactive and last messages ware committed.
+        bool ReadingIsFinished = false;
+        // True if the partition is may used for reading.
         bool UseForReading = false;
     };
     absl::flat_hash_map<ui32, TPartitionStatus> Partitions;
@@ -45,7 +49,13 @@ public:
 
     void UpdateConfig(const std::vector<ui32>& addedPartitions);
 
-    void SetUseForReading(const TString& consumerName, ui32 partitionId, ui64 messages, bool useForReading, ui32 generation, ui64 cookie);
+    void SetUseForReading(const TString& consumerName,
+                          ui32 partitionId,
+                          ui64 messages,
+                          std::optional<bool> readingIsFinished,
+                          std::optional<bool> useForReading,
+                          ui32 generation,
+                          ui64 cookie);
 
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;

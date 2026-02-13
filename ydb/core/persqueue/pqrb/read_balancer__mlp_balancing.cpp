@@ -25,18 +25,26 @@ const TPartitionGraph::Node* TMLPConsumer::NextPartition() {
     return GetPartitionGraph().GetPartition(PartitionsForBalancing[partitionId]);
 }
 
-bool TMLPConsumer::SetUseForReading(ui32 partitionId, ui64 messages, bool useForReading, ui32 generation, ui64 cookie) {
+bool TMLPConsumer::SetUseForReading(ui32 partitionId, ui64 messages, std::optional<bool> readingIsFinished,
+    std::optional<bool> useForReading, ui32 generation, ui64 cookie) {
     auto& status = Partitions[partitionId];
 
     if (status.Generation < generation || (status.Generation == generation && status.Cookie < cookie)) {
-        auto oldUseForReading = status.UseForReading;
+        auto result = false;
 
         status.Messages = messages;
-        status.UseForReading = useForReading;
+        if (readingIsFinished) {
+            result |= status.ReadingIsFinished != *readingIsFinished;
+            status.ReadingIsFinished = *readingIsFinished;
+        }
+        if (useForReading) {
+            result |= status.UseForReading != *useForReading;
+            status.UseForReading = *useForReading;
+        }
         status.Generation = generation;
         status.Cookie = cookie;
 
-        return oldUseForReading != useForReading;
+        return result;
     }
 
     return false;
@@ -45,15 +53,24 @@ bool TMLPConsumer::SetUseForReading(ui32 partitionId, ui64 messages, bool useFor
 void TMLPConsumer::Rebuild() {
     PartitionsForBalancing.clear();
 
-    if (Partitions.empty()) {
-        for (const auto& partitionConfig : GetConfig().GetAllPartitions()) {
-            Partitions[partitionConfig.GetPartitionId()] = {0, 0, 0, true};
+    size_t activePartitions = 0;
+    size_t readyForReadingPartitions = 0;
+    for (const auto& [partitionId, status] : Partitions) {
+        if (status.ReadingIsFinished) {
+            continue;
+        }
+        activePartitions++;
+        if (status.UseForReading) {
+            readyForReadingPartitions++;
         }
     }
 
-    PartitionsForBalancing.reserve(Partitions.size());
+    PartitionsForBalancing.reserve(readyForReadingPartitions ? readyForReadingPartitions : activePartitions);
     for (const auto& [partitionId, status] : Partitions) {
-        if (status.UseForReading) {
+        if (status.ReadingIsFinished) {
+            continue;
+        }
+        if (!readyForReadingPartitions || status.UseForReading) {
             PartitionsForBalancing.push_back(partitionId);
         }
     }
@@ -122,9 +139,10 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
                 auto [it, _] = Consumers.try_emplace(consumerName, *this);
                 auto& consumer = it->second;
 
+                auto readingIsFinished = consumerResult.GetReadingFinished();
                 auto useForReading = consumerResult.GetUseForReading();
                 auto messages = std::max<i64>(0, endOffset - consumerResult.GetCommitedOffset());
-                mit->second |=consumer.SetUseForReading(partitionId, messages, useForReading, generation, cookie);
+                mit->second |=consumer.SetUseForReading(partitionId, messages, readingIsFinished, useForReading, generation, cookie);
             }
         }
     }
@@ -142,7 +160,8 @@ void TMLPBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, con
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
                      0, // expected messages
-                     false, // use for reading
+                     true, // reading is finished
+                     std::nullopt, // use for reading
                      record.GetGeneration(),
                      record.GetCookie());
 }
@@ -153,6 +172,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
                      record.GetMessages(), // expected messages
+                     std::nullopt, // reading is finished
                      record.GetUseForReading(), // use for reading
                      record.GetGeneration(),
                      record.GetCookie());
@@ -172,7 +192,7 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
 
         if (mlpConsumers.contains(consumerName)) {
             for (const auto& partitionId : addedPartitions) {
-                consumer.SetUseForReading(partitionId, 0, true, 0, 0);
+                consumer.SetUseForReading(partitionId, 0, false, false, 0, 0);
             }
             consumer.Rebuild();
         } else {
@@ -181,7 +201,13 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
     }
 }
 
-void TMLPBalancer::SetUseForReading(const TString& consumerName, ui32 partitionId, ui64 messages, bool useForReading, ui32 generation, ui64 cookie) {
+void TMLPBalancer::SetUseForReading(const TString& consumerName,
+                                    ui32 partitionId,
+                                    ui64 messages,
+                                    std::optional<bool> readingIsFinished,
+                                    std::optional<bool> useForReading,
+                                    ui32 generation,
+                                    ui64 cookie) {
     auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
     if (!consumerConfig) {
         PQ_LOG_D("Consumer '" << consumerName << "' does not exist");
@@ -196,7 +222,7 @@ void TMLPBalancer::SetUseForReading(const TString& consumerName, ui32 partitionI
     auto [it, _] = Consumers.try_emplace(consumerName, *this);
     auto& consumer = it->second;
 
-    if (consumer.SetUseForReading(partitionId, messages, useForReading, generation, cookie)) {
+    if (consumer.SetUseForReading(partitionId, messages, readingIsFinished, useForReading, generation, cookie)) {
         consumer.Rebuild();
     }
 

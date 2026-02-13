@@ -112,7 +112,7 @@ namespace {
         return res;
     }
 
-    
+    [[maybe_unused]]
     void GetAllMembers(TExprNode::TPtr node, THashSet<TString>& members) {
         if (node->IsCallable("Member")) {
             auto member = TCoMember(node);
@@ -191,33 +191,33 @@ namespace {
 
         THashSet<TString> possibleIndexKeys;
         TVector<TString> keyList;
-        GetAllMembers(filterLambda, possibleIndexKeys);
-        keyList.insert(keyList.begin(), possibleIndexKeys.begin(), possibleIndexKeys.end());
-
         TPredicateExtractorSettings settings;
-        //settings.MergeAdjacentPointRanges = true;
-        //settings.HaveNextValueCallable = true;
-        //settings.BuildLiteralRange = true;
-        //settings.IsValidForRange = IsValidForRange;
-        //settings.MergeAdjacentPointRanges = false;
-        //settings.ExternalParameterMaxSize = 0;
+        settings.MergeAdjacentPointRanges = true;
+        settings.HaveNextValueCallable = true;
+        settings.BuildLiteralRange = true;
+        settings.IsValidForRange = IsValidForRange;
 
-        YQL_CLOG(TRACE, CoreDq) << "Extracting ranges: " << PrintExpression(filterLambda, ctx);
         auto extractor = MakePredicateRangeExtractor(settings);
         bool prepareSuccess = extractor->Prepare(filterLambda, rowType, possibleIndexKeys, ctx, typesCtx);
+        keyList.insert(keyList.begin(), possibleIndexKeys.begin(), possibleIndexKeys.end());
+
         if (!prepareSuccess) {
             return;
         }
 
-        YQL_CLOG(TRACE, CoreDq) << "Prepare extraction success";
-
         auto buildResult = extractor->BuildComputeNode(keyList, ctx, typesCtx);
-        YQL_CLOG(TRACE, CoreDq) << "Built compute node";
+        Y_ENSURE(buildResult.ComputeNode);
 
         auto evaluateRes = Evaluate(buildResult.ComputeNode, ctx, typesCtx, funcRegistry);
         auto repr = PrintExpression(evaluateRes, ctx);
 
-        YQL_CLOG(TRACE, CoreDq) << "Extracted ranges from predicate: " << repr;
+        TStringBuilder keyStringBuilder;
+        for (auto k : keyList) {
+            keyStringBuilder << k << ",";
+        }
+
+        YQL_CLOG(TRACE, CoreDq) << "Extracting ranges from filter: " << PrintExpression(filterLambda, ctx);
+        YQL_CLOG(TRACE, CoreDq) << "Extracted ranges for keys [" << keyStringBuilder << "]: " << repr;
 
     }
 }
@@ -728,9 +728,11 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         // Currently we just set the number to 10% before we have statistics and parse
         // the predicate
 
-        auto rowType = flatmapInput.Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        auto lambdaCopy = ctx.DeepCopyLambda(flatmap.Lambda().Ref());
-        PrintExtractedRanges(lambdaCopy, *rowType, ctx, *typeCtx, funcRegistry);
+        auto inputType = flatmapInput.Ptr()->GetTypeAnn();
+        if (inputType->GetKind() == ETypeAnnotationKind::List) {
+            auto rowType = flatmapInput.Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            PrintExtractedRanges(flatmap.Lambda().Ptr(), *rowType, ctx, *typeCtx, funcRegistry);
+        }
 
         double selectivity = TPredicateSelectivityComputer(inputStats).Compute(flatmap.Lambda().Body());
 

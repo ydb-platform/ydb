@@ -486,8 +486,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
     MLPBalancer->Handle(ev, ctx);
 
     if (StatsRequestTracker.Cookies.empty()) {
+        StatsRequestTracker.StatsReceived = true;
+
         CheckStat(ctx);
         Balancer->ProcessPendingStats(ctx);
+        ProcessPendingMLPGetPartitionRequests(ctx);
     }
 }
 
@@ -909,7 +912,23 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
-    MLPBalancer->Handle(ev);
+    if (StatsRequestTracker.StatsReceived) {
+        return MLPBalancer->Handle(ev);
+    }
+
+    PendingMLPGetPartitionRequests.push_back(std::move(ev));
+}
+
+void TPersQueueReadBalancer::ProcessPendingMLPGetPartitionRequests(const TActorContext&) {
+    while (!PendingMLPGetPartitionRequests.empty()) {
+        auto ev = std::move(PendingMLPGetPartitionRequests.front());
+        PendingMLPGetPartitionRequests.pop_front();
+        MLPBalancer->Handle(ev);
+    }
+
+    if (!PendingMLPGetPartitionRequests.empty()) {
+        std::exchange(PendingMLPGetPartitionRequests, {});
+    }
 }
 
 STFUNC(TPersQueueReadBalancer::StateInit) {

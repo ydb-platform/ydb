@@ -155,6 +155,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
 
+    void ProcessPendingMLPGetPartitionRequests(const TActorContext& ctx);
+
 
     bool Inited;
     ui64 PathId;
@@ -225,6 +227,7 @@ private:
 
         ui64 Round = 0;
         ui64 NextCookie = 0;
+        bool StatsReceived = false;
     };
     TStatsRequestTracker StatsRequestTracker;
 
@@ -235,6 +238,7 @@ private:
 
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+    std::deque<TEvPQ::TEvMLPGetPartitionRequest::TPtr> PendingMLPGetPartitionRequests;
 
     TActorId FindSubDomainPathIdActor;
 

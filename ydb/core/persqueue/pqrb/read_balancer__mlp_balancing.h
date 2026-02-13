@@ -28,7 +28,7 @@ private:
         ui64 Messages = 0;
         ui64 Cookie = 0;
         ui32 Generation = 0;
-        bool UseForReading = true;
+        bool UseForReading = false;
     };
     absl::flat_hash_map<ui32, TPartitionStatus> Partitions;
 };

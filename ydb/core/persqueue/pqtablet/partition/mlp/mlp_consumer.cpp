@@ -907,7 +907,7 @@ bool TConsumerActor::UseForReading() const {
 void TConsumerActor::NotifyPQRB(bool force) {
     auto useForReading = UseForReading();
     if (force || useForReading != LastUseForReading) {
-        auto ev =std::make_unique<TEvPQ::TEvMLPConsumerStatus>("TODO", Config.GetName(), PartitionId,
+        auto ev = std::make_unique<TEvPQ::TEvMLPConsumerStatus>(Config.GetName(), PartitionId,
             PartitionEndOffset - LastCommittedOffset, useForReading);
         Send(PartitionActorId, std::move(ev));
         LastUseForReading = useForReading;

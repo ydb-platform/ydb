@@ -96,7 +96,7 @@ public:
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> HashShuffleFuncType;
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
 
-    NCommon::TConfSetting<ui32, Static> MaxDPHypDPTableSize;
+    NCommon::TConfSetting<ui32, Static> CBOTimeout;
     NCommon::TConfSetting<ui32, Static> ShuffleEliminationJoinNumCutoff;
 
     NCommon::TConfSetting<ui32, Static> MaxTasksPerStage;

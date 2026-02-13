@@ -29,6 +29,7 @@ namespace NKikimr::NDDisk {
             EvReadPersistentBuffer,
             EvReadPersistentBufferResult,
             EvErasePersistentBuffer,
+            EvBatchErasePersistentBuffer,
             EvErasePersistentBufferResult,
             EvListPersistentBuffer,
             EvListPersistentBufferResult,
@@ -175,6 +176,7 @@ namespace NKikimr::NDDisk {
     struct TEvReadPersistentBuffer;
     struct TEvReadPersistentBufferResult;
     struct TEvErasePersistentBuffer;
+    struct TEvBatchErasePersistentBuffer;
     struct TEvErasePersistentBufferResult;
     struct TEvListPersistentBuffer;
     struct TEvListPersistentBufferResult;
@@ -339,6 +341,21 @@ namespace NKikimr::NDDisk {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
+        }
+    };
+
+    DECLARE_DDISK_EVENT(BatchErasePersistentBuffer) {
+        using TResult = TEvErasePersistentBufferResult;
+
+        TEvBatchErasePersistentBuffer() = default;
+
+        TEvBatchErasePersistentBuffer(const TQueryCredentials& creds, const std::vector<std::tuple<TBlockSelector, ui64>>& erases) {
+            creds.Serialize(Record.MutableCredentials());
+            for (auto& [selector, lsn] : erases) {
+                auto* erase = Record.AddErases();
+                selector.Serialize(erase->MutableSelector());
+                erase->SetLsn(lsn);
+            }
         }
     };
 

@@ -463,11 +463,15 @@ namespace NKikimr::NDDisk {
         };
         std::map<std::tuple<ui64, ui64, ui64>, TPersistentBufferToDiskWriteInFlight> PersistentBufferWriteInflight;
 
-        struct TPersistentBufferToDiskReadInFlight {
+        struct TPersistentBufferDiskOperationInFlight {
+            TActorId Sender;
+            ui64 Cookie;
+            TActorId Session;
             NWilson::TSpan Span;
+            std::set<ui64> OperationCookies;
         };
 
-        std::map<ui64, TPersistentBufferToDiskReadInFlight> PersistentBufferReadInflight;
+        std::map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
 
@@ -492,6 +496,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);
         void Handle(TEvErasePersistentBuffer::TPtr ev);
+        void Handle(TEvBatchErasePersistentBuffer::TPtr ev);
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);

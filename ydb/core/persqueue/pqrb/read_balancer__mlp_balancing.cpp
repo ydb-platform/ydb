@@ -138,13 +138,13 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
 
             auto mit = mlpConsumers.find(consumerName);
             if (mit != std::end(mlpConsumers)) {
-                auto [it, _] = Consumers.try_emplace(consumerName, *this);
+                auto [it, inserted] = Consumers.try_emplace(consumerName, *this);
                 auto& consumer = it->second;
 
                 auto readingIsFinished = consumerResult.GetReadingFinished();
                 auto useForReading = consumerResult.GetUseForReading();
                 auto messages = std::max<i64>(0, endOffset - consumerResult.GetCommitedOffset());
-                mit->second |=consumer.SetUseForReading(partitionId, messages, readingIsFinished, useForReading, generation, cookie);
+                mit->second |= consumer.SetUseForReading(partitionId, messages, readingIsFinished, useForReading, generation, cookie) || inserted;
             }
         }
     }

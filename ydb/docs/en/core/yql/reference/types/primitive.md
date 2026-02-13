@@ -60,6 +60,7 @@ Real number with fixed precision, 16 bytes in size. Precision is the maximum tot
 {% if feature_map_tables %}
 |`DyNumber` | A binary representation of a real number with an accuracy of up to 38 digits.<br/>Acceptable values: positive numbers from 1×10<sup>-130</sup> up to 1×10<sup>126</sup>–1, negative numbers from -1×10<sup>126</sup>–1 to -1×10<sup>-130</sup>, and 0.<br/>Compatible with the `Number` type in AWS DynamoDB. It's not recommended for {{ backend_name_lower }}-native applications. | — |
 {% endif %}
+|#
 
 {% include [x](../_includes/type_literals_examples.md) %}
 
@@ -91,8 +92,6 @@ Due to the added redundancy, `JsonDocument` is less effective in storage. The ad
 To store numbers (JSON Number) in `JsonDocument`, as well as for arithmetic operations on them in the [JSON API](../builtins/json.md), the [Double](https://en.wikipedia.org/wiki/Double-precision_floating-point_format) type is used. Precision might be lost when non-standard representations of numbers are used in the source JSON document.
 
 {% endnote %}
-
-
 
 ## Date and time {#datetime}
 
@@ -289,8 +288,6 @@ SELECT -- these expressions are always true for any timezones: the timezone does
 
 Keep in mind that when converting between `TzDate` and `TzDatetime`, or `TzTimestamp` the date's midnight doesn't follow the local time zone, but midnight in UTC for the date in UTC.
 
-
-
 ## Casting between data types {#cast}
 
 ### Explicit casting {#explicit-cast}
@@ -399,4 +396,3 @@ Implicit type casting that occurs in basic operations ( +-\*/) between different
 | **TzDate** | — | — | — | `TzDate` | — | — | — |
 | **TzDatetime** | — | — | — | `TzDatetime` | — | — | — |
 | **TzTimestamp** | — | — | — | `TzTimestamp` | — | — | — |
-

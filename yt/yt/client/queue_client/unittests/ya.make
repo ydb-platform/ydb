@@ -2,8 +2,6 @@ GTEST(unittester-client-queue-client)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-ALLOCATOR(TCMALLOC)
-
 SRCS(
     cross_cluster_reference_ut.cpp
 )

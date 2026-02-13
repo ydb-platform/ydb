@@ -18,6 +18,8 @@ struct TJoinDescription {
     TJoinSourceData RightSource;
     TDqSetup<false, true>* Setup;
     std::optional<TDqUserRenames> CustomRenames;
+    int BlockSize = 128;
+    bool SliceBlocks = false;
 };
 
 bool IsBlockJoin(ETestedJoinAlgo algo);

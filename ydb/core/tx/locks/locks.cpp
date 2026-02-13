@@ -219,7 +219,7 @@ void TLockInfo::OnRemoved() {
 void TLockInfo::PersistLock(ILocksDb* db) {
     Y_ENSURE(!IsPersistent());
     Y_ENSURE(db, "Cannot persist lock without a db");
-    db->PersistAddLock(LockId, LockNodeId, Generation, Counter, CreationTime.MicroSeconds(), ui64(Flags & ELockFlags::PersistentMask), VictimQuerySpanId);
+    db->PersistAddLock(LockId, LockNodeId, Generation, Counter, CreationTime.MicroSeconds(), ui64(Flags & ELockFlags::PersistentMask));
     Flags |= ELockFlags::Persistent;
 
     PersistRanges(db);
@@ -1152,8 +1152,8 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         } else {
             lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
         }
-        if (lock && Update->VictimQuerySpanId != 0) {
-            lock->SetVictimQuerySpanId(Update->VictimQuerySpanId);
+        if (lock && Update->QuerySpanId != 0) {
+            lock->SetVictimQuerySpanId(Update->QuerySpanId);
         }
         if (!lock) {
             counter = TLock::ErrorTooMuch;
@@ -1192,13 +1192,13 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 }
             }
             for (auto& readConflictLock : Update->ReadConflictLocks) {
-                if (readConflictLock.AddConflict(lock.Get(), Db, Update->BreakerQuerySpanId)) {
+                if (readConflictLock.AddConflict(lock.Get(), Db, Update->GetEffectiveBreakerQuerySpanId())) {
                     waitPersistent = true;
                     waitPersistentMore.emplace_back(&readConflictLock);
                 }
             }
             for (auto& writeConflictLock : Update->WriteConflictLocks) {
-                if (lock->AddConflict(&writeConflictLock, Db, Update->BreakerQuerySpanId)) {
+                if (lock->AddConflict(&writeConflictLock, Db, Update->GetEffectiveBreakerQuerySpanId())) {
                     waitPersistent = true;
                     waitPersistentMore.emplace_back(&writeConflictLock);
                 }
@@ -1587,8 +1587,8 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     if (!Update->Lock) {
         return EEnsureCurrentLock::TooMany;
     }
-    if (Update->VictimQuerySpanId != 0) {
-        Update->Lock->SetVictimQuerySpanId(Update->VictimQuerySpanId);
+    if (Update->QuerySpanId != 0) {
+        Update->Lock->SetVictimQuerySpanId(Update->QuerySpanId);
     }
 
     return EEnsureCurrentLock::Success;

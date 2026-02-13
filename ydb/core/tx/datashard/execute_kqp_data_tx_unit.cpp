@@ -319,7 +319,6 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             // TODO: we would want an actual table id that caused inconsistency,
             //       relevant for future multi-table shards only.
             // NOTE: generation may not match an existing lock, but it's not a problem.
-            ui64 querySpanId = op->QuerySpanId();
             for (auto& table : guardLocks.AffectedTables) {
                 Y_ENSURE(guardLocks.LockTxId);
                 op->Result()->AddTxLock(
@@ -329,8 +328,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                     Max<ui64>(),
                     table.GetTableId().OwnerId,
                     table.GetTableId().LocalPathId,
-                    false,
-                    querySpanId);
+                    false);
             }
 
             tx->ReleaseTxData(txc, ctx);
@@ -519,9 +517,6 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
         op->Result()->Record.MutableTxStats()->SetBreakerQuerySpanId(effectiveBreakerQuerySpanId);
     }
 
-    // Get the query trace ID to include in the returned locks
-    ui64 querySpanId = op->QuerySpanId();
-
     LOG_T("add locks to result: " << locks.size());
     for (const auto& lock : locks) {
         if (lock.IsError()) {
@@ -530,7 +525,7 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
         }
 
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
-            lock.SchemeShard, lock.PathId, lock.HasWrites, querySpanId);
+            lock.SchemeShard, lock.PathId, lock.HasWrites);
 
         LOG_T("add lock to result: " << op->Result()->Record.GetTxLocks().rbegin()->ShortDebugString());
     }

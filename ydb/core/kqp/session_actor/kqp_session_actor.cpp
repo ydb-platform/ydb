@@ -2145,26 +2145,7 @@ public:
     void HandleNoop(T&) {
     }
 
-    bool MergeLocksWithTxResult(const NKikimrKqp::TExecuterTxResult& result) {
-        if (result.HasLocks()) {
-            auto& txCtx = QueryState->TxCtx;
-            const auto& locks = result.GetLocks();
-            auto [success, issues] = MergeLocks(locks.GetType(), locks.GetValue(), *txCtx);
-            if (!success) {
-                if (!txCtx->GetSnapshot().IsValid() || txCtx->TxHasEffects()) {
-                    ReplyQueryError(Ydb::StatusIds::ABORTED,  "Error while locks merge",
-                        MessageFromIssues(issues));
-                    return false;
-                }
-
-                if (txCtx->GetSnapshot().IsValid()) {
-                    txCtx->Locks.MarkBroken(issues.back());
-                }
-            }
-        }
-
-        return true;
-    }
+    // MergeLocksWithTxResult removed: non-TxManager lock path is no longer supported
 
     void InvalidateQuery() {
         if (QueryState->CompileResult) {
@@ -2562,9 +2543,7 @@ public:
             QueryState->TxCtx->Locks.LockHandle = std::move(ev->LockHandle);
         }
 
-        if (!QueryState->TxCtx->TxManager && !MergeLocksWithTxResult(executerResults)) {
-            return;
-        }
+        // Non-TxManager lock path removed; TxManager handles all lock management
 
         if (!response->GetIssues().empty()){
             NYql::TIssues issues;

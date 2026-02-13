@@ -48,19 +48,6 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
     }
 }
 
-TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
-    // In the old lock path (non-TxManager), locks don't carry per-lock QuerySpanIds.
-    // Use the first query's TraceId as the victim, since it established the MVCC snapshot
-    // and is typically the SELECT whose read locks were broken.
-    TMaybe<ui64> victimQuerySpanId = txCtx.QueryTextCollector.GetFirstQuerySpanId();
-    return GetLocksInvalidatedIssue(
-        txCtx,
-        TKikimrPathId(
-            invalidatedLock.GetSchemeShard(),
-            invalidatedLock.GetPathId()),
-            victimQuerySpanId);
-}
-
 NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
     TMaybe<ui64> victimQuerySpanId)
 {
@@ -85,64 +72,6 @@ NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableI
         AppendQuerySpanIdInfo(message, victimQuerySpanId);
     }
     return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-}
-
-std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
-    TKqpTransactionContext& txCtx)
-{
-    std::pair<bool, std::vector<TIssue>> res;
-    auto& locks = txCtx.Locks;
-
-    YQL_ENSURE(type.GetKind() == NKikimrMiniKQL::ETypeKind::List);
-    auto locksListType = type.GetList();
-
-    if (!locks.HasLocks()) {
-        locks.LockType = locksListType.GetItem();
-        locks.LocksListType = locksListType;
-    }
-
-    YQL_ENSURE(locksListType.GetItem().GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
-    auto lockType = locksListType.GetItem().GetStruct();
-    YQL_ENSURE(lockType.MemberSize() == 7);
-    YQL_ENSURE(lockType.GetMember(0).GetName() == "Counter");
-    YQL_ENSURE(lockType.GetMember(1).GetName() == "DataShard");
-    YQL_ENSURE(lockType.GetMember(2).GetName() == "Generation");
-    YQL_ENSURE(lockType.GetMember(3).GetName() == "LockId");
-    YQL_ENSURE(lockType.GetMember(4).GetName() == "PathId");
-    YQL_ENSURE(lockType.GetMember(5).GetName() == "SchemeShard");
-    YQL_ENSURE(lockType.GetMember(6).GetName() == "HasWrites");
-
-    res.first = true;
-    for (auto& lockValue : value.GetList()) {
-        TKqpTxLock txLock(lockValue);
-        if (auto counter = txLock.GetCounter(); counter >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin) {
-            switch (counter) {
-                case NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken:
-                case NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken:
-                    res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
-                    break;
-                default:
-                    res.second.emplace_back(YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_ACQUIRE_FAILURE));
-                    break;
-            }
-            res.first = false;
-
-        } else if (auto curTxLock = locks.LocksMap.FindPtr(txLock.GetKey())) {
-            if (txLock.HasWrites()) {
-                curTxLock->SetHasWrites();
-            }
-
-            if (curTxLock->Invalidated(txLock)) {
-                res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
-                res.first = false;
-            }
-        } else {
-            // despite there were some errors we need to proceed merge to erase remaining locks properly
-            locks.LocksMap.insert(std::make_pair(txLock.GetKey(), txLock));
-        }
-    }
-
-    return res;
 }
 
 TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {

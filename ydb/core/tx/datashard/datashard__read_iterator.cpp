@@ -2605,9 +2605,10 @@ private:
         ValidationInfo.SetLoaded();
     }
 
-    // Set QuerySpanId on a lock proto: VictimQuerySpanId for broken locks, current QuerySpanId for normal locks.
+    // Set QuerySpanId on a lock proto for broken locks only (VictimQuerySpanId).
+    // For successful locks, KQP already knows the QuerySpanId from the request.
     static void SetLockQuerySpanId(NKikimrDataEvents::TLock* addLock, const TSysTables::TLocksTable::TLock& lock,
-                                    TSysLocks& sysLocks, ui64 currentQuerySpanId)
+                                    TSysLocks& sysLocks)
     {
         if (lock.IsError()) {
             if (auto rawLock = sysLocks.GetRawLock(lock.LockId)) {
@@ -2616,8 +2617,6 @@ private:
                     addLock->SetQuerySpanId(id);
                 }
             }
-        } else if (currentQuerySpanId != 0) {
-            addLock->SetQuerySpanId(currentQuerySpanId);
         }
     }
 
@@ -2738,7 +2737,7 @@ private:
                 addLock->SetHasWrites(true);
             }
 
-            SetLockQuerySpanId(addLock, lock, sysLocks, state.QuerySpanId);
+            SetLockQuerySpanId(addLock, lock, sysLocks);
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
                 << " Acquired lock# " << lock.LockId << ", counter# " << lock.Counter

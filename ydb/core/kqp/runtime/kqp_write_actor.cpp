@@ -455,9 +455,9 @@ public:
         ClearMkqlData();
     }
 
-    // Update QuerySpanId if a smaller (earlier) one is found.
+    // Set QuerySpanId if not already set (keep the first arriving one).
     void MaybeUpdateQuerySpanId(ui64 querySpanId) {
-        if (querySpanId != 0 && (QuerySpanId == 0 || querySpanId < QuerySpanId)) {
+        if (QuerySpanId == 0 && querySpanId != 0) {
             QuerySpanId = querySpanId;
         }
     }
@@ -1093,8 +1093,9 @@ public:
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
                     YQL_ENSURE(TxManager->BrokenLocks());
-                    if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
-                        TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
+                    // Use actor's own QuerySpanId (KQP knows which request placed the lock)
+                    if (QuerySpanId != 0) {
+                        TxManager->SetVictimQuerySpanId(QuerySpanId);
                     }
                     RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
                     return;
@@ -3070,11 +3071,11 @@ public:
 
 
             auto& writeInfo = WriteInfos[settings.TableId.PathId];
-            // Track the first (minimum) QuerySpanId for this table - messages may arrive out of order
-            if (settings.QuerySpanId != 0) {
-                if (writeInfo.FirstQuerySpanId == 0 || settings.QuerySpanId < writeInfo.FirstQuerySpanId) {
-                    writeInfo.FirstQuerySpanId = settings.QuerySpanId;
-                }
+            // Keep the first arriving QuerySpanId for this table.
+            // TEvBufferWrite messages are processed sequentially, so the first arrival
+            // corresponds to the first query in the transaction.
+            if (settings.QuerySpanId != 0 && writeInfo.FirstQuerySpanId == 0) {
+                writeInfo.FirstQuerySpanId = settings.QuerySpanId;
             }
             if (!writeInfo.Actors.contains(settings.TableId.PathId)) {
                 AFL_ENSURE(writeInfo.Actors.empty());
@@ -3090,8 +3091,7 @@ public:
                         settings.TablePath)) {
                     return;
                 }
-                // Update the actor's QuerySpanId if we found a smaller (earlier) one.
-                // This handles out-of-order TEvBufferWrite message delivery.
+                // Propagate the first QuerySpanId to the write actor if not yet set.
                 writeInfo.Actors.at(settings.TableId.PathId).WriteActor->MaybeUpdateQuerySpanId(writeInfo.FirstQuerySpanId);
             }
 
@@ -3140,7 +3140,7 @@ public:
                             indexSettings.TablePath)) {
                         return;
                     }
-                    // Update the actor's QuerySpanId if we found a smaller (earlier) one.
+                    // Propagate the first QuerySpanId to the index write actor if not yet set.
                     writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->MaybeUpdateQuerySpanId(writeInfo.FirstQuerySpanId);
                 }
 
@@ -4886,8 +4886,7 @@ private:
         };
 
         THashMap<TPathId, TActorInfo> Actors;
-        // Track the first (minimum) QuerySpanId for this table.
-        // This handles out-of-order TEvBufferWrite message delivery.
+        // The first QuerySpanId received for this table (from the first query in the transaction).
         ui64 FirstQuerySpanId = 0;
     };
 

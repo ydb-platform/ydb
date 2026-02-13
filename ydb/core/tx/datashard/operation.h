@@ -527,7 +527,7 @@ public:
 
     enum class EType {
         DataTx,
-        WriteTx
+        WriteTx,
     };
 
 public:

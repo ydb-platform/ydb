@@ -2540,6 +2540,7 @@ message TInMemoryLockInfo {
     optional NKikimrProto.TRowVersion BreakVersion = 7;
     repeated NKikimrProto.TPathID ReadTables = 8;
     repeated NKikimrProto.TPathID WriteTables = 9;
+    optional uint64 VictimQuerySpanId = 10;
 }
 
 // In-memory ranges associated with the lock

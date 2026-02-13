@@ -31,10 +31,7 @@ struct TSetupSysLocks
     {
         LockTxId = lockTxId;
         LockNodeId = lockNodeId;
-        // querySpanId serves two roles: identifies our lock as victim if broken,
-        // and is stored on conflicts to attribute us as breaker on commit.
-        VictimQuerySpanId = querySpanId;
-        BreakerQuerySpanId = querySpanId;
+        QuerySpanId = querySpanId;
 
         SysLocksTable.SetupUpdate(this, db);
     }
@@ -46,8 +43,7 @@ struct TSetupSysLocks
     {
         LockTxId = op->LockTxId();
         LockNodeId = op->LockNodeId();
-        VictimQuerySpanId = op->QuerySpanId();
-        BreakerQuerySpanId = op->QuerySpanId();
+        QuerySpanId = op->QuerySpanId();
 
         auto mvccVersion = self.GetMvccVersion(op.Get());
 

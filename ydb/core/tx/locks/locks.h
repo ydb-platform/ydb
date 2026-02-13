@@ -61,7 +61,7 @@ public:
     virtual bool MayAddLock(ui64 lockId) = 0;
 
     // Persist adding/removing a lock info
-    virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 victimQuerySpanId = 0) = 0;
+    virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
@@ -755,10 +755,17 @@ private:
 struct TLocksUpdate {
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
-    ui64 VictimQuerySpanId = 0;       // Stored on the lock; identifies the victim if this lock is broken
-    ui64 BreakerQuerySpanId = 0;       // Stored on conflicts; identifies the breaker when CommitLock breaks others
-    bool BreakerQuerySpanIdExplicitlySet = false;  // Set when overridden by FirstQuerySpanId from KQP commit
+    // The current query's SpanId. Used as VictimQuerySpanId on the lock and as initial BreakerQuerySpanId on conflicts.
+    ui64 QuerySpanId = 0;
+    // Only set explicitly: overridden by FirstQuerySpanId from KQP commit, or restored from conflict in CommitLock.
+    ui64 BreakerQuerySpanId = 0;
+    bool BreakerQuerySpanIdExplicitlySet = false;
     TLockInfo::TPtr Lock;
+
+    // Returns effective BreakerQuerySpanId: explicit override if set, otherwise falls back to QuerySpanId.
+    ui64 GetEffectiveBreakerQuerySpanId() const {
+        return BreakerQuerySpanId != 0 ? BreakerQuerySpanId : QuerySpanId;
+    }
 
     TStackVec<TPointKey, 4> PointLocks;
     TStackVec<TRangeKey, 4> RangeLocks;
@@ -1025,8 +1032,11 @@ public:
     }
 
     TMaybe<ui64> GetCurrentBreakerQuerySpanId() const {
-        if (Update && Update->BreakerQuerySpanId != 0) {
-            return Update->BreakerQuerySpanId;
+        if (Update) {
+            ui64 effective = Update->GetEffectiveBreakerQuerySpanId();
+            if (effective != 0) {
+                return effective;
+            }
         }
         return Nothing();
     }

@@ -448,9 +448,9 @@ public:
         for (const auto& lock : record.GetTxLocks()) {
             if (!Settings.TxManager->AddLock(shardId, lock)) {
                 YQL_ENSURE(Settings.TxManager->BrokenLocks());
-                // Store the broken lock's QuerySpanId for TLI logging
-                if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
-                    Settings.TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
+                // Use the request's QuerySpanId (KQP knows which request placed the lock)
+                if (Settings.QuerySpanId != 0) {
+                    Settings.TxManager->SetVictimQuerySpanId(Settings.QuerySpanId);
                 }
                 TString message;
                 if (auto lockIssue = Settings.TxManager->GetLockIssue()) {

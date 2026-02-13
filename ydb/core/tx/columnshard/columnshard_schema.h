@@ -832,8 +832,8 @@ struct Schema : NIceDb::Schema {
         TString serialized;
         Y_ABORT_UNLESS(proto.SerializeToString(&serialized));
         db.Table<LongTxWrites>().Key((ui64)writeId).Update(
-            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized),
-            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId),
+            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized), 
+            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId), 
             NIceDb::TUpdate<LongTxWrites::GranuleShardingVersion>(granuleShardingVersion.value_or(0))
             );
     }

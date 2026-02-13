@@ -192,6 +192,17 @@ message TEvErasePersistentBuffer {
     uint64 Lsn = 3;
 }
 
+
+message TEvBatchErasePersistentBuffer {
+    message TEraseInfo {
+        TBlockSelector Selector = 1;
+        uint64 Lsn = 2;
+    }
+    
+    TQueryCredentials Credentials = 1;
+    repeated TEvErasePersistentBuffer Erases = 2;
+}
+
 message TEvErasePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;

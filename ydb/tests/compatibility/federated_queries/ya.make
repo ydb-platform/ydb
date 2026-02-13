@@ -9,6 +9,7 @@ SPLIT_FACTOR(10)
 TEST_SRCS(
     test_external_data_source.py
 )
+TAG(ya:manual)
 
 SIZE(LARGE)
 REQUIREMENTS(cpu:16)

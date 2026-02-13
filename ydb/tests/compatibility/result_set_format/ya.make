@@ -10,6 +10,7 @@ TEST_SRCS(
     test_result_set_value.py
     test_result_set_arrow.py
 )
+TAG(ya:manual)
 
 SIZE(LARGE)
 REQUIREMENTS(cpu:16)

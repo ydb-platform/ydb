@@ -7,3 +7,4 @@
 - [{#T}](deployment-preparation.md)
 - [{#T}](deployment-configuration-v1.md)
 - [{#T}](deployment-configuration-v2.md)
+- [{#T}](deployment-configuration-olap.md)

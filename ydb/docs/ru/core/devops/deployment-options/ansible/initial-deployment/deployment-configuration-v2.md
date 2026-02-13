@@ -1,4 +1,4 @@
-# Развёртывание кластера с использованием конфигурации V2
+# Развёртывание кластера с использованием конфигурации V2 (OLTP)
 
 {% note alert  %}
 
@@ -139,7 +139,7 @@ all:
 
 Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/group_vars/ydb/vault.yaml`.
 
-## Подготовка конфигурационного файла {{ ydb-short-name }} {#ydb-config-prepare}
+## Подготовьте конфигурационный файл {{ ydb-short-name }} {#ydb-config-prepare}
 
 Создайте файл `files/config.yaml` и заполните его.
 

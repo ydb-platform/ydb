@@ -2,6 +2,7 @@ import "ydb/core/protos/pqconfig.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/library/actors/protos/actors.proto";
+import "google/protobuf/duration.proto";
 
 package NKikimrClient;
 option java_package = "ru.yandex.kikimr.proto";
@@ -109,6 +110,10 @@ message TPersQueuePartitionRequest {
         optional int64 WriteTimeMS = 1; //for mirroring only
     }
 
+    message TCmdUpdateReadMetrics {
+        optional google.protobuf.Duration in_flight_fullness_duration = 1;
+    }
+
     message TCmdGetMaxSeqNo {
         repeated bytes SourceId = 2; //list of sourceIds to request
     }
@@ -167,6 +172,7 @@ message TPersQueuePartitionRequest {
     optional TCmdRegisterMessageGroup CmdRegisterMessageGroup = 20;
     optional TCmdDeregisterMessageGroup CmdDeregisterMessageGroup = 21;
     optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
+    optional TCmdUpdateReadMetrics CmdUpdateReadMetrics = 29;
 
     optional NActorsProto.TActorId PipeClient = 15;
 

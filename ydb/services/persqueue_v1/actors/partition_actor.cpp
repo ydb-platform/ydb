@@ -160,6 +160,7 @@ TPartitionActor::~TPartitionActor() = default;
 void TPartitionActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
+    ctx.Schedule(TDuration::Seconds(60), new TEvPQProxy::TEvUpdateReadMetrics());
 }
 
 const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const {
@@ -1001,6 +1002,26 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const 
 
 void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContext& ctx) {
     ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
+}
+
+void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {
+    auto inFlightFullnessDuration = PartitionInFlightMemoryController.GetFullnessDuration();
+
+    NKikimrClient::TPersQueueRequest request;
+    auto duration = request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->mutable_in_flight_fullness_duration();
+    auto seconds = inFlightFullnessDuration.Seconds();
+    duration->set_seconds(seconds);
+    duration->set_nanos((inFlightFullnessDuration - TDuration::Seconds(seconds)).NanoSeconds());
+
+    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    req->Record.Swap(&request);
+
+    if (!PipeClient) {
+        return;
+    }
+
+    NTabletPipe::SendData(ctx, PipeClient, req.Release());
+    ctx.Schedule(TDuration::Seconds(60), new TEvPQProxy::TEvUpdateReadMetrics());
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {

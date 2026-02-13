@@ -139,6 +139,7 @@ private:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);

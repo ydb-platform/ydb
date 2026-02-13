@@ -2409,6 +2409,20 @@ void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, NWilso
     ctx.Send(partActor, new TEvPQ::TEvDeregisterMessageGroup(responseCookie, std::move(body.GetRef())), 0, 0, std::move(traceId));
 }
 
+void TPersQueue::HandleUpdateReadMetricsRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
+    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+{
+    PQ_ENSURE(req.HasCmdUpdateReadMetrics());
+
+    if (!req.GetCmdUpdateReadMetrics().Hasin_flight_fullness_duration()) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "in_flight_full_duration is required");
+    }
+
+    TDuration inFlightFullnessDuration = TDuration::Seconds(req.GetCmdUpdateReadMetrics().Getin_flight_fullness_duration().seconds()) +
+        TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().Getin_flight_fullness_duration().nanos() / 1'000'000);
+    ctx.Send(partActor, new TEvPQ::TEvUpdateReadMetrics(inFlightFullnessDuration), 0, 0, std::move(traceId));
+}
+
 void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
@@ -2768,6 +2782,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         HandleDeregisterMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdSplitMessageGroup()) {
         HandleSplitMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
+    } else if (req.HasCmdUpdateReadMetrics()) {
+        HandleUpdateReadMetricsRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else {
         PQ_LOG_ERROR_AND_DIE("unknown or empty command");
         return;

@@ -1829,6 +1829,15 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     OnReadComplete(info, userInfo, ev->Get(), ctx);
 }
 
+void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx) {
+    LOG_D("Handle TEvPQ::TEvUpdateReadMetrics");
+    auto inFlightFullnessDuration = ev->Get()->InFlightFullnessDuration;
+    if (PartitionCountersLabeled) {
+        PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_FULLNESS_DURATION_MS].Set(inFlightFullnessDuration.MilliSeconds());
+        ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
+    }
+}
+
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->IsInternal) {
         CompacterPartitionRequestInflight = false;

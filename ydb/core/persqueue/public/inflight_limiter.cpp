@@ -19,12 +19,12 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
         return true;
     }
 
+    auto wasMemoryLimitReached = IsMemoryLimitReached();
     if (Size == 0) {
-        return TotalSize < MaxAllowedSize;
+        return !wasMemoryLimitReached;
     }
 
     AFL_ENSURE(Layout.empty() || Offset > Layout.back());
-
     if (TotalSize % LayoutUnitSize != 0) {
         AFL_ENSURE(!Layout.empty());
         Layout.back() = Offset;
@@ -40,6 +40,10 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
     AFL_ENSURE(!Layout.empty());
     Layout.back() = Offset;
 
+    if (!wasMemoryLimitReached && IsMemoryLimitReached()) {
+        InFlightFullSince = TInstant::Now();
+    }
+
     return TotalSize < MaxAllowedSize;
 }
 
@@ -49,6 +53,7 @@ bool TInFlightController::Remove(ui64 Offset) {
         return true;
     }
 
+    auto wasMemoryLimitReached = IsMemoryLimitReached();
     for (auto it = Layout.begin(); it != Layout.end(); it = Layout.erase(it)) {
         if (*it >= Offset) {
             break;
@@ -62,7 +67,12 @@ bool TInFlightController::Remove(ui64 Offset) {
         }
     }
 
-    return TotalSize < MaxAllowedSize;
+    auto isMemoryLimitReached = IsMemoryLimitReached();
+    if (wasMemoryLimitReached && !isMemoryLimitReached && InFlightFullSince != TInstant::Zero()) {
+        InFlightFullnessDuration += (TInstant::Now() - std::exchange(InFlightFullSince, TInstant::Zero()));
+    }
+
+    return !isMemoryLimitReached;
 }
 
 bool TInFlightController::IsMemoryLimitReached() const {
@@ -72,6 +82,10 @@ bool TInFlightController::IsMemoryLimitReached() const {
     }
 
     return TotalSize >= MaxAllowedSize;
+}
+
+TDuration TInFlightController::GetFullnessDuration() {
+    return std::exchange(InFlightFullnessDuration, TDuration::Zero());
 }
 
 } // namespace NKikimr::NPQ

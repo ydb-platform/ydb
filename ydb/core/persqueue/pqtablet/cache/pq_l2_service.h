@@ -58,7 +58,7 @@ struct TCacheValue : TNonCopyable {
         return AccessCount;
     }
 
-    std::shared_ptr<TVector<TBatch>> GetValue() {
+    std::shared_ptr<const TVector<TBatch>> GetValue() {
         std::lock_guard lock(ValueMutex);
         if (Value) {
             return Value;

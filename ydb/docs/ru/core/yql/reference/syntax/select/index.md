@@ -14,7 +14,6 @@ SELECT "Hello, world!";
 SELECT 2 + 2;
 ```
 
-
 ## Процедура выполнения SELECT {#selectexec}
 
 Результат запроса `SELECT` вычисляется следующим образом:

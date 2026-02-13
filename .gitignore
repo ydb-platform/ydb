@@ -102,8 +102,10 @@ path.bash.inc
 /.editorconfig
 
 # Cursor ignore
-.cursor/
 .cursorignore
+
+# Claude Code
+.claude/
 
 # Harness local cluster working directory
 .ydbd_working_dir/

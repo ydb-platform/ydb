@@ -74,10 +74,7 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, 
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
         case arrow::Type::FIXED_SIZE_BINARY: {
-            if (!tableColumnType) {
-                break;
-            }
-            if (dynamic_cast<const arrow::FixedSizeBinaryType&>(type).byte_width() != NScheme::FSB_SIZE) {
+            if (!tableColumnType || dynamic_cast<const arrow::FixedSizeBinaryType&>(type).byte_width() != NScheme::FSB_SIZE) {
                 break;
             }
 

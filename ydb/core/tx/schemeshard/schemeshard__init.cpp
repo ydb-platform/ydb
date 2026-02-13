@@ -5640,7 +5640,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 auto compactionId = shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::ForcedCompactionId>();
 
-                Self->AddForcedCompactionShard(shardIdx, *Self->ForcedCompactions.at(compactionId));
+                Self->AddForcedCompactionShard(shardIdx, Self->ForcedCompactions.at(compactionId));
 
                 if (!shardsRowset.Next()) {
                     return false;

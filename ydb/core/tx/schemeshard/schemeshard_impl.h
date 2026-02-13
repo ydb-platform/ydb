@@ -1738,6 +1738,8 @@ public:
     // namespace NForcedCompaction {
     THashMap<ui64, TForcedCompactionInfo::TPtr> ForcedCompactions;
     THashMap<TPathId, TForcedCompactionInfo::TPtr> InProgressForcedCompactionsByTable;
+    THashMap<TShardIdx, TForcedCompactionInfo::TPtr> InProgressForcedCompactionsByShard;
+
     TFifoQueue<TPathId> ForcedCompactionTablesQueue;
     THashMap<TPathId, TFifoQueue<TShardIdx>> ForcedCompactionShardsByTable;
 
@@ -1752,7 +1754,7 @@ public:
     };
 
     void AddForcedCompaction(const TForcedCompactionInfo::TPtr& forcedCompactionInfo);
-    void AddForcedCompactionShard(const TShardIdx& shardId, const TForcedCompactionInfo& forcedCompactionInfo);
+    void AddForcedCompactionShard(const TShardIdx& shardId, const TForcedCompactionInfo::TPtr& forcedCompactionInfo);
 
     void PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<TShardIdx>& shardsToCompact);
@@ -1760,6 +1762,7 @@ public:
 
     void FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedCompaction& compaction, const TForcedCompactionInfo& forcedCompactionInfo);
 
+    void CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx);
     void ProcessForcedCompactionQueues();
 
     void EnqueueForcedCompaction(const TShardIdx& shardIdx);

@@ -110,7 +110,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
 
         Self->AddForcedCompaction(info);
         for (const auto& shardIdx : shardsToCompact) {
-            Self->AddForcedCompactionShard(shardIdx, *info);
+            Self->AddForcedCompactionShard(shardIdx, info);
         }
         Self->FromForcedCompactionInfo(*response->Record.MutableForcedCompaction(), *info);
 

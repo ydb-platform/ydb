@@ -16,9 +16,12 @@ void TSchemeShard::AddForcedCompaction(
 
 void TSchemeShard::AddForcedCompactionShard(
     const TShardIdx& shardId,
-    const TForcedCompactionInfo& forcedCompactionInfo)
+    const TForcedCompactionInfo::TPtr& forcedCompactionInfo)
 {
-    ForcedCompactionShardsByTable[forcedCompactionInfo.TablePathId].Enqueue(shardId);
+    ForcedCompactionShardsByTable[forcedCompactionInfo->TablePathId].Enqueue(shardId);
+    if (forcedCompactionInfo->State == TForcedCompactionInfo::EState::InProgress) {
+        InProgressForcedCompactionsByShard[shardId] = forcedCompactionInfo;
+    }
 }
 
 void TSchemeShard::PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& info) {
@@ -77,6 +80,32 @@ void TSchemeShard::FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedComp
     compaction.SetProgress(progress);
 }
 
+void TSchemeShard::CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx) {
+    auto compactionPtr = InProgressForcedCompactionsByShard.FindPtr(shardIdx);
+    if (!compactionPtr) {
+        return;
+    }
+    auto compaction = *compactionPtr;
+    auto* shardsQueue = ForcedCompactionShardsByTable.FindPtr(compaction->TablePathId); // TODO: check all table when cascade = true
+
+    if (compaction->ShardsInFlight.erase(shardIdx)
+        || shardsQueue && shardsQueue->Remove(shardIdx))
+    {
+        DoneShardsToPersist.emplace_back(shardIdx, compaction);
+    }
+
+    const auto now = ctx.Now();
+    bool compactionCompleted = (!shardsQueue || shardsQueue->Empty()) && compaction->ShardsInFlight.empty();
+    if (compactionCompleted
+        || DoneShardsToPersist.size() >= ForcedCompactionPersistBatchSize
+        || now - ForcedCompactionProgressStartTime > ForcedCompactionPersistBatchMaxTime)
+    {
+        ForcedCompactionProgressStartTime = now;
+        Execute(CreateTxProgressForcedCompaction());
+    }
+    ProcessForcedCompactionQueues();
+}
+
 void TSchemeShard::ProcessForcedCompactionQueues() {
     // try enqueue shards from multiple tables fairly
     auto initialQueueSize = ForcedCompactionTablesQueue.Size();
@@ -94,7 +123,6 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
         if (shards.Empty()) {
             tablesWithoutCandidates.insert(tablePathId);
             ForcedCompactionTablesQueue.PopFront();
-            InProgressForcedCompactionsByTable.erase(tablePathId);
             ForcedCompactionShardsByTable.erase(tablePathId);
         } else {
             if (compaction->MaxShardsInFlight <= compaction->ShardsInFlight.size()) {
@@ -118,6 +146,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
             "for forced compaction# " << shardIdx
             << " at schemeshard# " << TabletID());
 
+        CompleteForcedCompactionForShard(shardIdx, ctx);
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
@@ -169,26 +198,7 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
             << " at schemeshard " << TabletID());
     }
 
-    if (auto* compactionPtrPtr = InProgressForcedCompactionsByTable.FindPtr(pathId)) {
-        auto& compactionPtr = *compactionPtrPtr;
-        auto& shardsQueue = ForcedCompactionShardsByTable.at(pathId);
-        
-        if (compactionPtr->ShardsInFlight.erase(shardIdx)
-            || shardsQueue.Remove(shardIdx))
-        {
-            DoneShardsToPersist.emplace_back(shardIdx, compactionPtr);
-        }
-
-        const auto now = ctx.Now();
-        if (shardsQueue.Empty() && compactionPtr->ShardsInFlight.empty()  // compaction completed. TODO: check all table when cascade = true
-            || DoneShardsToPersist.size() >= ForcedCompactionPersistBatchSize
-            || now - ForcedCompactionProgressStartTime > ForcedCompactionPersistBatchMaxTime)
-        {
-            ForcedCompactionProgressStartTime = now;
-            Execute(CreateTxProgressForcedCompaction());
-        }
-        ProcessForcedCompactionQueues();
-    }
+    CompleteForcedCompactionForShard(shardIdx, ctx);
 }
 
 void TSchemeShard::EnqueueForcedCompaction(const TShardIdx& shardIdx) {

@@ -7,6 +7,7 @@ import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param, get_ci_version, get_self_version
 from time import time_ns
+from datetime import datetime
 
 
 class ResultsProcessor:
@@ -65,6 +66,7 @@ class ResultsProcessor:
         .add_column('git_commit_timestamp', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
         .add_column('git_branch', ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column('run_type', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('tool', ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column('label', ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column('warehouses', ydb.OptionalType(ydb.PrimitiveType.Uint32))
         .add_column('duration_seconds', ydb.OptionalType(ydb.PrimitiveType.Uint32))
@@ -231,8 +233,7 @@ class ResultsProcessor:
                 endpoint.send_data(data)
 
     @classmethod
-    def upload_tpcc_results(cls, results):
-        from datetime import datetime
+    def upload_tpcc_results(cls, results, run_type: str):
         if not cls.send_results or not cls.get_tpcc_endpoints():
             return
         with allure.step("Upload TPCC results to YDB"):
@@ -259,7 +260,8 @@ class ResultsProcessor:
                 'git_repository': 'https://github.com/ydb-platform/ydb.git',
                 'git_commit_timestamp': 1000000 * commit_ts,
                 'git_branch': branch,
-                'run_type': 'default',
+                'run_type': run_type,
+                'tool': 'ydb_cli_tpcc',
                 'label': f"{datetime.fromtimestamp(commit_ts).strftime('%Y-%m-%d_%H%M%S')}_{version}_{summary.get('measure_start_ts', 0)}",
                 'warehouses': summary.get('warehouses', 0),
                 'duration_seconds': summary.get('time_seconds', 0),

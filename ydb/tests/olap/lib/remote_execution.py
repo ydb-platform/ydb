@@ -7,6 +7,7 @@ import subprocess
 import logging
 import yatest.common
 import shutil
+import shlex
 import allure
 import random
 from contextlib import AbstractContextManager
@@ -626,7 +627,7 @@ def get_remote_tmp_path(host: str, *localpath: str) -> str:
 class LongRemoteExecution(AbstractContextManager):
     def __init__(self, host: str, *cmd: str):
         self.host = host
-        self.cmd = subprocess.list2cmdline(cmd)
+        self.cmd = shlex.join(cmd)
         self_hash = f're_{abs(hash((self.host, self.cmd)))}_{random.randint(0, 1000000)}'
         tmpdir = get_remote_tmp_path(self.host, self_hash)
         self._script_path = os.path.join(tmpdir, f'run_{self_hash}.sh')

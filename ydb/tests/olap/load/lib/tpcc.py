@@ -5,6 +5,7 @@ from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
+import logging
 
 
 class TpccSuiteBase(LoadSuiteBase):
@@ -26,9 +27,11 @@ class TpccSuiteBase(LoadSuiteBase):
         wh_count = 0
         try:
             wh_count = ScenarioTestHelper(None).get_table_rows_count(f'{cls.get_tpcc_path()}/warehouse')
-        except BaseException:
+        except Exception as e:
+            logging.info(f'catch exception while check warehouse count: {e}. Data will be reimport.')
             pass
         if wh_count < cls.warehouses:
+            logging.info(f'warehouse count {wh_count} less then need {cls.warehouses}. Data will be reimport.')
             YdbCliHelper.clear_tpcc(cls.get_tpcc_path())
             YdbCliHelper.init_tpcc(cls.get_tpcc_path(), cls.warehouses)
             YdbCliHelper.import_data_tpcc(cls.get_tpcc_path(), cls.warehouses)
@@ -78,7 +81,8 @@ class TpccSuiteBase(LoadSuiteBase):
         self.process_query_result(result, 'test', True)
         stats = result.get_stats('test')
         if result.success and 'tpcc_json' in stats:
-            ResultsProcessor.upload_tpcc_results(stats['tpcc_json'])
+            run_type = f'ydb_cli_{str(self.tx_mode).replace("-rw", "")}_{getenv("TPCC_RUN_TYPE", "default")}'
+            ResultsProcessor.upload_tpcc_results(stats['tpcc_json'], run_type)
 
 
 class TestTpccW3000T0Serializable(TpccSuiteBase):

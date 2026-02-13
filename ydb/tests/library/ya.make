@@ -16,7 +16,6 @@ PY_SRCS(
     common/protobuf_kv.py
     common/protobuf_ss.py
     common/path_types.py
-    common/safe_parametrize.py
     common/types.py
     common/wait_for.py
     common/workload_manager.py

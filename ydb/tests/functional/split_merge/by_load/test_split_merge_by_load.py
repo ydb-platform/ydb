@@ -10,10 +10,10 @@ import attr
 import pytest
 import requests
 
-from ydb.tests.library.common.safe_parametrize import ParameterSet, safe_mark_parametrize
 from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.fixtures import ydb_database_ctx
+from ydb.tests.library.fixtures.safe_parametrize import ParameterSet, safe_mark_parametrize
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -566,6 +566,12 @@ WHERE Path = '{}/{}';
     return all_follower_reads
 
 
+# NOTE: There are 2 variations for this test: leaders and followers. In each variation
+#       the test applies the read load only on the leader (or followers) of each partition.
+#       The test expects the table to be split multiple times, once the leaders (or followers)
+#       become sufficiently overloaded. When the table is split the expected number
+#       of times, the load on the leaders (or followers) is turned off and the test expects
+#       the table to be merged back into a single partition.
 @safe_mark_parametrize(
     ParameterSet("leader", read_mode=ydb.QueryOnlineReadOnly()),
     ParameterSet("follower", read_mode=ydb.QueryStaleReadOnly()),

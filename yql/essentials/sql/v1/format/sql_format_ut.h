@@ -1,4 +1,3 @@
-// NOLINTBEGIN(misc-definitions-in-headers)
 #pragma once
 
 Y_UNIT_TEST(Pragma) {

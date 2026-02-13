@@ -191,7 +191,8 @@ bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
             "batch_size_bytes",
             "directory",
             "metrics_level",
-        };
+            "v_cpu_rate_limit"};
+
         for (const auto& names : REPLICATION_AND_TRANSFER_SECRETS_SETTINGS) {
             settings.insert(names.Name);
             settings.insert(names.Path);

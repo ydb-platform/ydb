@@ -1,5 +1,6 @@
 #include "grpc_service_v1.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/service_keyvalue.h>
@@ -7,6 +8,22 @@
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
+
+namespace {
+
+TKeyValueRequestSettings GetKeyValueRequestSettings(NActors::TActorSystem* actorSystem) {
+    TKeyValueRequestSettings settings;
+    const TAppData* appData = actorSystem ? actorSystem->AppData<TAppData>() : nullptr;
+    if (!appData || !appData->Icb) {
+        return settings;
+    }
+
+    const auto& controls = appData->Icb->KeyValueVolumeControls;
+    settings.UseCustomSerialization = controls.UseCustomSerialization.AtomicLoad()->Get();
+    return settings;
+}
+
+} // namespace
 
 TKeyValueGRpcServiceV1::TKeyValueGRpcServiceV1(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
     : ActorSystem_(actorSystem)
@@ -41,8 +58,16 @@ void TKeyValueGRpcServiceV1::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) 
 
     SETUP_KV_METHOD(AcquireLock, DoAcquireLockKeyValue, RLMODE(Rps), KEYVALUE_ACQUIRELOCK, TAuditMode::NonModifying());
     SETUP_KV_METHOD(ExecuteTransaction, DoExecuteTransactionKeyValue, RLMODE(Rps), KEYVALUE_EXECUTETRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
-    SETUP_KV_METHOD(Read, DoReadKeyValue, RLMODE(Rps), KEYVALUE_READ, TAuditMode::NonModifying());
-    SETUP_KV_METHOD(ReadRange, DoReadRangeKeyValue, RLMODE(Rps), KEYVALUE_READRANGE, TAuditMode::NonModifying());
+    SETUP_KV_METHOD(Read,
+            [this](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility) {
+                DoReadKeyValue(std::move(p), facility, GetKeyValueRequestSettings(ActorSystem_));
+            },
+            RLMODE(Rps), KEYVALUE_READ, TAuditMode::NonModifying());
+    SETUP_KV_METHOD(ReadRange,
+            [this](std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility) {
+                DoReadRangeKeyValue(std::move(p), facility, GetKeyValueRequestSettings(ActorSystem_));
+            },
+            RLMODE(Rps), KEYVALUE_READRANGE, TAuditMode::NonModifying());
     SETUP_KV_METHOD(ListRange, DoListRangeKeyValue, RLMODE(Rps), KEYVALUE_LISTRANGE, TAuditMode::NonModifying());
     SETUP_KV_METHOD(GetStorageChannelStatus, DoGetStorageChannelStatusKeyValue, RLMODE(Rps), KEYVALUE_GETSTORAGECHANNELSTATUS, TAuditMode::NonModifying());
 

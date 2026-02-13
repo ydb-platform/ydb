@@ -93,14 +93,6 @@ namespace {
 
 constexpr bool UsePayloadForExecuteTransactionWrite = false;
 
-bool IsUseCustomSerializationForKeyValueReadEnabled() {
-    const TAppData* appData = AppData();
-    if (!appData || !appData->Icb) {
-        return false;
-    }
-    return appData->Icb->KeyValueVolumeControls.UseCustomSerialization.AtomicLoad()->Get();
-}
-
 void AppendVarint(TString& out, ui64 value) {
     while (value >= 0x80) {
         out.push_back(static_cast<char>((value & 0x7F) | 0x80));
@@ -121,12 +113,13 @@ TString MakeLengthDelimitedFieldHeader(ui32 fieldNumber, ui64 size) {
 bool TryReplyReadResultWithCustomSerialization(
         const TEvKeyValue::TEvReadResponse& from,
         Ydb::StatusIds::StatusCode status,
+        bool useCustomSerialization,
         IRequestNoOpCtx* request)
 {
     if (status != Ydb::StatusIds::SUCCESS || !from.IsPayload() || !request) {
         return false;
     }
-    if (!IsUseCustomSerializationForKeyValueReadEnabled()) {
+    if (!useCustomSerialization) {
         return false;
     }
 
@@ -161,12 +154,13 @@ bool TryReplyReadResultWithCustomSerialization(
 bool TryReplyReadRangeResultWithCustomSerialization(
         const TEvKeyValue::TEvReadRangeResponse& from,
         Ydb::StatusIds::StatusCode status,
+        bool useCustomSerialization,
         IRequestNoOpCtx* request)
 {
     if (status != Ydb::StatusIds::SUCCESS || !request) {
         return false;
     }
-    if (!IsUseCustomSerializationForKeyValueReadEnabled()) {
+    if (!useCustomSerialization) {
         return false;
     }
 
@@ -1065,6 +1059,13 @@ public:
     using TBase::TBase;
     using TBase::Reply;
 
+    TKeyValueRequestGrpc(std::conditional_t<IsOperational, IRequestOpCtx, IRequestNoOpCtx>* request,
+            const TKeyValueRequestSettings& settings)
+        : TBase(request)
+        , RequestSettings(settings)
+    {
+    }
+
     template<typename T, typename = void>
     struct THasMsg: std::false_type
     {};
@@ -1174,7 +1175,8 @@ protected:
             if constexpr (!IsOperational
                     && std::is_same_v<TKVRequest, TEvKeyValue::TEvRead>
                     && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadResult>) {
-                if (TryReplyReadResultWithCustomSerialization(*ev->Get(), status, this->Request.Get())) {
+                if (TryReplyReadResultWithCustomSerialization(*ev->Get(), status,
+                        RequestSettings.UseCustomSerialization, this->Request.Get())) {
                     PassAway();
                     return;
                 }
@@ -1182,7 +1184,8 @@ protected:
             if constexpr (!IsOperational
                     && std::is_same_v<TKVRequest, TEvKeyValue::TEvReadRange>
                     && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadRangeResult>) {
-                if (TryReplyReadRangeResultWithCustomSerialization(*ev->Get(), status, this->Request.Get())) {
+                if (TryReplyReadRangeResultWithCustomSerialization(*ev->Get(), status,
+                        RequestSettings.UseCustomSerialization, this->Request.Get())) {
                     PassAway();
                     return;
                 }
@@ -1266,6 +1269,7 @@ protected:
 protected:
     ui64 KVTabletId = 0;
     TActorId KVPipeClient;
+    TKeyValueRequestSettings RequestSettings;
 };
 
 template <bool IsOperational>
@@ -1471,20 +1475,36 @@ void DoExecuteTransactionKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IF
     TActivationContext::AsActorContext().Register(new TExecuteTransactionRequest<false>(p.release()));
 }
 
-void DoReadKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRequest<true>(p.release()));
+void DoReadKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility) {
+    DoReadKeyValue(std::move(p), facility, {});
 }
 
-void DoReadKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRequest<false>(p.release()));
+void DoReadKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& facility) {
+    DoReadKeyValueV2(std::move(p), facility, {});
 }
 
-void DoReadRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRangeRequest<true>(p.release()));
+void DoReadRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility) {
+    DoReadRangeKeyValue(std::move(p), facility, {});
 }
 
-void DoReadRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRangeRequest<false>(p.release()));
+void DoReadRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& facility) {
+    DoReadRangeKeyValueV2(std::move(p), facility, {});
+}
+
+void DoReadKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const TKeyValueRequestSettings& settings) {
+    TActivationContext::AsActorContext().Register(new TReadRequest<true>(p.release(), settings));
+}
+
+void DoReadKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&, const TKeyValueRequestSettings& settings) {
+    TActivationContext::AsActorContext().Register(new TReadRequest<false>(p.release(), settings));
+}
+
+void DoReadRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const TKeyValueRequestSettings& settings) {
+    TActivationContext::AsActorContext().Register(new TReadRangeRequest<true>(p.release(), settings));
+}
+
+void DoReadRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&, const TKeyValueRequestSettings& settings) {
+    TActivationContext::AsActorContext().Register(new TReadRangeRequest<false>(p.release(), settings));
 }
 
 void DoListRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {

@@ -350,16 +350,23 @@ NThreading::TFuture<TReadBlocksLocalResponse> TDirectBlockGroup::ReadBlocksLocal
     // Block is not writed
     if (!BlocksMeta[startIndex].IsWritten())
     {
+        auto data = requestHandler->GetData();
+        if (auto guard = data.Acquire()) {
+            const auto& sglist = guard.Get();
+            const auto& block = sglist[0];
+            memset(const_cast<char*>(block.Data()), 0, block.Size());
+        } else {
+            Y_ABORT_UNLESS(false);
+        }
+
+        requestHandler->SetResponse();
+
         requestHandler->Span.EndOk();
         if (ReadBlocksReplyCallback) {
             ReadBlocksReplyCallback(true);
         }
 
-        auto promise = NThreading::NewPromise<TReadBlocksLocalResponse>();
-
-        promise.SetValue(TReadBlocksLocalResponse());
-
-        return promise.GetFuture();
+        return requestHandler->GetFuture();
     }
 
     ++StorageRequestId;

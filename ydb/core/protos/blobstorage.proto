@@ -1596,7 +1596,50 @@ message TEvControllerAllocateDDiskBlockGroup {
     optional string DDiskPoolName = 1; // DDisk pool name
     optional string PersistentBufferDDiskPoolName = 2; // DDisk pool from which we assign node persistent buffers
     optional uint64 TabletId = 3; // who allocates the Direct Block Group
+
+    // TODO(alexvru): remove this compatibilty command
     repeated TQuery Queries = 4; // direct block groups being allocated/reallocated/deleted
+
+    message TDirectBlockGroupOperation {
+        optional uint64 DirectBlockGroupId = 1; // unique identifier of a direct block group within the tablet
+
+        // Update definition of a whole direct block group. It creates missing DDisks (indexed starting from zero),
+        // releases excessive ones, and claims number of chunks per DDisk to requested value (if possible). If the
+        // operation is not possible (e.g. due to lack of DDisks with required amount of chunks), then the whole
+        // TEvControllerAllocateDDiskBlockGroup command is rejected completely.
+        message TDefineDirectBlockGroup {
+            optional uint32 NumDDisks = 1; // number of DDisks we want to allocate with indexes [0..NumDDisks-1]
+            optional uint32 NumChunksPerDDisk = 2; // number of claimed chunks per every created DDisk
+            optional uint32 NumPersistentBuffers = 3; // number of persistent buffers for this direct block group
+        }
+        optional TDefineDirectBlockGroup DefineDirectBlockGroup = 2;
+
+        // Update single DDisk within the Direct Block Group. This command can change the claim for the DDisk. When
+        // claim is set to zero, then this DDisk is considered to be unused.
+        message TDefineDirectBlockGroupDisk {
+            optional uint32 DDiskIndex = 1; // DDisk index inside a group we are going to adjust
+            optional uint32 NumChunksPerDDisk = 2; // number of chunks we want to use for this DDisk (0 for deletion)
+            repeated NKikimrBlobStorage.NDDisk.TDDiskId ProhibitionList = 3; // a list of DDisks identifying locations that are forbidden to settle newly created DDisk
+        }
+        repeated TDefineDirectBlockGroupDisk DefineDirectBlockGroupDisks = 3;
+
+        // This command works like 'mv' command -- it overwrites one DDisk entry with its claim by another one. It can
+        // be used in scenario, when one DDisk is allocated temporarily, gets its data replicated from other DDisk and
+        // then gets that other disk replaced.
+        message TReassignDirectBlockGroupDisk {
+            optional uint32 DDiskIndexFrom = 1;
+            optional uint32 DDiskIndexTo = 2;
+        }
+        repeated TReassignDirectBlockGroupDisk ReassignDirectBlockGroupDisks = 4;
+
+        // Reallocate persistent buffer.
+        message TReassignPersistentBuffer {
+            optional uint32 PersistentBufferIndex = 1; // which one we are going to replace
+            repeated uint32 PreferredNodeIds = 2; // in order of descending preference
+        }
+        repeated TReassignPersistentBuffer ReassignPersistentBuffers = 5;
+    }
+    repeated TDirectBlockGroupOperation DirectBlockGroupOperations = 5;
 }
 
 message TEvControllerAllocateDDiskBlockGroupResult {
@@ -1614,4 +1657,15 @@ message TEvControllerAllocateDDiskBlockGroupResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;
     repeated TResponse Responses = 3; // single response per original query
+
+    // Direct block group descriptor is returned for every requested direct block group. It contains plain list of DDisks
+    // for that group and can contain holes if some DDisks in the middle were deleted (by setting claim to zero). In this
+    // case these entries do not contain any fields.
+    message TDirectBlockGroup {
+        optional uint64 DirectBlockGroupId = 1;
+        repeated NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 2; // a set of DDisk for this direct block group
+        repeated NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 3; // persistent buffers
+        optional bool Error = 4; // if an error has occured while processing this item
+    }
+    repeated TDirectBlockGroup DirectBlockGroups = 4;
 }

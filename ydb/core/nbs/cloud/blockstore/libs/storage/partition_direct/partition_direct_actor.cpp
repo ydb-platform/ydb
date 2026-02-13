@@ -23,11 +23,6 @@ TPartitionActor::TPartitionActor(
     , VolumeConfig(std::move(volumeConfig))
 {
     Y_ABORT_UNLESS(VolumeConfig.GetPartitions().size() == 1);
-
-    LOG_INFO(NActors::TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-        "Creating partition actor with VolumeConfig: %s, StorageConfig: %s",
-        VolumeConfig.DebugString().data(),
-        StorageConfig.DebugString().data());
 }
 
 void TPartitionActor::Bootstrap(const NActors::TActorContext& ctx)
@@ -130,10 +125,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
                 .BlockSize = blockSize,
                 .BlocksCount = blockCount,
                 .VhostQueuesCount = 1};
-            service->VhostServer->StartEndpoint(
-                std::move(socketPath),
-                fastPathService,
-                options);
+            // service->VhostServer->StartEndpoint(
+            //     std::move(socketPath),
+            //     fastPathService,
+            //     options);
         }
 
         LOG_INFO(

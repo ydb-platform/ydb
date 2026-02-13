@@ -763,6 +763,43 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         UNIT_ASSERT_VALUES_EQUAL(readRangeResult.pair(1).value(), "value22");
     }
 
+    Y_UNIT_TEST(SimpleWriteReadRangeV2WithUsePayloadAndCustomSerializationControl) {
+        TString tablePath = "/Root/mydb/kvtable";
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableImmediateControlsConfig()->MutableKeyValueVolumeControls()->SetUsePayload(1);
+        appConfig.MutableImmediateControlsConfig()->MutableKeyValueVolumeControls()->SetUseCustomSerialization(1);
+
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        ui16 grpc = server.GetPort();
+
+        std::shared_ptr<grpc::Channel> channel;
+        channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
+        MakeDirectory(channel, "/Root/mydb");
+        MakeTable(channel, tablePath);
+        WaitTableCreation(server, tablePath);
+
+        std::unique_ptr<Ydb::KeyValue::V2::KeyValueService::Stub> stub;
+        stub = Ydb::KeyValue::V2::KeyValueService::NewStub(channel);
+
+        Write<Version::V2>(tablePath, 0, "key1", "value1", 1, stub);
+        Write<Version::V2>(tablePath, 0, "key2", "value22", 2, stub);
+
+        Ydb::KeyValue::ReadRangeRequest readRangeRequest;
+        readRangeRequest.set_path(tablePath);
+        readRangeRequest.set_partition_id(0);
+        auto *range = readRangeRequest.mutable_range();
+        range->set_from_key_inclusive("key1");
+        range->set_to_key_inclusive("key3");
+
+        Ydb::KeyValue::ReadRangeResult readRangeResult = ReadRange<Version::V2>(readRangeRequest, stub);
+
+        UNIT_ASSERT_VALUES_EQUAL(readRangeResult.pair_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(readRangeResult.pair(0).key(), "key1");
+        UNIT_ASSERT_VALUES_EQUAL(readRangeResult.pair(0).value(), "value1");
+        UNIT_ASSERT_VALUES_EQUAL(readRangeResult.pair(1).key(), "key2");
+        UNIT_ASSERT_VALUES_EQUAL(readRangeResult.pair(1).value(), "value22");
+    }
+
     Y_UNIT_TEST(SimpleWriteReadV2WithUsePayloadAndCustomSerializationControl) {
         TString tablePath = "/Root/mydb/kvtable";
         NKikimrConfig::TAppConfig appConfig;

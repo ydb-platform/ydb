@@ -109,6 +109,15 @@ void AppendVarint(TString& out, ui64 value) {
     out.push_back(static_cast<char>(value));
 }
 
+TString MakeLengthDelimitedFieldHeader(ui32 fieldNumber, ui64 size) {
+    TString out;
+    out.reserve(16);
+    const ui64 fieldTag = (static_cast<ui64>(fieldNumber) << 3) | 2ull;
+    AppendVarint(out, fieldTag);
+    AppendVarint(out, size);
+    return out;
+}
+
 bool TryReplyReadResultWithCustomSerialization(
         const TEvKeyValue::TEvReadResponse& from,
         Ydb::StatusIds::StatusCode status,
@@ -136,12 +145,7 @@ bool TryReplyReadResultWithCustomSerialization(
 
     TRope payload = from.GetBuffer();
     if (payload.GetSize()) {
-        constexpr ui64 valueFieldTag = (4ull << 3) | 2ull; // bytes value = 4;
-
-        TString valueFieldHeader;
-        valueFieldHeader.reserve(16);
-        AppendVarint(valueFieldHeader, valueFieldTag);
-        AppendVarint(valueFieldHeader, payload.GetSize());
+        TString valueFieldHeader = MakeLengthDelimitedFieldHeader(4, payload.GetSize()); // bytes value = 4;
 
         TRope response(std::move(serializedResult));
         response.Insert(response.End(), TRope(std::move(valueFieldHeader)));
@@ -151,6 +155,71 @@ bool TryReplyReadResultWithCustomSerialization(
         request->SendSerializedResult(TRope(std::move(serializedResult)), status);
     }
 
+    return true;
+}
+
+bool TryReplyReadRangeResultWithCustomSerialization(
+        const TEvKeyValue::TEvReadRangeResponse& from,
+        Ydb::StatusIds::StatusCode status,
+        IRequestNoOpCtx* request)
+{
+    if (status != Ydb::StatusIds::SUCCESS || !request) {
+        return false;
+    }
+    if (!IsUseCustomSerializationForKeyValueReadEnabled()) {
+        return false;
+    }
+
+    bool hasPayload = true;
+    for (int idx = 0; idx < from.Record.pair_size(); ++idx) {
+        if (!from.IsPayload(idx)) {
+            hasPayload = false;
+            break;
+        }
+    }
+    if (!hasPayload) {
+        return false;
+    }
+
+    Ydb::KeyValue::ReadRangeResult result;
+    if (from.Record.status() == NKikimrKeyValue::Statuses::RSTATUS_OVERRUN) {
+        result.set_is_overrun(true);
+    }
+    result.set_node_id(from.Record.node_id());
+    result.set_status(status);
+
+    TString serializedResult;
+    Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToString(&serializedResult);
+    TRope response(std::move(serializedResult));
+
+    for (int idx = 0; idx < from.Record.pair_size(); ++idx) {
+        Ydb::KeyValue::ReadRangeResult::KeyValuePair pair;
+        const auto& fromPair = from.Record.pair(idx);
+        pair.set_key(fromPair.key());
+        pair.set_creation_unix_time(fromPair.creation_unix_time());
+        pair.set_storage_channel(fromPair.storage_channel());
+
+        TString serializedPair;
+        Y_PROTOBUF_SUPPRESS_NODISCARD pair.SerializeToString(&serializedPair);
+
+        TRope payload = from.GetBuffer(idx);
+        ui64 pairSize = serializedPair.size();
+        TString valueFieldHeader;
+        if (payload.GetSize()) {
+            valueFieldHeader = MakeLengthDelimitedFieldHeader(2, payload.GetSize()); // bytes value = 2;
+            pairSize += valueFieldHeader.size() + payload.GetSize();
+        }
+
+        TString pairFieldHeader = MakeLengthDelimitedFieldHeader(1, pairSize); // repeated KeyValuePair pair = 1;
+        response.Insert(response.End(), TRope(std::move(pairFieldHeader)));
+        response.Insert(response.End(), TRope(std::move(serializedPair)));
+        if (payload.GetSize()) {
+            response.Insert(response.End(), TRope(std::move(valueFieldHeader)));
+            response.Insert(response.End(), std::move(payload));
+        }
+    }
+
+    request->SendSerializedResult(std::move(response), status);
     return true;
 }
 
@@ -1106,6 +1175,14 @@ protected:
                     && std::is_same_v<TKVRequest, TEvKeyValue::TEvRead>
                     && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadResult>) {
                 if (TryReplyReadResultWithCustomSerialization(*ev->Get(), status, this->Request.Get())) {
+                    PassAway();
+                    return;
+                }
+            }
+            if constexpr (!IsOperational
+                    && std::is_same_v<TKVRequest, TEvKeyValue::TEvReadRange>
+                    && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadRangeResult>) {
+                if (TryReplyReadRangeResultWithCustomSerialization(*ev->Get(), status, this->Request.Get())) {
                     PassAway();
                     return;
                 }

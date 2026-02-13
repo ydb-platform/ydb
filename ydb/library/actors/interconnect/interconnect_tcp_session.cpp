@@ -192,9 +192,6 @@ namespace NActors {
         TInstant now = TlsActivationContext->Now();
 
         auto sequenceId = InterconnectSequenceId.fetch_add(1, std::memory_order::acquire);
-        if (auto tracer = TlsActivationContext->AsActorContext().ActorSystem()->GetActorTracer()) {
-            tracer->HandleInterconnectSend(*ev, sequenceId);
-        }
         const auto [dataSize, event] = oChannel.Push(*ev, *Pool, now, sequenceId);
         LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize);
 

@@ -1,88 +1,139 @@
 #include "trace_data.h"
 
 #include <util/generic/buffer.h>
-#include <util/generic/hash.h>
-#include <util/generic/strbuf.h>
-#include <util/generic/string.h>
-#include <util/generic/vector.h>
+#include <util/stream/buffer.h>
+
+#include <cstring>
 
 namespace NActors::NTracing {
+
     namespace {
 
-        void Serialize(ui32 val, TBuffer& buffer) {
-            buffer.Append(reinterpret_cast<const char*>(&val), sizeof(val));
+        void WriteU32(TBuffer& buf, ui32 val) {
+            buf.Append(reinterpret_cast<const char*>(&val), sizeof(val));
         }
 
-        void Serialize(const TStringBuf& str, TBuffer& buffer) {
-            auto size = str.size();
-            buffer.Append(reinterpret_cast<const char*>(&size), sizeof(size));
-            buffer.Append(str.data(), str.size());
+        void WriteString(TBuffer& buf, const TString& str) {
+            WriteU32(buf, static_cast<ui32>(str.size()));
+            buf.Append(str.data(), str.size());
         }
 
-        void Serialize(const TString& str, TBuffer& buffer) {
-            Serialize(static_cast<const TStringBuf>(str), buffer);
+        bool ReadU32(const char*& ptr, const char* end, ui32& val) {
+            if (ptr + sizeof(ui32) > end) return false;
+            std::memcpy(&val, ptr, sizeof(ui32));
+            ptr += sizeof(ui32);
+            return true;
         }
 
-        template <typename T>
-        void Serialize(const TVector<T>& container, TBuffer& buffer) {
-            auto size = container.size();
-            buffer.Append(reinterpret_cast<const char*>(&size), sizeof(size));
-            for (const auto& element: container) {
-                Serialize(element, buffer);
+        bool ReadString(const char*& ptr, const char* end, TString& str) {
+            ui32 len = 0;
+            if (!ReadU32(ptr, end, len)) return false;
+            if (ptr + len > end) return false;
+            str.assign(ptr, len);
+            ptr += len;
+            return true;
+        }
+
+        void SerializeDicts(TBuffer& buf, const TActivityDict& activityDict, const TEventNamesDict& eventNamesDict) {
+            WriteU32(buf, static_cast<ui32>(activityDict.size()));
+            for (const auto& [index, name] : activityDict) {
+                WriteU32(buf, index);
+                WriteString(buf, name);
+            }
+
+            WriteU32(buf, static_cast<ui32>(eventNamesDict.size()));
+            for (const auto& [typeId, name] : eventNamesDict) {
+                WriteU32(buf, typeId);
+                WriteString(buf, name);
             }
         }
 
-        template <typename K, typename V>
-        void Serialize(const THashMap<K, V>& container, TBuffer& buffer) {
-            auto size = container.size();
-            buffer.Append(reinterpret_cast<const char*>(&size), sizeof(size));
-            for (const auto& [k, v]: container) {
-                Serialize(k, buffer);
-                Serialize(v, buffer);
+        bool DeserializeDicts(const char*& ptr, const char* end, TActivityDict& activityDict, TEventNamesDict& eventNamesDict) {
+            ui32 activityCount = 0;
+            if (!ReadU32(ptr, end, activityCount)) return false;
+            activityDict.reserve(activityCount);
+            for (ui32 i = 0; i < activityCount; ++i) {
+                ui32 index = 0;
+                TString name;
+                if (!ReadU32(ptr, end, index)) return false;
+                if (!ReadString(ptr, end, name)) return false;
+                activityDict.emplace_back(index, std::move(name));
             }
-        }
-    }
 
-    TBuffer SerializeHeader(TActivityDict&& activityDict, TEventNamesDict&& eventNamesDict) {
-        TBuffer res;
-        Serialize(activityDict, res);
-        Serialize(eventNamesDict, res);
-        return res;
-    }
-
-    TBuffer SerializeEvents(TTraceChunk::TEvents&& events) {
-        TBuffer res;
-#define WRITE_TO_BUFF(buff, MEMBER_NAME) \
-        buff.Append(reinterpret_cast<const char*>(&item.MEMBER_NAME), sizeof(item.MEMBER_NAME));
-
-        auto writer = [&res](auto&& item) {
-            WRITE_TO_BUFF(res, Timestamp);
-            WRITE_TO_BUFF(res, Type);
-            switch (item.Type) {
-                case TEvent::EType::SendInterconnect:
-                    WRITE_TO_BUFF(res, Event.SendInterconnectEvent);
-                    break;
-                case TEvent::EType::RecieveInterconnect:
-                    WRITE_TO_BUFF(res, Event.RecieveInterconnectEvent);
-                    break;
-                case TEvent::EType::SendLocal:
-                    WRITE_TO_BUFF(res, Event.SendLocalEvent);
-                    break;
-                case TEvent::EType::RecieveLocal:
-                    WRITE_TO_BUFF(res, Event.RecieveLocalEvent);
-                    break;
-                case TEvent::EType::New:
-                    WRITE_TO_BUFF(res, Event.NewEvent);
-                    break;
-                case TEvent::EType::Die:
-                    WRITE_TO_BUFF(res, Event.DieEvent);
-                    break;
+            ui32 eventNamesCount = 0;
+            if (!ReadU32(ptr, end, eventNamesCount)) return false;
+            for (ui32 i = 0; i < eventNamesCount; ++i) {
+                ui32 typeId = 0;
+                TString name;
+                if (!ReadU32(ptr, end, typeId)) return false;
+                if (!ReadString(ptr, end, name)) return false;
+                eventNamesDict[typeId] = std::move(name);
             }
-        };
-#undef WRITE_TO_BUFF
-        for (auto&& event: events) {
-            writer(std::move(event));
+
+            return true;
         }
-        return res;
+
+    } // anonymous namespace
+
+    TBuffer SerializeTrace(const TTraceChunk& chunk, ui32 nodeId) {
+        TBuffer dictBuf;
+        SerializeDicts(dictBuf, chunk.ActivityDict, chunk.EventNamesDict);
+
+        TTraceFileHeader header;
+        header.NodeId = nodeId;
+        header.HeaderSize = static_cast<ui32>(dictBuf.Size());
+        header.EventCount = chunk.Events.size();
+
+        TBuffer result;
+        result.Reserve(sizeof(header) + dictBuf.Size() + chunk.Events.size() * sizeof(TTraceEvent));
+
+        result.Append(reinterpret_cast<const char*>(&header), sizeof(header));
+        result.Append(dictBuf.Data(), dictBuf.Size());
+        result.Append(
+            reinterpret_cast<const char*>(chunk.Events.data()),
+            chunk.Events.size() * sizeof(TTraceEvent)
+        );
+
+        return result;
     }
-}
+
+    bool DeserializeTrace(const TBuffer& data, TTraceChunk& chunk, ui32& nodeId) {
+        const char* ptr = data.Data();
+        const char* end = ptr + data.Size();
+
+        if (static_cast<size_t>(end - ptr) < sizeof(TTraceFileHeader)) {
+            return false;
+        }
+
+        TTraceFileHeader header;
+        std::memcpy(&header, ptr, sizeof(header));
+        ptr += sizeof(header);
+
+        if (header.Magic != TraceFileMagic || header.Version != TraceFileVersion) {
+            return false;
+        }
+
+        nodeId = header.NodeId;
+
+        const char* dictEnd = ptr + header.HeaderSize;
+        if (dictEnd > end) {
+            return false;
+        }
+
+        if (!DeserializeDicts(ptr, dictEnd, chunk.ActivityDict, chunk.EventNamesDict)) {
+            return false;
+        }
+        ptr = dictEnd;
+
+        size_t eventsBytes = header.EventCount * sizeof(TTraceEvent);
+        if (ptr + eventsBytes > end) {
+            return false;
+        }
+
+        chunk.Events.resize(header.EventCount);
+        std::memcpy(chunk.Events.data(), ptr, eventsBytes);
+
+        return true;
+    }
+
+} // namespace NActors::NTracing

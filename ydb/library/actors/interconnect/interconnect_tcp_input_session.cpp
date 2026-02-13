@@ -964,9 +964,6 @@ namespace NActors {
                 descr.Cookie,
                 Params.PeerScopeId,
                 std::move(descr.TraceId));
-            if (auto tracer = TlsActivationContext->ActorSystem()->GetActorTracer()) {
-                tracer->HandleInterconnectRecieve(*ev, descr.InterconnectSequenceId);
-            }
             if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
                 Metrics->IncScopeErrors();
                 LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error PeerNodeId# %" PRIu32 " Peer# %s"

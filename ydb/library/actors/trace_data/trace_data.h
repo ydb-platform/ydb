@@ -1,89 +1,54 @@
 #pragma once
 
-#include <util/generic/fwd.h>
-
 #include <util/generic/buffer.h>
-#include <util/generic/vector.h>
 #include <util/generic/hash.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
 
-namespace NActors {
-    namespace NTracing {
-        struct TLocalActorId {
-            ui64 LocalId = 0;
-        };
-        struct TGlobalActorId {
-            ui64 LocalId = 0;
-            ui32 NodeId = 0;
-        };
+namespace NActors::NTracing {
 
-        template <typename TTraits>
-        struct TSendEvent: public TTraits {
-            TTraits::TActorId Sender;
-            TTraits::TActorId Recipient;
-            ui64 ObjectId = 0;
-        };
+    enum class ETraceEventType : ui8 {
+        SendLocal = 0,
+        ReceiveLocal = 1,
+        New = 2,
+        Die = 3,
+    };
 
-        template <typename TTraits>
-        struct TRecieveEvent : public TTraits {
-            TTraits::TActorId Sender;
-            TTraits::TActorId Recipient;
-            ui64 ObjectId = 0;
-            ui32 MessageType = 0;
-        };
+    struct TTraceEvent {
+        ui64 Timestamp;    // microseconds
+        ui64 Actor1;       // Sender LocalId (Send/Receive), ActorId (New/Die)
+        ui64 Actor2;       // Recipient LocalId (Send/Receive), 0 (New/Die)
+        ui32 Aux;          // MessageType index (Send/Receive), 0 (New/Die)
+        ui16 Extra;        // ActivityIndex (Receive), 0 (others)
+        ui8  Type;         // ETraceEventType
+        ui8  Flags;        // reserved
+    };
 
-        struct TLocalTraits {
-            using TActorId = TLocalActorId;
-        };
+    static_assert(sizeof(TTraceEvent) == 32);
 
-        struct TRecieveLocalTraits: public TLocalTraits {
-            ui32 ActivityIndex = 0;
-        };
+    constexpr ui32 TraceFileMagic = 0x41525459; // "YTRA" little-endian
+    constexpr ui32 TraceFileVersion = 1;
 
-        struct TInterconnectTraits {
-            using TActorId = TGlobalActorId;
-            ui32 InterconnectSequenceId = 0;
-        };
+    struct TTraceFileHeader {
+        ui32 Magic = TraceFileMagic;
+        ui32 Version = TraceFileVersion;
+        ui32 NodeId = 0;
+        ui32 HeaderSize = 0;   // byte size of the dictionaries section that follows
+        ui64 EventCount = 0;
+    };
 
-        struct TNewEvent {
-            TLocalActorId ActorId;
-        };
+    static_assert(sizeof(TTraceFileHeader) == 24);
 
-        struct TDieEvent {
-            TLocalActorId ActorId;
-        };
+    using TActivityDict = TVector<std::pair<ui32, TString>>;
+    using TEventNamesDict = THashMap<ui32, TString>;
 
-        struct TEvent {
-            enum class EType : ui8 {
-                SendInterconnect,
-                RecieveInterconnect,
-                SendLocal,
-                RecieveLocal,
-                New,
-                Die
-            };
-            uint64_t Timestamp = 0;
-            union TEventImpl {
-                TSendEvent<TInterconnectTraits> SendInterconnectEvent;
-                TRecieveEvent<TInterconnectTraits> RecieveInterconnectEvent;
-                TSendEvent<TLocalTraits> SendLocalEvent;
-                TRecieveEvent<TRecieveLocalTraits> RecieveLocalEvent;
-                TNewEvent NewEvent;
-                TDieEvent DieEvent;
-            } Event;
-            EType Type;
-        };
+    struct TTraceChunk {
+        TActivityDict ActivityDict;
+        TEventNamesDict EventNamesDict;
+        TVector<TTraceEvent> Events;
+    };
 
-        using TActivityDict = TVector<TStringBuf>;
-        using TEventNamesDict = THashMap<ui32, TString>;
+    TBuffer SerializeTrace(const TTraceChunk& chunk, ui32 nodeId);
+    bool DeserializeTrace(const TBuffer& data, TTraceChunk& chunk, ui32& nodeId);
 
-        struct TTraceChunk {
-            using TEvents = TVector<TEvent>;
-            TActivityDict ActivityDict;
-            TEventNamesDict EventNamesDict;
-            TEvents Events;
-        };
-
-        TBuffer SerializeHeader(TActivityDict&& activityDict, TEventNamesDict&& eventNamesDict);
-        TBuffer SerializeEvents(TTraceChunk::TEvents&& events);
-    }
-}
+} // namespace NActors::NTracing

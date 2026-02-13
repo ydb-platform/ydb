@@ -264,7 +264,7 @@ namespace NActors {
                         TlsThreadContext->ActivityContext.ElapsingActorActivity.store(activityType, std::memory_order_release);
                     }
 
-                    if (auto tracer = ActorSystem->GetActorTracer()) [[likely]] {
+                    if (auto tracer = ActorSystem->GetActorTracer()) {
                         tracer->HandleReceive(*actor, *ev);
                     }
 
@@ -277,7 +277,7 @@ namespace NActors {
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "dyingActorsCnt ", dyingActorsCnt);
                     ExecutionStats.UpdateActorsStats(dyingActorsCnt, ThreadCtx.Pool());
                     if (dyingActorsCnt) {
-                        if (auto tracer = ActorSystem->GetActorTracer()) [[likely]] {
+                        if (auto tracer = ActorSystem->GetActorTracer()) {
                             tracer->HandleDie(*actor);
                         }
                         DropUnregistered();

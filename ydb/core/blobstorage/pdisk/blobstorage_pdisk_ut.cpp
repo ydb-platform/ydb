@@ -14,7 +14,6 @@
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include <util/system/hp_timer.h>
-#include <util/random/fast.h>
 
 namespace NKikimr {
 
@@ -2326,6 +2325,166 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(shares[HullHugeUserData] * 0.80 < shares[HullHugeAsyncBlob] &&
                     shares[HullHugeAsyncBlob] * 0.80 < shares[HullHugeUserData]);
         UNIT_ASSERT(shares[HullComp] * 0.90 > shares[HullFresh]);
+    }
+
+    Y_UNIT_TEST(CompactionWriteShouldNotAffectRtWriteLatency) {
+        using namespace NPriWrite;
+
+        TActorTestContext testCtx{{}};
+        auto ioDuration = TDuration::MilliSeconds(5);
+        testCtx.TestCtx.SectorMap->ImitateRandomWait = {ioDuration, TDuration::MicroSeconds(1)};
+
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->SeparateHugePriorities = true;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
+        TVDiskMock compVDisk(&testCtx);
+        compVDisk.InitFull();
+        TVDiskMock rtVDisk(&testCtx);
+        rtVDisk.InitFull();
+
+        constexpr ui32 compChunkCount = 32;
+        constexpr ui32 rtChunkCount = 8;
+        compVDisk.ReserveChunk(compChunkCount);
+        compVDisk.CommitReservedChunks();
+        rtVDisk.ReserveChunk(rtChunkCount);
+        rtVDisk.CommitReservedChunks();
+
+        TVector<TChunkIdx> compChunks(compVDisk.Chunks[EChunkState::COMMITTED].begin(),
+                compVDisk.Chunks[EChunkState::COMMITTED].end());
+        TVector<TChunkIdx> rtChunks(rtVDisk.Chunks[EChunkState::COMMITTED].begin(),
+                rtVDisk.Chunks[EChunkState::COMMITTED].end());
+
+        UNIT_ASSERT_VALUES_EQUAL(compChunks.size(), compChunkCount);
+        UNIT_ASSERT_VALUES_EQUAL(rtChunks.size(), rtChunkCount);
+
+        auto alignToAppendBlock = [] (size_t size, ui32 appendBlockSize) {
+            return (size + appendBlockSize - 1) / appendBlockSize * appendBlockSize;
+        };
+        const size_t compWriteSize = alignToAppendBlock(2_MB, compVDisk.PDiskParams->AppendBlockSize);
+        const size_t rtWriteSize = alignToAppendBlock(500_KB, rtVDisk.PDiskParams->AppendBlockSize);
+
+        auto seed = TInstant::Now().MicroSeconds();
+        Cerr << "seed# " << seed << Endl;
+        TReallyFastRng32 rng(seed);
+        auto compParts = GenParts(rng, compWriteSize);
+        auto rtParts = GenParts(rng, rtWriteSize);
+
+        constexpr ui32 compInflight = 10;
+        constexpr ui32 compTotalWrites = 1000;
+        constexpr ui32 compWritesPerRtWrite = 20;
+        const ui32 rtTotalWrites = Max<ui32>(1, compTotalWrites / compWritesPerRtWrite);
+
+        void* compCookie = reinterpret_cast<void*>(1);
+        void* rtCookie = reinterpret_cast<void*>(2);
+
+        // statistics section
+        ui32 compSent = 0;
+        ui32 compDone = 0;
+        ui32 rtSent = 0;
+        ui32 rtDone = 0;
+        ui32 nextRtAtCompDone = 0;
+        std::optional<TInstant> rtWriteStartedAt;
+        TVector<double> rtLatenciesMs;
+        ui64 compBytesWritten = 0;
+        ui64 rtBytesWritten = 0;
+        TSimpleTimer totalWriteTimer;
+
+        auto sendCompWrite = [&] {
+            const TChunkIdx chunk = compChunks[compSent % compChunks.size()];
+            testCtx.Send(new NPDisk::TEvChunkWrite(
+                    compVDisk.PDiskParams->Owner, compVDisk.PDiskParams->OwnerRound,
+                    chunk, 0, compParts, compCookie, false, HullComp));
+            ++compSent;
+        };
+
+        auto sendRtWrite = [&] {
+            const TChunkIdx chunk = rtChunks[rtSent % rtChunks.size()];
+            rtWriteStartedAt = TInstant::Now();
+            // Intentional: write request with NPriRead::HullOnlineRt to reproduce production traffic tagging.
+            testCtx.Send(new NPDisk::TEvChunkWrite(
+                    rtVDisk.PDiskParams->Owner, rtVDisk.PDiskParams->OwnerRound,
+                    chunk, 0, rtParts, rtCookie, false, NPriRead::HullOnlineRt));
+            ++rtSent;
+        };
+
+        auto trySendRtWrite = [&] {
+            if (!rtWriteStartedAt && rtSent < rtTotalWrites && compDone >= nextRtAtCompDone) {
+                sendRtWrite();
+                nextRtAtCompDone += compWritesPerRtWrite;
+            }
+        };
+
+        for (ui32 i = 0; i < compInflight && compSent < compTotalWrites; ++i) {
+            sendCompWrite();
+        }
+        trySendRtWrite();
+
+        while (compDone < compTotalWrites || rtDone < rtTotalWrites) {
+            auto result = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
+
+            if (result->Cookie == rtCookie) {
+                UNIT_ASSERT(rtWriteStartedAt);
+                const auto latency = TInstant::Now() - *rtWriteStartedAt;
+                rtLatenciesMs.push_back((double)latency.MicroSeconds() / 1000.0);
+                rtWriteStartedAt.reset();
+                ++rtDone;
+                rtBytesWritten += rtWriteSize;
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result->Cookie, compCookie);
+                ++compDone;
+                compBytesWritten += compWriteSize;
+                if (compSent < compTotalWrites) {
+                    sendCompWrite();
+                }
+            }
+
+            trySendRtWrite();
+        }
+
+        UNIT_ASSERT(!rtLatenciesMs.empty());
+        UNIT_ASSERT_VALUES_EQUAL(rtDone, rtTotalWrites);
+
+        double minLatencyMs = rtLatenciesMs.front();
+        double maxLatencyMs = rtLatenciesMs.front();
+        double avgLatencyMs = 0;
+        for (double latencyMs : rtLatenciesMs) {
+            minLatencyMs = Min(minLatencyMs, latencyMs);
+            maxLatencyMs = Max(maxLatencyMs, latencyMs);
+            avgLatencyMs += latencyMs;
+        }
+        avgLatencyMs /= rtLatenciesMs.size();
+
+        Cout << "HullOnlineRt chunk write latency on vdisk2, ms:"
+             << " min# " << Sprintf("%.3f", minLatencyMs)
+             << " avg# " << Sprintf("%.3f", avgLatencyMs)
+             << " max# " << Sprintf("%.3f", maxLatencyMs) << Endl;
+        Cout << "HullOnlineRt chunk write latency samples on vdisk2, ms:";
+        for (double latencyMs : rtLatenciesMs) {
+            Cout << " " << Sprintf("%.3f", latencyMs);
+        }
+        Cout << Endl;
+
+        const double durationSec = Max(totalWriteTimer.Get().SecondsFloat(), 1e-9);
+        constexpr double bytesInMB = 1'000'000.0;
+        constexpr double bytesInGB = 1'000'000'000.0;
+        Cout << "Chunk write throughput:" << " duration_sec# " << Sprintf("%.3f", durationSec) << Endl
+             << " comp_avg_speed# " << Sprintf("%.3f", (double)compBytesWritten / durationSec / bytesInMB) << "MB/s"
+             << " rt_avg_speed# " << Sprintf("%.3f", (double)rtBytesWritten / durationSec / bytesInMB) << "MB/s" << Endl
+             << " comp_written# " << Sprintf("%.3f", (double)compBytesWritten / bytesInGB) << "GB"
+             << " rt_written# " << Sprintf("%.3f", (double)rtBytesWritten / bytesInGB) << "GB"
+             << Endl;
+
+        // All in-flight device requests are expected to complete before the new request starts.
+        // This results in approximately 4x ioDuration latency. Additionally, there are
+        // one request handled by the Submit thread and one by the PDisk main thread.
+        //
+        // In this test we observe ~35 ms, which is close to the theoretical expectation.
+        // We use a ×10 margin in the assertion to avoid false positives due to timing noise.
+        //
+        // For comparison, the noop scheduler produces ~×60 latency in the same test.
+        UNIT_ASSERT_LE(avgLatencyMs, ioDuration.MillisecondsFloat() * 10);
     }
 }
 

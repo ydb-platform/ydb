@@ -1,7 +1,7 @@
 #pragma once
 
 #include "data_storage.h"
-#include "keyvalue_client_v1.h"
+#include "keyvalue_client.h"
 #include "run_stats.h"
 #include "types.h"
 
@@ -55,7 +55,7 @@ private:
     const NKikimrKeyValue::KeyValueVolumeStressLoad& Config_;
     const TString VolumePath_;
     TRunStats& Stats_;
-    TKeyValueClientV1 Client_;
+    std::unique_ptr<IKeyValueClient> Client_;
 
     std::atomic<bool> StopRequested_ = false;
     const std::chrono::steady_clock::time_point EndAt_;

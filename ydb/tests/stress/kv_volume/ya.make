@@ -5,7 +5,9 @@ SRCS(
     utils.cpp
     run_stats.cpp
     data_storage.cpp
+    keyvalue_client.cpp
     keyvalue_client_v1.cpp
+    keyvalue_client_v2.cpp
     worker.cpp
 )
 

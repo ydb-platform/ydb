@@ -1,4 +1,4 @@
-#include "keyvalue_client_v1.h"
+#include "keyvalue_client.h"
 #include "run_stats.h"
 #include "types.h"
 #include "utils.h"
@@ -250,7 +250,7 @@ TOptions ParseOptions(int argc, char** argv) {
         .StoreResult(&options.InFlight)
         .DefaultValue("1");
 
-    opts.AddLongOption("version", "KeyValue API version (currently only v1 is supported)")
+    opts.AddLongOption("version", "KeyValue API version: v1 or v2")
         .StoreResult(&options.Version)
         .DefaultValue("v1");
 
@@ -283,8 +283,8 @@ TOptions ParseOptions(int argc, char** argv) {
         throw std::runtime_error("exactly one of --config or --config-name must be provided");
     }
 
-    if (options.Version != "v1") {
-        throw std::runtime_error("only --version v1 is supported in this cutover step");
+    if (options.Version != "v1" && options.Version != "v2") {
+        throw std::runtime_error("--version must be v1 or v2");
     }
 
     return options;
@@ -297,7 +297,7 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     TRunStats stats;
 
     {
-        TKeyValueClientV1 setupClient(hostPort);
+        std::unique_ptr<IKeyValueClient> setupClient = MakeKeyValueClient(hostPort, options.Version);
         TString error;
         TVector<TString> channels;
         channels.reserve(config.volume_config().channel_media_size());
@@ -305,7 +305,7 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
             channels.push_back(media);
         }
 
-        if (!setupClient.CreateVolume(volumePath, config.volume_config().partition_count(), channels, &error)) {
+        if (!setupClient->CreateVolume(volumePath, config.volume_config().partition_count(), channels, &error)) {
             Cerr << "CreateVolume failed: " << error << Endl;
             return 2;
         }
@@ -331,9 +331,9 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     }
 
     {
-        TKeyValueClientV1 setupClient(hostPort);
+        std::unique_ptr<IKeyValueClient> setupClient = MakeKeyValueClient(hostPort, options.Version);
         TString error;
-        if (!setupClient.DropVolume(volumePath, &error)) {
+        if (!setupClient->DropVolume(volumePath, &error)) {
             Cerr << "DropVolume failed: " << error << Endl;
             return 2;
         }

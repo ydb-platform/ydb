@@ -19,13 +19,14 @@ class TestYdbKvVolumeWorkload(StressFixture):
             "ydb/tests/stress/kv_volume/tests/configs/write_read_delete.textproto",
         ],
     )
-    def test(self, config):
+    @pytest.mark.parametrize("version", ["v1", "v2"])
+    def test(self, config, version):
         yatest.common.execute([
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
             "--database", self.database,
             "--duration", "1",
             "--in-flight", "1",
-            "--version", "v1",
+            "--version", version,
             "--config", yatest.common.source_path(config),
         ])

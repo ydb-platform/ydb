@@ -3,6 +3,7 @@
 #include "keyvalue_client.h"
 
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_keyvalue_v2.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <grpcpp/client_context.h>
@@ -12,9 +13,9 @@
 
 namespace NKvVolumeStress {
 
-class TKeyValueClientV1 final : public IKeyValueClient {
+class TKeyValueClientV2 final : public IKeyValueClient {
 public:
-    explicit TKeyValueClientV1(const TString& hostPort);
+    explicit TKeyValueClientV2(const TString& hostPort);
 
     bool CreateVolume(const TString& path, ui32 partitionCount, const TVector<TString>& channels, TString* error) override;
     bool DropVolume(const TString& path, TString* error) override;
@@ -30,7 +31,8 @@ private:
 
 private:
     std::shared_ptr<grpc::Channel> Channel_;
-    std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> Stub_;
+    std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> StubV1_;
+    std::unique_ptr<Ydb::KeyValue::V2::KeyValueService::Stub> StubV2_;
 };
 
 } // namespace NKvVolumeStress

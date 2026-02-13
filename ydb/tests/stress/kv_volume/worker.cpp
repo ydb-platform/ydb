@@ -26,7 +26,7 @@ TWorker::TWorker(
     , Config_(config)
     , VolumePath_(volumePath)
     , Stats_(stats)
-    , Client_(hostPort)
+    , Client_(MakeKeyValueClient(hostPort, options.Version))
     , EndAt_(std::chrono::steady_clock::now() + std::chrono::seconds(options.Duration))
 {
     for (const auto& action : Config_.actions()) {
@@ -216,7 +216,7 @@ void TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyVal
     }
 
     TString error;
-    if (!Client_.Write(VolumePath_, partitionId, pairs, writeCommand.channel(), &error)) {
+    if (!Client_->Write(VolumePath_, partitionId, pairs, writeCommand.channel(), &error)) {
         Stats_.RecordError("write_failed", error);
         return;
     }
@@ -248,7 +248,7 @@ void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NK
 
         TString value;
         TString error;
-        if (!Client_.Read(VolumePath_, info.PartitionId, key, offset, readCommand.size(), &value, &error)) {
+        if (!Client_->Read(VolumePath_, info.PartitionId, key, offset, readCommand.size(), &value, &error)) {
             Stats_.RecordError("read_failed", error);
             continue;
         }
@@ -281,7 +281,7 @@ void TWorker::ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const 
 
     for (const auto& [key, info] : keys) {
         TString error;
-        if (!Client_.DeleteKey(VolumePath_, info.PartitionId, key, &error)) {
+        if (!Client_->DeleteKey(VolumePath_, info.PartitionId, key, &error)) {
             Stats_.RecordError("delete_failed", error);
         }
     }

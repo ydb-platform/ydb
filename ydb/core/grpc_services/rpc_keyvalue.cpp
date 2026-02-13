@@ -93,6 +93,67 @@ namespace {
 
 constexpr bool UsePayloadForExecuteTransactionWrite = false;
 
+bool IsUseCustomSerializationForKeyValueReadEnabled() {
+    const TAppData* appData = AppData();
+    if (!appData || !appData->Icb) {
+        return false;
+    }
+    return appData->Icb->KeyValueVolumeControls.UseCustomSerialization.AtomicLoad()->Get();
+}
+
+void AppendVarint(TString& out, ui64 value) {
+    while (value >= 0x80) {
+        out.push_back(static_cast<char>((value & 0x7F) | 0x80));
+        value >>= 7;
+    }
+    out.push_back(static_cast<char>(value));
+}
+
+bool TryReplyReadResultWithCustomSerialization(
+        const TEvKeyValue::TEvReadResponse& from,
+        Ydb::StatusIds::StatusCode status,
+        IRequestNoOpCtx* request)
+{
+    if (status != Ydb::StatusIds::SUCCESS || !from.IsPayload() || !request) {
+        return false;
+    }
+    if (!IsUseCustomSerializationForKeyValueReadEnabled()) {
+        return false;
+    }
+
+    Ydb::KeyValue::ReadResult result;
+    result.set_requested_key(from.Record.requested_key());
+    result.set_requested_offset(from.Record.requested_offset());
+    result.set_requested_size(from.Record.requested_size());
+    result.set_node_id(from.Record.node_id());
+    if (from.Record.status() == NKikimrKeyValue::Statuses::RSTATUS_OVERRUN) {
+        result.set_is_overrun(true);
+    }
+    result.set_status(status);
+
+    TString serializedResult;
+    Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToString(&serializedResult);
+
+    TRope payload = from.GetBuffer();
+    if (payload.GetSize()) {
+        constexpr ui64 valueFieldTag = (4ull << 3) | 2ull; // bytes value = 4;
+
+        TString valueFieldHeader;
+        valueFieldHeader.reserve(16);
+        AppendVarint(valueFieldHeader, valueFieldTag);
+        AppendVarint(valueFieldHeader, payload.GetSize());
+
+        TRope response(std::move(serializedResult));
+        response.Insert(response.End(), TRope(std::move(valueFieldHeader)));
+        response.Insert(response.End(), std::move(payload));
+        request->SendSerializedResult(std::move(response), status);
+    } else {
+        request->SendSerializedResult(TRope(std::move(serializedResult)), status);
+    }
+
+    return true;
+}
+
 void CopyProtobuf(const Ydb::KeyValue::AcquireLockRequest &/*from*/,
         NKikimrKeyValue::AcquireLockRequest */*to*/)
 {
@@ -1041,6 +1102,15 @@ protected:
             }
             this->ReplyWithResult(status, result, TActivationContext::AsActorContext());
         } else {      
+            if constexpr (!IsOperational
+                    && std::is_same_v<TKVRequest, TEvKeyValue::TEvRead>
+                    && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadResult>) {
+                if (TryReplyReadResultWithCustomSerialization(*ev->Get(), status, this->Request.Get())) {
+                    PassAway();
+                    return;
+                }
+            }
+
             TResultRecord result;//google::protobuf::Arena::CreateMessage<TResultRecord>(this->Request->GetArena());
             if constexpr (std::is_same_v<TKVRequest, TEvKeyValue::TEvRead>
                     && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadResult>) {

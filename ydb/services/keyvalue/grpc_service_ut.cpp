@@ -763,6 +763,35 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         UNIT_ASSERT_VALUES_EQUAL(readRangeResult.pair(1).value(), "value22");
     }
 
+    Y_UNIT_TEST(SimpleWriteReadV2WithUsePayloadAndCustomSerializationControl) {
+        TString tablePath = "/Root/mydb/kvtable";
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableImmediateControlsConfig()->MutableKeyValueVolumeControls()->SetUsePayload(1);
+        appConfig.MutableImmediateControlsConfig()->MutableKeyValueVolumeControls()->SetUseCustomSerialization(1);
+
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        ui16 grpc = server.GetPort();
+
+        std::shared_ptr<grpc::Channel> channel;
+        channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
+        MakeDirectory(channel, "/Root/mydb");
+        MakeTable(channel, tablePath);
+        WaitTableCreation(server, tablePath);
+
+        std::unique_ptr<Ydb::KeyValue::V2::KeyValueService::Stub> stub;
+        stub = Ydb::KeyValue::V2::KeyValueService::NewStub(channel);
+
+        Write<Version::V2>(tablePath, 0, "key", "value", 1, stub);
+
+        Ydb::KeyValue::ReadRequest readRequest;
+        readRequest.set_path(tablePath);
+        readRequest.set_partition_id(0);
+        readRequest.set_key("key");
+        Ydb::KeyValue::ReadResult readResult = Read<Version::V2>(readRequest, stub);
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult.value(), "value");
+    }
+
     Y_UNIT_TEST(SimpleExecuteWriteV2WithUsePayloadControl) {
         TString tablePath = "/Root/mydb/kvtable";
         NKikimrConfig::TAppConfig appConfig;

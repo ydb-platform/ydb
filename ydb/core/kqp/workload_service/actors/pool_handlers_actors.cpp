@@ -369,7 +369,7 @@ public:
             Counters.ContinueOk->Inc();
             Counters.DelayedTimeMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
 
-            LOG_REQ_STARTED(PoolId, request,LocalInFlight);
+            LOG_REQ_STARTED(PoolId, request, LocalInFlight);
         } else {
             if (status == Ydb::StatusIds::OVERLOADED) {
                 Counters.ContinueOverloaded->Inc();

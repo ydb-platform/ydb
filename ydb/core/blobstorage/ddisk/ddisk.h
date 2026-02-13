@@ -343,11 +343,11 @@ namespace NKikimr::NDDisk {
 
         TEvErasePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
-            Record.SetFreeSpace(freeSpace);
+            Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
-            Record.SetStatus(status);
+            Record.SetFreeSpace(freeSpace);
         }
     };
 

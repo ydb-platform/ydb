@@ -304,7 +304,7 @@ namespace NKikimr::NDDisk {
                         "offset and size must be multiple of block size and size must be nonzero"));
                     registerError();
                     return false;
-                    }
+                }
 
                 if constexpr (NPrivate::THasWriteInstructionField<TRecord>::value) {
                     const TWriteInstruction instruction(record.GetInstruction());

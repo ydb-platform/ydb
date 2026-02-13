@@ -135,7 +135,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
                 options);
         }
 
-        LOG_INFO(
+        LOG_ERROR(
             NActors::TActivationContext::AsActorContext(),
             NKikimrServices::NBS_PARTITION,
             "Started NBS partition LoadActorAdapter: actor id %s",

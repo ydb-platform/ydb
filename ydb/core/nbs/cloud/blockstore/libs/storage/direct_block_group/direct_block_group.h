@@ -42,40 +42,6 @@ constexpr size_t BlocksCount = 128 * 1024 * 1024 / 4096;
 class TDirectBlockGroup : public IDirectBlockGroup
 {
 private:
-    struct TBlockMeta {
-        TVector<ui64> LsnByPersistentBufferIndex;
-        TVector<bool> IsFlushedToDDiskByPersistentBufferIndex;
-
-        explicit TBlockMeta(size_t persistentBufferCount)
-            : LsnByPersistentBufferIndex(persistentBufferCount, 0)
-            , IsFlushedToDDiskByPersistentBufferIndex(persistentBufferCount, false)
-        {}
-
-        void OnWriteCompleted(const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta)
-        {
-            LsnByPersistentBufferIndex[writeMeta.Index] = writeMeta.Lsn;
-            IsFlushedToDDiskByPersistentBufferIndex[writeMeta.Index] = false;
-        }
-
-        void OnFlushCompleted(size_t persistentBufferIndex, ui64 lsn)
-        {
-            if (LsnByPersistentBufferIndex[persistentBufferIndex] == lsn) {
-                LsnByPersistentBufferIndex[persistentBufferIndex] = 0;
-                IsFlushedToDDiskByPersistentBufferIndex[persistentBufferIndex] = true;
-            }
-        }
-
-        [[nodiscard]] bool IsWritten() const
-        {
-            return IsFlushedToDDisk() || LsnByPersistentBufferIndex[0] != 0;
-        }
-
-        [[nodiscard]] bool IsFlushedToDDisk() const
-        {
-            return IsFlushedToDDiskByPersistentBufferIndex[0];
-        }
-    };
-
     struct TDDiskConnection
     {
         NKikimr::NBsController::TDDiskId DDiskId;
@@ -94,6 +60,16 @@ private:
         }
     };
 
+    struct TRequestsStalking
+    {
+        explicit TRequestsStalking(ui32 responsesExpected)
+            : ResponsesExpected(responsesExpected)
+        {}
+
+        ui32 ResponsesHandled = 0;
+        const ui32 ResponsesExpected;
+    };
+
     TMutex Lock;
 
     TVector<TDDiskConnection> DDiskConnections;
@@ -105,7 +81,8 @@ private:
     ui64 BlocksCount; // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
     std::unordered_map<ui64, std::shared_ptr<IRequestHandler>> RequestHandlersByStorageRequestId;
-    TVector<TBlockMeta> BlocksMeta;
+    class TDirtyMap;
+    std::unique_ptr<TDirtyMap> DirtyMap;
     TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
 
     std::function<void(bool)> WriteBlocksReplyCallback;
@@ -121,6 +98,7 @@ public:
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
         ui32 blockSize,
         ui64 blocksCount);
+    ~TDirectBlockGroup();
 
     void SetWriteBlocksReplyCallback(std::function<void(bool)> callback) override {
         WriteBlocksReplyCallback = std::move(callback);
@@ -145,7 +123,8 @@ public:
 private:
     void HandleConnectResult(
         ui64 storageRequestId,
-        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
+        std::shared_ptr<TRequestsStalking> connectionsStalking);
 
     void HandleWritePersistentBufferResult(
         ui64 storageRequestId,
@@ -169,6 +148,14 @@ private:
     void HandleSyncResult(
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvSyncResult& result);
+
+    void RestorePersistentBuffer();
+    void HandleListPersistentBufferResultOnRestore(
+        ui64 storageRequestId,
+        const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
+        size_t persistentBufferIndex,
+        std::shared_ptr<TRequestsStalking> requestsStalking);
+    void RestorePersistentBufferFinised();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

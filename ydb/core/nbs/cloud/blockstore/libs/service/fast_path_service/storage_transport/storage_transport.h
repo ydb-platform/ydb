@@ -58,7 +58,7 @@ public:
         NWilson::TTraceId traceId,
         ui64 requestId) = 0;
 
-    virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvSyncResult> Sync(
+    virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult> SyncWithPersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,

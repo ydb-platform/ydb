@@ -72,7 +72,8 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
-       if (ev->Get()->SourceType == TEv::EvSync) {
+        auto sourceType = ev->Get()->SourceType;
+        if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
             std::vector<TSegmentManager::TSegment> segments;
             ui64 syncId = SegmentManager.GetSync(ev->Cookie);
             SegmentManager.PopRequest(ev->Cookie, &segments);
@@ -111,7 +112,8 @@ namespace NKikimr::NDDisk {
             hFunc(TEvDisconnect, handleQuery)
             hFunc(TEvWrite, handleQuery)
             hFunc(TEvRead, handleQuery)
-            hFunc(TEvSync, handleQuery)
+            hFunc(TEvSyncWithPersistentBuffer, handleQuery)
+            hFunc(TEvSyncWithDDisk, handleQuery)
             hFunc(TEvWritePersistentBuffer, handleQuery)
             hFunc(TEvReadPersistentBuffer, handleQuery)
             hFunc(TEvErasePersistentBuffer, handleQuery)

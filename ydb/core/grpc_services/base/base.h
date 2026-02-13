@@ -31,6 +31,7 @@
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/stream/str.h>
 
 namespace NKikimrScheme {
@@ -79,13 +80,20 @@ inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TString&& serializedR
 }
 
 inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TRope&& serializedResult) {
-    TVector<grpc::Slice> slices;
+    TStackVec<grpc::Slice, 8> slices;
+    size_t chunkCount = 0;
+    for (auto it = serializedResult.Begin(); it != serializedResult.End(); ++it) {
+        ++chunkCount;
+    }
+    slices.reserve(chunkCount);
+
+    static auto freeChunk = [](void* p) -> void {
+        TRcBuf* toDelete = reinterpret_cast<TRcBuf*>(p);
+        delete toDelete;
+    };
+
     for (auto it = serializedResult.Begin(); it != serializedResult.End(); ++it) {
         auto* owner = new TRcBuf(it.GetChunk());
-        static auto freeChunk = [](void* p) -> void {
-            TRcBuf* toDelete = reinterpret_cast<TRcBuf*>(p);
-            delete toDelete;
-        };
 
         grpc_slice slice = grpc_slice_new_with_user_data(
             const_cast<char*>(it.ContiguousData()), it.ContiguousSize(), freeChunk, owner);

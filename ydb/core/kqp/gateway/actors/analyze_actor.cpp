@@ -181,7 +181,7 @@ void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const T
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     analyzeRequest->Record = Request.Record;
     Send(
-        MakePipePerNodeCacheID(false),
+        MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), StatisticsAggregatorId.value(), true),
         IEventHandle::FlagTrackDelivery
     );
@@ -224,7 +224,7 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& ent
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     analyzeRequest->Record = Request.Record;
     Send(
-        MakePipePerNodeCacheID(false),
+        MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), entry.DomainInfo->Params.GetStatisticsAggregator(), true),
         IEventHandle::FlagTrackDelivery
     );
@@ -241,7 +241,7 @@ void TAnalyzeActor::Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorCont
         auto cancelRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyzeCancel>();
         cancelRequest->Record.SetOperationId(OperationId);
         Send(
-            MakePipePerNodeCacheID(false),
+            MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
             new TEvPipeCache::TEvForward(cancelRequest.release(), StatisticsAggregatorId.value(), false));
     }
 
@@ -269,7 +269,7 @@ void TAnalyzeActor::HandleUnexpectedEvent(ui32 typeRewrite) {
 }
 
 void TAnalyzeActor::PassAway() {
-    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+    Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
     TActorBootstrapped::PassAway();
 }
 

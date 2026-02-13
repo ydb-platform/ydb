@@ -124,7 +124,7 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
             AbcSlug_ = pair.second;
         } else if (pair.first == "_federation_account") {
             FederationAccount_ = pair.second;
-       } else if (pair.first == "_advanced_monitoring") {
+        } else if (pair.first == "_advanced_monitoring") {
             AdvancedMonitoringSettings_ = pair.second;
         }
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -23,7 +24,10 @@ public:
     bool Read(const TString& path, ui32 partitionId, const TString& key, ui32 offset, ui32 size, TString* value, TString* error);
 
 private:
-    bool CallWithRetry(const std::function<grpc::Status(grpc::ClientContext*)>& call, TString* error);
+    bool CallWithRetry(
+        const std::function<grpc::Status(grpc::ClientContext*)>& call,
+        const std::function<Ydb::StatusIds::StatusCode()>& getOperationStatus,
+        TString* error);
 
 private:
     std::shared_ptr<grpc::Channel> Channel_;

@@ -4,6 +4,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/string/builder.h>
+#include <util/system/env.h>
 
 #include <grpcpp/create_channel.h>
 
@@ -24,6 +25,22 @@ TString StatusToString(Ydb::StatusIds::StatusCode status) {
     return Ydb::StatusIds::StatusCode_Name(status);
 }
 
+const TString& AuthTicket() {
+    static const TString token = [] {
+        const TString fromEnv = GetEnv("YDB_AUTH_TICKET", "");
+        if (!fromEnv.empty()) {
+            return fromEnv;
+        }
+        return TString("root@builtin");
+    }();
+
+    return token;
+}
+
+void AdjustCtx(grpc::ClientContext& ctx) {
+    ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, AuthTicket());
+}
+
 } // namespace
 
 TKeyValueClientV1::TKeyValueClientV1(const TString& hostPort)
@@ -41,7 +58,11 @@ bool TKeyValueClientV1::CreateVolume(const TString& path, ui32 partitionCount, c
     }
 
     Ydb::KeyValue::CreateVolumeResponse response;
-    if (!CallWithRetry([&](grpc::ClientContext* ctx) { return Stub_->CreateVolume(ctx, request, &response); }, error)) {
+    if (!CallWithRetry(
+            [&](grpc::ClientContext* ctx) { return Stub_->CreateVolume(ctx, request, &response); },
+            [&] { return response.operation().status(); },
+            error))
+    {
         return false;
     }
 
@@ -58,7 +79,11 @@ bool TKeyValueClientV1::DropVolume(const TString& path, TString* error) {
     request.set_path(path);
 
     Ydb::KeyValue::DropVolumeResponse response;
-    if (!CallWithRetry([&](grpc::ClientContext* ctx) { return Stub_->DropVolume(ctx, request, &response); }, error)) {
+    if (!CallWithRetry(
+            [&](grpc::ClientContext* ctx) { return Stub_->DropVolume(ctx, request, &response); },
+            [&] { return response.operation().status(); },
+            error))
+    {
         return false;
     }
 
@@ -89,7 +114,11 @@ bool TKeyValueClientV1::Write(
     }
 
     Ydb::KeyValue::ExecuteTransactionResponse response;
-    if (!CallWithRetry([&](grpc::ClientContext* ctx) { return Stub_->ExecuteTransaction(ctx, request, &response); }, error)) {
+    if (!CallWithRetry(
+            [&](grpc::ClientContext* ctx) { return Stub_->ExecuteTransaction(ctx, request, &response); },
+            [&] { return response.operation().status(); },
+            error))
+    {
         return false;
     }
 
@@ -111,7 +140,11 @@ bool TKeyValueClientV1::DeleteKey(const TString& path, ui32 partitionId, const T
     deleteRange->mutable_range()->set_to_key_inclusive(key);
 
     Ydb::KeyValue::ExecuteTransactionResponse response;
-    if (!CallWithRetry([&](grpc::ClientContext* ctx) { return Stub_->ExecuteTransaction(ctx, request, &response); }, error)) {
+    if (!CallWithRetry(
+            [&](grpc::ClientContext* ctx) { return Stub_->ExecuteTransaction(ctx, request, &response); },
+            [&] { return response.operation().status(); },
+            error))
+    {
         return false;
     }
 
@@ -140,7 +173,11 @@ bool TKeyValueClientV1::Read(
     request.set_size(size);
 
     Ydb::KeyValue::ReadResponse response;
-    if (!CallWithRetry([&](grpc::ClientContext* ctx) { return Stub_->Read(ctx, request, &response); }, error)) {
+    if (!CallWithRetry(
+            [&](grpc::ClientContext* ctx) { return Stub_->Read(ctx, request, &response); },
+            [&] { return response.operation().status(); },
+            error))
+    {
         return false;
     }
 
@@ -159,27 +196,45 @@ bool TKeyValueClientV1::Read(
     return true;
 }
 
-bool TKeyValueClientV1::CallWithRetry(const std::function<grpc::Status(grpc::ClientContext*)>& call, TString* error) {
+bool TKeyValueClientV1::CallWithRetry(
+    const std::function<grpc::Status(grpc::ClientContext*)>& call,
+    const std::function<Ydb::StatusIds::StatusCode()>& getOperationStatus,
+    TString* error)
+{
     for (ui32 attempt = 1; attempt <= GrpcRetryCount; ++attempt) {
         grpc::ClientContext context;
+        AdjustCtx(context);
         context.set_deadline(std::chrono::system_clock::now() + GrpcDeadline);
 
         grpc::Status grpcStatus = call(&context);
-        if (grpcStatus.ok()) {
-            return true;
+        if (!grpcStatus.ok()) {
+            if (attempt == GrpcRetryCount) {
+                *error = TStringBuilder()
+                    << "gRPC call failed: code=" << static_cast<int>(grpcStatus.error_code())
+                    << " message='" << grpcStatus.error_message() << "'";
+                return false;
+            }
+
+            std::this_thread::sleep_for(GrpcRetrySleep);
+            continue;
         }
 
-        if (attempt == GrpcRetryCount) {
-            *error = TStringBuilder()
-                << "gRPC call failed: code=" << static_cast<int>(grpcStatus.error_code())
-                << " message='" << grpcStatus.error_message() << "'";
-            return false;
+        const Ydb::StatusIds::StatusCode operationStatus = getOperationStatus();
+        if (operationStatus == Ydb::StatusIds::UNAVAILABLE) {
+            if (attempt == GrpcRetryCount) {
+                *error = TStringBuilder()
+                    << "Operation failed with status=" << StatusToString(operationStatus);
+                return false;
+            }
+
+            std::this_thread::sleep_for(GrpcRetrySleep);
+            continue;
         }
 
-        std::this_thread::sleep_for(GrpcRetrySleep);
+        return true;
     }
 
-    *error = "gRPC call failed: unknown error";
+    *error = "Retry loop failed unexpectedly";
     return false;
 }
 

@@ -17,11 +17,11 @@ security_config:
   default_access: <default access rights on the cluster scheme root>
 
   # access list configuration
-  database_allowed_sids: <list of SIDs for the "database" role — cannot issue backend calls without a database>
+  database_allowed_sids: <list of SIDs that are allowed to view database state>
   viewer_allowed_sids: <list of SIDs that are allowed to view the cluster state>
   monitoring_allowed_sids: <list of SIDs that are allowed to monitor and change the cluster state>
   administration_allowed_sids: <list of SIDs that are allowed cluster administration>
-  bootstrap_allowed_sids: <list of SIDs allowed to bootstrap the cluster when not yet initialized>
+  bootstrap_allowed_sids: <list of SIDs allowed to bootstrap the cluster>
   register_dynamic_node_allowed_sids: <list of SIDs that are allowed to register database nodes in the cluster>
 
   # built-in security configuration

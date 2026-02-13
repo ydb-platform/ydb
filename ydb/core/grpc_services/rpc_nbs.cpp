@@ -7,6 +7,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 
 namespace NKikimr::NGRpcService {
@@ -39,6 +40,7 @@ public:
         const TString storagePoolName = request->GetStoragePoolName();
         const ui32 blockSize = request->GetBlockSize() ? request->GetBlockSize() : 4096;
         const ui64 blocksCount = request->GetBlocksCount() ? request->GetBlocksCount() : 32768;
+        const ui32 storageMedia = request->GetStorageMedia();
 
         NYdb::NBS::NProto::TStorageConfig storageConfig;
         storageConfig.SetDDiskPoolName(storagePoolName);
@@ -48,6 +50,9 @@ public:
 
         NKikimrBlockStore::TVolumeConfig volumeConfig;
         volumeConfig.SetBlockSize(blockSize);
+        if (storageMedia == Ydb::Nbs::StorageMediaKind::STORAGE_MEDIA_MEMORY) {
+            volumeConfig.SetStorageMediaKind(NYdb::NBS::NProto::EStorageMediaKind::STORAGE_MEDIA_MEMORY);
+        }
 
         auto* partition = volumeConfig.AddPartitions();
         partition->SetBlockCount(blocksCount);

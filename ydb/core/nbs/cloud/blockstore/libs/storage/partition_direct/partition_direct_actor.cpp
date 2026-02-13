@@ -22,6 +22,11 @@ TPartitionActor::TPartitionActor(
     , VolumeConfig(std::move(volumeConfig))
 {
     Y_ABORT_UNLESS(VolumeConfig.GetPartitions().size() == 1);
+
+    LOG_INFO(NActors::TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+        "Creating partition actor with VolumeConfig: %s, StorageConfig: %s",
+        VolumeConfig.DebugString().data(),
+        StorageConfig.DebugString().data());
 }
 
 void TPartitionActor::Bootstrap(const NActors::TActorContext& ctx)
@@ -96,6 +101,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
                 std::move(persistentBufferDDiskIds),
                 VolumeConfig.GetBlockSize(),
                 VolumeConfig.GetPartitions(0).GetBlockCount(),
+                VolumeConfig.GetStorageMediaKind(),  // storageMedia
                 StorageConfig,
                 AppData()->Counters);
 

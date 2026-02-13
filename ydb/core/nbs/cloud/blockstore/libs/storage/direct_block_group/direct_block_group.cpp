@@ -111,7 +111,7 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TDirectBlockGroup::WriteBlocksLoc
         const auto& ddiskConnection = PersistentBufferConnections[i];
         ++StorageRequestId;
 
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "WriteBlocksLocal" << " requestId# " << StorageRequestId);
+        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "WriteBlocksLocal" << " requestId# " << StorageRequestId);
 
         auto future = StorageTransport->WritePersistentBuffer(
             ddiskConnection.GetServiceId(),
@@ -218,7 +218,7 @@ void TDirectBlockGroup::ProcessSyncQueue()
 
         ++StorageRequestId;
 
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "ProcessSyncQueue" << " requestId# " << StorageRequestId);
+        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "ProcessSyncQueue" << " requestId# " << StorageRequestId);
 
         auto future = StorageTransport->Sync(
             ddiskConnection.GetServiceId(),
@@ -287,7 +287,7 @@ void TDirectBlockGroup::RequestBlockErase(
 
     ++StorageRequestId;
 
-    LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "RequestBlockErase" << " requestId# " << StorageRequestId);
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "RequestBlockErase" << " requestId# " << StorageRequestId);
 
     auto future = StorageTransport->ErasePersistentBuffer(
         PersistentBufferConnections[requestHandler.GetPersistentBufferIndex()]
@@ -364,7 +364,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TDirectBlockGroup::ReadBlocksLocal
 
     ++StorageRequestId;
 
-    LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "ReadBlocksLocal" << " requestId# " << StorageRequestId);
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "ReadBlocksLocal" << " requestId# " << StorageRequestId);
 
     if (!BlocksMeta[startIndex].IsFlushedToDDisk()) {
         const auto& ddiskConnection = PersistentBufferConnections[0];

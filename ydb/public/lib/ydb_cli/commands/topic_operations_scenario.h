@@ -92,6 +92,7 @@ public:
     bool KeyedWrites = false;
     size_t ConfigConsumerCount = 0;
     bool NeedDescribeTopic = false;
+    TString DescribeConsumerName;
 
 protected:
     void CreateTopic(const TString& database,

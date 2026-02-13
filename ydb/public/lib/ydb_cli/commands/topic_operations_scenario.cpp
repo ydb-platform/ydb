@@ -335,6 +335,7 @@ void TTopicOperationsScenario::StartConfiguratorThread(std::vector<std::future<v
     if (!ConfigConsumerCount) {
         return;
     }
+
     TTopicWorkloadConfiguratorParams params{
         .TotalSec = TotalSec.Seconds(),
         .WarmupSec = WarmupSec.Seconds(),
@@ -351,9 +352,10 @@ void TTopicOperationsScenario::StartConfiguratorThread(std::vector<std::future<v
 void TTopicOperationsScenario::StartDescriberThread(std::vector<std::future<void>>& threads,
                                                     const TString& database)
 {
-    if (!NeedDescribeTopic) {
+    if (!NeedDescribeTopic && DescribeConsumerName.empty()) {
         return;
     }
+
     TTopicWorkloadDescriberParams params{
         .TotalSec = TotalSec.Seconds(),
         .WarmupSec = WarmupSec.Seconds(),
@@ -362,6 +364,9 @@ void TTopicOperationsScenario::StartDescriberThread(std::vector<std::future<void
         .ErrorFlag = ErrorFlag,
         .Database = database,
         .TopicName = TopicName,
+        .ConsumerName = DescribeConsumerName,
+        .NeedDescribeTopic = NeedDescribeTopic,
+        .NeedDescribeConsumer = !DescribeConsumerName.empty()
     };
     threads.push_back(std::async([params = std::move(params)]() { TTopicWorkloadWriterWorker::RetryableDescriberLoop(params); }));
 }

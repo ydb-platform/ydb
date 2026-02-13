@@ -18,6 +18,7 @@ namespace NYdb::NConsoleClient {
 class TCommandWorkloadTopicDescribe {
 public:
     static TString GenerateConsumerName(const TString& consumerPrefix, ui32 consumerIdx);
+    static NTopic::TConsumerDescription DescribeConsumer(const TString& database, const TString& topicName, const TString& consumerName, const NYdb::TDriver& driver);
     static TString GenerateFullTopicName(const TString& database, const TString& topicName);
     static NTopic::TTopicDescription DescribeTopic(const TString& database, const TString& topicName, const NYdb::TDriver& driver);
 };
@@ -30,6 +31,9 @@ struct TTopicWorkloadDescriberParams {
     std::shared_ptr<std::atomic<bool>> ErrorFlag;
     TString Database;
     TString TopicName;
+    TString ConsumerName;
+    bool NeedDescribeTopic = false;
+    bool NeedDescribeConsumer = false;
 };
 
 class TTopicWorkloadDescriberWorker {

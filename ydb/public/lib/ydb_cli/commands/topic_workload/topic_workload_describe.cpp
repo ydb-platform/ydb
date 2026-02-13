@@ -9,6 +9,25 @@ TString TCommandWorkloadTopicDescribe::GenerateConsumerName(const TString& consu
     return consumerName;
 }
 
+NYdb::NTopic::TConsumerDescription TCommandWorkloadTopicDescribe::DescribeConsumer(const TString& database,
+                                                                                   const TString& topicName,
+                                                                                   const TString& consumerName,
+                                                                                   const NYdb::TDriver& driver)
+{
+    NYdb::NTopic::TTopicClient topicClient(driver);
+
+    TString fullTopicName = GenerateFullTopicName(database, topicName);
+    auto result = topicClient.DescribeConsumer(fullTopicName, consumerName, {}).GetValueSync();
+
+    if (!result.IsSuccess() || result.GetIssues()) {
+        throw yexception() << "Error describe consumer '" << consumerName << "' for topic '" << fullTopicName << "'";
+    }
+
+    NYdb::NTopic::TConsumerDescription description = result.GetConsumerDescription();
+
+    return description;
+}
+
 TString TCommandWorkloadTopicDescribe::GenerateFullTopicName(const TString& database, const TString& topicName)
 {
     TString fullTopicName = TStringBuilder() << database << "/" << topicName;
@@ -49,7 +68,13 @@ void TTopicWorkloadDescriberWorker::Process(TInstant endTime)
             break;
         }
 
-        TCommandWorkloadTopicDescribe::DescribeTopic(Params.Database, Params.TopicName, Params.Driver);
+        if (Params.NeedDescribeTopic) {
+            TCommandWorkloadTopicDescribe::DescribeTopic(Params.Database, Params.TopicName, Params.Driver);
+        }
+
+        if (Params.NeedDescribeConsumer) {
+            TCommandWorkloadTopicDescribe::DescribeConsumer(Params.Database, Params.TopicName, Params.ConsumerName, Params.Driver);
+        }
 
         Sleep(TDuration::Seconds(3));
     }

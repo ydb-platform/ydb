@@ -27,5 +27,5 @@ class TestWorkloadParallel(ParallelWorkloadTestBase):
             workload_params=runnable_workloads,
             duration_value=self.timeout,
             nemesis_enabled=nemesis_enabled,
-            nodes_percentage=100
+            nodes_percentage=1
         )

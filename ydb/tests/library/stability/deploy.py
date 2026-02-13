@@ -1,4 +1,5 @@
 from collections import defaultdict
+import random
 import allure
 import logging
 import os
@@ -25,6 +26,7 @@ class StressUtilDeployer:
         self.cluster_path = cluster_path
         self.yaml_config = yaml_config
         self.nodes = YdbCluster.get_cluster_nodes()
+        # YdbCluster.execute_single_result_query('ALTER DATABASE `/Root/db1` SET (MAX_PATHS = 200000)')
         patch_max_suffix(1000000)
 
         # Collect unique hosts and their corresponding nodes
@@ -203,8 +205,8 @@ class StressUtilDeployer:
                 num_nodes = max(
                     1, int(
                         len(unique_nodes) * nodes_percentage / 100))
-
-                selected_nodes = unique_nodes[:num_nodes]
+                selected_nodes = random.sample(unique_nodes, num_nodes)
+                # selected_nodes = unique_nodes[:num_nodes]
 
                 allure.attach(
                     f"Selected {

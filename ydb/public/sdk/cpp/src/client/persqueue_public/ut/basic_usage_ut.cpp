@@ -613,7 +613,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (const bool enabled: {true, false}) {
             NPersQueue::TAlterTopicSettings settings{};
             settings.ReadRules(rrSettings);
-            const std::string m = R"-({"shared/user":{"metrics_level":3,"monitoring_project_id": "mon"}})-";
+            const std::string m = R"-({"shared/user":{"metrics_level":3,"monitoring_project_id":"mon"}})-";
             if (enabled) {
                 settings.AdvancedMonitoringSettings(m);
             }

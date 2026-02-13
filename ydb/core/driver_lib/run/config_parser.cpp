@@ -268,6 +268,7 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
     opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&RunOpts.MonitoringAddress);
     opts.AddLongOption("mon-cert", "Path to monitoring certificate file (https)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringCertificateFile);
     opts.AddLongOption("mon-key", "Path to monitoring private key file (https)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringPrivateKeyFile);
+    opts.AddLongOption("mon-ca", "Path to CA certificate file for verifying client certificates (mTLS)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringCaFile);
     opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&RunOpts.MonitoringThreads);
 
     SetupLastGetOptForConfigFiles(opts);
@@ -306,7 +307,7 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
 }
 
 void TRunCommandConfigParser::ApplyParsedOptions() {
-    auto ensureFileExists = [](const TString& path, TStringBuf optName) {
+    auto ensureFileExistsIfSet = [](const TString& path, TStringBuf optName) {
         if (path.empty()) {
             return;
         }
@@ -317,8 +318,9 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
         }
     };
 
-    ensureFileExists(RunOpts.MonitoringCertificateFile, "mon-cert");
-    ensureFileExists(RunOpts.MonitoringPrivateKeyFile, "mon-key");
+    ensureFileExistsIfSet(RunOpts.MonitoringCertificateFile, "mon-cert");
+    ensureFileExistsIfSet(RunOpts.MonitoringPrivateKeyFile, "mon-key");
+    ensureFileExistsIfSet(RunOpts.MonitoringCaFile, "mon-ca");
 
     // apply global options
     Config.AppConfig.MutableInterconnectConfig()->SetStartTcp(GlobalOpts.StartTcp);
@@ -389,6 +391,7 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     Config.AppConfig.MutableMonitoringConfig()->SetInactivityTimeout(ToString(RunOpts.MonitoringInactivityTimeout.Seconds()));
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificateFile(RunOpts.MonitoringCertificateFile);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringPrivateKeyFile(RunOpts.MonitoringPrivateKeyFile);
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCaFile(RunOpts.MonitoringCaFile);
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }
 

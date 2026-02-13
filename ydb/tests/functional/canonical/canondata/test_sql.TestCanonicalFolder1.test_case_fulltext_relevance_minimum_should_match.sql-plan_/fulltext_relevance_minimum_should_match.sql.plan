@@ -52,6 +52,7 @@
                                                         "DefaultOperator": "\"or\"",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
+                                                        "ItemsLimit": "\"1001\"",
                                                         "MinimumShouldMatch": "\"1\"",
                                                         "MinimumShouldMatchExplained": "1",
                                                         "Name": "ReadFullTextIndex",

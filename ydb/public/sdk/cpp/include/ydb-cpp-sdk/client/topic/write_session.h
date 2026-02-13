@@ -176,6 +176,9 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
     //! ProducerId is generated as ProducerIdPrefix + partition id.
     FLUENT_SETTING(std::string, ProducerIdPrefix);
 
+    //! SessionID to use.
+    FLUENT_SETTING_DEFAULT(std::string, SessionId, "");
+
 private:
     using TWriteSessionSettings::ProducerId;
 };

@@ -287,11 +287,12 @@ namespace NKikimr::NDDisk {
         TEvWritePersistentBufferResult() = default;
 
         TEvWritePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
+            Record.SetFreeSpace(freeSpace);
         }
     };
 
@@ -341,11 +342,12 @@ namespace NKikimr::NDDisk {
         TEvErasePersistentBufferResult() = default;
 
         TEvErasePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
+            Record.SetFreeSpace(freeSpace);
         }
     };
 

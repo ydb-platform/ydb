@@ -209,7 +209,7 @@ namespace NKikimr::NDDisk {
             }
             return;
         }
-        Y_ABORT_UNLESS(sectors.size() == sectorsCnt && sectorsCnt <= MaxSectorsPerBufferRecord && sectorsCnt > 1);
+        Y_ABORT_UNLESS(sectors.size() == sectorsCnt && sectorsCnt <= MaxSectorsPerBufferRecord + 1 && sectorsCnt > 1);
 
         const TWriteInstruction instr(record.GetInstruction());
         TRope payload;
@@ -279,7 +279,8 @@ namespace NKikimr::NDDisk {
                         Y_ABORT_UNLESS(pr.PartsCount == 1);
                         Y_ABORT_UNLESS(pr.DataParts.begin()->second == inflight.Data);
                     }
-                    auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                    auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace());
                     auto h = std::make_unique<IEventHandle>(inflight.Sender, SelfId(), replyEv.release(), 0, inflight.Cookie);
                     if (inflight.Session) {
                         h->Rewrite(TEvInterconnect::EvForward, inflight.Session);
@@ -504,7 +505,8 @@ namespace NKikimr::NDDisk {
         }
         Counters.Interface.ErasePersistentBuffer.Reply(true);
         span.End();
-        SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+        SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace()));
     }
 
     void TDDiskActor::Handle(TEvListPersistentBuffer::TPtr ev) {
@@ -557,4 +559,14 @@ namespace NKikimr::NDDisk {
         }
         return sb;
     }
+
+    double TDDiskActor::GetPersistentBufferFreeSpace() {
+        double freeSpace = PersistentBufferSpaceAllocator.GetFreeSpace();
+        ui32 ownedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
+        freeSpace += (MaxChunks - ownedChunks) * SectorInChunk;
+        freeSpace /= (MaxChunks * SectorInChunk);
+        Y_ABORT_UNLESS(freeSpace >= 0 && freeSpace <= 1);
+        return freeSpace;
+    }
+
 } // NKikimr::NDDisk

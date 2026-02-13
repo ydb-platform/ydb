@@ -64,7 +64,7 @@ CLUSTER_CONFIG = dict(
     },
 )
 
-DATABASE_DISK_SPACE_QUOTA_EXCEEDED = 'DATABASE_DISK_SPACE_QUOTA_EXCEEDED' # change to '2033' if enable_oltp_sink: True
+DATABASE_DISK_SPACE_QUOTA_EXCEEDED = 'DATABASE_DISK_SPACE_QUOTA_EXCEEDED'  # change to '2033' if enable_oltp_sink: True
 
 
 @pytest.fixture(scope='module', params=[True, False], ids=['enable_alter_database_create_hive_first--true', 'enable_alter_database_create_hive_first--false'])

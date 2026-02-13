@@ -349,20 +349,21 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         NDetail::TSlidingWindow slidingWindow;
         slidingWindow.WindowSize = TDuration::Seconds(1);
         slidingWindow.UnitSize = TDuration::MilliSeconds(100);
+        controller.SlidingWindow = slidingWindow;
 
         controller.Add(1, 1000001);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 1000001);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1024);
         
         Sleep(TDuration::Seconds(2));
-        UNIT_ASSERT(slidingWindow.GetValueOnWindow() >= TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(controller.SlidingWindow.GetValueOnWindow(), TDuration::Seconds(1));
 
         controller.Remove(2);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 0);
 
         Sleep(TDuration::Seconds(2));
-        UNIT_ASSERT(slidingWindow.GetValueOnWindow() >= TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(controller.SlidingWindow.GetValueOnWindow(), TDuration::Zero());
     }
 
     Y_UNIT_TEST(TestSlidingWindowStartStopManyTimes) {

@@ -37,6 +37,7 @@ TDuration TSlidingWindow::GetValueOnWindow() {
 
     auto carry = TDuration::Zero();
     if (RecordingStart != TInstant::Zero()) {
+        RecordingStart = Max(RecordingStart, now - WindowSize);
         carry = now - RecordingStart;
     }
 

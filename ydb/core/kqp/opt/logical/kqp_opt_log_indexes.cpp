@@ -1259,6 +1259,7 @@ struct TFullTextApplyParseResult {
     TExprNode::TPtr K1Factor;
     TExprNode::TPtr DefaultOperator;
     TExprNode::TPtr MinimumShouldMatch;
+    TExprNode::TPtr ScoreRestriction;
 
     ui64 FulltextExprCount = 0;
     bool IsScoreApply = false;
@@ -1448,25 +1449,95 @@ struct TFullTextApplyParseResult {
     }
 };
 
+TExprNode::TPtr FindScoreOrScoreOverMemberOfStruct(const TExprNode::TPtr& node) {
+    if (node->Content() == "FulltextScore") {
+        return node;
+    }
+
+    auto exprBase = TExprBase(node);
+    if (exprBase.Maybe<TCoMember>()) {
+        auto member = exprBase.Cast<TCoMember>();
+        for(const auto& child : member.Struct().Cast<TCoAsStruct>()) {
+            if (child.Item(1).Ptr()->Content() == "FulltextScore") {
+                return child.Item(1).Ptr();
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void VisitExprSkipOptionalIfValue(const TExprNode::TPtr& node, const TExprVisitPtrFunc& preFunc,
+     TNodeSet& visitedNodes, TExprNode::TPtr& scoreRestriction)
+{
+    if (!visitedNodes.emplace(node.Get()).second) {
+        return;
+    }
+
+    if (!preFunc || preFunc(node)) {
+        if (node->Content() == "OptionalIf") {
+            auto optionalIf = TExprBase(node).Maybe<TCoOptionalIf>().Cast();
+            VisitExprSkipOptionalIfValue(optionalIf.Predicate().Ptr(), preFunc, visitedNodes, scoreRestriction);
+            return;
+        }
+
+        if (node->Content() == "AsStruct") {
+            auto asStruct = TExprBase(node).Maybe<TCoAsStruct>().Cast();
+            for (auto child : asStruct) {
+                VisitExprSkipOptionalIfValue(child.Item(1).Ptr(), preFunc, visitedNodes, scoreRestriction);
+            }
+            return;
+        }
+
+        if (node->Content() == ">" || node->Content() == "<") {
+            auto compare = TExprBase(node).Maybe<TCoCompare>().Cast();
+            if (compare.Left().Maybe<TCoIntegralCtor>() && compare.Left().Cast<TCoIntegralCtor>().Literal().Value() == "0" && node->Content() == "<") {
+                auto score = FindScoreOrScoreOverMemberOfStruct(compare.Right().Ptr());
+                if (score) {
+                    scoreRestriction = node;
+                    VisitExprSkipOptionalIfValue(score, preFunc, visitedNodes, scoreRestriction);
+                }
+            }
+
+            if (compare.Right().Maybe<TCoIntegralCtor>() && compare.Right().Cast<TCoIntegralCtor>().Literal().Value() == "0" && node->Content() == ">") {
+                auto score = FindScoreOrScoreOverMemberOfStruct(compare.Left().Ptr());
+                if (score) {
+                    scoreRestriction = node;
+                    VisitExprSkipOptionalIfValue(score, preFunc, visitedNodes, scoreRestriction);
+                }
+            }
+
+            return;
+        }
+
+        for (const auto& child : node->Children()) {
+            VisitExprSkipOptionalIfValue(child, preFunc, visitedNodes, scoreRestriction);
+        }
+    }
+}
+
+
 TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx, std::string_view indexName) {
 
     TFullTextApplyParseResult result;
-    THashMap<const TExprNode*, const TExprNode*> nodeToParentMap;
     static const THashSet<TString> AllowedFulltextExprs = {
         "FulltextScore",
         "FulltextMatch",
         "And",
-        "OptionalIf",
         "Member",
+        "AsStruct",
+        "OptionalIf",
         "Just",
-        "AsStruct"};
+        "AsStruct",
+        ">",
+        "<"
+    };
 
-    VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
+    TNodeSet visitedNodes;
+
+    VisitExprSkipOptionalIfValue(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
         bool isGreenNode = false;
-        auto parent = nodeToParentMap.find(expr.Get());
         if (AllowedFulltextExprs.contains(expr->Content())) {
-            isGreenNode = true;
-        } else if (parent != nodeToParentMap.end() && parent->second->Content() == "AsStruct") {
             isGreenNode = true;
         } else {
             isGreenNode = false;
@@ -1476,17 +1547,13 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
             return false;
         }
 
-        for(auto& child : expr->Children()) {
-            nodeToParentMap.emplace(child.Get(), expr.Get());
-        }
-
         if (expr->Content() == "FulltextScore" || expr->Content() == "FulltextMatch") {
             result.Apply = expr;
             return false;
         }
 
         return true;
-    });
+    }, visitedNodes, result.ScoreRestriction);
 
     VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
         if (expr->Content() == "FulltextMatch" || expr->Content() == "FulltextScore") {
@@ -1499,7 +1566,12 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
 
     bool hasValidApply = result.Apply && result.ValidateApply(ctx);
 
-    if (!hasValidApply || result.FulltextExprCount != 1) {
+    bool scoreRestrictionFound = result.ScoreRestriction != nullptr;
+    if (!result.IsScoreApply) {
+        scoreRestrictionFound = true;
+    }
+
+    if (!hasValidApply || result.FulltextExprCount != 1 || !scoreRestrictionFound) {
         result.HasErrors = true;
         auto message = TStringBuilder{} << "Unsupported index access, index name: " << indexName << ".";
         if (result.FulltextExprCount > 1) {
@@ -1510,6 +1582,8 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
             message << " FulltextMatch/FulltextScore node is not reachable by conjunctions.";
         } else if (!hasValidApply) {
             message << " FulltextMatch/FulltextScore predicate is not valid.";
+        } else if (!scoreRestrictionFound) {
+            message << " Score restriction is not found in the predicate. It's required to put FulltextScore() > 0 constraint in the where clause.";
         }
 
         TIssue baseIssue{ctx.GetPosition(node.Pos()), message};
@@ -1525,123 +1599,50 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
 }
 
 
-TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap)
+TMaybeNode<TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx)
 {
-    Y_UNUSED(kqpCtx, parentsMap);
-
-    if (!node.Maybe<TCoTopSort>()) {
+    if (!node.Maybe<TCoTopBase>()) {
         return node;
     }
 
-    auto topSort = node.Maybe<TCoTopSort>().Cast();
-    auto read = TReadMatch::MatchFullTextRead(topSort.Input(), kqpCtx);
+    auto topSort = node.Maybe<TCoTopBase>().Cast();
+    auto read = topSort.Input().Maybe<TKqlReadTableFullTextIndex>();
     if (!read) {
         return node;
     }
 
-    auto directions = topSort.SortDirections().Maybe<TCoBool>();
-    if (!directions) {
+    auto settings = TKqpReadTableFullTextIndexSettings::Parse(read.Cast().Settings());
+    if (settings.ItemsLimit){
         return node;
     }
 
-    if (directions.Cast().Literal().Value() != "false") {
+    auto directions = GetSortDirection(topSort.SortDirections());
+    auto sortingKeys = ExtractSortingKeys(topSort.KeySelectorLambda());
+    if (directions != ESortDirection::Reverse || sortingKeys.size() != 1) {
         return node;
     }
 
-    auto result = FindMatchingApply(topSort.KeySelectorLambda().Body(), ctx, read.Index().Value());
-    if (result.HasErrors) {
-        return {};
-    }
-
-    if (!result.IsScoreApply) {
+    if (sortingKeys.front() != NTableIndex::NFulltext::FullTextRelevanceColumn) {
         return node;
     }
 
-    auto searchQuery = TExprBase(result.SearchQuery);
-    auto searchColumn = TExprBase(result.SearchColumn).Maybe<TCoMember>().Cast();
+    settings.SetItemsLimit(topSort.Count().Ptr());
 
-    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
-        .Add(Build<TCoAtom>(ctx, node.Pos())
-            .Value(searchColumn.Name().StringValue())
-            .Done())
-        .Done();
+    auto input = ctx.ChangeChild(
+        read.Cast().Ref(), TKqlReadTableFullTextIndex::idx_Settings, settings.BuildNode(ctx, node.Pos()).Ptr());
 
-    TVector<TCoAtom> resultColumnsVector;
-    for(const auto& column: read.Columns()) {
-        resultColumnsVector.push_back(column);
-    }
-
-    resultColumnsVector.push_back(Build<TCoAtom>(ctx, node.Pos())
-        .Value(NTableIndex::NFulltext::FullTextRelevanceColumn)
-        .Done());
-
-    auto resultColumns = Build<TCoAtomList>(ctx, node.Pos())
-        .Add(resultColumnsVector)
-        .Done();
-
-    auto settings = result.Settings(ctx, node.Pos());
-    settings.push_back(Build<TCoNameValueTuple>(ctx, node.Pos())
-        .Name<TCoAtom>()
-            .Value(TKqpReadTableFullTextIndexSettings::ItemsLimitSettingName)
-            .Build()
-        .Value(topSort.Count())
-        .Done());
-
-    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
-        .Table(read.Table())
-        .Index(read.Index())
-        .Columns(resultColumns.Ptr())
-        .Query(searchQuery.Ptr())
-        .QueryColumns(searchColumns.Ptr())
-        .Settings<TCoNameValueTupleList>().Add(settings).Build()
-        .Done();
-
-    TNodeOnNodeOwnedMap replaces;
-    auto newMember = Build<TCoMember>(ctx, searchColumn.Pos())
-        .Name().Build(NTableIndex::NFulltext::FullTextRelevanceColumn)
-            .Struct(searchColumn.Struct())
-        .Done();
-
-    replaces.emplace(result.Apply.Get(), newMember.Ptr());
-    auto newLambda = TCoLambda{ctx.NewLambda(
-        topSort.KeySelectorLambda().Pos(),
-        std::move(topSort.KeySelectorLambda().Args().Ptr()),
-        ctx.ReplaceNodes(TExprNode::TListType{topSort.KeySelectorLambda().Body().Ptr()}, replaces))};
-
-    auto resultTopSort = Build<TCoTopSort>(ctx, topSort.Pos())
-        .Input(newInput)
-        .KeySelectorLambda(NewLambdaFrom(ctx, topSort.KeySelectorLambda().Pos(), replaces, topSort.KeySelectorLambda().Args().Ref(), newLambda.Body()))
-        .SortDirections(topSort.SortDirections())
-        .Count(topSort.Count())
-        .Done();
-
-    auto rowArg = Build<TCoArgument>(ctx, topSort.Pos())
-        .Name("row")
-        .Done();
-    auto mapResult = Build<TCoMap>(ctx, topSort.Pos())
-        .Input(resultTopSort)
-        .Lambda()
-            .Args({rowArg})
-            .Body<TCoFilterMembers>()
-                .Input(rowArg)
-                .Members(read.Columns())
-                .Build()
-            .Build()
-        .Done();
-
-    return mapResult;
+    return ctx.ChangeChild(
+        node.Ref(), TCoTopSort::idx_Input, std::move(input));
 };
 
-TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap)
+TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    Y_UNUSED(kqpCtx, parentsMap);
     if (!node.Maybe<TCoFlatMap>()) {
         return node;
     }
 
     auto flatMap = node.Maybe<TCoFlatMap>().Cast();
+
     auto read = TReadMatch::MatchFullTextRead(flatMap.Input(), kqpCtx);
     if (!read) {
         return node;
@@ -1695,6 +1696,8 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
             .Struct(searchColumn.Struct())
         .Done();
         replaces.emplace(result.Apply.Get(), newMember.Ptr());
+        auto emptyBool = Build<TCoBool>(ctx, searchColumn.Pos()).Literal().Build("true").Done().Ptr();
+        replaces.emplace(result.ScoreRestriction.Get(), emptyBool);
     } else {
         auto newMember = Build<TCoBool>(ctx, searchColumn.Pos()).Literal().Build("true").Done().Ptr();
         replaces.emplace(result.Apply.Get(), newMember);

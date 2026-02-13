@@ -8,15 +8,15 @@
 
 ## Импорт данных {#import}
 
-Федеративные запросы позволяют импортировать данные из подключенных внешних источников в таблицы базы данных {{ ydb-full-name }}. Для импорта данных нужно использовать запрос чтения из [внешнего источника данных](../datamodel/external_data_source.md) или [внешней таблицы](../datamodel/external_table.md) и записи в {{ ydb-short-name }} таблицу.
+Федеративные запросы позволяют импортировать данные из подключенных внешних источников в таблицы базы данных {{ ydb-full-name }}. Для импорта данных нужно использовать запрос чтения из [внешнего источника данных](../../datamodel/external_data_source.md) или [внешней таблицы](../../datamodel/external_table.md) и записи в {{ ydb-short-name }} таблицу.
 
 Для колоночных таблиц поддерживается массивно-параллельный импорт из внешнего источника при использовании конструкций UPSERT и INSERT — несколько рабочих потоков параллельно читают данные из внешнего источника и пишут в таблицу. Для строковых таблиц функциональность в разработке.
 
-|Операция|Запись в [строковые таблицы](../datamodel/table.md#row-oriented-tables)|Запись в [колоночные таблицы](../datamodel/table.md#column-oriented-tables)|
+|Операция|Запись в [строковые таблицы](../../datamodel/table.md#row-oriented-tables)|Запись в [колоночные таблицы](../../datamodel/table.md#column-oriented-tables)|
 |--------|-----------------|------------------|
-|[UPSERT](../../yql/reference/syntax/upsert_into.md)|однопоточная|параллельная|
-|[REPLACE](../../yql/reference/syntax/replace_into.md)|однопоточная|параллельная|
-|[INSERT](../../yql/reference/syntax/insert_into.md)|однопоточная|параллельная|
+|[UPSERT](../../../yql/reference/syntax/upsert_into.md)|однопоточная|параллельная|
+|[REPLACE](../../../yql/reference/syntax/replace_into.md)|однопоточная|параллельная|
+|[INSERT](../../../yql/reference/syntax/insert_into.md)|однопоточная|параллельная|
 
 {% note tip %}
 

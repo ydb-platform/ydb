@@ -4,8 +4,8 @@
 
 Бакеты в S3 бывают двух видов: публичные и приватные. Для подключения к публичному бакету необходимо использовать `AUTH_METHOD="NONE"`, а для подключения к приватному — `AUTH_METHOD="AWS"`. Подробное описание `AWS` можно найти [здесь](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html). `AUTH_METHOD="NONE"` означает, что аутентификация не требуется. В случае `AUTH_METHOD="AWS"` необходимо указать несколько дополнительных параметров:
 
-- `AWS_ACCESS_KEY_ID_SECRET_PATH` — [секрет](../../datamodel/secrets.md), в котором хранится `AWS_ACCESS_KEY_ID`.
-- `AWS_SECRET_ACCESS_KEY_SECRET_PATH` — [секрет](../../datamodel/secrets.md), в котором хранится `AWS_SECRET_ACCESS_KEY`.
+- `AWS_ACCESS_KEY_ID_SECRET_PATH` — [секрет](../../../datamodel/secrets.md), в котором хранится `AWS_ACCESS_KEY_ID`.
+- `AWS_SECRET_ACCESS_KEY_SECRET_PATH` — [секрет](../../../datamodel/secrets.md), в котором хранится `AWS_SECRET_ACCESS_KEY`.
 - `AWS_REGION` — регион, из которого будет происходить чтение, например `ru-central-1`.
 
 Для настройки соединения с публичным бакетом достаточно выполнить следующий SQL-запрос. Запрос создаст внешний источник данных с именем `s3_data_source`, который будет указывать на конкретный S3-бакет с именем `bucket`.
@@ -18,7 +18,7 @@ CREATE EXTERNAL DATA SOURCE s3_data_source WITH (
 );
 ```
 
-Для настройки соединения с приватным бакетом необходимо выполнить несколько SQL-запросов. Сначала нужно создать [секреты](../../datamodel/secrets.md), содержащие `AWS_ACCESS_KEY_ID` и `AWS_SECRET_ACCESS_KEY`.
+Для настройки соединения с приватным бакетом необходимо выполнить несколько SQL-запросов. Сначала нужно создать [секреты](../../../datamodel/secrets.md), содержащие `AWS_ACCESS_KEY_ID` и `AWS_SECRET_ACCESS_KEY`.
 
 ```yql
 CREATE SECRET aws_access_id WITH (value=<id>);
@@ -40,7 +40,7 @@ CREATE EXTERNAL DATA SOURCE s3_data_source WITH (
 
 ## Использование внешнего источника данных для S3-бакета {#external-data-source-settings}
 
-При работе с S3-совместимым хранилищем данных с помощью [внешних источников данных](../../datamodel/external_data_source.md) можно выяснить свойства файлов в бакете S3 до создания [внешних таблиц](../../datamodel/external_table.md):
+При работе с S3-совместимым хранилищем данных с помощью [внешних источников данных](../../../datamodel/external_data_source.md) можно выяснить свойства файлов в бакете S3 до создания [внешних таблиц](../../../datamodel/external_table.md):
 
 - Быстро просмотреть файлы
 - Проверить права доступа

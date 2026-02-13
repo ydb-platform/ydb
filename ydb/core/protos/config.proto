@@ -2001,6 +2001,12 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0
         }];
+        optional uint64 UseCustomSerialization = 3 [(ControlOptions) = {
+            Description: "Use custom serialization for KeyValue requests and responses",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
     }
 
     message TKQPSessionControls {

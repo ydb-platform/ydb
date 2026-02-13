@@ -93,6 +93,130 @@ namespace {
 
 constexpr bool UsePayloadForExecuteTransactionWrite = false;
 
+void AppendVarint(TString& out, ui64 value) {
+    while (value >= 0x80) {
+        out.push_back(static_cast<char>((value & 0x7F) | 0x80));
+        value >>= 7;
+    }
+    out.push_back(static_cast<char>(value));
+}
+
+TString MakeLengthDelimitedFieldHeader(ui32 fieldNumber, ui64 size) {
+    TString out;
+    out.reserve(16);
+    const ui64 fieldTag = (static_cast<ui64>(fieldNumber) << 3) | 2ull;
+    AppendVarint(out, fieldTag);
+    AppendVarint(out, size);
+    return out;
+}
+
+bool TryReplyReadResultWithCustomSerialization(
+        const TEvKeyValue::TEvReadResponse& from,
+        Ydb::StatusIds::StatusCode status,
+        bool useCustomSerialization,
+        IRequestNoOpCtx* request)
+{
+    if (status != Ydb::StatusIds::SUCCESS || !from.IsPayload() || !request) {
+        return false;
+    }
+    if (!useCustomSerialization) {
+        return false;
+    }
+
+    Ydb::KeyValue::ReadResult result;
+    result.set_requested_key(from.Record.requested_key());
+    result.set_requested_offset(from.Record.requested_offset());
+    result.set_requested_size(from.Record.requested_size());
+    result.set_node_id(from.Record.node_id());
+    if (from.Record.status() == NKikimrKeyValue::Statuses::RSTATUS_OVERRUN) {
+        result.set_is_overrun(true);
+    }
+    result.set_status(status);
+
+    TString serializedResult;
+    Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToString(&serializedResult);
+
+    TRope payload = from.GetBuffer();
+    if (payload.GetSize()) {
+        TString valueFieldHeader = MakeLengthDelimitedFieldHeader(4, payload.GetSize()); // bytes value = 4;
+
+        TRope response(std::move(serializedResult));
+        response.Insert(response.End(), TRope(std::move(valueFieldHeader)));
+        response.Insert(response.End(), std::move(payload));
+        request->SendSerializedResult(std::move(response), status);
+    } else {
+        request->SendSerializedResult(TRope(std::move(serializedResult)), status);
+    }
+
+    return true;
+}
+
+bool TryReplyReadRangeResultWithCustomSerialization(
+        const TEvKeyValue::TEvReadRangeResponse& from,
+        Ydb::StatusIds::StatusCode status,
+        bool useCustomSerialization,
+        IRequestNoOpCtx* request)
+{
+    if (status != Ydb::StatusIds::SUCCESS || !request) {
+        return false;
+    }
+    if (!useCustomSerialization) {
+        return false;
+    }
+
+    bool hasPayload = true;
+    for (int idx = 0; idx < from.Record.pair_size(); ++idx) {
+        if (!from.IsPayload(idx)) {
+            hasPayload = false;
+            break;
+        }
+    }
+    if (!hasPayload) {
+        return false;
+    }
+
+    Ydb::KeyValue::ReadRangeResult result;
+    if (from.Record.status() == NKikimrKeyValue::Statuses::RSTATUS_OVERRUN) {
+        result.set_is_overrun(true);
+    }
+    result.set_node_id(from.Record.node_id());
+    result.set_status(status);
+
+    TString serializedResult;
+    Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToString(&serializedResult);
+    TRope response(std::move(serializedResult));
+
+    for (int idx = 0; idx < from.Record.pair_size(); ++idx) {
+        Ydb::KeyValue::ReadRangeResult::KeyValuePair pair;
+        const auto& fromPair = from.Record.pair(idx);
+        pair.set_key(fromPair.key());
+        pair.set_creation_unix_time(fromPair.creation_unix_time());
+        pair.set_storage_channel(fromPair.storage_channel());
+
+        TString serializedPair;
+        Y_PROTOBUF_SUPPRESS_NODISCARD pair.SerializeToString(&serializedPair);
+
+        TRope payload = from.GetBuffer(idx);
+        ui64 pairSize = serializedPair.size();
+        TString valueFieldHeader;
+        if (payload.GetSize()) {
+            valueFieldHeader = MakeLengthDelimitedFieldHeader(2, payload.GetSize()); // bytes value = 2;
+            pairSize += valueFieldHeader.size() + payload.GetSize();
+        }
+
+        TString pairFieldHeader = MakeLengthDelimitedFieldHeader(1, pairSize); // repeated KeyValuePair pair = 1;
+        response.Insert(response.End(), TRope(std::move(pairFieldHeader)));
+        response.Insert(response.End(), TRope(std::move(serializedPair)));
+        if (payload.GetSize()) {
+            response.Insert(response.End(), TRope(std::move(valueFieldHeader)));
+            response.Insert(response.End(), std::move(payload));
+        }
+    }
+
+    request->SendSerializedResult(std::move(response), status);
+    return true;
+}
+
 void CopyProtobuf(const Ydb::KeyValue::AcquireLockRequest &/*from*/,
         NKikimrKeyValue::AcquireLockRequest */*to*/)
 {
@@ -935,6 +1059,13 @@ public:
     using TBase::TBase;
     using TBase::Reply;
 
+    TKeyValueRequestGrpc(std::conditional_t<IsOperational, IRequestOpCtx, IRequestNoOpCtx>* request,
+            const TKeyValueRequestSettings& settings)
+        : TBase(request)
+        , RequestSettings(settings)
+    {
+    }
+
     template<typename T, typename = void>
     struct THasMsg: std::false_type
     {};
@@ -1041,6 +1172,25 @@ protected:
             }
             this->ReplyWithResult(status, result, TActivationContext::AsActorContext());
         } else {      
+            if constexpr (!IsOperational
+                    && std::is_same_v<TKVRequest, TEvKeyValue::TEvRead>
+                    && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadResult>) {
+                if (TryReplyReadResultWithCustomSerialization(*ev->Get(), status,
+                        RequestSettings.UseCustomSerialization, this->Request.Get())) {
+                    PassAway();
+                    return;
+                }
+            }
+            if constexpr (!IsOperational
+                    && std::is_same_v<TKVRequest, TEvKeyValue::TEvReadRange>
+                    && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadRangeResult>) {
+                if (TryReplyReadRangeResultWithCustomSerialization(*ev->Get(), status,
+                        RequestSettings.UseCustomSerialization, this->Request.Get())) {
+                    PassAway();
+                    return;
+                }
+            }
+
             TResultRecord result;//google::protobuf::Arena::CreateMessage<TResultRecord>(this->Request->GetArena());
             if constexpr (std::is_same_v<TKVRequest, TEvKeyValue::TEvRead>
                     && std::is_same_v<TResultRecord, Ydb::KeyValue::ReadResult>) {
@@ -1119,6 +1269,7 @@ protected:
 protected:
     ui64 KVTabletId = 0;
     TActorId KVPipeClient;
+    TKeyValueRequestSettings RequestSettings;
 };
 
 template <bool IsOperational>
@@ -1324,20 +1475,36 @@ void DoExecuteTransactionKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IF
     TActivationContext::AsActorContext().Register(new TExecuteTransactionRequest<false>(p.release()));
 }
 
-void DoReadKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRequest<true>(p.release()));
+void DoReadKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility) {
+    DoReadKeyValue(std::move(p), facility, {});
 }
 
-void DoReadKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRequest<false>(p.release()));
+void DoReadKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& facility) {
+    DoReadKeyValueV2(std::move(p), facility, {});
 }
 
-void DoReadRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRangeRequest<true>(p.release()));
+void DoReadRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility) {
+    DoReadRangeKeyValue(std::move(p), facility, {});
 }
 
-void DoReadRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRangeRequest<false>(p.release()));
+void DoReadRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& facility) {
+    DoReadRangeKeyValueV2(std::move(p), facility, {});
+}
+
+void DoReadKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const TKeyValueRequestSettings& settings) {
+    TActivationContext::AsActorContext().Register(new TReadRequest<true>(p.release(), settings));
+}
+
+void DoReadKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&, const TKeyValueRequestSettings& settings) {
+    TActivationContext::AsActorContext().Register(new TReadRequest<false>(p.release(), settings));
+}
+
+void DoReadRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const TKeyValueRequestSettings& settings) {
+    TActivationContext::AsActorContext().Register(new TReadRangeRequest<true>(p.release(), settings));
+}
+
+void DoReadRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&, const TKeyValueRequestSettings& settings) {
+    TActivationContext::AsActorContext().Register(new TReadRangeRequest<false>(p.release(), settings));
 }
 
 void DoListRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {

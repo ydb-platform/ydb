@@ -27,6 +27,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/ulid.h>
+#include <ydb/library/actors/util/rope.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -59,6 +60,39 @@ using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
 TString DatabaseFromDomain(const TAppData* appdata);
+
+inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TString&& serializedResult) {
+    // res->data() pointer is used inside grpc code.
+    // So this object should be destroyed during grpc_slice destroying routine
+    auto* res = new TString;
+    res->swap(serializedResult);
+
+    static auto freeResult = [](void* p) -> void {
+        TString* toDelete = reinterpret_cast<TString*>(p);
+        delete toDelete;
+    };
+
+    grpc_slice slice = grpc_slice_new_with_user_data(
+        const_cast<char*>(res->data()), res->size(), freeResult, res);
+    grpc::Slice sl(slice, grpc::Slice::STEAL_REF);
+    return grpc::ByteBuffer(&sl, 1);
+}
+
+inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TRope&& serializedResult) {
+    TVector<grpc::Slice> slices;
+    for (auto it = serializedResult.Begin(); it != serializedResult.End(); ++it) {
+        auto* owner = new TRcBuf(it.GetChunk());
+        static auto freeChunk = [](void* p) -> void {
+            TRcBuf* toDelete = reinterpret_cast<TRcBuf*>(p);
+            delete toDelete;
+        };
+
+        grpc_slice slice = grpc_slice_new_with_user_data(
+            const_cast<char*>(it.ContiguousData()), it.ContiguousSize(), freeChunk, owner);
+        slices.emplace_back(slice, grpc::Slice::STEAL_REF);
+    }
+    return grpc::ByteBuffer(slices.data(), slices.size());
+}
 
 inline TActorId CreateGRpcRequestProxyId(int n = 0) {
     if (n == 0) {
@@ -490,6 +524,9 @@ public:
     virtual void FinishStream(ui32 status) = 0;
 
     virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl flag = EStreamCtrl::CONT) = 0;
+    virtual void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl flag = EStreamCtrl::CONT) {
+        SendSerializedResult(in.ExtractUnderlyingContainerOrCopy<TString>(), status, flag);
+    }
 
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 
@@ -1334,20 +1371,15 @@ public:
     }
 
     void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
-        // res->data() pointer is used inside grpc code.
-        // So this object should be destroyed during grpc_slice destroying routine
-        auto res = new TString;
-        res->swap(in);
+        auto data = MakeByteBufferFromSerializedResult(std::move(in));
+        if (flag == IRequestCtx::EStreamCtrl::FINISH) {
+            AuditLogRequestEnd(status);
+        }
+        Ctx_->Reply(&data, status, flag);
+    }
 
-        static auto freeResult = [](void* p) -> void {
-            TString* toDelete = reinterpret_cast<TString*>(p);
-            delete toDelete;
-        };
-
-        grpc_slice slice = grpc_slice_new_with_user_data(
-                    (void*)(res->data()), res->size(), freeResult, res);
-        grpc::Slice sl = grpc::Slice(slice, grpc::Slice::STEAL_REF);
-        auto data = grpc::ByteBuffer(&sl, 1);
+    void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
+        auto data = MakeByteBufferFromSerializedResult(std::move(in));
         if (flag == IRequestCtx::EStreamCtrl::FINISH) {
             AuditLogRequestEnd(status);
         }

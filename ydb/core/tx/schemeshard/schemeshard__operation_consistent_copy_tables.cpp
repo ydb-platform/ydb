@@ -302,7 +302,7 @@ bool CreateConsistentCopyTables(
                     indexDescr.MutableCreateSrcCdcStream()->CopyFrom(itCreate->second);
                 }
 
-                auto itDrop = descr.GetIndexImplTableDropCdcStreams().find(name);
+                auto itDrop = descr.GetIndexImplTableDropCdcStreams().find(key);
                 if (itDrop != descr.GetIndexImplTableDropCdcStreams().end()) {
                     indexDescr.MutableDropSrcCdcStream()->CopyFrom(itDrop->second);
                 }

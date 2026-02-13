@@ -77,6 +77,9 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, 
             if (!tableColumnType) {
                 break;
             }
+            if (dynamic_cast<const arrow::FixedSizeBinaryType&>(type).byte_width() != NScheme::FSB_SIZE) {
+                break;
+            }
 
             switch (tableColumnType->GetTypeId()) {
                 case NScheme::NTypeIds::Decimal: {

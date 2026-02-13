@@ -91,7 +91,7 @@ static arrow::Status ConvertColumn(
                     return arrow::Status::SerializationError("Cannot parse dy number: ", value);
                 }
                 auto appendResult = builder.Append((*dyNumber).data(), (*dyNumber).size());
-                if (appendResult.ok()) {
+                if (!appendResult.ok()) {
                     return appendResult;
                 }
             }

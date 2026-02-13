@@ -28,7 +28,7 @@ bool TVacuumLogic::TryStartVacuum(ui64 vacuumGeneration, const TActorContext& ct
                     logl << "TVacuumLogic: Starting Vacuum for tablet with id " << Owner->TabletID()
                         << ", current Vacuum generation: " << CurrentVacuumGeneration;
                 }
-                State = EVacuumState::PendingCompaction;
+                ChangeState(EVacuumState::PendingCompaction);
                 return true;
             }
             break;
@@ -51,6 +51,12 @@ bool TVacuumLogic::TryStartVacuum(ui64 vacuumGeneration, const TActorContext& ct
 }
 
 void TVacuumLogic::OnCompactionPrepared(ui32 tableId, ui64 compactionId) {
+    if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+        logl << "TVacuumLogic: OnCompactionPrepared"
+            << " in tablet with id " << Owner->TabletID()
+            << ", state: " << State
+            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+    }
     Y_ENSURE(State == EVacuumState::PendingCompaction);
     CompactingTables[tableId] = {tableId, compactionId};
 }
@@ -58,9 +64,9 @@ void TVacuumLogic::OnCompactionPrepared(ui32 tableId, ui64 compactionId) {
 void TVacuumLogic::WaitCompaction() {
     Y_ENSURE(State == EVacuumState::PendingCompaction);
     if (CompactingTables.empty()) {
-        State = EVacuumState::PendingFirstSnapshot;
+        ChangeState(EVacuumState::PendingFirstSnapshot);
     } else {
-        State = EVacuumState::WaitCompaction;
+        ChangeState(EVacuumState::WaitCompaction);
     }
 }
 
@@ -68,6 +74,12 @@ void TVacuumLogic::OnCompleteCompaction(
     ui32 tableId,
     const TFinishedCompactionInfo& finishedCompactionInfo)
 {
+    if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+        logl << "TVacuumLogic: OnCompleteCompaction"
+            << " in tablet with id " << Owner->TabletID()
+            << ", state: " << State
+            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+    }
     if (State != EVacuumState::WaitCompaction) {
         return;
     }
@@ -78,7 +90,7 @@ void TVacuumLogic::OnCompleteCompaction(
         }
     }
     if (CompactingTables.empty()) {
-        State = EVacuumState::PendingFirstSnapshot;
+        ChangeState(EVacuumState::PendingFirstSnapshot);
     }
 }
 
@@ -93,15 +105,21 @@ bool TVacuumLogic::NeedLogSnaphot() {
 }
 
 void TVacuumLogic::OnMakeLogSnapshot(ui32 generation, ui32 step) {
+    if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+        logl << "TVacuumLogic: OnMakeLogSnapshot"
+            << " in tablet with id " << Owner->TabletID()
+            << ", state: " << State
+            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+    }
     switch (State) {
         case EVacuumState::PendingFirstSnapshot: {
             FirstLogSnaphotStep = TGCTime(generation, step);
-            State = EVacuumState::WaitFirstSnapshot;
+            ChangeState(EVacuumState::WaitFirstSnapshot);
             break;
         }
         case EVacuumState::PendingSecondSnapshot: {
             SecondLogSnaphotStep = TGCTime(generation, step);
-            State = EVacuumState::WaitSecondSnapshot;
+            ChangeState(EVacuumState::WaitSecondSnapshot);
             break;
         }
         default: {
@@ -111,10 +129,16 @@ void TVacuumLogic::OnMakeLogSnapshot(ui32 generation, ui32 step) {
 }
 
 void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
+    if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+        logl << "TVacuumLogic: OnSnapshotCommited"
+            << " in tablet with id " << Owner->TabletID()
+            << ", state: " << State
+            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+    }
     switch (State) {
         case EVacuumState::WaitFirstSnapshot: {
             if (FirstLogSnaphotStep <= TGCTime(generation, step)) {
-                State = EVacuumState::PendingSecondSnapshot;
+                ChangeState(EVacuumState::PendingSecondSnapshot);
             }
             break;
         }
@@ -122,9 +146,9 @@ void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
             if (SecondLogSnaphotStep <= TGCTime(generation, step)) {
                 Ops->Send(Owner->Tablet(), new TEvTablet::TEvGcForStepAckRequest(FirstLogSnaphotStep.Generation, FirstLogSnaphotStep.Step));
                 if (GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
-                    State = EVacuumState::WaitAllGCs;
+                    ChangeState(EVacuumState::WaitAllGCs);
                 } else {
-                    State = EVacuumState::WaitLogGC;
+                    ChangeState(EVacuumState::WaitLogGC);
                 }
             }
             break;
@@ -136,10 +160,16 @@ void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
 }
 
 void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
+    if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+        logl << "TVacuumLogic: OnCollectedGarbage"
+            << " in tablet with id " << Owner->TabletID()
+            << ", state: " << State
+            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+    }
     switch (State) {
         case EVacuumState::WaitAllGCs: {
             if (!GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
-                State = EVacuumState::WaitLogGC;
+                ChangeState(EVacuumState::WaitLogGC);
             }
             break;
         }
@@ -156,10 +186,16 @@ void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
 }
 
 void TVacuumLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TActorContext& ctx) {
+    if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+        logl << "TVacuumLogic: OnGcForStepAckResponse"
+            << " in tablet with id " << Owner->TabletID()
+            << ", state: " << State
+            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+    }
     switch (State) {
         case EVacuumState::WaitAllGCs: {
             if (FirstLogSnaphotStep <= TGCTime(generation, step)) {
-                State = EVacuumState::WaitTabletGC;
+                ChangeState(EVacuumState::WaitTabletGC);
             }
             break;
         }
@@ -190,7 +226,7 @@ bool TVacuumLogic::NeedGC() {
 }
 
 void TVacuumLogic::CompleteVacuum(const TActorContext& ctx) {
-    State = EVacuumState::Idle;
+    ChangeState(EVacuumState::Idle);
     if (NextVacuumGeneration) {
         Executor->StartVacuum(std::exchange(NextVacuumGeneration, 0));
     } else {
@@ -201,6 +237,16 @@ void TVacuumLogic::CompleteVacuum(const TActorContext& ctx) {
                 << ", current Vacuum generation: " << CurrentVacuumGeneration;
         }
     }
+}
+
+
+void TVacuumLogic::ChangeState(EVacuumState to) {
+    if (auto logl = Logger->Log(ELnLev::Debug)) {
+        logl << "TVacuumLogic: State transition from " << State << " to " << to
+            << " in tablet with id " << Owner->TabletID()
+            << ", current Vacuum generation: " << CurrentVacuumGeneration;
+    }
+    State = to;
 }
 
 } // namespace NKikimr::NTabletFlatExecutor

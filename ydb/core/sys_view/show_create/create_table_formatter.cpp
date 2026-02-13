@@ -1133,6 +1133,11 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
 
     if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan) {
         Stream << del << "INITIAL_SCAN = TRUE";
+        del = ", ";
+    }
+
+    if (cdcStream.GetUserSIDs()) {
+        Stream << del << "USERS_SID = TRUE";
     }
 
     Stream << ");";

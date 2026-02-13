@@ -596,8 +596,8 @@ protected:
             }
         }
 
-        auto& payloadJson = valueJson["payload"];
-        payloadJson["source"] = NJson::TJsonMap({
+        auto& sourceJson = valueJson["payload"]["source"];
+        sourceJson = NJson::TJsonMap({
             {"version", "1.0.0"},
             {"connector", "ydb"},
             {"ts_ms", record.GetApproximateCreationDateTime().MilliSeconds()},
@@ -608,7 +608,7 @@ protected:
         });
 
         if (!record.GetUserSID().empty() && Opts.UserSIDs) {
-            payloadJson["user"] = record.GetUserSID();
+            sourceJson["user"] = record.GetUserSID();
         }
     }
 

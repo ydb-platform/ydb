@@ -6640,7 +6640,6 @@ Y_UNIT_TEST(InvalidChangefeedUserSIDs) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:92: Error: Literal of Bool type is expected for USER_SIDS\n");
 }
 
-
 Y_UNIT_TEST(InvalidChangefeedVirtualTimestamps) {
     auto req = R"(
             USE plato;

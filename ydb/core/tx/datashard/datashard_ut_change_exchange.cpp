@@ -1476,11 +1476,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     .WriteKey("step").WriteString("***")
                     .WriteKey("txId").WriteString("***")
                     .WriteKey("ts_ms").WriteString("***")
-                    .WriteKey("snapshot").WriteBool(snapshot)
-                .EndObject();
+                    .WriteKey("snapshot").WriteBool(snapshot);
         if (!userSID.empty()) {
             payload.WriteKey("user").WriteString(userSID);
         }
+        payload.EndObject();
 
         if (before) {
             payload.WriteKey("before").UnsafeWriteValue(before);

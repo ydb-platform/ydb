@@ -45,6 +45,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
             NLs::StreamVirtualTimestamps(false),
+            NLs::StreamUserSIDs(false),
         });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {NLs::PathExist});
 
@@ -175,6 +176,40 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
                   VirtualTimestamps: true
                 }
             )", format, format), {NKikimrScheme::StatusInvalidParameter});
+        }
+    }
+
+    Y_UNIT_TEST(UserSIDs) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedDynamoDBStreamsFormat(true)
+            .EnableChangefeedDebeziumJsonFormat(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const char* format : TVector<const char*>{"Proto", "Json", "DebeziumJson"}) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%s"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormat%s
+                  UserSIDs: true
+                }
+            )", format, format));
+            env.TestWaitNotification(runtime, txId);
+
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/Table/Stream%s", format)), {
+                NLs::StreamUserSIDs(true),
+            });
         }
     }
 

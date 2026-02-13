@@ -31,7 +31,7 @@ code workspace/workspace.code-workspace
 3) Forward the monitoring ports via SSH.
 
     You can find them in the startup script log.
-    
+
     Example:
     ```
     2026-01-16 08:46:09,089 - __main__ - INFO - Cluster started successfully!
@@ -66,7 +66,7 @@ code workspace/workspace.code-workspace
 2) Create partition:
     ```
     cd ydb_bg/ydb/apps/dstool/
-    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 1000 --pool ddp1
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 1000 --pool ddp1 --type=ssd
     ```
 
 3) Write some data:

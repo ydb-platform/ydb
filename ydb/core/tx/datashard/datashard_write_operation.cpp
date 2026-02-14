@@ -75,7 +75,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
     for (const auto& recordOperation : record.operations()) {
         TValidatedWriteTxOperation validatedOperation;
 
-        auto [errCode, errStr] = validatedOperation.ParseOperation(ev, recordOperation, self->TableInfos, TabletId, KeyValidator);
+        auto [errCode, errStr] = validatedOperation.ParseOperation(ev, recordOperation, self->TableInfos, self->MovedUserTableIds, TabletId, KeyValidator);
         if (errCode != NKikimrTxDataShard::TError::OK) {
             ErrCode = errCode;
             ErrStr = std::move(errStr);
@@ -96,7 +96,7 @@ TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
-std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperation::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator) {
+std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperation::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, const THashSet<ui64>& movedUserTables, ui64 tabletId, TKeyValidator& keyValidator) {
     OperationType = recordOperation.GetType();
     switch (OperationType) {
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
@@ -123,8 +123,12 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     const NKikimrDataEvents::TTableId& tableIdRecord = recordOperation.GetTableId();
 
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
-    if (!tableInfoPtr)
+    if (!tableInfoPtr) {
+        if (movedUserTables.contains(tableIdRecord.GetTableId())) {
+            return {NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' was moved."};
+        }
         return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist."};
+    }
 
     const TUserTable& tableInfo = *tableInfoPtr->Get();
 

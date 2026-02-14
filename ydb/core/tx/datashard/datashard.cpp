@@ -1696,6 +1696,9 @@ void TDataShard::PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui6
     if (tableInfo.Stats.LastFullCompaction) {
         PersistUserTableFullCompactionTs(db, tableId, tableInfo.Stats.LastFullCompaction.Seconds());
     }
+
+    db.Table<Schema::MovedUserTables>().Key(prevTableId).Update();
+    MovedUserTableIds.insert(prevTableId);
 }
 
 void TDataShard::PersistUnprotectedReadsEnabled(NIceDb::TNiceDb& db) {

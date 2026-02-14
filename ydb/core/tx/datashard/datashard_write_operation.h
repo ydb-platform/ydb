@@ -17,7 +17,7 @@ namespace NDataShard {
 
 class TValidatedWriteTxOperation: TMoveOnly {
 public:
-    std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator);
+    std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, const THashSet<ui64>& movedUserTables, ui64 tabletId, TKeyValidator& keyValidator);
     TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
     void SetTxKeys(const TUserTable& tableInfo, ui64 tabletId, TKeyValidator& keyValidator);
     

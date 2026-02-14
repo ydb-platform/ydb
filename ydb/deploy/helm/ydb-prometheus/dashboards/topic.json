@@ -45,6 +45,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Number of bytes per second written to the topic using `Ydb::TopicService::StreamWrite`",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -185,6 +186,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Number of messages per second written using `Ydb::TopicService::StreamWrite`",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -325,6 +327,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Distribution of the time from message creation to its being written to the topic, by time intervals in milliseconds",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -590,6 +593,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Distribution of write throttling duration (waiting for quota), by time intervals in milliseconds",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -856,6 +860,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Utilization of the topic partitions’ write quotas",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -955,6 +960,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Number of open write sessions to the topic",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1054,6 +1060,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Number of write sessions to the topic created per second",
       "fieldConfig": {
         "defaults": {
           "color": {

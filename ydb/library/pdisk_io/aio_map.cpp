@@ -104,6 +104,8 @@ class TRandomWaitThreadPool : public IThreadPool {
     TThread WorkThread;
     std::atomic<bool> StopFlag;
     std::pair<TDuration, TDuration> WaitParams;
+    TSpinLock DeadlineLock;
+    TInstant LatestDeadline;
 
     ///////    Thread working part    /////
     static void *Proc(void* that) {
@@ -174,8 +176,14 @@ class TRandomWaitThreadPool : public IThreadPool {
             return false;
         }
         auto op = static_cast<TAsyncIoOperationMap*>(obj);
-        op->Deadline = TInstant::Now() + WaitParams.first
+        const TDuration randomWaitAddend = WaitParams.first
             + TDuration::MicroSeconds(RandomNumber<ui32>(WaitParams.second.MicroSeconds()));
+        {
+            TGuard<TSpinLock> guard(DeadlineLock);
+            const TInstant baseDeadline = Max(LatestDeadline, TInstant::Now());
+            op->Deadline = baseDeadline + randomWaitAddend;
+            LatestDeadline = op->Deadline;
+        }
         IncomingQueue.Push(op);
         return true;
     }
@@ -200,6 +208,7 @@ public:
         : WorkThread(TThread::TParams(Proc, this))
         , StopFlag(false)
         , WaitParams(waitParams)
+        , LatestDeadline(TInstant::Now())
     {
         WorkThread.Start();
     }

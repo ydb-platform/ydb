@@ -80,7 +80,7 @@ struct TEvService {
             Record.SetLagMilliSeconds(lag.MilliSeconds());
         }
 
-        template<class TContainer>
+        template <typename TContainer>
         explicit TEvWorkerStatus(const TWorkerId& id, TInstant startTime, TContainer&& statsValues) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
@@ -129,7 +129,6 @@ struct TEvService {
             version.ToProto(Record.MutableVersion());
         }
     };
-
 };
 
 namespace NService {

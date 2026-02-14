@@ -1162,8 +1162,8 @@ namespace {
                     levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << name << " value is invalid: " << value << ". Expected one of "
-                                         << GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>()
+                        TStringBuilder() << name << " value is invalid: " << value << "."
+                            << "Expected one of " << GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>()
                     ));
                     return false;
                 }

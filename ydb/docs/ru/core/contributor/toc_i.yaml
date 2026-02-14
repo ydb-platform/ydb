@@ -1,6 +1,8 @@
 items:
 - name: Работа над изменениями
   href: suggest-change.md
+- name: Автотесты и их стабильность
+  href: autotests-and-analysis.md
 - name: Сборка и тесты Ya
   href: build-ya.md
 - name: Релизы

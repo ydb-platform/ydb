@@ -36,7 +36,10 @@ const TString& AuthTicket() {
 }
 
 void AdjustCtx(grpc::ClientContext& ctx) {
-    ctx.AddMetadata(YdbAuthHeader, AuthTicket());
+    auto token = AuthTicket();
+    if (token.size()) {
+        ctx.AddMetadata(YdbAuthHeader, token);
+    }
 }
 
 } // namespace

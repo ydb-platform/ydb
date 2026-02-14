@@ -209,7 +209,8 @@ namespace {
         Y_ENSURE(buildResult.ComputeNode);
 
         auto evaluateRes = Evaluate(buildResult.ComputeNode, ctx, typesCtx, funcRegistry);
-        auto repr = PrintExpression(evaluateRes, ctx);
+        auto finalExpr = Evaluate(evaluateRes, ctx, typesCtx, funcRegistry);
+        auto repr = PrintExpression(finalExpr, ctx);
 
         TStringBuilder keyStringBuilder;
         for (auto k : keyList) {

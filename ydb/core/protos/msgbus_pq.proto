@@ -109,6 +109,10 @@ message TPersQueuePartitionRequest {
         optional int64 WriteTimeMS = 1; //for mirroring only
     }
 
+    message TCmdUpdateReadMetrics {
+        optional uint64 InFlightOverflowDurationMs = 1;
+    }
+
     message TCmdGetMaxSeqNo {
         repeated bytes SourceId = 2; //list of sourceIds to request
     }
@@ -167,6 +171,7 @@ message TPersQueuePartitionRequest {
     optional TCmdRegisterMessageGroup CmdRegisterMessageGroup = 20;
     optional TCmdDeregisterMessageGroup CmdDeregisterMessageGroup = 21;
     optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
+    optional TCmdUpdateReadMetrics CmdUpdateReadMetrics = 29;
 
     optional NActorsProto.TActorId PipeClient = 15;
 

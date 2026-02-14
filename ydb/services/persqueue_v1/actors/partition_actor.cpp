@@ -160,6 +160,7 @@ TPartitionActor::~TPartitionActor() = default;
 void TPartitionActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
+    ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
 }
 
 const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const {
@@ -1031,6 +1032,23 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const 
 
 void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContext& ctx) {
     ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
+}
+
+void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {
+    auto inFlightFullnessDuration = PartitionInFlightMemoryController.GetOverflowDuration();
+
+    NKikimrClient::TPersQueueRequest request;
+    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetInFlightOverflowDurationMs(inFlightFullnessDuration.MilliSeconds());
+
+    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    req->Record.Swap(&request);
+
+    ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
+    if (!PipeClient) {
+        return;
+    }
+
+    NTabletPipe::SendData(ctx, PipeClient, req.Release());
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {

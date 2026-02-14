@@ -130,6 +130,7 @@ struct TEvPQ {
         EvPartitionLabeledCounters,
         EvGetPartitionClientInfo,
         EvUpdateAvailableSize,
+        EvUpdateReadMetrics,
         EvPipeDisconnected,
         EvReserveBytes,
         EvPartitionLabeledCountersDrop,
@@ -714,6 +715,14 @@ struct TEvPQ {
         {}
 
         TActorId Sender;
+    };
+
+    struct TEvUpdateReadMetrics : TEventLocal<TEvUpdateReadMetrics, EvUpdateReadMetrics> {
+        TEvUpdateReadMetrics(TDuration inFlightOverflowDuration)
+            : InFlightOverflowDuration(inFlightOverflowDuration)
+        {}
+
+        TDuration InFlightOverflowDuration;
     };
 
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {

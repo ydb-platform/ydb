@@ -1,7 +1,33 @@
+#include <util/datetime/base.h>
 #include <util/system/types.h>
 #include <deque>
 
 namespace NKikimr::NPQ {
+
+namespace NDetail {
+
+struct TSlidingWindow {
+private:
+    struct TSlidingWindowRecord {
+        TInstant Start;
+        TDuration Duration;
+    };
+    std::deque<TSlidingWindowRecord> Records;
+    TInstant RecordingStart = TInstant::Zero();
+
+    void RemoveOldRecords(TInstant now);
+
+public:
+    TDuration WindowSize = TDuration::Seconds(60);
+    TDuration UnitSize = TDuration::Seconds(1);
+
+    void StartRecord();
+    TDuration GetValueOnWindow();
+    void Reset();
+    size_t GetRecordsCount() const;
+};
+
+} // namespace NDetail
 
 // This class is used to control in-flight data.
 // Contoller handles layout of data units, max units count is MAX_LAYOUT_COUNT constant.
@@ -28,11 +54,16 @@ struct TInFlightController {
     ui64 TotalSize = 0;
     ui64 MaxAllowedSize = 0;
 
+    TInstant InFlightFullSince = TInstant::Zero();
+    NDetail::TSlidingWindow SlidingWindow;
+
     // Adds an offset with size
     bool Add(ui64 Offset, ui64 Size);
     // Removes offsets <= given offset
     bool Remove(ui64 Offset);
     bool IsMemoryLimitReached() const;
+
+    TDuration GetOverflowDuration();
 };
 
 } // namespace NKikimr::NPQ

@@ -768,6 +768,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         PartitionCountersLabeled->GetCounters()[METRIC_LIFE_TIME] = CreationTime.MilliSeconds();
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS] = 1;
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS_TOTAL] = Config.PartitionsSize();
+        PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Set(0);
         ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
     UpdateUserInfoEndOffset(ctx.Now());
@@ -1827,6 +1828,14 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     }
 
     OnReadComplete(info, userInfo, ev->Get(), ctx);
+}
+
+void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext&) {
+    LOG_D("Handle TEvPQ::TEvUpdateReadMetrics");
+    auto inFlightOverflowDuration = ev->Get()->InFlightOverflowDuration;
+    if (PartitionCountersLabeled) {
+        PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Set(inFlightOverflowDuration.MilliSeconds());
+    }
 }
 
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {

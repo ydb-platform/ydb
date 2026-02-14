@@ -168,6 +168,7 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
     data->TotalErrors = snapshot.TotalErrors;
     data->ActionsPerSecond = recentRate;
     data->AverageActionsPerSecond = avgRate;
+    data->Latency = snapshot.TotalLatency;
     data->SampleErrors = snapshot.SampleErrors;
 
     data->Actions.reserve(snapshot.ActionRuns.size());
@@ -216,6 +217,14 @@ void TRunDisplayController::PrintText(const TRunDisplayData& data) const {
          << " ops/s(cur)=" << std::fixed << std::setprecision(2) << data.ActionsPerSecond
          << " ops/s(avg)=" << std::fixed << std::setprecision(1) << data.AverageActionsPerSecond
          << " errors=" << data.TotalErrors;
+
+    if (data.Latency.Samples > 0) {
+        line << " | lat(ms):"
+             << " p50=" << data.Latency.P50Ms
+             << " p90=" << data.Latency.P90Ms
+             << " p99=" << data.Latency.P99Ms
+             << " p100=" << data.Latency.P100Ms;
+    }
 
     if (!data.Actions.empty()) {
         line << " | actions: ";

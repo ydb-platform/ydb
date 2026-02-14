@@ -17,6 +17,18 @@ using namespace std::chrono_literals;
 namespace {
 
 constexpr ui32 DefaultActionMaxInFlight = 5;
+const TString InitialActionName = "__initial__";
+const TString ReadLatencyKind = "read";
+const TString WriteLatencyKind = "write";
+const TString DeleteLatencyKind = "delete";
+
+ui64 ToLatencyMs(std::chrono::steady_clock::duration duration) {
+    const ui64 latencyUs = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+    if (latencyUs == 0) {
+        return 0;
+    }
+    return (latencyUs + 999) / 1000;
+}
 
 } // namespace
 
@@ -250,7 +262,15 @@ bool TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyVal
     }
 
     TString error;
-    if (!Client_->Write(VolumePath_, partitionId, pairs, writeCommand.channel(), &error)) {
+    const auto startedAt = std::chrono::steady_clock::now();
+    const bool ok = Client_->Write(VolumePath_, partitionId, pairs, writeCommand.channel(), &error);
+    const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
+
+    if (actionName != InitialActionName) {
+        Stats_.RecordLatency(WriteLatencyKind, latencyMs);
+    }
+
+    if (!ok) {
         Stats_.RecordError("write_failed", error);
         return false;
     }
@@ -284,7 +304,12 @@ void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NK
 
         TString value;
         TString error;
-        if (!Client_->Read(VolumePath_, info.PartitionId, key, offset, readCommand.size(), &value, &error)) {
+        const auto startedAt = std::chrono::steady_clock::now();
+        const bool ok = Client_->Read(VolumePath_, info.PartitionId, key, offset, readCommand.size(), &value, &error);
+        const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
+        Stats_.RecordLatency(ReadLatencyKind, latencyMs);
+
+        if (!ok) {
             Stats_.RecordError("read_failed", error);
             continue;
         }
@@ -317,7 +342,12 @@ void TWorker::ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const 
 
     for (const auto& [key, info] : keys) {
         TString error;
-        if (!Client_->DeleteKey(VolumePath_, info.PartitionId, key, &error)) {
+        const auto startedAt = std::chrono::steady_clock::now();
+        const bool ok = Client_->DeleteKey(VolumePath_, info.PartitionId, key, &error);
+        const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
+        Stats_.RecordLatency(DeleteLatencyKind, latencyMs);
+
+        if (!ok) {
             Stats_.RecordError("delete_failed", error);
         }
     }

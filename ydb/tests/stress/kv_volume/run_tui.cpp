@@ -54,10 +54,23 @@ Element TRunTui::BuildHeaderPart() {
               << "   ops/s(avg): " << std::fixed << std::setprecision(1) << data->AverageActionsPerSecond
               << "   errors: " << data->TotalErrors;
 
+    std::stringstream latencySs;
+    if (data->Latency.Samples == 0) {
+        latencySs << "latency(ms): n/a";
+    } else {
+        latencySs << "latency(ms):"
+                  << " p50=" << data->Latency.P50Ms
+                  << " p90=" << data->Latency.P90Ms
+                  << " p99=" << data->Latency.P99Ms
+                  << " p100=" << data->Latency.P100Ms
+                  << "  samples=" << data->Latency.Samples;
+    }
+
     return window(text("kv_volume workload"),
         vbox({
             text(timeSs.str()),
             text(metricsSs.str()) | bold,
+            text(latencySs.str()),
             hbox({
                 text("Progress: ["),
                 gauge(static_cast<float>(progress)) | size(WIDTH, EQUAL, 20),

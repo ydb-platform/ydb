@@ -2395,6 +2395,12 @@ public:
                     break;
                 }
             }
+            // When tracing is disabled all QuerySpanIds are 0 and GetAllQuerySpanIds
+            // filters them out.  Fall back to the first collected query text which is
+            // the lock-establishing query.
+            if (victimQueryText.empty()) {
+                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
+            }
         }
 
         return {victimQuerySpanId, victimQueryText};
@@ -2486,7 +2492,13 @@ public:
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
                         YQL_ENSURE(!issues.Empty());
                         auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
-                        EmitVictimTliLog(brokenLockQuerySpanId, ev->BrokenLockQuerySpanId, ev->LocksBrokenAsVictim);
+                        // Use TxManager's broken locks count as fallback when executer stats don't
+                        // carry LocksBrokenAsVictim (e.g. lock invalidation detected via AddLock
+                        // on STATUS_COMPLETED response where datashard TxStats lack victim count).
+                        auto victimCount = ev->LocksBrokenAsVictim > 0
+                            ? ev->LocksBrokenAsVictim
+                            : QueryState->TxCtx->TxManager->GetBrokenLocksCount();
+                        EmitVictimTliLog(brokenLockQuerySpanId, ev->BrokenLockQuerySpanId, victimCount);
                     } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {
                         // Non-TxManager (obsolete) path: no QuerySpanId tracking
                         YQL_ENSURE(!QueryState->TxCtx->TxManager);
@@ -2613,6 +2625,13 @@ public:
         if (ExecuterId) {
             Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
         } else {
+            // No executer to forward to; emit victim TLI stats directly since
+            // ProcessExecuterResult (which normally handles this) won't be called.
+            if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
+                auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
+                auto victimCount = QueryState->TxCtx->TxManager->GetBrokenLocksCount();
+                EmitVictimTliLog(brokenLockQuerySpanId, std::nullopt, victimCount);
+            }
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.Issues));
         }
     }

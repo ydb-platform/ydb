@@ -1091,6 +1091,9 @@ public:
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
+                    // STATUS_COMPLETED response TxStats don't include LocksBrokenAsVictim,
+                    // but the lock invalidation detected by AddLock means this is a victim.
+                    Stats.LocksBrokenAsVictim += 1;
                     YQL_ENSURE(TxManager->BrokenLocks());
                     // Use actor's current QuerySpanId (KQP knows which request placed the lock)
                     if (CurrentQuerySpanId != 0) {

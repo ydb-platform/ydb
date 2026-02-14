@@ -28,7 +28,7 @@ class TOffloadedPoolAllocator : public IAllocator {
 public:
     TOffloadedPoolAllocator(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> scopedAlloc)
         : Alloc(TDefaultAllocator::Instance())
-        , ScopedAlloc(std::move(scopedAlloc)) 
+        , ScopedAlloc(std::move(scopedAlloc))
         , AllocatedSize(0) {
     }
 
@@ -166,7 +166,7 @@ public:
     }
 
     explicit TColumnBatch(const TRecordBatchPtr& data, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr)
-        : Alloc(alloc) 
+        : Alloc(alloc)
         , Data(data)
         , SerializedMemory(NArrow::GetBatchDataSize(Data))
         , Memory(NArrow::GetBatchMemorySize(Data)) {
@@ -435,7 +435,7 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
 
     struct TUnpreparedBatch {
         ui64 TotalDataSize = 0;
-        std::deque<TRecordBatchPtr> Batches; 
+        std::deque<TRecordBatchPtr> Batches;
     };
 
 public:
@@ -690,7 +690,7 @@ class TRowsBatcher {
             return MakeIntrusive<TRowBatch>(Extract(), std::move(Alloc));
         }
     };
-    
+
 public:
     explicit TRowsBatcher(
             ui16 columnCount,
@@ -747,7 +747,7 @@ private:
 
 class TRowsBatcherProxy : public IRowsBatcher {
 public:
-    TRowsBatcherProxy(const size_t columnsCount, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) 
+    TRowsBatcherProxy(const size_t columnsCount, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : ColumnsCount(columnsCount)
         , RowBatcher(columnsCount, std::nullopt, alloc) {
         CurrentRow.reserve(columnsCount);
@@ -1201,7 +1201,7 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
     const auto iterPrimary = PrimaryToSecondary.find(primaryKey);
 
     // In case on unique indexes NULL != NULL,
-    // so we don't need to check if rows with NULLs are unique. 
+    // so we don't need to check if rows with NULLs are unique.
     const bool secondaryKeyHasNull = std::any_of(
         secondaryKey.begin(),
         secondaryKey.end(),
@@ -1678,7 +1678,7 @@ public:
                 const auto& rightWriteInfo = WriteInfos.at(rhs);
                 return leftWriteInfo.Metadata.Priority < rightWriteInfo.Metadata.Priority;
             });
-        
+
         for (const TWriteToken token : writeTokensFoFlush) {
             FlushSerializer(token);
         }
@@ -1757,7 +1757,7 @@ public:
                     operation.SetQuerySpanId(inFlightBatch.QuerySpanId);
                 }
             } else {
-                AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());   
+                AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());
             }
         }
 

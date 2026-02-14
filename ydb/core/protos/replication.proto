@@ -200,7 +200,7 @@ message TOperationId {
 
 message TReplicationLocationConfig {
     optional string Path = 1;
-    optional string YdbDatabaseId = 2;
+    optional string YcResourceId = 2;
     optional string YcFolderId = 3;
     optional string YcCloudId = 4;
     optional string MonitoringProjectId = 5;
@@ -349,15 +349,16 @@ message TEvStopWorker {
     optional TWorkerIdentity Worker = 2;
 }
 
-enum EWorkOperation {
-    UNSPECIFIED = 0;
-    READ = 1;
-    DECOMPRESS = 2;
-    PROCESS = 3;
-    WRITE = 4;
-};
 
 message TWorkerStats {
+    enum EWorkOperation {
+        OPERATION_UNSPECIFIED = 0;
+        OPERATION_READ = 1;
+        OPERATION_DECOMPRESS = 2;
+        OPERATION_PROCESS = 3;
+        OPERATION_WRITE = 4;
+    };
+
     enum EStatsKeys {
         READ_TIME = 1;
         DECOMPRESS_ELAPSED_CPU = 2;

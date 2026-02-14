@@ -11,11 +11,14 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
 namespace NKikimr::NReplication::NController {
 
 const TString ReplicationConsumerName = "replicationConsumer";
+
+using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
 
 namespace {
 

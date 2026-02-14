@@ -1152,8 +1152,9 @@ namespace {
                 }
                 auto& levelSetting = dstSettings.MetricsSettings.ConstructInPlace().Level;
                 ui64 numericVal = 0;
-                if (TryFromString<ui64>(value, numericVal)) {
-                    levelSetting = static_cast < TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>(numericVal);
+                const ui64 maxValue = static_cast<ui64>(TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Detailed);
+                if (TryFromString<ui64>(value, numericVal) && numericVal <= maxValue) {
+                    levelSetting = static_cast<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>(numericVal);
                 } else if (value == "database") {
                     levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Database;
                 } else if (value == "object") {
@@ -1163,7 +1164,7 @@ namespace {
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << name << " value is invalid: " << value << "."
-                            << "Expected one of " << GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>()
+                            << "Expected numeric value from 0 to " << maxValue << " or one of " << GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>()
                     ));
                     return false;
                 }

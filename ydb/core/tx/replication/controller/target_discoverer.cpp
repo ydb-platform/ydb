@@ -2,6 +2,7 @@
 #include "private_events.h"
 #include "target_discoverer.h"
 #include "target_table.h"
+#include <ydb/core/protos/metrics_config.pb.h> // should be before target_transfer.h
 #include "target_transfer.h"
 #include "util.h"
 

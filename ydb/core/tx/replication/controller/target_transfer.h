@@ -6,9 +6,11 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/tx/replication/service/worker.h>
 
+namespace NKikimrProto::NMetricsConfig {
+    class TMetricsConfig;
+} // namespace NKikimrProto::NMetricsConfig
 
 namespace NKikimr::NReplication::NController {
-
 
 class TTargetTransfer: public TTargetWithStream {
     using TBase = TTargetWithStream;
@@ -46,6 +48,6 @@ public:
 
 private:
     TActorId StreamConsumerRemover;
-    NKikimrProto::NMetricsConfig::TMetricsConfig::EMetricsLevel MetricsLevel = NKikimrProto::NMetricsConfig::TMetricsConfig::LEVEL_DEFAULT;
+    NKikimrProto::NMetricsConfig::TMetricsConfig MetricsConfig;
 };
 }

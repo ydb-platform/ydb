@@ -238,6 +238,8 @@ message TEvKqpInputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
     optional string BatchOperationMaxKey = 2;
     repeated uint32 BatchOperationKeyIds = 3;
+    repeated uint64 DeferredBreakerQuerySpanIds = 4; // QuerySpanIds of transactions that broke locks in deferred scenarios
+    repeated uint32 DeferredBreakerNodeIds = 5; // Node IDs where breaker query texts are cached (parallel to DeferredBreakerQuerySpanIds)
 }
 
 message TKqpReadRangesSourceSettings {
@@ -280,6 +282,9 @@ message TKqpReadRangesSourceSettings {
 
     // Vector top-K pushdown for brute force vector search
     optional NKikimrKqp.TReadVectorTopK VectorTopK = 26;
+
+    // Globally unique query trace ID for TLI log linkage
+    optional uint64 QuerySpanId = 27;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -320,6 +325,9 @@ message TKqpVectorResolveSettings {
     // Parameters for finding overlapping clusters (multiple clusters per row)
     optional uint32 OverlapClusters = 18;
     optional double OverlapRatio = 19;
+
+    // Globally unique query trace ID for TLI log linkage
+    optional uint64 QuerySpanId = 20;
 }
 
 message TKqpTaskInfo {
@@ -2241,6 +2249,9 @@ message TEvRead {
     optional NKikimrDataEvents.ELockMode LockMode = 904;
 
     optional NKikimrKqp.TReadVectorTopK VectorTopK = 905;
+
+    // Globally unique query trace ID for TLI log linkage
+    optional uint64 QuerySpanId = 906;
 }
 
 message TReadContinuationToken {
@@ -2299,6 +2310,12 @@ message TEvReadResult {
     optional uint64 RowCount = 12;
 
     optional uint32 NodeId = 13;
+
+    // QuerySpanIds of transactions that broke locks in deferred scenarios (e.g., OLTP sink UPSERT...SELECT)
+    repeated uint64 DeferredBreakerQuerySpanIds = 14;
+
+    // Node IDs where breaker query texts are cached (parallel to DeferredBreakerQuerySpanIds)
+    repeated uint32 DeferredBreakerNodeIds = 15;
 
     // Data for the possibly partial result
     oneof ReadResult {
@@ -2523,6 +2540,7 @@ message TInMemoryLockInfo {
     optional NKikimrProto.TRowVersion BreakVersion = 7;
     repeated NKikimrProto.TPathID ReadTables = 8;
     repeated NKikimrProto.TPathID WriteTables = 9;
+    optional uint64 VictimQuerySpanId = 10;
 }
 
 // In-memory ranges associated with the lock

@@ -884,6 +884,10 @@ public:
             record.SetLockNodeId(Settings->GetLockNodeId());
         }
 
+        if (Settings->HasQuerySpanId()) {
+            record.SetQuerySpanId(Settings->GetQuerySpanId());
+        }
+
         if (Settings->HasVectorTopK()) {
             *record.MutableVectorTopK() = Settings->GetVectorTopK();
         }
@@ -1060,6 +1064,15 @@ public:
 
         for (auto& lock : record.GetBrokenTxLocks()) {
             BrokenLocks.push_back(lock);
+        }
+
+        // Collect deferred breaker info for TLI logging
+        {
+            const auto& traceIds = record.GetDeferredBreakerQuerySpanIds();
+            const auto& nodeIds = record.GetDeferredBreakerNodeIds();
+            for (int i = 0; i < traceIds.size(); ++i) {
+                DeferredBreakers.push_back({traceIds[i], i < nodeIds.size() ? nodeIds[i] : 0u});
+            }
         }
 
         if (UseFollowers) {
@@ -1513,6 +1526,11 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+        // Add deferred breaker info for TLI logging
+        for (const auto& breaker : DeferredBreakers) {
+            resultInfo.AddDeferredBreakerQuerySpanIds(breaker.QuerySpanId);
+            resultInfo.AddDeferredBreakerNodeIds(breaker.NodeId);
+        }
         if (Settings->GetIsBatch() && !BatchOperationMaxRow.GetCells().empty()) {
             std::vector<TCell> keyRow;
             auto cells = BatchOperationMaxRow.GetCells();
@@ -1585,6 +1603,11 @@ private:
 
     TVector<NKikimrDataEvents::TLock> Locks;
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
+    struct TDeferredBreakerInfo {
+        ui64 QuerySpanId = 0;
+        ui32 NodeId = 0;
+    };
+    TVector<TDeferredBreakerInfo> DeferredBreakers;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 

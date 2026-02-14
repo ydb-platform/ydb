@@ -318,6 +318,9 @@ public:
         record.SetLockMode(!isUniqueCheck
             ? Settings.LockMode
             : NKikimrDataEvents::OPTIMISTIC);
+        if (Settings.QuerySpanId) {
+            record.SetQuerySpanId(Settings.QuerySpanId);
+        }
 
         AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
 
@@ -415,25 +418,49 @@ public:
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
             Settings.TxManager->SetError(shardId);
-            RuntimeError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Table: `"
-                    << lookupState.Worker->GetTablePath() << "`.");
+            // Store the broken lock's QuerySpanId for TLI logging
+            for (const auto& brokenLock : record.GetBrokenTxLocks()) {
+                if (brokenLock.HasQuerySpanId() && brokenLock.GetQuerySpanId() != 0) {
+                    Settings.TxManager->SetVictimQuerySpanId(brokenLock.GetQuerySpanId());
+                    break;
+                }
+            }
+            {
+                TString message;
+                if (auto lockIssue = Settings.TxManager->GetLockIssue()) {
+                    message = lockIssue->GetMessage();
+                } else {
+                    TStringBuilder builder;
+                    builder << "Transaction locks invalidated. Table: `"
+                        << lookupState.Worker->GetTablePath() << "`.";
+                    auto victimId = Settings.TxManager->GetVictimQuerySpanId();
+                    if (victimId && *victimId != 0) {
+                        builder << " VictimQuerySpanId: " << *victimId << ".";
+                    }
+                    message = builder;
+                }
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
+                    NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+            }
             return;
         }
 
         for (const auto& lock : record.GetTxLocks()) {
             if (!Settings.TxManager->AddLock(shardId, lock)) {
                 YQL_ENSURE(Settings.TxManager->BrokenLocks());
-                NYql::TIssues issues;
-                issues.AddIssue(*Settings.TxManager->GetLockIssue());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::ABORTED,
-                    NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                    TStringBuilder() << "Transaction locks invalidated. Table: `"
-                        << lookupState.Worker->GetTablePath() << "`.",
-                    std::move(issues));
+                // Use the request's QuerySpanId (KQP knows which request placed the lock)
+                if (Settings.QuerySpanId != 0) {
+                    Settings.TxManager->SetVictimQuerySpanId(Settings.QuerySpanId);
+                }
+                TString message;
+                if (auto lockIssue = Settings.TxManager->GetLockIssue()) {
+                    message = lockIssue->GetMessage();
+                } else {
+                    message = TStringBuilder() << "Transaction locks invalidated. Table: `"
+                        << lookupState.Worker->GetTablePath() << "`.";
+                }
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
+                    NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
                 return;
             }
         }

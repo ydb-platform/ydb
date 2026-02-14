@@ -48,10 +48,17 @@ public:
     }
 
     void AddAction(ui64 shardId, ui8 action) override {
+        AddAction(shardId, action, 0);
+    }
+
+    void AddAction(ui64 shardId, ui8 action, ui64 querySpanId) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
-        ShardsInfo.at(shardId).Flags |= action;
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Flags |= action;
         if (action & EAction::WRITE) {
             ReadOnly = false;
+            // Track all QuerySpanIds of queries that wrote to this shard
+            AddBreakerQuerySpanId(shardInfo, querySpanId);
         }
         ++ActionsCount;
     }
@@ -273,7 +280,7 @@ public:
         return GetShardsCount() == 0;
     }
 
-    bool HasLocks() const override { 
+    bool HasLocks() const override {
         for (const auto& [_, shardInfo] : ShardsInfo) {
             if (!shardInfo.Locks.empty()) {
                 return true;
@@ -304,8 +311,64 @@ public:
         return LocksIssue.has_value() && !(HasSnapshot() && IsReadOnly());
     }
 
+    ui64 GetBrokenLocksCount() const override {
+        ui64 count = 0;
+        for (const auto& [shardId, shardInfo] : ShardsInfo) {
+            for (const auto& [key, lockInfo] : shardInfo.Locks) {
+                if (lockInfo.Invalidated || lockInfo.LocksAcquireFailure) {
+                    ++count;
+                }
+            }
+        }
+        return count;
+    }
+
     const std::optional<NYql::TIssue>& GetLockIssue() const override {
         return LocksIssue;
+    }
+
+    void SetVictimQuerySpanId(ui64 querySpanId) override {
+        if (querySpanId == 0) {
+            return;
+        }
+
+        if (!VictimQuerySpanId_) {
+            VictimQuerySpanId_ = querySpanId;
+
+            // If we already have a LocksIssue, update its message to include the victim query trace id
+            if (LocksIssue) {
+                TString currentMessage = LocksIssue->GetMessage();
+                if (!currentMessage.Contains("VictimQuerySpanId:")) {
+                    TStringBuilder message;
+                    message << currentMessage;
+                    message << " VictimQuerySpanId: " << *VictimQuerySpanId_ << ".";
+                    LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+                }
+            }
+        }
+    }
+
+    std::optional<ui64> GetVictimQuerySpanId() const override {
+        return VictimQuerySpanId_;
+    }
+
+    void SetShardBreakerQuerySpanId(ui64 shardId, ui64 querySpanId) override {
+        if (querySpanId == 0) {
+            return;
+        }
+        auto it = ShardsInfo.find(shardId);
+        if (it == ShardsInfo.end()) {
+            return;
+        }
+        AddBreakerQuerySpanId(it->second, querySpanId);
+    }
+
+    TVector<ui64> GetShardBreakerQuerySpanIds(ui64 shardId) const override {
+        auto it = ShardsInfo.find(shardId);
+        if (it != ShardsInfo.end() && !it->second.BreakerQuerySpanIds.empty()) {
+            return it->second.BreakerQuerySpanIds;
+        }
+        return {};
     }
 
     const THashSet<ui64>& GetShards() const override {
@@ -518,6 +581,7 @@ private:
             TKqpLock Lock;
             bool Invalidated = false;
             bool LocksAcquireFailure = false;
+            ui64 BreakerQuerySpanId = 0;  // QuerySpanId of the query that modified this lock
         };
 
         THashMap<TKqpLock::TKey, TLockInfo> Locks;
@@ -528,7 +592,17 @@ private:
         bool Restarting = false;
         bool Reattaching = false;
         TReattachState ReattachState;
+
+        // All QuerySpanIds of queries that wrote to this shard in insertion order.
+        TVector<ui64> BreakerQuerySpanIds;
+        THashSet<ui64> BreakerQuerySpanIdsSet;
     };
+
+    static void AddBreakerQuerySpanId(TShardInfo& shardInfo, ui64 querySpanId) {
+        if (querySpanId != 0 && shardInfo.BreakerQuerySpanIdsSet.emplace(querySpanId).second) {
+            shardInfo.BreakerQuerySpanIds.push_back(querySpanId);
+        }
+    }
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {
         TStringBuilder message;
@@ -539,9 +613,13 @@ private:
         for (const auto& path : shardInfo.Pathes) {
             if (!first) {
                 message << ", ";
-                first = false;
             }
+            first = false;
             message << "`" << path << "`";
+        }
+        message << ".";
+        if (VictimQuerySpanId_ && *VictimQuerySpanId_ != 0) {
+            message << " VictimQuerySpanId: " << *VictimQuerySpanId_ << ".";
         }
         LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     }
@@ -560,6 +638,7 @@ private:
     bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
     std::optional<NYql::TIssue> LocksIssue;
+    std::optional<ui64> VictimQuerySpanId_;
 
     THashSet<ui64> SendingShards;
     THashSet<ui64> ReceivingShards;

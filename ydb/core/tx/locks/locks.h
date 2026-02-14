@@ -38,6 +38,7 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
+        ui64 VictimQuerySpanId = 0;
 
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
@@ -250,6 +251,17 @@ inline ELockConflictFlags& operator&=(ELockConflictFlags& a, ELockConflictFlags 
 inline ELockConflictFlags operator~(ELockConflictFlags c) { return ELockConflictFlags(~ELockConflictFlagsRaw(c)); }
 inline bool operator!(ELockConflictFlags c) { return ELockConflictFlagsRaw(c) == 0; }
 
+struct TConflictLockInfo {
+    ELockConflictFlags Flags = ELockConflictFlags::None;
+    ui64 BreakerQuerySpanId = 0;
+
+    TConflictLockInfo() = default;
+    TConflictLockInfo(ELockConflictFlags flags, ui64 breakerQuerySpanId = 0)
+        : Flags(flags)
+        , BreakerQuerySpanId(breakerQuerySpanId)
+    {}
+};
+
 // ELockRangeFlags type safe enum
 
 enum class ELockRangeFlags : ui8 {
@@ -341,6 +353,8 @@ public:
 
     ui64 GetLockId() const { return LockId; }
     ui32 GetLockNodeId() const { return LockNodeId; }
+    ui64 GetVictimQuerySpanId() const { return VictimQuerySpanId; }
+    void SetVictimQuerySpanId(ui64 victimQuerySpanId) { VictimQuerySpanId = victimQuerySpanId; }
 
     TInstant GetCreationTime() const { return CreationTime; }
 
@@ -358,7 +372,7 @@ public:
 
     bool PersistRanges(ILocksDb* db);
 
-    bool AddConflict(TLockInfo* otherLock, ILocksDb* db);
+    bool AddConflict(TLockInfo* otherLock, ILocksDb* db, ui64 breakerQuerySpanId = 0);
     bool AddVolatileDependency(ui64 txId, ILocksDb* db);
     bool PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
@@ -381,10 +395,18 @@ public:
     template<class TCallback>
     void ForAllConflicts(TCallback&& callback, ELockConflictFlags mask) const {
         for (auto& pr : ConflictLocks) {
-            if (!!(pr.second & mask)) {
+            if (!!(pr.second.Flags & mask)) {
                 callback(pr.first);
             }
         }
+    }
+
+    ui64 GetConflictBreakerQuerySpanId(TLockInfo* otherLock) const {
+        auto it = ConflictLocks.find(otherLock);
+        if (it != ConflictLocks.end()) {
+            return it->second.BreakerQuerySpanId;
+        }
+        return 0;
     }
 
     template<class TCallback>
@@ -431,6 +453,7 @@ private:
     ui64 Counter;
     TInstant CreationTime;
     ELockFlags Flags = ELockFlags::None;
+    ui64 VictimQuerySpanId = 0;
     THashSet<TPathId> ReadTables;
     THashSet<TPathId> WriteTables;
     TVector<TPointKey> Points;
@@ -440,8 +463,7 @@ private:
 
     std::optional<TRowVersion> BreakVersion;
 
-    // A set of locks we must break on commit
-    THashMap<TLockInfo*, ELockConflictFlags> ConflictLocks;
+    THashMap<TLockInfo*, TConflictLockInfo> ConflictLocks;  // Locks to break on commit
     absl::flat_hash_set<ui64> VolatileDependencies;
     TVector<TPersistentRange> PersistentRanges;
 
@@ -733,7 +755,22 @@ private:
 struct TLocksUpdate {
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
+    // The current query's SpanId. Used as VictimQuerySpanId on the lock and as initial BreakerQuerySpanId on conflicts.
+    ui64 QuerySpanId = 0;
+    // Optional explicit override for breaker attribution, otherwise resolved from conflict data or QuerySpanId.
+    ui64 BreakerQuerySpanId = 0;
+    bool BreakerQuerySpanIdExplicitlySet = false;
+    // QuerySpanId captured at the moment a lock break is first detected (AddBreakLock).
+    ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
+
+    // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
+    // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
+    ui64 GetEffectiveBreakerQuerySpanId() const {
+        if (BreakerQuerySpanId != 0) return BreakerQuerySpanId;
+        if (ConflictBreakerQuerySpanId != 0) return ConflictBreakerQuerySpanId;
+        return QuerySpanId;
+    }
 
     TStackVec<TPointKey, 4> PointLocks;
     TStackVec<TRangeKey, 4> RangeLocks;
@@ -783,14 +820,25 @@ struct TLocksUpdate {
 
     void AddBreakLock(TLockInfo* lock) {
         BreakLocks.PushBack(lock);
+        CaptureConflictBreakerQuerySpanId();
     }
 
     void AddBreakShardLocks(TTableLocks* table) {
         BreakShardLocks.PushBack(table);
+        CaptureConflictBreakerQuerySpanId();
     }
 
     void AddBreakRangeLocks(TTableLocks* table) {
         BreakRangeLocks.PushBack(table);
+        CaptureConflictBreakerQuerySpanId();
+    }
+
+    // Capture the current QuerySpanId as ConflictBreakerQuerySpanId
+    // the first time a lock break is detected during operation processing.
+    void CaptureConflictBreakerQuerySpanId() {
+        if (ConflictBreakerQuerySpanId == 0 && QuerySpanId != 0) {
+            ConflictBreakerQuerySpanId = QuerySpanId;
+        }
     }
 
     void FlattenBreakLocks() {
@@ -907,6 +955,8 @@ public:
 
     std::pair<TVector<TLock>, TVector<ui64>> ApplyLocks();
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
+    TVector<ui64> ExtractVictimQuerySpanIds(const TVector<ui64>& lockIds) const;
+    TMaybe<ui64> GetVictimQuerySpanIdForLock(ui64 lockTxId) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
@@ -995,6 +1045,24 @@ public:
 
     const THashMap<ui64, TLockInfo::TPtr>& GetRemovedLocks() const {
         return Locker.GetRemovedLocks();
+    }
+
+    TMaybe<ui64> GetCurrentBreakerQuerySpanId() const {
+        if (Update) {
+            ui64 effective = Update->GetEffectiveBreakerQuerySpanId();
+            if (effective != 0) {
+                return effective;
+            }
+        }
+        return Nothing();
+    }
+
+    // Override BreakerQuerySpanId for the current update.
+    void SetBreakerQuerySpanId(ui64 querySpanId) {
+        if (Update && querySpanId != 0) {
+            Update->BreakerQuerySpanId = querySpanId;
+            Update->BreakerQuerySpanIdExplicitlySet = true;
+        }
     }
 
 private:

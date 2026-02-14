@@ -45,6 +45,7 @@ public:
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
         , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
+        , QuerySpanId(settings.HasQuerySpanId() ? settings.GetQuerySpanId() : 0)
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TaskId, args.TypeEnv, args.HolderFactory, args.InputDesc))
@@ -693,6 +694,10 @@ private:
             record.SetLockNodeId(*NodeLockId);
         }
 
+        if (QuerySpanId) {
+            record.SetQuerySpanId(QuerySpanId);
+        }
+
         auto defaultSettings = GetDefaultReadSettings()->Record;
         if (!MaxRowsDefaultQuota || !MaxBytesDefaultQuota) {
             MaxRowsDefaultQuota = defaultSettings.GetMaxRows();
@@ -861,6 +866,7 @@ private:
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
+    const ui64 QuerySpanId;
     TReads Reads;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;

@@ -164,6 +164,9 @@ private:
                 row.Counter = protoLock.GetCounter();
                 row.CreateTs = protoLock.GetCreateTs();
                 row.Flags = protoLock.GetFlags();
+                if (protoLock.HasVictimQuerySpanId()) {
+                    row.VictimQuerySpanId = protoLock.GetVictimQuerySpanId();
+                }
                 if (protoLock.HasBreakVersion()) {
                     row.BreakVersion = TRowVersion::FromProto(protoLock.GetBreakVersion());
                 }
@@ -630,6 +633,9 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         protoLockInfo->SetCounter(lockInfo.GetRawCounter());
         protoLockInfo->SetCreateTs(lockInfo.GetCreationTime().MicroSeconds());
         protoLockInfo->SetFlags((ui64)lockInfo.GetFlags());
+        if (ui64 victimId = lockInfo.GetVictimQuerySpanId(); victimId != 0) {
+            protoLockInfo->SetVictimQuerySpanId(victimId);
+        }
         if (const auto& version = lockInfo.GetBreakVersion()) {
             version->ToProto(protoLockInfo->MutableBreakVersion());
         }

@@ -14,6 +14,7 @@ message TLock {
     optional fixed64 SchemeShard = 5;
     optional uint64 PathId = 6;
     optional bool HasWrites = 7;
+    optional uint64 QuerySpanId = 8;
 }
 
 message TKqpLocks {
@@ -40,6 +41,10 @@ message TKqpLocks {
     optional uint64 ArbiterShard = 5;
 
     optional uint64 ArbiterColumnShard = 6;
+
+    // All QuerySpanIds of queries that wrote to this shard. Used for lock-breaking attribution
+    // so the DataShard can report all breaker queries, not just one.
+    repeated uint64 AllQuerySpanIds = 8;
 }
 
 message TTableId {
@@ -106,6 +111,7 @@ message TEvWrite {
         optional string PayloadSchema = 6;
         optional uint32 DefaultFilledColumnCount = 7;
         optional bool IsBulk = 8;
+        optional uint64 QuerySpanId = 9;
     }
 
     // Transaction operations
@@ -128,6 +134,7 @@ message TEvWrite {
 
     optional ELockMode LockMode = 10;
     optional uint64 TimeoutSeconds = 11;
+    optional uint64 QuerySpanId = 12;
 }
 
 message TEvWriteResult {

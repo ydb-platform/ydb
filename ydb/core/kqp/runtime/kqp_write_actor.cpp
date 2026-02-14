@@ -65,7 +65,46 @@ namespace {
         }
     }
 
-    void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+    // Set all BreakerQuerySpanIds on lock proto for lock-breaking attribution.
+    // Uses only TxManager's per-shard SpanIds (all queries that wrote to this shard).
+    void SetBreakerQuerySpanIdsOnLocks(NKikimrDataEvents::TKqpLocks* protoLocks,
+        ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
+    {
+        auto perShardIds = txManager->GetShardBreakerQuerySpanIds(shardId);
+        for (ui64 id : perShardIds) {
+            protoLocks->AddAllQuerySpanIds(id);
+        }
+    }
+
+    // Extract VictimQuerySpanId from the first broken lock in a WriteResult record.
+    void SetVictimQuerySpanIdFromBrokenLocks(const NKikimrDataEvents::TEvWriteResult& record,
+        const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
+    {
+        if (!record.GetTxLocks().empty()) {
+            const auto& lock = record.GetTxLocks(0);
+            if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
+                txManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
+            }
+        }
+    }
+
+    // Build error issues from TxManager lock issue combined with additional issues.
+    NYql::TIssues MakeLockIssues(const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager,
+        const NYql::TIssues& extraIssues)
+    {
+        NYql::TIssues result;
+        if (auto lockIssue = txManager->GetLockIssue()) {
+            result.AddIssue(*lockIssue);
+        }
+        for (const auto& issue : extraIssues) {
+            result.AddIssue(issue);
+        }
+        return result;
+    }
+
+    void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite,
+        ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
+    {
         evWrite->Record.SetTxId(txId);
         auto* protoLocks = evWrite->Record.MutableLocks();
         protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
@@ -114,6 +153,8 @@ namespace {
         for (const auto& lock : locks) {
             *protoLocks->AddLocks() = lock;
         }
+
+        SetBreakerQuerySpanIdsOnLocks(protoLocks, shardId, txManager);
     }
 
     void FillEvWriteRollback(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
@@ -237,6 +278,7 @@ struct TKqpTableWriterStatistics {
     ui64 EraseBytes = 0;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
+    TVector<ui64> BreakerQuerySpanIds;
 
     THashSet<ui64> AffectedPartitions;
 
@@ -260,9 +302,14 @@ struct TKqpTableWriterStatistics {
 
         LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
         LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+        if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.BreakerQuerySpanIdsSize() > 0) {
+            for (ui64 id : txStats.GetBreakerQuerySpanIds()) {
+                BreakerQuerySpanIds.push_back(id);
+            }
+        }
     }
 
-    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim) {
+    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim, const TVector<ui64>& breakerQuerySpanIds = {}) {
         NKqpProto::TKqpTaskExtraStats extraStats;
         if (stats->HasExtra()) {
             stats->GetExtra().UnpackTo(&extraStats);
@@ -271,13 +318,17 @@ struct TKqpTableWriterStatistics {
             extraStats.GetLockStats().GetBrokenAsBreaker() + brokenAsBreaker);
         extraStats.MutableLockStats()->SetBrokenAsVictim(
             extraStats.GetLockStats().GetBrokenAsVictim() + brokenAsVictim);
+        for (ui64 id : breakerQuerySpanIds) {
+            extraStats.MutableLockStats()->AddBreakerQuerySpanIds(id);
+        }
         stats->MutableExtra()->PackFrom(extraStats);
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
-        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim);
+        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQuerySpanIds);
         LocksBrokenAsBreaker = 0;
         LocksBrokenAsVictim = 0;
+        BreakerQuerySpanIds.clear();
 
         if (ReadRows + WriteRows + EraseRows == 0) {
             // Avoid empty table_access stats
@@ -399,6 +450,12 @@ public:
         ClearMkqlData();
     }
 
+    // Set the current query's SpanId before processing each batch.
+    // This ensures UpdateShards/AddAction passes the correct per-query SpanId to TxManager.
+    void SetCurrentQuerySpanId(ui64 querySpanId) {
+        CurrentQuerySpanId = querySpanId;
+    }
+
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         try {
@@ -482,6 +539,11 @@ public:
 
         // At current time only insert operation can fail.
         NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
+
+        // Associate this token with the current query's SpanId for TLI lock-break attribution.
+        // This ensures each batch created from this token carries the correct QuerySpanId,
+        // even when batches from multiple queries are later combined into a single EvWrite.
+        ShardedWriteController->SetTokenQuerySpanId(token, CurrentQuerySpanId);
 
         CA_LOG_D("Open: token=" << token);
     }
@@ -960,12 +1022,9 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            RuntimeError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Table: `"
-                    << TablePath << "`.",
-                getIssues());
+
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record, TxManager);
+            RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {
@@ -1027,16 +1086,20 @@ public:
                 return builder;
             }());
 
+        // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
+                    // STATUS_COMPLETED response TxStats don't include LocksBrokenAsVictim,
+                    // but the lock invalidation detected by AddLock means this is a victim.
+                    Stats.LocksBrokenAsVictim += 1;
                     YQL_ENSURE(TxManager->BrokenLocks());
-                    NYql::TIssues issues;
-                    issues.AddIssue(*TxManager->GetLockIssue());
-                    RuntimeError(
-                        NYql::NDqProto::StatusIds::ABORTED,
-                        std::move(issues));
+                    // Use actor's current QuerySpanId (KQP knows which request placed the lock)
+                    if (CurrentQuerySpanId != 0) {
+                        TxManager->SetVictimQuerySpanId(CurrentQuerySpanId);
+                    }
+                    RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
                     return;
                 }
             }
@@ -1101,7 +1164,11 @@ public:
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
             }
-            TxManager->AddAction(shardInfo.ShardId, flags);
+            // Use per-batch QuerySpanId when available; fall back to CurrentQuerySpanId.
+            // This ensures TxManager tracks the correct per-query SpanId even when
+            // FlushBuffers() flushes batches from multiple queries at once.
+            const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
+            TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
     }
 
@@ -1140,6 +1207,8 @@ public:
             return false;
         }
 
+        // BreakerQuerySpanId is set in AddAction during write phase, not here
+
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
 
@@ -1161,6 +1230,7 @@ public:
                 for (const auto& lock : locks) {
                     *protoLocks->AddLocks() = lock;
                 }
+                SetBreakerQuerySpanIdsOnLocks(protoLocks, shardId, TxManager);
             }
         } else if (isPrepare) {
             YQL_ENSURE(TxId);
@@ -1177,6 +1247,16 @@ public:
             evWrite->Record.SetLockMode(LockMode);
         }
 
+        // Use the first batch's QuerySpanId for this shard. When batches from
+        // multiple queries are combined into a single EvWrite, we use the SpanId
+        // from the first batch (the earliest writer), which is the correct one
+        // for lock-break attribution (the earliest writer causes the conflict).
+        {
+            const ui64 spanId = ShardedWriteController->GetFirstBatchQuerySpanId(shardId);
+            if (spanId != 0) {
+                evWrite->Record.SetQuerySpanId(spanId);
+            }
+        }
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
@@ -1509,6 +1589,8 @@ private:
 
     NWilson::TTraceId ParentTraceId;
     NWilson::TSpan TableWriteActorSpan;
+    // Current query's SpanId, set before each batch via SetCurrentQuerySpanId.
+    ui64 CurrentQuerySpanId = 0;
 };
 
 
@@ -2346,6 +2428,8 @@ public:
                 nullptr,
                 TActorId{},
                 Counters);
+            // Set initial QuerySpanId for direct write actor
+            WriteTableActor->SetCurrentQuerySpanId(Settings.GetQuerySpanId());
             WriteTableActor->SetParentTraceId(DirectWriteActorSpan.GetTraceId());
             WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
 
@@ -2692,6 +2776,7 @@ struct TWriteSettings {
     std::vector<TIndex> Indexes;
 
     bool EnableStreamWrite;
+    ui64 QuerySpanId = 0;
 };
 
 struct TBufferWriteMessage {
@@ -2748,6 +2833,7 @@ public:
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
+        , QuerySpanId(settings.QuerySpanId)
     {
         Counters->BufferActorsCount->Inc();
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
@@ -2979,6 +3065,7 @@ public:
                     .LockTxId = LockTxId,
                     .LockNodeId = LockNodeId,
                     .LockMode = settings.TransactionSettings.LockMode,
+                    .QuerySpanId = QuerySpanId,
                     .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
 
                     .TxManager = TxManager,
@@ -3013,6 +3100,11 @@ public:
                         settings.TablePath)) {
                     return;
                 }
+            }
+            // Set the current query's SpanId on all write actors for this table.
+            // TxManager::AddAction (called from UpdateShards) will collect per-shard SpanIds.
+            for (auto& [pathId, actorInfo] : writeInfo.Actors) {
+                actorInfo.WriteActor->SetCurrentQuerySpanId(settings.QuerySpanId);
             }
 
             if (!settings.LookupColumns.empty()) {
@@ -3052,11 +3144,13 @@ public:
                         .WriteActor = ptr,
                         .Id = id,
                     });
-                } else if (!checkSchemaVersion(
-                        writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                        indexSettings.TableId,
-                        indexSettings.TablePath)) {
-                    return;
+                } else {
+                    if (!checkSchemaVersion(
+                            writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                            indexSettings.TableId,
+                            indexSettings.TablePath)) {
+                        return;
+                    }
                 }
 
                 if (indexSettings.IsUniq) {
@@ -3618,8 +3712,13 @@ public:
             FillEvWriteRollback(evWrite.get(), shardId, TxManager);
         } else {
             YQL_ENSURE(TxId);
+            // BreakerQuerySpanId comes from TxManager (set by per-table write actors), not this actor
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             evWrite->Record.SetOverloadSubscribe(++ExternalShardIdToOverloadSeqNo[shardId]);
+        }
+
+        if (QuerySpanId != 0) {
+            evWrite->Record.SetQuerySpanId(QuerySpanId);
         }
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "BufferActor");
@@ -4416,13 +4515,9 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder()
-                    << "Transaction locks invalidated. "
-                    << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
-                getIssues());
+
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record, TxManager);
+            ReplyError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {
@@ -4845,6 +4940,7 @@ private:
 
     NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;
+    ui64 QuerySpanId = 0;
 };
 
 class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {
@@ -4998,6 +5094,7 @@ private:
                 .DefaultColumns = std::move(defaultColumns),
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
+                .QuerySpanId = Settings.GetQuerySpanId(),
             };
 
             for (const auto& indexSettings : Settings.GetIndexes()) {

@@ -200,12 +200,13 @@ public:
 
     void Finalize() {
         Y_ABORT_UNLESS(!AlreadyReplied);
+
+        FillLocksFromExtraData();
+
         if (LocksBroken) {
             YQL_ENSURE(ResponseEv->BrokenLockShardId);
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
-
-        FillLocksFromExtraData();
 
         if (TxManager) {
             TxManager->SetHasSnapshot(GetSnapshot().IsValid());
@@ -613,10 +614,9 @@ private:
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        res->Record.GetTxLocks(0).GetSchemeShard(),
-                        res->Record.GetTxLocks(0).GetPathId());
+                    FillBrokenLockInfo(res->Record.GetTxLocks(0));
                 }
+                FillLocksFromExtraData();
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 return;
             }
@@ -1379,9 +1379,8 @@ private:
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        res->Record.GetTxLocks(0).GetSchemeShard(),
-                        res->Record.GetTxLocks(0).GetPathId());
+                    FillBrokenLockInfo(res->Record.GetTxLocks(0));
+                    FillLocksFromExtraData();
                     ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                     return;
                 }
@@ -1454,9 +1453,8 @@ private:
                 ResponseEv->BrokenLockShardId = shardId; // todo: without responseEv
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        res->Record.GetTxLocks(0).GetSchemeShard(),
-                        res->Record.GetTxLocks(0).GetPathId());
+                    FillBrokenLockInfo(res->Record.GetTxLocks(0));
+                    FillLocksFromExtraData();
                     return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
 
@@ -2413,6 +2411,11 @@ private:
             switch (Request.LocksOp) {
                 case ELocksOp::Commit:
                     locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                    if (TxManager) {
+                        for (ui64 spanId : TxManager->GetShardBreakerQuerySpanIds(shardId)) {
+                            locks->AddAllQuerySpanIds(spanId);
+                        }
+                    }
                     break;
                 case ELocksOp::Rollback:
                     locks->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
@@ -2605,6 +2608,11 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                    if (TxManager) {
+                        for (ui64 spanId : TxManager->GetShardBreakerQuerySpanIds(shardId)) {
+                            shardTx->MutableLocks()->AddAllQuerySpanIds(spanId);
+                        }
+                    }
                     if (!columnShardArbiter) {
                         *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
@@ -2632,6 +2640,11 @@ private:
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                    if (TxManager) {
+                        for (ui64 spanId : TxManager->GetShardBreakerQuerySpanIds(shardId)) {
+                            tx->MutableLocks()->AddAllQuerySpanIds(spanId);
+                        }
+                    }
                     if (!columnShardArbiter) {
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
@@ -3068,6 +3081,16 @@ private:
         }
     }
 
+    // Extract broken lock info from the first TxLock in a DataShard response.
+    void FillBrokenLockInfo(const NKikimrDataEvents::TLock& brokenLock) {
+        ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
+            brokenLock.GetSchemeShard(),
+            brokenLock.GetPathId());
+        if (brokenLock.HasQuerySpanId()) {
+            ResponseEv->BrokenLockQuerySpanId = brokenLock.GetQuerySpanId();
+        }
+    }
+
     void FillLocksFromExtraData() {
         auto addLocks = [this](const ui64 taskId, const auto& data) {
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
@@ -3086,7 +3109,11 @@ private:
                     if (TxManager) {
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
+                        if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
+                            if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
+                                TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
+                            }
+                        }
                     }
                 }
 
@@ -3098,6 +3125,17 @@ private:
                     }
 
                     ResponseEv->BatchOperationMaxKeys.emplace_back(info.GetBatchOperationMaxKey());
+                }
+                // Collect deferred breaker info for TLI logging at SessionActor level
+                {
+                    const auto& traceIds = info.GetDeferredBreakerQuerySpanIds();
+                    const auto& nodeIds = info.GetDeferredBreakerNodeIds();
+                    for (int i = 0; i < traceIds.size(); ++i) {
+                        ResponseEv->DeferredBreakers.push_back({
+                            traceIds[i],
+                            i < nodeIds.size() ? nodeIds[i] : 0u
+                        });
+                    }
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
@@ -3119,8 +3157,14 @@ private:
                         }
 
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        TxManager->AddAction(lock.GetDataShard(), flags);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
+                        // Pass the lock's QuerySpanId to track which query wrote to this shard
+                        ui64 querySpanId = lock.HasQuerySpanId() ? lock.GetQuerySpanId() : 0;
+                        TxManager->AddAction(lock.GetDataShard(), flags, querySpanId);
+                        if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
+                            if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
+                                TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
+                            }
+                        }
                     }
                 }
             }

@@ -358,6 +358,11 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
     auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
     op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+    if (!locksBrokenByTx.empty()) {
+        auto breakerQuerySpanId = DataShard.SysLocksTable().GetCurrentBreakerQuerySpanId();
+        ui64 effectiveBreakerQuerySpanId = breakerQuerySpanId ? *breakerQuerySpanId : op->QuerySpanId();
+        op->Result()->Record.MutableTxStats()->AddBreakerQuerySpanIds(effectiveBreakerQuerySpanId);
+    }
     NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), op->GetTxId(), locksBrokenByTx);
 
     for (const auto& lock : locks) {

@@ -1,9 +1,14 @@
 #pragma once
 
+#include <deque>
+#include <unordered_map>
 #include <openssl/sha.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/core/log.h>
+#include <util/string/escape.h>
 
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -11,6 +16,179 @@
 
 namespace NKikimr {
 namespace NDataIntegrity {
+
+// Node-level cache for query text lookup in deferred lock TLI scenarios.
+// Stores hash(queryText)->queryText for deduplication (OLTP typically has few distinct queries)
+// and querySpanId->hash for lookup by QuerySpanId.
+// Cross-node lookups use TKqpQueryTextCacheService when local cache misses.
+class TNodeQueryTextCache {
+public:
+    static constexpr size_t MaxSpanIdEntries = 10000;
+
+    static TNodeQueryTextCache& Instance() {
+        return *Singleton<TNodeQueryTextCache>();
+    }
+
+    void Add(ui64 querySpanId, const TString& queryText) {
+        if (querySpanId == 0 || queryText.empty()) {
+            return;
+        }
+        with_lock(Lock) {
+            ui64 textHash = ComputeHash(queryText);
+            // Store unique query text (deduplicated by hash)
+            QueryTexts[textHash] = queryText;
+            // Evict oldest SpanId mappings if full
+            while (SpanIdOrder.size() >= MaxSpanIdEntries) {
+                SpanIdToHash.erase(SpanIdOrder.front());
+                SpanIdOrder.pop_front();
+            }
+            SpanIdToHash[querySpanId] = textHash;
+            SpanIdOrder.push_back(querySpanId);
+        }
+    }
+
+    TString Get(ui64 querySpanId) const {
+        with_lock(Lock) {
+            auto spanIt = SpanIdToHash.find(querySpanId);
+            if (spanIt != SpanIdToHash.end()) {
+                auto textIt = QueryTexts.find(spanIt->second);
+                if (textIt != QueryTexts.end()) {
+                    return textIt->second;
+                }
+            }
+        }
+        return "";
+    }
+
+private:
+    static ui64 ComputeHash(const TString& s) {
+        return std::hash<TString>{}(s);
+    }
+
+    mutable TAdaptiveLock Lock;
+    std::unordered_map<ui64, ui64> SpanIdToHash;       // querySpanId -> hash(queryText)
+    std::unordered_map<ui64, TString> QueryTexts;      // hash(queryText) -> queryText (deduplicated)
+    std::deque<ui64> SpanIdOrder;                       // eviction order for SpanId mappings
+};
+
+// Collects query texts and QuerySpanIds for TLI logging and victim stats attribution
+class TQueryTextCollector {
+public:
+    // First query always stored (for victim stats); subsequent only if TLI enabled
+    void AddQueryText(ui64 querySpanId, const TString& queryText) {
+        if (queryText.empty()) {
+            return;
+        }
+        TNodeQueryTextCache::Instance().Add(querySpanId, queryText);
+
+        if (QueryTexts.empty() || IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            // Deduplicate consecutive identical entries
+            if (QueryTexts.empty() ||
+                QueryTexts.back().first != querySpanId ||
+                QueryTexts.back().second != queryText) {
+                QueryTexts.push_back({querySpanId, queryText});
+                // Keep only the last N queries to prevent unbounded memory growth
+                constexpr size_t MAX_QUERY_TEXTS = 100;
+                while (QueryTexts.size() > MAX_QUERY_TEXTS) {
+                    QueryTexts.pop_front();
+                }
+            }
+        }
+    }
+
+    // Combine all query texts into a single string for logging
+    TString CombineQueryTexts() const {
+        if (QueryTexts.empty()) {
+            return "";
+        }
+
+        TStringBuilder builder;
+        builder << "[";
+        for (size_t i = 0; i < QueryTexts.size(); ++i) {
+            if (i > 0) {
+                builder << " | ";
+            }
+            builder << "QuerySpanId=" << QueryTexts[i].first
+                << " QueryText=" << QueryTexts[i].second;
+        }
+        builder << "]";
+        return builder;
+    }
+
+    // Check if there are any query texts
+    bool Empty() const {
+        return QueryTexts.empty();
+    }
+
+    // Get the number of queries
+    size_t GetQueryCount() const {
+        return QueryTexts.size();
+    }
+
+    // Get all non-zero QuerySpanIds from all queries in this transaction
+    TVector<ui64> GetAllQuerySpanIds() const {
+        TVector<ui64> result;
+        for (const auto& [spanId, _] : QueryTexts) {
+            if (spanId != 0) {
+                result.push_back(spanId);
+            }
+        }
+        return result;
+    }
+
+    // Get the first query text
+    TString GetFirstQueryText() const {
+        if (QueryTexts.empty()) {
+            return "";
+        }
+        return QueryTexts.front().second;
+    }
+
+    // Get query text by QuerySpanId
+    TString GetQueryTextBySpanId(ui64 querySpanId) const {
+        for (const auto& [spanId, queryText] : QueryTexts) {
+            if (spanId == querySpanId) {
+                return queryText;
+            }
+        }
+        return "";
+    }
+
+    // Clear all query texts and QuerySpanIds
+    void Clear() {
+        QueryTexts.clear();
+    }
+
+private:
+    std::deque<std::pair<ui64, TString>> QueryTexts;
+};
+
+inline void LogQueryTextImpl(TStringStream& ss, const TString& queryText, bool hashed) {
+    if (!hashed) {
+        LogKeyValue("QueryText", EscapeC(queryText), ss);
+        return;
+    }
+
+    // Hash the query text
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    if (SHA256_Init(&sha256) != 1) {
+        return;
+    }
+    if (SHA256_Update(&sha256, queryText.data(), queryText.size()) != 1) {
+        return;
+    }
+    if (SHA256_Final(hash, &sha256) != 1) {
+        return;
+    }
+    std::string hashedQueryText(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH);
+    LogKeyValue("QueryText", Base64Encode(hashedQueryText), ss);
+}
+
+inline void LogQueryText(TStringStream& ss, const TString& queryText) {
+    const auto& config = AppData()->DataIntegrityTrailsConfig;
+    LogQueryTextImpl(ss, queryText, config.GetQueryTextLogMode() == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
+}
 
 inline bool ShouldBeLogged(NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type) {
     switch (type) {
@@ -44,26 +222,16 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         TStringStream ss;
         LogKeyValue("Component", "SessionActor", ss);
         LogKeyValue("SessionId", request->Get()->GetSessionId(), ss);
-        LogKeyValue("TraceId", request->Get()->GetTraceId(), ss);
+
+        if (!request->Get()->GetTraceId().empty()) {
+            LogKeyValue("TraceId", request->Get()->GetTraceId(), ss);
+        }
+
         LogKeyValue("Type", "Request", ss);
         LogKeyValue("QueryAction", ToString(request->Get()->GetAction()), ss);
         LogKeyValue("QueryType", ToString(request->Get()->GetType()), ss);
 
-        const auto queryTextLogMode = AppData()->DataIntegrityTrailsConfig.HasQueryTextLogMode()
-            ? AppData()->DataIntegrityTrailsConfig.GetQueryTextLogMode()
-            : NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED;
-        if (queryTextLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_ORIGINAL) {
-            LogKeyValue("QueryText", EscapeC(request->Get()->GetQuery()), ss);
-        } else {
-            std::string hashedQueryText;
-            hashedQueryText.resize(SHA256_DIGEST_LENGTH);
-
-            SHA256_CTX sha256;
-            SHA256_Init(&sha256);
-            SHA256_Update(&sha256, request->Get()->GetQuery().data(), request->Get()->GetQuery().size());
-            SHA256_Final(reinterpret_cast<unsigned char*>(&hashedQueryText[0]), &sha256);
-            LogKeyValue("QueryText", Base64Encode(hashedQueryText), ss);
-        }
+        LogQueryText(ss, request->Get()->GetQuery());
 
         if (request->Get()->HasTxControl()) {
             LogTxControl(request->Get()->GetTxControl(), ss);
@@ -86,16 +254,72 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         TStringStream ss;
         LogKeyValue("Component", "SessionActor", ss);
         LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
         LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
+        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, true);
 
         return ss.Str();
     };
 
     LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+}
+
+// Structured parameters for TLI logging to improve readability
+struct TTliLogParams {
+    TString Component;
+    TString Message;
+    TString QueryText;
+    TString QueryTexts;
+    TString TraceId;
+    TMaybe<ui64> BreakerQuerySpanId;
+    TMaybe<ui64> VictimQuerySpanId;
+    TMaybe<ui64> CurrentQuerySpanId;
+    TString VictimQueryText;
+    bool IsCommitAction = false;
+};
+
+inline void LogTli(const TTliLogParams& params, const TActorContext& ctx) {
+    if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+        return;
+    }
+
+    TStringStream ss;
+    LogKeyValue("Component", params.Component, ss);
+    LogKeyValue("Message", params.Message, ss);
+
+    if (!params.TraceId.empty()) {
+        LogKeyValue("TraceId", params.TraceId, ss);
+    }
+
+    // Determine if this is a breaker or victim log based on which TraceId is set (and non-zero)
+    const bool isBreaker = params.BreakerQuerySpanId.Defined() && *params.BreakerQuerySpanId != 0;
+
+    if (isBreaker) {
+        LogKeyValue("BreakerQuerySpanId", ToString(*params.BreakerQuerySpanId), ss);
+    } else if (params.VictimQuerySpanId && *params.VictimQuerySpanId != 0) {
+        LogKeyValue("VictimQuerySpanId", ToString(*params.VictimQuerySpanId), ss);
+    }
+
+    if (params.CurrentQuerySpanId && *params.CurrentQuerySpanId != 0) {
+        LogKeyValue("CurrentQuerySpanId", ToString(*params.CurrentQuerySpanId), ss);
+    }
+
+    // Use appropriate field names based on breaker vs victim
+    if (isBreaker) {
+        LogKeyValue("BreakerQueryText", EscapeC(params.QueryText), ss);
+        LogKeyValue("BreakerQueryTexts", EscapeC(params.QueryTexts), ss, true);
+    } else {
+        LogKeyValue("VictimQueryText", EscapeC(params.VictimQueryText), ss);
+        LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
+    }
+
+    LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
 }
 
 // DataExecuter
@@ -104,7 +328,11 @@ inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebu
         TStringStream ss;
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Request", ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(txId), ss);
         LogKeyValue("Locks", "[" + txLocksDebugStr + "]", ss);
 
@@ -128,7 +356,11 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("State", state, ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
         LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
 
@@ -160,7 +392,11 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("State", state, ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
         LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
 
@@ -187,7 +423,11 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
         TStringStream ss;
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", type, ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(txId), ss);
 
         TStringBuilder locksDebugStr;
@@ -197,7 +437,7 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
         }
         locksDebugStr << "]";
 
-        LogKeyValue("Locks", locksDebugStr, ss);
+        LogKeyValue("Locks", locksDebugStr, ss, true);
 
         return ss.Str();
     };
@@ -216,7 +456,7 @@ inline void LogIntegrityTrails(const TString& txType, ui64 txId, TMaybe<ui64> sh
             LogKeyValue("ShardId", ToString(*shardId), ss);
         }
 
-        LogKeyValue("Type", type, ss, /*last*/ true);
+        LogKeyValue("Type", type, ss, true);
 
         return ss.Str();
     };

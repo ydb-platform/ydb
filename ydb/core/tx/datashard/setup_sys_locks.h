@@ -26,6 +26,16 @@ struct TSetupSysLocks
         SysLocksTable.SetupUpdate(this, db);
     }
 
+    TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, ui64 querySpanId, TDataShard& self, ILocksDb* db)
+        : SysLocksTable(self.SysLocksTable())
+    {
+        LockTxId = lockTxId;
+        LockNodeId = lockNodeId;
+        QuerySpanId = querySpanId;
+
+        SysLocksTable.SetupUpdate(this, db);
+    }
+
     TSetupSysLocks(TOperation::TPtr op,
                    TDataShard &self,
                    ILocksDb* db)
@@ -33,6 +43,7 @@ struct TSetupSysLocks
     {
         LockTxId = op->LockTxId();
         LockNodeId = op->LockNodeId();
+        QuerySpanId = op->QuerySpanId();
 
         auto mvccVersion = self.GetMvccVersion(op.Get());
 

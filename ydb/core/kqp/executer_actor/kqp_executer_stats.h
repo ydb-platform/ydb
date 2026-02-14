@@ -403,6 +403,9 @@ public:
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
+    TVector<ui64> BreakerQuerySpanIds;
+
+    void CollectLockStats(const NKikimrQueryStats::TTxStats& txStats);
 
     void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
     void UpdateStorageTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);

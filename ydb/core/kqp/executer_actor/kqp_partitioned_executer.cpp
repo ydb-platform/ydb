@@ -84,6 +84,7 @@ public:
         , WriteBufferInitialMemoryLimit(std::move(settings.WriteBufferInitialMemoryLimit))
         , WriteBufferMemoryLimit(std::move(settings.WriteBufferMemoryLimit))
         , ChannelService(channelService)
+        , QuerySpanId(settings.QuerySpanId)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
@@ -582,6 +583,7 @@ private:
             .SessionActorId = SelfId(),
             .TxManager = txManager,
             .TraceId = Request.TraceId.GetTraceId(),
+            .QuerySpanId = QuerySpanId,
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc)
@@ -928,6 +930,7 @@ private:
     const ui64 WriteBufferInitialMemoryLimit;
     const ui64 WriteBufferMemoryLimit;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
+    ui64 QuerySpanId = 0;
 };
 
 } // namespace

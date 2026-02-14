@@ -1106,6 +1106,7 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
             THolder<TEvBlobStorage::TEvControllerSelectGroups> ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
             NKikimrBlobStorage::TEvControllerSelectGroups& record = ev->Record;
             record.SetReturnAllMatchingGroups(true);
+            record.SetBlockUntilAllResourcesAreComplete(true);
             for (auto& request : requests) {
                 record.MutableGroupParameters()->AddAllocated(std::move(request).Release());
             }

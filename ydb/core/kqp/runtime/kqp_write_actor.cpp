@@ -540,6 +540,11 @@ public:
         // At current time only insert operation can fail.
         NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
 
+        // Associate this token with the current query's SpanId for TLI lock-break attribution.
+        // This ensures each batch created from this token carries the correct QuerySpanId,
+        // even when batches from multiple queries are later combined into a single EvWrite.
+        ShardedWriteController->SetTokenQuerySpanId(token, CurrentQuerySpanId);
+
         CA_LOG_D("Open: token=" << token);
     }
 
@@ -1156,7 +1161,11 @@ public:
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
             }
-            TxManager->AddAction(shardInfo.ShardId, flags, CurrentQuerySpanId);
+            // Use per-batch QuerySpanId when available; fall back to CurrentQuerySpanId.
+            // This ensures TxManager tracks the correct per-query SpanId even when
+            // FlushBuffers() flushes batches from multiple queries at once.
+            const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
+            TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
     }
 
@@ -1235,9 +1244,15 @@ public:
             evWrite->Record.SetLockMode(LockMode);
         }
 
-        // CurrentQuerySpanId belongs to the batch currently being sent.
-        if (CurrentQuerySpanId != 0) {
-            evWrite->Record.SetQuerySpanId(CurrentQuerySpanId);
+        // Use the first batch's QuerySpanId for this shard. When batches from
+        // multiple queries are combined into a single EvWrite, we use the SpanId
+        // from the first batch (the earliest writer), which is the correct one
+        // for lock-break attribution (the earliest writer causes the conflict).
+        {
+            const ui64 spanId = ShardedWriteController->GetFirstBatchQuerySpanId(shardId);
+            if (spanId != 0) {
+                evWrite->Record.SetQuerySpanId(spanId);
+            }
         }
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
 

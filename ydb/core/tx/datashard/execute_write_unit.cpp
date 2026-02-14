@@ -536,6 +536,9 @@ public:
             if (writeTx->HasOperations()) {
                 for (validatedOperationIndex = 0; validatedOperationIndex < writeTx->GetOperations().size(); ++validatedOperationIndex) {
                     const TValidatedWriteTxOperation& validatedOperation = writeTx->GetOperations()[validatedOperationIndex];
+                    if (validatedOperation.GetQuerySpanId() != 0) {
+                        guardLocks.QuerySpanId = validatedOperation.GetQuerySpanId();
+                    }
                     DoUpdateToUserDb(userDb, validatedOperation, txc);
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << validatedOperation.GetMatrix().GetRowCount());
                 }

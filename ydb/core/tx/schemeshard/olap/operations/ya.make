@@ -1,12 +1,13 @@
 LIBRARY()
 
 SRCS(
-    create_table.cpp
-    drop_table.cpp
+    alter_store.cpp
     alter_table.cpp
     create_store.cpp
+    create_table.cpp
     drop_store.cpp
-    alter_store.cpp
+    drop_table.cpp
+    read_only_copy_table.cpp
 )
 
 PEERDIR(

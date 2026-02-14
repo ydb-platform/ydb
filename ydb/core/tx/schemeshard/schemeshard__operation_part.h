@@ -514,6 +514,8 @@ ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, const TTxTransaction
 ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropColumnTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state);

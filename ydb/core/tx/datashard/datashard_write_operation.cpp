@@ -232,6 +232,10 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     }
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
 
+    if (recordOperation.HasQuerySpanId()) {
+        QuerySpanId = recordOperation.GetQuerySpanId();
+    }
+
     SetTxKeys(tableInfo, tabletId, keyValidator);
 
     return {NKikimrTxDataShard::TError::OK, {}};

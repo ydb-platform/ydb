@@ -760,11 +760,16 @@ struct TLocksUpdate {
     // Optional explicit override for breaker attribution, otherwise resolved from conflict data or QuerySpanId.
     ui64 BreakerQuerySpanId = 0;
     bool BreakerQuerySpanIdExplicitlySet = false;
+    // QuerySpanId captured at the moment a lock break is first detected (AddBreakLock).
+    ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
 
-    // Returns effective BreakerQuerySpanId: explicit override if set, otherwise falls back to QuerySpanId.
+    // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
+    // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
     ui64 GetEffectiveBreakerQuerySpanId() const {
-        return BreakerQuerySpanId != 0 ? BreakerQuerySpanId : QuerySpanId;
+        if (BreakerQuerySpanId != 0) return BreakerQuerySpanId;
+        if (ConflictBreakerQuerySpanId != 0) return ConflictBreakerQuerySpanId;
+        return QuerySpanId;
     }
 
     TStackVec<TPointKey, 4> PointLocks;
@@ -815,14 +820,25 @@ struct TLocksUpdate {
 
     void AddBreakLock(TLockInfo* lock) {
         BreakLocks.PushBack(lock);
+        CaptureConflictBreakerQuerySpanId();
     }
 
     void AddBreakShardLocks(TTableLocks* table) {
         BreakShardLocks.PushBack(table);
+        CaptureConflictBreakerQuerySpanId();
     }
 
     void AddBreakRangeLocks(TTableLocks* table) {
         BreakRangeLocks.PushBack(table);
+        CaptureConflictBreakerQuerySpanId();
+    }
+
+    // Capture the current QuerySpanId as ConflictBreakerQuerySpanId
+    // the first time a lock break is detected during operation processing.
+    void CaptureConflictBreakerQuerySpanId() {
+        if (ConflictBreakerQuerySpanId == 0 && QuerySpanId != 0) {
+            ConflictBreakerQuerySpanId = QuerySpanId;
+        }
     }
 
     void FlattenBreakLocks() {

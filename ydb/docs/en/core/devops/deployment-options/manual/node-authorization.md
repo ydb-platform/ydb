@@ -66,7 +66,7 @@ To enable mandatory database node authorization, add the following configuration
 
     If the certificate is successfully verified and the components of the "Subject" field comply with the requirements defined in the `subject_terms` sub-block, the connection will be assigned the access subjects listed in the `member_groups` parameter. To distinguish these subjects from other user groups and accounts, their names typically have the `@cert` suffix.
 
-1. Add the `register_dynamic_node_allowed_sids` element to the cluster authentication settings `security_config` block, and list the subjects permitted for database node registration. For internal technical reasons, the list must include the `root@builtin` element. Example:
+1. Add the `register_dynamic_node_allowed_sids` element to the cluster authentication settings `security_config` block, and list the subjects permitted for database node registration. Example:
 
     ```yaml
     domains_config:
@@ -80,11 +80,18 @@ To enable mandatory database node authorization, add the following configuration
             viewer_allowed_sids:
             ...
             register_dynamic_node_allowed_sids:
-            - "root@builtin" # required for internal technical reasons
             - "registerNode@cert"
     ```
 
     For more detailed information on configuring cluster authentication parameters, see the [relevant documentation section](../../../reference/configuration/security_config.md#security-access-levels).
+
+1. In the `auth_config` section of the cluster configuration, add the `node_registration_token` as empty string. Example:
+
+    ```yaml
+    auth_config:
+      ...
+      node_registration_token: ""
+    ```
 
 1. Deploy the static configuration files on all cluster nodes either manually, or [using the Ansible playbook action](../ansible/update-config.md).
 

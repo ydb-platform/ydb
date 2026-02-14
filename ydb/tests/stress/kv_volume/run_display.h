@@ -91,9 +91,9 @@ private:
     TRunStatsSnapshot PrevSnapshot_;
     bool HasPrevSnapshot_ = false;
     std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>> TotalActionsHistory_;
-    THashMap<TString, std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionRunsHistory_;
-    THashMap<TString, std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionReadBytesHistory_;
-    THashMap<TString, std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionWriteBytesHistory_;
+    TVector<std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionRunsHistory_;
+    TVector<std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionReadBytesHistory_;
+    TVector<std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionWriteBytesHistory_;
 
     std::unique_ptr<TRunTui> Tui_;
 };

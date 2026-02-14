@@ -17,7 +17,6 @@ using namespace std::chrono_literals;
 namespace {
 
 constexpr ui32 DefaultActionMaxInFlight = 5;
-const TString InitialActionName = "__initial__";
 
 ui64 ToLatencyMs(std::chrono::steady_clock::duration duration) {
     const ui64 latencyUs = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
@@ -49,12 +48,14 @@ TWorker::TWorker(
     , StopSignal_(stopSignal)
     , Client_(MakeKeyValueClient(hostPort, options.Version))
 {
+    ui32 actionIndex = 0;
     for (const auto& action : Config_.actions()) {
-        ActionsByName_[action.name()] = &action;
+        ActionsByName_[action.name()] = TActionEntry{&action, actionIndex};
         ActionCapacity_ += GetActionLimit(action);
         if (action.has_parent_action() && !action.parent_action().empty()) {
             ChildrenByParent_[action.parent_action()].push_back(action.name());
         }
+        ++actionIndex;
     }
 
     if (WorkerLoadTracker_) {
@@ -148,11 +149,12 @@ void TWorker::ScheduleAction(const TString& actionName) {
 
     const auto actionIt = ActionsByName_.find(actionName);
     if (actionIt == ActionsByName_.end()) {
-        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName, actionName);
+        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName);
         return;
     }
 
-    const auto* action = actionIt->second;
+    const auto* action = actionIt->second.Action;
+    const ui32 actionStatsIndex = actionIt->second.StatsIndex;
     const ui32 limit = GetActionLimit(*action);
 
     {
@@ -208,18 +210,19 @@ void TWorker::ScheduleAction(const TString& actionName) {
             WorkerLoadTracker_->AddActive(WorkerId_, -1);
         }
 
-        Stats_.RecordError("thread_create_failed", e.what(), actionName);
+        Stats_.RecordError("thread_create_failed", e.what(), actionStatsIndex);
     }
 }
 
 void TWorker::ExecuteAction(const TString& actionName) {
     const auto actionIt = ActionsByName_.find(actionName);
     if (actionIt == ActionsByName_.end()) {
-        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName, actionName);
+        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName);
         return;
     }
 
-    const auto& action = *actionIt->second;
+    const auto& action = *actionIt->second.Action;
+    const ui32 actionStatsIndex = actionIt->second.StatsIndex;
 
     for (const auto& command : action.action_command()) {
         switch (command.Command_case()) {
@@ -228,25 +231,25 @@ void TWorker::ExecuteAction(const TString& actionName) {
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kRead: {
-                ExecuteReadCommand(action, command.read());
+                ExecuteReadCommand(action, actionStatsIndex, command.read());
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kWrite: {
-                (void)ExecuteWriteCommand(actionName, command.write());
+                (void)ExecuteWriteCommand(actionName, command.write(), actionStatsIndex);
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kDelete: {
-                ExecuteDeleteCommand(action, command.delete_());
+                ExecuteDeleteCommand(action, actionStatsIndex, command.delete_());
                 break;
             }
             case NKikimrKeyValue::ActionCommand::COMMAND_NOT_SET: {
-                Stats_.RecordError("empty_command", TStringBuilder() << "Action " << actionName << " has empty command", actionName);
+                Stats_.RecordError("empty_command", TStringBuilder() << "Action " << actionName << " has empty command", actionStatsIndex);
                 break;
             }
         }
     }
 
-    Stats_.RecordAction(actionName);
+    Stats_.RecordAction(actionStatsIndex);
 
     if (!IsStopped()) {
         const auto childrenIt = ChildrenByParent_.find(actionName);
@@ -272,7 +275,11 @@ void TWorker::WriteInitialDataImpl() {
     }
 }
 
-bool TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyValue::ActionCommand_Write& writeCommand) {
+bool TWorker::ExecuteWriteCommand(
+    const TString& actionName,
+    const NKikimrKeyValue::ActionCommand_Write& writeCommand,
+    std::optional<ui32> actionStatsIndex)
+{
     if (writeCommand.count() == 0) {
         return true;
     }
@@ -294,12 +301,12 @@ bool TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyVal
     const bool ok = Client_->Write(VolumePath_, partitionId, pairs, writeCommand.channel(), &error);
     const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
 
-    if (actionName != InitialActionName) {
-        Stats_.RecordLatency(actionName, latencyMs);
+    if (actionStatsIndex) {
+        Stats_.RecordLatency(*actionStatsIndex, latencyMs);
     }
 
     if (!ok) {
-        Stats_.RecordError("write_failed", error, actionName);
+        Stats_.RecordError("write_failed", error, actionStatsIndex);
         return false;
     }
 
@@ -310,8 +317,8 @@ bool TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyVal
         bytesWritten += value.size();
     }
 
-    if (actionName != InitialActionName) {
-        Stats_.RecordWriteBytes(actionName, bytesWritten);
+    if (actionStatsIndex) {
+        Stats_.RecordWriteBytes(*actionStatsIndex, bytesWritten);
     }
 
     if (Options_.Verbose) {
@@ -321,7 +328,11 @@ bool TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyVal
     return true;
 }
 
-void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NKikimrKeyValue::ActionCommand_Read& readCommand) {
+void TWorker::ExecuteReadCommand(
+    const NKikimrKeyValue::Action& action,
+    ui32 actionStatsIndex,
+    const NKikimrKeyValue::ActionCommand_Read& readCommand)
+{
     if (readCommand.count() == 0) {
         return;
     }
@@ -347,14 +358,14 @@ void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NK
         const auto startedAt = std::chrono::steady_clock::now();
         const bool ok = Client_->Read(VolumePath_, info.PartitionId, key, offset, readCommand.size(), &value, &error);
         const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
-        Stats_.RecordLatency(actionName, latencyMs);
+        Stats_.RecordLatency(actionStatsIndex, latencyMs);
 
         if (!ok) {
-            Stats_.RecordError("read_failed", error, actionName);
+            Stats_.RecordError("read_failed", error, actionStatsIndex);
             continue;
         }
 
-        Stats_.RecordReadBytes(actionName, value.size());
+        Stats_.RecordReadBytes(actionStatsIndex, value.size());
 
         if (readCommand.verify_data()) {
             TString expected = GetPatternData(info.KeySize);
@@ -369,13 +380,17 @@ void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NK
                         << " requested_size=" << readCommand.size()
                         << " expected_len=" << expected.size()
                         << " actual_len=" << value.size(),
-                    actionName);
+                    actionStatsIndex);
             }
         }
     }
 }
 
-void TWorker::ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const NKikimrKeyValue::ActionCommand_Delete& deleteCommand) {
+void TWorker::ExecuteDeleteCommand(
+    const NKikimrKeyValue::Action& action,
+    ui32 actionStatsIndex,
+    const NKikimrKeyValue::ActionCommand_Delete& deleteCommand)
+{
     if (deleteCommand.count() == 0) {
         return;
     }
@@ -393,10 +408,10 @@ void TWorker::ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const 
         const auto startedAt = std::chrono::steady_clock::now();
         const bool ok = Client_->DeleteKey(VolumePath_, info.PartitionId, key, &error);
         const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
-        Stats_.RecordLatency(actionName, latencyMs);
+        Stats_.RecordLatency(actionStatsIndex, latencyMs);
 
         if (!ok) {
-            Stats_.RecordError("delete_failed", error, actionName);
+            Stats_.RecordError("delete_failed", error, actionStatsIndex);
         }
     }
 }

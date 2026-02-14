@@ -8,6 +8,7 @@
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 
 namespace NKvVolumeStress {
 
@@ -34,7 +35,18 @@ constexpr std::array<ui64, 48> LatencyBucketUpperBoundsMs = {
 
 } // namespace
 
-TRunStats::TRunStats() = default;
+TRunStats::TRunStats(TVector<TString> actionNames)
+    : ActionNames_(std::move(actionNames))
+{
+    ActionStats_.resize(ActionNames_.size());
+    TVector<TString> sortedActionNames = ActionNames_;
+    std::sort(sortedActionNames.begin(), sortedActionNames.end());
+    for (size_t i = 1; i < sortedActionNames.size(); ++i) {
+        if (sortedActionNames[i - 1] == sortedActionNames[i]) {
+            throw std::runtime_error(TStringBuilder() << "duplicate action name in stats registry: " << sortedActionNames[i]);
+        }
+    }
+}
 
 size_t TRunStats::FindLatencyBucket(ui64 latencyMs) {
     for (size_t i = 0; i < LatencyBucketUpperBoundsMs.size(); ++i) {
@@ -108,33 +120,55 @@ TLatencyPercentiles TRunStats::BuildPercentiles(const TLatencyHistogram& histogr
     return percentiles;
 }
 
-void TRunStats::RecordAction(const TString& actionName) {
-    std::lock_guard lock(Mutex_);
-    ++ActionRuns_[actionName];
+void TRunStats::IncrementNamedCounter(TVector<TNamedCounter>& counters, const TString& name) {
+    for (auto& counter : counters) {
+        if (counter.Name == name) {
+            ++counter.Total;
+            return;
+        }
+    }
+    counters.push_back(TNamedCounter{name, 1});
 }
 
-void TRunStats::RecordReadBytes(const TString& actionName, ui64 bytes) {
-    std::lock_guard lock(Mutex_);
-    ReadBytesByAction_[actionName] += bytes;
+bool TRunStats::IsValidActionIndex(ui32 actionIndex) const {
+    return actionIndex < ActionStats_.size();
 }
 
-void TRunStats::RecordWriteBytes(const TString& actionName, ui64 bytes) {
+void TRunStats::RecordAction(ui32 actionIndex) {
     std::lock_guard lock(Mutex_);
-    WriteBytesByAction_[actionName] += bytes;
+    if (IsValidActionIndex(actionIndex)) {
+        ++ActionStats_[actionIndex].Runs;
+    }
 }
 
-void TRunStats::RecordLatency(const TString& kind, ui64 latencyMs) {
+void TRunStats::RecordReadBytes(ui32 actionIndex, ui64 bytes) {
+    std::lock_guard lock(Mutex_);
+    if (IsValidActionIndex(actionIndex)) {
+        ActionStats_[actionIndex].ReadBytes += bytes;
+    }
+}
+
+void TRunStats::RecordWriteBytes(ui32 actionIndex, ui64 bytes) {
+    std::lock_guard lock(Mutex_);
+    if (IsValidActionIndex(actionIndex)) {
+        ActionStats_[actionIndex].WriteBytes += bytes;
+    }
+}
+
+void TRunStats::RecordLatency(ui32 actionIndex, ui64 latencyMs) {
     std::lock_guard lock(Mutex_);
     RecordLatencySample(TotalLatency_, latencyMs);
-    RecordLatencySample(LatencyByKind_[kind], latencyMs);
+    if (IsValidActionIndex(actionIndex)) {
+        RecordLatencySample(ActionStats_[actionIndex].Latency, latencyMs);
+    }
 }
 
-void TRunStats::RecordError(const TString& kind, const TString& message, const TString& actionName) {
+void TRunStats::RecordError(const TString& kind, const TString& message, std::optional<ui32> actionIndex) {
     std::lock_guard lock(Mutex_);
-    ++ErrorsByKind_[kind];
+    IncrementNamedCounter(ErrorsByKind_, kind);
     ++TotalErrors_;
-    if (!actionName.empty()) {
-        ++ErrorsByAction_[actionName];
+    if (actionIndex && IsValidActionIndex(*actionIndex)) {
+        ++ActionStats_[*actionIndex].Errors;
     }
 
     if (SampleErrors_.size() < 20) {
@@ -151,15 +185,21 @@ TRunStatsSnapshot TRunStats::Snapshot() const {
     std::lock_guard lock(Mutex_);
 
     TRunStatsSnapshot snapshot;
-    snapshot.ActionRuns = ActionRuns_;
-    snapshot.ErrorsByKind = ErrorsByKind_;
-    snapshot.ErrorsByAction = ErrorsByAction_;
-    snapshot.ReadBytesByAction = ReadBytesByAction_;
-    snapshot.WriteBytesByAction = WriteBytesByAction_;
-    snapshot.LatencyByKind.reserve(LatencyByKind_.size());
-    for (const auto& [kind, histogram] : LatencyByKind_) {
-        snapshot.LatencyByKind[kind] = BuildPercentiles(histogram);
+    snapshot.ActionNames = ActionNames_;
+    snapshot.ActionRuns.resize(ActionStats_.size());
+    snapshot.ErrorsByAction.resize(ActionStats_.size());
+    snapshot.ReadBytesByAction.resize(ActionStats_.size());
+    snapshot.WriteBytesByAction.resize(ActionStats_.size());
+    snapshot.LatencyByAction.resize(ActionStats_.size());
+    for (size_t i = 0; i < ActionStats_.size(); ++i) {
+        const TActionStats& actionStats = ActionStats_[i];
+        snapshot.ActionRuns[i] = actionStats.Runs;
+        snapshot.ErrorsByAction[i] = actionStats.Errors;
+        snapshot.ReadBytesByAction[i] = actionStats.ReadBytes;
+        snapshot.WriteBytesByAction[i] = actionStats.WriteBytes;
+        snapshot.LatencyByAction[i] = BuildPercentiles(actionStats.Latency);
     }
+    snapshot.ErrorsByKind = ErrorsByKind_;
     snapshot.TotalLatency = BuildPercentiles(TotalLatency_);
     snapshot.SampleErrors = SampleErrors_;
     snapshot.TotalErrors = TotalErrors_;
@@ -169,24 +209,42 @@ TRunStatsSnapshot TRunStats::Snapshot() const {
 void TRunStats::PrintSummary(double elapsedSeconds) const {
     const TRunStatsSnapshot snapshot = Snapshot();
 
-    TVector<std::pair<TString, ui64>> sortedActions(snapshot.ActionRuns.begin(), snapshot.ActionRuns.end());
+    TVector<std::pair<TString, ui64>> sortedActions;
+    sortedActions.reserve(snapshot.ActionNames.size());
+    for (size_t i = 0; i < snapshot.ActionNames.size(); ++i) {
+        sortedActions.push_back({snapshot.ActionNames[i], i < snapshot.ActionRuns.size() ? snapshot.ActionRuns[i] : 0});
+    }
     std::sort(sortedActions.begin(), sortedActions.end(), [](const auto& l, const auto& r) {
         return l.first < r.first;
     });
 
-    TVector<std::pair<TString, ui64>> sortedErrors(snapshot.ErrorsByKind.begin(), snapshot.ErrorsByKind.end());
+    TVector<std::pair<TString, ui64>> sortedErrors;
+    sortedErrors.reserve(snapshot.ErrorsByKind.size());
+    for (const auto& error : snapshot.ErrorsByKind) {
+        sortedErrors.push_back({error.Name, error.Total});
+    }
     std::sort(sortedErrors.begin(), sortedErrors.end(), [](const auto& l, const auto& r) {
         return l.first < r.first;
     });
 
-    TVector<std::pair<TString, ui64>> sortedActionErrors(snapshot.ErrorsByAction.begin(), snapshot.ErrorsByAction.end());
+    TVector<std::pair<TString, ui64>> sortedActionErrors;
+    sortedActionErrors.reserve(snapshot.ActionNames.size());
+    for (size_t i = 0; i < snapshot.ActionNames.size(); ++i) {
+        sortedActionErrors.push_back(
+            {snapshot.ActionNames[i], i < snapshot.ErrorsByAction.size() ? snapshot.ErrorsByAction[i] : 0});
+    }
     std::sort(sortedActionErrors.begin(), sortedActionErrors.end(), [](const auto& l, const auto& r) {
         return l.first < r.first;
     });
 
     TVector<std::pair<TString, TLatencyPercentiles>> sortedLatencies(
-        snapshot.LatencyByKind.begin(),
-        snapshot.LatencyByKind.end());
+        snapshot.ActionNames.size());
+    for (size_t i = 0; i < snapshot.ActionNames.size(); ++i) {
+        sortedLatencies[i] = {
+            snapshot.ActionNames[i],
+            i < snapshot.LatencyByAction.size() ? snapshot.LatencyByAction[i] : TLatencyPercentiles{}
+        };
+    }
     std::sort(sortedLatencies.begin(), sortedLatencies.end(), [](const auto& l, const auto& r) {
         return l.first < r.first;
     });
@@ -254,9 +312,20 @@ void TRunStats::PrintSummary(double elapsedSeconds) const {
         }
     }
 
-    if (!sortedActionErrors.empty()) {
+    bool hasActionErrors = false;
+    for (const auto& [_, count] : sortedActionErrors) {
+        if (count > 0) {
+            hasActionErrors = true;
+            break;
+        }
+    }
+
+    if (hasActionErrors) {
         Cout << "Errors by action:" << Endl;
         for (const auto& [action, count] : sortedActionErrors) {
+            if (count == 0) {
+                continue;
+            }
             Cout << "  " << action << ": " << count << Endl;
         }
     }

@@ -328,7 +328,13 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     const TString hostPort = ParseHostPort(options.Endpoint);
     const TString volumePath = MakeVolumePath(options.Database, config.volume_config().path());
 
-    TRunStats stats;
+    TVector<TString> actionNames;
+    actionNames.reserve(config.actions_size());
+    for (const auto& action : config.actions()) {
+        actionNames.push_back(action.name());
+    }
+
+    TRunStats stats(std::move(actionNames));
     TWorkerLoadTracker workerLoadTracker(options.InFlight);
     const auto [initialTotalBytes, initialTotalCommands] = CalculateInitialLoadTotals(config, options.InFlight);
     TInitialLoadProgress initialLoadProgress(initialTotalBytes, initialTotalCommands);

@@ -41,6 +41,11 @@ public:
     void Run(std::chrono::steady_clock::time_point endAt);
 
 private:
+    struct TActionEntry {
+        const NKikimrKeyValue::Action* Action = nullptr;
+        ui32 StatsIndex = 0;
+    };
+
     bool IsStopped() const;
     ui32 GetActionLimit(const NKikimrKeyValue::Action& action) const;
     void WaitForActions();
@@ -52,9 +57,18 @@ private:
     void ExecuteAction(const TString& actionName);
     void WriteInitialDataImpl();
 
-    bool ExecuteWriteCommand(const TString& actionName, const NKikimrKeyValue::ActionCommand_Write& writeCommand);
-    void ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NKikimrKeyValue::ActionCommand_Read& readCommand);
-    void ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const NKikimrKeyValue::ActionCommand_Delete& deleteCommand);
+    bool ExecuteWriteCommand(
+        const TString& actionName,
+        const NKikimrKeyValue::ActionCommand_Write& writeCommand,
+        std::optional<ui32> actionStatsIndex = std::nullopt);
+    void ExecuteReadCommand(
+        const NKikimrKeyValue::Action& action,
+        ui32 actionStatsIndex,
+        const NKikimrKeyValue::ActionCommand_Read& readCommand);
+    void ExecuteDeleteCommand(
+        const NKikimrKeyValue::Action& action,
+        ui32 actionStatsIndex,
+        const NKikimrKeyValue::ActionCommand_Delete& deleteCommand);
 
     TVector<TString> ResolveSources(const NKikimrKeyValue::Action& action) const;
     ui32 SelectPartitionId();
@@ -75,7 +89,7 @@ private:
 
     TDataStorage DataStorage_;
 
-    THashMap<TString, const NKikimrKeyValue::Action*> ActionsByName_;
+    THashMap<TString, TActionEntry> ActionsByName_;
     THashMap<TString, TVector<TString>> ChildrenByParent_;
 
     std::optional<ui32> FixedPartitionId_;

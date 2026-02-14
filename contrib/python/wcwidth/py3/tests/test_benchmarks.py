@@ -1,10 +1,16 @@
 """Performance benchmarks for wcwidth module."""
 # std imports
 import os
+import sys
 import unicodedata
+
+# 3rd party
+import pytest
 
 # local
 import wcwidth
+
+_wcwidth_module = sys.modules['wcwidth.wcwidth']
 
 
 def test_wcwidth_ascii(benchmark):
@@ -53,6 +59,31 @@ def test_wcswidth_emoji_sequence(benchmark):
     """Benchmark wcswidth() with emoji sequences."""
     text = '👨\u200d👩\u200d👧\u200d👦' * 10
     benchmark(wcwidth.wcswidth, text)
+
+
+# Regional Indicator benchmarks - paired flags and unpaired RI
+RI_FLAGS_PAIRED = '🇺🇸🇬🇧🇫🇷🇩🇪🇯🇵' * 100
+RI_FLAGS_UNPAIRED = '🇺🇸🇬🇧🇫' * 100
+
+
+def test_wcswidth_ri_flags_paired(benchmark):
+    """Benchmark wcswidth() with paired regional indicator flags."""
+    benchmark(wcwidth.wcswidth, RI_FLAGS_PAIRED)
+
+
+def test_wcswidth_ri_flags_unpaired(benchmark):
+    """Benchmark wcswidth() with mixed paired and unpaired regional indicators."""
+    benchmark(wcwidth.wcswidth, RI_FLAGS_UNPAIRED)
+
+
+def test_width_ri_flags_paired(benchmark):
+    """Benchmark width() with paired regional indicator flags."""
+    benchmark(wcwidth.width, RI_FLAGS_PAIRED)
+
+
+def test_width_ri_flags_unpaired(benchmark):
+    """Benchmark width() with mixed paired and unpaired regional indicators."""
+    benchmark(wcwidth.width, RI_FLAGS_UNPAIRED)
 
 
 # NFC vs NFD comparison - text with combining marks
@@ -297,39 +328,88 @@ def test_iter_sequences_mixed(benchmark):
 
 
 # UDHR-based benchmarks,
-# Load combined text (12 world languages)
+# Load combined text (500+ world languages)
 import yatest.common as yc
 UDHR_FILE = os.path.join(os.path.dirname(yc.source_path(__file__)), 'udhr_combined.txt')
-with open(UDHR_FILE, encoding='utf-8') as f:
-    UDHR_TEXT = f.read()
-UDHR_LINES = UDHR_TEXT.splitlines()[:200]
+UDHR_TEXT = ''
+UDHR_LINES = []
+UDHR_WIDTHS = []
+UDHR_FILLCHAR = '█'
+UDHR_SAMPLE_EVERY = 20
+if os.path.exists(UDHR_FILE):
+    with open(UDHR_FILE, encoding='utf-8') as f:
+        UDHR_TEXT = f.read()
+    _all_lines = [line.rstrip() for line in UDHR_TEXT.splitlines() if line.strip()]
+    UDHR_LINES = [l for i, l in enumerate(_all_lines) if i % UDHR_SAMPLE_EVERY == 0]
+    UDHR_TEXT = '\n'.join(UDHR_LINES)
+    UDHR_WIDTHS = [wcwidth.width(line) for line in UDHR_LINES]
+
+_udhr_skip = pytest.mark.skipif(
+    not os.path.exists(UDHR_FILE),
+    reason=f"{os.path.basename(UDHR_FILE)} is missing; run bin/update-tables.py",
+)
 
 
+@_udhr_skip
 def test_wrap_udhr(benchmark):
     """Benchmark wrap() with multilingual UDHR text."""
-    benchmark(wcwidth.wrap, UDHR_TEXT, 80)
+    result = benchmark.pedantic(wcwidth.wrap, args=(UDHR_TEXT, 80), rounds=1, iterations=1)
+    assert len(result)
+    assert all(0 <= wcwidth.width(_l) <= 80 for _l in result)
 
 
+@_udhr_skip
 def test_width_udhr(benchmark):
     """Benchmark width() with multilingual UDHR text."""
-    benchmark(wcwidth.width, UDHR_TEXT)
+    result = benchmark.pedantic(wcwidth.width, args=(UDHR_TEXT,), rounds=1, iterations=1)
+    assert result > 0
 
 
-def test_wcswidth_udhr(benchmark):
-    """Benchmark wcswidth() with multilingual UDHR text."""
-    benchmark(wcwidth.wcswidth, UDHR_TEXT)
+@_udhr_skip
+def test_width_udhr_lines(benchmark):
+    """Benchmark width() on individual UDHR lines."""
+    result = benchmark.pedantic(lambda: sum(wcwidth.width(line) for line in UDHR_LINES),
+                                rounds=1, iterations=1)
+    assert result > 0
 
 
+@_udhr_skip
+def test_width_wcswidth_consistency_udhr(benchmark):
+    """Verify width() and wcswidth() agree for printable multilingual text."""
+    def check():
+        failures = []
+        for line in UDHR_LINES:
+            if not line or not line.isprintable():
+                continue
+            w = wcwidth.width(line)
+            wcs = wcwidth.wcswidth(line)
+            if w != wcs:
+                failures.append((line[:60], w, wcs))
+        return failures
+    failures = benchmark.pedantic(check, rounds=1, iterations=1)
+    assert not failures
+
+
+@_udhr_skip
+def test_width_fastpath_integrity_udhr(benchmark):
+    """Verify width() produces identical results with and without the fast path."""
+    saved = _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN
+
+    def check():
+        _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN = 0
+        fast_total = sum(wcwidth.width(line) for line in UDHR_LINES)
+        _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN = 999_999
+        parse_total = sum(wcwidth.width(line) for line in UDHR_LINES)
+        return fast_total, parse_total
+
+    fast_total, parse_total = benchmark.pedantic(check, rounds=1, iterations=1)
+    _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN = saved
+    assert fast_total == parse_total
+
+
+@_udhr_skip
 def test_ljust_udhr_lines(benchmark):
     """Benchmark ljust() on UDHR lines."""
-    benchmark(lambda: [wcwidth.ljust(line, 100) for line in UDHR_LINES])
-
-
-def test_rjust_udhr_lines(benchmark):
-    """Benchmark rjust() on UDHR lines."""
-    benchmark(lambda: [wcwidth.rjust(line, 100) for line in UDHR_LINES])
-
-
-def test_center_udhr_lines(benchmark):
-    """Benchmark center() on UDHR lines."""
-    benchmark(lambda: [wcwidth.center(line, 100) for line in UDHR_LINES])
+    benchmark.pedantic(lambda: [wcwidth.ljust(line, w + 1, UDHR_FILLCHAR)
+                                for line, w in zip(UDHR_LINES, UDHR_WIDTHS)],
+                       rounds=1, iterations=1)

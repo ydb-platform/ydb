@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wcwidth
-Version: 0.5.0
+Version: 0.5.2
 Summary: Measures the displayed width of unicode strings in a terminal
 Project-URL: Homepage, https://github.com/jquast/wcwidth
 Author-email: Jeff Quast <contact@jeffquast.com>
@@ -119,8 +119,7 @@ Measures width of a single codepoint,
 
 Use function `wcwidth()`_ to determine the length of a *single unicode character*.
 
-See `Specification <Specification_from_pypi_>`_ of character measurements. Note that ``-1`` is
-returned for control codes.
+See specification_ of character measurements. Note that ``-1`` is returned for control codes.
 
 wcswidth()
 ----------
@@ -135,8 +134,8 @@ Measures width of a string, returns -1 for control codes.
 
 Use function `wcswidth()`_ to determine the length of many, a *string of unicode characters*.
 
-See `Specification <Specification_from_pypi_>`_ of character measurements. Note that
-``-1`` is returned if control codes occurs anywhere in the string.
+See specification_ of character measurements. Note that ``-1`` is returned if control codes occurs
+anywhere in the string.
 
 width()
 -------
@@ -252,7 +251,7 @@ Use `center()`_ as replacement of `str.center()`_:
 wrap()
 ------
 
-Use function ``wrap()`` to wrap text containing terminal sequences, Unicode grapheme
+Use function `wrap()`_ to wrap text containing terminal sequences, Unicode grapheme
 clusters, and wide characters to a given display width.
 
 .. code-block:: python
@@ -334,10 +333,12 @@ The ``ambiguous_width`` parameter is available on all width-measuring functions:
 The most reliable method to detect whether a terminal profile is set for "Ambiguous width as wide"
 mode is to display an ambiguous character surrounded by a pair of Cursor Position Report (CPR)
 queries with a terminal in cooked or raw mode, and to parse the responses for their ``(y, x)``
-locations, and measure the difference of the ``x`` positions. This code should also check whether
-it is attached to a terminal and timeout, and then fallback to the preferred locale.
+locations and measure the difference ``x``.
 
-`jquast/blessed`_ library provides a `Terminal.detect_ambiguous_width()`_ method:
+This code should also be careful check whether it is attached to a terminal and be careful of
+possible timeout, slow network, or non-response when working with "dumb terminals" like a CI build.
+
+`jquast/blessed`_ library provides such a helping `Terminal.detect_ambiguous_width()`_ method:
 
 .. code-block:: python
 
@@ -484,6 +485,16 @@ languages.
 History
 =======
 
+0.5.2 *2026-01-29*
+  * **Bugfix** Measurement of category ``Mc`` (`Spacing Combining Mark`_), approx.  443, has a more
+    nuanced specification_, and may be categorized as either zero or wide. `PR #200`_.
+  * **Bugfix** Measurement of "standalone" modifiers and regional indicators, `PR #202`_.
+  * **Updated** Data files used in some automatic tests are no longer distributed. `PR #199`_
+
+0.5.1 *2026-01-27*
+  * **Updated** generated zero and wide code tables to length of 1 to complete the previously
+    announced removal of historical wide and zero tables. `PR #196`_.
+
 0.5.0 *2026-01-26*
   * **Drop Support** of many historical versions of wide and zero unicode tables.  Only the latest
     Unicode version (17.0.0) is now shipped. The related ``unicode_version='auto'`` keyword of the
@@ -551,13 +562,12 @@ History
 0.2.10 *2023-11-13*
   * **Bugfix** accounting of some kinds of emoji sequences using U+FE0F
     Variation Selector 16 (`PR #97`_).
-  * **Updated** `Specification <Specification_from_pypi_>`_.
+  * **Updated** specification_.
 
 0.2.9 *2023-10-30*
   * **Bugfix** zero-width characters used in Emoji ZWJ sequences, Balinese,
     Jamo, Devanagari, Tamil, Kannada and others (`PR #91`_).
-  * **Updated** to include `Specification <Specification_from_pypi_>`_ of
-    character measurements.
+  * **Updated** to include specification_ of character measurements.
 
 0.2.8 *2023-09-30*
   * Include requirements files in the source distribution (`PR #82`_).
@@ -638,7 +648,8 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
  * for any purpose and without fee is hereby granted. The author
  * disclaims all warranties with regard to this software.
 
-.. _`Specification_from_pypi`: https://wcwidth.readthedocs.io/en/latest/specs.html
+.. _`Spacing Combining Mark`: https://www.unicode.org/versions/latest/ch04.pdf#G134153
+.. _`specification`: https://wcwidth.readthedocs.io/en/latest/specs.html
 .. _`tox`: https://tox.wiki/en/latest/
 .. _`prospector`: https://github.com/landscapeio/prospector
 .. _`combining`: https://en.wikipedia.org/wiki/Combining_character
@@ -682,6 +693,10 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`PR #193`: https://github.com/jquast/wcwidth/pull/193
 .. _`PR #194`: https://github.com/jquast/wcwidth/pull/194
 .. _`PR #195`: https://github.com/jquast/wcwidth/pull/195
+.. _`PR #196`: https://github.com/jquast/wcwidth/pull/196
+.. _`PR #199`: https://github.com/jquast/wcwidth/pull/199
+.. _`PR #200`: https://github.com/jquast/wcwidth/pull/200
+.. _`PR #202`: https://github.com/jquast/wcwidth/pull/202
 .. _`Issue #101`: https://github.com/jquast/wcwidth/issues/101
 .. _`Issue #190`: https://github.com/jquast/wcwidth/issues/190
 .. _`jquast/blessed`: https://github.com/jquast/blessed

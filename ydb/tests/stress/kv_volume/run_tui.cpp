@@ -16,6 +16,14 @@ namespace NKvVolumeStress {
 
 using namespace ftxui;
 
+namespace {
+
+double ToMiBPerSecond(double bytesPerSecond) {
+    return bytesPerSecond / (1024.0 * 1024.0);
+}
+
+} // namespace
+
 TRunTui::TRunTui(std::shared_ptr<TRunDisplayData> data)
     : Screen_(ScreenInteractive::Fullscreen())
     , DataToDisplay_(std::move(data))
@@ -84,13 +92,16 @@ Element TRunTui::BuildActionsPart() {
 
     Elements rows;
     rows.push_back(hbox({
-        text("Action") | size(WIDTH, EQUAL, 18),
-        text("Total") | align_right | size(WIDTH, EQUAL, 10),
-        text("ops/s") | align_right | size(WIDTH, EQUAL, 10),
-        text("p50") | align_right | size(WIDTH, EQUAL, 8),
-        text("p90") | align_right | size(WIDTH, EQUAL, 8),
-        text("p99") | align_right | size(WIDTH, EQUAL, 8),
-        text("p100") | align_right | size(WIDTH, EQUAL, 8),
+        text("Action") | size(WIDTH, EQUAL, 16),
+        text("Total") | align_right | size(WIDTH, EQUAL, 9),
+        text("ops/s") | align_right | size(WIDTH, EQUAL, 8),
+        text("Err") | align_right | size(WIDTH, EQUAL, 6),
+        text("p50") | align_right | size(WIDTH, EQUAL, 6),
+        text("p90") | align_right | size(WIDTH, EQUAL, 6),
+        text("p99") | align_right | size(WIDTH, EQUAL, 6),
+        text("p100") | align_right | size(WIDTH, EQUAL, 7),
+        text("rMB/s") | align_right | size(WIDTH, EQUAL, 8),
+        text("wMB/s") | align_right | size(WIDTH, EQUAL, 8),
     }));
 
     if (data->Actions.empty()) {
@@ -103,15 +114,22 @@ Element TRunTui::BuildActionsPart() {
             const TString p90 = action.Latency.Samples > 0 ? ToString(action.Latency.P90Ms) : "-";
             const TString p99 = action.Latency.Samples > 0 ? ToString(action.Latency.P99Ms) : "-";
             const TString p100 = action.Latency.Samples > 0 ? ToString(action.Latency.P100Ms) : "-";
+            std::stringstream readBwSs;
+            readBwSs << std::fixed << std::setprecision(1) << ToMiBPerSecond(action.ReadBytesPerSecond);
+            std::stringstream writeBwSs;
+            writeBwSs << std::fixed << std::setprecision(1) << ToMiBPerSecond(action.WriteBytesPerSecond);
 
             rows.push_back(hbox({
-                text(action.Name) | size(WIDTH, EQUAL, 18),
-                text(ToString(action.TotalRuns)) | align_right | size(WIDTH, EQUAL, 10),
-                text(rateSs.str()) | align_right | size(WIDTH, EQUAL, 10),
-                text(p50) | align_right | size(WIDTH, EQUAL, 8),
-                text(p90) | align_right | size(WIDTH, EQUAL, 8),
-                text(p99) | align_right | size(WIDTH, EQUAL, 8),
-                text(p100) | align_right | size(WIDTH, EQUAL, 8),
+                text(action.Name) | size(WIDTH, EQUAL, 16),
+                text(ToString(action.TotalRuns)) | align_right | size(WIDTH, EQUAL, 9),
+                text(rateSs.str()) | align_right | size(WIDTH, EQUAL, 8),
+                text(ToString(action.ErrorCount)) | align_right | size(WIDTH, EQUAL, 6),
+                text(p50) | align_right | size(WIDTH, EQUAL, 6),
+                text(p90) | align_right | size(WIDTH, EQUAL, 6),
+                text(p99) | align_right | size(WIDTH, EQUAL, 6),
+                text(p100) | align_right | size(WIDTH, EQUAL, 7),
+                text(readBwSs.str()) | align_right | size(WIDTH, EQUAL, 8),
+                text(writeBwSs.str()) | align_right | size(WIDTH, EQUAL, 8),
             }));
         }
     }
@@ -119,28 +137,43 @@ Element TRunTui::BuildActionsPart() {
     return vbox(rows);
 }
 
-Element TRunTui::BuildErrorsPart() {
+Element TRunTui::BuildWorkersPart() {
     std::shared_ptr<TRunDisplayData> data = std::atomic_load(&DataToDisplay_);
 
     Elements rows;
-    rows.push_back(text("Errors by kind:") | bold);
-
-    if (data->Errors.empty()) {
-        rows.push_back(text("  none"));
-    } else {
-        for (const auto& error : data->Errors) {
-            rows.push_back(text("  " + error.Name + ": " + ToString(error.Total)));
-        }
+    if (data->WorkerLoad.WorkersTotal == 0) {
+        rows.push_back(text("Worker load: n/a"));
+        return vbox(rows);
     }
 
-    rows.push_back(text(""));
-    rows.push_back(text("Sample errors:") | bold);
-    if (data->SampleErrors.empty()) {
-        rows.push_back(text("  none"));
-    } else {
-        for (const auto& error : data->SampleErrors) {
-            rows.push_back(paragraph("  " + error));
-        }
+    std::stringstream summarySs;
+    summarySs << "Workers busy: " << data->WorkerLoad.BusyWorkers << "/" << data->WorkerLoad.WorkersTotal
+              << " (" << std::fixed << std::setprecision(1) << data->WorkerLoad.BusyPercent << "%)"
+              << "   Active actions: " << data->WorkerLoad.ActiveActionsTotal << "/" << data->WorkerLoad.CapacityTotal
+              << " (" << std::fixed << std::setprecision(1) << data->WorkerLoad.UtilizationPercent << "%)";
+    rows.push_back(text(summarySs.str()) | bold);
+
+    rows.push_back(hbox({
+        text("Worker") | size(WIDTH, EQUAL, 10),
+        text("Active") | align_right | size(WIDTH, EQUAL, 10),
+        text("Cap") | align_right | size(WIDTH, EQUAL, 10),
+        text("Util%") | align_right | size(WIDTH, EQUAL, 10),
+    }));
+
+    for (const auto& row : data->WorkerLoad.Workers) {
+        std::stringstream utilSs;
+        utilSs << std::fixed << std::setprecision(1) << row.UtilizationPercent;
+
+        rows.push_back(hbox({
+            text(ToString(row.WorkerId)) | size(WIDTH, EQUAL, 10),
+            text(ToString(row.ActiveActions)) | align_right | size(WIDTH, EQUAL, 10),
+            text(ToString(row.Capacity)) | align_right | size(WIDTH, EQUAL, 10),
+            text(utilSs.str()) | align_right | size(WIDTH, EQUAL, 10),
+        }));
+    }
+
+    if (data->WorkerLoad.Workers.empty()) {
+        rows.push_back(text("no workers"));
     }
 
     return vbox(rows);
@@ -155,11 +188,11 @@ Component TRunTui::BuildComponent() {
         return BuildActionsPart();
     }), "Actions");
 
-    Component errors = Scroller(Renderer([this] {
-        return BuildErrorsPart();
-    }), "Errors");
+    Component workers = Scroller(Renderer([this] {
+        return BuildWorkersPart();
+    }), "Workers");
 
-    auto container = Container::Vertical({header, actions, errors});
+    auto container = Container::Vertical({header, actions, workers});
 
     return Renderer(container, [=] {
         const int termHeight = Terminal::Size().dimy;
@@ -172,12 +205,12 @@ Component TRunTui::BuildComponent() {
         }
 
         Element actionsElement = actions->Render() | size(HEIGHT, GREATER_THAN, 8) | flex;
-        Element errorsElement = errors->Render() | size(HEIGHT, GREATER_THAN, 8) | flex;
+        Element workersElement = workers->Render() | size(HEIGHT, GREATER_THAN, 8) | flex;
 
         return vbox({
             headerElement,
             actionsElement,
-            errorsElement,
+            workersElement,
         });
     });
 }

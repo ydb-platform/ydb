@@ -13,8 +13,23 @@ namespace NKvVolumeStress {
 
 namespace {
 
-constexpr std::array<ui64, 16> LatencyBucketUpperBoundsMs = {
-    1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1000, 2000, 5000, 10000, 30000, 60000
+constexpr std::array<ui64, 48> LatencyBucketUpperBoundsMs = {
+    1, 2, 3,
+    4, 5, 6,
+    8, 10, 12,
+    16, 20, 24,
+    32, 40, 48,
+    64, 80, 96,
+    128, 160, 192,
+    256, 320, 384,
+    512, 640, 768,
+    1000, 1200, 1500,
+    2000, 2500, 3000,
+    4000, 5000, 6000,
+    8000, 10000, 12000,
+    16000, 20000, 24000,
+    32000, 40000, 48000,
+    64000, 80000, 96000
 };
 
 } // namespace
@@ -74,16 +89,29 @@ void TRunStats::RecordAction(const TString& actionName) {
     ++ActionRuns_[actionName];
 }
 
+void TRunStats::RecordReadBytes(const TString& actionName, ui64 bytes) {
+    std::lock_guard lock(Mutex_);
+    ReadBytesByAction_[actionName] += bytes;
+}
+
+void TRunStats::RecordWriteBytes(const TString& actionName, ui64 bytes) {
+    std::lock_guard lock(Mutex_);
+    WriteBytesByAction_[actionName] += bytes;
+}
+
 void TRunStats::RecordLatency(const TString& kind, ui64 latencyMs) {
     std::lock_guard lock(Mutex_);
     RecordLatencySample(TotalLatency_, latencyMs);
     RecordLatencySample(LatencyByKind_[kind], latencyMs);
 }
 
-void TRunStats::RecordError(const TString& kind, const TString& message) {
+void TRunStats::RecordError(const TString& kind, const TString& message, const TString& actionName) {
     std::lock_guard lock(Mutex_);
     ++ErrorsByKind_[kind];
     ++TotalErrors_;
+    if (!actionName.empty()) {
+        ++ErrorsByAction_[actionName];
+    }
 
     if (SampleErrors_.size() < 20) {
         SampleErrors_.push_back(TStringBuilder() << kind << ": " << message);
@@ -101,6 +129,9 @@ TRunStatsSnapshot TRunStats::Snapshot() const {
     TRunStatsSnapshot snapshot;
     snapshot.ActionRuns = ActionRuns_;
     snapshot.ErrorsByKind = ErrorsByKind_;
+    snapshot.ErrorsByAction = ErrorsByAction_;
+    snapshot.ReadBytesByAction = ReadBytesByAction_;
+    snapshot.WriteBytesByAction = WriteBytesByAction_;
     snapshot.LatencyByKind.reserve(LatencyByKind_.size());
     for (const auto& [kind, histogram] : LatencyByKind_) {
         snapshot.LatencyByKind[kind] = BuildPercentiles(histogram);
@@ -121,6 +152,11 @@ void TRunStats::PrintSummary(double elapsedSeconds) const {
 
     TVector<std::pair<TString, ui64>> sortedErrors(snapshot.ErrorsByKind.begin(), snapshot.ErrorsByKind.end());
     std::sort(sortedErrors.begin(), sortedErrors.end(), [](const auto& l, const auto& r) {
+        return l.first < r.first;
+    });
+
+    TVector<std::pair<TString, ui64>> sortedActionErrors(snapshot.ErrorsByAction.begin(), snapshot.ErrorsByAction.end());
+    std::sort(sortedActionErrors.begin(), sortedActionErrors.end(), [](const auto& l, const auto& r) {
         return l.first < r.first;
     });
 
@@ -191,6 +227,13 @@ void TRunStats::PrintSummary(double elapsedSeconds) const {
                  << " p100=" << lat.P100Ms
                  << " samples=" << lat.Samples
                  << Endl;
+        }
+    }
+
+    if (!sortedActionErrors.empty()) {
+        Cout << "Errors by action:" << Endl;
+        for (const auto& [action, count] : sortedActionErrors) {
+            Cout << "  " << action << ": " << count << Endl;
         }
     }
 

@@ -6,6 +6,7 @@ SRCS(
     initial_load_progress.cpp
     initial_load_display.cpp
     run_stats.cpp
+    worker_load.cpp
     run_display.cpp
     run_tui.cpp
     scroller.cpp

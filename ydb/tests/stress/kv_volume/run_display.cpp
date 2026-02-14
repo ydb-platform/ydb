@@ -41,8 +41,14 @@ double CalcRate(ui64 current, ui64 previous, double elapsedSeconds) {
 
 } // namespace
 
-TRunDisplayController::TRunDisplayController(TRunStats& stats, ui32 durationSeconds, bool noTui, bool verbose)
+TRunDisplayController::TRunDisplayController(
+    TRunStats& stats,
+    const TWorkerLoadTracker* workerLoadTracker,
+    ui32 durationSeconds,
+    bool noTui,
+    bool verbose)
     : Stats_(stats)
+    , WorkerLoadTracker_(workerLoadTracker)
     , DurationSeconds_(durationSeconds)
     , NoTui_(noTui)
     , Verbose_(verbose)
@@ -76,6 +82,8 @@ void TRunDisplayController::Start() {
     HasPrevSnapshot_ = true;
     TotalActionsHistory_.clear();
     ActionRunsHistory_.clear();
+    ActionReadBytesHistory_.clear();
+    ActionWriteBytesHistory_.clear();
 
     Mode_ = DetectMode();
     if (Mode_ == EDisplayMode::None) {
@@ -170,6 +178,9 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
     data->ActionsPerSecond = recentRate;
     data->AverageActionsPerSecond = avgRate;
     data->Latency = snapshot.TotalLatency;
+    if (WorkerLoadTracker_) {
+        data->WorkerLoad = WorkerLoadTracker_->Snapshot();
+    }
     data->SampleErrors = snapshot.SampleErrors;
 
     data->Actions.reserve(snapshot.ActionRuns.size());
@@ -186,6 +197,26 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
             actionHistory.pop_front();
         }
 
+        ui64 readBytes = 0;
+        if (const auto itRead = snapshot.ReadBytesByAction.find(name); itRead != snapshot.ReadBytesByAction.end()) {
+            readBytes = itRead->second;
+        }
+        auto& readHistory = ActionReadBytesHistory_[name];
+        readHistory.emplace_back(now, readBytes);
+        while (!readHistory.empty() && now - readHistory.front().first > CurrentOpsRateWindow) {
+            readHistory.pop_front();
+        }
+
+        ui64 writeBytes = 0;
+        if (const auto itWrite = snapshot.WriteBytesByAction.find(name); itWrite != snapshot.WriteBytesByAction.end()) {
+            writeBytes = itWrite->second;
+        }
+        auto& writeHistory = ActionWriteBytesHistory_[name];
+        writeHistory.emplace_back(now, writeBytes);
+        while (!writeHistory.empty() && now - writeHistory.front().first > CurrentOpsRateWindow) {
+            writeHistory.pop_front();
+        }
+
         TRunDisplayData::TActionRow row;
         row.Name = name;
         row.TotalRuns = count;
@@ -196,9 +227,38 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
             row.RunsPerSecond = CalcRate(count, windowStartCount, windowSeconds);
         }
 
+        if (readHistory.size() >= 2) {
+            const auto& [windowStartTs, windowStartBytes] = readHistory.front();
+            const double windowSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(now - windowStartTs).count();
+            row.ReadBytesPerSecond = CalcRate(readBytes, windowStartBytes, windowSeconds);
+        } else {
+            ui64 prevReadBytes = 0;
+            if (const auto itPrevRead = PrevSnapshot_.ReadBytesByAction.find(name); itPrevRead != PrevSnapshot_.ReadBytesByAction.end()) {
+                prevReadBytes = itPrevRead->second;
+            }
+            row.ReadBytesPerSecond = HasPrevSnapshot_ ? CalcRate(readBytes, prevReadBytes, intervalSeconds) : 0.0;
+        }
+
+        if (writeHistory.size() >= 2) {
+            const auto& [windowStartTs, windowStartBytes] = writeHistory.front();
+            const double windowSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(now - windowStartTs).count();
+            row.WriteBytesPerSecond = CalcRate(writeBytes, windowStartBytes, windowSeconds);
+        } else {
+            ui64 prevWriteBytes = 0;
+            if (const auto itPrevWrite = PrevSnapshot_.WriteBytesByAction.find(name); itPrevWrite != PrevSnapshot_.WriteBytesByAction.end()) {
+                prevWriteBytes = itPrevWrite->second;
+            }
+            row.WriteBytesPerSecond = HasPrevSnapshot_ ? CalcRate(writeBytes, prevWriteBytes, intervalSeconds) : 0.0;
+        }
+
         const auto latencyIt = snapshot.LatencyByKind.find(name);
         if (latencyIt != snapshot.LatencyByKind.end()) {
             row.Latency = latencyIt->second;
+        }
+
+        const auto errorsIt = snapshot.ErrorsByAction.find(name);
+        if (errorsIt != snapshot.ErrorsByAction.end()) {
+            row.ErrorCount = errorsIt->second;
         }
 
         data->Actions.push_back(std::move(row));
@@ -252,7 +312,9 @@ void TRunDisplayController::PrintText(const TRunDisplayData& data) const {
                 line << ", ";
             }
             first = false;
-            line << action.Name << "=" << std::fixed << std::setprecision(1) << action.RunsPerSecond << "/s";
+            line << action.Name
+                 << "=" << std::fixed << std::setprecision(1) << action.RunsPerSecond << "/s"
+                 << " err=" << action.ErrorCount;
         }
     }
 

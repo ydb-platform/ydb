@@ -36,25 +36,40 @@ TWorker::TWorker(
     const TString& hostPort,
     const TString& volumePath,
     TRunStats& stats,
-    TInitialLoadProgress* initialLoadProgress)
+    TInitialLoadProgress* initialLoadProgress,
+    TWorkerLoadTracker* workerLoadTracker,
+    const volatile std::sig_atomic_t* stopSignal)
     : WorkerId_(workerId)
     , Options_(options)
     , Config_(config)
     , VolumePath_(volumePath)
     , Stats_(stats)
     , InitialLoadProgress_(initialLoadProgress)
+    , WorkerLoadTracker_(workerLoadTracker)
+    , StopSignal_(stopSignal)
     , Client_(MakeKeyValueClient(hostPort, options.Version))
 {
     for (const auto& action : Config_.actions()) {
         ActionsByName_[action.name()] = &action;
+        ActionCapacity_ += GetActionLimit(action);
         if (action.has_parent_action() && !action.parent_action().empty()) {
             ChildrenByParent_[action.parent_action()].push_back(action.name());
         }
     }
 
+    if (WorkerLoadTracker_) {
+        WorkerLoadTracker_->SetWorkerCapacity(WorkerId_, ActionCapacity_);
+    }
+
     if (static_cast<int>(Config_.partition_mode()) == 1 && Config_.volume_config().partition_count() > 0) {
         FixedPartitionId_ = WorkerId_ % Config_.volume_config().partition_count();
     }
+}
+
+ui32 TWorker::GetActionLimit(const NKikimrKeyValue::Action& action) const {
+    return action.has_worker_max_in_flight() && action.worker_max_in_flight() > 0
+        ? action.worker_max_in_flight()
+        : DefaultActionMaxInFlight;
 }
 
 void TWorker::LoadInitialData() {
@@ -81,7 +96,7 @@ void TWorker::Run(std::chrono::steady_clock::time_point endAt) {
             }
         }
 
-        while (std::chrono::steady_clock::now() < endAt) {
+        while (!IsStopped() && std::chrono::steady_clock::now() < endAt) {
             std::this_thread::sleep_for(100ms);
         }
 
@@ -98,7 +113,10 @@ void TWorker::Run(std::chrono::steady_clock::time_point endAt) {
 }
 
 bool TWorker::IsStopped() const {
-    return StopRequested_.load(std::memory_order_relaxed);
+    if (StopRequested_.load(std::memory_order_relaxed)) {
+        return true;
+    }
+    return StopSignal_ && *StopSignal_ != 0;
 }
 
 void TWorker::WaitForActions() {
@@ -130,14 +148,12 @@ void TWorker::ScheduleAction(const TString& actionName) {
 
     const auto actionIt = ActionsByName_.find(actionName);
     if (actionIt == ActionsByName_.end()) {
-        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName);
+        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName, actionName);
         return;
     }
 
     const auto* action = actionIt->second;
-    const ui32 limit = action->has_worker_max_in_flight() && action->worker_max_in_flight() > 0
-        ? action->worker_max_in_flight()
-        : DefaultActionMaxInFlight;
+    const ui32 limit = GetActionLimit(*action);
 
     {
         std::lock_guard lock(RunningByActionMutex_);
@@ -149,6 +165,9 @@ void TWorker::ScheduleAction(const TString& actionName) {
     }
 
     ActiveActions_.fetch_add(1, std::memory_order_relaxed);
+    if (WorkerLoadTracker_) {
+        WorkerLoadTracker_->AddActive(WorkerId_, +1);
+    }
 
     try {
         std::thread([this, actionName] {
@@ -166,6 +185,10 @@ void TWorker::ScheduleAction(const TString& actionName) {
                 std::lock_guard lock(ActiveActionsMutex_);
                 ActiveActionsCv_.notify_all();
             }
+
+            if (WorkerLoadTracker_) {
+                WorkerLoadTracker_->AddActive(WorkerId_, -1);
+            }
         }).detach();
     } catch (const std::system_error& e) {
         {
@@ -181,14 +204,18 @@ void TWorker::ScheduleAction(const TString& actionName) {
             ActiveActionsCv_.notify_all();
         }
 
-        Stats_.RecordError("thread_create_failed", e.what());
+        if (WorkerLoadTracker_) {
+            WorkerLoadTracker_->AddActive(WorkerId_, -1);
+        }
+
+        Stats_.RecordError("thread_create_failed", e.what(), actionName);
     }
 }
 
 void TWorker::ExecuteAction(const TString& actionName) {
     const auto actionIt = ActionsByName_.find(actionName);
     if (actionIt == ActionsByName_.end()) {
-        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName);
+        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName, actionName);
         return;
     }
 
@@ -213,7 +240,7 @@ void TWorker::ExecuteAction(const TString& actionName) {
                 break;
             }
             case NKikimrKeyValue::ActionCommand::COMMAND_NOT_SET: {
-                Stats_.RecordError("empty_command", TStringBuilder() << "Action " << actionName << " has empty command");
+                Stats_.RecordError("empty_command", TStringBuilder() << "Action " << actionName << " has empty command", actionName);
                 break;
             }
         }
@@ -233,6 +260,10 @@ void TWorker::ExecuteAction(const TString& actionName) {
 
 void TWorker::WriteInitialDataImpl() {
     for (const auto& writeCommand : Config_.initial_data().write_commands()) {
+        if (IsStopped()) {
+            break;
+        }
+
         const bool success = ExecuteWriteCommand("__initial__", writeCommand);
         if (InitialLoadProgress_) {
             const ui64 bytes = static_cast<ui64>(writeCommand.size()) * writeCommand.count();
@@ -268,12 +299,19 @@ bool TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyVal
     }
 
     if (!ok) {
-        Stats_.RecordError("write_failed", error);
+        Stats_.RecordError("write_failed", error, actionName);
         return false;
     }
 
+    ui64 bytesWritten = 0;
+
     for (const auto& [key, value] : pairs) {
         DataStorage_.AddKey(actionName, key, TKeyInfo{partitionId, static_cast<ui32>(value.size())});
+        bytesWritten += value.size();
+    }
+
+    if (actionName != InitialActionName) {
+        Stats_.RecordWriteBytes(actionName, bytesWritten);
     }
 
     if (Options_.Verbose) {
@@ -293,6 +331,10 @@ void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NK
     const auto keys = DataStorage_.PickKeys(sources, readCommand.count(), false);
 
     for (const auto& [key, info] : keys) {
+        if (IsStopped()) {
+            break;
+        }
+
         const ui32 maxOffset = info.KeySize > readCommand.size() ? info.KeySize - readCommand.size() : 0;
         ui32 offset = 0;
         if (maxOffset > 0) {
@@ -308,9 +350,11 @@ void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NK
         Stats_.RecordLatency(actionName, latencyMs);
 
         if (!ok) {
-            Stats_.RecordError("read_failed", error);
+            Stats_.RecordError("read_failed", error, actionName);
             continue;
         }
+
+        Stats_.RecordReadBytes(actionName, value.size());
 
         if (readCommand.verify_data()) {
             TString expected = GetPatternData(info.KeySize);
@@ -324,7 +368,8 @@ void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NK
                         << " offset=" << offset
                         << " requested_size=" << readCommand.size()
                         << " expected_len=" << expected.size()
-                        << " actual_len=" << value.size());
+                        << " actual_len=" << value.size(),
+                    actionName);
             }
         }
     }
@@ -340,6 +385,10 @@ void TWorker::ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const 
     const auto keys = DataStorage_.PickKeys(sources, deleteCommand.count(), true);
 
     for (const auto& [key, info] : keys) {
+        if (IsStopped()) {
+            break;
+        }
+
         TString error;
         const auto startedAt = std::chrono::steady_clock::now();
         const bool ok = Client_->DeleteKey(VolumePath_, info.PartitionId, key, &error);
@@ -347,7 +396,7 @@ void TWorker::ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const 
         Stats_.RecordLatency(actionName, latencyMs);
 
         if (!ok) {
-            Stats_.RecordError("delete_failed", error);
+            Stats_.RecordError("delete_failed", error, actionName);
         }
     }
 }

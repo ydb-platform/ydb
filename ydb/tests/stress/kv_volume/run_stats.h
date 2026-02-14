@@ -21,6 +21,9 @@ struct TLatencyPercentiles {
 struct TRunStatsSnapshot {
     THashMap<TString, ui64> ActionRuns;
     THashMap<TString, ui64> ErrorsByKind;
+    THashMap<TString, ui64> ErrorsByAction;
+    THashMap<TString, ui64> ReadBytesByAction;
+    THashMap<TString, ui64> WriteBytesByAction;
     THashMap<TString, TLatencyPercentiles> LatencyByKind;
     TLatencyPercentiles TotalLatency;
     TVector<TString> SampleErrors;
@@ -32,14 +35,16 @@ public:
     TRunStats();
 
     void RecordAction(const TString& actionName);
+    void RecordReadBytes(const TString& actionName, ui64 bytes);
+    void RecordWriteBytes(const TString& actionName, ui64 bytes);
     void RecordLatency(const TString& kind, ui64 latencyMs);
-    void RecordError(const TString& kind, const TString& message);
+    void RecordError(const TString& kind, const TString& message, const TString& actionName = TString());
     ui64 GetTotalErrors() const;
     TRunStatsSnapshot Snapshot() const;
     void PrintSummary(double elapsedSeconds) const;
 
 private:
-    static constexpr size_t LatencyBucketCount = 17; // last bucket is +inf
+    static constexpr size_t LatencyBucketCount = 49; // last bucket is +inf
 
     struct TLatencyHistogram {
         std::array<ui64, LatencyBucketCount> Buckets = {};
@@ -55,6 +60,9 @@ private:
     mutable std::mutex Mutex_;
     THashMap<TString, ui64> ActionRuns_;
     THashMap<TString, ui64> ErrorsByKind_;
+    THashMap<TString, ui64> ErrorsByAction_;
+    THashMap<TString, ui64> ReadBytesByAction_;
+    THashMap<TString, ui64> WriteBytesByAction_;
     THashMap<TString, TLatencyHistogram> LatencyByKind_;
     TLatencyHistogram TotalLatency_;
     TVector<TString> SampleErrors_;

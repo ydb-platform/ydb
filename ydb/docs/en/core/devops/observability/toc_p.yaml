@@ -7,3 +7,5 @@ items:
   href: system-views.md
 - name: Tracing
   href: ../../reference/observability/tracing/setup.md
+- name: Alerting
+  href: alerting.md

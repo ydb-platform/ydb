@@ -13,8 +13,23 @@ namespace NKvVolumeStress {
 
 namespace {
 
-constexpr std::array<ui64, 16> LatencyBucketUpperBoundsMs = {
-    1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1000, 2000, 5000, 10000, 30000, 60000
+constexpr std::array<ui64, 48> LatencyBucketUpperBoundsMs = {
+    1, 2, 3,
+    4, 5, 6,
+    8, 10, 12,
+    16, 20, 24,
+    32, 40, 48,
+    64, 80, 96,
+    128, 160, 192,
+    256, 320, 384,
+    512, 640, 768,
+    1000, 1200, 1500,
+    2000, 2500, 3000,
+    4000, 5000, 6000,
+    8000, 10000, 12000,
+    16000, 20000, 24000,
+    32000, 40000, 48000,
+    64000, 80000, 96000
 };
 
 } // namespace
@@ -51,13 +66,37 @@ TLatencyPercentiles TRunStats::BuildPercentiles(const TLatencyHistogram& histogr
     const auto valueAtRank = [&histogram](ui64 rank) -> ui64 {
         ui64 cumulative = 0;
         for (size_t i = 0; i < histogram.Buckets.size(); ++i) {
-            cumulative += histogram.Buckets[i];
-            if (cumulative >= rank) {
-                if (i < LatencyBucketUpperBoundsMs.size()) {
-                    return LatencyBucketUpperBoundsMs[i];
-                }
-                return histogram.MaxMs;
+            const ui64 bucketSamples = histogram.Buckets[i];
+            if (bucketSamples == 0) {
+                continue;
             }
+
+            const ui64 cumulativeBefore = cumulative;
+            cumulative += bucketSamples;
+            if (cumulative < rank) {
+                continue;
+            }
+
+            const double lowerBoundMs = i == 0
+                ? 0.0
+                : static_cast<double>(LatencyBucketUpperBoundsMs[i - 1]);
+            const double bucketUpperBoundMs = i < LatencyBucketUpperBoundsMs.size()
+                ? static_cast<double>(LatencyBucketUpperBoundsMs[i])
+                : static_cast<double>(histogram.MaxMs);
+            const double upperBoundMs = std::min(bucketUpperBoundMs, static_cast<double>(histogram.MaxMs));
+
+            if (upperBoundMs <= lowerBoundMs) {
+                return std::min<ui64>(static_cast<ui64>(upperBoundMs), histogram.MaxMs);
+            }
+
+            const double rankInBucket = static_cast<double>(rank - cumulativeBefore);
+            const double bucketFraction = std::clamp(
+                rankInBucket / static_cast<double>(bucketSamples),
+                0.0,
+                1.0);
+            const double interpolatedMs = lowerBoundMs + (upperBoundMs - lowerBoundMs) * bucketFraction;
+            const ui64 estimatedMs = static_cast<ui64>(std::llround(interpolatedMs));
+            return std::min(estimatedMs, histogram.MaxMs);
         }
         return histogram.MaxMs;
     };
@@ -74,16 +113,29 @@ void TRunStats::RecordAction(const TString& actionName) {
     ++ActionRuns_[actionName];
 }
 
+void TRunStats::RecordReadBytes(const TString& actionName, ui64 bytes) {
+    std::lock_guard lock(Mutex_);
+    ReadBytesByAction_[actionName] += bytes;
+}
+
+void TRunStats::RecordWriteBytes(const TString& actionName, ui64 bytes) {
+    std::lock_guard lock(Mutex_);
+    WriteBytesByAction_[actionName] += bytes;
+}
+
 void TRunStats::RecordLatency(const TString& kind, ui64 latencyMs) {
     std::lock_guard lock(Mutex_);
     RecordLatencySample(TotalLatency_, latencyMs);
     RecordLatencySample(LatencyByKind_[kind], latencyMs);
 }
 
-void TRunStats::RecordError(const TString& kind, const TString& message) {
+void TRunStats::RecordError(const TString& kind, const TString& message, const TString& actionName) {
     std::lock_guard lock(Mutex_);
     ++ErrorsByKind_[kind];
     ++TotalErrors_;
+    if (!actionName.empty()) {
+        ++ErrorsByAction_[actionName];
+    }
 
     if (SampleErrors_.size() < 20) {
         SampleErrors_.push_back(TStringBuilder() << kind << ": " << message);
@@ -101,6 +153,9 @@ TRunStatsSnapshot TRunStats::Snapshot() const {
     TRunStatsSnapshot snapshot;
     snapshot.ActionRuns = ActionRuns_;
     snapshot.ErrorsByKind = ErrorsByKind_;
+    snapshot.ErrorsByAction = ErrorsByAction_;
+    snapshot.ReadBytesByAction = ReadBytesByAction_;
+    snapshot.WriteBytesByAction = WriteBytesByAction_;
     snapshot.LatencyByKind.reserve(LatencyByKind_.size());
     for (const auto& [kind, histogram] : LatencyByKind_) {
         snapshot.LatencyByKind[kind] = BuildPercentiles(histogram);
@@ -121,6 +176,11 @@ void TRunStats::PrintSummary(double elapsedSeconds) const {
 
     TVector<std::pair<TString, ui64>> sortedErrors(snapshot.ErrorsByKind.begin(), snapshot.ErrorsByKind.end());
     std::sort(sortedErrors.begin(), sortedErrors.end(), [](const auto& l, const auto& r) {
+        return l.first < r.first;
+    });
+
+    TVector<std::pair<TString, ui64>> sortedActionErrors(snapshot.ErrorsByAction.begin(), snapshot.ErrorsByAction.end());
+    std::sort(sortedActionErrors.begin(), sortedActionErrors.end(), [](const auto& l, const auto& r) {
         return l.first < r.first;
     });
 
@@ -191,6 +251,13 @@ void TRunStats::PrintSummary(double elapsedSeconds) const {
                  << " p100=" << lat.P100Ms
                  << " samples=" << lat.Samples
                  << Endl;
+        }
+    }
+
+    if (!sortedActionErrors.empty()) {
+        Cout << "Errors by action:" << Endl;
+        for (const auto& [action, count] : sortedActionErrors) {
+            Cout << "  " << action << ": " << count << Endl;
         }
     }
 

@@ -5,6 +5,7 @@
 #include "keyvalue_client.h"
 #include "run_stats.h"
 #include "types.h"
+#include "worker_load.h"
 
 #include <ydb/tests/stress/kv_volume/protos/config.pb.h>
 
@@ -14,6 +15,7 @@
 #include <util/system/types.h>
 
 #include <atomic>
+#include <csignal>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -31,13 +33,16 @@ public:
         const TString& hostPort,
         const TString& volumePath,
         TRunStats& stats,
-        TInitialLoadProgress* initialLoadProgress = nullptr);
+        TInitialLoadProgress* initialLoadProgress = nullptr,
+        TWorkerLoadTracker* workerLoadTracker = nullptr,
+        const volatile std::sig_atomic_t* stopSignal = nullptr);
 
     void LoadInitialData();
     void Run(std::chrono::steady_clock::time_point endAt);
 
 private:
     bool IsStopped() const;
+    ui32 GetActionLimit(const NKikimrKeyValue::Action& action) const;
     void WaitForActions();
     void PeriodicLoop(
         const TString& actionName,
@@ -62,6 +67,8 @@ private:
     const TString VolumePath_;
     TRunStats& Stats_;
     TInitialLoadProgress* const InitialLoadProgress_;
+    TWorkerLoadTracker* const WorkerLoadTracker_;
+    const volatile std::sig_atomic_t* const StopSignal_;
     std::unique_ptr<IKeyValueClient> Client_;
 
     std::atomic<bool> StopRequested_ = false;
@@ -84,6 +91,7 @@ private:
     THashMap<ui32, TString> PatternCache_;
 
     std::atomic<ui64> WriteKeyCounter_ = 0;
+    ui32 ActionCapacity_ = 0;
 
     TVector<std::thread> Schedulers_;
 };

@@ -5,6 +5,7 @@
 #include "types.h"
 #include "utils.h"
 #include "worker.h"
+#include "worker_load.h"
 
 #include <ydb/tests/stress/kv_volume/protos/config.pb.h>
 
@@ -22,6 +23,7 @@
 
 #include <exception>
 #include <chrono>
+#include <csignal>
 #include <memory>
 #include <stdexcept>
 #include <thread>
@@ -30,6 +32,12 @@
 namespace {
 
 using namespace NKvVolumeStress;
+
+volatile std::sig_atomic_t StopRequestedBySignal = 0;
+
+void HandleStopSignal(int) {
+    StopRequestedBySignal = 1;
+}
 
 THashMap<TString, TString> BuildPresetConfigs() {
     return {
@@ -321,9 +329,11 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     const TString volumePath = MakeVolumePath(options.Database, config.volume_config().path());
 
     TRunStats stats;
+    TWorkerLoadTracker workerLoadTracker(options.InFlight);
     const auto [initialTotalBytes, initialTotalCommands] = CalculateInitialLoadTotals(config, options.InFlight);
     TInitialLoadProgress initialLoadProgress(initialTotalBytes, initialTotalCommands);
     double runElapsedSeconds = 0.0;
+    bool interrupted = false;
 
     {
         std::unique_ptr<IKeyValueClient> setupClient = MakeKeyValueClient(hostPort, options.Version);
@@ -352,45 +362,65 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
                 hostPort,
                 volumePath,
                 stats,
-                &initialLoadProgress));
+                &initialLoadProgress,
+                &workerLoadTracker,
+                &StopRequestedBySignal));
         }
 
         if (initialTotalCommands > 0) {
             TInitialLoadDisplayController initialLoadDisplay(initialLoadProgress, stats, options.NoTui, options.Verbose);
             initialLoadDisplay.Start();
             for (const auto& worker : workers) {
+                if (StopRequestedBySignal != 0) {
+                    interrupted = true;
+                    break;
+                }
                 worker->LoadInitialData();
             }
             initialLoadDisplay.Stop();
         } else {
             for (const auto& worker : workers) {
+                if (StopRequestedBySignal != 0) {
+                    interrupted = true;
+                    break;
+                }
                 worker->LoadInitialData();
             }
         }
 
-        const auto runStart = std::chrono::steady_clock::now();
-        const auto runEndAt = runStart + std::chrono::seconds(options.Duration);
-        TRunDisplayController display(stats, options.Duration, options.NoTui, options.Verbose);
-        display.Start();
-
-        TVector<std::thread> threads;
-        threads.reserve(options.InFlight);
-
-        for (const auto& worker : workers) {
-            threads.emplace_back([workerPtr = worker.get(), runEndAt] {
-                workerPtr->Run(runEndAt);
-            });
+        if (StopRequestedBySignal != 0) {
+            interrupted = true;
         }
 
-        for (auto& thread : threads) {
-            thread.join();
+        if (!interrupted) {
+            const auto runStart = std::chrono::steady_clock::now();
+            const auto runEndAt = runStart + std::chrono::seconds(options.Duration);
+            TRunDisplayController display(stats, &workerLoadTracker, options.Duration, options.NoTui, options.Verbose);
+            display.Start();
+
+            TVector<std::thread> threads;
+            threads.reserve(options.InFlight);
+
+            for (const auto& worker : workers) {
+                threads.emplace_back([workerPtr = worker.get(), runEndAt] {
+                    workerPtr->Run(runEndAt);
+                });
+            }
+
+            for (auto& thread : threads) {
+                thread.join();
+            }
+
+            display.Stop();
+
+            if (StopRequestedBySignal != 0) {
+                interrupted = true;
+            }
+
+            runElapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(
+                std::chrono::steady_clock::now() - runStart
+            ).count();
         }
-
-        display.Stop();
-
-        runElapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(
-            std::chrono::steady_clock::now() - runStart
-        ).count();
     }
 
     {
@@ -404,6 +434,11 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
 
     stats.PrintSummary(runElapsedSeconds);
 
+    if (interrupted) {
+        Cerr << "Interrupted by signal, workload stopped and volume dropped" << Endl;
+        return 130;
+    }
+
     if (stats.GetTotalErrors() > 0 && !options.AllowErrors) {
         return 1;
     }
@@ -415,6 +450,10 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
 
 int main(int argc, char** argv) {
     try {
+        StopRequestedBySignal = 0;
+        std::signal(SIGINT, HandleStopSignal);
+        std::signal(SIGTERM, HandleStopSignal);
+
         const TOptions options = ParseOptions(argc, argv);
 
         NKikimrKeyValue::KeyValueVolumeStressLoad config;

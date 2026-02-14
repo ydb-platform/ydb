@@ -1,6 +1,7 @@
 #pragma once
 
 #include "run_stats.h"
+#include "worker_load.h"
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -26,6 +27,9 @@ struct TRunDisplayData {
         ui64 TotalRuns = 0;
         double RunsPerSecond = 0.0;
         TLatencyPercentiles Latency;
+        ui64 ErrorCount = 0;
+        double ReadBytesPerSecond = 0.0;
+        double WriteBytesPerSecond = 0.0;
     };
 
     struct TErrorRow {
@@ -43,6 +47,7 @@ struct TRunDisplayData {
     double ActionsPerSecond = 0.0;
     double AverageActionsPerSecond = 0.0;
     TLatencyPercentiles Latency;
+    TWorkerLoadSnapshot WorkerLoad;
 
     TVector<TActionRow> Actions;
     TVector<TErrorRow> Errors;
@@ -53,7 +58,12 @@ class TRunTui;
 
 class TRunDisplayController {
 public:
-    TRunDisplayController(TRunStats& stats, ui32 durationSeconds, bool noTui, bool verbose);
+    TRunDisplayController(
+        TRunStats& stats,
+        const TWorkerLoadTracker* workerLoadTracker,
+        ui32 durationSeconds,
+        bool noTui,
+        bool verbose);
     ~TRunDisplayController();
 
     void Start();
@@ -67,6 +77,7 @@ private:
 
 private:
     TRunStats& Stats_;
+    const TWorkerLoadTracker* const WorkerLoadTracker_;
     const ui32 DurationSeconds_;
     const bool NoTui_;
     const bool Verbose_;
@@ -81,6 +92,8 @@ private:
     bool HasPrevSnapshot_ = false;
     std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>> TotalActionsHistory_;
     THashMap<TString, std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionRunsHistory_;
+    THashMap<TString, std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionReadBytesHistory_;
+    THashMap<TString, std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionWriteBytesHistory_;
 
     std::unique_ptr<TRunTui> Tui_;
 };

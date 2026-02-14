@@ -21,7 +21,7 @@ public:
 private:
     ftxui::Element BuildHeaderPart();
     ftxui::Element BuildActionsPart();
-    ftxui::Element BuildErrorsPart();
+    ftxui::Element BuildWorkersPart();
 
     ftxui::Component BuildComponent();
 

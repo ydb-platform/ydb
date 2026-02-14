@@ -51,19 +51,19 @@ VALUES
 ```yql
 ALTER TABLE Vectors
 ADD INDEX EmbeddingIndex
-GLOBAL USING vector_kmeans_tree 
+GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine, 
-  vector_type="float", 
-  vector_dimension=5, 
-  levels=1, 
+  distance=cosine,
+  vector_type="float",
+  vector_dimension=5,
+  levels=1,
   clusters=2)
 ```
 
-Данная команда создаёт индекс типа `vector_kmeans_tree`. Подробнее об индексах такого типа вы можете прочитать [здесь](../../dev/vector-indexes.md#kmeans-tree-type). В данном модельном примере указан параметр `clusters=2` (разбиение множества векторов при построении индекса на два кластера на каждом уровне); для реальных данных рекомендованы значения в диапазоне от 64 до 512.
+Данная команда создаёт индекс типа `vector_kmeans_tree`. В данном модельном примере указан параметр `clusters=2` (разбиение множества векторов при построении индекса на два кластера на каждом уровне); для реальных данных рекомендованы значения в диапазоне от 64 до 512. Также для реальных данных рекомендуется добавить параметр `overlap_clusters=3`.
 
-Общую информацию о векторных индексах, параметрах их создания и текущих ограничениях см. в разделе [{#T}](../../dev/vector-indexes.md).
+Подробную информацию о векторных индексах и их параметрах смотрите в разделе [{#T}](../../dev/vector-indexes.md).
 
 ## Шаг 4. Поиск в таблице без использования векторного индекса {#step4}
 
@@ -101,6 +101,8 @@ id CosineDistance
 Для поиска 3-х ближайших соседей вектора `[1.f, 1.f, 1.f, 1.f, 4.f]` с использованием индекса `EmbeddingIndex`, который был создан на [шаге 3](#step3), нужно выполнить запрос:
 
 ```yql
+PRAGMA ydb.KMeansTreeSearchTopSize="3";
+
 $K = 3;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.f, 1.f, 1.f, 1.f, 4.f]);
 

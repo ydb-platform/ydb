@@ -49,6 +49,7 @@ CREATE TABLE user_articles (
         distance="cosine",
         vector_type="float",
         vector_dimension=512,
+        overlap_clusters=3,
         clusters=128,
         levels=2
     ),

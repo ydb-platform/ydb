@@ -1091,6 +1091,15 @@ class TDataShard
             >;
         };
 
+        // Tracks table IDs that were moved/renamed so that writes referencing
+        // old IDs can be recognized as SCHEME_CHANGED rather than SCHEME_ERROR.
+        struct MovedUserTables : Table<37> {
+            struct PrevTid : Column<1, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<PrevTid>;
+            using TColumns = TableColumns<PrevTid>;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -1099,7 +1108,7 @@ class TDataShard
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
-            LockVolatileDependencies, CdcStreamHeartbeats>;
+            LockVolatileDependencies, CdcStreamHeartbeats, MovedUserTables>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1701,6 +1710,7 @@ public:
     }
 
     const THashMap<ui64, TUserTable::TCPtr> &GetUserTables() const { return TableInfos; }
+    const THashSet<ui64>& GetMovedUserTables() const { return MovedUserTableIds; }
 
     ui64 GetLocalTableId(const TTableId& tableId) const {
         Y_ENSURE(!TSysTables::IsSystemTable(tableId));
@@ -2735,6 +2745,7 @@ private:
     TInstant StopKeyAccessSamplingAt;
 
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
+    THashSet<ui64> MovedUserTableIds;   // tableIds that were moved/renamed away from this shard
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;

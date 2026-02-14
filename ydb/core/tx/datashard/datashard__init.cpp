@@ -291,6 +291,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::TxVolatileParticipants);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamScans);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamHeartbeats);
+        PRECHARGE_SYS_TABLE(Schema::MovedUserTables);
 
         if (!ready)
             return false;
@@ -374,6 +375,20 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
                     it->second->Stats.LastFullCompaction = TInstant::Seconds(ts);
                 }
             }
+            if (!rowset.Next())
+                return false;
+        }
+    }
+
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::MovedUserTables::TableId)) {
+        // Load moved user table IDs
+        Self->MovedUserTableIds.clear();
+        auto rowset = db.Table<Schema::MovedUserTables>().GreaterOrEqual(0).Select();
+        if (!rowset.IsReady())
+            return false;
+        while (!rowset.EndOfSet()) {
+            ui64 prevTid = rowset.GetValue<Schema::MovedUserTables::PrevTid>();
+            Self->MovedUserTableIds.insert(prevTid);
             if (!rowset.Next())
                 return false;
         }

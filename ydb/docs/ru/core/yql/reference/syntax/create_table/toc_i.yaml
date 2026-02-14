@@ -5,3 +5,4 @@ items:
 - { name: FAMILY,          href: family.md          }
 - { name: WITH,            href: with.md            }
 - { name: AS SELECT,       href: as_select.md }
+- { name: COMPRESSION,     href: compression.md     }

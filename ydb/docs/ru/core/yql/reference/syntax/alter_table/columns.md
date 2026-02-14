@@ -1,13 +1,13 @@
-# Изменение состава колонок
+# Изменение колонок
 
-{{ backend_name }} поддерживает возможность добавлять колонки в {% if backend_name == "YDB" and oss == true %} строковые и колоночные таблицы{% else %} таблицы {% endif %}, а также удалять неключевые колонки из таблиц.
+{{ backend_name }} поддерживает возможность добавлять колонки в {% if backend_name == "YDB" and oss == true %} строковые и колоночные таблицы{% else %} таблицы {% endif %}, удалять неключевые колонки из таблиц, а также изменять свойства существующих колонок.
 
 ## ADD COLUMN
 
 Строит новую колонку с указанными именем, типом и опциями для указанной таблицы.
 
 ```yql
-ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>];
+ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION(key1=value1[, key2=value2])];
 ```
 
 ## Параметры запроса
@@ -28,18 +28,53 @@ ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_n
 
 ## Пример
 
-Приведенный ниже код добавит к таблице `episodes` колонку `views` с типом данных `Uint64`.
+Приведённый ниже код добавит к таблице `episodes` колонку `views` с типом данных `Uint64`.
 
 ```yql
 ALTER TABLE episodes ADD COLUMN views Uint64;
 ```
 
-Приведенный ниже код добавит к таблице `episodes` колонку `rate` с типом данных `Double` и значением по умолчанию `5.0`.
+Приведённый ниже код добавит к таблице `episodes` колонку `rate` с типом данных `Double` и значением по умолчанию `5.0`.
 
 ```yql
 ALTER TABLE episodes ADD COLUMN rate Double NOT NULL DEFAULT 5.0;
 ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альтернативный синтаксис
 ```
+
+## ALTER COLUMN
+
+Изменяет свойства существующей колонки в указанной таблице.
+
+```yql
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([key1=value1[, key2=value2]])];
+```
+
+### Параметры запроса
+
+#### table_name
+
+Путь к таблице, в которой требуется изменить колонку.
+
+#### column_name
+
+Имя колонки, которая будет изменена в указанной таблице.
+
+#### SET
+
+Установить параметр колонки
+
+#### DROP
+
+Удалить параметр колонки
+
+### Пример
+
+Приведённый ниже код запретит пустые значения в колонке `title` из таблицы `episodes` .
+
+```yql
+ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
+```
+
 
 ## DROP COLUMN
 
@@ -61,7 +96,7 @@ ALTER TABLE table_name DROP COLUMN column_name;
 
 ### Пример
 
-Приведенный ниже код удалит колонку `views` из таблицы `episodes`.
+Приведённый ниже код удалит колонку `views` из таблицы `episodes`.
 
 ```yql
 ALTER TABLE episodes DROP COLUMN views;

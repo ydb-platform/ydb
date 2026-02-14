@@ -15,6 +15,7 @@
 ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
   [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
+  [COMPRESSION(key1=value1[, key2=value2])]
   [, ...],
     INDEX <index_name>
       [GLOBAL]
@@ -75,6 +76,10 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 Если параметр не будет указан, таблица будет разбита на партиции по тем же колонкам, которые входят в первичный ключ. Как правильно выбирать ключи для партиционирования в колоночных таблицах, читайте в статье [{#T}](../../../../dev/primary-key/column-oriented.md).
 
 Подробнее о партиционировании колоночных таблиц читайте в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning).
+
+### COMPRESSION(...)
+
+Настройки сжатия кололнок для **колоночных** таблиц. Подробнее в разделе [{#T}](compression.md).
 
 ### FAMILY <column_family> (настройка группы колонок)
 

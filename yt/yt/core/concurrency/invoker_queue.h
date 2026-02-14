@@ -206,13 +206,13 @@ private:
 
     struct TCounters
     {
-        NProfiling::TCounter EnqueuedCounter;
-        NProfiling::TCounter DequeuedCounter;
         NProfiling::TEventTimer WaitTimer;
         NProfiling::TEventTimer ExecTimer;
         NProfiling::TTimeCounter CumulativeTimeCounter;
         NProfiling::TEventTimer TotalTimer;
-        std::atomic<int> ActiveCallbacks = 0;
+        std::atomic<i64> EnqueuedCallbacks = 0;
+        std::atomic<i64> DequeuedCallbacks = 0;
+        std::atomic<i64> ActiveCallbacks = 0;
     };
     using TCountersPtr = std::unique_ptr<TCounters>;
 

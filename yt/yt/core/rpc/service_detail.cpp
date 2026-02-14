@@ -934,8 +934,7 @@ private:
 
         if (Cancelable_) {
             // TODO(lukyan): Wrap in CancelableExecution.
-            auto fiberCanceler = GetCurrentFiberCanceler();
-            if (fiberCanceler) {
+            if (auto fiberCanceler = GetCurrentFiberCanceler()) {
                 auto cancelationHandler = BIND([fiberCanceler = std::move(fiberCanceler)] (const TError& error) {
                     fiberCanceler(error);
                 });

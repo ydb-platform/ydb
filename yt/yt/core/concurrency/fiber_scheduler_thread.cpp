@@ -1156,9 +1156,12 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
     YT_VERIFY(invoker != GetSyncInvoker());
 
     // Ensure canceler created.
-    GetCurrentFiberCanceler();
+    auto* switchHandler = NDetail::CurrentFiberSwitchHandler();
+    auto& canceler = switchHandler->Canceler();
+    if (!canceler) {
+        canceler = New<NDetail::TCanceler>(GetCurrentFiberId());
+    }
 
-    const auto& canceler = NDetail::GetFiberSwitchHandler()->Canceler();
     canceler->SetFuture(future);
     auto finally = Finally([&] {
         canceler->ResetFuture();

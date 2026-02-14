@@ -1,0 +1,60 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: muted */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    Ensure(0, FALSE, 'muted: sql panic')
+;
+/*
+SELECT
+    i_item_id,
+    ca_country,
+    ca_state,
+    ca_county,
+    Avg(CAST(cs_quantity AS Decimal (12, 2))) AS agg1,
+    Avg(CAST(cs_list_price AS Decimal (12, 2))) AS agg2,
+    Avg(CAST(cs_coupon_amt AS Decimal (12, 2))) AS agg3,
+    Avg(CAST(cs_sales_price AS Decimal (12, 2))) AS agg4,
+    Avg(CAST(cs_net_profit AS Decimal (12, 2))) AS agg5,
+    Avg(CAST(c_birth_year AS Decimal (12, 2))) AS agg6,
+    Avg(CAST(cd1.cd_dep_count AS Decimal (12, 2))) AS agg7
+FROM
+    plato.catalog_sales
+,
+    plato.customer_demographics AS cd1
+,
+    plato.customer_demographics AS cd2
+,
+    plato.customer
+,
+    plato.customer_address
+,
+    plato.date_dim
+,
+    plato.item
+WHERE
+    cs_sold_date_sk == d_date_sk
+    AND cs_item_sk == i_item_sk
+    AND cs_bill_cdemo_sk == cd1.cd_demo_sk
+    AND cs_bill_customer_sk == c_customer_sk
+    AND cd1.cd_gender == 'M'
+    AND cd1.cd_education_status == 'College'
+    AND c_current_cdemo_sk == cd2.cd_demo_sk
+    AND c_current_addr_sk == ca_address_sk
+    AND c_birth_month IN (9, 5, 12, 4, 1, 10)
+    AND d_year == 2001
+    AND ca_state IN (
+        'ND', 'WI', 'AL',
+        'NC', 'OK', 'MS', 'TN'
+    )
+GROUP BY
+    ROLLUP (i_item_id, ca_country, ca_state, ca_county)
+ORDER BY
+    ca_country,
+    ca_state,
+    ca_county,
+    i_item_id
+LIMIT 100;
+*/

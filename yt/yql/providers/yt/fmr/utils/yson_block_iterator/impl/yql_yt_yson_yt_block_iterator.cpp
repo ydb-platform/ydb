@@ -7,10 +7,10 @@
 namespace NYql::NFmr {
 
 TYtBlockIterator::TYtBlockIterator(
-    TVector<NYT::TRawTableReaderPtr> partReaders,
-    TVector<TString> keyColumns,
+    std::vector<NYT::TRawTableReaderPtr> partReaders,
+    std::vector<TString> keyColumns,
     TYtBlockIteratorSettings settings,
-    TVector<ESortOrder> sortOrders,
+    std::vector<ESortOrder> sortOrders,
     TMaybe<bool> isFirstRowKeysInclusive,
     TMaybe<TString> firstRowKeys,
     TMaybe<TString> lastRowKeys
@@ -69,11 +69,11 @@ bool TYtBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup
     return true;
 }
 
-TVector<TRowIndexMarkup> TYtBlockIterator::FilterRowsInKeyBounds(const TString& blob, const TVector<TRowIndexMarkup>& rows) const {
+std::vector<TRowIndexMarkup> TYtBlockIterator::FilterRowsInKeyBounds(const TString& blob, const std::vector<TRowIndexMarkup>& rows) const {
     if (!(FirstBound_ || LastBound_)) {
         return rows;
     }
-    TVector<TRowIndexMarkup> filtered;
+    std::vector<TRowIndexMarkup> filtered;
     filtered.reserve(rows.size());
     for (const auto& r : rows) {
         if (RowInKeyBounds(blob, r)) {
@@ -120,6 +120,7 @@ bool TYtBlockIterator::NextBlock(TIndexedBlock& out) {
         }
 
         rowBytes.clear();
+
         NYql::NCommon::CopyYson(cmd, *InputBuf_, rowBytes);
 
         bool needBreak = false;

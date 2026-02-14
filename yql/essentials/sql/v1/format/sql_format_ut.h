@@ -1606,6 +1606,8 @@ Y_UNIT_TEST(CreateTableTrailingComma) {
          "CREATE TABLE tableName (\n\tKey Uint32,\n\tPRIMARY KEY (Key),\n);\n"},
         {"CREATE TABLE tableName (Key Uint32,);",
          "CREATE TABLE tableName (\n\tKey Uint32,\n);\n"},
+        {"CREATE TABLE tableName (Key Uint32) WITH (STORE = COLUMN,);",
+         "CREATE TABLE tableName (\n\tKey Uint32\n)\nWITH (STORE = COLUMN,\n);\n"},
     };
     TSetup setup;
     setup.Run(cases);

@@ -10,11 +10,11 @@ namespace NYql::NFmr {
 
 TTDSBlockIterator::TTDSBlockIterator(
     TString tableId,
-    TVector<TTableRange> tableRanges,
+    std::vector<TTableRange> tableRanges,
     ITableDataService::TPtr tableDataService,
-    TVector<TString> keyColumns,
-    TVector<ESortOrder> sortOrders,
-    TVector<TString> neededColumns,
+    std::vector<TString> keyColumns,
+    std::vector<ESortOrder> sortOrders,
+    std::vector<TString> neededColumns,
     TString serializedColumnGroupsSpec,
     TMaybe<bool> isFirstRowKeysInclusive,
     TMaybe<TString> firstRowKeys,
@@ -110,7 +110,7 @@ bool TTDSBlockIterator::NextBlock(TIndexedBlock& out) {
             allNeeded.insert(c);
         }
 
-        TVector<TString> groupNamesToRead;
+        std::vector<TString> groupNamesToRead;
         if (SerializedColumnGroupsSpec_.empty()) {
             groupNamesToRead.push_back(TString());
         } else {
@@ -133,7 +133,7 @@ bool TTDSBlockIterator::NextBlock(TIndexedBlock& out) {
             groupNamesToRead.assign(groupNames.begin(), groupNames.end());
         }
 
-        TVector<TString> groupYsons;
+        std::vector<TString> groupYsons;
         groupYsons.reserve(groupNamesToRead.size());
         for (const auto& gname : groupNamesToRead) {
             const TString dataChunkId = GetTableDataServiceChunkId(CurrentChunk_, gname);
@@ -149,7 +149,7 @@ bool TTDSBlockIterator::NextBlock(TIndexedBlock& out) {
 
         out.Data = unionYson;
         if (FirstBound_ || LastBound_) {
-            TVector<TRowIndexMarkup> filtered;
+            std::vector<TRowIndexMarkup> filtered;
             filtered.reserve(rows.size());
             for (const auto& r : rows) {
                 if (RowInKeyBounds(out.Data, r)) {

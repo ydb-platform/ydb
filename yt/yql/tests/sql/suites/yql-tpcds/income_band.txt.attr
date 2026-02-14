@@ -1,0 +1,26 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "ib_income_band_sk";
+            "required" = %true;
+            "sort_order" = "ascending";
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "ib_lower_bound";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "ib_upper_bound";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+    ];
+}

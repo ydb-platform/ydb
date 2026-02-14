@@ -192,6 +192,8 @@ private:
         }
 
         if (!result->ProgramHolder) {
+            Stats.ProcessingErrors++;
+            SendStats(EWorkerOperation::NONE);
             return LogCritAndLeave(TStringBuilder() << "Compilation failed: " << result->Issues.ToOneLineString());
         }
 
@@ -260,6 +262,7 @@ private:
             Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
             return;
         }
+        SendOperationChange(EWorkerOperation::PROCESS);
 
         PollSent = false;
 
@@ -277,6 +280,7 @@ private:
                 ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
                 ProcessingError = TStringBuilder() << "Error transform message partition " << partitionId << " offset " << message.GetOffset()
                     << ": " << msg;
+                Stats.WriteErrors++;
             };
 
             try {
@@ -305,6 +309,8 @@ private:
                         tablePath = DefaultTablePath;
                     }
 
+                    Stats.BytesWritten += m->EstimateSize;
+                    Stats.RowsWritten += m->Data.RowCount();
                     if (!TableState->AddData(std::move(tablePath), m->Data, m->EstimateSize)) {
                         RequiredFlush = true;
                     }
@@ -324,12 +330,14 @@ private:
 
         if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval || RequiredFlush)) {
             if (TableState->Flush()) {
+                SendStats(EWorkerOperation::WRITE);
                 LastWriteTime.reset();
                 return Become(&TThis::StateWrite);
             }
         }
 
         if (ProcessingError) {
+            SendStats(EWorkerOperation::NONE);
             LogCritAndLeave(*ProcessingError);
         } else {
             PollSent = true;
@@ -339,6 +347,7 @@ private:
 
     void TryFlush() {
         if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval && TableState->Flush()) {
+            SendStats(EWorkerOperation::WRITE);
             LastWriteTime.reset();
             WakeupScheduled = false;
             Become(&TThis::StateWrite);
@@ -371,7 +380,10 @@ private:
 
         if (status != Ydb::StatusIds::SUCCESS && error && !ProcessingError) {
             ProcessingError = error;
+            Stats.WriteErrors++;
         }
+
+        SendStats(EWorkerOperation::NONE);
 
         if (ProcessingError) {
             return LogCritAndLeave(*ProcessingError);
@@ -403,6 +415,7 @@ private:
                 WakeupScheduled = false;
                 break;
             case ETag::RetryFlush:
+                SendStats(EWorkerOperation::WRITE);
                 TableState->Flush();
                 break;
             case ETag::LeaveOnBatchSizeExceed:
@@ -493,7 +506,9 @@ public:
         , DirectoryPath(directoryPath)
         , Database(database)
         , TargetDirectoryPath(MakeTargetDirectoryPath(database, directoryPath))
-    {}
+    {
+        Stats.StartTime = Now();
+    }
 
 private:
     const TString TransformLambda;
@@ -530,6 +545,58 @@ private:
 
     ui32 Attempt = 0;
     TDuration Delay = MinRetryDelay;
+
+    struct TStatsHolder {
+        EWorkerOperation Operation;
+        TInstant StartTime;
+        double StartCpuSec;
+        ui64 BytesWritten = 0;
+        ui64 RowsWritten = 0;
+        ui64 WriteErrors = 0;
+        ui64 ProcessingErrors = 0;
+
+        void ResetStats(double currentElapsedCpu, EWorkerOperation newState) {
+            StartCpuSec = currentElapsedCpu;
+            StartTime = Now();
+            Operation = newState;
+        }
+
+        void DumpStats(double currentElapsedCpu, EWorkerOperation newState, TTransferWriteStats* dumpTo) {
+            if (Operation == EWorkerOperation::PROCESS) {
+                dumpTo->ProcessingCpu = TDuration::Seconds(currentElapsedCpu - StartCpuSec);
+                dumpTo->ProcessingTime = Now() - StartTime;
+            } else if (Operation == EWorkerOperation::WRITE) {
+                dumpTo->WriteDuration = Now() - StartTime;
+            }
+
+            dumpTo->ProcessingErrors = ProcessingErrors;
+            dumpTo->WriteErrors = WriteErrors;
+            dumpTo->WriteBytes = BytesWritten;
+            dumpTo->WriteRows = RowsWritten;
+            BytesWritten = 0;
+            RowsWritten = 0;
+            WriteErrors = 0;
+            ProcessingErrors = 0;
+
+            ResetStats(currentElapsedCpu, newState);
+        }
+    };
+
+    TStatsHolder Stats;
+
+private:
+    void SendStats(EWorkerOperation newCurrentOperation) {
+        auto* event = TEvWorker::TEvStatus::FromOperation(Stats.Operation);
+        event->DetailedStats->WriterStats = std::make_unique<TTransferWriteStats>();
+        Stats.DumpStats(GetElapsedTicksAsSeconds(),newCurrentOperation, event->DetailedStats->WriterStats.get());
+        Send(Worker, event);
+    }
+
+    void SendOperationChange(EWorkerOperation currentOperation) {
+        Stats.ResetStats(GetElapsedTicksAsSeconds(), currentOperation);
+        auto* event = TEvWorker::TEvStatus::FromOperation(currentOperation);
+        Send(Worker, event);
+    }
 
 }; // TTransferWriter
 

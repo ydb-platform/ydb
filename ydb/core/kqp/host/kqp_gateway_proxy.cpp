@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
@@ -2935,6 +2936,10 @@ public:
                     target.SetDirectoryPath(*settings.Settings.DirectoryPath);
                 }
             }
+            if (settings.Settings.MetricsSettings) {
+                config.MutableMetricsConfig()->SetLevel(static_cast<NKikimrProto::NMetricsConfig::TMetricsConfig::EMetricsLevel>(
+                    settings.Settings.MetricsSettings->Level));
+            }
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -3002,6 +3007,11 @@ public:
             } else if (const auto& standBy = settings.Settings.StateStandBy) {
                 auto& state = *op.MutableState();
                 state.MutableStandBy();
+            }
+
+            if (settings.Settings.MetricsSettings) {
+                op.MutableConfig()->MutableMetricsConfig()->SetLevel(static_cast<NKikimrProto::NMetricsConfig::TMetricsConfig::EMetricsLevel>(
+                    settings.Settings.MetricsSettings->Level));
             }
 
             if (settings.Settings.ConnectionString

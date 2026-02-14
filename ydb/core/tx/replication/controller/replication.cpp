@@ -5,6 +5,7 @@
 #include "secret_resolver.h"
 #include "target_discoverer.h"
 #include "target_table.h"
+#include <ydb/core/protos/metrics_config.pb.h> // should be before target_transfer.h
 #include "target_transfer.h"
 #include "tenant_resolver.h"
 #include "util.h"
@@ -101,6 +102,10 @@ class TReplication::TImpl: public TLagProvider {
         for (auto& [_, target] : Targets) {
             target->Progress(ctx);
         }
+    }
+
+    void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+        Config.MutableLocation()->CopyFrom(location);
     }
 
 public:
@@ -501,6 +506,14 @@ void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
 
 const TMaybe<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
+}
+
+void TReplication::SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+    Impl->SetLocation(location);
+}
+
+const NKikimrReplication::TReplicationLocationConfig& TReplication::GetLocation() const {
+    return Impl->Config.GetLocation();
 }
 
 }

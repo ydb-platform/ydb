@@ -46,5 +46,4 @@
 ## Смотрите также
 
 * [{#T}](../reference/ydb-sdk/index.md)
-* [{#T}](../postgresql/intro.md)
 * [{#T}](../reference/kafka-api/index.md)

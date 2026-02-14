@@ -1,5 +1,4 @@
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
-ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
@@ -87,13 +86,8 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_current]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_24_4]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_25_1]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_24_4_to_current]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_24_4_to_current_mixed]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_25_1_to_current]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_25_1_to_current_mixed]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[current_to_stable_24_4-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[current_to_stable_24_4-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_24_4_to_current-column]

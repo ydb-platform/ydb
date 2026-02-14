@@ -42,4 +42,28 @@ struct TShardKeyRanges {
     std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };
 
+struct TShardInfo {
+    struct TColumnWriteInfo {
+        ui32 MaxValueSizeBytes = 0;
+    };
+
+    TMaybe<TShardKeyRanges> KeyReadRanges;  // empty -> no reads
+    TMaybe<TShardKeyRanges> KeyWriteRanges; // empty -> no writes
+    THashMap<TString, TColumnWriteInfo> ColumnWrites;
+
+    TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
+};
+
+using TShardIdToInfoMap = THashMap<ui64 /* shardId */, TShardInfo>;
+
+class TShardInfoWithId: public TShardInfo {
+public:
+    ui64 ShardId;
+    TShardInfoWithId(const ui64 shardId, TShardInfo&& base)
+        : TShardInfo(std::move(base))
+        , ShardId(shardId) {
+
+    }
+};
+
 } // namespace NKikimr::NKqp

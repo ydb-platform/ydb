@@ -559,7 +559,7 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadR
     const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
     auto ranges = ExtractRanges(source, stageInfo, holderFactory, typeEnv, guard);
 
-    ui64 shard = 0;
+    ui64 shard = 0; // TODO: is it some magic shardId number?
     if (!ranges.empty()) {
         auto& range = source.GetReverse() ? ranges.back() : ranges[0];
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)

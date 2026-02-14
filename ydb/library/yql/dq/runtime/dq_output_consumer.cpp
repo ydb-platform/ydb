@@ -392,7 +392,14 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
@@ -493,7 +500,14 @@ public:
     }
 private:
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs_) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
@@ -604,7 +618,14 @@ public:
 
 private:
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs_) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
@@ -781,7 +802,14 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {

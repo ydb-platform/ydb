@@ -1,6 +1,7 @@
 #pragma once
 
 #include "data_storage.h"
+#include "initial_load_progress.h"
 #include "keyvalue_client.h"
 #include "run_stats.h"
 #include "types.h"
@@ -29,7 +30,8 @@ public:
         const NKikimrKeyValue::KeyValueVolumeStressLoad& config,
         const TString& hostPort,
         const TString& volumePath,
-        TRunStats& stats);
+        TRunStats& stats,
+        TInitialLoadProgress* initialLoadProgress = nullptr);
 
     void LoadInitialData();
     void Run(std::chrono::steady_clock::time_point endAt);
@@ -45,7 +47,7 @@ private:
     void ExecuteAction(const TString& actionName);
     void WriteInitialDataImpl();
 
-    void ExecuteWriteCommand(const TString& actionName, const NKikimrKeyValue::ActionCommand_Write& writeCommand);
+    bool ExecuteWriteCommand(const TString& actionName, const NKikimrKeyValue::ActionCommand_Write& writeCommand);
     void ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NKikimrKeyValue::ActionCommand_Read& readCommand);
     void ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const NKikimrKeyValue::ActionCommand_Delete& deleteCommand);
 
@@ -59,6 +61,7 @@ private:
     const NKikimrKeyValue::KeyValueVolumeStressLoad& Config_;
     const TString VolumePath_;
     TRunStats& Stats_;
+    TInitialLoadProgress* const InitialLoadProgress_;
     std::unique_ptr<IKeyValueClient> Client_;
 
     std::atomic<bool> StopRequested_ = false;

@@ -26,12 +26,14 @@ TWorker::TWorker(
     const NKikimrKeyValue::KeyValueVolumeStressLoad& config,
     const TString& hostPort,
     const TString& volumePath,
-    TRunStats& stats)
+    TRunStats& stats,
+    TInitialLoadProgress* initialLoadProgress)
     : WorkerId_(workerId)
     , Options_(options)
     , Config_(config)
     , VolumePath_(volumePath)
     , Stats_(stats)
+    , InitialLoadProgress_(initialLoadProgress)
     , Client_(MakeKeyValueClient(hostPort, options.Version))
 {
     for (const auto& action : Config_.actions()) {
@@ -194,7 +196,7 @@ void TWorker::ExecuteAction(const TString& actionName) {
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kWrite: {
-                ExecuteWriteCommand(actionName, command.write());
+                (void)ExecuteWriteCommand(actionName, command.write());
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kDelete: {
@@ -222,13 +224,17 @@ void TWorker::ExecuteAction(const TString& actionName) {
 
 void TWorker::WriteInitialDataImpl() {
     for (const auto& writeCommand : Config_.initial_data().write_commands()) {
-        ExecuteWriteCommand("__initial__", writeCommand);
+        const bool success = ExecuteWriteCommand("__initial__", writeCommand);
+        if (InitialLoadProgress_) {
+            const ui64 bytes = static_cast<ui64>(writeCommand.size()) * writeCommand.count();
+            InitialLoadProgress_->OnCommandFinished(bytes, success);
+        }
     }
 }
 
-void TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyValue::ActionCommand_Write& writeCommand) {
+bool TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyValue::ActionCommand_Write& writeCommand) {
     if (writeCommand.count() == 0) {
-        return;
+        return true;
     }
 
     const ui32 partitionId = SelectPartitionId();
@@ -246,7 +252,7 @@ void TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyVal
     TString error;
     if (!Client_->Write(VolumePath_, partitionId, pairs, writeCommand.channel(), &error)) {
         Stats_.RecordError("write_failed", error);
-        return;
+        return false;
     }
 
     for (const auto& [key, value] : pairs) {
@@ -256,6 +262,8 @@ void TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyVal
     if (Options_.Verbose) {
         Cerr << "[worker=" << WorkerId_ << "] write ok action=" << actionName << " count=" << pairs.size() << Endl;
     }
+
+    return true;
 }
 
 void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NKikimrKeyValue::ActionCommand_Read& readCommand) {

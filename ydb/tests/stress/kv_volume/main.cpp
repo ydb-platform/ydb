@@ -1,3 +1,4 @@
+#include "initial_load_display.h"
 #include "keyvalue_client.h"
 #include "run_display.h"
 #include "run_stats.h"
@@ -24,6 +25,7 @@
 #include <memory>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 
 namespace {
 
@@ -230,6 +232,24 @@ bool ValidateConfig(const NKikimrKeyValue::KeyValueVolumeStressLoad& config, TSt
     return true;
 }
 
+std::pair<ui64, ui64> CalculateInitialLoadTotals(
+    const NKikimrKeyValue::KeyValueVolumeStressLoad& config,
+    ui32 workersCount)
+{
+    ui64 totalBytesPerWorker = 0;
+    ui64 totalCommandsPerWorker = 0;
+
+    for (const auto& writeCommand : config.initial_data().write_commands()) {
+        totalBytesPerWorker += static_cast<ui64>(writeCommand.size()) * writeCommand.count();
+        ++totalCommandsPerWorker;
+    }
+
+    return {
+        totalBytesPerWorker * workersCount,
+        totalCommandsPerWorker * workersCount,
+    };
+}
+
 TOptions ParseOptions(int argc, char** argv) {
     TOptions options;
 
@@ -301,6 +321,8 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     const TString volumePath = MakeVolumePath(options.Database, config.volume_config().path());
 
     TRunStats stats;
+    const auto [initialTotalBytes, initialTotalCommands] = CalculateInitialLoadTotals(config, options.InFlight);
+    TInitialLoadProgress initialLoadProgress(initialTotalBytes, initialTotalCommands);
     double runElapsedSeconds = 0.0;
 
     {
@@ -323,11 +345,27 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
         workers.reserve(options.InFlight);
 
         for (ui32 workerId = 0; workerId < options.InFlight; ++workerId) {
-            workers.emplace_back(std::make_unique<TWorker>(workerId, options, config, hostPort, volumePath, stats));
+            workers.emplace_back(std::make_unique<TWorker>(
+                workerId,
+                options,
+                config,
+                hostPort,
+                volumePath,
+                stats,
+                &initialLoadProgress));
         }
 
-        for (const auto& worker : workers) {
-            worker->LoadInitialData();
+        if (initialTotalCommands > 0) {
+            TInitialLoadDisplayController initialLoadDisplay(initialLoadProgress, stats, options.NoTui, options.Verbose);
+            initialLoadDisplay.Start();
+            for (const auto& worker : workers) {
+                worker->LoadInitialData();
+            }
+            initialLoadDisplay.Stop();
+        } else {
+            for (const auto& worker : workers) {
+                worker->LoadInitialData();
+            }
         }
 
         const auto runStart = std::chrono::steady_clock::now();

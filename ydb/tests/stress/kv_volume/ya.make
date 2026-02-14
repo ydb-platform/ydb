@@ -3,6 +3,8 @@ PROGRAM(workload_keyvalue_volume)
 SRCS(
     main.cpp
     utils.cpp
+    initial_load_progress.cpp
+    initial_load_display.cpp
     run_stats.cpp
     run_display.cpp
     run_tui.cpp

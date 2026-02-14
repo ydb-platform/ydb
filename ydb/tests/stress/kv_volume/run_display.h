@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <thread>
 
@@ -76,6 +77,7 @@ private:
     std::chrono::steady_clock::time_point PrevTs_;
     TRunStatsSnapshot PrevSnapshot_;
     bool HasPrevSnapshot_ = false;
+    std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>> TotalActionsHistory_;
 
     std::unique_ptr<TRunTui> Tui_;
 };

@@ -22,6 +22,7 @@ namespace NKvVolumeStress {
 namespace {
 
 constexpr auto DisplayUpdateInterval = std::chrono::seconds(1);
+constexpr auto CurrentOpsRateWindow = std::chrono::seconds(5);
 
 bool IsInteractiveTerminal() {
 #ifdef _win_
@@ -73,6 +74,7 @@ void TRunDisplayController::Start() {
     PrevTs_ = StartTs_;
     PrevSnapshot_ = Stats_.Snapshot();
     HasPrevSnapshot_ = true;
+    TotalActionsHistory_.clear();
 
     Mode_ = DetectMode();
     if (Mode_ == EDisplayMode::None) {
@@ -140,8 +142,20 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
     }
 
     const double intervalSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(now - PrevTs_).count();
-    const double totalRate = HasPrevSnapshot_ ? CalcRate(totalActions, prevTotalActions, intervalSeconds) : 0.0;
+    const double instantRate = HasPrevSnapshot_ ? CalcRate(totalActions, prevTotalActions, intervalSeconds) : 0.0;
     const double avgRate = elapsedSecondsFloat > 0.0 ? static_cast<double>(totalActions) / elapsedSecondsFloat : 0.0;
+
+    TotalActionsHistory_.emplace_back(now, totalActions);
+    while (!TotalActionsHistory_.empty() && now - TotalActionsHistory_.front().first > CurrentOpsRateWindow) {
+        TotalActionsHistory_.pop_front();
+    }
+
+    double recentRate = instantRate;
+    if (TotalActionsHistory_.size() >= 2) {
+        const auto& [windowStartTs, windowStartActions] = TotalActionsHistory_.front();
+        const double windowSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(now - windowStartTs).count();
+        recentRate = CalcRate(totalActions, windowStartActions, windowSeconds);
+    }
 
     auto data = std::make_shared<TRunDisplayData>();
     data->DurationSeconds = DurationSeconds_;
@@ -152,7 +166,7 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
         : 100.0;
     data->TotalActions = totalActions;
     data->TotalErrors = snapshot.TotalErrors;
-    data->ActionsPerSecond = totalRate;
+    data->ActionsPerSecond = recentRate;
     data->AverageActionsPerSecond = avgRate;
     data->SampleErrors = snapshot.SampleErrors;
 
@@ -199,7 +213,7 @@ void TRunDisplayController::PrintText(const TRunDisplayData& data) const {
          << std::fixed << std::setprecision(1) << data.ProgressPercent << "%";
 
     line << " | total_ops=" << data.TotalActions
-         << " ops/s(cur)=" << std::fixed << std::setprecision(1) << data.ActionsPerSecond
+         << " ops/s(cur)=" << std::fixed << std::setprecision(2) << data.ActionsPerSecond
          << " ops/s(avg)=" << std::fixed << std::setprecision(1) << data.AverageActionsPerSecond
          << " errors=" << data.TotalErrors;
 

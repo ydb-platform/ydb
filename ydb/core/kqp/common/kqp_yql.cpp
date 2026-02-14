@@ -833,18 +833,18 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
         .Done();
 }
 
-bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TCoNameValueTupleList& list) {
+bool TKqpStreamLookupSettings::HasVectorTop(const NNodes::TCoNameValueTupleList& list) {
     for (const auto& tuple : list) {
         auto name = tuple.Name().Value();
-        if (name == VectorTopColumnSettingName) {
+        if (name == VectorTopColumnSettingName || name == VectorTopDistinctSettingName) {
             return true;
         }
     }
     return false;
 }
 
-bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TKqlStreamLookupTable& node) {
-    return TKqpStreamLookupSettings::HasVectorTopColumn(node.Settings());
+bool TKqpStreamLookupSettings::HasVectorTop(const NNodes::TKqlStreamLookupTable& node) {
+    return TKqpStreamLookupSettings::HasVectorTop(node.Settings());
 }
 
 TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameValueTupleList& list) {

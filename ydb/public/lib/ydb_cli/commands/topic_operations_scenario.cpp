@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_keyed_writer.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_writer.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_configurator.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
 
@@ -326,6 +327,48 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
     while (*count != ProducerThreadCount) {
         Sleep(TDuration::MilliSeconds(10));
     }
+}
+
+void TTopicOperationsScenario::StartConfiguratorThread(std::vector<std::future<void>>& threads,
+                                                       const TString& database)
+{
+    if (!ConfigConsumerCount) {
+        return;
+    }
+
+    TTopicWorkloadConfiguratorParams params{
+        .TotalSec = TotalSec.Seconds(),
+        .WarmupSec = WarmupSec.Seconds(),
+        .Driver = *Driver,
+        .Log = Log,
+        .ErrorFlag = ErrorFlag,
+        .Database = database,
+        .TopicName = TopicName,
+        .ConsumerCount = ConfigConsumerCount
+    };
+    threads.push_back(std::async([params = std::move(params)]() { TTopicWorkloadWriterWorker::RetryableConfiguratorLoop(params); }));
+}
+
+void TTopicOperationsScenario::StartDescriberThread(std::vector<std::future<void>>& threads,
+                                                    const TString& database)
+{
+    if (!NeedDescribeTopic && DescribeConsumerName.empty()) {
+        return;
+    }
+
+    TTopicWorkloadDescriberParams params{
+        .TotalSec = TotalSec.Seconds(),
+        .WarmupSec = WarmupSec.Seconds(),
+        .Driver = *Driver,
+        .Log = Log,
+        .ErrorFlag = ErrorFlag,
+        .Database = database,
+        .TopicName = TopicName,
+        .ConsumerName = DescribeConsumerName,
+        .NeedDescribeTopic = NeedDescribeTopic,
+        .NeedDescribeConsumer = !DescribeConsumerName.empty()
+    };
+    threads.push_back(std::async([params = std::move(params)]() { TTopicWorkloadWriterWorker::RetryableDescriberLoop(params); }));
 }
 
 void TTopicOperationsScenario::JoinThreads(const std::vector<std::future<void>>& threads)

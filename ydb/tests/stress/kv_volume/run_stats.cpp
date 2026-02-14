@@ -4,6 +4,8 @@
 #include <util/string/builder.h>
 
 #include <algorithm>
+#include <iomanip>
+#include <sstream>
 
 namespace NKvVolumeStress {
 
@@ -38,7 +40,7 @@ TRunStatsSnapshot TRunStats::Snapshot() const {
     return snapshot;
 }
 
-void TRunStats::PrintSummary() const {
+void TRunStats::PrintSummary(double elapsedSeconds) const {
     const TRunStatsSnapshot snapshot = Snapshot();
 
     TVector<std::pair<TString, ui64>> sortedActions(snapshot.ActionRuns.begin(), snapshot.ActionRuns.end());
@@ -51,10 +53,38 @@ void TRunStats::PrintSummary() const {
         return l.first < r.first;
     });
 
+    ui64 totalActions = 0;
+    for (const auto& [_, count] : sortedActions) {
+        totalActions += count;
+    }
+
+    const double safeElapsedSeconds = elapsedSeconds > 0.0 ? elapsedSeconds : 0.0;
+    const double totalOpsPerSecond = safeElapsedSeconds > 0.0
+        ? static_cast<double>(totalActions) / safeElapsedSeconds
+        : 0.0;
+
     Cout << "==== kv_volume summary ====" << Endl;
+    {
+        std::stringstream ss;
+        ss << std::fixed << std::setprecision(1) << safeElapsedSeconds;
+        Cout << "Elapsed seconds: " << ss.str() << Endl;
+    }
+    Cout << "Total actions: " << totalActions << Endl;
+    {
+        std::stringstream ss;
+        ss << std::fixed << std::setprecision(1) << totalOpsPerSecond;
+        Cout << "Average ops/s: " << ss.str() << Endl;
+    }
     Cout << "Action runs:" << Endl;
     for (const auto& [name, count] : sortedActions) {
-        Cout << "  " << name << ": " << count << Endl;
+        const double actionOpsPerSecond = safeElapsedSeconds > 0.0
+            ? static_cast<double>(count) / safeElapsedSeconds
+            : 0.0;
+        std::stringstream ss;
+        ss << std::fixed << std::setprecision(1) << actionOpsPerSecond;
+
+        Cout << "  " << name << ": " << count
+             << " (" << ss.str() << " ops/s)" << Endl;
     }
 
     Cout << "Errors by kind:" << Endl;

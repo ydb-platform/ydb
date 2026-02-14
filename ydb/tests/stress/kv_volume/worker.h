@@ -31,15 +31,19 @@ public:
         const TString& volumePath,
         TRunStats& stats);
 
-    void Run();
+    void LoadInitialData();
+    void Run(std::chrono::steady_clock::time_point endAt);
 
 private:
     bool IsStopped() const;
     void WaitForActions();
-    void PeriodicLoop(const TString& actionName, ui32 periodUs);
+    void PeriodicLoop(
+        const TString& actionName,
+        ui32 periodUs,
+        std::chrono::steady_clock::time_point endAt);
     void ScheduleAction(const TString& actionName);
     void ExecuteAction(const TString& actionName);
-    void WriteInitialData();
+    void WriteInitialDataImpl();
 
     void ExecuteWriteCommand(const TString& actionName, const NKikimrKeyValue::ActionCommand_Write& writeCommand);
     void ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NKikimrKeyValue::ActionCommand_Read& readCommand);
@@ -58,7 +62,6 @@ private:
     std::unique_ptr<IKeyValueClient> Client_;
 
     std::atomic<bool> StopRequested_ = false;
-    const std::chrono::steady_clock::time_point EndAt_;
 
     TDataStorage DataStorage_;
 

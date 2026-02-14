@@ -22,7 +22,7 @@ public:
     void RecordError(const TString& kind, const TString& message);
     ui64 GetTotalErrors() const;
     TRunStatsSnapshot Snapshot() const;
-    void PrintSummary() const;
+    void PrintSummary(double elapsedSeconds) const;
 
 private:
     mutable std::mutex Mutex_;

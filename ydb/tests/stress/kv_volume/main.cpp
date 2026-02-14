@@ -20,6 +20,7 @@
 #include <util/string/builder.h>
 
 #include <exception>
+#include <chrono>
 #include <memory>
 #include <stdexcept>
 #include <thread>
@@ -300,6 +301,7 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     const TString volumePath = MakeVolumePath(options.Database, config.volume_config().path());
 
     TRunStats stats;
+    double runElapsedSeconds = 0.0;
 
     {
         std::unique_ptr<IKeyValueClient> setupClient = MakeKeyValueClient(hostPort, options.Version);
@@ -317,19 +319,28 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     }
 
     {
+        TVector<std::unique_ptr<TWorker>> workers;
+        workers.reserve(options.InFlight);
+
+        for (ui32 workerId = 0; workerId < options.InFlight; ++workerId) {
+            workers.emplace_back(std::make_unique<TWorker>(workerId, options, config, hostPort, volumePath, stats));
+        }
+
+        for (const auto& worker : workers) {
+            worker->LoadInitialData();
+        }
+
+        const auto runStart = std::chrono::steady_clock::now();
+        const auto runEndAt = runStart + std::chrono::seconds(options.Duration);
         TRunDisplayController display(stats, options.Duration, options.NoTui, options.Verbose);
         display.Start();
 
         TVector<std::thread> threads;
-        TVector<std::unique_ptr<TWorker>> workers;
-
-        workers.reserve(options.InFlight);
         threads.reserve(options.InFlight);
 
-        for (ui32 workerId = 0; workerId < options.InFlight; ++workerId) {
-            workers.emplace_back(std::make_unique<TWorker>(workerId, options, config, hostPort, volumePath, stats));
-            threads.emplace_back([worker = workers.back().get()] {
-                worker->Run();
+        for (const auto& worker : workers) {
+            threads.emplace_back([workerPtr = worker.get(), runEndAt] {
+                workerPtr->Run(runEndAt);
             });
         }
 
@@ -338,6 +349,10 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
         }
 
         display.Stop();
+
+        runElapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(
+            std::chrono::steady_clock::now() - runStart
+        ).count();
     }
 
     {
@@ -349,7 +364,7 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
         }
     }
 
-    stats.PrintSummary();
+    stats.PrintSummary(runElapsedSeconds);
 
     if (stats.GetTotalErrors() > 0 && !options.AllowErrors) {
         return 1;

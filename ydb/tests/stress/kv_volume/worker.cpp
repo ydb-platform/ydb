@@ -33,7 +33,6 @@ TWorker::TWorker(
     , VolumePath_(volumePath)
     , Stats_(stats)
     , Client_(MakeKeyValueClient(hostPort, options.Version))
-    , EndAt_(std::chrono::steady_clock::now() + std::chrono::seconds(options.Duration))
 {
     for (const auto& action : Config_.actions()) {
         ActionsByName_[action.name()] = &action;
@@ -47,25 +46,31 @@ TWorker::TWorker(
     }
 }
 
-void TWorker::Run() {
+void TWorker::LoadInitialData() {
     try {
-        WriteInitialData();
+        WriteInitialDataImpl();
+    } catch (const std::exception& e) {
+        Stats_.RecordError("worker_exception", e.what());
+    }
+}
 
+void TWorker::Run(std::chrono::steady_clock::time_point endAt) {
+    try {
         for (const auto& action : Config_.actions()) {
             if (action.has_parent_action() && !action.parent_action().empty()) {
                 continue;
             }
 
             if (action.has_period_us() && action.period_us() > 0) {
-                Schedulers_.emplace_back([this, name = action.name(), period = action.period_us()] {
-                    PeriodicLoop(name, period);
+                Schedulers_.emplace_back([this, endAt, name = action.name(), period = action.period_us()] {
+                    PeriodicLoop(name, period, endAt);
                 });
             } else {
                 ScheduleAction(action.name());
             }
         }
 
-        while (std::chrono::steady_clock::now() < EndAt_) {
+        while (std::chrono::steady_clock::now() < endAt) {
             std::this_thread::sleep_for(100ms);
         }
 
@@ -96,11 +101,11 @@ void TWorker::WaitForActions() {
     }
 }
 
-void TWorker::PeriodicLoop(const TString& actionName, ui32 periodUs) {
+void TWorker::PeriodicLoop(const TString& actionName, ui32 periodUs, std::chrono::steady_clock::time_point endAt) {
     auto period = std::chrono::microseconds(std::max<ui32>(1, periodUs));
     auto nextRun = std::chrono::steady_clock::now();
 
-    while (!IsStopped() && nextRun < EndAt_) {
+    while (!IsStopped() && nextRun < endAt) {
         ScheduleAction(actionName);
         nextRun += period;
         std::this_thread::sleep_until(nextRun);
@@ -215,7 +220,7 @@ void TWorker::ExecuteAction(const TString& actionName) {
     }
 }
 
-void TWorker::WriteInitialData() {
+void TWorker::WriteInitialDataImpl() {
     for (const auto& writeCommand : Config_.initial_data().write_commands()) {
         ExecuteWriteCommand("__initial__", writeCommand);
     }

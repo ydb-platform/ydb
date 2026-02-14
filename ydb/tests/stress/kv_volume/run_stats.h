@@ -53,6 +53,7 @@ public:
 
 private:
     static constexpr size_t LatencyBucketCount = 49; // last bucket is +inf
+    static constexpr size_t CacheLineSize = 64;
 
     struct TLatencyHistogram {
         std::array<ui64, LatencyBucketCount> Buckets = {};
@@ -60,28 +61,37 @@ private:
         ui64 MaxMs = 0;
     };
 
+    struct alignas(CacheLineSize) TPaddedAtomicUi64 {
+        TPaddedAtomicUi64();
+
+        std::atomic<ui64> Value = 0;
+    };
+    static_assert(alignof(TPaddedAtomicUi64) >= CacheLineSize);
+    static_assert(sizeof(TPaddedAtomicUi64) % CacheLineSize == 0);
+
     struct TAtomicLatencyHistogram {
         TAtomicLatencyHistogram();
 
-        std::array<std::atomic<ui64>, LatencyBucketCount> Buckets;
-        std::atomic<ui64> MaxMs = 0;
+        std::array<TPaddedAtomicUi64, LatencyBucketCount> Buckets;
+        TPaddedAtomicUi64 MaxMs;
     };
 
-    struct TAtomicActionStats {
+    struct alignas(CacheLineSize) TAtomicActionStats {
         TAtomicActionStats();
 
-        std::atomic<ui64> Runs = 0;
-        std::atomic<ui64> ReadBytes = 0;
-        std::atomic<ui64> WriteBytes = 0;
+        TPaddedAtomicUi64 Runs;
+        TPaddedAtomicUi64 ReadBytes;
+        TPaddedAtomicUi64 WriteBytes;
         TAtomicLatencyHistogram Latency;
     };
+    static_assert(alignof(TAtomicActionStats) >= CacheLineSize);
 
     static size_t FindLatencyBucket(ui64 latencyMs);
     static void RecordLatencySample(TAtomicLatencyHistogram& histogram, ui64 latencyMs);
     static TLatencyHistogram BuildHistogramSnapshot(const TAtomicLatencyHistogram& histogram);
     static TLatencyPercentiles BuildPercentiles(const TLatencyHistogram& histogram);
     static void IncrementNamedCounter(TVector<TNamedCounter>& counters, const TString& name);
-    static void UpdateMax(std::atomic<ui64>& maxValue, ui64 candidate);
+    static void UpdateMax(TPaddedAtomicUi64& maxValue, ui64 candidate);
 
     bool IsValidActionIndex(ui32 actionIndex) const {
         return actionIndex < ActionCount_;

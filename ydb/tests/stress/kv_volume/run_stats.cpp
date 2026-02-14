@@ -35,17 +35,16 @@ constexpr std::array<ui64, 48> LatencyBucketUpperBoundsMs = {
 
 } // namespace
 
+TRunStats::TPaddedAtomicUi64::TPaddedAtomicUi64() {
+    Value.store(0, std::memory_order_relaxed);
+}
+
 TRunStats::TAtomicLatencyHistogram::TAtomicLatencyHistogram() {
-    for (auto& bucket : Buckets) {
-        bucket.store(0, std::memory_order_relaxed);
-    }
-    MaxMs.store(0, std::memory_order_relaxed);
+    // initialized by TPaddedAtomicUi64 default constructors
 }
 
 TRunStats::TAtomicActionStats::TAtomicActionStats() {
-    Runs.store(0, std::memory_order_relaxed);
-    ReadBytes.store(0, std::memory_order_relaxed);
-    WriteBytes.store(0, std::memory_order_relaxed);
+    // initialized by TPaddedAtomicUi64 default constructors
 }
 
 TRunStats::TRunStats(TVector<TString> actionNames)
@@ -75,28 +74,28 @@ size_t TRunStats::FindLatencyBucket(ui64 latencyMs) {
     return LatencyBucketCount - 1;
 }
 
-void TRunStats::UpdateMax(std::atomic<ui64>& maxValue, ui64 candidate) {
-    ui64 current = maxValue.load(std::memory_order_relaxed);
+void TRunStats::UpdateMax(TPaddedAtomicUi64& maxValue, ui64 candidate) {
+    ui64 current = maxValue.Value.load(std::memory_order_relaxed);
     while (current < candidate
-        && !maxValue.compare_exchange_weak(current, candidate, std::memory_order_relaxed, std::memory_order_relaxed))
+        && !maxValue.Value.compare_exchange_weak(current, candidate, std::memory_order_relaxed, std::memory_order_relaxed))
     {
     }
 }
 
 void TRunStats::RecordLatencySample(TAtomicLatencyHistogram& histogram, ui64 latencyMs) {
     const size_t bucket = FindLatencyBucket(latencyMs);
-    histogram.Buckets[bucket].fetch_add(1, std::memory_order_relaxed);
+    histogram.Buckets[bucket].Value.fetch_add(1, std::memory_order_relaxed);
     UpdateMax(histogram.MaxMs, latencyMs);
 }
 
 TRunStats::TLatencyHistogram TRunStats::BuildHistogramSnapshot(const TAtomicLatencyHistogram& histogram) {
     TLatencyHistogram result;
     for (size_t i = 0; i < result.Buckets.size(); ++i) {
-        const ui64 count = histogram.Buckets[i].load(std::memory_order_relaxed);
+        const ui64 count = histogram.Buckets[i].Value.load(std::memory_order_relaxed);
         result.Buckets[i] = count;
         result.Samples += count;
     }
-    result.MaxMs = histogram.MaxMs.load(std::memory_order_relaxed);
+    result.MaxMs = histogram.MaxMs.Value.load(std::memory_order_relaxed);
     return result;
 }
 
@@ -168,19 +167,19 @@ void TRunStats::IncrementNamedCounter(TVector<TNamedCounter>& counters, const TS
 
 void TRunStats::RecordAction(ui32 actionIndex) {
     if (IsValidActionIndex(actionIndex)) {
-        ActionStats_[actionIndex].Runs.fetch_add(1, std::memory_order_relaxed);
+        ActionStats_[actionIndex].Runs.Value.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
 void TRunStats::RecordReadBytes(ui32 actionIndex, ui64 bytes) {
     if (IsValidActionIndex(actionIndex)) {
-        ActionStats_[actionIndex].ReadBytes.fetch_add(bytes, std::memory_order_relaxed);
+        ActionStats_[actionIndex].ReadBytes.Value.fetch_add(bytes, std::memory_order_relaxed);
     }
 }
 
 void TRunStats::RecordWriteBytes(ui32 actionIndex, ui64 bytes) {
     if (IsValidActionIndex(actionIndex)) {
-        ActionStats_[actionIndex].WriteBytes.fetch_add(bytes, std::memory_order_relaxed);
+        ActionStats_[actionIndex].WriteBytes.Value.fetch_add(bytes, std::memory_order_relaxed);
     }
 }
 
@@ -218,9 +217,9 @@ TRunStatsSnapshot TRunStats::Snapshot() const {
     snapshot.LatencyByAction.resize(ActionCount_);
     for (ui32 i = 0; i < ActionCount_; ++i) {
         const TAtomicActionStats& actionStats = ActionStats_[i];
-        snapshot.ActionRuns[i] = actionStats.Runs.load(std::memory_order_relaxed);
-        snapshot.ReadBytesByAction[i] = actionStats.ReadBytes.load(std::memory_order_relaxed);
-        snapshot.WriteBytesByAction[i] = actionStats.WriteBytes.load(std::memory_order_relaxed);
+        snapshot.ActionRuns[i] = actionStats.Runs.Value.load(std::memory_order_relaxed);
+        snapshot.ReadBytesByAction[i] = actionStats.ReadBytes.Value.load(std::memory_order_relaxed);
+        snapshot.WriteBytesByAction[i] = actionStats.WriteBytes.Value.load(std::memory_order_relaxed);
         snapshot.LatencyByAction[i] = BuildPercentiles(BuildHistogramSnapshot(actionStats.Latency));
     }
     snapshot.TotalLatency = BuildPercentiles(BuildHistogramSnapshot(TotalLatency_));

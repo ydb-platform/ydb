@@ -588,7 +588,13 @@ namespace NKikimr::NGRpcProxy::V1 {
         return res;
     }
 
-    Ydb::StatusIds::StatusCode ProcessAttributes(const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& attributes, NKikimrSchemeOp::TPersQueueGroupDescription* pqDescr, TConsumersAdvancedMonitoringSettings& consumersAdvancedMonitoringSettings, TString& error, bool alter) {
+    Ydb::StatusIds::StatusCode ProcessAttributes(
+        const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& attributes,
+        const bool topicsAreFirstClassCitizen,
+        NKikimrSchemeOp::TPersQueueGroupDescription* pqDescr,
+        TConsumersAdvancedMonitoringSettings& consumersAdvancedMonitoringSettings,
+        TString& error,
+        const bool alter) {
 
         auto config = pqDescr->MutablePQTabletConfig();
         auto partConfig = config->MutablePartitionConfig();
@@ -714,6 +720,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                     return Ydb::StatusIds::BAD_REQUEST;
                 }
             } else if (attrName == "_advanced_monitoring") {
+                if (topicsAreFirstClassCitizen) {
+                    error = TStringBuilder() << "Attribute " << attrName << " is not supported in non-federation";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
                 if (std::expected m = TConsumersAdvancedMonitoringSettings::FromJson(attrValue); m.has_value()) {
                     consumersAdvancedMonitoringSettings = std::move(m).value();
                 } else {
@@ -864,7 +874,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             pqDescr->SetPartitionPerTablet(1);
 
         TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
-        auto res = ProcessAttributes(settings.attributes(), pqDescr, consumersAdvancedMonitoringSettings, error, alter);
+        auto res = ProcessAttributes(settings.attributes(), pqConfig.GetTopicsAreFirstClassCitizen(), pqDescr, consumersAdvancedMonitoringSettings, error, alter);
         if (res != Ydb::StatusIds::SUCCESS) {
             return res;
         }
@@ -1199,7 +1209,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         partConfig->SetSourceIdMaxCounts(NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts());
 
         TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
-        auto res = ProcessAttributes(request.attributes(), pqDescr, consumersAdvancedMonitoringSettings, error, false);
+        auto res = ProcessAttributes(request.attributes(), pqConfig.GetTopicsAreFirstClassCitizen(), pqDescr, consumersAdvancedMonitoringSettings, error, false);
         if (res != Ydb::StatusIds::SUCCESS) {
             return TYdbPqCodes(res, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
@@ -1414,7 +1424,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
-        auto res = ProcessAttributes(request.alter_attributes(), &pqDescr, consumersAdvancedMonitoringSettings, error, true);
+        auto res = ProcessAttributes(request.alter_attributes(), pqConfig.GetTopicsAreFirstClassCitizen(), &pqDescr, consumersAdvancedMonitoringSettings, error, true);
         if (res != Ydb::StatusIds::SUCCESS) {
             return res;
         }

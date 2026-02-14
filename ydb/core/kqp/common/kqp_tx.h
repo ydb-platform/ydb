@@ -527,6 +527,8 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
     TMaybe<ui64> victimQuerySpanId = Nothing());
 NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
     TMaybe<ui64> victimQuerySpanId = Nothing());
+std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
+    const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);

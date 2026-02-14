@@ -2142,7 +2142,26 @@ public:
     void HandleNoop(T&) {
     }
 
-    // MergeLocksWithTxResult removed: non-TxManager lock path is no longer supported
+    bool MergeLocksWithTxResult(const NKikimrKqp::TExecuterTxResult& result) {
+        if (result.HasLocks()) {
+            auto& txCtx = QueryState->TxCtx;
+            const auto& locks = result.GetLocks();
+            auto [success, issues] = MergeLocks(locks.GetType(), locks.GetValue(), *txCtx);
+            if (!success) {
+                if (!txCtx->GetSnapshot().IsValid() || txCtx->TxHasEffects()) {
+                    ReplyQueryError(Ydb::StatusIds::ABORTED,  "Error while locks merge",
+                        MessageFromIssues(issues));
+                    return false;
+                }
+
+                if (txCtx->GetSnapshot().IsValid()) {
+                    txCtx->Locks.MarkBroken(issues.back());
+                }
+            }
+        }
+
+        return true;
+    }
 
     void InvalidateQuery() {
         if (QueryState->CompileResult) {
@@ -2468,6 +2487,14 @@ public:
                         YQL_ENSURE(!issues.Empty());
                         auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
                         EmitVictimTliLog(brokenLockQuerySpanId, ev->BrokenLockQuerySpanId, ev->LocksBrokenAsVictim);
+                    } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {
+                        // Non-TxManager (obsolete) path: no QuerySpanId tracking
+                        YQL_ENSURE(!QueryState->TxCtx->TxManager);
+                        if (ev->BrokenLockPathId) {
+                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
+                        } else {
+                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
+                        }
                     }
                     break;
                 }
@@ -2514,7 +2541,9 @@ public:
             QueryState->TxCtx->Locks.LockHandle = std::move(ev->LockHandle);
         }
 
-        // Non-TxManager lock path removed; TxManager handles all lock management
+        if (!QueryState->TxCtx->TxManager && !MergeLocksWithTxResult(executerResults)) {
+            return;
+        }
 
         if (!response->GetIssues().empty()){
             NYql::TIssues issues;

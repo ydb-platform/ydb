@@ -822,7 +822,8 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
 }
 
 // Updates the single row. Column in commands must be unique.
-void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) {
+void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands, 
+        const TString& userSID) {
     ui64 localTid = LocalTableId(tableId);
     Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
@@ -839,12 +840,12 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
         auto writeVersion = GetWriteVersion(tableId);
-        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeVersion)) {
+        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeVersion, userSID)) {
             throw TNotReadyTabletException();
         }
         Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, writeVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeTxId)) {
+        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeTxId, userSID)) {
             throw TNotReadyTabletException();
         }
         Db.UpdateTx(localTid, NTable::ERowOp::Upsert, key, ops, writeTxId);
@@ -856,7 +857,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
 }
 
 // Erases the single row.
-void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) {
+void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TString& userSID) {
     ui64 localTid = LocalTableId(tableId);
     Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
@@ -869,12 +870,12 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
         auto writeVersion = GetWriteVersion(tableId);
-        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeVersion)) {
+        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeVersion, userSID)) {
             throw TNotReadyTabletException();
         }
         Db.Update(localTid, NTable::ERowOp::Erase, key, { }, writeVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeTxId)) {
+        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeTxId, userSID)) {
             throw TNotReadyTabletException();
         }
         Db.UpdateTx(localTid, NTable::ERowOp::Erase, key, { }, writeTxId);

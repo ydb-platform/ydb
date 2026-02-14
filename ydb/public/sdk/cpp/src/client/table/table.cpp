@@ -3017,6 +3017,11 @@ TChangefeedDescription& TChangefeedDescription::WithInitialScan() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithUserSIDs() {
+    UserSIDs_ = true;
+    return *this;
+}
+
 TChangefeedDescription& TChangefeedDescription::AddAttribute(const std::string& key, const std::string& value) {
     Attributes_[key] = value;
     return *this;
@@ -3067,6 +3072,10 @@ const std::optional<TDuration>& TChangefeedDescription::GetResolvedTimestamps() 
 
 bool TChangefeedDescription::GetInitialScan() const {
     return InitialScan_;
+}
+
+bool TChangefeedDescription::GetUserSIDs() const {
+    return UserSIDs_;
 }
 
 const std::unordered_map<std::string, std::string>& TChangefeedDescription::GetAttributes() const {
@@ -3173,6 +3182,7 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_virtual_timestamps(VirtualTimestamps_);
     proto.set_schema_changes(SchemaChanges_);
     proto.set_aws_region(TStringType{AwsRegion_});
+    proto.set_user_sids(UserSIDs_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:

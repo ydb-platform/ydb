@@ -1822,6 +1822,7 @@ struct Schema : NIceDb::Schema {
         struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
+        struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1834,7 +1835,8 @@ struct Schema : NIceDb::Schema {
             VirtualTimestamps,
             AwsRegion,
             ResolvedTimestampsIntervalMs,
-            SchemaChanges
+            SchemaChanges,
+            UserSIDs
         >;
     };
 
@@ -1849,6 +1851,7 @@ struct Schema : NIceDb::Schema {
         struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
+        struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1861,7 +1864,8 @@ struct Schema : NIceDb::Schema {
             VirtualTimestamps,
             AwsRegion,
             ResolvedTimestampsIntervalMs,
-            SchemaChanges
+            SchemaChanges,
+            UserSIDs
         >;
     };
 

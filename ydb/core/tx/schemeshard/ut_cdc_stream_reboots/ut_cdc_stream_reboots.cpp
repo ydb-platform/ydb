@@ -7,7 +7,9 @@
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
-    void CreateStream(TTestWithReboots& t, const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool onIndex = false) {
+    void CreateStream(TTestWithReboots& t, const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool onIndex = false,
+        bool userSIDs = false)
+    {
         t.GetTestEnvOptions()
             .EnableChangefeedInitialScan(true)
             .EnableChangefeedsOnIndexTables(true);
@@ -45,6 +47,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             streamDesc.SetMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly);
             streamDesc.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
             streamDesc.SetVirtualTimestamps(vt);
+            streamDesc.SetUserSIDs(userSIDs);
 
             if (state) {
                 streamDesc.SetState(*state);
@@ -66,6 +69,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             TestDescribeResult(DescribePrivatePath(runtime, path + "/" + tableName + "/Stream"), {
                 NLs::PathExist,
                 NLs::StreamVirtualTimestamps(vt),
+                NLs::StreamUserSIDs(userSIDs),
             });
         });
     }
@@ -100,6 +104,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamOnIndexTableWithVirtualTimestamps, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         CreateStream(t, {}, true, true);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamOnIndexTableWithUserSIDs, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t, {}, true, true, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithAwsRegion, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {

@@ -1282,6 +1282,7 @@ void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     out.set_name(in.GetName());
     out.set_virtual_timestamps(in.GetVirtualTimestamps());
     out.set_schema_changes(in.GetSchemaChanges());
+    out.set_user_sids(in.GetUserSIDs());
     out.set_aws_region(in.GetAwsRegion());
 
     if (const auto value = in.GetResolvedTimestampsIntervalMs()) {
@@ -1349,6 +1350,7 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
     out.SetVirtualTimestamps(in.virtual_timestamps());
     out.SetSchemaChanges(in.schema_changes());
     out.SetAwsRegion(in.aws_region());
+    out.SetUserSIDs(in.user_sids());
 
     if (in.has_resolved_timestamps_interval()) {
         out.SetResolvedTimestampsIntervalMs(TDuration::Seconds(in.resolved_timestamps_interval().seconds()).MilliSeconds());

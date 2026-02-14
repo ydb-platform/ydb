@@ -278,6 +278,7 @@ public:
             .AwsRegion = stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
             .VirtualTimestamps = stream.VirtualTimestamps,
             .ShardId = DataShard.TabletId,
+            .UserSIDs = stream.UserSIDs,
         }))
     {
     }

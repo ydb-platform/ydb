@@ -116,7 +116,7 @@ namespace NMiniKQL {
         TIncomingResults Results;
     };
 
-    TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly);
+    TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, const TString& userSID);
     TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData);
 
     NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& engineHost,

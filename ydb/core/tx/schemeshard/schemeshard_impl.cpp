@@ -382,10 +382,11 @@ THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal
         const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const
 {
-    return MakeHolder<TEvDataShard::TEvProposeTransaction>(
+    auto result = MakeHolder<TEvDataShard::TEvProposeTransaction>(
         NKikimrTxDataShard::TX_KIND_SCHEME, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, SelectProcessingParams(pathId)
     );
+    return result;
 }
 
 THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(
@@ -1991,7 +1992,8 @@ void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) 
         NIceDb::TUpdate<Schema::CdcStream::ResolvedTimestampsIntervalMs>(alterData->ResolvedTimestamps.MilliSeconds()),
         NIceDb::TUpdate<Schema::CdcStream::SchemaChanges>(alterData->SchemaChanges),
         NIceDb::TUpdate<Schema::CdcStream::AwsRegion>(alterData->AwsRegion),
-        NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State)
+        NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State),
+        NIceDb::TUpdate<Schema::CdcStream::UserSIDs>(alterData->UserSIDs)
     );
 
     db.Table<Schema::CdcStreamAlterData>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -2018,7 +2020,8 @@ void TSchemeShard::PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId&
         NIceDb::TUpdate<Schema::CdcStreamAlterData::ResolvedTimestampsIntervalMs>(alterData->ResolvedTimestamps.MilliSeconds()),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::SchemaChanges>(alterData->SchemaChanges),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::AwsRegion>(alterData->AwsRegion),
-        NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State)
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::UserSIDs>(alterData->UserSIDs)
     );
 }
 

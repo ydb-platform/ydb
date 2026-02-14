@@ -33,7 +33,7 @@ TUploadRequest GenerateBulkRowRequest(ui64 tableId, ui64 keyStart, ui64 n) {
     TUploadRowsRequestPtr request(new TEvDataShard::TEvUploadRowsRequest());
     auto& record = request->Record;
     record.SetTableId(tableId);
-
+    
     auto& rowScheme = *record.MutableRowScheme();
     for (size_t i = 2; i <= 11; ++i) {
         rowScheme.AddValueColumnIds(i);

@@ -88,13 +88,13 @@ public:
 };
 
 IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
+    TKqpDatashardComputeContext& computeCtx, const TString& userSID);
 IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
+    TKqpDatashardComputeContext& computeCtx, const TString& userSID);
 IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
+    TKqpDatashardComputeContext& computeCtx, const TString& userSID);
 
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx);
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, const TString& userSID);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

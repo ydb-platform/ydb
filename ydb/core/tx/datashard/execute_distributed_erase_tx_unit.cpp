@@ -172,11 +172,11 @@ public:
 
             if (changeCollector) {
                 if (!volatileDependencies.empty() || volatileOrdered) {
-                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId)) {
+                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId, BUILTIN_ACL_CDC_TTL)) {
                         pageFault = true;
                     }
                 } else {
-                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion)) {
+                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion, BUILTIN_ACL_CDC_TTL)) {
                         pageFault = true;
                     }
                 }

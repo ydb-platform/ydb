@@ -894,11 +894,8 @@ private:
         const ui64 txFlags = 0;
 
         TXLOG_D("Sending CreateVolatileSnapshot tx to shard " << state.ShardId);
-        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                new TEvDataShard::TEvProposeTransaction(
-                    NKikimrTxDataShard::TX_KIND_SNAPSHOT,
-                    ctx.SelfID, TxId, txBody, txFlags),
-                state.ShardId, true));
+        auto ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SNAPSHOT, ctx.SelfID, TxId, txBody, txFlags);
+        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(ev, state.ShardId, true));
 
         state.AffectedFlags |= AffectedRead;
         state.State = EShardState::SnapshotProposeSent;
@@ -1537,10 +1534,8 @@ private:
         TXLOG_D("Sending TEvProposeTransaction (scan) to shard " << shardId << " ReadTxId# " << state.ReadTxId);
 
         // TODO: support followers?
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
-                    ctx.SelfID, state.ReadTxId, txBody, txFlags),
-                shardId, true));
+        auto ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN, ctx.SelfID, state.ReadTxId, txBody, txFlags);
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(ev, shardId, true));
 
         state.State = EShardState::ReadTableProposeSent;
     }

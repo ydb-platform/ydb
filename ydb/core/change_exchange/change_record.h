@@ -34,6 +34,7 @@ public:
     virtual const TString& GetBody() const = 0;
     virtual ESource GetSource() const = 0;
     virtual const TString& GetSourceId() const = 0;
+    virtual const TString& GetUserSID() const = 0;
     virtual bool IsBroadcast() const = 0;
 
     virtual void Accept(IVisitor& visitor) const = 0;
@@ -57,6 +58,7 @@ public:
     const TString& GetBody() const override { return Body; }
     ESource GetSource() const override { return Source; }
     const TString& GetSourceId() const override { return SourceId; }
+    const TString& GetUserSID() const override { return UserSID; };
     bool IsBroadcast() const override { return false; }
 
     void RewriteTxId(ui64) override { Y_ABORT("not implemented"); }
@@ -69,6 +71,7 @@ protected:
     TString Body;
     ESource Source = ESource::Unspecified;
     TString SourceId;
+    TString UserSID;
 
 }; // TChangeRecordBase
 
@@ -110,6 +113,16 @@ public:
 
     TSelf& WithSource(ESource source) {
         GetRecord()->Source = source;
+        return static_cast<TSelf&>(*this);
+    }
+
+    TSelf& WithUserSID(const TString& userSID) {
+        GetRecord()->UserSID = userSID;
+        return static_cast<TSelf&>(*this);
+    }
+
+    TSelf& WithUserSID(TString&& userSID) {
+        GetRecord()->UserSID = std::move(userSID);
         return static_cast<TSelf&>(*this);
     }
 

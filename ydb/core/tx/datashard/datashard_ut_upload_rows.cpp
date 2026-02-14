@@ -45,7 +45,7 @@ static void DoStartUploadTestRows(
         rows->emplace_back(serializedKey, serializedValue);
     }
 
-    auto actor = NTxProxy::CreateUploadRowsInternal(sender, database, tableName, types, rows, NTxProxy::EUploadRowsMode::Normal, false, false, 0, backoff);
+    auto actor = NTxProxy::CreateUploadRowsInternal(sender, database, tableName, types, rows, "", NTxProxy::EUploadRowsMode::Normal, false, false, 0, backoff);
     runtime.Register(actor);
 }
 

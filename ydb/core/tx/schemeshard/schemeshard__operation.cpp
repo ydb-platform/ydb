@@ -189,6 +189,7 @@ bool TSchemeShard::ProcessOperationParts(
 
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
     using namespace NGenerated;
+
     THolder<TProposeResponse> response = nullptr;
 
     auto selfId = SelfTabletId();

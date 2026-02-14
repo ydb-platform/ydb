@@ -40,13 +40,14 @@ private:
         }
     }
 
-    IActor* CreateUploaderInternal(const TString& database, const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie);
+    IActor* CreateUploaderInternal(const TString& database, const TString& tablePath, const std::shared_ptr<TData>& data,
+                                   const TString& userSID, ui64 cookie);
 
     void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data) {
         auto cookie = ++Cookie;
 
         auto actorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            CreateUploaderInternal(Database, tablePath, data, cookie)
+            CreateUploaderInternal(Database, tablePath, data, BUILTIN_ACL_CDC_WITHOUT_USER_SID, cookie)
         );
         CookieMapping[cookie] = {tablePath, actorId};
     }

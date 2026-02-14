@@ -747,7 +747,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 auto propose = MakeHolder<TEvDataShard::TEvProposeTransaction>(
                     NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE, SelfId(), TxId, tx.SerializeAsString()
                 );
-
+                
                 Send(LeaderPipeCache, new TEvPipeCache::TEvForward(propose.Release(), shardId, true));
 
                 Y_DEBUG_ABORT_UNLESS(!Shards.contains(shardId));

@@ -385,7 +385,7 @@ public:
                 magicDataSize,
                 MainKey,
                 PCtx->PDiskLogPrefix,
-                Cfg->EnableFormatEncryption);
+                Cfg->EnableFormatAndMetadataEncryption);
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TPushUnformattedMetadataSector>(format,
                 !Cfg->MetadataOnly));
             if (Cfg->MetadataOnly) {
@@ -452,8 +452,8 @@ public:
                         options.EnableSmallDiskOptimization = cfg->FeatureFlags.GetEnableSmallDiskOptimization();
                         options.Metadata = metadata;
                         options.PlainDataChunks = cfg->PlainDataChunks;
-                        options.EnableFormatEncryption = cfg->EnableFormatEncryption;
-                        options.EnableSectorEncryption = cfg->EnableSectorEncryption;
+                        options.EnableFormatAndMetadataEncryption = cfg->EnableFormatAndMetadataEncryption;
+                        options.EnableSectorEncryption = cfg->FeatureFlags.GetEnablePDiskDataEncryption();
 
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,

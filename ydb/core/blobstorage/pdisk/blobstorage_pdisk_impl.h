@@ -443,7 +443,7 @@ public:
 
     void DropAllMetadataRequests();
 
-    TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize, bool encryption,
+    TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize,
         const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords, const ui64 *magic);
     bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
 

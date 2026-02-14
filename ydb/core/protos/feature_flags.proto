@@ -254,4 +254,5 @@ message TFeatureFlags {
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
+    optional bool EnablePDiskDataEncryption = 230 [default = true];
 }

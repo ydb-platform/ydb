@@ -93,8 +93,8 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
                 TPDiskCategory(deviceType, 0).GetRaw()));
     cfg->SectorMap = options.SectorMap;
     // Disable encryption for SectorMap
-    cfg->EnableSectorEncryption = options.EnableSectorEncryption.value_or(!cfg->SectorMap);
-    cfg->EnableFormatEncryption = options.EnableFormatEncryption;
+    cfg->FeatureFlags.SetEnablePDiskDataEncryption(options.EnableSectorEncryption.value_or(!cfg->SectorMap));
+    cfg->EnableFormatAndMetadataEncryption = options.EnableFormatAndMetadataEncryption;
     cfg->PlainDataChunks = options.PlainDataChunks;
 
     if (!isBlockDevice && !cfg->UseSpdkNvmeDriver && !options.SectorMap) {
@@ -223,7 +223,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
                 ui64 sectorOffset = sysLogOffset + (ui64)((idx / 3) * 3) * (ui64)format.SectorSize;
                 bool isCrcOk = NPDisk::TPDiskHashCalculator().CheckSectorHash(
                         sectorOffset, format.MagicSysLogChunk, sector, format.SectorSize, logFooter->Hash);
-                outInfo.SectorInfo.push_back(TPDiskInfo::TSectorInfo(logFooter->Nonce, logFooter->Version, isCrcOk));
+                outInfo.SectorInfo.push_back(TPDiskInfo::TSectorInfo(logFooter->Nonce, logFooter->GetVersion(), isCrcOk));
             }
 
             return true;

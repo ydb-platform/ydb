@@ -86,7 +86,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->ChunkSize = runCfg.ChunkSize;
         pDiskConfig->SectorMap = runCfg.TestContext->SectorMap;
-        pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
+        pDiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(!pDiskConfig->SectorMap);
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(false);
 
         NPDisk::TMainKey mainKey{ .Keys = {NPDisk::YdbDefaultPDiskSequence}, .IsInitialized = true };

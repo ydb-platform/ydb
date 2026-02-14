@@ -348,6 +348,10 @@ private:
         if (!ok && allowConvert) {
             ok = NArrow::TArrowToYdbConverter::NeedConversion(type1, type2);
         }
+        if (!ok) {
+            // TODO: SwitchYqlTypeToArrowType(Interval) == arrow::Type::DURATION, but YQL Interval is Int64
+            ok = type1.GetTypeId() == NScheme::NTypeIds::Int64 && type2.GetTypeId() == NScheme::NTypeIds::Interval;
+        }
         return ok;
     }
 

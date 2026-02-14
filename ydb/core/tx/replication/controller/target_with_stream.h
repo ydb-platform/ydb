@@ -2,14 +2,11 @@
 
 #include "target_base.h"
 
-#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 
 #include <library/cpp/sliding_window/sliding_window.h>
 
 namespace NKikimr::NReplication::NController {
-
-using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
 
 extern const TString ReplicationConsumerName;
 

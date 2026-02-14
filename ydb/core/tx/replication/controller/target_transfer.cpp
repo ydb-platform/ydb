@@ -1,4 +1,5 @@
 #include "stream_consumer_remover.h"
+#include <ydb/core/protos/metrics_config.pb.h> // should be before target_transfer.h
 #include "target_transfer.h"
 
 #include <ydb/core/base/path.h>
@@ -11,13 +12,16 @@
 
 namespace NKikimr::NReplication::NController {
 
+using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
+using EWorkOperation = NKikimrReplication::TWorkerStats::EWorkOperation;
+
 class TTransferStats : public TTargetWithStreamStats {
     using TBase = TTargetWithStreamStats;
     using TBase::TBase;
     using TBase::TMultiSlidingWindow;
 
     struct TWorkerStats {
-        NKikimrReplication::EWorkOperation Operation;
+        EWorkOperation Operation;
         TInstant LastChange = TInstant::Zero();
         ui32 ReadOffset;
         ui32 Partition;
@@ -75,7 +79,7 @@ public:
 
             case NKikimrReplication::TWorkerStats::WORK_OPERATION: {
                 workerStats.ChangeStateTime = Now();
-                workerStats.Operation = static_cast<NKikimrReplication::EWorkOperation>(value);
+                workerStats.Operation = static_cast<EWorkOperation>(value);
                 break;
             }
             default:
@@ -105,19 +109,19 @@ public:
                 auto& dstWorker = *dstStats.AddWorkersStats();
                 dstWorker.set_worker_id(ToString(id));
                 switch (workerStats.Operation) {
-                    case NKikimrReplication::EWorkOperation::UNSPECIFIED:
+                    case NKikimrReplication::TWorkerStats::OPERATION_UNSPECIFIED:
                         dstWorker.set_state(Ydb::Replication::DescribeTransferResult_Stats::STATE_UNSPECIFIED);
                         break;
-                    case NKikimrReplication::EWorkOperation::READ:
+                    case NKikimrReplication::TWorkerStats::OPERATION_READ:
                         dstWorker.set_state(Ydb::Replication::DescribeTransferResult_Stats::STATE_READ);
                         break;
-                    case NKikimrReplication::EWorkOperation::DECOMPRESS:
+                    case NKikimrReplication::TWorkerStats::OPERATION_DECOMPRESS:
                         dstWorker.set_state(Ydb::Replication::DescribeTransferResult_Stats::STATE_DECOMPRESS);
                         break;
-                    case NKikimrReplication::EWorkOperation::PROCESS:
+                    case NKikimrReplication::TWorkerStats::OPERATION_PROCESS:
                         dstWorker.set_state(Ydb::Replication::DescribeTransferResult_Stats::STATE_PROCESS);
                         break;
-                    case NKikimrReplication::EWorkOperation::WRITE:
+                    case NKikimrReplication::TWorkerStats::OPERATION_WRITE:
                         dstWorker.set_state(Ydb::Replication::DescribeTransferResult_Stats::STATE_WRITE);
                         break;
                 }
@@ -161,7 +165,7 @@ struct TTransferCounters: public TTragetWithStreamCounters {
                             ->GetSubgroup("counters", "transfer")
                             ->GetSubgroup("host", "")
                             ->GetSubgroup("transfer_id", location.GetPath())
-                            ->GetSubgroup("database_id", location.GetYdbDatabaseId())
+                            ->GetSubgroup("database_id", location.GetYcResourceId())
                             ->GetSubgroup("folder_id", location.GetYcFolderId())
                             ->GetSubgroup("cloud_id", location.GetYcCloudId());
 
@@ -208,9 +212,11 @@ TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConf
     : TTargetWithStream(replication, ETargetKind::Transfer, id, config)
 {
     Stats.reset(new TTransferStats(Now()));
-    MetricsLevel = replication->GetConfig().HasMetricsConfig()
-                       ? replication->GetConfig().GetMetricsConfig().GetLevel()
-                       : NKikimrProto::NMetricsConfig::TMetricsConfig::LEVEL_DEFAULT;
+    if (replication->GetConfig().HasMetricsConfig()) {
+        MetricsConfig.CopyFrom(replication->GetConfig().GetMetricsConfig());
+    } else {
+        MetricsConfig.SetLevel(TMetricsConfig::LEVEL_DEFAULT);
+    }
 }
 
 void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig& cfg) {
@@ -222,7 +228,11 @@ void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig&
         cfg.GetTransferSpecific().GetRunAsUser(),
         t.GetDirectoryPath());
 
-    MetricsLevel = cfg.HasMetricsConfig() ? cfg.GetMetricsConfig().GetLevel() : NKikimrProto::NMetricsConfig::TMetricsConfig::LEVEL_DEFAULT;
+    if (cfg.HasMetricsConfig()) {
+        MetricsConfig.CopyFrom(cfg.GetMetricsConfig());
+    } else {
+        MetricsConfig.SetLevel(TMetricsConfig::LEVEL_DEFAULT);
+    }
     Location.CopyFrom(cfg.GetLocation());
 }
 
@@ -291,8 +301,7 @@ void TTargetTransfer::RemoveWorker(ui64 id) {
 }
 
 void TTargetTransfer::EnsureCounters() {
-    auto metricsValEnumVal = static_cast<TMetricsConfig::EMetricsLevel>(MetricsLevel);
-    switch (metricsValEnumVal) {
+    switch (MetricsConfig.GetLevel()) {
         case TMetricsConfig::LEVEL_DEFAULT:
         case TMetricsConfig::LEVEL_OBJECT:
         case TMetricsConfig::LEVEL_DETAILED:

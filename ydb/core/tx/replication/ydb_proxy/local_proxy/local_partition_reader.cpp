@@ -262,7 +262,7 @@ void TLocalTopicPartitionReaderActor::HandleOnWaitData(TEvPersQueue::TEvResponse
         );
 
         TString data;
-        const bool isCompressed = proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1;
+        bool isCompressed = proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1;
         if (isCompressed && !AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
             const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
             data = codecImpl->Decompress(proto.GetData());
@@ -272,8 +272,8 @@ void TLocalTopicPartitionReaderActor::HandleOnWaitData(TEvPersQueue::TEvResponse
         }
 
         if (isCompressed) {
-            messages.emplace_back(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage{
-                static_cast<NYdb::NTopic::ECodec>(proto.codec() + 1), std::move(data), information, nullptr});
+            messages.push_back(TTopicMessage{NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage{
+                static_cast<NYdb::NTopic::ECodec>(proto.codec() + 1), std::move(data), information, nullptr}});
         } else {
             messages.emplace_back(std::move(information), std::move(data));
         }

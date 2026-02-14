@@ -128,7 +128,7 @@ public:
                     location.SetYcFolderId(it->second);
                 }
                 if (auto it = attrs.find("database_id"); it != attrs.end()) {
-                    location.SetYdbDatabaseId(it->second);
+                    location.SetYcResourceId(it->second);
                 }
                 if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
                     location.SetMonitoringProjectId(it->second);

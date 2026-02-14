@@ -58,7 +58,7 @@ class TSessionInfo {
                 return;
 
             auto subgroup = countersRoot->GetSubgroup("transfer_id", Location.GetPath())
-                                ->GetSubgroup("database_id", Location.GetYdbDatabaseId())
+                                ->GetSubgroup("database_id", Location.GetYcResourceId())
                                 ->GetSubgroup("folder_id", Location.GetYcFolderId())
                                 ->GetSubgroup("cloud_id", Location.GetYcCloudId())
                                 ->GetSubgroup("monitoring_project_id", Location.GetMonitoringProjectId());

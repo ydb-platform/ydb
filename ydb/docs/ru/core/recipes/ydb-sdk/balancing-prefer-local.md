@@ -101,4 +101,63 @@
   }
   ```
 
+- Python
+
+  {% cut "sqlalchemy" %}
+
+  ```python
+  import os
+  import sqlalchemy as sa
+
+  engine = sa.create_engine(
+      os.environ["YDB_SQLALCHEMY_URL"],
+      connect_args={
+          "driver_config_kwargs": {
+              "use_all_nodes": False,  # предпочитать ближайший дата-центр
+          }
+      },
+  )
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import os
+  import ydb
+  import asyncio
+
+  async def ydb_init():
+      driver_config = ydb.DriverConfig(
+          endpoint=os.environ["YDB_ENDPOINT"],
+          database=os.environ["YDB_DATABASE"],
+          credentials=ydb.credentials_from_env_variables(),
+          use_all_nodes=False,  # предпочитать ближайший дата-центр
+      )
+      async with ydb.aio.Driver(driver_config) as driver:
+          await driver.wait()
+          # ...
+
+  asyncio.run(ydb_init())
+  ```
+
+  {% endcut %}
+
+  ```python
+  import os
+  import ydb
+
+  driver_config = ydb.DriverConfig(
+      endpoint=os.environ["YDB_ENDPOINT"],
+      database=os.environ["YDB_DATABASE"],
+      credentials=ydb.credentials_from_env_variables(),
+      use_all_nodes=False,  # предпочитать ближайший дата-центр
+  )
+
+  with ydb.Driver(driver_config) as driver:
+      driver.wait(timeout=5)
+      # ...
+  ```
+
 {% endlist %}

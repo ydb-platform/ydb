@@ -125,15 +125,7 @@
 
 - Python
 
-  ```python
-  import ydb
-
-  with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
-    driver.wait(timeout=5)
-    ...
-  ```
-
-- Python (asyncio)
+  {% cut "asyncio" %}
 
   ```python
   import ydb
@@ -145,6 +137,16 @@
       ...
 
   asyncio.run(ydb_init())
+  ```
+
+  {% endcut %}
+
+  ```python
+  import ydb
+
+  with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
+    driver.wait(timeout=5)
+    ...
   ```
 
 - C# (.NET)

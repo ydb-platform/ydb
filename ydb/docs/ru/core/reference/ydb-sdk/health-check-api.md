@@ -22,6 +22,10 @@
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
+- Python
+
+  Функциональность на данный момент не поддерживается.
+
 {% endlist %}
 
 ## Параметры вызова {#call-parameters}
@@ -63,6 +67,10 @@
       FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
   };
   ```
+
+- Python
+
+  Функциональность на данный момент не поддерживается.
 
 {% endlist %}
 

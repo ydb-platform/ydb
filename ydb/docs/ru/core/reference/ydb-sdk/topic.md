@@ -137,6 +137,46 @@
   }.Build();
   ```
 
+- Python
+
+  Для работы с топиками создаётся экземпляр драйвера {{ ydb-short-name }}. Клиент топиков доступен через атрибут `topic_client` и используется для управляющих операций с топиками, а также создания писателей и читателей.
+
+  {% cut "asyncio" %}
+
+  ```python
+  import os
+  import ydb
+
+  driver_config = ydb.DriverConfig(
+      endpoint=os.environ["YDB_ENDPOINT"],
+      database=os.environ["YDB_DATABASE"],
+  )
+  async with ydb.aio.Driver(driver_config) as driver:
+      await driver.wait(timeout=5)
+      # driver.topic_client — клиент для работы с топиками
+      writer = driver.topic_client.writer(topic_path)
+      reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
+  ```
+
+  {% endcut %}
+
+  ```python
+  import os
+  import ydb
+
+  driver_config = ydb.DriverConfig(
+      endpoint=os.environ["YDB_ENDPOINT"],
+      database=os.environ["YDB_DATABASE"],
+  )
+  driver = ydb.Driver(driver_config)
+  driver.wait(timeout=5)
+  # driver.topic_client — клиент для работы с топиками
+  writer = driver.topic_client.writer(topic_path)
+  reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
+  ```
+
+  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
+
 {% endlist %}
 
 ## Управление топиками {#manage}
@@ -182,6 +222,17 @@
 - Python
 
   Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций
+
+  {% cut "asyncio" %}
+
+  ```python
+  await driver.topic_client.create_topic(topic_path,
+      supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP],  # optional
+      min_active_partitions=3,                                     # optional
+  )
+  ```
+
+  {% endcut %}
 
   ```python
   driver.topic_client.create_topic(topic_path,
@@ -274,6 +325,17 @@
 
   Пример изменения списка поддерживаемых кодеков и минимального количества партиций у топика
 
+  {% cut "asyncio" %}
+
+  ```python
+  await driver.topic_client.alter_topic(topic_path,
+      set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP],  # optional
+      set_min_active_partitions=3,                                     # optional
+  )
+  ```
+
+  {% endcut %}
+
   ```python
   driver.topic_client.alter_topic(topic_path,
       set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
@@ -337,6 +399,15 @@
 
 - Python
 
+  {% cut "asyncio" %}
+
+  ```python
+  info = await driver.topic_client.describe_topic(topic_path)
+  print(info)
+  ```
+
+  {% endcut %}
+
   ```python
   info = driver.topic_client.describe_topic(topic_path)
   print(info)
@@ -375,6 +446,14 @@
   ```
 
 - Python
+
+  {% cut "asyncio" %}
+
+  ```python
+  await driver.topic_client.drop_topic(topic_path)
+  ```
+
+  {% endcut %}
 
   ```python
   driver.topic_client.drop_topic(topic_path)
@@ -433,6 +512,14 @@
   ```
 
 - Python
+
+  {% cut "asyncio" %}
+
+  ```python
+  writer = driver.topic_client.writer(topic_path)
+  ```
+
+  {% endcut %}
 
   ```python
   writer = driver.topic_client.writer(topic_path)
@@ -576,6 +663,17 @@
 - Python
 
   Для отправки сообщений можно передавать как просто содержимое сообщения (bytes, str), так и вручную задавать некоторые свойства. Объекты можно передавать по одному или сразу в массиве (list). Метод `write` выполняется асинхронно. Возврат из метода происходит сразу после того как сообщения будут положены во внутренний буфер клиента, обычно это происходит быстро. Ожидание может возникнуть, если внутренний буфер уже заполнен и нужно подождать, пока часть данных будет отправлена на сервер.
+
+  {% cut "asyncio" %}
+
+  ```python
+  writer = driver.topic_client.writer(topic_path)
+  await writer.write("mess")
+  await writer.write(bytes([1, 2, 3]))
+  await writer.write(["mess-1", "mess-2"])
+  ```
+
+  {% endcut %}
 
   ```python
   # Простая отправка сообщений, без явного указания метаданных.
@@ -722,6 +820,20 @@
 
   * `flush()` — дожидается подтверждения для всех сообщений, записанных ранее во внутренний буфер.
   * `write_with_ack(...)` — отправляет сообщение и ждет подтверждение его доставки от сервера. При отправке нескольких сообщений подряд это способ работает медленно.
+
+  {% cut "asyncio" %}
+
+  ```python
+  for mess in messages:
+      await writer.write(mess)
+
+  await writer.flush()
+
+  await writer.write_with_ack(["mess-1", "mess-2"])
+  await writer.write_with_ack("message")
+  ```
+
+  {% endcut %}
 
   ```python
   # Положить несколько сообщений во внутренний буфер, затем дождаться,
@@ -944,6 +1056,15 @@
 
   Для использования функции передачи метаданных создайте объект `TopicWriterMessage` с аргументом `metadata_items`, как показано ниже:
 
+  {% cut "asyncio" %}
+
+  ```python
+  message = ydb.TopicWriterMessage(data="message-data", metadata_items={"meta-key": "meta-value"})
+  await writer.write(message)
+  ```
+
+  {% endcut %}
+
   ```python
   message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
   writer.write(message)
@@ -1020,27 +1141,7 @@
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
-  ```python
-  with ydb.QuerySessionPool(driver) as session_pool:
-
-      def callee(tx: ydb.QueryTxContext):
-          tx_writer: ydb.TopicTxWriter = driver.topic_client.tx_writer(tx, topic)
-
-          for i in range(message_count):
-              result_stream = tx.execute(query=f"select {i} as res;")
-              for result_set in result_stream:
-                  message = str(result_set.rows[0]["res"])
-                  tx_writer.write(ydb.TopicWriterMessage(message))
-                  print(f"Message {message} was written with tx.")
-
-      session_pool.retry_tx_sync(callee)
-  ```
-
-- Python (asyncio)
-
-  Для записи в топик в транзакции необходимо создать транзакционного писателя через вызов `topic_client.tx_writer`. После этого можно отправлять сообщения, как обычно. Закрывать транзакционного писателя не требуется — это происходит автоматически при завершении транзакции.
-
-  В примере ниже нет явного вызова `tx.commit()` — он происходит неявно при успешном завершении лямбды `callee`.
+  {% cut "asyncio" %}
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 
@@ -1058,6 +1159,24 @@
                       print(f"Message {result_set.rows[0]['res']} was written with tx.")
 
       await session_pool.retry_tx_async(callee)
+  ```
+
+  {% endcut %}
+
+  ```python
+  with ydb.QuerySessionPool(driver) as session_pool:
+
+      def callee(tx: ydb.QueryTxContext):
+          tx_writer: ydb.TopicTxWriter = driver.topic_client.tx_writer(tx, topic)
+
+          for i in range(message_count):
+              result_stream = tx.execute(query=f"select {i} as res;")
+              for result_set in result_stream:
+                  message = str(result_set.rows[0]["res"])
+                  tx_writer.write(ydb.TopicWriterMessage(message))
+                  print(f"Message {message} was written with tx.")
+
+      session_pool.retry_tx_sync(callee)
   ```
 
 - Java (sync)
@@ -1229,6 +1348,14 @@
 - Python
 
   Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
+
+  {% cut "asyncio" %}
+
+  ```python
+  reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
+  ```
+
+  {% endcut %}
 
   ```python
   reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
@@ -1484,6 +1611,16 @@
 
 - Python
 
+  {% cut "asyncio" %}
+
+  ```python
+  while True:
+      message = await reader.receive_message()
+      process(message)
+  ```
+
+  {% endcut %}
+
   ```python
   while True:
       message = reader.receive_message()
@@ -1564,6 +1701,16 @@
   ```
 
 - Python
+
+  {% cut "asyncio" %}
+
+  ```python
+  while True:
+      batch = await reader.receive_batch()
+      process(batch)
+  ```
+
+  {% endcut %}
 
   ```python
   while True:
@@ -1649,14 +1796,23 @@
 
   `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
+  {% cut "asyncio" %}
+
+  ```python
+  while True:
+      message = await reader.receive_message()
+      process(message)
+      reader.commit(message)
+  ```
+
+  {% endcut %}
+
   ```python
   while True:
       message = reader.receive_message()
       process(message)
       reader.commit(message)
   ```
-
-  `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
 - Java
 
@@ -1749,6 +1905,17 @@
   По умолчанию `Commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
 - Python
+
+  {% cut "asyncio" %}
+
+  ```python
+  while True:
+      batch = await reader.receive_batch()
+      process(batch)
+      reader.commit(batch)
+  ```
+
+  {% endcut %}
 
   ```python
   while True:
@@ -2063,21 +2230,7 @@
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
-  ```python
-  with driver.topic_client.reader(topic, consumer) as reader:
-      with ydb.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
-
-              def callee(tx: ydb.QueryTxContext):
-                  batch = reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
-
-              session_pool.retry_tx_sync(callee)
-  ```
-
-- Python (asyncio)
-
-  Для чтения сообщений в рамках транзакции следует использовать метод `reader.receive_batch_with_tx`. Он прочитает пакет сообщений и добавит их коммит в транзакцию, при этом отдельно коммитить эти сообщения не требуется. Читателя сообщений можно использовать повторно в разных транзакциях. При этом важно, чтобы порядок коммита транзакций соответствовал порядку получения сообщений от читателя, так как коммиты сообщений в топике должны выполняться строго по порядку - в противном случае транзакция получит ошибку на попытке сделать коммит. Проще всего это сделать, если использовать читателя в цикле.
+  {% cut "asyncio" %}
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 
@@ -2091,6 +2244,20 @@
                   print(f"Message {batch.messages[0].data.decode()} was read with tx.")
 
               await session_pool.retry_tx_async(callee)
+  ```
+
+  {% endcut %}
+
+  ```python
+  with driver.topic_client.reader(topic, consumer) as reader:
+      with ydb.QuerySessionPool(driver) as session_pool:
+          for _ in range(message_count):
+
+              def callee(tx: ydb.QueryTxContext):
+                  batch = reader.receive_batch_with_tx(tx, max_messages=1)
+                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+
+              session_pool.retry_tx_sync(callee)
   ```
 
 - Java (sync)
@@ -2205,6 +2372,17 @@
 
   Специальной обработки не требуется.
 
+  {% cut "asyncio" %}
+
+  ```python
+  while True:
+      batch = await reader.receive_batch()
+      process(batch)
+      reader.commit(batch)
+  ```
+
+  {% endcut %}
+
   ```python
   while True:
     batch = reader.receive_batch()
@@ -2281,6 +2459,23 @@
 - Python
 
   В этом примере обработка сообщений в батче остановится, если в процессе работы партиция будет отобрана. Такая оптимизация требует дополнительного кода на клиенте. В простых случаях, когда обработка отобранных партиций не является проблемой, ее можно не применять.
+
+  {% cut "asyncio" %}
+
+  ```python
+  def process_batch(batch):
+      for message in batch.messages:
+          if not batch.alive:
+              return False
+          process(message)
+      return True
+
+  batch = await reader.receive_batch()
+  if process_batch(batch):
+      reader.commit(batch)
+  ```
+
+  {% endcut %}
 
   ```python
   def process_batch(batch):
@@ -2434,7 +2629,7 @@
     "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
     "github.com/ydb-platform/ydb-go-sdk/v3/topic/topictypes"
   )
-  
+
   // режим полной поддержки (обработка автомасштабирования в SDK, по умолчанию)
   reader, err := db.Topic().StartReader(
     "consumer",
@@ -2453,6 +2648,25 @@
 - Python
 
   Включение автомасштабирования топика во время его создания производится с помощью аргумента `auto_partitioning_settings` у `create_topic`:
+
+  {% cut "asyncio" %}
+
+  ```python
+  await driver.topic_client.create_topic(
+      topic,
+      consumers=[consumer],
+      min_active_partitions=10,
+      max_active_partitions=100,
+      auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+          strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+          up_utilization_percent=80,
+          down_utilization_percent=20,
+          stabilization_window=datetime.timedelta(seconds=300),
+      ),
+  )
+  ```
+
+  {% endcut %}
 
   ```python
       driver.topic_client.create_topic(
@@ -2514,6 +2728,19 @@
 - Python
 
   Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
+
+  {% cut "asyncio" %}
+
+  ```python
+  await driver.topic_client.commit_offset(
+      topic_path,
+      consumer_name,
+      partition_id,
+      offset,
+  )
+  ```
+
+  {% endcut %}
 
   ```python
   driver.topic_client.commit_offset(

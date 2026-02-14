@@ -142,11 +142,31 @@
 
 - Python
 
-  {% include [auth-access-token](../../_includes/python/auth-access-token.md) %}
+  {% cut "sqlalchemy" %}
 
-- Python (asyncio)
+  ```python
+  import os
+  import sqlalchemy as sa
+
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": {"token": os.environ["YDB_TOKEN"]}
+      }
+  )
+  with engine.connect() as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
 
   {% include [auth-access-token](../../_includes/python/async/auth-access-token.md) %}
+
+  {% endcut %}
+
+  {% include [auth-access-token](../../_includes/python/auth-access-token.md) %}
 
 - C# (.NET)
 

@@ -116,36 +116,32 @@
 
 - Python
 
-  ```python
-    import os
-    import ydb
-
-    with ydb.Driver(
-        connection_string=os.environ["YDB_CONNECTION_STRING"],
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=5)
-        ...
-  ```
-
-- Python (asyncio)
+  {% cut "sqlalchemy" %}
 
   ```python
-    import os
-    import ydb
-    import asyncio
+  import os
+  import sqlalchemy as sa
+  import ydb
 
-    async def ydb_init():
-        async with ydb.aio.Driver(
-            endpoint=os.environ["YDB_ENDPOINT"],
-            database=os.environ["YDB_DATABASE"],
-            credentials=ydb.credentials_from_env_variables(),
-        ) as driver:
-            await driver.wait()
-            ...
-
-    asyncio.run(ydb_init())
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": ydb.credentials_from_env_variables()
+      }
+  )
+  with engine.connect() as connection:
+      result = connection.execute(sa.text("SELECT 1"))
   ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
+
+  {% include [auth-env](../../_includes/python/async/auth-env.md) %}
+
+  {% endcut %}
+
+  {% include [auth-env](../../_includes/python/auth-env.md) %}
 
 - PHP
 

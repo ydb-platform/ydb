@@ -9,11 +9,19 @@
 
 namespace NKvVolumeStress {
 
+struct TRunStatsSnapshot {
+    THashMap<TString, ui64> ActionRuns;
+    THashMap<TString, ui64> ErrorsByKind;
+    TVector<TString> SampleErrors;
+    ui64 TotalErrors = 0;
+};
+
 class TRunStats {
 public:
     void RecordAction(const TString& actionName);
     void RecordError(const TString& kind, const TString& message);
     ui64 GetTotalErrors() const;
+    TRunStatsSnapshot Snapshot() const;
     void PrintSummary() const;
 
 private:

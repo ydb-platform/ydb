@@ -4,6 +4,9 @@ SRCS(
     main.cpp
     utils.cpp
     run_stats.cpp
+    run_display.cpp
+    run_tui.cpp
+    scroller.cpp
     data_storage.cpp
     keyvalue_client.cpp
     keyvalue_client_v1.cpp
@@ -12,6 +15,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/ftxui
     contrib/libs/grpc
     contrib/libs/protobuf
     library/cpp/getopt

@@ -1,4 +1,5 @@
 #include "keyvalue_client.h"
+#include "run_display.h"
 #include "run_stats.h"
 #include "types.h"
 #include "utils.h"
@@ -268,6 +269,10 @@ TOptions ParseOptions(int argc, char** argv) {
         .NoArgument()
         .SetFlag(&options.Verbose);
 
+    opts.AddLongOption("no-tui", "Disable TUI even in interactive terminal, use plain text updates")
+        .NoArgument()
+        .SetFlag(&options.NoTui);
+
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
     (void)parseResult;
 
@@ -312,6 +317,9 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     }
 
     {
+        TRunDisplayController display(stats, options.Duration, options.NoTui, options.Verbose);
+        display.Start();
+
         TVector<std::thread> threads;
         TVector<std::unique_ptr<TWorker>> workers;
 
@@ -328,6 +336,8 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
         for (auto& thread : threads) {
             thread.join();
         }
+
+        display.Stop();
     }
 
     {

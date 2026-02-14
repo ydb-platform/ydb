@@ -15,6 +15,7 @@ struct TOptions {
     TString ConfigName;
     bool AllowErrors = false;
     bool Verbose = false;
+    bool NoTui = false;
 };
 
 struct TKeyInfo {

@@ -27,26 +27,26 @@ ui64 TRunStats::GetTotalErrors() const {
     return TotalErrors_;
 }
 
+TRunStatsSnapshot TRunStats::Snapshot() const {
+    std::lock_guard lock(Mutex_);
+
+    TRunStatsSnapshot snapshot;
+    snapshot.ActionRuns = ActionRuns_;
+    snapshot.ErrorsByKind = ErrorsByKind_;
+    snapshot.SampleErrors = SampleErrors_;
+    snapshot.TotalErrors = TotalErrors_;
+    return snapshot;
+}
+
 void TRunStats::PrintSummary() const {
-    THashMap<TString, ui64> actionRuns;
-    THashMap<TString, ui64> errorsByKind;
-    TVector<TString> sampleErrors;
-    ui64 totalErrors = 0;
+    const TRunStatsSnapshot snapshot = Snapshot();
 
-    {
-        std::lock_guard lock(Mutex_);
-        actionRuns = ActionRuns_;
-        errorsByKind = ErrorsByKind_;
-        sampleErrors = SampleErrors_;
-        totalErrors = TotalErrors_;
-    }
-
-    TVector<std::pair<TString, ui64>> sortedActions(actionRuns.begin(), actionRuns.end());
+    TVector<std::pair<TString, ui64>> sortedActions(snapshot.ActionRuns.begin(), snapshot.ActionRuns.end());
     std::sort(sortedActions.begin(), sortedActions.end(), [](const auto& l, const auto& r) {
         return l.first < r.first;
     });
 
-    TVector<std::pair<TString, ui64>> sortedErrors(errorsByKind.begin(), errorsByKind.end());
+    TVector<std::pair<TString, ui64>> sortedErrors(snapshot.ErrorsByKind.begin(), snapshot.ErrorsByKind.end());
     std::sort(sortedErrors.begin(), sortedErrors.end(), [](const auto& l, const auto& r) {
         return l.first < r.first;
     });
@@ -66,11 +66,11 @@ void TRunStats::PrintSummary() const {
         }
     }
 
-    Cout << "Total errors: " << totalErrors << Endl;
+    Cout << "Total errors: " << snapshot.TotalErrors << Endl;
 
-    if (!sampleErrors.empty()) {
+    if (!snapshot.SampleErrors.empty()) {
         Cout << "Sample errors:" << Endl;
-        for (const auto& error : sampleErrors) {
+        for (const auto& error : snapshot.SampleErrors) {
             Cout << "  " << error << Endl;
         }
     }

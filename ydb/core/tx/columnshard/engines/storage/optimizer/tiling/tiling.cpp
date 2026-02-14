@@ -25,7 +25,7 @@ struct TSettings {
     unsigned MaxLevels = 10;
     unsigned ExpectedPortionCount = 1;
     ui64 ExpectedPortionSize = 4 * 1024 * 1024; // 4MiB
-    unsigned MaxAccumulateCount = 10;
+    unsigned MaxAccumulateCount = 11;
     ui64 MaxAccumulatePortionSize = 512 * 1024; // 512KiB
     TDuration MaxAccumulateTime = TDuration::Seconds(60);
     ui64 MaxCompactionBytes = 256 * 1024 * 1024;

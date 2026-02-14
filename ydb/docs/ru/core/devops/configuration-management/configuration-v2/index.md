@@ -11,6 +11,7 @@
 - [DSL конфигурации кластера](dynamic-config-selectors.md)
 - [Параметры конфигурации](config-settings.md)
 - [{#T}](cluster-expansion.md)
+- [{#T}](state-storage-reconfiguration.md)
 - [{#T}](state-storage-move.md)
 - [{#T}](static-group-move.md)
 - [Замена FQDN узла](replacing-nodes.md)

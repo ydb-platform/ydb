@@ -25,7 +25,7 @@ namespace NKvVolumeStress {
 
 using namespace ftxui;
 
-constexpr auto DisplayUpdateInterval = std::chrono::seconds(1);
+constexpr auto DisplaySleepStep = std::chrono::milliseconds(100);
 
 bool IsInteractiveTerminal() {
 #ifdef _win_
@@ -223,7 +223,7 @@ void TInitialLoadDisplayController::Loop() {
         }
 
         for (int i = 0; i < 10 && !StopRequested_.load(std::memory_order_relaxed); ++i) {
-            std::this_thread::sleep_for(DisplayUpdateInterval / 10);
+            std::this_thread::sleep_for(DisplaySleepStep);
         }
     }
 }

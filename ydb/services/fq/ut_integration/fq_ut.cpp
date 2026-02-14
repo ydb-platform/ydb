@@ -28,7 +28,7 @@ using namespace FederatedQuery;
 using namespace NYdb::NFq;
 
 namespace {
-    const ui32 Retries = 10;
+    const ui32 Retries = 20;
 
     void PrintProtoIssues(const NProtoBuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>& protoIssues) {
         if (protoIssues.empty()) {
@@ -811,10 +811,17 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
             Fq::Private::GetTaskRequest req;
             req.set_owner_id("owner_id");
             req.set_host("host");
-            auto result = client.GetTask(std::move(req)).ExtractValueSync();
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            result.GetIssues().PrintTo(Cerr);
+            const auto result = DoWithRetryOnRetCode([&]() {
+                auto r = req;
+                auto result = client.GetTask(std::move(r)).ExtractValueSync();
+                if (result.GetStatus() == EStatus::TRANSPORT_UNAVAILABLE)) {
+                    return false;
+                }
+                result.GetIssues().PrintTo(Cerr);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                return true;
+            }, TRetryOptions(Retries));
+            UNIT_ASSERT_C(result, "GetTask did not succeed within the time limit");
         }
     }
 

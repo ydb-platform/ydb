@@ -4,6 +4,8 @@
 #include <util/system/types.h>
 
 #include <array>
+#include <atomic>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <util/generic/vector.h>
@@ -58,27 +60,43 @@ private:
         ui64 MaxMs = 0;
     };
 
-    static size_t FindLatencyBucket(ui64 latencyMs);
-    static void RecordLatencySample(TLatencyHistogram& histogram, ui64 latencyMs);
-    static TLatencyPercentiles BuildPercentiles(const TLatencyHistogram& histogram);
-    static void IncrementNamedCounter(TVector<TNamedCounter>& counters, const TString& name);
+    struct TAtomicLatencyHistogram {
+        TAtomicLatencyHistogram();
 
-    struct TActionStats {
-        ui64 Runs = 0;
-        ui64 Errors = 0;
-        ui64 ReadBytes = 0;
-        ui64 WriteBytes = 0;
-        TLatencyHistogram Latency;
+        std::array<std::atomic<ui64>, LatencyBucketCount> Buckets;
+        std::atomic<ui64> MaxMs = 0;
     };
 
-    bool IsValidActionIndex(ui32 actionIndex) const;
+    struct TAtomicActionStats {
+        TAtomicActionStats();
+
+        std::atomic<ui64> Runs = 0;
+        std::atomic<ui64> ReadBytes = 0;
+        std::atomic<ui64> WriteBytes = 0;
+        TAtomicLatencyHistogram Latency;
+    };
+
+    static size_t FindLatencyBucket(ui64 latencyMs);
+    static void RecordLatencySample(TAtomicLatencyHistogram& histogram, ui64 latencyMs);
+    static TLatencyHistogram BuildHistogramSnapshot(const TAtomicLatencyHistogram& histogram);
+    static TLatencyPercentiles BuildPercentiles(const TLatencyHistogram& histogram);
+    static void IncrementNamedCounter(TVector<TNamedCounter>& counters, const TString& name);
+    static void UpdateMax(std::atomic<ui64>& maxValue, ui64 candidate);
+
+    bool IsValidActionIndex(ui32 actionIndex) const {
+        return actionIndex < ActionCount_;
+    }
 
 private:
-    mutable std::mutex Mutex_;
+    const ui32 ActionCount_ = 0;
     TVector<TString> ActionNames_;
-    TVector<TActionStats> ActionStats_;
+
+    std::unique_ptr<TAtomicActionStats[]> ActionStats_;
+    TAtomicLatencyHistogram TotalLatency_;
+
+    mutable std::mutex ErrorMutex_;
     TVector<TNamedCounter> ErrorsByKind_;
-    TLatencyHistogram TotalLatency_;
+    TVector<ui64> ActionErrors_;
     TVector<TString> SampleErrors_;
     ui64 TotalErrors_ = 0;
 };

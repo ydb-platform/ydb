@@ -36,9 +36,8 @@ protected:
         }
     };
 
-
 public:
-    TTargetWithStreamStats(TInstant startTime);
+    explicit TTargetWithStreamStats(TInstant startTime);
 
     bool UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) override;
     void RemoveWorker(ui64 workerId) override;

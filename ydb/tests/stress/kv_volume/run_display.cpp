@@ -75,6 +75,7 @@ void TRunDisplayController::Start() {
     PrevSnapshot_ = Stats_.Snapshot();
     HasPrevSnapshot_ = true;
     TotalActionsHistory_.clear();
+    ActionRunsHistory_.clear();
 
     Mode_ = DetectMode();
     if (Mode_ == EDisplayMode::None) {
@@ -179,10 +180,27 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
             prevCount = it->second;
         }
 
+        auto& actionHistory = ActionRunsHistory_[name];
+        actionHistory.emplace_back(now, count);
+        while (!actionHistory.empty() && now - actionHistory.front().first > CurrentOpsRateWindow) {
+            actionHistory.pop_front();
+        }
+
         TRunDisplayData::TActionRow row;
         row.Name = name;
         row.TotalRuns = count;
         row.RunsPerSecond = HasPrevSnapshot_ ? CalcRate(count, prevCount, intervalSeconds) : 0.0;
+        if (actionHistory.size() >= 2) {
+            const auto& [windowStartTs, windowStartCount] = actionHistory.front();
+            const double windowSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(now - windowStartTs).count();
+            row.RunsPerSecond = CalcRate(count, windowStartCount, windowSeconds);
+        }
+
+        const auto latencyIt = snapshot.LatencyByKind.find(name);
+        if (latencyIt != snapshot.LatencyByKind.end()) {
+            row.Latency = latencyIt->second;
+        }
+
         data->Actions.push_back(std::move(row));
     }
     std::sort(data->Actions.begin(), data->Actions.end(), [](const auto& l, const auto& r) {

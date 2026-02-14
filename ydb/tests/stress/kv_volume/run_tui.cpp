@@ -84,9 +84,13 @@ Element TRunTui::BuildActionsPart() {
 
     Elements rows;
     rows.push_back(hbox({
-        text("Action") | size(WIDTH, EQUAL, 24),
-        text("Total") | align_right | size(WIDTH, EQUAL, 12),
-        text("ops/s") | align_right | size(WIDTH, EQUAL, 12),
+        text("Action") | size(WIDTH, EQUAL, 18),
+        text("Total") | align_right | size(WIDTH, EQUAL, 10),
+        text("ops/s") | align_right | size(WIDTH, EQUAL, 10),
+        text("p50") | align_right | size(WIDTH, EQUAL, 8),
+        text("p90") | align_right | size(WIDTH, EQUAL, 8),
+        text("p99") | align_right | size(WIDTH, EQUAL, 8),
+        text("p100") | align_right | size(WIDTH, EQUAL, 8),
     }));
 
     if (data->Actions.empty()) {
@@ -95,11 +99,19 @@ Element TRunTui::BuildActionsPart() {
         for (const auto& action : data->Actions) {
             std::stringstream rateSs;
             rateSs << std::fixed << std::setprecision(1) << action.RunsPerSecond;
+            const TString p50 = action.Latency.Samples > 0 ? ToString(action.Latency.P50Ms) : "-";
+            const TString p90 = action.Latency.Samples > 0 ? ToString(action.Latency.P90Ms) : "-";
+            const TString p99 = action.Latency.Samples > 0 ? ToString(action.Latency.P99Ms) : "-";
+            const TString p100 = action.Latency.Samples > 0 ? ToString(action.Latency.P100Ms) : "-";
 
             rows.push_back(hbox({
-                text(action.Name) | size(WIDTH, EQUAL, 24),
-                text(ToString(action.TotalRuns)) | align_right | size(WIDTH, EQUAL, 12),
-                text(rateSs.str()) | align_right | size(WIDTH, EQUAL, 12),
+                text(action.Name) | size(WIDTH, EQUAL, 18),
+                text(ToString(action.TotalRuns)) | align_right | size(WIDTH, EQUAL, 10),
+                text(rateSs.str()) | align_right | size(WIDTH, EQUAL, 10),
+                text(p50) | align_right | size(WIDTH, EQUAL, 8),
+                text(p90) | align_right | size(WIDTH, EQUAL, 8),
+                text(p99) | align_right | size(WIDTH, EQUAL, 8),
+                text(p100) | align_right | size(WIDTH, EQUAL, 8),
             }));
         }
     }

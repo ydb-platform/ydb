@@ -25,6 +25,7 @@ struct TRunDisplayData {
         TString Name;
         ui64 TotalRuns = 0;
         double RunsPerSecond = 0.0;
+        TLatencyPercentiles Latency;
     };
 
     struct TErrorRow {
@@ -79,6 +80,7 @@ private:
     TRunStatsSnapshot PrevSnapshot_;
     bool HasPrevSnapshot_ = false;
     std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>> TotalActionsHistory_;
+    THashMap<TString, std::deque<std::pair<std::chrono::steady_clock::time_point, ui64>>> ActionRunsHistory_;
 
     std::unique_ptr<TRunTui> Tui_;
 };

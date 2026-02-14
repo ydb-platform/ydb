@@ -179,7 +179,7 @@ void TRunStats::PrintSummary(double elapsedSeconds) const {
     }
 
     if (!sortedLatencies.empty()) {
-        Cout << "Latency by kind (ms):" << Endl;
+        Cout << "Latency by action (ms):" << Endl;
         for (const auto& [kind, lat] : sortedLatencies) {
             if (lat.Samples == 0) {
                 continue;

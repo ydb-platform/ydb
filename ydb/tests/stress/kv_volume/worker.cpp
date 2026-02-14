@@ -18,9 +18,6 @@ namespace {
 
 constexpr ui32 DefaultActionMaxInFlight = 5;
 const TString InitialActionName = "__initial__";
-const TString ReadLatencyKind = "read";
-const TString WriteLatencyKind = "write";
-const TString DeleteLatencyKind = "delete";
 
 ui64 ToLatencyMs(std::chrono::steady_clock::duration duration) {
     const ui64 latencyUs = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
@@ -267,7 +264,7 @@ bool TWorker::ExecuteWriteCommand(const TString& actionName, const NKikimrKeyVal
     const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
 
     if (actionName != InitialActionName) {
-        Stats_.RecordLatency(WriteLatencyKind, latencyMs);
+        Stats_.RecordLatency(actionName, latencyMs);
     }
 
     if (!ok) {
@@ -291,6 +288,7 @@ void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NK
         return;
     }
 
+    const TString actionName = action.name();
     const TVector<TString> sources = ResolveSources(action);
     const auto keys = DataStorage_.PickKeys(sources, readCommand.count(), false);
 
@@ -307,7 +305,7 @@ void TWorker::ExecuteReadCommand(const NKikimrKeyValue::Action& action, const NK
         const auto startedAt = std::chrono::steady_clock::now();
         const bool ok = Client_->Read(VolumePath_, info.PartitionId, key, offset, readCommand.size(), &value, &error);
         const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
-        Stats_.RecordLatency(ReadLatencyKind, latencyMs);
+        Stats_.RecordLatency(actionName, latencyMs);
 
         if (!ok) {
             Stats_.RecordError("read_failed", error);
@@ -337,6 +335,7 @@ void TWorker::ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const 
         return;
     }
 
+    const TString actionName = action.name();
     const TVector<TString> sources = ResolveSources(action);
     const auto keys = DataStorage_.PickKeys(sources, deleteCommand.count(), true);
 
@@ -345,7 +344,7 @@ void TWorker::ExecuteDeleteCommand(const NKikimrKeyValue::Action& action, const 
         const auto startedAt = std::chrono::steady_clock::now();
         const bool ok = Client_->DeleteKey(VolumePath_, info.PartitionId, key, &error);
         const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
-        Stats_.RecordLatency(DeleteLatencyKind, latencyMs);
+        Stats_.RecordLatency(actionName, latencyMs);
 
         if (!ok) {
             Stats_.RecordError("delete_failed", error);

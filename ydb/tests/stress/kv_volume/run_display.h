@@ -39,6 +39,7 @@ struct TRunDisplayData {
     ui64 TotalActions = 0;
     ui64 TotalErrors = 0;
     double ActionsPerSecond = 0.0;
+    double AverageActionsPerSecond = 0.0;
 
     TVector<TActionRow> Actions;
     TVector<TErrorRow> Errors;

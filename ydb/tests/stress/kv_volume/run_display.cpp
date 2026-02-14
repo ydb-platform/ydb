@@ -124,6 +124,7 @@ void TRunDisplayController::Loop() {
 std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::chrono::steady_clock::time_point now) {
     const TRunStatsSnapshot snapshot = Stats_.Snapshot();
     const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - StartTs_);
+    const double elapsedSecondsFloat = std::chrono::duration_cast<std::chrono::duration<double>>(now - StartTs_).count();
     const ui32 elapsedSeconds = static_cast<ui32>(std::max<i64>(0, elapsed.count()));
     const ui32 boundedElapsed = std::min(elapsedSeconds, DurationSeconds_);
     const ui32 remaining = DurationSeconds_ > boundedElapsed ? DurationSeconds_ - boundedElapsed : 0;
@@ -140,6 +141,7 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
 
     const double intervalSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(now - PrevTs_).count();
     const double totalRate = HasPrevSnapshot_ ? CalcRate(totalActions, prevTotalActions, intervalSeconds) : 0.0;
+    const double avgRate = elapsedSecondsFloat > 0.0 ? static_cast<double>(totalActions) / elapsedSecondsFloat : 0.0;
 
     auto data = std::make_shared<TRunDisplayData>();
     data->DurationSeconds = DurationSeconds_;
@@ -151,6 +153,7 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
     data->TotalActions = totalActions;
     data->TotalErrors = snapshot.TotalErrors;
     data->ActionsPerSecond = totalRate;
+    data->AverageActionsPerSecond = avgRate;
     data->SampleErrors = snapshot.SampleErrors;
 
     data->Actions.reserve(snapshot.ActionRuns.size());
@@ -196,7 +199,8 @@ void TRunDisplayController::PrintText(const TRunDisplayData& data) const {
          << std::fixed << std::setprecision(1) << data.ProgressPercent << "%";
 
     line << " | total_ops=" << data.TotalActions
-         << " ops/s=" << std::fixed << std::setprecision(1) << data.ActionsPerSecond
+         << " ops/s(cur)=" << std::fixed << std::setprecision(1) << data.ActionsPerSecond
+         << " ops/s(avg)=" << std::fixed << std::setprecision(1) << data.AverageActionsPerSecond
          << " errors=" << data.TotalErrors;
 
     if (!data.Actions.empty()) {

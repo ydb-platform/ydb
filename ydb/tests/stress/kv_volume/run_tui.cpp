@@ -50,7 +50,8 @@ Element TRunTui::BuildHeaderPart() {
 
     std::stringstream metricsSs;
     metricsSs << "total ops: " << data->TotalActions
-              << "   ops/s: " << std::fixed << std::setprecision(1) << data->ActionsPerSecond
+              << "   ops/s(cur): " << std::fixed << std::setprecision(1) << data->ActionsPerSecond
+              << "   ops/s(avg): " << std::fixed << std::setprecision(1) << data->AverageActionsPerSecond
               << "   errors: " << data->TotalErrors;
 
     return window(text("kv_volume workload"),

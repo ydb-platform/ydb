@@ -791,7 +791,7 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
                 auto r = req;
                 auto result = client.PingTask(std::move(r)).ExtractValueSync();
                 result.GetIssues().PrintTo(Cerr);
-                if (result.GetStatus() == EStatus::TRANSPORT_UNAVAILABLE)) {
+                if (result.GetStatus() == EStatus::TRANSPORT_UNAVAILABLE) {
                     return false;
                 }
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -814,7 +814,7 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
             const auto result = DoWithRetryOnRetCode([&]() {
                 auto r = req;
                 auto result = client.GetTask(std::move(r)).ExtractValueSync();
-                if (result.GetStatus() == EStatus::TRANSPORT_UNAVAILABLE)) {
+                if (result.GetStatus() == EStatus::TRANSPORT_UNAVAILABLE) {
                     return false;
                 }
                 result.GetIssues().PrintTo(Cerr);

@@ -66,13 +66,37 @@ TLatencyPercentiles TRunStats::BuildPercentiles(const TLatencyHistogram& histogr
     const auto valueAtRank = [&histogram](ui64 rank) -> ui64 {
         ui64 cumulative = 0;
         for (size_t i = 0; i < histogram.Buckets.size(); ++i) {
-            cumulative += histogram.Buckets[i];
-            if (cumulative >= rank) {
-                if (i < LatencyBucketUpperBoundsMs.size()) {
-                    return LatencyBucketUpperBoundsMs[i];
-                }
-                return histogram.MaxMs;
+            const ui64 bucketSamples = histogram.Buckets[i];
+            if (bucketSamples == 0) {
+                continue;
             }
+
+            const ui64 cumulativeBefore = cumulative;
+            cumulative += bucketSamples;
+            if (cumulative < rank) {
+                continue;
+            }
+
+            const double lowerBoundMs = i == 0
+                ? 0.0
+                : static_cast<double>(LatencyBucketUpperBoundsMs[i - 1]);
+            const double bucketUpperBoundMs = i < LatencyBucketUpperBoundsMs.size()
+                ? static_cast<double>(LatencyBucketUpperBoundsMs[i])
+                : static_cast<double>(histogram.MaxMs);
+            const double upperBoundMs = std::min(bucketUpperBoundMs, static_cast<double>(histogram.MaxMs));
+
+            if (upperBoundMs <= lowerBoundMs) {
+                return std::min<ui64>(static_cast<ui64>(upperBoundMs), histogram.MaxMs);
+            }
+
+            const double rankInBucket = static_cast<double>(rank - cumulativeBefore);
+            const double bucketFraction = std::clamp(
+                rankInBucket / static_cast<double>(bucketSamples),
+                0.0,
+                1.0);
+            const double interpolatedMs = lowerBoundMs + (upperBoundMs - lowerBoundMs) * bucketFraction;
+            const ui64 estimatedMs = static_cast<ui64>(std::llround(interpolatedMs));
+            return std::min(estimatedMs, histogram.MaxMs);
         }
         return histogram.MaxMs;
     };

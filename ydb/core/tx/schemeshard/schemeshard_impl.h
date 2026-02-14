@@ -10,6 +10,7 @@
 #include "schemeshard_build_index.h"
 #include "schemeshard_domain_links.h"
 #include "schemeshard_export.h"
+#include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
 #include "schemeshard_info_types.h"
 #include "schemeshard_login_helper.h"
@@ -157,6 +158,31 @@ private:
 
         void OnTimeout(const TShardIdx& shardIdx) override {
             Self->OnBorrowedCompactionTimeout(shardIdx);
+        }
+
+    private:
+        TSchemeShard* Self;
+    };
+
+    using TForcedCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
+        TShardIdx,
+        TFifoQueue<TShardIdx>,
+        TEvPrivate::EvRunForcedCompaction,
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
+        NKikimrServices::TActivity::SCHEMESHARD_FORCED_COMPACTION>;
+
+    class TForcedCompactionStarter : public TForcedCompactionQueue::IStarter {
+    public:
+        TForcedCompactionStarter(TSchemeShard* self)
+            : Self(self)
+        { }
+
+        NOperationQueue::EStartStatus StartOperation(const TShardIdx& shardIdx) override {
+            return Self->StartForcedCompaction(shardIdx);
+        }
+
+        void OnTimeout(const TShardIdx& shardIdx) override {
+            Self->OnForcedCompactionTimeout(shardIdx);
         }
 
     private:
@@ -338,6 +364,15 @@ public:
 
     TBorrowedCompactionStarter BorrowedCompactionStarter;
     TBorrowedCompactionQueue* BorrowedCompactionQueue = nullptr;
+
+    TForcedCompactionStarter ForcedCompactionStarter;
+    TForcedCompactionQueue* ForcedCompactionQueue = nullptr;
+
+    enum class ECompactionType : ui64 {
+        Unspecified = 0,
+        Background = 1,
+        Forced = 2,
+    };
 
     TBackgroundCleaningStarter BackgroundCleaningStarter;
     TBackgroundCleaningQueue* BackgroundCleaningQueue = nullptr;
@@ -542,6 +577,10 @@ public:
 
     void ConfigureBorrowedCompactionQueue(
         const NKikimrConfig::TCompactionConfig::TBorrowedCompactionConfig& config,
+        const TActorContext &ctx);
+
+    void ConfigureForcedCompactionQueue(
+        const NKikimrConfig::TCompactionConfig::TForcedCompactionConfig& config,
         const TActorContext &ctx);
 
     void ConfigureBackgroundCleaningQueue(
@@ -1026,6 +1065,7 @@ public:
     NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardCompactionInfo& info);
     void OnBackgroundCompactionTimeout(const TShardCompactionInfo& info);
     void UpdateBackgroundCompactionQueueMetrics();
+    void HandleBackgroundCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
 
     NOperationQueue::EStartStatus StartBorrowedCompaction(const TShardIdx& shardIdx);
     void OnBorrowedCompactionTimeout(const TShardIdx& shardIdx);
@@ -1694,6 +1734,47 @@ public:
     void SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
 
     // } //NIndexBuilder
+
+    // namespace NForcedCompaction {
+    THashMap<ui64, TForcedCompactionInfo::TPtr> ForcedCompactions;
+    THashMap<TPathId, TForcedCompactionInfo::TPtr> InProgressForcedCompactionsByTable;
+    THashMap<TShardIdx, TForcedCompactionInfo::TPtr> InProgressForcedCompactionsByShard;
+
+    TFifoQueue<TPathId> ForcedCompactionTablesQueue;
+    THashMap<TPathId, TFifoQueue<TShardIdx>> ForcedCompactionShardsByTable;
+
+    TVector<std::pair<TShardIdx, TForcedCompactionInfo::TPtr>> DoneShardsToPersist;
+    ui32 ForcedCompactionPersistBatchSize = 100;
+    TInstant ForcedCompactionProgressStartTime;
+    TDuration ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(100);
+
+    struct TForcedCompaction {
+        struct TTxCreate;
+        struct TTxProgress;
+    };
+
+    void AddForcedCompaction(const TForcedCompactionInfo::TPtr& forcedCompactionInfo);
+    void AddForcedCompactionShard(const TShardIdx& shardId, const TForcedCompactionInfo::TPtr& forcedCompactionInfo);
+
+    void PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
+    void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<TShardIdx>& shardsToCompact);
+    void PersistForcedCompactionDoneShard(NIceDb::TNiceDb& db, const TShardIdx& shardId);
+
+    void FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedCompaction& compaction, const TForcedCompactionInfo& forcedCompactionInfo);
+
+    void CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx);
+    void ProcessForcedCompactionQueues();
+
+    void EnqueueForcedCompaction(const TShardIdx& shardIdx);
+    NOperationQueue::EStartStatus StartForcedCompaction(const TShardIdx& shardIdx);
+    void OnForcedCompactionTimeout(const TShardIdx& shardIdx);
+    void HandleForcedCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
+
+    NTabletFlatExecutor::ITransaction* CreateTxCreateForcedCompaction(TEvForcedCompaction::TEvCreateRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressForcedCompaction();
+
+    void Handle(TEvForcedCompaction::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
+    // } // NForcedCompaction
 
     // namespace NCdcStreamScan {
     struct TCdcStreamScan {

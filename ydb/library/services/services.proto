@@ -1148,5 +1148,6 @@ message TActivity {
         NBS2_TEST_WORKLOAD = 678;
         BS_LOAD_DDISK_WRITE = 679;
         BS_LOAD_DDISK_READ = 680;
+        SCHEMESHARD_FORCED_COMPACTION = 681;
     };
 };

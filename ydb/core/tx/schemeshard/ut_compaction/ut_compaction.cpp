@@ -3,6 +3,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <algorithm>
 #include <random>
@@ -126,7 +127,7 @@ void WriteDataSpreadKeys(
     }
 }
 
-void CreateTableWithData(
+void CreateTable(
     TTestActorRuntime &runtime,
     TTestEnv& env,
     const char* path,
@@ -150,6 +151,18 @@ void CreateTableWithData(
             }
         )____", name, shardsCount, shardsCount, shardsCount));
     env.TestWaitNotification(runtime, txId, schemeshardId);
+}
+
+void CreateTableWithData(
+    TTestActorRuntime &runtime,
+    TTestEnv& env,
+    const char* path,
+    const char* name,
+    ui32 shardsCount,
+    ui64& txId,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
+{
+    CreateTable(runtime, env, path, name, shardsCount, txId, schemeshardId);
 
     WriteData(runtime, name, 0, 100);
 }
@@ -441,14 +454,7 @@ void TestBackgroundCompaction(
     }
 }
 
-ui64 TestServerless(
-    TTestActorRuntime& runtime,
-    TTestEnv& env,
-    bool enableServerless)
-{
-    ui64 txId = 100;
-    ui64 schemeshardId = TTestTxConfig::SchemeShard;
-
+ui64 SetupServerless(ui64 schemeshardId, TTestActorRuntime& runtime, TTestEnv& env, ui64& txId) {
     TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", R"(
         Name: "Shared"
     )");
@@ -523,6 +529,18 @@ ui64 TestServerless(
             UniformPartitionsCount: 2
         )____");
     env.TestWaitNotification(runtime, txId, schemeshardId);
+    return schemeshardId;
+}
+
+ui64 TestServerless(
+    TTestActorRuntime& runtime,
+    TTestEnv& env,
+    bool enableServerless)
+{
+    ui64 txId = 100;
+    ui64 schemeshardId = TTestTxConfig::SchemeShard;
+
+    schemeshardId = SetupServerless(schemeshardId, runtime, env, txId);
 
     // turn on background compaction
     EnableBackgroundCompactionViaRestart(runtime, env, schemeshardId, enableServerless);
@@ -1769,5 +1787,176 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT(queue.Empty());
     }
 };
+
+Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
+
+    void Setup(TTestBasicRuntime& runtime, TTestEnv& env) {
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldCompact) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
+        
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+
+        for (auto shard: info.Shards) {
+            CheckShardBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
+            CheckShardNotBorrowedCompacted(runtime, info.UserTable, shard, info.OwnerId);
+        }
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldCompactAfterRestart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        size_t compactionResultCount = 0;
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCompactTableResult: {
+                ev.Reset();
+                ++compactionResultCount;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            default:
+                return originalObserver(ev);
+            }
+        });
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, txId);
+        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
+        
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(compactionResultCount, 1);
+
+        // reset observer
+        runtime.SetObserverFunc(originalObserver);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        for (auto shard: info.Shards) {
+            CheckShardBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
+            CheckShardNotBorrowedCompacted(runtime, info.UserTable, shard, info.OwnerId);
+        }
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldCompactMultipleTables) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTable(runtime, env, "/MyRoot", "Simple1", 2, ++txId);
+        WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets);
+        WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets + 1);
+        auto info1 = GetPathInfo(runtime, "/MyRoot/Simple1");
+        
+        CreateTable(runtime, env, "/MyRoot", "Simple2", 2, ++txId);
+        WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 2);
+        WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 3);
+        auto info2 = GetPathInfo(runtime, "/MyRoot/Simple2");
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+
+        for (auto shard: info1.Shards) {
+            CheckShardBackgroundCompacted(runtime, info1.UserTable, shard, info1.OwnerId);
+        }
+        for (auto shard: info2.Shards) {
+            CheckShardBackgroundCompacted(runtime, info2.UserTable, shard, info2.OwnerId);
+        }
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldCompactMultipleTimes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
+        
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+
+        for (auto shard: info.Shards) {
+            auto count = GetCompactionStats(
+                runtime,
+                info.UserTable,
+                shard,
+                info.OwnerId).BackgroundRequestCount;
+
+            UNIT_ASSERT_VALUES_EQUAL(count, 1);
+        }
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+
+        for (auto shard: info.Shards) {
+            auto count = GetCompactionStats(
+                runtime,
+                info.UserTable,
+                shard,
+                info.OwnerId).BackgroundRequestCount;
+
+            UNIT_ASSERT_VALUES_EQUAL(count, 2);
+        }
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldNotCompactSameTableSimultaneously) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
+
+        // block result, so first compaction will stuck in progress
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(ShouldNotCompactServerless) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 100;
+        ui64 schemeshardId = SetupServerless(TTestTxConfig::SchemeShard, runtime, env, txId);
+
+        auto info = GetPathInfo(runtime, "/MyRoot/User/Simple", schemeshardId);
+        UNIT_ASSERT(!info.Shards.empty());
+
+        TestCompact(runtime, schemeshardId, ++txId, "/MyRoot/User", "Simple", Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+}
 
 } // NKikimr::NSchemeShard

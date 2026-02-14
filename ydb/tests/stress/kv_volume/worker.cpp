@@ -16,7 +16,7 @@ using namespace std::chrono_literals;
 
 namespace {
 
-constexpr ui32 DefaultActionMaxInFlight = 5;
+constexpr ui32 DefaultActionMaxInFlight = 30;
 const TString InitialActionName = "__initial__";
 
 ui64 ToLatencyMs(std::chrono::steady_clock::duration duration) {

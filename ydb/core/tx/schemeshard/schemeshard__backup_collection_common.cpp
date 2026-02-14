@@ -1,5 +1,21 @@
 #include "schemeshard__backup_collection_common.h"
 
+namespace NKikimr::NSchemeShard {
+
+bool isSupportedIndex(TPathId pathId, const TOperationContext& context) {
+    auto indexInfo = context.SS->Indexes.at(pathId);
+    return indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
+            indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+}
+
+bool isSupportedIndex(TPathId pathId, const TSchemeShard* ss) {
+    auto indexInfo = ss->Indexes.at(pathId);
+    return indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
+            indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+}
+
+} // namespace NKikimr::NSchemeShard
+
 namespace NKikimr::NSchemeShard::NBackup {
 
 std::optional<NBackup::TBackupCollectionPaths> ResolveBackupCollectionPaths(
@@ -171,9 +187,7 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                 }
 
                 auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
-                    continue;
-                }
+                if (!isSupportedIndex(childPathId, context)) continue;
 
                 // Add required PARENT directory path for index backup:
                 // {targetDir}/__ydb_backup_meta/indexes/{table_path}
@@ -185,6 +199,16 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                     relativeItemPath
                 });
                 collectionPaths.emplace(indexBackupParentPath);
+                if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                    TString vectorIndexDir = JoinPath({
+                        targetDir,
+                        "__ydb_backup_meta",
+                        "indexes",
+                        relativeItemPath,
+                        childName
+                    });
+                    collectionPaths.emplace(vectorIndexDir);
+                }
             }
         }
     }

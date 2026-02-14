@@ -254,44 +254,58 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
 
                 // Get index info and filter for global sync only
                 auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
-                    continue;
-                }
+                if (!isSupportedIndex(childPathId, context)) continue;
+
 
                 // Get index implementation table (single child of index)
                 auto indexPath = TPath::Init(childPathId, context.SS);
-                Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
-                auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
+                for (const auto& [implTableName, implTablePathId]: indexPath.Base()->GetChildren()) {
 
-                // Build relative path to index impl table (relative to working dir)
-                TString indexImplTableRelPath = JoinPath({relativeItemPath, childName, implTableName});
+                    // Build relative path to index impl table (relative to working dir)
+                    TString indexImplTableRelPath = JoinPath({relativeItemPath, childName, implTableName});
 
-                // Create AlterContinuousBackup for index impl table
-                NKikimrSchemeOp::TModifyScheme modifyScheme;
-                modifyScheme.SetWorkingDir(tx.GetWorkingDir());
-                modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
-                modifyScheme.SetInternal(true);
+                    // Create AlterContinuousBackup for index impl table
+                    NKikimrSchemeOp::TModifyScheme modifyScheme;
+                    modifyScheme.SetWorkingDir(tx.GetWorkingDir());
+                    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
+                    modifyScheme.SetInternal(true);
 
-                auto& cb = *modifyScheme.MutableAlterContinuousBackup();
-                cb.SetTableName(indexImplTableRelPath);  // Relative path: table1/index1/indexImplTable
+                    auto& cb = *modifyScheme.MutableAlterContinuousBackup();
+                    cb.SetTableName(indexImplTableRelPath);  // Relative path: table1/index1/indexImplTable
 
-                auto& ib = *cb.MutableTakeIncrementalBackup();
-                // Destination: {backup_collection}/{timestamp}_inc/__ydb_backup_meta/indexes/{table_path}/{index_name}
-                TString dstPath = JoinPath({
-                    tx.GetBackupIncrementalBackupCollection().GetName(),
-                    tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
-                    "__ydb_backup_meta",
-                    "indexes",
-                    relativeItemPath,  // Relative table path (e.g., "table1")
-                    childName          // Index name (e.g., "index1")
-                });
-                ib.SetDstPath(dstPath);
+                    auto& ib = *cb.MutableTakeIncrementalBackup();
 
-                TPathId stream;
-                if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result, stream)) {
-                    return result;
+                    TString dstPath;
+
+                    if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                        dstPath = JoinPath({
+                            tx.GetBackupIncrementalBackupCollection().GetName(),
+                            tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
+                            "__ydb_backup_meta",
+                            "indexes",
+                            relativeItemPath,
+                            childName,
+                            implTableName
+                        });
+                    } else {
+                        dstPath = JoinPath({
+                            tx.GetBackupIncrementalBackupCollection().GetName(),
+                            tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
+                            "__ydb_backup_meta",
+                            "indexes",
+                            relativeItemPath,
+                            childName
+                        });
+                    }
+
+                    ib.SetDstPath(dstPath);
+
+                    TPathId stream;
+                    if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result, stream)) {
+                        return result;
+                    }
+                    streams.push_back(stream);
                 }
-                streams.push_back(stream);
             }
         }
     }

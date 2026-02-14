@@ -849,7 +849,9 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         if (!tablePath.IsInsideTableIndexPath()) {
             checks.IsCommonSensePath();
         } else {
-            if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
+            const auto& indexPath = tablePath.Parent();
+            if (!indexPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal) &&
+                !indexPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree)) {
                 return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
                     "Cannot add changefeed to index table");
             }

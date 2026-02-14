@@ -899,7 +899,7 @@ public:
             std::exit(1);
         }
 
-        CheckPathForImport(ConnectionConfig, Config.Path);
+        CheckPathForImport(ConnectionConfig, Config);
 
         Config.SetDisplay();
         CalculateApproximateDataSize();
@@ -974,11 +974,14 @@ public:
 
         std::vector<std::thread> threads;
         threads.reserve(threadCount);
+        const auto whByProcess = Config.WarehouseCount / Config.ProcessCount + (Config.WarehouseCount % Config.ProcessCount ? 1 : 0);
+        const auto whByThread = whByProcess / threadCount + (whByProcess % threadCount ? 1 : 0);
+        const auto whPrStart = Config.ProcessIndex * whByProcess + 1;
+        const auto whPrEnd = std::min<int>((Config.ProcessIndex + 1) * whByProcess, Config.WarehouseCount);
 
         for (size_t threadId = 0; threadId < threadCount; ++threadId) {
-            int whStart = threadId * Config.WarehouseCount / threadCount + 1;
-            int whEnd = (threadId + 1) * Config.WarehouseCount / threadCount;
-
+            const int whStart = whPrStart + threadId * whByThread;
+            const int whEnd = std::min<int>(whPrStart + (threadId + 1) * whByThread - 1, whPrEnd);
             threads.emplace_back([threadId, &drivers, driverCount, this, whStart, whEnd]() {
                 google::protobuf::Arena arena;
                 TReallyFastRng32 fastRng(threadId * TInstant::Now().Seconds());
@@ -995,6 +998,8 @@ public:
         NOperation::TOperationClient operationClient(drivers[0]);
 
         Clock::time_point lastIndexProgressCheck = Clock::time_point::min();
+        const auto customersCount = Config.WarehouseCount * DISTRICT_COUNT * CUSTOMERS_PER_DISTRICT;
+        const auto openOrdersCount = customersCount;
 
         while (true) {
             if (GetGlobalInterruptSource().stop_requested()) {
@@ -1022,6 +1027,19 @@ public:
                 // Check if all indexed ranges are loaded and start index creation
                 size_t indexedRangesLoaded = LoadState.IndexedRangesLoaded.load(std::memory_order_relaxed);
                 if (indexedRangesLoaded >= threadCount) {
+                    if (Config.ProcessIndex > 0) {
+                        LoadState.State = TImportState::ESUCCESS;
+                        lastIndexProgressCheck = now;
+                        break;
+                    } else if (Config.ProcessCount > 1) {
+                        if (now < lastIndexProgressCheck + INDEX_PROGRESS_CHECK_INTERVAL) {
+                            break;
+                        }
+                        if (GetTableSize(drivers.front(), Config.Path, TABLE_OORDER) < openOrdersCount || GetTableSize(drivers.front(), Config.Path, TABLE_CUSTOMER) < customersCount) {
+                            lastIndexProgressCheck = now;
+                            break;
+                        }
+                    }
                     CreateIndices(drivers[0], Config.Path, LoadState, Log.get());
                     for (const auto& state: LoadState.IndexBuildStates) {
                         if (state.Id.GetKind() == TOperation::TOperationId::UNUSED) {

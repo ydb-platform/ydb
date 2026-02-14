@@ -48,6 +48,8 @@ struct TRunConfig {
     void SetDisplay();
 
     int WarehouseCount = DEFAULT_WAREHOUSE_COUNT;
+    ui32 ProcessIndex = 0;
+    ui32 ProcessCount = 1;
     TDuration WarmupDuration = {};
     TDuration RunDuration = DEFAULT_RUN_DURATION;
 

@@ -109,8 +109,6 @@ bool TThroughputThrottlerConfig::operator==(const NConcurrency::TThroughputThrot
 
 void TPrefetchingThrottlerConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("enable", &TThis::Enable)
-        .Default(true);
     registrar.Parameter("target_rps", &TThis::TargetRps)
         .Default(1.0)
         .GreaterThan(1e-3);

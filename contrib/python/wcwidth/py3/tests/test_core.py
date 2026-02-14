@@ -1,5 +1,6 @@
 """Core tests for wcwidth module."""
 # std imports
+import sys
 import importlib.metadata
 
 # 3rd party
@@ -7,6 +8,9 @@ import pytest
 
 # local
 import wcwidth
+
+_wcwidth_module = sys.modules['wcwidth.wcwidth']
+_WIDTH_FAST_PATH_MIN_LEN = _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN
 
 
 def test_package_version():
@@ -202,7 +206,7 @@ def test_balinese_script():
               "\u1B2E"    # Category 'Lo', EAW 'N' -- BALINESE LETTER LA
               "\u1B44")   # Category 'Mc', EAW 'N' -- BALINESE ADEG ADEG
     expect_length_each = (1, 1, 1, 0)
-    expect_length_phrase = 3
+    expect_length_phrase = 4
 
     # exercise,
     length_each = tuple(map(wcwidth.wcwidth, phrase))
@@ -211,6 +215,13 @@ def test_balinese_script():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+
+    # verify width() parse mode also handles Mc correctly
+    assert wcwidth.width(phrase) == expect_length_phrase
+
+    # standalone Mc has zero width
+    assert wcwidth.wcswidth("\u1B44") == 0
+    assert wcwidth.width("\u1B44") == 0
 
 
 def test_kr_jamo():
@@ -302,8 +313,8 @@ def test_devanagari_script():
               "\u093F")   # MatraL, Category 'Mc', East Asian Width property 'N' -- DEVANAGARI VOWEL SIGN I
     # 23107-terminal-suppt.pdf suggests wcwidth.wcwidth should return (2, 0, 0, 1)
     expect_length_each = (1, 0, 1, 0)
-    # I believe the final width *should* be 3.
-    expect_length_phrase = 2
+    # wcswidth detects Mc following base, adding +1 for the spacing mark
+    expect_length_phrase = 3
 
     # exercise,
     length_each = tuple(map(wcwidth.wcwidth, phrase))
@@ -312,6 +323,7 @@ def test_devanagari_script():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+    assert wcwidth.width(phrase) == expect_length_phrase
 
 
 def test_tamil_script():
@@ -323,8 +335,8 @@ def test_tamil_script():
     # 23107-terminal-suppt.pdf suggests wcwidth.wcwidth should return (3, 0, 0, 4)
     expect_length_each = (1, 0, 1, 0)
 
-    # I believe the final width should be about 5 or 6.
-    expect_length_phrase = 2
+    # wcswidth detects Mc following base, adding +1 for the spacing mark
+    expect_length_phrase = 3
 
     # exercise,
     length_each = tuple(map(wcwidth.wcwidth, phrase))
@@ -333,6 +345,7 @@ def test_tamil_script():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+    assert wcwidth.width(phrase) == expect_length_phrase
 
 
 def test_kannada_script():
@@ -345,8 +358,8 @@ def test_kannada_script():
               "\u0cc8")   # MatraUR, Category 'Mc', East Asian Width property 'N' -- KANNADA VOWEL SIGN AI
     # 23107-terminal-suppt.pdf suggests should be (2, 0, 3, 1)
     expect_length_each = (1, 0, 1, 0)
-    # I believe the correct final width *should* be 3 or 4.
-    expect_length_phrase = 2
+    # wcswidth detects Mc following base, adding +1 for the spacing mark
+    expect_length_phrase = 3
 
     # exercise,
     length_each = tuple(map(wcwidth.wcwidth, phrase))
@@ -355,6 +368,7 @@ def test_kannada_script():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+    assert wcwidth.width(phrase) == expect_length_phrase
 
 
 def test_kannada_script_2():
@@ -377,6 +391,50 @@ def test_kannada_script_2():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+    assert wcwidth.width(phrase) == expect_length_phrase
+
+
+def test_bengali_nukta_mc():
+    # Mc following Mn (Nukta) is still counted as spacing mark.
+    #
+    # Discovered via UDHR Bengali text where wrap() produced lines exceeding the requested width.
+    # The root cause was that width() only recognized a Spacing Combining Mark (Mc) when it was
+    # *immediately* adjacent to the base character (index == last_base + 1).
+    #
+    # In Bengali, a Nukta (U+09BC, category Mn) commonly sits between the consonant and the vowel
+    # sign, so the Mc vowel sign was skipped and measured as zero instead of one.
+    #
+    # The nukta between consonant and vowel sign does not break the combining sequence, so the Mc
+    # must still be counted.
+    phrase = "\u09AF\u09BC\u09C7"
+    assert wcwidth.wcwidth("\u09C7") == 0
+    assert wcwidth.wcswidth(phrase) == 2
+    assert wcwidth.width(phrase) == 2
+
+
+@pytest.mark.parametrize("repeat", [1, _WIDTH_FAST_PATH_MIN_LEN])
+def test_mc_width_consistency(repeat):
+    # width(), wcswidth(), and per-grapheme width sums must all agree.
+    #
+    # The repeat parameter ensures both the short (parse) and long (fast) code
+    # paths of width() are exercised.  At repeat=1 the phrases are short enough
+    # to go through character-by-character parse mode.  At repeat=_WIDTH_FAST_PATH_MIN_LEN
+    # every phrase exceeds the threshold and takes the fast path that delegates
+    # to wcswidth().
+    phrases = [
+        "\u0915\u094D\u0937\u093F",
+        "\u0b95\u0bcd\u0bb7\u0bcc",
+        "\u0cb0\u0ccd\u0c9d\u0cc8",
+        "\u0cb0\u0cbc\u0ccd\u0c9a",
+        "\u09AF\u09BC\u09C7",
+        "\u09B9\u09AF\u09BC\u09C7\u099B\u09C7",
+        "\u0915\u09BE\u0999\u09CD\u0996\u09BE",
+    ]
+    for phrase in phrases:
+        text = phrase * repeat
+        assert wcwidth.width(text) == wcwidth.wcswidth(text)
+        grapheme_sum = sum(wcwidth.width(g) for g in wcwidth.iter_graphemes(text))
+        assert wcwidth.width(text) == grapheme_sum
 
 
 def test_soft_hyphen():

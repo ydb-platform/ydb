@@ -141,6 +141,8 @@ def test_wide_unicode_graphemes(input_str, expected):
 
 
 @pytest.mark.skipif(NARROW_ONLY, reason="requires wide Unicode")
+@pytest.mark.skipif(not os.path.exists(os.path.join(os.path.dirname(__file__), 'GraphemeBreakTest.txt')),
+                    reason="GraphemeBreakTest.txt is missing; run bin/update-tables.py")
 @pytest.mark.parametrize(("input_str", "expected"), read_grapheme_break_test())
 def test_unicode_grapheme_break_test(input_str, expected):
     """Validate against official Unicode GraphemeBreakTest.txt."""
@@ -227,6 +229,8 @@ def test_iter_graphemes_reverse_unicode(input_str, expected):
 
 
 @pytest.mark.skipif(NARROW_ONLY, reason="requires wide Unicode")
+@pytest.mark.skipif(not os.path.exists(os.path.join(os.path.dirname(__file__), 'GraphemeBreakTest.txt')),
+                    reason="GraphemeBreakTest.txt is missing; run bin/update-tables.py")
 @pytest.mark.parametrize(("input_str", "expected"), read_grapheme_break_test())
 def test_grapheme_roundtrip_consistency(input_str, expected):
     """Forward and reverse iteration produce identical boundaries."""

@@ -10,6 +10,7 @@ IF (OS_LINUX)
     SRCS(
         aio_linux.cpp
         file_params_linux.cpp
+        uring_router.cpp
     )
 ELSE(OS_LINUX)
     SRCS(
@@ -54,3 +55,7 @@ SRCS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

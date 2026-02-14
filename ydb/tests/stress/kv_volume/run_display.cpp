@@ -21,7 +21,7 @@ namespace NKvVolumeStress {
 
 namespace {
 
-constexpr auto DisplaySleepStep = std::chrono::milliseconds(100);
+constexpr auto DisplaySleepStep = std::chrono::milliseconds(20);
 constexpr auto CurrentOpsRateWindow = std::chrono::seconds(5);
 
 bool IsInteractiveTerminal() {

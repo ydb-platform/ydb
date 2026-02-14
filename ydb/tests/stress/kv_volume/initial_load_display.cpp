@@ -25,7 +25,7 @@ namespace NKvVolumeStress {
 
 using namespace ftxui;
 
-constexpr auto DisplaySleepStep = std::chrono::milliseconds(100);
+constexpr auto DisplaySleepStep = std::chrono::milliseconds(20);
 
 bool IsInteractiveTerminal() {
 #ifdef _win_

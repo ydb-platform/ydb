@@ -124,7 +124,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
 
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
     if (!tableInfoPtr)
-        return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist."};
+        return {NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist."};
 
     const TUserTable& tableInfo = *tableInfoPtr->Get();
 

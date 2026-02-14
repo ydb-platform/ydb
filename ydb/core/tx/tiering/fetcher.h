@@ -64,6 +64,18 @@ public:
     }
 };
 
+class TEvResolveTierSecrets: public TEventLocal<TEvResolveTierSecrets, NTiers::EvResolveTierSecrets> {
+private:
+    YDB_READONLY_DEF(NTiers::TExternalStorageId, TierId);
+    YDB_READONLY_DEF(NTiers::TTierConfig, Config);
+
+public:
+    TEvResolveTierSecrets(NTiers::TExternalStorageId tierId, NTiers::TTierConfig config)
+        : TierId(std::move(tierId))
+        , Config(std::move(config)) {
+    }
+};
+
 }   // namespace NTiers
 
 class TSchemeObjectWatcher: public TActorBootstrapped<TSchemeObjectWatcher> {

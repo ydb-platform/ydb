@@ -9,10 +9,13 @@
 
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/accessor/validator.h>
+#include <ydb/services/metadata/secret/accessor/snapshot.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
+
+#include <util/generic/vector.h>
 
 #include <functional>
 
@@ -40,9 +43,9 @@ public:
     bool IsReady() const {
         return !!S3Settings;
     }
-    TManager& Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+    bool Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::ISecretAccessor> secrets);
     bool Stop();
-    bool Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+    bool Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::ISecretAccessor> secrets);
 };
 }
 
@@ -119,7 +122,7 @@ private:
 
     using TTierById = THashMap<NTiers::TExternalStorageId, TTierGuard>;
     YDB_READONLY_DEF(TTierById, Tiers);
-    YDB_READONLY_DEF(std::shared_ptr<NMetadata::NSecret::TSnapshot>, Secrets);
+    YDB_READONLY_DEF(std::shared_ptr<NMetadata::NSecret::ISecretAccessor>, Secrets);
 
 private:
     void OnConfigsUpdated(bool notifyShard = true);
@@ -131,14 +134,16 @@ public:
         : TabletId(tabletId)
         , TabletActorId(tabletActorId)
         , ShardCallback(shardCallback)
-        , Secrets(std::make_shared<NMetadata::NSecret::TSnapshot>(TInstant::Zero())) {
+        , Secrets(nullptr) {
     }
     TActorId GetActorId() const;
     void ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers, const bool resubscribeToConfig);
 
-    void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+    void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::ISecretAccessor> secrets);
+    void OnTierSecretsResolved(const NTiers::TExternalStorageId& tierId, const NTiers::TTierConfig& config, std::shared_ptr<NMetadata::NSecret::ISecretAccessor> accessor);
     void UpdateTierConfig(std::optional<NTiers::TTierConfig> config, const NTiers::TExternalStorageId& tierId, const bool notifyShard = true);
     ui64 GetAwaitedConfigsCount() const;
+    TVector<TString> GetRequestedTierConfigPaths() const;
 
     TString DebugString();
 

@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/schemeshard
     ydb/core/tx/tiering/tier
+    ydb/core/tx/tx_proxy
     ydb/core/tablet_flat/protos
     ydb/core/wrappers
     ydb/public/api/protos

@@ -13,6 +13,8 @@ private:
     YDB_READONLY_DEF(TString, ConfigPath);
 
 public:
+    TExternalStorageId() = default;
+
     TExternalStorageId(const TString& path)
         : ConfigPath(CanonizePath(path)) {
     }

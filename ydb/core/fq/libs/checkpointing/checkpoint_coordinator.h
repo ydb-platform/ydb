@@ -203,6 +203,7 @@ private:
 
     THashMap<TActorId, ui64> TaskIds;
     THashSet<ui64> FinishedTasks;
+    ui64 SkippedDueToInFlightLimitCounter = 0;
 };
 
 THolder<NActors::IActor> MakeCheckpointCoordinator(

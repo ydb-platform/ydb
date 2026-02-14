@@ -376,10 +376,12 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvScheduleC
     if (checkpointsInFly >= Settings.GetMaxInflight() || (InitingZeroCheckpoint && !FailedZeroCheckpoint)) {
         CC_LOG_W("Skip schedule checkpoint event since inflight checkpoint limit exceeded: current: " << checkpointsInFly << ", limit: " << Settings.GetMaxInflight());
         Metrics.SkippedDueToInFlightLimit->Inc();
+        ++SkippedDueToInFlightLimitCounter;
         return;
     }
     FailedZeroCheckpoint = false;
-    Metrics.SkippedDueToInFlightLimit->Set(0);
+    Metrics.SkippedDueToInFlightLimit->Sub(SkippedDueToInFlightLimitCounter);
+    SkippedDueToInFlightLimitCounter = 0;
     InitCheckpoint();
 }
 
@@ -658,6 +660,7 @@ void TCheckpointCoordinator::PassAway() {
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.Unsubscribe();
     }
+    Metrics.SkippedDueToInFlightLimit->Sub(SkippedDueToInFlightLimitCounter);
     NActors::TActor<TCheckpointCoordinator>::PassAway();
 }
 

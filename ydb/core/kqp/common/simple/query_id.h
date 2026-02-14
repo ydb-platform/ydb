@@ -22,8 +22,12 @@ struct TKqpQueryId {
     TGUCSettings GUCSettings;
 
 public:
-    TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& text,
-        const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
+    TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& userSid,
+        const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
+        const TGUCSettings& gUCSettings);
+
+    TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId,
+        const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
         const TGUCSettings& gUCSettings);
 
     bool IsSql() const;

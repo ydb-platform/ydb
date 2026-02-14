@@ -34,6 +34,7 @@ struct TGRpcServersWrapper {
     TGRpcServersFactory GrpcServersFactory;
     TMutex Mutex;
     std::atomic<bool> IsDisabled = false;
+    TDuration WarmupTimeout = TDuration::Zero();
 
     TGuard<TMutex> Guard() {
         return TGuard<TMutex>(Mutex);

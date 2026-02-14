@@ -739,7 +739,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         ::Sleep(TDuration::MilliSeconds(100));
 
         auto result = session.ExecuteQuery(R"(--!syntax_v1
-            SELECT NodeId, QueryId, Query, CompilationDuration
+            SELECT NodeId, QueryId, Query, CompilationDurationMs
             FROM `/Root/.sys/compile_cache_queries`
             ORDER BY NodeId DESC, QueryId DESC
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
@@ -1174,7 +1174,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         NYdb::TResultSetParser parser(resultSet);
         while(parser.TryNextRow()) {
-            auto maybeDuration = parser.ColumnParser("CompilationDuration").GetOptionalUint64();
+            auto maybeDuration = parser.ColumnParser("CompilationDurationMs").GetOptionalUint64();
             UNIT_ASSERT(maybeDuration);
             auto duration = maybeDuration.value();
             UNIT_ASSERT_C(duration > 0, "duration is " << duration);
@@ -1219,7 +1219,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 11);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
 
         NYdb::TResultSetParser parser(resultSet);

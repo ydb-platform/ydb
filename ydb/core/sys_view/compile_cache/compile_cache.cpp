@@ -63,7 +63,7 @@ public:
                 return TCell::Make<ui64>(info.GetLastAccessedAt());
             }});
 
-            insert({TSchema::CompilationDuration::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 8
+            insert({TSchema::CompilationDurationMs::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 8
                 return TCell::Make<ui64>(NProtoInterop::CastFromProto(info.GetCompilationDuration()).MilliSeconds());
             }});
 
@@ -74,6 +74,10 @@ public:
             insert({TSchema::Metadata::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 10
                 return TCell(info.GetMetaInfo());
             }});
+
+            insert({TSchema::IsTruncated::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 11
+                return TCell::Make<bool>(info.GetIsTruncated());
+            }});
         }
     };
 
@@ -83,12 +87,22 @@ public:
         : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
         const auto& cellsFrom = TableRange.From.GetCells();
+        if (cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
+            NodeIdFrom = cellsFrom[0].AsValue<ui32>();
+            NodeIdFromInclusive = TableRange.FromInclusive;
+            HasNodeIdFrom = true;
+        }
         if (cellsFrom.size() > 1 && !cellsFrom[1].IsNull()) {
             QueryIdFrom = cellsFrom[1].AsBuf();
             QueryIdFromInclusive = TableRange.FromInclusive;
         }
 
         const auto& cellsTo = TableRange.To.GetCells();
+        if (cellsTo.size() > 0 && !cellsTo[0].IsNull()) {
+            NodeIdTo = cellsTo[0].AsValue<ui32>();
+            NodeIdToInclusive = TableRange.ToInclusive;
+            HasNodeIdTo = true;
+        }
         if (cellsTo.size() > 1 && !cellsTo[1].IsNull()) {
             QueryIdTo = cellsTo[1].AsBuf();
             QueryIdToInclusive = TableRange.ToInclusive;
@@ -147,7 +161,17 @@ private:
         // if feature flag is not set -- return only for self node
         if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
             PendingNodesInitialized = true;
-            PendingNodes.emplace_back(SelfId().NodeId());
+            ui32 selfNodeId = SelfId().NodeId();
+            
+            // Check if self node matches the NodeId filter
+            bool matchFrom = !HasNodeIdFrom || 
+                (NodeIdFromInclusive ? selfNodeId >= NodeIdFrom : selfNodeId > NodeIdFrom);
+            bool matchTo = !HasNodeIdTo || 
+                (NodeIdToInclusive ? selfNodeId <= NodeIdTo : selfNodeId < NodeIdTo);
+            
+            if (matchFrom && matchTo) {
+                PendingNodes.emplace_back(selfNodeId);
+            }
         }
 
         if (AckReceived) {
@@ -164,6 +188,12 @@ private:
         if (!PendingNodesInitialized && !PendingRequest) {
             PendingRequest = true;
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
+            return;
+        }
+
+        // If no pending nodes left after initialization/filtering, return empty result
+        if (PendingNodesInitialized && PendingNodes.empty()) {
+            ReplyEmptyAndDie();
             return;
         }
 
@@ -190,7 +220,7 @@ private:
             req->Record.SetFreeSpace(FreeSpace);
 
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Send request to node, node_id="  << nodeId << ", request: " << req->Record.ShortDebugString());
+                "Send request to node_id=" << nodeId << ", request: " << req->Record.ShortDebugString());
 
             Send(kqpProxyId, req.release(), 0, nodeId);
             PendingRequest = true;
@@ -202,9 +232,18 @@ private:
         if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
             auto& proxies = ev->Get()->ProxyNodes;
             std::sort(proxies.begin(), proxies.end());
-            PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
-            PendingNodesInitialized = true;
+            
+            for (ui32 nodeId : proxies) {
+                bool matchFrom = !HasNodeIdFrom || 
+                    (NodeIdFromInclusive ? nodeId >= NodeIdFrom : nodeId > NodeIdFrom);
+                bool matchTo = !HasNodeIdTo || 
+                    (NodeIdToInclusive ? nodeId <= NodeIdTo : nodeId < NodeIdTo);
+                if (matchFrom && matchTo) {
+                    PendingNodes.push_back(nodeId);
+                }
+            }
         }
+        PendingNodesInitialized = true;
         StartScan();
     }
 
@@ -223,7 +262,9 @@ private:
         if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListCompileCacheQueriesRequest) {
             ui32 nodeId = ev->Cookie;
             LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Received undelivered response for node_id: " << nodeId);
+                "Undelivered response for node_id=" << nodeId);
+            PendingRequest = false;
+            PendingNodes.pop_front();
             StartScan();
         }
     }
@@ -240,6 +281,7 @@ private:
     void ProcessRows() {
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
+
         for(int idx = 0; idx < LastResponse.GetCacheCacheQueries().size(); ++idx) {
             TVector<TCell> cells;
             for (auto extractor : ColumnsExtractors) {
@@ -251,11 +293,13 @@ private:
             cells.clear();
         }
 
+        bool shouldContinue = true;
         if (LastResponse.GetFinished()) {
             PendingNodes.pop_front();
             ContinuationToken = TString();
             if (PendingNodes.empty()) {
                 batch->Finished = true;
+                shouldContinue = false;
             }
 
         } else {
@@ -264,7 +308,7 @@ private:
 
         PendingRequest = false;
         SendBatch(std::move(batch));
-        if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
+        if (AppData()->FeatureFlags.GetEnableCompileCacheView() && shouldContinue) {
             StartScan();
         }
     }
@@ -274,6 +318,13 @@ private:
     }
 
 private:
+    ui32 NodeIdFrom = 0;
+    bool NodeIdFromInclusive = false;
+    bool HasNodeIdFrom = false;
+    ui32 NodeIdTo = 0;
+    bool NodeIdToInclusive = false;
+    bool HasNodeIdTo = false;
+
     TString QueryIdFrom;
     bool QueryIdFromInclusive = false;
     TString QueryIdTo;

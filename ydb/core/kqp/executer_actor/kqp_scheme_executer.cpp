@@ -568,7 +568,7 @@ public:
                 IActor* analyzeActor = new TAnalyzeActor(Database, analyzeOperation.GetTablePath(), columns, analyzePromise);
 
                 auto actorSystem = TActivationContext::ActorSystem();
-                RegisterWithSameMailbox(analyzeActor);
+                AnalyzeActorId = RegisterWithSameMailbox(analyzeActor);
 
                 auto selfId = SelfId();
                 analyzePromise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
@@ -1038,6 +1038,11 @@ public:
             (status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())),
             (issues, issues.ToOneLineString()));
 
+        if (AnalyzeActorId) {
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), issues);
+            Send(AnalyzeActorId, abortEv.Release());
+        }
+
         ReplyErrorAndDie(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
     }
 
@@ -1124,6 +1129,7 @@ private:
     TIntrusivePtr<TUserRequestContext> RequestContext;
     const TMaybe<TString> RequestType;
     const TActorId KqpTempTablesAgentActor;
+    TActorId AnalyzeActorId;
 };
 
 } // namespace

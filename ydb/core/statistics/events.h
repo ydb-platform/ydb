@@ -114,6 +114,8 @@ struct TEvStatistics {
 
         EvFinishTraversal,
 
+        EvAnalyzeCancel,
+
         EvEnd
     };
 
@@ -274,6 +276,12 @@ struct TEvStatistics {
         TEvAnalyzeStatusResponse,
         NKikimrStat::TEvAnalyzeStatusResponse,
         EvAnalyzeStatusResponse>
+    {};
+
+    struct TEvAnalyzeCancel : public TEventPB<
+        TEvAnalyzeCancel,
+        NKikimrStat::TEvAnalyzeCancel,
+        EvAnalyzeCancel>
     {};
 
     struct TEvAnalyzeShard : public TEventPB<

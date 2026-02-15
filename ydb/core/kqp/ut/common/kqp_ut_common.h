@@ -168,21 +168,33 @@ public:
     ~TKikimrRunner() {
         Server->GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 
-        // Now stop the driver after server has stopped accepting connections
+        // Stop the driver to close all client-side gRPC connections
         RunCall([&] { Driver->Stop(true); Driver.Reset(); return false; });
+
+        // In single-threaded mode (UseRealThreads=false), actor system events
+        // need explicit dispatching. After Driver->Stop(), there may be pending
+        // server-side session cleanup events in the actor system mailbox.
+        // Dispatch them so gRPC server doesn't see stale in-progress requests
+        // during shutdown (which would cause it to wait and leak memory).
+        // In real-threads mode, the actor system threads handle this automatically.
+        if (!Server->GetRuntime()->IsRealThreads()) {
+            auto savedTimeout = Server->GetRuntime()->SetDispatchTimeout(TDuration::MilliSeconds(500));
+            try {
+                TDispatchOptions opts;
+                Server->GetRuntime()->DispatchEvents(opts, TDuration::MilliSeconds(500));
+            } catch (const TEmptyEventQueueException&) {
+                // Timeout is expected when there are no more events to dispatch
+            }
+            Server->GetRuntime()->SetDispatchTimeout(savedTimeout);
+        }
 
         if (ThreadPoolStarted_) {
             ThreadPool.Stop();
         }
 
-        // Shutdown gRPC servers first to stop accepting new connections
+        // Shutdown gRPC servers to stop accepting new connections
         // This prevents memory leaks from connections being established during shutdown
         Server->ShutdownGRpc();
-
-        // Wait a bit to ensure gRPC shutdown completes and all server threads finish
-        // The Shutdown() method already waits internally, but we add extra time
-        // to ensure all resources are fully cleaned up
-        Sleep(TDuration::MilliSeconds(100));
 
         if (!WaitHttpGatewayFinalization(CountersRoot)) {
             Cerr << "Failed to finalize http gateway before destruction" << Endl;

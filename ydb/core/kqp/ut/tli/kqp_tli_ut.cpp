@@ -16,7 +16,7 @@ namespace NKikimr {
 namespace NKqp {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb::NQuery;
 
 namespace {
     // ==================== Low-level TLI parsing helpers ====================
@@ -489,30 +489,32 @@ namespace {
         }
     }
 
+    // NQuery-based test context (primary API for all tests)
     struct TTliTestContext {
         TKikimrRunner Kikimr;
-        TTableClient Client;
+        TQueryClient Client;
         TSession Session;
         TSession VictimSession;
 
         TTliTestContext(TStringStream& ss, bool logEnabled = true)
             : Kikimr(MakeKikimrSettings(ss))
-            , Client(Kikimr.GetTableClient())
-            , Session(Client.CreateSession().GetValueSync().GetSession())
-            , VictimSession(Client.CreateSession().GetValueSync().GetSession())
+            , Client(Kikimr.GetQueryClient())
+            , Session(Client.GetSession().GetValueSync().GetSession())
+            , VictimSession(Client.GetSession().GetValueSync().GetSession())
         {
             ConfigureKikimrForTli(Kikimr, logEnabled);
         }
 
         void CreateTable(const TString& tableName) {
-            NKqp::AssertSuccessResult(Session.ExecuteSchemeQuery(
-                Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str())
+            NKqp::AssertSuccessResult(Session.ExecuteQuery(
+                Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str()),
+                TTxControl::NoTx()
             ).GetValueSync());
         }
 
         void SeedTable(const TString& tableName, const TVector<std::pair<ui64, TString>>& rows) {
             for (const auto& [key, value] : rows) {
-                NKqp::AssertSuccessResult(Session.ExecuteDataQuery(
+                NKqp::AssertSuccessResult(Session.ExecuteQuery(
                     Sprintf("UPSERT INTO `%s` (Key, Value) VALUES (%luu, \"%s\")", tableName.c_str(), key, value.c_str()),
                     TTxControl::BeginTx().CommitTx()
                 ).GetValueSync());
@@ -520,7 +522,7 @@ namespace {
         }
 
         void ExecuteQuery(const TString& query) {
-            NKqp::AssertSuccessResult(Session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync());
+            NKqp::AssertSuccessResult(Session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync());
         }
     };
 
@@ -530,8 +532,8 @@ namespace {
         TKikimrRunner Kikimr;
         std::unique_ptr<NYdb::TDriver> VictimDriver;
         std::unique_ptr<NYdb::TDriver> BreakerDriver;
-        std::unique_ptr<TTableClient> VictimClient;
-        std::unique_ptr<TTableClient> BreakerClient;
+        std::unique_ptr<TQueryClient> VictimClient;
+        std::unique_ptr<TQueryClient> BreakerClient;
         std::optional<TSession> VictimSession;
         std::optional<TSession> BreakerSession;
 
@@ -554,34 +556,36 @@ namespace {
             VictimDriver = std::make_unique<NYdb::TDriver>(victimConfig);
             BreakerDriver = std::make_unique<NYdb::TDriver>(breakerConfig);
 
-            VictimClient = std::make_unique<TTableClient>(*VictimDriver);
-            BreakerClient = std::make_unique<TTableClient>(*BreakerDriver);
+            VictimClient = std::make_unique<TQueryClient>(*VictimDriver);
+            BreakerClient = std::make_unique<TQueryClient>(*BreakerDriver);
 
-            VictimSession = VictimClient->CreateSession().GetValueSync().GetSession();
-            BreakerSession = BreakerClient->CreateSession().GetValueSync().GetSession();
+            VictimSession = VictimClient->GetSession().GetValueSync().GetSession();
+            BreakerSession = BreakerClient->GetSession().GetValueSync().GetSession();
         }
 
         void CreateTable(const TString& tableName) {
-            NKqp::AssertSuccessResult(BreakerSession->ExecuteSchemeQuery(
-                Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str())
+            NKqp::AssertSuccessResult(BreakerSession->ExecuteQuery(
+                Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str()),
+                TTxControl::NoTx()
             ).GetValueSync());
         }
 
         void SeedTable(const TString& tableName, const TVector<std::pair<ui64, TString>>& rows) {
             for (const auto& [key, value] : rows) {
-                NKqp::AssertSuccessResult(BreakerSession->ExecuteDataQuery(
+                NKqp::AssertSuccessResult(BreakerSession->ExecuteQuery(
                     Sprintf("UPSERT INTO `%s` (Key, Value) VALUES (%luu, \"%s\")", tableName.c_str(), key, value.c_str()),
                     TTxControl::BeginTx().CommitTx()
                 ).GetValueSync());
             }
         }
-
     };
+
+    // ==================== NQuery transaction helpers ====================
 
     TTransaction BeginReadTx(TSession& session, const TString& queryText) {
         while (true) {
-            auto result = session.ExecuteDataQuery(queryText, TTxControl::BeginTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            auto result = session.ExecuteQuery(queryText, TTxControl::BeginTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             if (FormatResultSetYson(result.GetResultSet(0)) != "[]") {
                 auto tx = result.GetTransaction();
                 UNIT_ASSERT(tx);
@@ -591,35 +595,29 @@ namespace {
     }
 
     std::optional<TTransaction> BeginTx(TSession& session, const TString& query) {
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-        return result.GetTransaction();
-    }
-
-    std::optional<NYdb::NQuery::TTransaction> BeginTx(NYdb::NQuery::TSession& session, const TString& query) {
-        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx()).GetValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         return result.GetTransaction();
     }
 
-    void ExecuteInTx(NYdb::NQuery::TSession& session, NYdb::NQuery::TTransaction& tx, const TString& query) {
-        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::Tx(tx)).GetValueSync();
+    void ExecuteInTx(TSession& session, TTransaction& tx, const TString& query) {
+        auto result = session.ExecuteQuery(query, TTxControl::Tx(tx)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void ExecuteAndCommitTx(TSession& session, TTransaction& tx, const TString& query) {
+        auto result = session.ExecuteQuery(query, TTxControl::Tx(tx).CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     // Execute victim commit and return both status and issues for verification
     std::pair<EStatus, TString> ExecuteVictimCommitWithIssues(TSession& session, TTransaction& tx, const TString& query) {
-        auto result = session.ExecuteDataQuery(query, TTxControl::Tx(tx).CommitTx()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::Tx(tx).CommitTx()).GetValueSync();
         return {result.GetStatus(), result.GetIssues().ToString()};
     }
 
     // Execute a direct commit (no query) and return both status and issues
     std::pair<EStatus, TString> CommitTxWithIssues(TTransaction& tx) {
-        auto result = tx.Commit().ExtractValueSync();
-        return {result.GetStatus(), result.GetIssues().ToString()};
-    }
-
-    std::pair<EStatus, TString> CommitTxWithIssues(NYdb::NQuery::TTransaction& tx) {
         auto result = tx.Commit().GetValueSync();
         return {result.GetStatus(), result.GetIssues().ToString()};
     }
@@ -734,6 +732,33 @@ namespace {
             "no TLI INFO logs expected when TLI logs are disabled");
     }
 
+    // ==================== DataQuery backward-compatibility helpers ====================
+
+    namespace NDataQueryCompat {
+        NYdb::NTable::TTransaction BeginReadTx(NYdb::NTable::TSession& session, const TString& queryText) {
+            while (true) {
+                auto result = session.ExecuteDataQuery(queryText, NYdb::NTable::TTxControl::BeginTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+                if (FormatResultSetYson(result.GetResultSet(0)) != "[]") {
+                    auto tx = result.GetTransaction();
+                    UNIT_ASSERT(tx);
+                    return *tx;
+                }
+            }
+        }
+
+        std::optional<NYdb::NTable::TTransaction> BeginTx(NYdb::NTable::TSession& session, const TString& query) {
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            return result.GetTransaction();
+        }
+
+        std::pair<EStatus, TString> ExecuteVictimCommitWithIssues(NYdb::NTable::TSession& session, NYdb::NTable::TTransaction& tx, const TString& query) {
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::Tx(tx).CommitTx()).ExtractValueSync();
+            return {result.GetStatus(), result.GetIssues().ToString()};
+        }
+    } // namespace NDataQueryCompat
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpTli) {
@@ -789,10 +814,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Breaker: begin tx, write key 1, write key 2, then separate commit
         auto breakerTx = BeginTx(ctx.Session, breakerQueryText);
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
-            breakerQueryText2,
-            TTxControl::Tx(*breakerTx)).GetValueSync());
-        NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
+        ExecuteInTx(ctx.Session, *breakerTx, breakerQueryText2);
+        NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());
 
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
@@ -827,19 +850,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Breaker: 7 queries all to the same table, Key=1 (the breaker) is Q4.
         auto breakerTx = BeginTx(ctx.Session, breakerBefore1);                    // Q1: Key=10
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
-            breakerBefore2, TTxControl::Tx(*breakerTx)).GetValueSync());           // Q2: Key=20
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
-            breakerBefore3, TTxControl::Tx(*breakerTx)).GetValueSync());           // Q3: Key=30
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
-            breakerQueryText, TTxControl::Tx(*breakerTx)).GetValueSync());         // Q4: Key=1 (BREAKER)
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
-            breakerAfter1, TTxControl::Tx(*breakerTx)).GetValueSync());            // Q5: Key=40
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
-            breakerAfter2, TTxControl::Tx(*breakerTx)).GetValueSync());            // Q6: Key=50
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
-            breakerAfter3, TTxControl::Tx(*breakerTx)).GetValueSync());            // Q7: Key=60
-        NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());         // Standalone commit
+        ExecuteInTx(ctx.Session, *breakerTx, breakerBefore2);                     // Q2: Key=20
+        ExecuteInTx(ctx.Session, *breakerTx, breakerBefore3);                     // Q3: Key=30
+        ExecuteInTx(ctx.Session, *breakerTx, breakerQueryText);                   // Q4: Key=1 (BREAKER)
+        ExecuteInTx(ctx.Session, *breakerTx, breakerAfter1);                      // Q5: Key=40
+        ExecuteInTx(ctx.Session, *breakerTx, breakerAfter2);                      // Q6: Key=50
+        ExecuteInTx(ctx.Session, *breakerTx, breakerAfter3);                      // Q7: Key=60
+        NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());             // Standalone commit
 
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
@@ -866,14 +883,14 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim: read tables 1,2,3, then update table 4 (without commit)
         auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
+        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable4);
 
         // Breaker: update tables 5,2,6, then commit (breaks victim's lock on table 2)
         auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable2);
+        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdateTable6);
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
@@ -900,14 +917,14 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim: read tables 1,2,3, then update table 4 (without commit)
         auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
+        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable4);
 
         // Breaker: update tables 5,2,6, then commit separately (breaks victim's lock on table 2)
         auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable2);
+        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdateTable6);
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
@@ -936,16 +953,16 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim: read tables 1,2,3, then update table 4 (without commit)
         auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
+        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable4);
 
         // Breaker: update tables 5,2,6, then standalone COMMIT_TX (no query, just commit)
         auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx)).GetValueSync());
-        // Standalone COMMIT_TX (QUERY_ACTION_COMMIT_TX, unlike CommitTx() which is QUERY_ACTION_EXECUTE_PREPARED)
-        NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
+        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable2);
+        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable6);
+        // Standalone COMMIT_TX (QUERY_ACTION_COMMIT_TX, unlike CommitTx() which is QUERY_ACTION_EXECUTE with commit flag)
+        NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
@@ -1019,8 +1036,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         TTliTestContext ctx(ss);
 
         // Create two victim sessions
-        TSession victim1Session = ctx.Client.CreateSession().GetValueSync().GetSession();
-        TSession victim2Session = ctx.Client.CreateSession().GetValueSync().GetSession();
+        TSession victim1Session = ctx.Client.GetSession().GetValueSync().GetSession();
+        TSession victim2Session = ctx.Client.GetSession().GetValueSync().GetSession();
 
         ctx.CreateTable("/Root/Tenant1/TableA");
         ctx.CreateTable("/Root/Tenant1/TableB");
@@ -1040,7 +1057,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Breaker: write to both tables in a single transaction
         auto breakerTx = BeginTx(ctx.Session, breakerUpdate1);
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdate2, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdate2);
 
         // Both victims try to commit - both should be aborted
         auto [status1, issues1] = ExecuteVictimCommitWithIssues(victim1Session, victim1Tx, victim1CommitText);
@@ -1076,8 +1093,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim reads key 1 AGAIN - triggers InvisibleRowSkips detection
         {
-            auto result = ctx.VictimSession.ExecuteDataQuery(victimRead2Text, TTxControl::Tx(victimTx)).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            auto result = ctx.VictimSession.ExecuteQuery(victimRead2Text, TTxControl::Tx(victimTx)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             victimTx = *result.GetTransaction();
         }
 
@@ -1112,8 +1129,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim: read the conflicting key after breaker commit
         {
-            auto result = ctx.VictimSession.ExecuteDataQuery(victimReadText, TTxControl::Tx(victimTx)).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            auto result = ctx.VictimSession.ExecuteQuery(victimReadText, TTxControl::Tx(victimTx)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             victimTx = *result.GetTransaction();
         }
 
@@ -1152,18 +1169,18 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Step 2: Breaker writes to tables 5, 3, 6 and commits (only Table3 key 1 conflicts)
         auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable3, TTxControl::Tx(*breakerTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable3);
+        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdateTable6);
 
         // Step 3: Victim reads tables 2, 3, 4 after breaker committed
         // Only SELECT Table3 key 1 triggers InvisibleRowSkips (deferred detection)
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
+        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
         {
-            auto result = ctx.VictimSession.ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            auto result = ctx.VictimSession.ExecuteQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             victimTx = *result.GetTransaction();
         }
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable4, TTxControl::Tx(victimTx)).GetValueSync());
+        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable4);
 
         // Step 4: Victim writes and tries to commit -> should be aborted
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimWriteTable3);
@@ -1236,14 +1253,14 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim: read tables 1,2,3, then update table 4 (without commit)
         auto victimTx = BeginReadTx(*ctx.VictimSession, victimSelectTable1);
-        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
+        ExecuteInTx(*ctx.VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(*ctx.VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(*ctx.VictimSession, victimTx, victimUpdateTable4);
 
         // Breaker: update tables 5,2,6, then commit separately (breaks victim's lock on table 2)
         auto breakerTx = BeginTx(*ctx.BreakerSession, breakerUpdateTable5);
-        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+        ExecuteInTx(*ctx.BreakerSession, *breakerTx, breakerUpdateTable2);
+        ExecuteAndCommitTx(*ctx.BreakerSession, *breakerTx, breakerUpdateTable6);
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
@@ -1270,16 +1287,16 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim: read tables 1,2,3, then update table 4 (without commit)
         auto victimTx = BeginReadTx(*ctx.VictimSession, victimSelectTable1);
-        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
+        ExecuteInTx(*ctx.VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(*ctx.VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(*ctx.VictimSession, victimTx, victimUpdateTable4);
 
         // Breaker: update tables 5,2,6, then standalone COMMIT_TX (no query, just commit)
         auto breakerTx = BeginTx(*ctx.BreakerSession, breakerUpdateTable5);
-        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx)).GetValueSync());
+        ExecuteInTx(*ctx.BreakerSession, *breakerTx, breakerUpdateTable2);
+        ExecuteInTx(*ctx.BreakerSession, *breakerTx, breakerUpdateTable6);
         // Standalone COMMIT_TX (QUERY_ACTION_COMMIT_TX)
-        NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
+        NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
@@ -1310,7 +1327,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto victimTx = BeginTx(*ctx.VictimSession, victimUpsertSelect);
 
         // Breaker: write to key 3
-        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(
+        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteQuery(
             breakerUpsert, TTxControl::BeginTx().CommitTx()).GetValueSync());
 
         // Victim: try to commit - should be aborted
@@ -1349,14 +1366,15 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         ConfigureKikimrForTli(kikimr);
 
-        TTableClient client(kikimr.GetTableClient());
-        TSession session = client.CreateSession().GetValueSync().GetSession();
-        TSession victimSession = client.CreateSession().GetValueSync().GetSession();
+        TQueryClient client(kikimr.GetQueryClient());
+        TSession session = client.GetSession().GetValueSync().GetSession();
+        TSession victimSession = client.GetSession().GetValueSync().GetSession();
 
-        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(
-            R"(CREATE TABLE `/Root/Tenant1/TableTracing` (Key Uint64, Value String, PRIMARY KEY (Key));)"
+        NKqp::AssertSuccessResult(session.ExecuteQuery(
+            R"(CREATE TABLE `/Root/Tenant1/TableTracing` (Key Uint64, Value String, PRIMARY KEY (Key));)",
+            TTxControl::NoTx()
         ).GetValueSync());
-        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
+        NKqp::AssertSuccessResult(session.ExecuteQuery(
             "UPSERT INTO `/Root/Tenant1/TableTracing` (Key, Value) VALUES (1u, \"Initial\")",
             TTxControl::BeginTx().CommitTx()
         ).GetValueSync());
@@ -1366,7 +1384,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableTracing` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         auto victimTx = BeginReadTx(victimSession, victimQueryText);
-        NKqp::AssertSuccessResult(session.ExecuteDataQuery(breakerQueryText, TTxControl::BeginTx().CommitTx()).GetValueSync());
+        NKqp::AssertSuccessResult(session.ExecuteQuery(breakerQueryText, TTxControl::BeginTx().CommitTx()).GetValueSync());
         auto [status, issues] = ExecuteVictimCommitWithIssues(victimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
@@ -1409,45 +1427,97 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString tWriteTable1   = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"TWrite1\")";
         const TString externalBreakerWrite = "UPSERT INTO `/Root/Tenant1/Table2` (Key, Value) VALUES (1u, \"ExtBreaker\")";
 
-        // Victim: read table1 (lock on table1) + write table3 (non-read-only tx)
+        // VictimOfT: read table1 (lock on table1) + write table3 (non-read-only tx)
         auto victimOfTTx = BeginReadTx(ctx.VictimSession, victimOfTSelect);
-        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(
-            victimOfTUpdate, TTxControl::Tx(victimOfTTx)).GetValueSync());
+        ExecuteInTx(ctx.VictimSession, victimOfTTx, victimOfTUpdate);
 
-        // T (NQuery API → TKqpBufferWriteActor): read table2, write table1
-        NYdb::NQuery::TQueryClient queryClient(ctx.Kikimr.GetQueryClient());
-        auto tSession = queryClient.GetSession().GetValueSync().GetSession();
-
+        // T: read table2, write table1 (uses TKqpBufferWriteActor path)
+        auto tSession = ctx.Client.GetSession().GetValueSync().GetSession();
         auto tTx = BeginTx(tSession, tSelectTable2);
         UNIT_ASSERT(tTx);
         ExecuteInTx(tSession, *tTx, tWriteTable1);
 
-        // ExternalBreaker: write to table2 → breaks T's lock on table2
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
-            externalBreakerWrite, TTxControl::BeginTx().CommitTx()).GetValueSync());
+        // ExternalBreaker: write to table2 -> breaks T's lock on table2
+        ctx.ExecuteQuery(externalBreakerWrite);
 
-        // T: standalone commit → distributed commit via TKqpBufferWriteActor
-        //   shard1 (table1): T's write breaks Victim's lock → reports BreakerQuerySpanId
-        //   shard2 (table2): T's lock was broken → STATUS_LOCKS_BROKEN
-        //   Result: T is BOTH a breaker (of Victim) and a victim (of ExternalBreaker)
+        // T: standalone commit -> distributed commit via TKqpBufferWriteActor
+        //   shard1 (table1): T's write breaks VictimOfT's lock -> reports BreakerQuerySpanId
+        //   shard2 (table2): T's lock was broken -> STATUS_LOCKS_BROKEN
+        //   Result: T is BOTH a breaker (of VictimOfT) and a victim (of ExternalBreaker)
         auto [tStatus, tIssues] = CommitTxWithIssues(*tTx);
         UNIT_ASSERT_VALUES_EQUAL_C(tStatus, EStatus::ABORTED, tIssues);
 
-        // Verify the ExternalBreaker→T victim pair and record counts.
-        // expectedBreakerCount=2: ExternalBreaker's session + T's session (T broke Victim).
+        // Verify the ExternalBreaker->T victim pair and record counts.
+        // expectedBreakerCount=2: ExternalBreaker's session + T's session (T broke VictimOfT).
         // Without the fix, T's breaker log is missing (count would be 1 instead of 2).
         VerifyTliIssueAndLogs(tIssues, ss, externalBreakerWrite, tSelectTable2,
             /* victimExtraQueryText */ std::nullopt,
             /* expectedBreakerCount */ 2, /* expectedVictimCount */ 1);
 
-        // Additionally verify T's breaker log content (T broke Victim's lock on table1)
+        // Additionally verify T's breaker log content (T broke VictimOfT's lock on table1)
         const auto patterns = MakeTliLogPatterns();
         auto tBreakerQueryText = ExtractQueryText(ss.Str(), patterns.BreakerSessionActorMessagePattern, tWriteTable1);
         UNIT_ASSERT_C(tBreakerQueryText,
             "T should emit breaker TLI log for tWriteTable1 (T is both breaker and victim)");
     }
+
+    // ==================== DataQuery backward-compatibility tests ====================
+    // These tests verify that TLI logging works correctly with the legacy DataQuery API
+    // (NYdb::NTable::TTableClient / ExecuteDataQuery).
+
+    Y_UNIT_TEST(BasicDataQuery) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        ctx.CreateTable("/Root/Tenant1/TableLocks");
+        ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
+
+        // Create DataQuery sessions
+        NYdb::NTable::TTableClient tableClient(ctx.Kikimr.GetTableClient());
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto victimSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
+
+        auto victimTx = NDataQueryCompat::BeginReadTx(victimSession, victimQueryText);
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(breakerQueryText, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync());
+        auto [status, issues] = NDataQueryCompat::ExecuteVictimCommitWithIssues(victimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+    }
+
+    Y_UNIT_TEST(SeparateCommitDataQuery) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        ctx.CreateTable("/Root/Tenant1/TableLocks");
+        ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
+
+        // Create DataQuery sessions
+        NYdb::NTable::TTableClient tableClient(ctx.Kikimr.GetTableClient());
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto victimSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString breakerQueryText2 = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (2u, \"UsualValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
+
+        auto victimTx = NDataQueryCompat::BeginReadTx(victimSession, victimQueryText);
+
+        // Breaker: begin tx, write key 1, write key 2, then separate commit
+        auto breakerTx = NDataQueryCompat::BeginTx(session, breakerQueryText);
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
+            breakerQueryText2, NYdb::NTable::TTxControl::Tx(*breakerTx)).GetValueSync());
+        NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
+
+        auto [status, issues] = NDataQueryCompat::ExecuteVictimCommitWithIssues(victimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+    }
 }
 
 } // namespace NKqp
 } // namespace NKikimr
-

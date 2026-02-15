@@ -208,22 +208,71 @@ bool ValidateConfig(const NKikimrKeyValue::KeyValueVolumeStressLoad& config, TSt
         return false;
     }
 
-    THashSet<TString> actionNames;
+    THashMap<TString, ui32> actionIndexByName;
+    actionIndexByName.reserve(config.actions_size());
+    ui32 actionIndex = 0;
     for (const auto& action : config.actions()) {
         if (action.name().empty()) {
             *error = "action.name must be non-empty";
             return false;
         }
-        if (!actionNames.insert(action.name()).second) {
+        if (!actionIndexByName.emplace(action.name(), actionIndex).second) {
             *error = TStringBuilder() << "duplicate action name: " << action.name();
             return false;
         }
+        ++actionIndex;
     }
 
-    for (const auto& action : config.actions()) {
-        if (action.has_parent_action() && !action.parent_action().empty() && !actionNames.contains(action.parent_action())) {
-            *error = TStringBuilder() << "unknown parent_action: " << action.parent_action();
+    TVector<ui32> dsuParent(config.actions_size());
+    TVector<ui8> dsuRank(config.actions_size(), 0);
+    for (ui32 i = 0; i < dsuParent.size(); ++i) {
+        dsuParent[i] = i;
+    }
+
+    auto dsuFind = [&](const auto& self, ui32 v) -> ui32 {
+        if (dsuParent[v] != v) {
+            dsuParent[v] = self(self, dsuParent[v]);
+        }
+        return dsuParent[v];
+    };
+
+    auto dsuUnion = [&](ui32 a, ui32 b) -> bool {
+        a = dsuFind(dsuFind, a);
+        b = dsuFind(dsuFind, b);
+        if (a == b) {
             return false;
+        }
+        if (dsuRank[a] < dsuRank[b]) {
+            std::swap(a, b);
+        }
+        dsuParent[b] = a;
+        if (dsuRank[a] == dsuRank[b]) {
+            ++dsuRank[a];
+        }
+        return true;
+    };
+
+    for (const auto& action : config.actions()) {
+        if (action.has_parent_action() && !action.parent_action().empty()) {
+            const auto parentIt = actionIndexByName.find(action.parent_action());
+            if (parentIt == actionIndexByName.end()) {
+                *error = TStringBuilder() << "unknown parent_action: " << action.parent_action();
+                return false;
+            }
+
+            const auto childIt = actionIndexByName.find(action.name());
+            if (childIt == actionIndexByName.end()) {
+                *error = TStringBuilder() << "unknown action: " << action.name();
+                return false;
+            }
+            if (!dsuUnion(childIt->second, parentIt->second)) {
+                *error = TStringBuilder()
+                    << "cyclic parent_action dependency detected: "
+                    << action.name()
+                    << " -> "
+                    << action.parent_action();
+                return false;
+            }
         }
 
         if (action.has_action_data_mode()
@@ -237,7 +286,7 @@ bool ValidateConfig(const NKikimrKeyValue::KeyValueVolumeStressLoad& config, TSt
             }
 
             const TString& sourceAction = fromPrev.action_name(0);
-            if (!actionNames.contains(sourceAction)) {
+            if (!actionIndexByName.contains(sourceAction)) {
                 *error = TStringBuilder() << "unknown source action in from_prev_actions: " << sourceAction;
                 return false;
             }

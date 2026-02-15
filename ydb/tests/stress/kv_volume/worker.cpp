@@ -324,6 +324,7 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
         }
 
         ActionPool_->Enqueue([this, actionId, executionContext, actionStatsIndex] {
+            const auto actionStartedAt = std::chrono::steady_clock::now();
             try {
                 ExecuteAction(actionId, executionContext);
             } catch (const std::exception& e) {
@@ -331,6 +332,7 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
             } catch (...) {
                 Stats_.RecordError("action_exception", "unknown exception", actionStatsIndex);
             }
+            Stats_.RecordLatency(actionStatsIndex, ToLatencyMs(std::chrono::steady_clock::now() - actionStartedAt));
 
             RunningByAction_[actionId].Value.fetch_sub(1, std::memory_order_acq_rel);
 
@@ -430,13 +432,7 @@ bool TWorker::ExecuteWriteCommand(
     }
 
     TString error;
-    const auto startedAt = std::chrono::steady_clock::now();
     const bool ok = Client_->Write(VolumePath_, partitionId, pairs, writeCommand.channel(), &error);
-    const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
-
-    if (actionStatsIndex) {
-        Stats_.RecordLatency(*actionStatsIndex, latencyMs);
-    }
 
     if (!ok) {
         Stats_.RecordError("write_failed", error, actionStatsIndex);
@@ -496,10 +492,7 @@ void TWorker::ExecuteReadCommand(
 
         TString value;
         TString error;
-        const auto startedAt = std::chrono::steady_clock::now();
         const bool ok = Client_->Read(VolumePath_, info.PartitionId, key, offset, readCommand.size(), &value, &error);
-        const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
-        Stats_.RecordLatency(actionStatsIndex, latencyMs);
 
         if (!ok) {
             Stats_.RecordError("read_failed", error, actionStatsIndex);
@@ -545,10 +538,7 @@ void TWorker::ExecuteDeleteCommand(
         }
 
         TString error;
-        const auto startedAt = std::chrono::steady_clock::now();
         const bool ok = Client_->DeleteKey(VolumePath_, info.PartitionId, key, &error);
-        const ui64 latencyMs = ToLatencyMs(std::chrono::steady_clock::now() - startedAt);
-        Stats_.RecordLatency(actionStatsIndex, latencyMs);
 
         if (!ok) {
             Stats_.RecordError("delete_failed", error, actionStatsIndex);

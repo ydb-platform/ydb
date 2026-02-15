@@ -229,7 +229,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     }
 
     OpenIdConnectSettings.AccessServiceType = StartupOptions.AccessServiceType;
-    if (!StartupOptions.FederatedCreds()) {
+    if (StartupOptions.FederatedCreds()) {
         OpenIdConnectSettings.SessionServiceTokenName = StartupOptions.GetFederatedCredsJwtTokenName();
     }
     OpenIdConnectSettings.InitRequestTimeoutsByPath();

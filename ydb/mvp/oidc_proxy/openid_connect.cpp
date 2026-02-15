@@ -9,6 +9,7 @@
 
 #include <util/random/entropy.h>
 #include <util/random/random.h>
+#include <ydb/core/util/random.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
 
@@ -288,7 +289,7 @@ TString GetAddressWithoutPort(const TString& address) {
 
 TString GenerateRandomBase64(size_t byteNumber) {
     TString bytes = TString::Uninitialized(byteNumber);
-    EntropyPool().Read(bytes.Detach(), bytes.size());
+    SafeEntropyPoolRead(bytes.Detach(), bytes.size());
     return Base64EncodeUrlNoPadding(bytes);
 }
 

@@ -110,6 +110,9 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
             } catch (const yexception& ex) {
                 ythrow yexception() << "Failed to read federated token from '" << tokenPath << "': " << ex.what();
             }
+            if (JwtToken.empty()) {
+                ythrow yexception() << "Jwt token read from '" << tokenPath << "' is empty";
+            }
         }
     }
 

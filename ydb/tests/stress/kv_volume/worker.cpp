@@ -282,12 +282,16 @@ void TWorker::PeriodicLoop(ui32 actionId, ui32 periodUs, std::chrono::steady_clo
     auto nextRun = std::chrono::steady_clock::now();
     const auto maxSleepChunk = std::chrono::duration_cast<std::chrono::steady_clock::duration>(MaxNanoSleepChunk);
 
+    auto now = std::chrono::steady_clock::now();
     while (!IsStopped() && nextRun < endAt) {
-        ScheduleAction(actionId);
-        nextRun += period;
+        now = std::chrono::steady_clock::now();
+        while (nextRun <= now) {
+            ScheduleAction(actionId);
+            nextRun += period;
+        }
 
         while (!IsStopped()) {
-            const auto now = std::chrono::steady_clock::now();
+            now = std::chrono::steady_clock::now();
             if (now >= nextRun) {
                 break;
             }

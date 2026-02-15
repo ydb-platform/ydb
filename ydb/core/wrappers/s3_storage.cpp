@@ -88,20 +88,29 @@ protected:
         } else {
             errCode = TString(outcome.GetError().GetExceptionName());
         }
-        ++*Counters->GetCounter(errCode, true);
+        ++*Counters->GetNamedCounter("Code", errCode, true);
 
         // Latency
         auto histogram = NMonitoring::ExplicitHistogram({5, 10, 25, 50, 100, 500, 1000, 2500, 5000, 10'000, 30'000, 60'000, 120'000, 180'000, 300'000, 600'000});
-        Counters->GetHistogram("latency_ms", std::move(histogram))->Collect((TInstant::Now() - Start).MilliSeconds());
+        Counters->GetHistogram("LatencyMs", std::move(histogram))->Collect((TInstant::Now() - Start).MilliSeconds());
+
+        if (BytesWritten) {
+            *Counters->GetCounter("BytesWritten") += *BytesWritten;
+        }
+
+        if (BytesRead) {
+            *Counters->GetCounter("BytesRead") += *BytesRead;
+        }
     }
 
 private:
     const TActorSystem* ActorSystem;
     const TActorId Sender;
-    const TInstant Start = TInstant::Now();
-    NMonitoring::TDynamicCounterPtr Counters;
 
 protected:
+    const TInstant Start = TInstant::Now();
+    std::optional<size_t> BytesWritten, BytesRead; // Metrics for some special methods
+    NMonitoring::TDynamicCounterPtr Counters;
     mutable bool Replied = false;
     IRequestContext::TPtr RequestContext;
     const Aws::S3::Model::StorageClass StorageClass;
@@ -173,6 +182,7 @@ public:
         Range = range;
 
         Buffer.resize(range.second - range.first + 1);
+        this->BytesRead = Buffer.size();
         request.SetResponseStreamFactory([this]() {
             return Aws::New<DefaultUnderlyingStream>("StreamContext",
                 MakeUnique<TOutputStreamBuf>("StreamContext", Buffer));
@@ -229,6 +239,7 @@ public:
     const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->MutableRequest();
         Buffer = std::move(ev->Get()->Body);
+        this->BytesWritten = Buffer.size();
         request.SetBody(MakeShared<DefaultUnderlyingStream>("StreamContext",
             MakeUnique<TInputStreamBuf>("StreamContext", Buffer)));
 

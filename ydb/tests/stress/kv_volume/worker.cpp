@@ -55,6 +55,7 @@ TWorker::TWorker(
     ActionIdByName_.reserve(actionsCount);
     ChildrenByActionId_.resize(actionsCount);
     RunningByAction_ = std::make_unique<TAlignedActionCounter[]>(actionsCount);
+    ActionSlotSync_ = std::make_unique<TActionSlotSync[]>(actionsCount);
 
     ui32 actionIndex = 0;
     for (const auto& action : Config_.actions()) {
@@ -252,6 +253,10 @@ bool TWorker::IsStopped() const {
 }
 
 void TWorker::StopSchedulers() {
+    for (ui32 actionId = 0; actionId < Actions_.size(); ++actionId) {
+        ActionSlotSync_[actionId].Cv.notify_all();
+    }
+
     for (auto& scheduler : Schedulers_) {
         if (scheduler.joinable()) {
             scheduler.join();
@@ -282,16 +287,30 @@ void TWorker::PeriodicLoop(ui32 actionId, ui32 periodUs, std::chrono::steady_clo
     auto nextRun = std::chrono::steady_clock::now();
     const auto maxSleepChunk = std::chrono::duration_cast<std::chrono::steady_clock::duration>(MaxNanoSleepChunk);
 
-    auto now = std::chrono::steady_clock::now();
     while (!IsStopped() && nextRun < endAt) {
-        now = std::chrono::steady_clock::now();
-        while (nextRun <= now) {
-            ScheduleAction(actionId);
-            nextRun += period;
+        while (!IsStopped()) {
+            const EScheduleResult result = TryScheduleAction(actionId);
+            if (result == EScheduleResult::Scheduled) {
+                break;
+            }
+
+            if (result != EScheduleResult::LimitReached) {
+                return;
+            }
+
+            if (!WaitForActionSlot(actionId, endAt)) {
+                return;
+            }
         }
 
+        if (IsStopped()) {
+            return;
+        }
+
+        nextRun += period;
+
         while (!IsStopped()) {
-            now = std::chrono::steady_clock::now();
+            const auto now = std::chrono::steady_clock::now();
             if (now >= nextRun) {
                 break;
             }
@@ -308,14 +327,14 @@ void TWorker::PeriodicLoop(ui32 actionId, ui32 periodUs, std::chrono::steady_clo
     }
 }
 
-void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) {
+TWorker::EScheduleResult TWorker::TryScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) {
     if (IsStopped()) {
-        return;
+        return EScheduleResult::Stopped;
     }
 
     if (actionId >= Actions_.size()) {
         Stats_.RecordError("invalid_action_id", TStringBuilder() << "invalid action id " << actionId);
-        return;
+        return EScheduleResult::Failed;
     }
 
     const auto& actionEntry = Actions_[actionId];
@@ -326,7 +345,7 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
     ui32 runningNow = running.load(std::memory_order_relaxed);
     while (true) {
         if (runningNow >= limit) {
-            return;
+            return EScheduleResult::LimitReached;
         }
 
         if (running.compare_exchange_weak(
@@ -349,7 +368,7 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
     } catch (const std::exception& e) {
         rollbackRunning();
         Stats_.RecordError("execution_context_create_failed", e.what(), actionStatsIndex);
-        return;
+        return EScheduleResult::Failed;
     }
 
     ActiveActions_.fetch_add(1, std::memory_order_acq_rel);
@@ -388,8 +407,38 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
         DecreaseActiveActions();
         rollbackRunning();
         Stats_.RecordError("action_enqueue_failed", e.what(), actionStatsIndex);
-        return;
+        return EScheduleResult::Failed;
     }
+
+    return EScheduleResult::Scheduled;
+}
+
+void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) {
+    (void)TryScheduleAction(actionId, std::move(parentContext));
+}
+
+bool TWorker::WaitForActionSlot(ui32 actionId, std::chrono::steady_clock::time_point endAt) {
+    if (actionId >= Actions_.size()) {
+        return false;
+    }
+
+    TActionSlotSync& slotSync = ActionSlotSync_[actionId];
+    std::unique_lock lock(slotSync.Mutex);
+    slotSync.Waiter.store(true, std::memory_order_release);
+
+    const bool hasSlot = slotSync.Cv.wait_until(lock, endAt, [this, actionId] {
+        if (IsStopped()) {
+            return true;
+        }
+        const ui32 running = RunningByAction_[actionId].Value.load(std::memory_order_acquire);
+        return running < Actions_[actionId].Limit;
+    });
+
+    slotSync.Waiter.store(false, std::memory_order_release);
+    if (IsStopped()) {
+        return false;
+    }
+    return hasSlot;
 }
 
 void TWorker::ExecuteActionAsync(
@@ -516,6 +565,9 @@ void TWorker::FinishAction(const std::shared_ptr<TActionExecutionState>& state, 
 
     if (state->ActionId < Actions_.size()) {
         RunningByAction_[state->ActionId].Value.fetch_sub(1, std::memory_order_acq_rel);
+        if (ActionSlotSync_[state->ActionId].Waiter.load(std::memory_order_acquire)) {
+            ActionSlotSync_[state->ActionId].Cv.notify_one();
+        }
     }
 
     if (WorkerLoadTracker_) {

@@ -88,6 +88,19 @@ private:
         TCommandDone Done;
     };
 
+    enum class EScheduleResult {
+        Scheduled,
+        LimitReached,
+        Stopped,
+        Failed,
+    };
+
+    struct alignas(64) TActionSlotSync {
+        std::mutex Mutex;
+        std::condition_variable Cv;
+        std::atomic<bool> Waiter = false;
+    };
+
     bool IsStopped() const;
     ui32 GetActionLimit(const NKikimrKeyValue::Action& action) const;
     ui32 GetActionPoolSize() const;
@@ -106,7 +119,9 @@ private:
         ui32 actionId,
         ui32 periodUs,
         std::chrono::steady_clock::time_point endAt);
+    EScheduleResult TryScheduleAction(ui32 actionId, TExecutionContextPtr parentContext = nullptr);
     void ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext = nullptr);
+    bool WaitForActionSlot(ui32 actionId, std::chrono::steady_clock::time_point endAt);
     void ExecuteActionAsync(
         ui32 actionId,
         ui32 actionStatsIndex,
@@ -167,6 +182,7 @@ private:
     std::optional<ui32> FixedPartitionId_;
 
     std::unique_ptr<TAlignedActionCounter[]> RunningByAction_;
+    std::unique_ptr<TActionSlotSync[]> ActionSlotSync_;
 
     std::unique_ptr<TActionPool> ActionPool_;
 

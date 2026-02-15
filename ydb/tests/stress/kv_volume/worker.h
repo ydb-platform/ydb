@@ -38,6 +38,7 @@ public:
         TInitialLoadProgress* initialLoadProgress = nullptr,
         TWorkerLoadTracker* workerLoadTracker = nullptr,
         const volatile std::sig_atomic_t* stopSignal = nullptr);
+    ~TWorker();
 
     void LoadInitialData();
     void Run(std::chrono::steady_clock::time_point endAt);

@@ -99,10 +99,17 @@ TWorker::TWorker(
 
     if (WorkerLoadTracker_) {
         WorkerLoadTracker_->SetWorkerCapacity(WorkerId_, ActionPoolSize_);
+        WorkerLoadTracker_->SetActionPool(WorkerId_, ActionPool_.get());
     }
 
     if (static_cast<int>(Config_.partition_mode()) == 1 && Config_.volume_config().partition_count() > 0) {
         FixedPartitionId_ = WorkerId_ % Config_.volume_config().partition_count();
+    }
+}
+
+TWorker::~TWorker() {
+    if (WorkerLoadTracker_) {
+        WorkerLoadTracker_->SetActionPool(WorkerId_, nullptr);
     }
 }
 

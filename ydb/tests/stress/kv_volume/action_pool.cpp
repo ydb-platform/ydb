@@ -17,6 +17,7 @@ void TActionPool::Start() {
     StopRequested_.store(false, std::memory_order_release);
     NextQueueIndex_.store(0, std::memory_order_release);
     ActiveTasks_.store(0, std::memory_order_release);
+    QueueEmptyHits_.store(0, std::memory_order_release);
 
     Queues_.clear();
     Queues_.reserve(PoolSize_);
@@ -86,6 +87,10 @@ bool TActionPool::WaitForIdle(std::chrono::steady_clock::duration timeout) {
     });
 }
 
+ui64 TActionPool::GetQueueEmptyHits() const {
+    return QueueEmptyHits_.load(std::memory_order_relaxed);
+}
+
 void TActionPool::WorkerLoop(ui32 queueIndex) {
     if (queueIndex >= Queues_.size() || !Queues_[queueIndex]) {
         return;
@@ -96,12 +101,9 @@ void TActionPool::WorkerLoop(ui32 queueIndex) {
         TTask task;
         {
             std::unique_lock lock(queue.Mutex);
-            queue.Cv.wait(lock, [this, &queue] {
-                return StopRequested_.load(std::memory_order_acquire) || !queue.Pending.empty();
-            });
-
-            if (queue.Pending.empty()) {
-                continue;
+            while (!StopRequested_.load(std::memory_order_acquire) && queue.Pending.empty()) {
+                QueueEmptyHits_.fetch_add(1, std::memory_order_relaxed);
+                queue.Cv.wait(lock);
             }
 
             task = std::move(queue.Pending.front());

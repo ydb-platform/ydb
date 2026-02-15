@@ -26,6 +26,7 @@ public:
 
     void Enqueue(TTask task);
     bool WaitForIdle(std::chrono::steady_clock::duration timeout);
+    ui64 GetQueueEmptyHits() const;
 
 private:
     struct alignas(64) TQueue {
@@ -47,6 +48,7 @@ private:
     alignas(64) std::atomic<bool> StopRequested_ = false;
     alignas(64) std::atomic<ui64> NextQueueIndex_ = 0;
     alignas(64) std::atomic<ui64> ActiveTasks_ = 0;
+    alignas(64) std::atomic<ui64> QueueEmptyHits_ = 0;
 
     alignas(64) std::mutex ActiveTasksMutex_;
     std::condition_variable ActiveTasksCv_;

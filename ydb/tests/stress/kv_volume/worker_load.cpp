@@ -1,5 +1,7 @@
 #include "worker_load.h"
 
+#include "action_pool.h"
+
 #include <algorithm>
 
 namespace NKvVolumeStress {
@@ -8,10 +10,12 @@ TWorkerLoadTracker::TWorkerLoadTracker(ui32 workersCount)
     : WorkersCount_(workersCount)
     , ActiveByWorker_(std::make_unique<std::atomic<ui32>[]>(workersCount))
     , CapacityByWorker_(std::make_unique<std::atomic<ui32>[]>(workersCount))
+    , ActionPoolByWorker_(std::make_unique<std::atomic<const TActionPool*>[]>(workersCount))
 {
     for (ui32 i = 0; i < workersCount; ++i) {
         ActiveByWorker_[i].store(0, std::memory_order_relaxed);
         CapacityByWorker_[i].store(0, std::memory_order_relaxed);
+        ActionPoolByWorker_[i].store(nullptr, std::memory_order_relaxed);
     }
 }
 
@@ -20,6 +24,13 @@ void TWorkerLoadTracker::SetWorkerCapacity(ui32 workerId, ui32 capacity) {
         return;
     }
     CapacityByWorker_[workerId].store(capacity, std::memory_order_relaxed);
+}
+
+void TWorkerLoadTracker::SetActionPool(ui32 workerId, const TActionPool* actionPool) {
+    if (workerId >= WorkersCount_) {
+        return;
+    }
+    ActionPoolByWorker_[workerId].store(actionPool, std::memory_order_relaxed);
 }
 
 void TWorkerLoadTracker::AddActive(ui32 workerId, i32 delta) {
@@ -51,6 +62,8 @@ TWorkerLoadSnapshot TWorkerLoadTracker::Snapshot() const {
     for (ui32 workerId = 0; workerId < WorkersCount_; ++workerId) {
         const ui32 active = ActiveByWorker_[workerId].load(std::memory_order_relaxed);
         const ui32 capacity = CapacityByWorker_[workerId].load(std::memory_order_relaxed);
+        const TActionPool* actionPool = ActionPoolByWorker_[workerId].load(std::memory_order_relaxed);
+        const ui64 queueEmptyHits = actionPool ? actionPool->GetQueueEmptyHits() : 0;
 
         if (active > 0) {
             ++snapshot.BusyWorkers;
@@ -58,6 +71,7 @@ TWorkerLoadSnapshot TWorkerLoadTracker::Snapshot() const {
 
         snapshot.ActiveActionsTotal += active;
         snapshot.CapacityTotal += capacity;
+        snapshot.QueueEmptyHitsTotal += queueEmptyHits;
 
         TWorkerLoadSnapshot::TWorkerRow row;
         row.WorkerId = workerId;
@@ -66,6 +80,7 @@ TWorkerLoadSnapshot TWorkerLoadTracker::Snapshot() const {
         row.UtilizationPercent = capacity > 0
             ? std::min(100.0, static_cast<double>(active) * 100.0 / capacity)
             : 0.0;
+        row.QueueEmptyHits = queueEmptyHits;
         snapshot.Workers.push_back(std::move(row));
     }
 

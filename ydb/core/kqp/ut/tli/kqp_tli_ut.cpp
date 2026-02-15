@@ -596,6 +596,17 @@ namespace {
         return result.GetTransaction();
     }
 
+    std::optional<NYdb::NQuery::TTransaction> BeginTx(NYdb::NQuery::TSession& session, const TString& query) {
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        return result.GetTransaction();
+    }
+
+    void ExecuteInTx(NYdb::NQuery::TSession& session, NYdb::NQuery::TTransaction& tx, const TString& query) {
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::Tx(tx)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     // Execute victim commit and return both status and issues for verification
     std::pair<EStatus, TString> ExecuteVictimCommitWithIssues(TSession& session, TTransaction& tx, const TString& query) {
         auto result = session.ExecuteDataQuery(query, TTxControl::Tx(tx).CommitTx()).ExtractValueSync();
@@ -605,6 +616,11 @@ namespace {
     // Execute a direct commit (no query) and return both status and issues
     std::pair<EStatus, TString> CommitTxWithIssues(TTransaction& tx) {
         auto result = tx.Commit().ExtractValueSync();
+        return {result.GetStatus(), result.GetIssues().ToString()};
+    }
+
+    std::pair<EStatus, TString> CommitTxWithIssues(NYdb::NQuery::TTransaction& tx) {
+        auto result = tx.Commit().GetValueSync();
         return {result.GetStatus(), result.GetIssues().ToString()};
     }
 
@@ -1374,6 +1390,61 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         }
         UNIT_ASSERT_C(foundTraceIdInBreaker, "breaker SessionActor TLI log should contain TraceId when Wilson tracing is active");
         UNIT_ASSERT_C(foundTraceIdInVictim, "victim SessionActor TLI log should contain TraceId when Wilson tracing is active");
+    }
+
+    // Test: Transaction that is both a breaker AND a victim during distributed commit.
+    // When the victim-shard responds before the breaker-shard, the buffer write actor
+    // must still collect and propagate breaker TLI stats.
+    Y_UNIT_TEST(BreakerAndVictimInSameTransaction) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        for (int i = 1; i <= 3; ++i) {
+            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
+            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
+        }
+
+        const TString victimOfTSelect = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimOfTUpdate = "UPDATE `/Root/Tenant1/Table3` SET Value = \"VictimOfTWrite\" WHERE Key = 1u";
+        const TString tSelectTable2  = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
+        const TString tWriteTable1   = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"TWrite1\")";
+        const TString externalBreakerWrite = "UPSERT INTO `/Root/Tenant1/Table2` (Key, Value) VALUES (1u, \"ExtBreaker\")";
+
+        // Victim: read table1 (lock on table1) + write table3 (non-read-only tx)
+        auto victimOfTTx = BeginReadTx(ctx.VictimSession, victimOfTSelect);
+        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(
+            victimOfTUpdate, TTxControl::Tx(victimOfTTx)).GetValueSync());
+
+        // T (NQuery API → TKqpBufferWriteActor): read table2, write table1
+        NYdb::NQuery::TQueryClient queryClient(ctx.Kikimr.GetQueryClient());
+        auto tSession = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto tTx = BeginTx(tSession, tSelectTable2);
+        UNIT_ASSERT(tTx);
+        ExecuteInTx(tSession, *tTx, tWriteTable1);
+
+        // ExternalBreaker: write to table2 → breaks T's lock on table2
+        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
+            externalBreakerWrite, TTxControl::BeginTx().CommitTx()).GetValueSync());
+
+        // T: standalone commit → distributed commit via TKqpBufferWriteActor
+        //   shard1 (table1): T's write breaks Victim's lock → reports BreakerQuerySpanId
+        //   shard2 (table2): T's lock was broken → STATUS_LOCKS_BROKEN
+        //   Result: T is BOTH a breaker (of Victim) and a victim (of ExternalBreaker)
+        auto [tStatus, tIssues] = CommitTxWithIssues(*tTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(tStatus, EStatus::ABORTED, tIssues);
+
+        // Verify the ExternalBreaker→T victim pair and record counts.
+        // expectedBreakerCount=2: ExternalBreaker's session + T's session (T broke Victim).
+        // Without the fix, T's breaker log is missing (count would be 1 instead of 2).
+        VerifyTliIssueAndLogs(tIssues, ss, externalBreakerWrite, tSelectTable2,
+            /* victimExtraQueryText */ std::nullopt,
+            /* expectedBreakerCount */ 2, /* expectedVictimCount */ 1);
+
+        // Additionally verify T's breaker log content (T broke Victim's lock on table1)
+        const auto patterns = MakeTliLogPatterns();
+        auto tBreakerQueryText = ExtractQueryText(ss.Str(), patterns.BreakerSessionActorMessagePattern, tWriteTable1);
+        UNIT_ASSERT_C(tBreakerQueryText,
+            "T should emit breaker TLI log for tWriteTable1 (T is both breaker and victim)");
     }
 }
 

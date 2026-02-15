@@ -3661,6 +3661,8 @@ public:
             || CurrentStateFunc() == &TThis::StateFlush);
         Become(&TThis::StatePrepare);
 
+        PendingPrepareShards = TxManager->GetShardsCount();
+
         CheckQueuesEmpty();
         AFL_ENSURE(TxId);
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
@@ -4342,6 +4344,7 @@ public:
             }
         }
         default:
+            if (HandleDeferredLocksBrokenOnPrepare(&ev->Get()->Record)) return;
             HandleError(ev);
         }
     }
@@ -4367,6 +4370,7 @@ public:
             return;
         }
         default:
+            if (HandleDeferredLocksBrokenOnCommit(ev->Get()->Record)) return;
             HandleError(ev);
         }
     }
@@ -4567,15 +4571,14 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            if (ev->Get()->Record.HasTxStats()) {
-                LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
-                LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
-            }
+            CollectTliStats(ev->Get()->Record);
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
-            TxManager->SetError(ev->Get()->Record.GetOrigin());
-
             SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record, TxManager);
+            if (TryDeferLocksBrokenError(ev->Get()->Record.GetOrigin(), MakeLockIssues(TxManager, getIssues()))) {
+                return;
+            }
+            TxManager->SetError(ev->Get()->Record.GetOrigin());
             ReplyError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
@@ -4674,10 +4677,7 @@ public:
                 return builder;
             }());
 
-        if (ev->Get()->Record.HasTxStats()) {
-            LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
-            LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
-        }
+        CollectTliStats(ev->Get()->Record);
 
         OnCommitted(ev->Get()->Record.GetOrigin(), 0);
     }
@@ -4687,6 +4687,7 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
+        if (HandleDeferredLocksBrokenOnPrepare()) return;
         if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
             CA_LOG_E("Handle TEvWriteResult: unable to select coordinator. Tx canceled, actorId: " << SelfId()
                 << ", previously selected coordinator: " << TxManager->GetCoordinator()
@@ -4710,6 +4711,7 @@ public:
 
     void OnCommitted(ui64 shardId, ui64) override {
         if (TxManager->ConsumeCommitResult(shardId)) {
+            if (FlushDeferredLocksBrokenIfPending()) return;
             CA_LOG_D("Committed TxId=" << TxId.value_or(0));
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
@@ -4777,11 +4779,87 @@ public:
         Process();
     }
 
+    // --- TLI (Transaction Lineage Information) helpers ---
+    // Collect lock-breaking stats from a shard response for TLI attribution.
+    void CollectTliStats(const NKikimrDataEvents::TEvWriteResult& record) {
+        if (record.HasTxStats()) {
+            const auto& txStats = record.GetTxStats();
+            LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+            LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+            for (ui64 id : txStats.GetBreakerQuerySpanIds()) {
+                BreakerQuerySpanIds.push_back(id);
+            }
+        }
+    }
+
+    // Defer a LOCKS_BROKEN error during distributed prepare/commit so remaining
+    // shards can respond with their TxStats (breaker TLI info) before the error
+    // is sent to the session actor.  Returns true if the error was deferred.
+    bool TryDeferLocksBrokenError(ui64 shardId, NYql::TIssues&& issues) {
+        if (IsImmediateCommit || PendingLocksBrokenError) {
+            return false;
+        }
+        PendingLocksBrokenError.emplace(NYql::NDqProto::StatusIds::ABORTED, std::move(issues));
+        if (CurrentStateFunc() == &TThis::StateCommit) {
+            if (TxManager->ConsumeCommitResult(shardId)) {
+                FlushPendingLocksBrokenError();
+            }
+            return true;
+        }
+        if (CurrentStateFunc() == &TThis::StatePrepare) {
+            if (--PendingPrepareShards == 0) {
+                FlushPendingLocksBrokenError();
+            }
+            return true;
+        }
+        PendingLocksBrokenError.reset();
+        return false;
+    }
+
+    // Handle a deferred LOCKS_BROKEN error during prepare phase.
+    // Optionally collects stats from a shard response record.
+    bool HandleDeferredLocksBrokenOnPrepare(const NKikimrDataEvents::TEvWriteResult* record = nullptr) {
+        if (!PendingLocksBrokenError) return false;
+        if (record) CollectTliStats(*record);
+        if (--PendingPrepareShards == 0) {
+            FlushPendingLocksBrokenError();
+        }
+        return true;
+    }
+
+    // Handle a deferred LOCKS_BROKEN error during commit phase.
+    bool HandleDeferredLocksBrokenOnCommit(const NKikimrDataEvents::TEvWriteResult& record) {
+        if (!PendingLocksBrokenError) return false;
+        CollectTliStats(record);
+        if (TxManager->ConsumeCommitResult(record.GetOrigin())) {
+            FlushPendingLocksBrokenError();
+        }
+        return true;
+    }
+
+    // Flush a deferred LOCKS_BROKEN error if one is pending.
+    bool FlushDeferredLocksBrokenIfPending() {
+        if (!PendingLocksBrokenError) return false;
+        FlushPendingLocksBrokenError();
+        return true;
+    }
+
+    void FlushPendingLocksBrokenError() {
+        Y_ABORT_UNLESS(PendingLocksBrokenError);
+        auto error = std::move(*PendingLocksBrokenError);
+        PendingLocksBrokenError.reset();
+        PendingPrepareShards = 0;
+        ReplyErrorImpl(error.first, std::move(error.second));
+    }
+    // --- End TLI helpers ---
+
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) override {
+        if (FlushDeferredLocksBrokenIfPending()) return;
         ReplyError(statusCode, id, message, subIssues);
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) override {
+        if (FlushDeferredLocksBrokenIfPending()) return;
         ReplyError(statusCode, std::move(issues));
     }
 
@@ -4866,7 +4944,7 @@ public:
         ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
             actor->FillStats(&result);
         });
-        TKqpTableWriterStatistics::AddLockStats(&result, LocksBrokenAsBreaker, LocksBrokenAsVictim);
+        TKqpTableWriterStatistics::AddLockStats(&result, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQuerySpanIds);
         return result;
     }
 
@@ -4943,6 +5021,17 @@ private:
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
+    TVector<ui64> BreakerQuerySpanIds;
+
+    // Deferred error for STATUS_LOCKS_BROKEN during distributed prepare/commit.
+    // Allows remaining shards to respond (with breaker TLI stats) before
+    // sending the error to the session actor.
+    std::optional<std::pair<NYql::NDqProto::StatusIds::StatusCode, NYql::TIssues>> PendingLocksBrokenError;
+
+    // Number of shard responses still pending during prepare phase.
+    // Used together with PendingLocksBrokenError to know when all shards
+    // have responded and the deferred error can be flushed.
+    ui64 PendingPrepareShards = 0;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     std::shared_ptr<NMiniKQL::TTypeEnvironment> TypeEnv;

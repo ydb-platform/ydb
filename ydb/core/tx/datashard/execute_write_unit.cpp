@@ -49,10 +49,23 @@ public:
         const TActorContext& ctx, TStringBuf message,
         const NKikimrDataEvents::TKqpLocks* kqpLocks = nullptr)
     {
+        // Collect all lock IDs that belong to the current transaction.
+        // In the OLTP sink model, a transaction reads with lockTxId=X and commits
+        // with txId=Y. The commit write may break its own read lock (lockId=X),
+        // but X != Y, so checking selfTxId alone is insufficient. The kqpLocks
+        // contain the transaction's own lock descriptions with their LockIds.
+        THashSet<ui64> selfLockIds;
+        selfLockIds.insert(selfTxId);
+        if (kqpLocks) {
+            for (const auto& lock : kqpLocks->GetLocks()) {
+                selfLockIds.insert(lock.GetLockId());
+            }
+        }
+
         TVector<ui64> otherLocksBroken;
         otherLocksBroken.reserve(locksBrokenByTx.size());
         for (const auto& lockId : locksBrokenByTx) {
-            if (lockId != selfTxId) {
+            if (!selfLockIds.contains(lockId)) {
                 otherLocksBroken.push_back(lockId);
             }
         }

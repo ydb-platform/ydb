@@ -63,5 +63,10 @@ void TTopicWorkloadConfiguratorWorker::DropConsumers(NYdb::NTopic::TTopicClient&
 void TTopicWorkloadConfiguratorWorker::AlterTopic(NYdb::NTopic::TTopicClient& client,
                                                   const NYdb::NTopic::TAlterTopicSettings& settings) const
 {
-    client.AlterTopic(Params.TopicName, settings).GetValueSync();
+    auto result = client.AlterTopic(Params.TopicName, settings).GetValueSync();
+    if (!result.IsSuccess()) {
+        WRITE_LOG(Params.Log, ELogPriority::TLOG_ERR, TStringBuilder()
+                  << "Failed to alter topic " << Params.TopicName
+                  << ": " << result.GetIssues().ToOneLineString());
+    }
 }

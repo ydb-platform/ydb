@@ -287,6 +287,10 @@ TOptions ParseOptions(int argc, char** argv) {
         .StoreResult(&options.InFlight)
         .DefaultValue("1");
 
+    opts.AddLongOption("action-pool-size", "Action worker threads per worker (0 means auto)")
+        .StoreResult(&options.ActionPoolSize)
+        .DefaultValue("0");
+
     opts.AddLongOption("version", "KeyValue API version: v1 or v2")
         .StoreResult(&options.Version)
         .DefaultValue("v1");

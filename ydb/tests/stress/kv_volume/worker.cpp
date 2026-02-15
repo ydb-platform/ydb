@@ -111,6 +111,10 @@ ui32 TWorker::GetActionLimit(const NKikimrKeyValue::Action& action) const {
 }
 
 ui32 TWorker::GetActionPoolSize() const {
+    if (Options_.ActionPoolSize > 0) {
+        return Options_.ActionPoolSize;
+    }
+
     const ui32 hardwareThreads = std::max<ui32>(1, std::thread::hardware_concurrency());
     const ui32 desired = std::max<ui32>(1, hardwareThreads * 2);
     const ui32 capacity = std::max<ui32>(1, ActionCapacity_);

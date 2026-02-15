@@ -10,6 +10,7 @@ struct TOptions {
     TString Database;
     ui32 Duration = 120;
     ui32 InFlight = 1;
+    ui32 ActionPoolSize = 0;
     TString Version = "v1";
     TString ConfigPath;
     TString ConfigName;

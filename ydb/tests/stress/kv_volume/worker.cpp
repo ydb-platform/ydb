@@ -52,7 +52,7 @@ TWorker::TWorker(
     Actions_.reserve(actionsCount);
     ActionIdByName_.reserve(actionsCount);
     ChildrenByActionId_.resize(actionsCount);
-    RunningByAction_.assign(actionsCount, 0);
+    RunningByAction_ = std::make_unique<TAlignedActionCounter[]>(actionsCount);
 
     ui32 actionIndex = 0;
     for (const auto& action : Config_.actions()) {
@@ -288,20 +288,25 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
     const ui32 actionStatsIndex = actionEntry.StatsIndex;
     const ui32 limit = actionEntry.Limit;
 
-    {
-        std::lock_guard lock(RunningByActionMutex_);
-        ui32& running = RunningByAction_[actionId];
-        if (running >= limit) {
+    auto& running = RunningByAction_[actionId].Value;
+    ui32 runningNow = running.load(std::memory_order_relaxed);
+    while (true) {
+        if (runningNow >= limit) {
             return;
         }
-        ++running;
+
+        if (running.compare_exchange_weak(
+                runningNow,
+                runningNow + 1,
+                std::memory_order_acq_rel,
+                std::memory_order_relaxed))
+        {
+            break;
+        }
     }
 
     auto rollbackRunning = [this, actionId] {
-        std::lock_guard lock(RunningByActionMutex_);
-        if (actionId < RunningByAction_.size() && RunningByAction_[actionId]) {
-            --RunningByAction_[actionId];
-        }
+        RunningByAction_[actionId].Value.fetch_sub(1, std::memory_order_acq_rel);
     };
 
     TExecutionContextPtr executionContext;
@@ -338,12 +343,7 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
                 Stats_.RecordError("action_exception", "unknown exception", actionStatsIndex);
             }
 
-            {
-                std::lock_guard lock(RunningByActionMutex_);
-                if (actionId < RunningByAction_.size() && RunningByAction_[actionId]) {
-                    --RunningByAction_[actionId];
-                }
-            }
+            RunningByAction_[actionId].Value.fetch_sub(1, std::memory_order_acq_rel);
 
             if (WorkerLoadTracker_) {
                 WorkerLoadTracker_->AddActive(WorkerId_, -1);

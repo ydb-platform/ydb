@@ -55,6 +55,10 @@ private:
         std::optional<ui32> SourceActionId;
     };
 
+    struct alignas(64) TAlignedActionCounter {
+        std::atomic<ui32> Value = 0;
+    };
+
     bool IsStopped() const;
     ui32 GetActionLimit(const NKikimrKeyValue::Action& action) const;
     ui32 GetActionPoolSize() const;
@@ -116,8 +120,7 @@ private:
 
     std::optional<ui32> FixedPartitionId_;
 
-    alignas(64) std::mutex RunningByActionMutex_;
-    alignas(64) TVector<ui32> RunningByAction_;
+    std::unique_ptr<TAlignedActionCounter[]> RunningByAction_;
 
     std::unique_ptr<TActionPool> ActionPool_;
 

@@ -53,8 +53,6 @@ private:
     bool IsStopped() const;
     ui32 GetActionLimit(const NKikimrKeyValue::Action& action) const;
     ui32 GetActionPoolSize() const;
-    void StartActionPool();
-    void StopActionPool();
     void StopSchedulers();
     void WaitForActions();
     TExecutionContextPtr CreateExecutionContext(const TString& actionName, TExecutionContextPtr parentContext);

@@ -156,7 +156,7 @@ void TWorker::LoadInitialData() {
 void TWorker::Run(std::chrono::steady_clock::time_point endAt) {
     bool actionPoolStarted = false;
     try {
-        StartActionPool();
+        ActionPool_->Start();
         actionPoolStarted = true;
 
         for (const auto& action : Config_.actions()) {
@@ -180,27 +180,15 @@ void TWorker::Run(std::chrono::steady_clock::time_point endAt) {
         StopRequested_.store(true, std::memory_order_relaxed);
         StopSchedulers();
         WaitForActions();
-        StopActionPool();
+        ActionPool_->Stop();
     } catch (const std::exception& e) {
         StopRequested_.store(true, std::memory_order_relaxed);
         StopSchedulers();
         if (actionPoolStarted) {
             WaitForActions();
-            StopActionPool();
+            ActionPool_->Stop();
         }
         Stats_.RecordError("worker_exception", e.what());
-    }
-}
-
-void TWorker::StartActionPool() {
-    if (ActionPool_) {
-        ActionPool_->Start();
-    }
-}
-
-void TWorker::StopActionPool() {
-    if (ActionPool_) {
-        ActionPool_->Stop();
     }
 }
 
@@ -221,7 +209,7 @@ void TWorker::StopSchedulers() {
 }
 
 void TWorker::WaitForActions() {
-    const bool completed = ActionPool_ && ActionPool_->WaitForIdle(30s);
+    const bool completed = ActionPool_->WaitForIdle(30s);
 
     if (!completed) {
         Stats_.RecordError("worker_shutdown_timeout", "waiting for active actions timed out");

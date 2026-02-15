@@ -6,6 +6,7 @@
 #include <util/string/builder.h>
 #include <util/system/env.h>
 
+#include <grpc/impl/grpc_types.h>
 #include <grpcpp/create_channel.h>
 
 #include <chrono>
@@ -123,7 +124,11 @@ void CallWithRetryAsync(
 
 TKeyValueClientV2::TKeyValueClientV2(const TString& hostPort, std::shared_ptr<TGrpcAsyncExecutor> executor)
     : Executor_(std::move(executor))
-    , Channel_(grpc::CreateChannel(hostPort, grpc::InsecureChannelCredentials()))
+    , Channel_([&hostPort] {
+        grpc::ChannelArguments args;
+        args.SetInt(GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL, 1);
+        return grpc::CreateCustomChannel(hostPort, grpc::InsecureChannelCredentials(), args);
+    }())
     , StubV1_(Ydb::KeyValue::V1::KeyValueService::NewStub(Channel_))
     , StubV2_(Ydb::KeyValue::V2::KeyValueService::NewStub(Channel_))
 {

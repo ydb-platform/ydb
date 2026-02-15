@@ -1717,6 +1717,33 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             }
         }
 
+        TKeyedWriteSessionSettings writeSettings3 = writeSettings1;
+        writeSettings3.ProducerIdPrefix("autopartitioning_keyed_3");
+        auto session3 = client.CreateKeyedWriteSession(writeSettings3);
+
+        auto partitionsMap1 = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitionsMap();
+        auto partitionsMap3 = dynamic_cast<TKeyedWriteSession*>(session3.get())->GetPartitionsMap();
+
+        for (const auto& [partitionId, partitionInfo] : partitionsMap1) {
+            auto partitionInfo3 = partitionsMap3.find(partitionId);
+            UNIT_ASSERT_C(partitionInfo3 != partitionsMap3.end(),
+                "Partition " << partitionId << " is not in session3");
+            UNIT_ASSERT_C(partitionInfo.FromBound_ == partitionInfo3->second.FromBound_,
+                "From bound is not equal for partition " << partitionId);
+            UNIT_ASSERT_C(partitionInfo.ToBound_ == partitionInfo3->second.ToBound_,
+                "To bound is not equal for partition " << partitionId);
+        }
+
+        auto partitionsIndex1 = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitionsIndex();
+        auto partitionsIndex3 = dynamic_cast<TKeyedWriteSession*>(session3.get())->GetPartitionsIndex();
+        for (const auto& [key, partitionId] : partitionsIndex1) {
+            auto partitionId3 = partitionsIndex3.find(key);
+            UNIT_ASSERT_C(partitionId3 != partitionsIndex3.end(),
+                "Key " << key << " is not in session3");
+            UNIT_ASSERT_EQUAL_C(partitionId, partitionId3->second,
+                "Partition id is not equal for key " << key);
+        }
+
         UNIT_ASSERT_EQUAL_C(ackedSeqNos.size(), 14,
             "Expected exactly 14 distinct acks, each seqNo exactly once; got " << ackedSeqNos.size());
         auto sessionPartitions = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitions();

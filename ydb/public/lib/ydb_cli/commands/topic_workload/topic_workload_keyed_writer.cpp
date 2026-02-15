@@ -66,18 +66,6 @@ TInstant TTopicWorkloadKeyedWriterWorker::GetExpectedCurrMessageCreationTimestam
     );
 }
 
-void TTopicWorkloadKeyedWriterWorker::WaitTillNextMessageExpectedCreateTimeAndContinuationToken(
-    std::shared_ptr<TTopicWorkloadKeyedWriterProducer> producer)
-{
-    auto now = Now();
-    TDuration timeToNextMessage = Params.BytesPerSec == 0 ? TDuration::Zero() :
-        GetExpectedCurrMessageCreationTimestamp() - now;
-
-    if (timeToNextMessage > TDuration::Zero() || !producer->HasContinuationTokens()) {
-        producer->WaitForContinuationToken(timeToNextMessage);
-    }
-}
-
 void TTopicWorkloadKeyedWriterWorker::Process(TInstant endTime)
 {
     NYdb::NConsoleClient::NTopicWorkloadWriterInternal::ProcessWriterLoopCommon(

@@ -106,6 +106,10 @@ void TActionPool::WorkerLoop(ui32 queueIndex) {
                 queue.Cv.wait(lock);
             }
 
+            if (queue.Pending.empty()) {
+                continue;
+            }
+
             task = std::move(queue.Pending.front());
             queue.Pending.pop_front();
         }

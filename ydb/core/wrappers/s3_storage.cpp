@@ -80,6 +80,8 @@ protected:
         if (!Counters) {
             return;
         }
+
+        // Error code: requests per second
         TString errCode;
         if (outcome.IsSuccess()) {
             errCode = OkCode;
@@ -87,11 +89,16 @@ protected:
             errCode = TString(outcome.GetError().GetExceptionName());
         }
         ++*Counters->GetCounter(errCode, true);
+
+        // Latency
+        auto histogram = NMonitoring::ExplicitHistogram({5, 10, 25, 50, 100, 500, 1000, 2500, 5000, 10'000, 30'000, 60'000, 120'000, 180'000, 300'000, 600'000});
+        Counters->GetHistogram("latency_ms", std::move(histogram))->Collect((TInstant::Now() - Start).MilliSeconds());
     }
 
 private:
     const TActorSystem* ActorSystem;
     const TActorId Sender;
+    const TInstant Start = TInstant::Now();
     NMonitoring::TDynamicCounterPtr Counters;
 
 protected:

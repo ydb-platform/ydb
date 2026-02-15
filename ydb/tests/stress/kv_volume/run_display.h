@@ -32,11 +32,6 @@ struct TRunDisplayData {
         double WriteBytesPerSecond = 0.0;
     };
 
-    struct TErrorRow {
-        TString Name;
-        ui64 Total = 0;
-    };
-
     ui32 DurationSeconds = 0;
     ui32 ElapsedSeconds = 0;
     ui32 RemainingSeconds = 0;
@@ -50,8 +45,6 @@ struct TRunDisplayData {
     TWorkerLoadSnapshot WorkerLoad;
 
     TVector<TActionRow> Actions;
-    TVector<TErrorRow> Errors;
-    TVector<TString> SampleErrors;
 };
 
 class TRunTui;

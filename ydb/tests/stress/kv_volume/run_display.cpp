@@ -181,7 +181,6 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
     if (WorkerLoadTracker_) {
         data->WorkerLoad = WorkerLoadTracker_->Snapshot();
     }
-    data->SampleErrors = snapshot.SampleErrors;
 
     const size_t actionCount = snapshot.ActionNames.size();
     if (ActionRunsHistory_.size() != actionCount) {
@@ -264,14 +263,6 @@ std::shared_ptr<TRunDisplayData> TRunDisplayController::BuildDisplayData(std::ch
         data->Actions.push_back(std::move(row));
     }
     std::sort(data->Actions.begin(), data->Actions.end(), [](const auto& l, const auto& r) {
-        return l.Name < r.Name;
-    });
-
-    data->Errors.reserve(snapshot.ErrorsByKind.size());
-    for (const auto& error : snapshot.ErrorsByKind) {
-        data->Errors.push_back({error.Name, error.Total});
-    }
-    std::sort(data->Errors.begin(), data->Errors.end(), [](const auto& l, const auto& r) {
         return l.Name < r.Name;
     });
 

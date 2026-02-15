@@ -6,7 +6,6 @@
 #include <array>
 #include <atomic>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <util/generic/vector.h>
 
@@ -20,11 +19,6 @@ struct TLatencyPercentiles {
     ui64 P100Ms = 0;
 };
 
-struct TNamedCounter {
-    TString Name;
-    ui64 Total = 0;
-};
-
 struct TRunStatsSnapshot {
     TVector<TString> ActionNames;
     TVector<ui64> ActionRuns;
@@ -32,9 +26,7 @@ struct TRunStatsSnapshot {
     TVector<ui64> ReadBytesByAction;
     TVector<ui64> WriteBytesByAction;
     TVector<TLatencyPercentiles> LatencyByAction;
-    TVector<TNamedCounter> ErrorsByKind;
     TLatencyPercentiles TotalLatency;
-    TVector<TString> SampleErrors;
     ui64 TotalErrors = 0;
 };
 
@@ -80,6 +72,7 @@ private:
         TAtomicActionStats();
 
         TPaddedAtomicUi64 Runs;
+        TPaddedAtomicUi64 Errors;
         TPaddedAtomicUi64 ReadBytes;
         TPaddedAtomicUi64 WriteBytes;
         TAtomicLatencyHistogram Latency;
@@ -90,7 +83,6 @@ private:
     static void RecordLatencySample(TAtomicLatencyHistogram& histogram, ui64 latencyMs);
     static TLatencyHistogram BuildHistogramSnapshot(const TAtomicLatencyHistogram& histogram);
     static TLatencyPercentiles BuildPercentiles(const TLatencyHistogram& histogram);
-    static void IncrementNamedCounter(TVector<TNamedCounter>& counters, const TString& name);
     static void UpdateMax(TPaddedAtomicUi64& maxValue, ui64 candidate);
 
     bool IsValidActionIndex(ui32 actionIndex) const {
@@ -103,12 +95,7 @@ private:
 
     std::unique_ptr<TAtomicActionStats[]> ActionStats_;
     TAtomicLatencyHistogram TotalLatency_;
-
-    mutable std::mutex ErrorMutex_;
-    TVector<TNamedCounter> ErrorsByKind_;
-    TVector<ui64> ActionErrors_;
-    TVector<TString> SampleErrors_;
-    ui64 TotalErrors_ = 0;
+    TPaddedAtomicUi64 TotalErrors_;
 };
 
 } // namespace NKvVolumeStress

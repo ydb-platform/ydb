@@ -437,25 +437,13 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
             TInitialLoadDisplayController initialLoadDisplay(initialLoadProgress, stats, options.NoTui, options.Verbose);
             initialLoadDisplay.Start();
             for (const auto& worker : workers) {
+                worker->LoadInitialData();
                 if (StopRequestedBySignal != 0) {
                     interrupted = true;
                     break;
                 }
-                worker->LoadInitialData();
             }
             initialLoadDisplay.Stop();
-        } else {
-            for (const auto& worker : workers) {
-                if (StopRequestedBySignal != 0) {
-                    interrupted = true;
-                    break;
-                }
-                worker->LoadInitialData();
-            }
-        }
-
-        if (StopRequestedBySignal != 0) {
-            interrupted = true;
         }
 
         if (!interrupted) {
@@ -494,6 +482,7 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
         TString error;
         if (!setupClient->DropVolume(volumePath, &error)) {
             Cerr << "DropVolume failed: " << error << Endl;
+            stats.PrintSummary(runElapsedSeconds);
             return 2;
         }
     }

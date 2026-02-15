@@ -76,12 +76,18 @@ private:
         TExecutionContextPtr ExecutionContext;
     };
 
+    struct TActionQueue {
+        std::mutex Mutex;
+        std::condition_variable Cv;
+        std::deque<TActionTask> Pending;
+    };
+
     bool IsStopped() const;
     ui32 GetActionLimit(const NKikimrKeyValue::Action& action) const;
     ui32 GetActionPoolSize() const;
     void StartActionPool();
     void StopActionPool();
-    void ActionWorkerLoop();
+    void ActionWorkerLoop(ui32 queueIndex);
     void StopSchedulers();
     void WaitForActions();
     TExecutionContextPtr CreateExecutionContext(const TString& actionName, TExecutionContextPtr parentContext);
@@ -147,10 +153,9 @@ private:
     std::mutex ActiveActionsMutex_;
     std::condition_variable ActiveActionsCv_;
 
-    std::mutex ActionQueueMutex_;
-    std::condition_variable ActionQueueCv_;
-    std::deque<TActionTask> PendingActions_;
-    bool ActionQueueStopRequested_ = false;
+    std::atomic<bool> ActionQueueStopRequested_ = false;
+    std::atomic<ui64> NextActionQueueIndex_ = 0;
+    TVector<std::unique_ptr<TActionQueue>> ActionQueues_;
     TVector<std::thread> ActionWorkers_;
 
     std::mutex PatternCacheMutex_;

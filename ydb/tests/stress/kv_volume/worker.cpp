@@ -45,21 +45,14 @@ TWorker::TExecutionContext::~TExecutionContext() {
         return;
     }
 
-    TVector<std::pair<TString, TKeyInfo>> remaining;
-    remaining.reserve(Keys_.size());
-    for (const auto& [key, info] : Keys_) {
-        remaining.emplace_back(key, info);
-    }
-    Keys_.clear();
-
-    for (const auto& [key, info] : remaining) {
-        WorkerStorage_->AddKey(ActionName, key, info);
+    for (const auto& key : Keys_) {
+        WorkerStorage_->AddKey(ActionName, key.Key, key.Info);
     }
 }
 
 void TWorker::TExecutionContext::AddKey(const TString& key, const TKeyInfo& keyInfo) {
     std::lock_guard lock(Mutex_);
-    Keys_[key] = keyInfo;
+    Keys_.push_back(TStoredKey{key, keyInfo});
 }
 
 void TWorker::TExecutionContext::AddKeys(const TVector<std::pair<TString, TKeyInfo>>& keys) {
@@ -68,35 +61,66 @@ void TWorker::TExecutionContext::AddKeys(const TVector<std::pair<TString, TKeyIn
     }
 
     std::lock_guard lock(Mutex_);
+    Keys_.reserve(Keys_.size() + keys.size());
     for (const auto& [key, keyInfo] : keys) {
-        Keys_[key] = keyInfo;
+        Keys_.push_back(TStoredKey{key, keyInfo});
     }
 }
 
 TVector<std::pair<TString, TKeyInfo>> TWorker::TExecutionContext::PickKeys(ui32 count, bool erase) {
     std::lock_guard lock(Mutex_);
 
-    TVector<std::pair<TString, TKeyInfo>> candidates;
-    candidates.reserve(Keys_.size());
-    for (const auto& [key, info] : Keys_) {
-        candidates.emplace_back(key, info);
-    }
-
-    if (candidates.empty()) {
+    if (count == 0 || Keys_.empty()) {
         return {};
     }
 
-    std::shuffle(candidates.begin(), candidates.end(), RandomEngine());
-    const ui32 limit = std::min<ui32>(count, candidates.size());
-    candidates.resize(limit);
+    const size_t limit = std::min<size_t>(count, Keys_.size());
+    TVector<std::pair<TString, TKeyInfo>> pickedKeys;
+    pickedKeys.reserve(limit);
 
     if (erase) {
-        for (const auto& [key, _] : candidates) {
-            Keys_.erase(key);
+        for (size_t i = 0; i < limit; ++i) {
+            std::uniform_int_distribution<size_t> distribution(0, Keys_.size() - 1);
+            const size_t pickedIdx = distribution(RandomEngine());
+            if (pickedIdx + 1 != Keys_.size()) {
+                std::swap(Keys_[pickedIdx], Keys_.back());
+            }
+            TStoredKey picked = std::move(Keys_.back());
+            Keys_.pop_back();
+            pickedKeys.emplace_back(std::move(picked.Key), picked.Info);
+        }
+        return pickedKeys;
+    }
+
+    if (limit == Keys_.size()) {
+        for (const auto& key : Keys_) {
+            pickedKeys.emplace_back(key.Key, key.Info);
+        }
+        return pickedKeys;
+    }
+
+    TVector<size_t> selectedIndices;
+    selectedIndices.reserve(limit);
+
+    for (size_t i = 0; i < Keys_.size(); ++i) {
+        if (i < limit) {
+            selectedIndices.push_back(i);
+            continue;
+        }
+
+        std::uniform_int_distribution<size_t> distribution(0, i);
+        const size_t replaceIdx = distribution(RandomEngine());
+        if (replaceIdx < limit) {
+            selectedIndices[replaceIdx] = i;
         }
     }
 
-    return candidates;
+    for (const size_t idx : selectedIndices) {
+        const auto& key = Keys_[idx];
+        pickedKeys.emplace_back(key.Key, key.Info);
+    }
+
+    return pickedKeys;
 }
 
 TWorker::TWorker(

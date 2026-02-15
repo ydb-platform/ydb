@@ -43,6 +43,11 @@ public:
 
 private:
     struct TExecutionContext {
+        struct TStoredKey {
+            TString Key;
+            TKeyInfo Info;
+        };
+
         TExecutionContext(
             ui64 executionId,
             TString actionName,
@@ -61,7 +66,7 @@ private:
     private:
         TDataStorage* const WorkerStorage_;
         std::mutex Mutex_;
-        THashMap<TString, TKeyInfo> Keys_;
+        TVector<TStoredKey> Keys_;
     };
 
     using TExecutionContextPtr = std::shared_ptr<TExecutionContext>;

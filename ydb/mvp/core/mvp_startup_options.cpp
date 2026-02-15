@@ -18,6 +18,7 @@ TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
     startupOptions.LoadConfig(parsedArgs);
     startupOptions.SetPorts();
     startupOptions.LoadTokens();
+    startupOptions.AddFederatedCredsJwt();
     startupOptions.LoadCertificates();
 
     return startupOptions;
@@ -31,6 +32,14 @@ TString TMvpStartupOptions::GetLocalEndpoint() const {
     return HttpsPort
         ? TStringBuilder() << "https://" << FQDNHostName() << ":" << HttpsPort
         : TStringBuilder() << "http://" << FQDNHostName() << ":" << HttpPort;
+}
+
+bool TMvpStartupOptions::FederatedCreds() const {
+    return !JwtToken.empty();
+}
+
+TString TMvpStartupOptions::GetFederatedCredsJwtTokenName() const {
+    return FEDERATED_CREDS_JWT_TOKEN_NAME;
 }
 
 NLastGetopt::TOptsParseResult TMvpStartupOptions::ParseArgs(int argc, const char* argv[]) {
@@ -79,6 +88,29 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
     if (generic["auth"]) {
         auto auth = generic["auth"];
         YdbTokenFile = auth["token_file"].as<std::string>("");
+
+        bool hasFederatedCreds = auth["federated_creds"].IsDefined();
+        if (hasFederatedCreds) {
+            auto jwt = auth["federated_creds"];
+            auto tokenPath = jwt["k8s_token_path"].as<std::string>("");
+            JwtTokenEndpoint = jwt["token_service_endpoint"].as<std::string>("");
+            JwtSaId = jwt["service_account_id"].as<std::string>("");
+
+            if (tokenPath.empty()) {
+                ythrow yexception() << "Configuration error: 'k8s_token_path' must be specified in 'federated_creds'.";
+            }
+            if (JwtSaId.empty()) {
+                ythrow yexception() << "Configuration error: 'service_account_id' must be specified in 'federated_creds'.";
+            }
+            if (JwtTokenEndpoint.empty()) {
+                ythrow yexception() << "Configuration error: 'token_service_endpoint' must be specified in 'federated_creds'.";
+            }
+            try {
+                JwtToken = Strip(TUnbufferedFileInput(tokenPath).ReadAll());
+            } catch (const yexception& ex) {
+                ythrow yexception() << "Failed to read federated token from '" << tokenPath << "': " << ex.what();
+            }
+        }
     }
 
     if (generic["server"]) {
@@ -143,6 +175,17 @@ void TMvpStartupOptions::LoadTokens() {
         }
     } else {
         ythrow yexception() << "Invalid ydb token file format";
+    }
+}
+
+void TMvpStartupOptions::AddFederatedCredsJwt() {
+    if (!JwtToken.empty()) {
+        auto* jwtInfo = Tokens.AddJwtInfo();
+        jwtInfo->SetAuthMethod(NMvp::TJwtInfo::federated_creds);
+        jwtInfo->SetAccountId(JwtSaId);
+        jwtInfo->SetToken(JwtToken);
+        jwtInfo->SetEndpoint(JwtTokenEndpoint);
+        jwtInfo->SetName(FEDERATED_CREDS_JWT_TOKEN_NAME);
     }
 }
 

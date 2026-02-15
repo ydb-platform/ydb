@@ -1,9 +1,9 @@
+#include "mvp_tokens.h"
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/security/util.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
-#include "mvp_tokens.h"
 #include <ydb/public/api/client/nc_private/iam/v1/token_service.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
 
@@ -267,19 +267,29 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
             break;
         }
         case NMvp::nebius_v1: {
-            auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
-            auto encodedToken = jwt::create()
+            nebius::iam::v1::ExchangeTokenRequest request;
+            if (jwtInfo->authmethod() == NMvp::TJwtInfo::static_creds) {
+                auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
+                auto encodedToken = jwt::create()
                     .set_key_id(keyId)
                     .set_issuer(serviceAccountId)
                     .set_subject(serviceAccountId)
                     .set_issued_at(now)
                     .set_expires_at(expiresAt)
                     .sign(algorithm);
-            nebius::iam::v1::ExchangeTokenRequest request;
-            request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
-            request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
-            request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
-            request.set_subject_token(TString(encodedToken));
+                request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
+                request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
+                request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
+                request.set_subject_token(TString(encodedToken));
+            } else {
+                auto encodedToken = jwtInfo->token();
+                request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
+                request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
+                request.set_subject_token_type("urn:nebius:params:oauth:token-type:subject_identifier");
+                request.set_subject_token(TString(serviceAccountId));
+                request.set_actor_token_type("urn:ietf:params:oauth:token-type:jwt");
+                request.set_actor_token(TString(encodedToken));
+            }
 
             RequestCreateToken<nebius::iam::v1::TokenExchangeService,
                                 nebius::iam::v1::ExchangeTokenRequest,

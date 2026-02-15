@@ -95,4 +95,44 @@ generic:
         UNIT_ASSERT_VALUES_EQUAL(opts.HttpsPort, 8789);
         UNIT_ASSERT(!opts.SslCertificate.empty());
     }
+
+    Y_UNIT_TEST(FederatedCredsFromYaml) {
+        TTempFileHandle tmpToken = MakeTestFile("MY_JWT_TOKEN", "mvp_jwt_token", ".token");
+        TString yaml = TStringBuilder() << R"(
+generic:
+  auth:
+    federated_creds:
+      k8s_token_path: )" << tmpToken.Name() << R"(
+      token_service_endpoint: "https://token.endpoint/"
+      service_account_id: "sa-1"
+)";
+        TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_startup_fedcred", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        TMvpStartupOptions opts = MakeOpts(argv);
+
+        UNIT_ASSERT(opts.FederatedCreds());
+        UNIT_ASSERT_VALUES_EQUAL(opts.JwtToken, "MY_JWT_TOKEN");
+        UNIT_ASSERT(opts.Tokens.jwtinfo_size() > 0);
+        const auto& jwt = opts.Tokens.jwtinfo(0);
+        UNIT_ASSERT_VALUES_EQUAL(jwt.name(), opts.GetFederatedCredsJwtTokenName());
+        UNIT_ASSERT_VALUES_EQUAL(jwt.token(), "MY_JWT_TOKEN");
+        UNIT_ASSERT_VALUES_EQUAL(jwt.endpoint(), "https://token.endpoint/");
+        UNIT_ASSERT_VALUES_EQUAL(jwt.accountid(), "sa-1");
+        UNIT_ASSERT(jwt.authmethod() == NMvp::TJwtInfo::federated_creds);
+    }
+
+    Y_UNIT_TEST(FederatedCredsMissingTokenPathThrows) {
+        TString yaml = TStringBuilder() << R"(
+generic:
+  auth:
+    federated_creds:
+      token_service_endpoint: "https://token.endpoint/"
+      service_account_id: "sa-1"
+)";
+        TTempFileHandle tmpYaml = MakeTestFile(yaml, "mvp_startup_fedcred_no_token", ".yaml");
+
+        const char* argv[] = {"mvp_test", "--config", tmpYaml.Name().c_str()};
+        UNIT_ASSERT_EXCEPTION_CONTAINS(MakeOpts(argv), yexception, "'k8s_token_path' must be specified in 'federated_creds'");
+    }
 }

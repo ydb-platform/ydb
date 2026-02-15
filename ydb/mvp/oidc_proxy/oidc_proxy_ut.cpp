@@ -1590,4 +1590,16 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name:1234"), "some.domain.name");
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name"), "some.domain.name");
     }
-} // Y_UNIT_TEST_SUITE(Mvp)
+
+} // Y_UNIT_TEST_SUITE(MVP)
+
+Y_UNIT_TEST_SUITE(Utils) {
+    Y_UNIT_TEST(GenerateRandomBase64RandomUniqueness) {
+        THashSet<TString> seen;
+        for (size_t i = 0; i < 100; ++i) {
+            seen.insert(NMVP::NOIDC::GenerateRandomBase64(32));
+        }
+        UNIT_ASSERT(seen.size() > 95); // soft threshold
+    }
+
+} // Y_UNIT_TEST_SUITE(Utils)

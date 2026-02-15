@@ -11,6 +11,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
@@ -76,31 +77,6 @@ namespace {
         }
     }
 
-    // Extract VictimQuerySpanId from the first broken lock in a WriteResult record.
-    void SetVictimQuerySpanIdFromBrokenLocks(const NKikimrDataEvents::TEvWriteResult& record,
-        const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
-    {
-        if (!record.GetTxLocks().empty()) {
-            const auto& lock = record.GetTxLocks(0);
-            if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
-                txManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
-            }
-        }
-    }
-
-    // Build error issues from TxManager lock issue combined with additional issues.
-    NYql::TIssues MakeLockIssues(const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager,
-        const NYql::TIssues& extraIssues)
-    {
-        NYql::TIssues result;
-        if (auto lockIssue = txManager->GetLockIssue()) {
-            result.AddIssue(*lockIssue);
-        }
-        for (const auto& issue : extraIssues) {
-            result.AddIssue(issue);
-        }
-        return result;
-    }
 
     void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite,
         ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)

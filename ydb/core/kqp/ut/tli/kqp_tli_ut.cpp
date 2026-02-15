@@ -478,7 +478,6 @@ namespace {
 
     TKikimrSettings MakeKikimrSettings(TStringStream& ss) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.LogStream = &ss;
         settings.SetWithSampleTables(false);
         return settings;
@@ -1314,7 +1313,6 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Configure tracing: always sample all requests at max verbosity
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.LogStream = &ss;
         settings.SetWithSampleTables(false);
 

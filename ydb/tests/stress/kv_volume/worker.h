@@ -12,6 +12,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/system/rwlock.h>
 #include <util/system/types.h>
 
 #include <atomic>
@@ -65,7 +66,7 @@ private:
 
     private:
         TDataStorage* const WorkerStorage_;
-        std::mutex Mutex_;
+        TRWMutex Mutex_;
         TVector<TStoredKey> Keys_;
     };
 

@@ -51,7 +51,7 @@ TWorker::TExecutionContext::~TExecutionContext() {
 }
 
 void TWorker::TExecutionContext::AddKey(const TString& key, const TKeyInfo& keyInfo) {
-    std::lock_guard lock(Mutex_);
+    TWriteGuard lock(Mutex_);
     Keys_.push_back(TStoredKey{key, keyInfo});
 }
 
@@ -60,7 +60,7 @@ void TWorker::TExecutionContext::AddKeys(const TVector<std::pair<TString, TKeyIn
         return;
     }
 
-    std::lock_guard lock(Mutex_);
+    TWriteGuard lock(Mutex_);
     Keys_.reserve(Keys_.size() + keys.size());
     for (const auto& [key, keyInfo] : keys) {
         Keys_.push_back(TStoredKey{key, keyInfo});
@@ -68,17 +68,21 @@ void TWorker::TExecutionContext::AddKeys(const TVector<std::pair<TString, TKeyIn
 }
 
 TVector<std::pair<TString, TKeyInfo>> TWorker::TExecutionContext::PickKeys(ui32 count, bool erase) {
-    std::lock_guard lock(Mutex_);
-
-    if (count == 0 || Keys_.empty()) {
+    if (count == 0) {
         return {};
     }
 
-    const size_t limit = std::min<size_t>(count, Keys_.size());
-    TVector<std::pair<TString, TKeyInfo>> pickedKeys;
-    pickedKeys.reserve(limit);
-
     if (erase) {
+        TWriteGuard lock(Mutex_);
+
+        if (Keys_.empty()) {
+            return {};
+        }
+
+        const size_t limit = std::min<size_t>(count, Keys_.size());
+        TVector<std::pair<TString, TKeyInfo>> pickedKeys;
+        pickedKeys.reserve(limit);
+
         for (size_t i = 0; i < limit; ++i) {
             std::uniform_int_distribution<size_t> distribution(0, Keys_.size() - 1);
             const size_t pickedIdx = distribution(RandomEngine());
@@ -92,30 +96,24 @@ TVector<std::pair<TString, TKeyInfo>> TWorker::TExecutionContext::PickKeys(ui32 
         return pickedKeys;
     }
 
-    if (limit == Keys_.size()) {
+    TReadGuard lock(Mutex_);
+
+    if (Keys_.empty()) {
+        return {};
+    }
+
+    const size_t limit = std::min<size_t>(count, Keys_.size());
+    TVector<std::pair<TString, TKeyInfo>> pickedKeys;
+    pickedKeys.reserve(std::min(limit, Keys_.size()));
+
+    if (limit >= Keys_.size()) {
         for (const auto& key : Keys_) {
             pickedKeys.emplace_back(key.Key, key.Info);
         }
         return pickedKeys;
     }
 
-    TVector<size_t> selectedIndices;
-    selectedIndices.reserve(limit);
-
-    for (size_t i = 0; i < Keys_.size(); ++i) {
-        if (i < limit) {
-            selectedIndices.push_back(i);
-            continue;
-        }
-
-        std::uniform_int_distribution<size_t> distribution(0, i);
-        const size_t replaceIdx = distribution(RandomEngine());
-        if (replaceIdx < limit) {
-            selectedIndices[replaceIdx] = i;
-        }
-    }
-
-    for (const size_t idx : selectedIndices) {
+    for (size_t idx = 0; idx < limit; ++idx) {
         const auto& key = Keys_[idx];
         pickedKeys.emplace_back(key.Key, key.Info);
     }

@@ -1,33 +1,23 @@
 # Secrets
 
-{% note warning %}
+Various access credentials are used for authentication in external systems. These credentials are stored in separate objects called secrets. Secrets are only available for writing and updating; their values cannot be retrieved.
+In {{ ydb-full-name }}, secrets are used, for example, in [federated queries](../federated_query/index.md) and [data transfers](../transfer.md).
 
-This functionality is in "Preview" mode.
+## Syntax {#syntax}
 
-{% endnote %}
+The following YQL operators are used to manage secrets:
 
-To work with external data sources in {{ ydb-full-name }}, [federated queries](../federated_query/index.md) are used. Federated queries utilize various access credentials for authentication in external systems. These credentials are stored in separate objects called secrets. Secrets are only available for writing and updating; their values cannot be retrieved.
+- [CREATE SECRET](../../yql/reference/syntax/create-secret.md) — create a secret.
+- [ALTER SECRET](../../yql/reference/syntax/alter-secret.md) — modify an existing secret.
+- [DROP SECRET](../../yql/reference/syntax/drop-secret.md) — delete a secret.
 
-{% note warning %}
+## Usage {#secret-usage}
 
-The current syntax for working with secrets is temporary and will be changed in future releases of {{ ydb-full-name }}.
+Examples of using secrets and working with them are provided in the following sections:
 
-{% endnote %}
+* [{#T}](../../yql/reference/recipes/ttl.md)
+* [{#T}](../../recipes/import-export-column-tables.md)
 
-## Creating Secrets {#create_secret}
+## Access management {#secret_access}
 
-Secrets are created using an SQL query:
-
-```yql
-CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
-```
-
-## Access Management {#secret_access}
-
-All rights to use the secret belong to its creator. The creator can grant another user read access to the secret through [access management](#secret_access) for secrets.
-
-Special objects called `SECRET_ACCESS` are used to manage access to secrets. To grant permission to use the secret `MySecretName` to the user `another_user`, a `SECRET_ACCESS` object named `MySecretName:another_user` must be created:
-
-```yql
-CREATE OBJECT `MySecretName:another_user` (TYPE SECRET_ACCESS)
-```
+Secrets are schema objects, so rights to them are granted using the [GRANT](../../yql/reference/syntax/grant.md) command and revoked using the [REVOKE](../../yql/reference/syntax/revoke.md) command. To use a secret in a query, for example, when creating an [external data source](../../yql/reference/syntax/create-external-data-source.md) or [data transfer](../../yql/reference/syntax/create-transfer.md), the [right](../../yql/reference/syntax/grant.md#permissions-list) `SELECT ROW` is required.

@@ -18,6 +18,10 @@ A [cluster configuration](../../../../maintenance/manual/config-overview.md) is 
 
 The `admin database dump` command dumps the database' data and metadata to the client file system in the format described in [{#T}](../file-structure.md):
 
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
+
 ```bash
 {{ ydb-cli }} [connection options] admin database dump [options]
 ```
@@ -31,6 +35,10 @@ A [database configuration](../../../../maintenance/manual/config-overview.md) is
 ## Schema objects {#schema-objects}
 
 The `tools dump` command dumps the schema objects to the client file system in the format described in [{#T}](../file-structure.md):
+
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
 
 ```bash
 {{ ydb-cli }} [connection options] tools dump [options]

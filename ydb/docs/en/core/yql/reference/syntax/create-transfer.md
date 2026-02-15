@@ -82,7 +82,7 @@ CREATE TRANSFER example_transfer
     FROM example_topic TO example_table USING $transformation_lambda
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 

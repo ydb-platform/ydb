@@ -101,7 +101,6 @@ TWorker::TWorker(
 
     if (WorkerLoadTracker_) {
         WorkerLoadTracker_->SetWorkerCapacity(WorkerId_, ActionPoolSize_);
-        WorkerLoadTracker_->SetActionPool(WorkerId_, ActionPool_.get());
     }
 
     if (static_cast<int>(Config_.partition_mode()) == 1 && Config_.volume_config().partition_count() > 0) {
@@ -110,9 +109,6 @@ TWorker::TWorker(
 }
 
 TWorker::~TWorker() {
-    if (WorkerLoadTracker_) {
-        WorkerLoadTracker_->SetActionPool(WorkerId_, nullptr);
-    }
 }
 
 ui32 TWorker::GetActionLimit(const NKikimrKeyValue::Action& action) const {

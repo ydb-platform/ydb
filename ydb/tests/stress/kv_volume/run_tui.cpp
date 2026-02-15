@@ -150,8 +150,7 @@ Element TRunTui::BuildWorkersPart() {
     summarySs << "Workers busy: " << data->WorkerLoad.BusyWorkers << "/" << data->WorkerLoad.WorkersTotal
               << " (" << std::fixed << std::setprecision(1) << data->WorkerLoad.BusyPercent << "%)"
               << "   Active actions: " << data->WorkerLoad.ActiveActionsTotal << "/" << data->WorkerLoad.CapacityTotal
-              << " (" << std::fixed << std::setprecision(1) << data->WorkerLoad.UtilizationPercent << "%)"
-              << "   Queue empty hits: " << data->WorkerLoad.QueueEmptyHitsTotal;
+              << " (" << std::fixed << std::setprecision(1) << data->WorkerLoad.UtilizationPercent << "%)";
     rows.push_back(text(summarySs.str()) | bold);
 
     rows.push_back(hbox({
@@ -159,7 +158,6 @@ Element TRunTui::BuildWorkersPart() {
         text("Active") | align_right | size(WIDTH, EQUAL, 10),
         text("Cap") | align_right | size(WIDTH, EQUAL, 10),
         text("Util%") | align_right | size(WIDTH, EQUAL, 10),
-        text("QEmpty") | align_right | size(WIDTH, EQUAL, 12),
     }));
 
     for (const auto& row : data->WorkerLoad.Workers) {
@@ -171,7 +169,6 @@ Element TRunTui::BuildWorkersPart() {
             text(ToString(row.ActiveActions)) | align_right | size(WIDTH, EQUAL, 10),
             text(ToString(row.Capacity)) | align_right | size(WIDTH, EQUAL, 10),
             text(utilSs.str()) | align_right | size(WIDTH, EQUAL, 10),
-            text(ToString(row.QueueEmptyHits)) | align_right | size(WIDTH, EQUAL, 12),
         }));
     }
 

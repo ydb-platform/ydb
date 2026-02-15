@@ -336,9 +336,9 @@ TOptions ParseOptions(int argc, char** argv) {
         .StoreResult(&options.InFlight)
         .DefaultValue("1");
 
-    opts.AddLongOption("action-pool-size", "Action worker threads per worker (0 means auto)")
+    opts.AddLongOption("action-pool-size", "Action worker threads per worker (default 1; 0 means auto)")
         .StoreResult(&options.ActionPoolSize)
-        .DefaultValue("0");
+        .DefaultValue("1");
 
     opts.AddLongOption("grpc-cq-threads", "gRPC completion queue threads for async client (0 means auto)")
         .StoreResult(&options.GrpcCqThreads)

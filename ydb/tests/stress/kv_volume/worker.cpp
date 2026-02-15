@@ -58,8 +58,6 @@ TWorker::TWorker(
     }
     ActionPoolSize_ = GetActionPoolSize();
 
-    InitialContext_ = std::make_shared<TExecutionContext>(0, "__initial__", nullptr, &WorkerDataStorage_);
-
     if (WorkerLoadTracker_) {
         WorkerLoadTracker_->SetWorkerCapacity(WorkerId_, ActionPoolSize_);
     }
@@ -119,24 +117,14 @@ TVector<std::pair<TString, TKeyInfo>> TWorker::PickSourceKeys(
         return WorkerDataStorage_.PickKeys(count, erase);
     };
 
-    auto pickFromInitial = [this, count, erase, &pickFromWorker]() {
-        if (InitialContext_) {
-            TVector<std::pair<TString, TKeyInfo>> keys = InitialContext_->PickKeys(count, erase);
-            if (!keys.empty()) {
-                return keys;
-            }
-        }
-        return pickFromWorker();
-    };
-
     if (!action.has_action_data_mode()) {
-        return pickFromInitial();
+        return pickFromWorker();
     }
 
     const auto& mode = action.action_data_mode();
     switch (mode.Mode_case()) {
         case NKikimrKeyValue::ActionDataMode::kWorker:
-            return pickFromInitial();
+            return pickFromWorker();
         case NKikimrKeyValue::ActionDataMode::kFromPrevActions: {
             if (mode.from_prev_actions().action_name_size() == 0) {
                 return {};
@@ -150,10 +138,10 @@ TVector<std::pair<TString, TKeyInfo>> TWorker::PickSourceKeys(
             return pickFromWorker();
         }
         case NKikimrKeyValue::ActionDataMode::MODE_NOT_SET:
-            return pickFromInitial();
+            return pickFromWorker();
     }
 
-    return pickFromInitial();
+    return pickFromWorker();
 }
 
 void TWorker::LoadInitialData() {
@@ -493,7 +481,7 @@ void TWorker::WriteInitialDataImpl() {
             break;
         }
 
-        const bool success = ExecuteWriteCommand("__initial__", writeCommand, std::nullopt, InitialContext_);
+        const bool success = ExecuteWriteCommand("__initial__", writeCommand, std::nullopt, nullptr);
         if (InitialLoadProgress_) {
             const ui64 bytes = static_cast<ui64>(writeCommand.size()) * writeCommand.count();
             InitialLoadProgress_->OnCommandFinished(bytes, success);
@@ -547,7 +535,11 @@ bool TWorker::ExecuteWriteCommand(
         bytesWritten += value.size();
     }
 
-    executionContext->AddKeys(writtenKeys);
+    if (executionContext) {
+        executionContext->AddKeys(writtenKeys);
+    } else {
+        WorkerDataStorage_.AddKeys(writtenKeys);
+    }
 
     if (actionStatsIndex) {
         Stats_.RecordWriteBytes(*actionStatsIndex, bytesWritten);

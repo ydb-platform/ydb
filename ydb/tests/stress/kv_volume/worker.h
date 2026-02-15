@@ -119,7 +119,6 @@ private:
     std::atomic<bool> StopRequested_ = false;
 
     TKeyBucket WorkerDataStorage_;
-    TExecutionContextPtr InitialContext_;
 
     THashMap<TString, TActionEntry> ActionsByName_;
     THashMap<TString, TVector<TString>> ChildrenByParent_;

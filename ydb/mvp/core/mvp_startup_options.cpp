@@ -34,6 +34,7 @@ TString TMvpStartupOptions::GetLocalEndpoint() const {
 }
 
 NLastGetopt::TOptsParseResult TMvpStartupOptions::ParseArgs(int argc, const char* argv[]) {
+    // Opts must live longer than ParseArgs(), because the parse result refers to it.
     Opts = NLastGetopt::TOpts::Default();
 
     Opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&LogToStderr);

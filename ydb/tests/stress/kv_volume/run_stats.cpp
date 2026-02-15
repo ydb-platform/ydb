@@ -65,7 +65,13 @@ TRunStats::TRunStats(TVector<TString> actionNames)
 }
 
 size_t TRunStats::FindLatencyBucket(ui64 latencyMs) {
-    for (size_t i = 0; i < LatencyBucketUpperBoundsMs.size(); ++i) {
+    if (latencyMs <= 1) {
+        return 0;
+    }
+    if (latencyMs <= 5) {
+        return latencyMs - 1;
+    }
+    for (size_t i = 5; i < LatencyBucketUpperBoundsMs.size(); ++i) {
         if (latencyMs <= LatencyBucketUpperBoundsMs[i]) {
             return i;
         }

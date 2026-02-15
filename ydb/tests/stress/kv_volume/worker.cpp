@@ -318,23 +318,12 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
         return;
     }
 
-    if (IsStopped()) {
-        rollbackRunning();
-        return;
-    }
-
     try {
-        if (!ActionPool_) {
-            rollbackRunning();
-            Stats_.RecordError("action_enqueue_failed", "action pool is not initialized", actionStatsIndex);
-            return;
-        }
-
         if (WorkerLoadTracker_) {
             WorkerLoadTracker_->AddActive(WorkerId_, +1);
         }
 
-        const bool enqueued = ActionPool_->Enqueue([this, actionId, executionContext, actionStatsIndex] {
+        ActionPool_->Enqueue([this, actionId, executionContext, actionStatsIndex] {
             try {
                 ExecuteAction(actionId, executionContext);
             } catch (const std::exception& e) {
@@ -349,17 +338,6 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
                 WorkerLoadTracker_->AddActive(WorkerId_, -1);
             }
         });
-
-        if (!enqueued) {
-            if (WorkerLoadTracker_) {
-                WorkerLoadTracker_->AddActive(WorkerId_, -1);
-            }
-            rollbackRunning();
-            if (!IsStopped()) {
-                Stats_.RecordError("action_enqueue_failed", "action pool is stopped", actionStatsIndex);
-            }
-            return;
-        }
     } catch (const std::exception& e) {
         if (WorkerLoadTracker_) {
             WorkerLoadTracker_->AddActive(WorkerId_, -1);

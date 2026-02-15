@@ -66,18 +66,10 @@ void TActionPool::Stop() {
     Queues_.clear();
 }
 
-bool TActionPool::Enqueue(TTask task) {
-    if (!task) {
-        return false;
-    }
-
+void TActionPool::Enqueue(TTask task) {
     auto queueNumSeq = NextQueueIndex_.fetch_add(1, std::memory_order_acq_rel);
     const ui32 queueIndex = static_cast<ui32>(queueNumSeq) % Queues_.size();
     TQueue* queue = Queues_[queueIndex].get();
-    if (!queue) {
-        return false;
-    }
-
     {
         std::lock_guard lock(queue->Mutex);
         queue->Pending.push_back(std::move(task));
@@ -85,7 +77,6 @@ bool TActionPool::Enqueue(TTask task) {
     }
 
     queue->Cv.notify_one();
-    return true;
 }
 
 bool TActionPool::WaitForIdle(std::chrono::steady_clock::duration timeout) {

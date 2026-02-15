@@ -24,7 +24,7 @@ public:
     void Start();
     void Stop();
 
-    bool Enqueue(TTask task);
+    void Enqueue(TTask task);
     bool WaitForIdle(std::chrono::steady_clock::duration timeout);
 
 private:

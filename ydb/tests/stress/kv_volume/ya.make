@@ -1,5 +1,9 @@
 PROGRAM(workload_keyvalue_volume)
 
+IF (OS_LINUX)
+    ALLOCATOR(TCMALLOC_256K)
+ENDIF()
+
 SRCS(
     main.cpp
     utils.cpp

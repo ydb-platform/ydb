@@ -27,41 +27,6 @@ ui64 ToLatencyMs(std::chrono::steady_clock::duration duration) {
 
 } // namespace
 
-TWorker::TExecutionContext::TExecutionContext(
-    ui64 executionId,
-    TString actionName,
-    std::shared_ptr<TExecutionContext> parent,
-    TKeyBucket* workerStorage)
-    : ExecutionId(executionId)
-    , ActionName(std::move(actionName))
-    , Parent(std::move(parent))
-    , WorkerStorage_(workerStorage)
-{
-}
-
-TWorker::TExecutionContext::~TExecutionContext() {
-    if (!WorkerStorage_) {
-        return;
-    }
-
-    const TVector<std::pair<TString, TKeyInfo>> remaining = Keys_.Drain();
-    if (!remaining.empty()) {
-        WorkerStorage_->AddKeys(remaining);
-    }
-}
-
-void TWorker::TExecutionContext::AddKey(const TString& key, const TKeyInfo& keyInfo) {
-    Keys_.AddKey(key, keyInfo);
-}
-
-void TWorker::TExecutionContext::AddKeys(const TVector<std::pair<TString, TKeyInfo>>& keys) {
-    Keys_.AddKeys(keys);
-}
-
-TVector<std::pair<TString, TKeyInfo>> TWorker::TExecutionContext::PickKeys(ui32 count, bool erase) {
-    return Keys_.PickKeys(count, erase);
-}
-
 TWorker::TWorker(
     ui32 workerId,
     const TOptions& options,

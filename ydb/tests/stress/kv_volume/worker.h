@@ -1,5 +1,6 @@
 #pragma once
 
+#include "execution_context.h"
 #include "initial_load_progress.h"
 #include "key_bucket.h"
 #include "keyvalue_client.h"
@@ -43,28 +44,7 @@ public:
     void Run(std::chrono::steady_clock::time_point endAt);
 
 private:
-    struct TExecutionContext {
-        TExecutionContext(
-            ui64 executionId,
-            TString actionName,
-            std::shared_ptr<TExecutionContext> parent,
-            TKeyBucket* workerStorage);
-        ~TExecutionContext();
-
-        void AddKey(const TString& key, const TKeyInfo& keyInfo);
-        void AddKeys(const TVector<std::pair<TString, TKeyInfo>>& keys);
-        TVector<std::pair<TString, TKeyInfo>> PickKeys(ui32 count, bool erase);
-
-        const ui64 ExecutionId = 0;
-        const TString ActionName;
-        const std::shared_ptr<TExecutionContext> Parent;
-
-    private:
-        TKeyBucket* const WorkerStorage_;
-        TKeyBucket Keys_;
-    };
-
-    using TExecutionContextPtr = std::shared_ptr<TExecutionContext>;
+    using TExecutionContextPtr = TExecutionContext::TPtr;
 
     struct TActionEntry {
         const NKikimrKeyValue::Action* Action = nullptr;

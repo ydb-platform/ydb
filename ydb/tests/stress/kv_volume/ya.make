@@ -11,6 +11,7 @@ SRCS(
     run_tui.cpp
     scroller.cpp
     key_bucket.cpp
+    execution_context.cpp
     keyvalue_client.cpp
     keyvalue_client_v1.cpp
     keyvalue_client_v2.cpp

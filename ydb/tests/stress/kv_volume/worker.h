@@ -18,6 +18,7 @@
 #include <csignal>
 #include <chrono>
 #include <condition_variable>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -70,8 +71,18 @@ private:
         ui32 StatsIndex = 0;
     };
 
+    struct TActionTask {
+        TString ActionName;
+        TExecutionContextPtr ExecutionContext;
+    };
+
     bool IsStopped() const;
     ui32 GetActionLimit(const NKikimrKeyValue::Action& action) const;
+    ui32 GetActionPoolSize() const;
+    void StartActionPool();
+    void StopActionPool();
+    void ActionWorkerLoop();
+    void StopSchedulers();
     void WaitForActions();
     TExecutionContextPtr CreateExecutionContext(const TString& actionName, TExecutionContextPtr parentContext);
     TExecutionContextPtr FindNearestAncestorAction(
@@ -136,12 +147,19 @@ private:
     std::mutex ActiveActionsMutex_;
     std::condition_variable ActiveActionsCv_;
 
+    std::mutex ActionQueueMutex_;
+    std::condition_variable ActionQueueCv_;
+    std::deque<TActionTask> PendingActions_;
+    bool ActionQueueStopRequested_ = false;
+    TVector<std::thread> ActionWorkers_;
+
     std::mutex PatternCacheMutex_;
     THashMap<ui32, TString> PatternCache_;
 
     std::atomic<ui64> WriteKeyCounter_ = 0;
     std::atomic<ui64> ExecutionIdCounter_ = 1;
     ui32 ActionCapacity_ = 0;
+    ui32 ActionPoolSize_ = 1;
 
     TVector<std::thread> Schedulers_;
 };

@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <exception>
 #include <random>
-#include <system_error>
 
 namespace NKvVolumeStress {
 
@@ -92,11 +91,12 @@ TWorker::TWorker(
         }
         ++actionIndex;
     }
+    ActionPoolSize_ = GetActionPoolSize();
 
     InitialContext_ = std::make_shared<TExecutionContext>(0, "__initial__", nullptr, &WorkerDataStorage_);
 
     if (WorkerLoadTracker_) {
-        WorkerLoadTracker_->SetWorkerCapacity(WorkerId_, ActionCapacity_);
+        WorkerLoadTracker_->SetWorkerCapacity(WorkerId_, ActionPoolSize_);
     }
 
     if (static_cast<int>(Config_.partition_mode()) == 1 && Config_.volume_config().partition_count() > 0) {
@@ -108,6 +108,13 @@ ui32 TWorker::GetActionLimit(const NKikimrKeyValue::Action& action) const {
     return action.has_worker_max_in_flight() && action.worker_max_in_flight() > 0
         ? action.worker_max_in_flight()
         : DefaultActionMaxInFlight;
+}
+
+ui32 TWorker::GetActionPoolSize() const {
+    const ui32 hardwareThreads = std::max<ui32>(1, std::thread::hardware_concurrency());
+    const ui32 desired = std::max<ui32>(1, hardwareThreads * 2);
+    const ui32 capacity = std::max<ui32>(1, ActionCapacity_);
+    return std::min(capacity, desired);
 }
 
 TWorker::TExecutionContextPtr TWorker::CreateExecutionContext(const TString& actionName, TExecutionContextPtr parentContext) {
@@ -189,7 +196,11 @@ void TWorker::LoadInitialData() {
 }
 
 void TWorker::Run(std::chrono::steady_clock::time_point endAt) {
+    bool actionPoolStarted = false;
     try {
+        StartActionPool();
+        actionPoolStarted = true;
+
         for (const auto& action : Config_.actions()) {
             if (action.has_parent_action() && !action.parent_action().empty()) {
                 continue;
@@ -208,15 +219,120 @@ void TWorker::Run(std::chrono::steady_clock::time_point endAt) {
             std::this_thread::sleep_for(100ms);
         }
 
-        StopRequested_.store(true);
+        StopRequested_.store(true, std::memory_order_relaxed);
+        StopSchedulers();
+        WaitForActions();
+        StopActionPool();
+    } catch (const std::exception& e) {
+        StopRequested_.store(true, std::memory_order_relaxed);
+        StopSchedulers();
+        if (actionPoolStarted) {
+            WaitForActions();
+            StopActionPool();
+        }
+        Stats_.RecordError("worker_exception", e.what());
+    }
+}
 
-        for (auto& scheduler : Schedulers_) {
-            scheduler.join();
+void TWorker::StartActionPool() {
+    {
+        std::lock_guard lock(ActionQueueMutex_);
+        ActionQueueStopRequested_ = false;
+        PendingActions_.clear();
+    }
+
+    ActionWorkers_.clear();
+    ActionWorkers_.reserve(ActionPoolSize_);
+
+    try {
+        for (ui32 i = 0; i < ActionPoolSize_; ++i) {
+            ActionWorkers_.emplace_back([this] {
+                ActionWorkerLoop();
+            });
+        }
+    } catch (...) {
+        {
+            std::lock_guard lock(ActionQueueMutex_);
+            ActionQueueStopRequested_ = true;
+        }
+        ActionQueueCv_.notify_all();
+        for (auto& workerThread : ActionWorkers_) {
+            if (workerThread.joinable()) {
+                workerThread.join();
+            }
+        }
+        ActionWorkers_.clear();
+        throw;
+    }
+}
+
+void TWorker::StopActionPool() {
+    {
+        std::lock_guard lock(ActionQueueMutex_);
+        ActionQueueStopRequested_ = true;
+    }
+    ActionQueueCv_.notify_all();
+
+    for (auto& workerThread : ActionWorkers_) {
+        if (workerThread.joinable()) {
+            workerThread.join();
+        }
+    }
+    ActionWorkers_.clear();
+}
+
+void TWorker::ActionWorkerLoop() {
+    while (true) {
+        TActionTask task;
+        {
+            std::unique_lock lock(ActionQueueMutex_);
+            ActionQueueCv_.wait(lock, [this] {
+                return ActionQueueStopRequested_ || !PendingActions_.empty();
+            });
+
+            if (PendingActions_.empty()) {
+                if (ActionQueueStopRequested_) {
+                    return;
+                }
+                continue;
+            }
+
+            task = std::move(PendingActions_.front());
+            PendingActions_.pop_front();
         }
 
-        WaitForActions();
-    } catch (const std::exception& e) {
-        Stats_.RecordError("worker_exception", e.what());
+        try {
+            ExecuteAction(task.ActionName, task.ExecutionContext);
+        } catch (const std::exception& e) {
+            std::optional<ui32> actionStatsIndex;
+            if (const auto actionIt = ActionsByName_.find(task.ActionName); actionIt != ActionsByName_.end()) {
+                actionStatsIndex = actionIt->second.StatsIndex;
+            }
+            Stats_.RecordError("action_exception", e.what(), actionStatsIndex);
+        } catch (...) {
+            std::optional<ui32> actionStatsIndex;
+            if (const auto actionIt = ActionsByName_.find(task.ActionName); actionIt != ActionsByName_.end()) {
+                actionStatsIndex = actionIt->second.StatsIndex;
+            }
+            Stats_.RecordError("action_exception", "unknown exception", actionStatsIndex);
+        }
+
+        {
+            std::lock_guard lock(RunningByActionMutex_);
+            auto it = RunningByAction_.find(task.ActionName);
+            if (it != RunningByAction_.end() && it->second) {
+                --it->second;
+            }
+        }
+
+        if (ActiveActions_.fetch_sub(1, std::memory_order_relaxed) == 1) {
+            std::lock_guard lock(ActiveActionsMutex_);
+            ActiveActionsCv_.notify_all();
+        }
+
+        if (WorkerLoadTracker_) {
+            WorkerLoadTracker_->AddActive(WorkerId_, -1);
+        }
     }
 }
 
@@ -225,6 +341,15 @@ bool TWorker::IsStopped() const {
         return true;
     }
     return StopSignal_ && *StopSignal_ != 0;
+}
+
+void TWorker::StopSchedulers() {
+    for (auto& scheduler : Schedulers_) {
+        if (scheduler.joinable()) {
+            scheduler.join();
+        }
+    }
+    Schedulers_.clear();
 }
 
 void TWorker::WaitForActions() {
@@ -273,53 +398,46 @@ void TWorker::ScheduleAction(const TString& actionName, TExecutionContextPtr par
         ++running;
     }
 
-    TExecutionContextPtr executionContext = CreateExecutionContext(actionName, std::move(parentContext));
-    ActiveActions_.fetch_add(1, std::memory_order_relaxed);
-    if (WorkerLoadTracker_) {
-        WorkerLoadTracker_->AddActive(WorkerId_, +1);
+    auto rollbackRunning = [this, &actionName] {
+        std::lock_guard lock(RunningByActionMutex_);
+        auto it = RunningByAction_.find(actionName);
+        if (it != RunningByAction_.end() && it->second) {
+            --it->second;
+        }
+    };
+
+    TExecutionContextPtr executionContext;
+    try {
+        executionContext = CreateExecutionContext(actionName, std::move(parentContext));
+    } catch (const std::exception& e) {
+        rollbackRunning();
+        Stats_.RecordError("execution_context_create_failed", e.what(), actionStatsIndex);
+        return;
+    }
+
+    if (IsStopped()) {
+        rollbackRunning();
+        return;
     }
 
     try {
-        std::thread([this, actionName, executionContext = std::move(executionContext)] {
-            ExecuteAction(actionName, executionContext);
-
-            {
-                std::lock_guard lock(RunningByActionMutex_);
-                auto it = RunningByAction_.find(actionName);
-                if (it != RunningByAction_.end() && it->second) {
-                    --it->second;
-                }
-            }
-
-            if (ActiveActions_.fetch_sub(1, std::memory_order_relaxed) == 1) {
-                std::lock_guard lock(ActiveActionsMutex_);
-                ActiveActionsCv_.notify_all();
-            }
-
-            if (WorkerLoadTracker_) {
-                WorkerLoadTracker_->AddActive(WorkerId_, -1);
-            }
-        }).detach();
-    } catch (const std::system_error& e) {
-        {
-            std::lock_guard lock(RunningByActionMutex_);
-            auto it = RunningByAction_.find(actionName);
-            if (it != RunningByAction_.end() && it->second) {
-                --it->second;
-            }
+        std::lock_guard lock(ActionQueueMutex_);
+        if (ActionQueueStopRequested_ || IsStopped()) {
+            rollbackRunning();
+            return;
         }
-
-        if (ActiveActions_.fetch_sub(1, std::memory_order_relaxed) == 1) {
-            std::lock_guard lock(ActiveActionsMutex_);
-            ActiveActionsCv_.notify_all();
-        }
-
+        PendingActions_.push_back(TActionTask{actionName, std::move(executionContext)});
+        ActiveActions_.fetch_add(1, std::memory_order_relaxed);
         if (WorkerLoadTracker_) {
-            WorkerLoadTracker_->AddActive(WorkerId_, -1);
+            WorkerLoadTracker_->AddActive(WorkerId_, +1);
         }
-
-        Stats_.RecordError("thread_create_failed", e.what(), actionStatsIndex);
+    } catch (const std::exception& e) {
+        rollbackRunning();
+        Stats_.RecordError("action_enqueue_failed", e.what(), actionStatsIndex);
+        return;
     }
+
+    ActionQueueCv_.notify_one();
 }
 
 void TWorker::ExecuteAction(const TString& actionName, TExecutionContextPtr executionContext) {

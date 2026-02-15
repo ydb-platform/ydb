@@ -76,7 +76,7 @@ private:
         TExecutionContextPtr ExecutionContext;
     };
 
-    struct TActionQueue {
+    struct alignas(64) TActionQueue {
         std::mutex Mutex;
         std::condition_variable Cv;
         std::deque<TActionTask> Pending;
@@ -146,24 +146,24 @@ private:
 
     std::optional<ui32> FixedPartitionId_;
 
-    std::mutex RunningByActionMutex_;
-    THashMap<TString, ui32> RunningByAction_;
+    alignas(64) std::mutex RunningByActionMutex_;
+    alignas(64) THashMap<TString, ui32> RunningByAction_;
 
-    std::atomic<ui64> ActiveActions_ = 0;
-    std::mutex ActiveActionsMutex_;
-    std::condition_variable ActiveActionsCv_;
+    alignas(64) std::atomic<ui64> ActiveActions_ = 0;
+    alignas(64) std::mutex ActiveActionsMutex_;
+    alignas(64) std::condition_variable ActiveActionsCv_;
 
-    std::atomic<bool> ActionQueueStopRequested_ = false;
-    std::atomic<ui64> NextActionQueueIndex_ = 0;
-    TVector<std::unique_ptr<TActionQueue>> ActionQueues_;
-    TVector<std::thread> ActionWorkers_;
+    alignas(64) std::atomic<bool> ActionQueueStopRequested_ = false;
+    alignas(64) std::atomic<ui64> NextActionQueueIndex_ = 0;
+    alignas(64) TVector<std::unique_ptr<TActionQueue>> ActionQueues_;
+    alignas(64) TVector<std::thread> ActionWorkers_;
 
-    std::mutex PatternCacheMutex_;
-    THashMap<ui32, TString> PatternCache_;
+    alignas(64) std::mutex PatternCacheMutex_;
+    alignas(64) THashMap<ui32, TString> PatternCache_;
 
-    std::atomic<ui64> WriteKeyCounter_ = 0;
-    std::atomic<ui64> ExecutionIdCounter_ = 1;
-    ui32 ActionCapacity_ = 0;
+    alignas(64) std::atomic<ui64> WriteKeyCounter_ = 0;
+    alignas(64) std::atomic<ui64> ExecutionIdCounter_ = 1;
+    alignas(64) ui32 ActionCapacity_ = 0;
     ui32 ActionPoolSize_ = 1;
 
     TVector<std::thread> Schedulers_;

@@ -218,7 +218,6 @@ namespace {
         return std::nullopt;
     }
 
-
     std::optional<ui64> ExtractBreakerQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern,
         const std::optional<TString>& expectedBreakerQueryText = std::nullopt)
     {
@@ -236,8 +235,6 @@ namespace {
         }
         return std::nullopt;
     }
-
-
 
     std::optional<ui64> ExtractVictimQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern,
         const std::optional<TString>& expectedVictimQueryText = std::nullopt)
@@ -308,8 +305,6 @@ namespace {
             Cerr << record << Endl;
         }
     }
-
-
 
     // ==================== TLI log patterns ====================
 
@@ -489,6 +484,42 @@ namespace {
         }
     }
 
+    TString NumberedTablePath(int index) {
+        return Sprintf("/Root/Tenant1/Table%d", index);
+    }
+
+    void CreateTableInSession(TSession& session, const TString& tableName) {
+        NKqp::AssertSuccessResult(session.ExecuteQuery(
+            Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str()),
+            TTxControl::NoTx()
+        ).GetValueSync());
+    }
+
+    void SeedTableInSession(TSession& session, const TString& tableName, const TVector<std::pair<ui64, TString>>& rows) {
+        for (const auto& [key, value] : rows) {
+            NKqp::AssertSuccessResult(session.ExecuteQuery(
+                Sprintf("UPSERT INTO `%s` (Key, Value) VALUES (%luu, \"%s\")", tableName.c_str(), key, value.c_str()),
+                TTxControl::BeginTx().CommitTx()
+            ).GetValueSync());
+        }
+    }
+
+    void CreateAndSeedTablesInSession(TSession& session, int count) {
+        for (int i = 1; i <= count; ++i) {
+            const TString tablePath = NumberedTablePath(i);
+            CreateTableInSession(session, tablePath);
+            SeedTableInSession(session, tablePath, {{1, Sprintf("Init%d", i)}});
+        }
+    }
+
+    void CreateAndSeedTablesWithSecondKeyInSession(TSession& session, int count) {
+        for (int i = 1; i <= count; ++i) {
+            const TString tablePath = NumberedTablePath(i);
+            CreateTableInSession(session, tablePath);
+            SeedTableInSession(session, tablePath, {{1, Sprintf("Init%d", i)}, {2, Sprintf("Init%d_2", i)}});
+        }
+    }
+
     // NQuery-based test context (primary API for all tests)
     struct TTliTestContext {
         TKikimrRunner Kikimr;
@@ -506,19 +537,19 @@ namespace {
         }
 
         void CreateTable(const TString& tableName) {
-            NKqp::AssertSuccessResult(Session.ExecuteQuery(
-                Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str()),
-                TTxControl::NoTx()
-            ).GetValueSync());
+            CreateTableInSession(Session, tableName);
         }
 
         void SeedTable(const TString& tableName, const TVector<std::pair<ui64, TString>>& rows) {
-            for (const auto& [key, value] : rows) {
-                NKqp::AssertSuccessResult(Session.ExecuteQuery(
-                    Sprintf("UPSERT INTO `%s` (Key, Value) VALUES (%luu, \"%s\")", tableName.c_str(), key, value.c_str()),
-                    TTxControl::BeginTx().CommitTx()
-                ).GetValueSync());
-            }
+            SeedTableInSession(Session, tableName, rows);
+        }
+
+        void CreateAndSeedTables(int count) {
+            CreateAndSeedTablesInSession(Session, count);
+        }
+
+        void CreateAndSeedTablesWithSecondKey(int count) {
+            CreateAndSeedTablesWithSecondKeyInSession(Session, count);
         }
 
         void ExecuteQuery(const TString& query) {
@@ -564,19 +595,19 @@ namespace {
         }
 
         void CreateTable(const TString& tableName) {
-            NKqp::AssertSuccessResult(BreakerSession->ExecuteQuery(
-                Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str()),
-                TTxControl::NoTx()
-            ).GetValueSync());
+            CreateTableInSession(*BreakerSession, tableName);
         }
 
         void SeedTable(const TString& tableName, const TVector<std::pair<ui64, TString>>& rows) {
-            for (const auto& [key, value] : rows) {
-                NKqp::AssertSuccessResult(BreakerSession->ExecuteQuery(
-                    Sprintf("UPSERT INTO `%s` (Key, Value) VALUES (%luu, \"%s\")", tableName.c_str(), key, value.c_str()),
-                    TTxControl::BeginTx().CommitTx()
-                ).GetValueSync());
-            }
+            SeedTableInSession(*BreakerSession, tableName, rows);
+        }
+
+        void CreateAndSeedTables(int count) {
+            CreateAndSeedTablesInSession(*BreakerSession, count);
+        }
+
+        void CreateAndSeedTablesWithSecondKey(int count) {
+            CreateAndSeedTablesWithSecondKeyInSession(*BreakerSession, count);
         }
     };
 
@@ -608,6 +639,14 @@ namespace {
     void ExecuteAndCommitTx(TSession& session, TTransaction& tx, const TString& query) {
         auto result = session.ExecuteQuery(query, TTxControl::Tx(tx).CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    // Execute a query in tx and reassign the transaction from the result
+    // (needed when the test must track the updated transaction object, e.g. InvisibleRowSkips)
+    void ExecuteInTxReassign(TSession& session, TTransaction& tx, const TString& query) {
+        auto result = session.ExecuteQuery(query, TTxControl::Tx(tx)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        tx = *result.GetTransaction();
     }
 
     // Execute victim commit and return both status and issues for verification
@@ -766,12 +805,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(LogDisabled) {
         TStringStream ss;
         TTliTestContext ctx(ss, false);
-        ctx.CreateTable("/Root/Tenant1/TableLocks");
-        ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
+        ctx.CreateAndSeedTables(1);
 
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
         ctx.ExecuteQuery(breakerQueryText);
@@ -784,12 +822,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(Basic) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableLocks");
-        ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
+        ctx.CreateAndSeedTables(1);
 
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
         ctx.ExecuteQuery(breakerQueryText);
@@ -802,13 +839,12 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(SeparateCommit) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableLocks");
-        ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
+        ctx.CreateAndSeedTables(1);
 
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
-        const TString breakerQueryText2 = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (2u, \"UsualValue\")";
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString breakerQueryText2 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (2u, \"UsualValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
 
@@ -829,21 +865,20 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(SeparateCommitBreakerInMiddleOfSameShard) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/SameShardTable");
-        ctx.SeedTable("/Root/Tenant1/SameShardTable", {{1, "Initial"}});
+        ctx.CreateAndSeedTables(1);
 
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/SameShardTable` WHERE Key = 1u";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/SameShardTable` (Key, Value) VALUES (1u, \"VictimValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         // All writes go to the SAME table (same shard). The actual breaker (Key=1)
         // is in the middle of the sequence.
-        const TString breakerBefore1 = "UPSERT INTO `/Root/Tenant1/SameShardTable` (Key, Value) VALUES (10u, \"Before1\")";
-        const TString breakerBefore2 = "UPSERT INTO `/Root/Tenant1/SameShardTable` (Key, Value) VALUES (20u, \"Before2\")";
-        const TString breakerBefore3 = "UPSERT INTO `/Root/Tenant1/SameShardTable` (Key, Value) VALUES (30u, \"Before3\")";
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/SameShardTable` (Key, Value) VALUES (1u, \"BreakerValue\")";
-        const TString breakerAfter1 = "UPSERT INTO `/Root/Tenant1/SameShardTable` (Key, Value) VALUES (40u, \"After1\")";
-        const TString breakerAfter2 = "UPSERT INTO `/Root/Tenant1/SameShardTable` (Key, Value) VALUES (50u, \"After2\")";
-        const TString breakerAfter3 = "UPSERT INTO `/Root/Tenant1/SameShardTable` (Key, Value) VALUES (60u, \"After3\")";
+        const TString breakerBefore1 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (10u, \"Before1\")";
+        const TString breakerBefore2 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (20u, \"Before2\")";
+        const TString breakerBefore3 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (30u, \"Before3\")";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString breakerAfter1 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (40u, \"After1\")";
+        const TString breakerAfter2 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (50u, \"After2\")";
+        const TString breakerAfter3 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (60u, \"After3\")";
 
         // Victim: read Key=1 (creates a lock)
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
@@ -868,10 +903,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(ManyUpserts) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        for (int i = 1; i <= 6; ++i) {
-            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
-            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
-        }
+        ctx.CreateAndSeedTables(6);
 
         const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -898,50 +930,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
 
-    // Test: Many upserts in a single transaction, the breaker is the middle upsert, separate commit
-    Y_UNIT_TEST(ManyUpsertsSeparateCommit) {
-        TStringStream ss;
-        TTliTestContext ctx(ss);
-        for (int i = 1; i <= 6; ++i) {
-            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
-            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
-        }
-
-        const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
-        const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
-        const TString victimSelectTable3 = "SELECT * FROM `/Root/Tenant1/Table3` WHERE Key = 1u";
-        const TString victimUpdateTable4 = "UPDATE `/Root/Tenant1/Table4` SET Value = \"VictimUpdate\" WHERE Key = 1u";
-        const TString breakerUpdateTable2 = "UPDATE `/Root/Tenant1/Table2` SET Value = \"BreakerUpdate2\" WHERE Key = 1u";
-        const TString breakerUpdateTable5 = "UPDATE `/Root/Tenant1/Table5` SET Value = \"BreakerUpdate5\" WHERE Key = 1u";
-        const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
-
-        // Victim: read tables 1,2,3, then update table 4 (without commit)
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable3);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable4);
-
-        // Breaker: update tables 5,2,6, then commit separately (breaks victim's lock on table 2)
-        auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
-        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable2);
-        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdateTable6);
-
-        auto [status, issues] = CommitTxWithIssues(victimTx);
-        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
-
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
-    }
-
     // Test: Multi-table writes with standalone COMMIT_TX (TPCC-like scenario)
     // Breaker writes to multiple tables in separate queries, then uses breakerTx->Commit() (QUERY_ACTION_COMMIT_TX)
     // This is different from CommitTx() on the last query (QUERY_ACTION_EXECUTE_PREPARED with commit flag)
     Y_UNIT_TEST(ManyUpsertsStandaloneCommit) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        for (int i = 1; i <= 6; ++i) {
-            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
-            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
-        }
+        ctx.CreateAndSeedTables(6);
 
         const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -974,12 +969,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(DifferentKeys) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableDiffKeys");
-        ctx.SeedTable("/Root/Tenant1/TableDiffKeys", {{1, "V1"}, {2, "V2"}});
+        ctx.CreateAndSeedTablesWithSecondKey(1);
 
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableDiffKeys` WHERE Key = 1u";
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableDiffKeys` (Key, Value) VALUES (1u, \"Breaker\")";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableDiffKeys` (Key, Value) VALUES (2u, \"VictimWrite\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"Breaker\")";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (2u, \"VictimWrite\")";
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
         ctx.ExecuteQuery(breakerQueryText);
@@ -993,12 +987,12 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(MultipleKeys) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableMulti");
-        ctx.SeedTable("/Root/Tenant1/TableMulti", {{1, "V1"}, {2, "V2"}, {3, "V3"}});
+        ctx.CreateAndSeedTablesWithSecondKey(1);
+        ctx.SeedTable("/Root/Tenant1/Table1", {{3, "V3"}});
 
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableMulti` WHERE Key IN (1u, 2u, 3u)";
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableMulti` (Key, Value) VALUES (1u, \"B1\"), (2u, \"B2\"), (3u, \"B3\")";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableMulti` (Key, Value) VALUES (1u, \"Victim\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key IN (1u, 2u, 3u)";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"B1\"), (2u, \"B2\"), (3u, \"B3\")";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"Victim\")";
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
         ctx.ExecuteQuery(breakerQueryText);
@@ -1012,13 +1006,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(CrossTables) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableA");
-        ctx.CreateTable("/Root/Tenant1/TableB");
-        ctx.SeedTable("/Root/Tenant1/TableA", {{1, "ValA"}});
+        ctx.CreateAndSeedTables(2);
 
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableA` WHERE Key = 1u";
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableA` (Key, Value) VALUES (1u, \"Breaker\")";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableB` (Key, Value) VALUES (1u, \"DstVal\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"Breaker\")";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table2` (Key, Value) VALUES (1u, \"DstVal\")";
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
         ctx.ExecuteQuery(breakerQueryText);
@@ -1039,17 +1031,14 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         TSession victim1Session = ctx.Client.GetSession().GetValueSync().GetSession();
         TSession victim2Session = ctx.Client.GetSession().GetValueSync().GetSession();
 
-        ctx.CreateTable("/Root/Tenant1/TableA");
-        ctx.CreateTable("/Root/Tenant1/TableB");
-        ctx.SeedTable("/Root/Tenant1/TableA", {{1, "InitA"}});
-        ctx.SeedTable("/Root/Tenant1/TableB", {{1, "InitB"}});
+        ctx.CreateAndSeedTables(2);
 
-        const TString victim1QueryText = "SELECT * FROM `/Root/Tenant1/TableA` WHERE Key = 1u";
-        const TString victim2QueryText = "SELECT * FROM `/Root/Tenant1/TableB` WHERE Key = 1u";
-        const TString breakerUpdate1 = "UPDATE `/Root/Tenant1/TableA` SET Value = \"BreakerA\" WHERE Key = 1u";
-        const TString breakerUpdate2 = "UPDATE `/Root/Tenant1/TableB` SET Value = \"BreakerB\" WHERE Key = 1u";
-        const TString victim1CommitText = "UPSERT INTO `/Root/Tenant1/TableA` (Key, Value) VALUES (1u, \"VictimA\")";
-        const TString victim2CommitText = "UPSERT INTO `/Root/Tenant1/TableB` (Key, Value) VALUES (1u, \"VictimB\")";
+        const TString victim1QueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victim2QueryText = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
+        const TString breakerUpdate1 = "UPDATE `/Root/Tenant1/Table1` SET Value = \"BreakerA\" WHERE Key = 1u";
+        const TString breakerUpdate2 = "UPDATE `/Root/Tenant1/Table2` SET Value = \"BreakerB\" WHERE Key = 1u";
+        const TString victim1CommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimA\")";
+        const TString victim2CommitText = "UPSERT INTO `/Root/Tenant1/Table2` (Key, Value) VALUES (1u, \"VictimB\")";
 
         // Both victims read their respective tables
         auto victim1Tx = BeginReadTx(victim1Session, victim1QueryText);
@@ -1077,13 +1066,12 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(InvisibleRowSkips) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableSkips");
-        ctx.SeedTable("/Root/Tenant1/TableSkips", {{1, "Initial"}});
+        ctx.CreateAndSeedTables(1);
 
-        const TString victimRead1Text = "SELECT * FROM `/Root/Tenant1/TableSkips` WHERE Key = 1u /* victim-read1 */";
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableSkips` (Key, Value) VALUES (1u, \"BreakerV2\")";
-        const TString victimRead2Text = "SELECT * FROM `/Root/Tenant1/TableSkips` WHERE Key = 1u /* victim-read2 */";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableSkips` (Key, Value) VALUES (1u, \"VictimVal\")";
+        const TString victimRead1Text = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u /* victim-read1 */";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerV2\")";
+        const TString victimRead2Text = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u /* victim-read2 */";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimVal\")";
 
         // Victim reads key 1 at snapshot V1 - establishes lock
         auto victimTx = BeginReadTx(ctx.VictimSession, victimRead1Text);
@@ -1092,11 +1080,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx.ExecuteQuery(breakerQueryText);
 
         // Victim reads key 1 AGAIN - triggers InvisibleRowSkips detection
-        {
-            auto result = ctx.VictimSession.ExecuteQuery(victimRead2Text, TTxControl::Tx(victimTx)).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            victimTx = *result.GetTransaction();
-        }
+        ExecuteInTxReassign(ctx.VictimSession, victimTx, victimRead2Text);
 
         // Victim tries to commit -> aborted because lock was broken
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
@@ -1113,13 +1097,12 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(SnapshotThenReadWrite) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableSnapshot");
-        ctx.SeedTable("/Root/Tenant1/TableSnapshot", {{1, "V1"}, {2, "V2"}});
+        ctx.CreateAndSeedTablesWithSecondKey(1);
 
-        const TString victimSnapshotText = "SELECT * FROM `/Root/Tenant1/TableSnapshot` WHERE Key = 2u /* snapshot */";
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableSnapshot` (Key, Value) VALUES (1u, \"BreakerValue\")";
-        const TString victimReadText = "SELECT * FROM `/Root/Tenant1/TableSnapshot` WHERE Key = 1u /* victim-read */";
-        const TString victimWriteText = "UPSERT INTO `/Root/Tenant1/TableSnapshot` (Key, Value) VALUES (1u, \"VictimValue\")";
+        const TString victimSnapshotText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 2u /* snapshot */";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString victimReadText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u /* victim-read */";
+        const TString victimWriteText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         // Victim: start tx and get snapshot on a different key
         auto victimTx = BeginReadTx(ctx.VictimSession, victimSnapshotText);
@@ -1128,11 +1111,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx.ExecuteQuery(breakerQueryText);
 
         // Victim: read the conflicting key after breaker commit
-        {
-            auto result = ctx.VictimSession.ExecuteQuery(victimReadText, TTxControl::Tx(victimTx)).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            victimTx = *result.GetTransaction();
-        }
+        ExecuteInTxReassign(ctx.VictimSession, victimTx, victimReadText);
 
         // Victim: write the key and try to commit -> should be aborted
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimWriteText);
@@ -1147,10 +1126,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(ManyUpsertsDeferredLock) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        for (int i = 1; i <= 6; ++i) {
-            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
-            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}, {2, Sprintf("Init%d_2", i)}});
-        }
+        // Note: key 2 is needed for snapshot on Table1 in this scenario.
+        ctx.CreateAndSeedTablesWithSecondKey(6);
 
         // Victim queries
         const TString victimSnapshotTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 2u /* snapshot */";
@@ -1175,11 +1152,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Step 3: Victim reads tables 2, 3, 4 after breaker committed
         // Only SELECT Table3 key 1 triggers InvisibleRowSkips (deferred detection)
         ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
-        {
-            auto result = ctx.VictimSession.ExecuteQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            victimTx = *result.GetTransaction();
-        }
+        ExecuteInTxReassign(ctx.VictimSession, victimTx, victimSelectTable3);
         ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable4);
 
         // Step 4: Victim writes and tries to commit -> should be aborted
@@ -1195,20 +1168,20 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(ConcurrentUpsertSelect) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/ConcurrentTable");
+        ctx.CreateAndSeedTables(1);
 
         // Seed with initial data in the key range 1-10
-        for (ui64 i = 1; i <= 10; ++i) {
-            ctx.SeedTable("/Root/Tenant1/ConcurrentTable", {{i, Sprintf("Initial%lu", i)}});
+        for (ui64 i = 2; i <= 10; ++i) {
+            ctx.SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%lu", i)}});
         }
 
         // Victim transaction: UPSERT...SELECT that reads and writes keys 1-5
-        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/ConcurrentTable` (Key, Value) "
-                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/ConcurrentTable` "
+        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) "
+                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/Table1` "
                                            "WHERE Key >= 1u AND Key <= 5u";
 
         // Breaker transaction: simple UPSERT to key 3 (overlaps with victim's range)
-        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/ConcurrentTable` (Key, Value) VALUES (3u, \"BreakerValue\")";
+        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (3u, \"BreakerValue\")";
 
         // Victim: start transaction with UPSERT...SELECT (reads keys 1-5, then writes them)
         // Note: with OLTP sink, the lock is NOT created immediately here (deferred lock creation)
@@ -1234,14 +1207,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // This tests that TLI logging works correctly when breaker and victim sessions
     // are on different nodes.
 
-    // Test: 2-node version of ManyUpsertsSeparateCommit
-    Y_UNIT_TEST(ManyUpsertsSeparateCommit2Node) {
+    // Test: 2-node version of ManyUpserts
+    Y_UNIT_TEST(ManyUpserts2Node) {
         TStringStream ss;
         TTli2NodeTestContext ctx(ss);
-        for (int i = 1; i <= 6; ++i) {
-            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
-            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
-        }
+        ctx.CreateAndSeedTables(6);
 
         const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -1272,10 +1242,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(ManyUpsertsStandaloneCommit2Node) {
         TStringStream ss;
         TTli2NodeTestContext ctx(ss);
-        for (int i = 1; i <= 6; ++i) {
-            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
-            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
-        }
+        ctx.CreateAndSeedTables(6);
 
         const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -1308,20 +1275,20 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(ConcurrentUpsertSelect2Node) {
         TStringStream ss;
         TTli2NodeTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/ConcurrentTable");
+        ctx.CreateAndSeedTables(1);
 
         // Seed with initial data in the key range 1-10
-        for (ui64 i = 1; i <= 10; ++i) {
-            ctx.SeedTable("/Root/Tenant1/ConcurrentTable", {{i, Sprintf("Initial%lu", i)}});
+        for (ui64 i = 2; i <= 10; ++i) {
+            ctx.SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%lu", i)}});
         }
 
         // Victim transaction: UPSERT...SELECT that reads and writes keys 1-5
-        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/ConcurrentTable` (Key, Value) "
-                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/ConcurrentTable` "
+        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) "
+                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/Table1` "
                                            "WHERE Key >= 1u AND Key <= 5u";
 
         // Breaker transaction: simple UPSERT to key 3 (overlaps with victim's range)
-        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/ConcurrentTable` (Key, Value) VALUES (3u, \"BreakerValue\")";
+        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (3u, \"BreakerValue\")";
 
         // Victim: start transaction with UPSERT...SELECT
         auto victimTx = BeginTx(*ctx.VictimSession, victimUpsertSelect);
@@ -1370,18 +1337,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         TSession session = client.GetSession().GetValueSync().GetSession();
         TSession victimSession = client.GetSession().GetValueSync().GetSession();
 
-        NKqp::AssertSuccessResult(session.ExecuteQuery(
-            R"(CREATE TABLE `/Root/Tenant1/TableTracing` (Key Uint64, Value String, PRIMARY KEY (Key));)",
-            TTxControl::NoTx()
-        ).GetValueSync());
-        NKqp::AssertSuccessResult(session.ExecuteQuery(
-            "UPSERT INTO `/Root/Tenant1/TableTracing` (Key, Value) VALUES (1u, \"Initial\")",
-            TTxControl::BeginTx().CommitTx()
-        ).GetValueSync());
+        CreateAndSeedTablesInSession(session, 1);
 
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableTracing` (Key, Value) VALUES (1u, \"BreakerValue\")";
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableTracing` WHERE Key = 1u";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableTracing` (Key, Value) VALUES (1u, \"VictimValue\")";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         auto victimTx = BeginReadTx(victimSession, victimQueryText);
         NKqp::AssertSuccessResult(session.ExecuteQuery(breakerQueryText, TTxControl::BeginTx().CommitTx()).GetValueSync());
@@ -1416,10 +1376,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(BreakerAndVictimInSameTransaction) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        for (int i = 1; i <= 3; ++i) {
-            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
-            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
-        }
+        ctx.CreateAndSeedTables(3);
 
         const TString victimOfTSelect = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimOfTUpdate = "UPDATE `/Root/Tenant1/Table3` SET Value = \"VictimOfTWrite\" WHERE Key = 1u";
@@ -1468,17 +1425,16 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(BasicDataQuery) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableLocks");
-        ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
+        ctx.CreateAndSeedTables(1);
 
         // Create DataQuery sessions
         NYdb::NTable::TTableClient tableClient(ctx.Kikimr.GetTableClient());
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         auto victimSession = tableClient.CreateSession().GetValueSync().GetSession();
 
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         auto victimTx = NDataQueryCompat::BeginReadTx(victimSession, victimQueryText);
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(breakerQueryText, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync());
@@ -1491,18 +1447,17 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     Y_UNIT_TEST(SeparateCommitDataQuery) {
         TStringStream ss;
         TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableLocks");
-        ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
+        ctx.CreateAndSeedTables(1);
 
         // Create DataQuery sessions
         NYdb::NTable::TTableClient tableClient(ctx.Kikimr.GetTableClient());
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         auto victimSession = tableClient.CreateSession().GetValueSync().GetSession();
 
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
-        const TString breakerQueryText2 = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (2u, \"UsualValue\")";
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString breakerQueryText2 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (2u, \"UsualValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         auto victimTx = NDataQueryCompat::BeginReadTx(victimSession, victimQueryText);
 

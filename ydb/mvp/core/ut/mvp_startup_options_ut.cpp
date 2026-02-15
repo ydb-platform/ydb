@@ -9,16 +9,16 @@ using namespace NMVP;
 
 namespace {
     template <size_t N>
-    static TMvpStartupOptions MakeOpts(const char* (&argv)[N]) {
+    TMvpStartupOptions MakeOpts(const char* (&argv)[N]) {
         return TMvpStartupOptions::Build(N, argv);
     }
 
     template <size_t N>
-    static TMvpStartupOptions MakeOpts(const char* (&&argv)[N]) {
+    TMvpStartupOptions MakeOpts(const char* (&&argv)[N]) {
         return TMvpStartupOptions::Build(N, argv);
     }
 
-    static TTempFileHandle MakeTestFile(const TStringBuf content, const TString& name = "test", const TString& extension = "") {
+    TTempFileHandle MakeTestFile(const TStringBuf content, const TString& name = "test", const TString& extension = "") {
         TTempFileHandle tmpFile = TTempFileHandle::InCurrentDir(name, extension);
         TUnbufferedFileOutput ofs(tmpFile.Name());
         ofs.Write(content);

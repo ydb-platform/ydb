@@ -47,7 +47,12 @@ private:
 
     struct TActionEntry {
         const NKikimrKeyValue::Action* Action = nullptr;
+        TString Name;
+        ui32 ActionId = 0;
         ui32 StatsIndex = 0;
+        ui32 Limit = 0;
+        std::optional<ui32> ParentActionId;
+        std::optional<ui32> SourceActionId;
     };
 
     bool IsStopped() const;
@@ -55,21 +60,21 @@ private:
     ui32 GetActionPoolSize() const;
     void StopSchedulers();
     void WaitForActions();
-    TExecutionContextPtr CreateExecutionContext(const TString& actionName, TExecutionContextPtr parentContext);
+    TExecutionContextPtr CreateExecutionContext(ui32 actionId, TExecutionContextPtr parentContext);
     TExecutionContextPtr FindNearestAncestorAction(
         const TExecutionContextPtr& context,
-        const TString& actionName) const;
+        ui32 actionId) const;
     TVector<std::pair<TString, TKeyInfo>> PickSourceKeys(
-        const NKikimrKeyValue::Action& action,
+        const TActionEntry& actionEntry,
         const TExecutionContextPtr& context,
         ui32 count,
         bool erase);
     void PeriodicLoop(
-        const TString& actionName,
+        ui32 actionId,
         ui32 periodUs,
         std::chrono::steady_clock::time_point endAt);
-    void ScheduleAction(const TString& actionName, TExecutionContextPtr parentContext = nullptr);
-    void ExecuteAction(const TString& actionName, TExecutionContextPtr executionContext);
+    void ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext = nullptr);
+    void ExecuteAction(ui32 actionId, TExecutionContextPtr executionContext);
     void WriteInitialDataImpl();
 
     bool ExecuteWriteCommand(
@@ -78,12 +83,12 @@ private:
         std::optional<ui32> actionStatsIndex,
         const TExecutionContextPtr& executionContext);
     void ExecuteReadCommand(
-        const NKikimrKeyValue::Action& action,
+        const TActionEntry& actionEntry,
         ui32 actionStatsIndex,
         const TExecutionContextPtr& executionContext,
         const NKikimrKeyValue::ActionCommand_Read& readCommand);
     void ExecuteDeleteCommand(
-        const NKikimrKeyValue::Action& action,
+        const TActionEntry& actionEntry,
         ui32 actionStatsIndex,
         const TExecutionContextPtr& executionContext,
         const NKikimrKeyValue::ActionCommand_Delete& deleteCommand);
@@ -105,13 +110,14 @@ private:
 
     TKeyBucket WorkerDataStorage_;
 
-    THashMap<TString, TActionEntry> ActionsByName_;
-    THashMap<TString, TVector<TString>> ChildrenByParent_;
+    TVector<TActionEntry> Actions_;
+    THashMap<TString, ui32> ActionIdByName_;
+    TVector<TVector<ui32>> ChildrenByActionId_;
 
     std::optional<ui32> FixedPartitionId_;
 
     alignas(64) std::mutex RunningByActionMutex_;
-    alignas(64) THashMap<TString, ui32> RunningByAction_;
+    alignas(64) TVector<ui32> RunningByAction_;
 
     std::unique_ptr<TActionPool> ActionPool_;
 

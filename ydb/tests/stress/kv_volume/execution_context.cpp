@@ -4,10 +4,12 @@ namespace NKvVolumeStress {
 
 TExecutionContext::TExecutionContext(
     ui64 executionId,
+    ui32 actionId,
     TString actionName,
     TPtr parent,
     TKeyBucket* workerStorage)
     : ExecutionId(executionId)
+    , ActionId(actionId)
     , ActionName(std::move(actionName))
     , Parent(std::move(parent))
     , WorkerStorage_(workerStorage)

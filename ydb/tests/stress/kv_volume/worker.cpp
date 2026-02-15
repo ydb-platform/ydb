@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <exception>
 #include <random>
+#include <stdexcept>
 
 namespace NKvVolumeStress {
 
@@ -47,15 +48,52 @@ TWorker::TWorker(
     , StopSignal_(stopSignal)
     , Client_(MakeKeyValueClient(hostPort, options.Version))
 {
+    const ui32 actionsCount = Config_.actions_size();
+    Actions_.reserve(actionsCount);
+    ActionIdByName_.reserve(actionsCount);
+    ChildrenByActionId_.resize(actionsCount);
+    RunningByAction_.assign(actionsCount, 0);
+
     ui32 actionIndex = 0;
     for (const auto& action : Config_.actions()) {
-        ActionsByName_[action.name()] = TActionEntry{&action, actionIndex};
-        ActionCapacity_ += GetActionLimit(action);
-        if (action.has_parent_action() && !action.parent_action().empty()) {
-            ChildrenByParent_[action.parent_action()].push_back(action.name());
-        }
+        const ui32 limit = GetActionLimit(action);
+        ActionCapacity_ += limit;
+
+        Actions_.push_back(TActionEntry{
+            .Action = &action,
+            .Name = action.name(),
+            .ActionId = actionIndex,
+            .StatsIndex = actionIndex,
+            .Limit = limit,
+            .ParentActionId = std::nullopt,
+            .SourceActionId = std::nullopt,
+        });
+        ActionIdByName_[action.name()] = actionIndex;
         ++actionIndex;
     }
+
+    for (auto& actionEntry : Actions_) {
+        const auto& action = *actionEntry.Action;
+
+        if (action.has_parent_action() && !action.parent_action().empty()) {
+            if (const auto parentIt = ActionIdByName_.find(action.parent_action()); parentIt != ActionIdByName_.end()) {
+                actionEntry.ParentActionId = parentIt->second;
+                ChildrenByActionId_[*actionEntry.ParentActionId].push_back(actionEntry.ActionId);
+            }
+        }
+
+        if (action.has_action_data_mode()
+            && action.action_data_mode().Mode_case() == NKikimrKeyValue::ActionDataMode::kFromPrevActions)
+        {
+            const auto& fromPrev = action.action_data_mode().from_prev_actions();
+            if (fromPrev.action_name_size() > 0) {
+                if (const auto sourceIt = ActionIdByName_.find(fromPrev.action_name(0)); sourceIt != ActionIdByName_.end()) {
+                    actionEntry.SourceActionId = sourceIt->second;
+                }
+            }
+        }
+    }
+
     ActionPoolSize_ = GetActionPoolSize();
     ActionPool_ = std::make_unique<TActionPool>(ActionPoolSize_);
 
@@ -85,18 +123,28 @@ ui32 TWorker::GetActionPoolSize() const {
     return std::min(capacity, desired);
 }
 
-TWorker::TExecutionContextPtr TWorker::CreateExecutionContext(const TString& actionName, TExecutionContextPtr parentContext) {
+TWorker::TExecutionContextPtr TWorker::CreateExecutionContext(ui32 actionId, TExecutionContextPtr parentContext) {
+    if (actionId >= Actions_.size()) {
+        throw std::runtime_error(TStringBuilder() << "invalid action id " << actionId);
+    }
+
+    const auto& actionEntry = Actions_[actionId];
     const ui64 executionId = ExecutionIdCounter_.fetch_add(1, std::memory_order_relaxed);
-    return std::make_shared<TExecutionContext>(executionId, actionName, std::move(parentContext), &WorkerDataStorage_);
+    return std::make_shared<TExecutionContext>(
+        executionId,
+        actionEntry.ActionId,
+        actionEntry.Name,
+        std::move(parentContext),
+        &WorkerDataStorage_);
 }
 
 TWorker::TExecutionContextPtr TWorker::FindNearestAncestorAction(
     const TExecutionContextPtr& context,
-    const TString& actionName) const
+    ui32 actionId) const
 {
     TExecutionContextPtr current = context ? context->Parent : nullptr;
     while (current) {
-        if (current->ActionName == actionName) {
+        if (current->ActionId == actionId) {
             return current;
         }
         current = current->Parent;
@@ -105,7 +153,7 @@ TWorker::TExecutionContextPtr TWorker::FindNearestAncestorAction(
 }
 
 TVector<std::pair<TString, TKeyInfo>> TWorker::PickSourceKeys(
-    const NKikimrKeyValue::Action& action,
+    const TActionEntry& actionEntry,
     const TExecutionContextPtr& context,
     ui32 count,
     bool erase)
@@ -118,6 +166,7 @@ TVector<std::pair<TString, TKeyInfo>> TWorker::PickSourceKeys(
         return WorkerDataStorage_.PickKeys(count, erase);
     };
 
+    const auto& action = *actionEntry.Action;
     if (!action.has_action_data_mode()) {
         return pickFromWorker();
     }
@@ -127,13 +176,10 @@ TVector<std::pair<TString, TKeyInfo>> TWorker::PickSourceKeys(
         case NKikimrKeyValue::ActionDataMode::kWorker:
             return pickFromWorker();
         case NKikimrKeyValue::ActionDataMode::kFromPrevActions: {
-            if (mode.from_prev_actions().action_name_size() == 0) {
-                return {};
-            }
-
-            const TString& sourceAction = mode.from_prev_actions().action_name(0);
-            if (const TExecutionContextPtr sourceContext = FindNearestAncestorAction(context, sourceAction)) {
-                return sourceContext->PickKeys(count, erase);
+            if (actionEntry.SourceActionId) {
+                if (const TExecutionContextPtr sourceContext = FindNearestAncestorAction(context, *actionEntry.SourceActionId)) {
+                    return sourceContext->PickKeys(count, erase);
+                }
             }
 
             return pickFromWorker();
@@ -159,17 +205,18 @@ void TWorker::Run(std::chrono::steady_clock::time_point endAt) {
         ActionPool_->Start();
         actionPoolStarted = true;
 
-        for (const auto& action : Config_.actions()) {
-            if (action.has_parent_action() && !action.parent_action().empty()) {
+        for (const auto& actionEntry : Actions_) {
+            const auto& action = *actionEntry.Action;
+            if (actionEntry.ParentActionId) {
                 continue;
             }
 
             if (action.has_period_us() && action.period_us() > 0) {
-                Schedulers_.emplace_back([this, endAt, name = action.name(), period = action.period_us()] {
-                    PeriodicLoop(name, period, endAt);
+                Schedulers_.emplace_back([this, endAt, actionId = actionEntry.ActionId, period = action.period_us()] {
+                    PeriodicLoop(actionId, period, endAt);
                 });
             } else {
-                ScheduleAction(action.name());
+                ScheduleAction(actionEntry.ActionId);
             }
         }
 
@@ -216,52 +263,50 @@ void TWorker::WaitForActions() {
     }
 }
 
-void TWorker::PeriodicLoop(const TString& actionName, ui32 periodUs, std::chrono::steady_clock::time_point endAt) {
+void TWorker::PeriodicLoop(ui32 actionId, ui32 periodUs, std::chrono::steady_clock::time_point endAt) {
     auto period = std::chrono::microseconds(std::max<ui32>(1, periodUs));
     auto nextRun = std::chrono::steady_clock::now();
 
     while (!IsStopped() && nextRun < endAt) {
-        ScheduleAction(actionName);
+        ScheduleAction(actionId);
         nextRun += period;
         std::this_thread::sleep_until(nextRun);
     }
 }
 
-void TWorker::ScheduleAction(const TString& actionName, TExecutionContextPtr parentContext) {
+void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) {
     if (IsStopped()) {
         return;
     }
 
-    const auto actionIt = ActionsByName_.find(actionName);
-    if (actionIt == ActionsByName_.end()) {
-        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName);
+    if (actionId >= Actions_.size()) {
+        Stats_.RecordError("invalid_action_id", TStringBuilder() << "invalid action id " << actionId);
         return;
     }
 
-    const auto* action = actionIt->second.Action;
-    const ui32 actionStatsIndex = actionIt->second.StatsIndex;
-    const ui32 limit = GetActionLimit(*action);
+    const auto& actionEntry = Actions_[actionId];
+    const ui32 actionStatsIndex = actionEntry.StatsIndex;
+    const ui32 limit = actionEntry.Limit;
 
     {
         std::lock_guard lock(RunningByActionMutex_);
-        ui32& running = RunningByAction_[actionName];
+        ui32& running = RunningByAction_[actionId];
         if (running >= limit) {
             return;
         }
         ++running;
     }
 
-    auto rollbackRunning = [this, &actionName] {
+    auto rollbackRunning = [this, actionId] {
         std::lock_guard lock(RunningByActionMutex_);
-        auto it = RunningByAction_.find(actionName);
-        if (it != RunningByAction_.end() && it->second) {
-            --it->second;
+        if (actionId < RunningByAction_.size() && RunningByAction_[actionId]) {
+            --RunningByAction_[actionId];
         }
     };
 
     TExecutionContextPtr executionContext;
     try {
-        executionContext = CreateExecutionContext(actionName, std::move(parentContext));
+        executionContext = CreateExecutionContext(actionId, std::move(parentContext));
     } catch (const std::exception& e) {
         rollbackRunning();
         Stats_.RecordError("execution_context_create_failed", e.what(), actionStatsIndex);
@@ -284,9 +329,9 @@ void TWorker::ScheduleAction(const TString& actionName, TExecutionContextPtr par
             WorkerLoadTracker_->AddActive(WorkerId_, +1);
         }
 
-        const bool enqueued = ActionPool_->Enqueue([this, actionName, executionContext, actionStatsIndex] {
+        const bool enqueued = ActionPool_->Enqueue([this, actionId, executionContext, actionStatsIndex] {
             try {
-                ExecuteAction(actionName, executionContext);
+                ExecuteAction(actionId, executionContext);
             } catch (const std::exception& e) {
                 Stats_.RecordError("action_exception", e.what(), actionStatsIndex);
             } catch (...) {
@@ -295,9 +340,8 @@ void TWorker::ScheduleAction(const TString& actionName, TExecutionContextPtr par
 
             {
                 std::lock_guard lock(RunningByActionMutex_);
-                auto it = RunningByAction_.find(actionName);
-                if (it != RunningByAction_.end() && it->second) {
-                    --it->second;
+                if (actionId < RunningByAction_.size() && RunningByAction_[actionId]) {
+                    --RunningByAction_[actionId];
                 }
             }
 
@@ -326,15 +370,16 @@ void TWorker::ScheduleAction(const TString& actionName, TExecutionContextPtr par
     }
 }
 
-void TWorker::ExecuteAction(const TString& actionName, TExecutionContextPtr executionContext) {
-    const auto actionIt = ActionsByName_.find(actionName);
-    if (actionIt == ActionsByName_.end()) {
-        Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName);
+void TWorker::ExecuteAction(ui32 actionId, TExecutionContextPtr executionContext) {
+    if (actionId >= Actions_.size()) {
+        Stats_.RecordError("invalid_action_id", TStringBuilder() << "invalid action id " << actionId);
         return;
     }
 
-    const auto& action = *actionIt->second.Action;
-    const ui32 actionStatsIndex = actionIt->second.StatsIndex;
+    const auto& actionEntry = Actions_[actionId];
+    const auto& action = *actionEntry.Action;
+    const ui32 actionStatsIndex = actionEntry.StatsIndex;
+    const TString& actionName = actionEntry.Name;
 
     for (const auto& command : action.action_command()) {
         switch (command.Command_case()) {
@@ -343,7 +388,7 @@ void TWorker::ExecuteAction(const TString& actionName, TExecutionContextPtr exec
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kRead: {
-                ExecuteReadCommand(action, actionStatsIndex, executionContext, command.read());
+                ExecuteReadCommand(actionEntry, actionStatsIndex, executionContext, command.read());
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kWrite: {
@@ -351,7 +396,7 @@ void TWorker::ExecuteAction(const TString& actionName, TExecutionContextPtr exec
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kDelete: {
-                ExecuteDeleteCommand(action, actionStatsIndex, executionContext, command.delete_());
+                ExecuteDeleteCommand(actionEntry, actionStatsIndex, executionContext, command.delete_());
                 break;
             }
             case NKikimrKeyValue::ActionCommand::COMMAND_NOT_SET: {
@@ -364,11 +409,8 @@ void TWorker::ExecuteAction(const TString& actionName, TExecutionContextPtr exec
     Stats_.RecordAction(actionStatsIndex);
 
     if (!IsStopped()) {
-        const auto childrenIt = ChildrenByParent_.find(actionName);
-        if (childrenIt != ChildrenByParent_.end()) {
-            for (const TString& childName : childrenIt->second) {
-                ScheduleAction(childName, executionContext);
-            }
+        for (ui32 childActionId : ChildrenByActionId_[actionId]) {
+            ScheduleAction(childActionId, executionContext);
         }
     }
 }
@@ -451,7 +493,7 @@ bool TWorker::ExecuteWriteCommand(
 }
 
 void TWorker::ExecuteReadCommand(
-    const NKikimrKeyValue::Action& action,
+    const TActionEntry& actionEntry,
     ui32 actionStatsIndex,
     const TExecutionContextPtr& executionContext,
     const NKikimrKeyValue::ActionCommand_Read& readCommand)
@@ -460,7 +502,7 @@ void TWorker::ExecuteReadCommand(
         return;
     }
 
-    const auto keys = PickSourceKeys(action, executionContext, readCommand.count(), false);
+    const auto keys = PickSourceKeys(actionEntry, executionContext, readCommand.count(), false);
 
     for (const auto& [key, info] : keys) {
         if (IsStopped()) {
@@ -508,7 +550,7 @@ void TWorker::ExecuteReadCommand(
 }
 
 void TWorker::ExecuteDeleteCommand(
-    const NKikimrKeyValue::Action& action,
+    const TActionEntry& actionEntry,
     ui32 actionStatsIndex,
     const TExecutionContextPtr& executionContext,
     const NKikimrKeyValue::ActionCommand_Delete& deleteCommand)
@@ -517,7 +559,7 @@ void TWorker::ExecuteDeleteCommand(
         return;
     }
 
-    const auto keys = PickSourceKeys(action, executionContext, deleteCommand.count(), true);
+    const auto keys = PickSourceKeys(actionEntry, executionContext, deleteCommand.count(), true);
 
     for (const auto& [key, info] : keys) {
         if (IsStopped()) {

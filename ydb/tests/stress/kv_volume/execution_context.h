@@ -16,6 +16,7 @@ public:
 
     TExecutionContext(
         ui64 executionId,
+        ui32 actionId,
         TString actionName,
         TPtr parent,
         TKeyBucket* workerStorage);
@@ -26,6 +27,7 @@ public:
     TVector<std::pair<TString, TKeyInfo>> PickKeys(ui32 count, bool erase);
 
     const ui64 ExecutionId = 0;
+    const ui32 ActionId = 0;
     const TString ActionName;
     const TPtr Parent;
 

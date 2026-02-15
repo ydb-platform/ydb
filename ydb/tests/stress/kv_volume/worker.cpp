@@ -48,7 +48,7 @@ TWorker::TWorker(
     , InitialLoadProgress_(initialLoadProgress)
     , WorkerLoadTracker_(workerLoadTracker)
     , StopSignal_(stopSignal)
-    , Client_(MakeKeyValueClient(hostPort, options.Version))
+    , Client_(MakeKeyValueClient(hostPort, options))
 {
     const ui32 actionsCount = Config_.actions_size();
     Actions_.reserve(actionsCount);
@@ -265,10 +265,19 @@ void TWorker::StopSchedulers() {
 }
 
 void TWorker::WaitForActions() {
-    const bool completed = ActionPool_->WaitForIdle(30s);
+    {
+        std::unique_lock lock(ActiveActionsMutex_);
+        const bool completed = ActiveActionsCv_.wait_for(lock, 30s, [this] {
+            return ActiveActions_.load(std::memory_order_acquire) == 0;
+        });
+        if (!completed) {
+            Stats_.RecordError("worker_shutdown_timeout", "waiting for active actions timed out");
+        }
+    }
 
-    if (!completed) {
-        Stats_.RecordError("worker_shutdown_timeout", "waiting for active actions timed out");
+    const bool queueCompleted = ActionPool_->WaitForIdle(30s);
+    if (!queueCompleted) {
+        Stats_.RecordError("worker_shutdown_timeout", "waiting for action queue to drain timed out");
     }
 }
 
@@ -343,6 +352,8 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
         return;
     }
 
+    ActiveActions_.fetch_add(1, std::memory_order_acq_rel);
+
     try {
         if (WorkerLoadTracker_) {
             WorkerLoadTracker_->AddActive(WorkerId_, +1);
@@ -351,72 +362,173 @@ void TWorker::ScheduleAction(ui32 actionId, TExecutionContextPtr parentContext) 
         ActionPool_->Enqueue([this, actionId, executionContext, actionStatsIndex] {
             const auto actionStartedAt = std::chrono::steady_clock::now();
             try {
-                ExecuteAction(actionId, executionContext);
+                ExecuteActionAsync(actionId, actionStatsIndex, executionContext, actionStartedAt);
             } catch (const std::exception& e) {
                 Stats_.RecordError("action_exception", e.what(), actionStatsIndex);
+                auto state = std::make_shared<TActionExecutionState>();
+                state->ActionId = actionId;
+                state->ActionStatsIndex = actionStatsIndex;
+                state->ExecutionContext = executionContext;
+                state->StartedAt = actionStartedAt;
+                FinishAction(state, false);
             } catch (...) {
                 Stats_.RecordError("action_exception", "unknown exception", actionStatsIndex);
-            }
-            Stats_.RecordLatency(actionStatsIndex, ToLatencyMs(std::chrono::steady_clock::now() - actionStartedAt));
-
-            RunningByAction_[actionId].Value.fetch_sub(1, std::memory_order_acq_rel);
-
-            if (WorkerLoadTracker_) {
-                WorkerLoadTracker_->AddActive(WorkerId_, -1);
+                auto state = std::make_shared<TActionExecutionState>();
+                state->ActionId = actionId;
+                state->ActionStatsIndex = actionStatsIndex;
+                state->ExecutionContext = executionContext;
+                state->StartedAt = actionStartedAt;
+                FinishAction(state, false);
             }
         });
     } catch (const std::exception& e) {
         if (WorkerLoadTracker_) {
             WorkerLoadTracker_->AddActive(WorkerId_, -1);
         }
+        DecreaseActiveActions();
         rollbackRunning();
         Stats_.RecordError("action_enqueue_failed", e.what(), actionStatsIndex);
         return;
     }
 }
 
-void TWorker::ExecuteAction(ui32 actionId, TExecutionContextPtr executionContext) {
-    if (actionId >= Actions_.size()) {
-        Stats_.RecordError("invalid_action_id", TStringBuilder() << "invalid action id " << actionId);
+void TWorker::ExecuteActionAsync(
+    ui32 actionId,
+    ui32 actionStatsIndex,
+    TExecutionContextPtr executionContext,
+    std::chrono::steady_clock::time_point startedAt)
+{
+    auto state = std::make_shared<TActionExecutionState>();
+    state->ActionId = actionId;
+    state->ActionStatsIndex = actionStatsIndex;
+    state->ExecutionContext = std::move(executionContext);
+    state->StartedAt = startedAt;
+    ContinueAction(state);
+}
+
+void TWorker::ContinueAction(const std::shared_ptr<TActionExecutionState>& state) {
+    if (!state || state->Finished) {
         return;
     }
 
-    const auto& actionEntry = Actions_[actionId];
+    if (state->ActionId >= Actions_.size()) {
+        Stats_.RecordError("invalid_action_id", TStringBuilder() << "invalid action id " << state->ActionId, state->ActionStatsIndex);
+        FinishAction(state, false);
+        return;
+    }
+
+    const auto& actionEntry = Actions_[state->ActionId];
     const auto& action = *actionEntry.Action;
-    const ui32 actionStatsIndex = actionEntry.StatsIndex;
     const TString& actionName = actionEntry.Name;
 
-    for (const auto& command : action.action_command()) {
+    try {
+        if (state->NextCommandIndex >= static_cast<size_t>(action.action_command_size())) {
+            FinishAction(state, true);
+            return;
+        }
+
+        const auto commandIndex = state->NextCommandIndex;
+        ++state->NextCommandIndex;
+        const auto& command = action.action_command(static_cast<int>(commandIndex));
+
         switch (command.Command_case()) {
             case NKikimrKeyValue::ActionCommand::kPrint: {
                 Cerr << "[worker=" << WorkerId_ << "][action=" << actionName << "] " << command.print().msg() << Endl;
-                break;
+                ContinueAction(state);
+                return;
             }
             case NKikimrKeyValue::ActionCommand::kRead: {
-                ExecuteReadCommand(actionEntry, actionStatsIndex, executionContext, command.read());
-                break;
+                ExecuteReadCommandAsync(
+                    actionEntry,
+                    state->ActionStatsIndex,
+                    state->ExecutionContext,
+                    command.read(),
+                    [this, state] {
+                        ContinueAction(state);
+                    });
+                return;
             }
             case NKikimrKeyValue::ActionCommand::kWrite: {
-                (void)ExecuteWriteCommand(actionName, command.write(), actionStatsIndex, executionContext);
-                break;
+                ExecuteWriteCommandAsync(
+                    actionName,
+                    command.write(),
+                    state->ActionStatsIndex,
+                    state->ExecutionContext,
+                    [this, state] {
+                        ContinueAction(state);
+                    });
+                return;
             }
             case NKikimrKeyValue::ActionCommand::kDelete: {
-                ExecuteDeleteCommand(actionEntry, actionStatsIndex, executionContext, command.delete_());
-                break;
+                ExecuteDeleteCommandAsync(
+                    actionEntry,
+                    state->ActionStatsIndex,
+                    state->ExecutionContext,
+                    command.delete_(),
+                    [this, state] {
+                        ContinueAction(state);
+                    });
+                return;
             }
             case NKikimrKeyValue::ActionCommand::COMMAND_NOT_SET: {
-                Stats_.RecordError("empty_command", TStringBuilder() << "Action " << actionName << " has empty command", actionStatsIndex);
-                break;
+                Stats_.RecordError(
+                    "empty_command",
+                    TStringBuilder() << "Action " << actionName << " has empty command",
+                    state->ActionStatsIndex);
+                ContinueAction(state);
+                return;
+            }
+        }
+    } catch (const std::exception& e) {
+        Stats_.RecordError("action_exception", e.what(), state->ActionStatsIndex);
+        FinishAction(state, false);
+        return;
+    } catch (...) {
+        Stats_.RecordError("action_exception", "unknown exception", state->ActionStatsIndex);
+        FinishAction(state, false);
+        return;
+    }
+
+    Stats_.RecordError(
+        "action_exception",
+        TStringBuilder() << "unknown command type in action " << actionName,
+        state->ActionStatsIndex);
+    FinishAction(state, false);
+}
+
+void TWorker::FinishAction(const std::shared_ptr<TActionExecutionState>& state, bool recordAction) {
+    if (!state || state->Finished) {
+        return;
+    }
+    state->Finished = true;
+
+    if (recordAction) {
+        Stats_.RecordAction(state->ActionStatsIndex);
+
+        if (!IsStopped() && state->ActionId < ChildrenByActionId_.size()) {
+            for (ui32 childActionId : ChildrenByActionId_[state->ActionId]) {
+                ScheduleAction(childActionId, state->ExecutionContext);
             }
         }
     }
 
-    Stats_.RecordAction(actionStatsIndex);
+    Stats_.RecordLatency(state->ActionStatsIndex, ToLatencyMs(std::chrono::steady_clock::now() - state->StartedAt));
 
-    if (!IsStopped()) {
-        for (ui32 childActionId : ChildrenByActionId_[actionId]) {
-            ScheduleAction(childActionId, executionContext);
-        }
+    if (state->ActionId < Actions_.size()) {
+        RunningByAction_[state->ActionId].Value.fetch_sub(1, std::memory_order_acq_rel);
+    }
+
+    if (WorkerLoadTracker_) {
+        WorkerLoadTracker_->AddActive(WorkerId_, -1);
+    }
+
+    DecreaseActiveActions();
+}
+
+void TWorker::DecreaseActiveActions() {
+    if (ActiveActions_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        std::lock_guard lock(ActiveActionsMutex_);
+        ActiveActionsCv_.notify_all();
     }
 }
 
@@ -491,84 +603,236 @@ bool TWorker::ExecuteWriteCommand(
     return true;
 }
 
-void TWorker::ExecuteReadCommand(
+void TWorker::ExecuteWriteCommandAsync(
+    const TString& actionName,
+    const NKikimrKeyValue::ActionCommand_Write& writeCommand,
+    std::optional<ui32> actionStatsIndex,
+    const TExecutionContextPtr& executionContext,
+    TCommandDone done)
+{
+    if (writeCommand.count() == 0) {
+        done();
+        return;
+    }
+
+    const ui32 partitionId = SelectPartitionId();
+
+    TVector<std::pair<TString, TString>> pairs;
+    pairs.reserve(writeCommand.count());
+
+    for (ui32 i = 0; i < writeCommand.count(); ++i) {
+        const ui64 keyId = WriteKeyCounter_.fetch_add(1, std::memory_order_relaxed) + 1;
+        TString key = TStringBuilder() << actionName << "_" << WorkerId_ << "_" << keyId;
+        TString value = GetPatternData(writeCommand.size());
+        pairs.emplace_back(key, value);
+    }
+
+    ui64 bytesWritten = 0;
+    TVector<std::pair<TString, TKeyInfo>> writtenKeys;
+    writtenKeys.reserve(pairs.size());
+
+    for (const auto& [key, value] : pairs) {
+        const TKeyInfo keyInfo{partitionId, static_cast<ui32>(value.size())};
+        writtenKeys.emplace_back(key, keyInfo);
+        bytesWritten += value.size();
+    }
+
+    Client_->WriteAsync(
+        VolumePath_,
+        partitionId,
+        pairs,
+        writeCommand.channel(),
+        [this,
+         actionName,
+         actionStatsIndex,
+         executionContext,
+         bytesWritten,
+         writtenKeys = std::move(writtenKeys),
+         done = std::move(done)](bool ok, TString error) mutable {
+            try {
+                if (!ok) {
+                    Stats_.RecordError("write_failed", error, actionStatsIndex);
+                    done();
+                    return;
+                }
+
+                if (executionContext) {
+                    executionContext->AddKeys(writtenKeys);
+                } else {
+                    WorkerDataStorage_.AddKeys(writtenKeys);
+                }
+
+                if (actionStatsIndex) {
+                    Stats_.RecordWriteBytes(*actionStatsIndex, bytesWritten);
+                }
+
+                if (Options_.Verbose) {
+                    Cerr << "[worker=" << WorkerId_ << "] write ok action=" << actionName << " count=" << writtenKeys.size() << Endl;
+                }
+
+                done();
+            } catch (const std::exception& e) {
+                Stats_.RecordError("write_callback_exception", e.what(), actionStatsIndex);
+                done();
+            } catch (...) {
+                Stats_.RecordError("write_callback_exception", "unknown exception", actionStatsIndex);
+                done();
+            }
+        });
+}
+
+void TWorker::ExecuteReadCommandAsync(
     const TActionEntry& actionEntry,
     ui32 actionStatsIndex,
     const TExecutionContextPtr& executionContext,
-    const NKikimrKeyValue::ActionCommand_Read& readCommand)
+    const NKikimrKeyValue::ActionCommand_Read& readCommand,
+    TCommandDone done)
 {
     if (readCommand.count() == 0) {
+        done();
         return;
     }
 
     const auto keys = PickSourceKeys(actionEntry, executionContext, readCommand.count(), false);
-
-    for (const auto& [key, info] : keys) {
-        if (IsStopped()) {
-            break;
-        }
-
-        const ui32 maxOffset = info.KeySize > readCommand.size() ? info.KeySize - readCommand.size() : 0;
-        ui32 offset = 0;
-        if (maxOffset > 0) {
-            std::uniform_int_distribution<ui32> distribution(0, maxOffset);
-            offset = distribution(RandomEngine());
-        }
-
-        TString value;
-        TString error;
-        const bool ok = Client_->Read(VolumePath_, info.PartitionId, key, offset, readCommand.size(), &value, &error);
-
-        if (!ok) {
-            Stats_.RecordError("read_failed", error, actionStatsIndex);
-            continue;
-        }
-
-        Stats_.RecordReadBytes(actionStatsIndex, value.size());
-
-        if (readCommand.verify_data()) {
-            TString expected = GetPatternData(info.KeySize);
-            expected = expected.substr(offset, readCommand.size());
-            if (value != expected) {
-                Stats_.RecordError(
-                    "verify_failed",
-                    TStringBuilder()
-                        << "key=" << key
-                        << " partition=" << info.PartitionId
-                        << " offset=" << offset
-                        << " requested_size=" << readCommand.size()
-                        << " expected_len=" << expected.size()
-                        << " actual_len=" << value.size(),
-                    actionStatsIndex);
-            }
-        }
-    }
-}
-
-void TWorker::ExecuteDeleteCommand(
-    const TActionEntry& actionEntry,
-    ui32 actionStatsIndex,
-    const TExecutionContextPtr& executionContext,
-    const NKikimrKeyValue::ActionCommand_Delete& deleteCommand)
-{
-    if (deleteCommand.count() == 0) {
+    if (keys.empty()) {
+        done();
         return;
     }
 
-    const auto keys = PickSourceKeys(actionEntry, executionContext, deleteCommand.count(), true);
+    auto state = std::make_shared<TReadCommandState>();
+    state->ActionStatsIndex = actionStatsIndex;
+    state->ReadSize = readCommand.size();
+    state->VerifyData = readCommand.verify_data();
+    state->Keys = keys;
+    state->Done = std::move(done);
 
-    for (const auto& [key, info] : keys) {
-        if (IsStopped()) {
-            break;
-        }
+    ContinueReadCommand(state);
+}
 
-        TString error;
-        const bool ok = Client_->DeleteKey(VolumePath_, info.PartitionId, key, &error);
-
-        if (!ok) {
-            Stats_.RecordError("delete_failed", error, actionStatsIndex);
-        }
+void TWorker::ContinueReadCommand(const std::shared_ptr<TReadCommandState>& state) {
+    if (!state) {
+        return;
     }
+
+    if (state->NextKeyIndex >= state->Keys.size() || IsStopped()) {
+        state->Done();
+        return;
+    }
+
+    const auto& [key, info] = state->Keys[state->NextKeyIndex];
+    const ui32 maxOffset = info.KeySize > state->ReadSize ? info.KeySize - state->ReadSize : 0;
+    ui32 offset = 0;
+    if (maxOffset > 0) {
+        std::uniform_int_distribution<ui32> distribution(0, maxOffset);
+        offset = distribution(RandomEngine());
+    }
+
+    Client_->ReadAsync(
+        VolumePath_,
+        info.PartitionId,
+        key,
+        offset,
+        state->ReadSize,
+        [this, state, key, info, offset](bool ok, TString value, TString error) mutable {
+            try {
+                if (!ok) {
+                    Stats_.RecordError("read_failed", error, state->ActionStatsIndex);
+                } else {
+                    Stats_.RecordReadBytes(state->ActionStatsIndex, value.size());
+
+                    if (state->VerifyData) {
+                        TString expected = GetPatternData(info.KeySize);
+                        expected = expected.substr(offset, state->ReadSize);
+                        if (value != expected) {
+                            Stats_.RecordError(
+                                "verify_failed",
+                                TStringBuilder()
+                                    << "key=" << key
+                                    << " partition=" << info.PartitionId
+                                    << " offset=" << offset
+                                    << " requested_size=" << state->ReadSize
+                                    << " expected_len=" << expected.size()
+                                    << " actual_len=" << value.size(),
+                                state->ActionStatsIndex);
+                        }
+                    }
+                }
+
+                ++state->NextKeyIndex;
+                ContinueReadCommand(state);
+            } catch (const std::exception& e) {
+                Stats_.RecordError("read_callback_exception", e.what(), state->ActionStatsIndex);
+                ++state->NextKeyIndex;
+                ContinueReadCommand(state);
+            } catch (...) {
+                Stats_.RecordError("read_callback_exception", "unknown exception", state->ActionStatsIndex);
+                ++state->NextKeyIndex;
+                ContinueReadCommand(state);
+            }
+        });
+}
+
+void TWorker::ExecuteDeleteCommandAsync(
+    const TActionEntry& actionEntry,
+    ui32 actionStatsIndex,
+    const TExecutionContextPtr& executionContext,
+    const NKikimrKeyValue::ActionCommand_Delete& deleteCommand,
+    TCommandDone done)
+{
+    if (deleteCommand.count() == 0) {
+        done();
+        return;
+    }
+
+    auto state = std::make_shared<TDeleteCommandState>();
+    state->ActionStatsIndex = actionStatsIndex;
+    state->Keys = PickSourceKeys(actionEntry, executionContext, deleteCommand.count(), true);
+    state->Done = std::move(done);
+
+    if (state->Keys.empty()) {
+        state->Done();
+        return;
+    }
+
+    ContinueDeleteCommand(state);
+}
+
+void TWorker::ContinueDeleteCommand(const std::shared_ptr<TDeleteCommandState>& state) {
+    if (!state) {
+        return;
+    }
+
+    if (state->NextKeyIndex >= state->Keys.size() || IsStopped()) {
+        state->Done();
+        return;
+    }
+
+    const auto& [key, info] = state->Keys[state->NextKeyIndex];
+    Client_->DeleteKeyAsync(
+        VolumePath_,
+        info.PartitionId,
+        key,
+        [this, state](bool ok, TString error) mutable {
+            try {
+                if (!ok) {
+                    Stats_.RecordError(
+                        "delete_failed",
+                        error,
+                        state->ActionStatsIndex);
+                }
+
+                ++state->NextKeyIndex;
+                ContinueDeleteCommand(state);
+            } catch (const std::exception& e) {
+                Stats_.RecordError("delete_callback_exception", e.what(), state->ActionStatsIndex);
+                ++state->NextKeyIndex;
+                ContinueDeleteCommand(state);
+            } catch (...) {
+                Stats_.RecordError("delete_callback_exception", "unknown exception", state->ActionStatsIndex);
+                ++state->NextKeyIndex;
+                ContinueDeleteCommand(state);
+            }
+        });
 }
 
 ui32 TWorker::SelectPartitionId() {

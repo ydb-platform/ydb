@@ -340,6 +340,10 @@ TOptions ParseOptions(int argc, char** argv) {
         .StoreResult(&options.ActionPoolSize)
         .DefaultValue("0");
 
+    opts.AddLongOption("grpc-cq-threads", "gRPC completion queue threads for async client (0 means auto)")
+        .StoreResult(&options.GrpcCqThreads)
+        .DefaultValue("0");
+
     opts.AddLongOption("version", "KeyValue API version: v1 or v2")
         .StoreResult(&options.Version)
         .DefaultValue("v1");
@@ -402,7 +406,7 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     bool interrupted = false;
 
     {
-        std::unique_ptr<IKeyValueClient> setupClient = MakeKeyValueClient(hostPort, options.Version);
+        std::unique_ptr<IKeyValueClient> setupClient = MakeKeyValueClient(hostPort, options);
         TString error;
         TVector<TString> channels;
         channels.reserve(config.volume_config().channel_media_size());
@@ -478,7 +482,7 @@ int RunWorkload(const TOptions& options, const NKikimrKeyValue::KeyValueVolumeSt
     }
 
     {
-        std::unique_ptr<IKeyValueClient> setupClient = MakeKeyValueClient(hostPort, options.Version);
+        std::unique_ptr<IKeyValueClient> setupClient = MakeKeyValueClient(hostPort, options);
         TString error;
         if (!setupClient->DropVolume(volumePath, &error)) {
             Cerr << "DropVolume failed: " << error << Endl;

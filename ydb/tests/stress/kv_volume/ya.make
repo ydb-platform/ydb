@@ -11,6 +11,7 @@ SRCS(
     run_tui.cpp
     scroller.cpp
     action_pool.cpp
+    grpc_async_executor.cpp
     key_bucket.cpp
     execution_context.cpp
     keyvalue_client.cpp

@@ -82,9 +82,9 @@ private:
             IsValidFlag = ShiftWithFilter();
         }
 
-        ui64 GetSourceId() const {
+        ui64 GetSourceIdx() const {
             AFL_VERIFY(Source);
-            return Source->GetSourceId();
+            return Source->GetSourceIdx();
         }
 
         bool IsFilled() const {

@@ -228,11 +228,18 @@ bool ValidateConfig(const NKikimrKeyValue::KeyValueVolumeStressLoad& config, TSt
 
         if (action.has_action_data_mode()
             && action.action_data_mode().Mode_case() == NKikimrKeyValue::ActionDataMode::kFromPrevActions) {
-            for (const auto& sourceAction : action.action_data_mode().from_prev_actions().action_name()) {
-                if (!actionNames.contains(sourceAction)) {
-                    *error = TStringBuilder() << "unknown source action in from_prev_actions: " << sourceAction;
-                    return false;
-                }
+            const auto& fromPrev = action.action_data_mode().from_prev_actions();
+            if (fromPrev.action_name_size() != 1) {
+                *error = TStringBuilder()
+                    << "action " << action.name()
+                    << " must have exactly one source in from_prev_actions.action_name";
+                return false;
+            }
+
+            const TString& sourceAction = fromPrev.action_name(0);
+            if (!actionNames.contains(sourceAction)) {
+                *error = TStringBuilder() << "unknown source action in from_prev_actions: " << sourceAction;
+                return false;
             }
         }
     }

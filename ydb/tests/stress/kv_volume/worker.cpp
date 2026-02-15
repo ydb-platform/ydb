@@ -28,6 +28,77 @@ ui64 ToLatencyMs(std::chrono::steady_clock::duration duration) {
 
 } // namespace
 
+TWorker::TExecutionContext::TExecutionContext(
+    ui64 executionId,
+    TString actionName,
+    std::shared_ptr<TExecutionContext> parent,
+    TDataStorage* workerStorage)
+    : ExecutionId(executionId)
+    , ActionName(std::move(actionName))
+    , Parent(std::move(parent))
+    , WorkerStorage_(workerStorage)
+{
+}
+
+TWorker::TExecutionContext::~TExecutionContext() {
+    if (!WorkerStorage_) {
+        return;
+    }
+
+    TVector<std::pair<TString, TKeyInfo>> remaining;
+    remaining.reserve(Keys_.size());
+    for (const auto& [key, info] : Keys_) {
+        remaining.emplace_back(key, info);
+    }
+    Keys_.clear();
+
+    for (const auto& [key, info] : remaining) {
+        WorkerStorage_->AddKey(ActionName, key, info);
+    }
+}
+
+void TWorker::TExecutionContext::AddKey(const TString& key, const TKeyInfo& keyInfo) {
+    std::lock_guard lock(Mutex_);
+    Keys_[key] = keyInfo;
+}
+
+void TWorker::TExecutionContext::AddKeys(const TVector<std::pair<TString, TKeyInfo>>& keys) {
+    if (keys.empty()) {
+        return;
+    }
+
+    std::lock_guard lock(Mutex_);
+    for (const auto& [key, keyInfo] : keys) {
+        Keys_[key] = keyInfo;
+    }
+}
+
+TVector<std::pair<TString, TKeyInfo>> TWorker::TExecutionContext::PickKeys(ui32 count, bool erase) {
+    std::lock_guard lock(Mutex_);
+
+    TVector<std::pair<TString, TKeyInfo>> candidates;
+    candidates.reserve(Keys_.size());
+    for (const auto& [key, info] : Keys_) {
+        candidates.emplace_back(key, info);
+    }
+
+    if (candidates.empty()) {
+        return {};
+    }
+
+    std::shuffle(candidates.begin(), candidates.end(), RandomEngine());
+    const ui32 limit = std::min<ui32>(count, candidates.size());
+    candidates.resize(limit);
+
+    if (erase) {
+        for (const auto& [key, _] : candidates) {
+            Keys_.erase(key);
+        }
+    }
+
+    return candidates;
+}
+
 TWorker::TWorker(
     ui32 workerId,
     const TOptions& options,
@@ -58,6 +129,8 @@ TWorker::TWorker(
         ++actionIndex;
     }
 
+    InitialContext_ = std::make_shared<TExecutionContext>(0, "__initial__", nullptr, &WorkerDataStorage_);
+
     if (WorkerLoadTracker_) {
         WorkerLoadTracker_->SetWorkerCapacity(WorkerId_, ActionCapacity_);
     }
@@ -71,6 +144,76 @@ ui32 TWorker::GetActionLimit(const NKikimrKeyValue::Action& action) const {
     return action.has_worker_max_in_flight() && action.worker_max_in_flight() > 0
         ? action.worker_max_in_flight()
         : DefaultActionMaxInFlight;
+}
+
+TWorker::TExecutionContextPtr TWorker::CreateExecutionContext(const TString& actionName, TExecutionContextPtr parentContext) {
+    const ui64 executionId = ExecutionIdCounter_.fetch_add(1, std::memory_order_relaxed);
+    return std::make_shared<TExecutionContext>(executionId, actionName, std::move(parentContext), &WorkerDataStorage_);
+}
+
+TWorker::TExecutionContextPtr TWorker::FindNearestAncestorAction(
+    const TExecutionContextPtr& context,
+    const TString& actionName) const
+{
+    TExecutionContextPtr current = context ? context->Parent : nullptr;
+    while (current) {
+        if (current->ActionName == actionName) {
+            return current;
+        }
+        current = current->Parent;
+    }
+    return nullptr;
+}
+
+TVector<std::pair<TString, TKeyInfo>> TWorker::PickSourceKeys(
+    const NKikimrKeyValue::Action& action,
+    const TExecutionContextPtr& context,
+    ui32 count,
+    bool erase)
+{
+    if (count == 0) {
+        return {};
+    }
+
+    auto pickFromWorker = [this, count, erase](const TString& sourceAction) {
+        return WorkerDataStorage_.PickKeys({sourceAction}, count, erase);
+    };
+
+    auto pickFromInitial = [this, count, erase, &pickFromWorker]() {
+        if (InitialContext_) {
+            TVector<std::pair<TString, TKeyInfo>> keys = InitialContext_->PickKeys(count, erase);
+            if (!keys.empty()) {
+                return keys;
+            }
+        }
+        return pickFromWorker("__initial__");
+    };
+
+    if (!action.has_action_data_mode()) {
+        return pickFromInitial();
+    }
+
+    const auto& mode = action.action_data_mode();
+    switch (mode.Mode_case()) {
+        case NKikimrKeyValue::ActionDataMode::kWorker:
+            return pickFromInitial();
+        case NKikimrKeyValue::ActionDataMode::kFromPrevActions: {
+            if (mode.from_prev_actions().action_name_size() == 0) {
+                return {};
+            }
+
+            const TString& sourceAction = mode.from_prev_actions().action_name(0);
+            if (const TExecutionContextPtr sourceContext = FindNearestAncestorAction(context, sourceAction)) {
+                return sourceContext->PickKeys(count, erase);
+            }
+
+            return pickFromWorker(sourceAction);
+        }
+        case NKikimrKeyValue::ActionDataMode::MODE_NOT_SET:
+            return pickFromInitial();
+    }
+
+    return pickFromInitial();
 }
 
 void TWorker::LoadInitialData() {
@@ -142,7 +285,7 @@ void TWorker::PeriodicLoop(const TString& actionName, ui32 periodUs, std::chrono
     }
 }
 
-void TWorker::ScheduleAction(const TString& actionName) {
+void TWorker::ScheduleAction(const TString& actionName, TExecutionContextPtr parentContext) {
     if (IsStopped()) {
         return;
     }
@@ -166,14 +309,15 @@ void TWorker::ScheduleAction(const TString& actionName) {
         ++running;
     }
 
+    TExecutionContextPtr executionContext = CreateExecutionContext(actionName, std::move(parentContext));
     ActiveActions_.fetch_add(1, std::memory_order_relaxed);
     if (WorkerLoadTracker_) {
         WorkerLoadTracker_->AddActive(WorkerId_, +1);
     }
 
     try {
-        std::thread([this, actionName] {
-            ExecuteAction(actionName);
+        std::thread([this, actionName, executionContext = std::move(executionContext)] {
+            ExecuteAction(actionName, executionContext);
 
             {
                 std::lock_guard lock(RunningByActionMutex_);
@@ -214,7 +358,7 @@ void TWorker::ScheduleAction(const TString& actionName) {
     }
 }
 
-void TWorker::ExecuteAction(const TString& actionName) {
+void TWorker::ExecuteAction(const TString& actionName, TExecutionContextPtr executionContext) {
     const auto actionIt = ActionsByName_.find(actionName);
     if (actionIt == ActionsByName_.end()) {
         Stats_.RecordError("unknown_action", TStringBuilder() << "Unknown action " << actionName);
@@ -231,15 +375,15 @@ void TWorker::ExecuteAction(const TString& actionName) {
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kRead: {
-                ExecuteReadCommand(action, actionStatsIndex, command.read());
+                ExecuteReadCommand(action, actionStatsIndex, executionContext, command.read());
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kWrite: {
-                (void)ExecuteWriteCommand(actionName, command.write(), actionStatsIndex);
+                (void)ExecuteWriteCommand(actionName, command.write(), actionStatsIndex, executionContext);
                 break;
             }
             case NKikimrKeyValue::ActionCommand::kDelete: {
-                ExecuteDeleteCommand(action, actionStatsIndex, command.delete_());
+                ExecuteDeleteCommand(action, actionStatsIndex, executionContext, command.delete_());
                 break;
             }
             case NKikimrKeyValue::ActionCommand::COMMAND_NOT_SET: {
@@ -255,7 +399,7 @@ void TWorker::ExecuteAction(const TString& actionName) {
         const auto childrenIt = ChildrenByParent_.find(actionName);
         if (childrenIt != ChildrenByParent_.end()) {
             for (const TString& childName : childrenIt->second) {
-                ScheduleAction(childName);
+                ScheduleAction(childName, executionContext);
             }
         }
     }
@@ -267,7 +411,7 @@ void TWorker::WriteInitialDataImpl() {
             break;
         }
 
-        const bool success = ExecuteWriteCommand("__initial__", writeCommand);
+        const bool success = ExecuteWriteCommand("__initial__", writeCommand, std::nullopt, InitialContext_);
         if (InitialLoadProgress_) {
             const ui64 bytes = static_cast<ui64>(writeCommand.size()) * writeCommand.count();
             InitialLoadProgress_->OnCommandFinished(bytes, success);
@@ -278,7 +422,8 @@ void TWorker::WriteInitialDataImpl() {
 bool TWorker::ExecuteWriteCommand(
     const TString& actionName,
     const NKikimrKeyValue::ActionCommand_Write& writeCommand,
-    std::optional<ui32> actionStatsIndex)
+    std::optional<ui32> actionStatsIndex,
+    const TExecutionContextPtr& executionContext)
 {
     if (writeCommand.count() == 0) {
         return true;
@@ -311,10 +456,21 @@ bool TWorker::ExecuteWriteCommand(
     }
 
     ui64 bytesWritten = 0;
+    TVector<std::pair<TString, TKeyInfo>> writtenKeys;
+    writtenKeys.reserve(pairs.size());
 
     for (const auto& [key, value] : pairs) {
-        DataStorage_.AddKey(actionName, key, TKeyInfo{partitionId, static_cast<ui32>(value.size())});
+        const TKeyInfo keyInfo{partitionId, static_cast<ui32>(value.size())};
+        writtenKeys.emplace_back(key, keyInfo);
         bytesWritten += value.size();
+    }
+
+    if (executionContext) {
+        executionContext->AddKeys(writtenKeys);
+    } else {
+        for (const auto& [key, keyInfo] : writtenKeys) {
+            WorkerDataStorage_.AddKey(actionName, key, keyInfo);
+        }
     }
 
     if (actionStatsIndex) {
@@ -331,15 +487,14 @@ bool TWorker::ExecuteWriteCommand(
 void TWorker::ExecuteReadCommand(
     const NKikimrKeyValue::Action& action,
     ui32 actionStatsIndex,
+    const TExecutionContextPtr& executionContext,
     const NKikimrKeyValue::ActionCommand_Read& readCommand)
 {
     if (readCommand.count() == 0) {
         return;
     }
 
-    const TString actionName = action.name();
-    const TVector<TString> sources = ResolveSources(action);
-    const auto keys = DataStorage_.PickKeys(sources, readCommand.count(), false);
+    const auto keys = PickSourceKeys(action, executionContext, readCommand.count(), false);
 
     for (const auto& [key, info] : keys) {
         if (IsStopped()) {
@@ -389,15 +544,14 @@ void TWorker::ExecuteReadCommand(
 void TWorker::ExecuteDeleteCommand(
     const NKikimrKeyValue::Action& action,
     ui32 actionStatsIndex,
+    const TExecutionContextPtr& executionContext,
     const NKikimrKeyValue::ActionCommand_Delete& deleteCommand)
 {
     if (deleteCommand.count() == 0) {
         return;
     }
 
-    const TString actionName = action.name();
-    const TVector<TString> sources = ResolveSources(action);
-    const auto keys = DataStorage_.PickKeys(sources, deleteCommand.count(), true);
+    const auto keys = PickSourceKeys(action, executionContext, deleteCommand.count(), true);
 
     for (const auto& [key, info] : keys) {
         if (IsStopped()) {
@@ -414,29 +568,6 @@ void TWorker::ExecuteDeleteCommand(
             Stats_.RecordError("delete_failed", error, actionStatsIndex);
         }
     }
-}
-
-TVector<TString> TWorker::ResolveSources(const NKikimrKeyValue::Action& action) const {
-    if (!action.has_action_data_mode()) {
-        return {"__initial__"};
-    }
-
-    const auto& mode = action.action_data_mode();
-    switch (mode.Mode_case()) {
-        case NKikimrKeyValue::ActionDataMode::kWorker:
-            return {"__initial__"};
-        case NKikimrKeyValue::ActionDataMode::kFromPrevActions: {
-            TVector<TString> names;
-            for (const auto& name : mode.from_prev_actions().action_name()) {
-                names.push_back(name);
-            }
-            return names;
-        }
-        case NKikimrKeyValue::ActionDataMode::MODE_NOT_SET:
-            return {"__initial__"};
-    }
-
-    return {"__initial__"};
 }
 
 ui32 TWorker::SelectPartitionId() {

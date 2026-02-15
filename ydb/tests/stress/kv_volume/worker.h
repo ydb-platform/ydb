@@ -18,6 +18,7 @@
 #include <csignal>
 #include <chrono>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -41,6 +42,30 @@ public:
     void Run(std::chrono::steady_clock::time_point endAt);
 
 private:
+    struct TExecutionContext {
+        TExecutionContext(
+            ui64 executionId,
+            TString actionName,
+            std::shared_ptr<TExecutionContext> parent,
+            TDataStorage* workerStorage);
+        ~TExecutionContext();
+
+        void AddKey(const TString& key, const TKeyInfo& keyInfo);
+        void AddKeys(const TVector<std::pair<TString, TKeyInfo>>& keys);
+        TVector<std::pair<TString, TKeyInfo>> PickKeys(ui32 count, bool erase);
+
+        const ui64 ExecutionId = 0;
+        const TString ActionName;
+        const std::shared_ptr<TExecutionContext> Parent;
+
+    private:
+        TDataStorage* const WorkerStorage_;
+        std::mutex Mutex_;
+        THashMap<TString, TKeyInfo> Keys_;
+    };
+
+    using TExecutionContextPtr = std::shared_ptr<TExecutionContext>;
+
     struct TActionEntry {
         const NKikimrKeyValue::Action* Action = nullptr;
         ui32 StatsIndex = 0;
@@ -49,28 +74,38 @@ private:
     bool IsStopped() const;
     ui32 GetActionLimit(const NKikimrKeyValue::Action& action) const;
     void WaitForActions();
+    TExecutionContextPtr CreateExecutionContext(const TString& actionName, TExecutionContextPtr parentContext);
+    TExecutionContextPtr FindNearestAncestorAction(
+        const TExecutionContextPtr& context,
+        const TString& actionName) const;
+    TVector<std::pair<TString, TKeyInfo>> PickSourceKeys(
+        const NKikimrKeyValue::Action& action,
+        const TExecutionContextPtr& context,
+        ui32 count,
+        bool erase);
     void PeriodicLoop(
         const TString& actionName,
         ui32 periodUs,
         std::chrono::steady_clock::time_point endAt);
-    void ScheduleAction(const TString& actionName);
-    void ExecuteAction(const TString& actionName);
+    void ScheduleAction(const TString& actionName, TExecutionContextPtr parentContext = nullptr);
+    void ExecuteAction(const TString& actionName, TExecutionContextPtr executionContext);
     void WriteInitialDataImpl();
 
     bool ExecuteWriteCommand(
         const TString& actionName,
         const NKikimrKeyValue::ActionCommand_Write& writeCommand,
-        std::optional<ui32> actionStatsIndex = std::nullopt);
+        std::optional<ui32> actionStatsIndex = std::nullopt,
+        const TExecutionContextPtr& executionContext = nullptr);
     void ExecuteReadCommand(
         const NKikimrKeyValue::Action& action,
         ui32 actionStatsIndex,
+        const TExecutionContextPtr& executionContext,
         const NKikimrKeyValue::ActionCommand_Read& readCommand);
     void ExecuteDeleteCommand(
         const NKikimrKeyValue::Action& action,
         ui32 actionStatsIndex,
+        const TExecutionContextPtr& executionContext,
         const NKikimrKeyValue::ActionCommand_Delete& deleteCommand);
-
-    TVector<TString> ResolveSources(const NKikimrKeyValue::Action& action) const;
     ui32 SelectPartitionId();
     TString GetPatternData(ui32 size);
 
@@ -87,7 +122,8 @@ private:
 
     std::atomic<bool> StopRequested_ = false;
 
-    TDataStorage DataStorage_;
+    TDataStorage WorkerDataStorage_;
+    TExecutionContextPtr InitialContext_;
 
     THashMap<TString, TActionEntry> ActionsByName_;
     THashMap<TString, TVector<TString>> ChildrenByParent_;
@@ -105,6 +141,7 @@ private:
     THashMap<ui32, TString> PatternCache_;
 
     std::atomic<ui64> WriteKeyCounter_ = 0;
+    std::atomic<ui64> ExecutionIdCounter_ = 1;
     ui32 ActionCapacity_ = 0;
 
     TVector<std::thread> Schedulers_;

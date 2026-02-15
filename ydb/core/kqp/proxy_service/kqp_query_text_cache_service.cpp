@@ -1,6 +1,7 @@
 #include "kqp_query_text_cache_service.h"
 
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_tli.h>
 #include <ydb/core/kqp/common/kqp_query_text_cache_events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

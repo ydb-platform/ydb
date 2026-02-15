@@ -21,6 +21,7 @@
 #include "datashard_write.h"
 #include "incr_restore_scan.h"
 #include "datashard_integrity_trails.h"
+#include "datashard_tli.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
 #include "reject_reason.h"

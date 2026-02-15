@@ -1,5 +1,6 @@
 #include "datashard_impl.h"
 #include "datashard_integrity_trails.h"
+#include "datashard_tli.h"
 #include "datashard_locks_db.h"
 #include "setup_sys_locks.h"
 

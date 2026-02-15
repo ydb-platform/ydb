@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_tli.h>
 #include <ydb/core/kqp/common/kqp_query_text_cache_events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
@@ -2377,6 +2378,20 @@ public:
         } else if (brokenLockQuerySpanId) {
             victimQuerySpanId = *brokenLockQuerySpanId;
             victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(*brokenLockQuerySpanId);
+        }
+
+        // In Snapshot Isolation the conflict is detected during the write, but the actual
+        // victim is the read that established the snapshot.  When the resolved VictimQueryText
+        // is the same as the current (commit) query, prefer the first collected query text
+        // which is the lock-establishing read.
+        if (!victimQueryText.empty() && QueryState->TxCtx) {
+            TString currentQueryText = QueryState->ExtractQueryText();
+            if (victimQueryText == currentQueryText) {
+                TString firstText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
+                if (!firstText.empty() && firstText != currentQueryText) {
+                    victimQueryText = firstText;
+                }
+            }
         }
 
         // Fallback for query text: the lock-derived VictimQuerySpanId may differ from the

@@ -33,6 +33,32 @@ constexpr std::array<ui64, 48> LatencyBucketUpperBoundsMs = {
     64000, 80000, 96000
 };
 
+std::string FormatBytes(ui64 bytes) {
+    static constexpr std::array<const char*, 6> units = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
+
+    double value = static_cast<double>(bytes);
+    size_t unit = 0;
+    while (value >= 1024.0 && unit + 1 < units.size()) {
+        value /= 1024.0;
+        ++unit;
+    }
+
+    std::stringstream ss;
+    if (unit == 0) {
+        ss << static_cast<ui64>(value) << " " << units[unit];
+    } else {
+        ss << std::fixed << std::setprecision(value >= 100.0 ? 0 : 1) << value << " " << units[unit];
+    }
+    return ss.str();
+}
+
+std::string FormatRate(double bytesPerSecond) {
+    if (bytesPerSecond <= 0.0) {
+        return "0 B/s";
+    }
+    return FormatBytes(static_cast<ui64>(bytesPerSecond)) + "/s";
+}
+
 } // namespace
 
 TRunStats::TPaddedAtomicUi64::TPaddedAtomicUi64() {
@@ -241,6 +267,26 @@ void TRunStats::PrintSummary(double elapsedSeconds) const {
         return l.first < r.first;
     });
 
+    TVector<std::pair<TString, ui64>> sortedActionReadBytes;
+    sortedActionReadBytes.reserve(snapshot.ActionNames.size());
+    for (size_t i = 0; i < snapshot.ActionNames.size(); ++i) {
+        sortedActionReadBytes.push_back(
+            {snapshot.ActionNames[i], i < snapshot.ReadBytesByAction.size() ? snapshot.ReadBytesByAction[i] : 0});
+    }
+    std::sort(sortedActionReadBytes.begin(), sortedActionReadBytes.end(), [](const auto& l, const auto& r) {
+        return l.first < r.first;
+    });
+
+    TVector<std::pair<TString, ui64>> sortedActionWriteBytes;
+    sortedActionWriteBytes.reserve(snapshot.ActionNames.size());
+    for (size_t i = 0; i < snapshot.ActionNames.size(); ++i) {
+        sortedActionWriteBytes.push_back(
+            {snapshot.ActionNames[i], i < snapshot.WriteBytesByAction.size() ? snapshot.WriteBytesByAction[i] : 0});
+    }
+    std::sort(sortedActionWriteBytes.begin(), sortedActionWriteBytes.end(), [](const auto& l, const auto& r) {
+        return l.first < r.first;
+    });
+
     TVector<std::pair<TString, TLatencyPercentiles>> sortedLatencies(
         snapshot.ActionNames.size());
     for (size_t i = 0; i < snapshot.ActionNames.size(); ++i) {
@@ -257,10 +303,24 @@ void TRunStats::PrintSummary(double elapsedSeconds) const {
     for (const auto& [_, count] : sortedActions) {
         totalActions += count;
     }
+    ui64 totalReadBytes = 0;
+    for (const auto& [_, bytes] : sortedActionReadBytes) {
+        totalReadBytes += bytes;
+    }
+    ui64 totalWriteBytes = 0;
+    for (const auto& [_, bytes] : sortedActionWriteBytes) {
+        totalWriteBytes += bytes;
+    }
 
     const double safeElapsedSeconds = elapsedSeconds > 0.0 ? elapsedSeconds : 0.0;
     const double totalOpsPerSecond = safeElapsedSeconds > 0.0
         ? static_cast<double>(totalActions) / safeElapsedSeconds
+        : 0.0;
+    const double totalReadBandwidth = safeElapsedSeconds > 0.0
+        ? static_cast<double>(totalReadBytes) / safeElapsedSeconds
+        : 0.0;
+    const double totalWriteBandwidth = safeElapsedSeconds > 0.0
+        ? static_cast<double>(totalWriteBytes) / safeElapsedSeconds
         : 0.0;
 
     Cout << "==== kv_volume summary ====" << Endl;
@@ -275,16 +335,33 @@ void TRunStats::PrintSummary(double elapsedSeconds) const {
         ss << std::fixed << std::setprecision(1) << totalOpsPerSecond;
         Cout << "Average ops/s: " << ss.str() << Endl;
     }
+    Cout << "Average bandwidth: "
+         << "read=" << FormatRate(totalReadBandwidth)
+         << ", write=" << FormatRate(totalWriteBandwidth)
+         << ", total=" << FormatRate(totalReadBandwidth + totalWriteBandwidth)
+         << Endl;
     Cout << "Action runs:" << Endl;
-    for (const auto& [name, count] : sortedActions) {
+    for (size_t i = 0; i < sortedActions.size(); ++i) {
+        const auto& [name, count] = sortedActions[i];
+        const ui64 readBytes = i < sortedActionReadBytes.size() ? sortedActionReadBytes[i].second : 0;
+        const ui64 writeBytes = i < sortedActionWriteBytes.size() ? sortedActionWriteBytes[i].second : 0;
         const double actionOpsPerSecond = safeElapsedSeconds > 0.0
             ? static_cast<double>(count) / safeElapsedSeconds
+            : 0.0;
+        const double actionReadBandwidth = safeElapsedSeconds > 0.0
+            ? static_cast<double>(readBytes) / safeElapsedSeconds
+            : 0.0;
+        const double actionWriteBandwidth = safeElapsedSeconds > 0.0
+            ? static_cast<double>(writeBytes) / safeElapsedSeconds
             : 0.0;
         std::stringstream ss;
         ss << std::fixed << std::setprecision(1) << actionOpsPerSecond;
 
         Cout << "  " << name << ": " << count
-             << " (" << ss.str() << " ops/s)" << Endl;
+             << " (" << ss.str() << " ops/s"
+             << ", read=" << FormatRate(actionReadBandwidth)
+             << ", write=" << FormatRate(actionWriteBandwidth)
+             << ")" << Endl;
     }
 
     Cout << "Latency (ms):" << Endl;

@@ -19,7 +19,7 @@ NYdb::NTopic::TConsumerDescription TCommandWorkloadTopicDescribe::DescribeConsum
     TString fullTopicName = GenerateFullTopicName(database, topicName);
     auto result = topicClient.DescribeConsumer(fullTopicName, consumerName, {}).GetValueSync();
 
-    if (!result.IsSuccess() || result.GetIssues()) {
+    if (!result.IsSuccess()) {
         throw yexception() << "Error describe consumer '" << consumerName << "' for topic '" << fullTopicName << "'";
     }
 

@@ -100,6 +100,7 @@ generic:
         TTempFileHandle tmpToken = MakeTestFile("MY_JWT_TOKEN", "mvp_jwt_token", ".token");
         TString yaml = TStringBuilder() << R"(
 generic:
+  access_service_type: "nebius_v1"
   auth:
     federated_creds:
       k8s_token_path: )" << tmpToken.Name() << R"(
@@ -125,6 +126,7 @@ generic:
     Y_UNIT_TEST(FederatedCredsMissingTokenPathThrows) {
         TString yaml = TStringBuilder() << R"(
 generic:
+  access_service_type: "nebius_v1"
   auth:
     federated_creds:
       token_service_endpoint: "https://token.endpoint/"

@@ -289,7 +289,7 @@ TString GetAddressWithoutPort(const TString& address) {
 
 TString GenerateRandomBase64(size_t byteNumber) {
     TString bytes = TString::Uninitialized(byteNumber);
-    SafeEntropyPoolRead(bytes.Detach(), bytes.size());
+    NKikimr::SafeEntropyPoolRead(bytes.Detach(), bytes.size());
     return Base64EncodeUrlNoPadding(bytes);
 }
 

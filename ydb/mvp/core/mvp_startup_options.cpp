@@ -73,6 +73,13 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
     }
     auto generic = Config["generic"];
 
+    if (generic["access_service_type"]) {
+        auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
+        if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &AccessServiceType)) {
+            ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
+        }
+    }
+
     if (generic["logging"] && generic["logging"]["stderr"]) {
         if (parsedArgs.FindLongOptParseResult("stderr") == nullptr) {
             LogToStderr = generic["logging"]["stderr"].as<bool>(false);
@@ -91,6 +98,10 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
 
         bool hasFederatedCreds = auth["federated_creds"].IsDefined();
         if (hasFederatedCreds) {
+            if (AccessServiceType != NMvp::nebius_v1) {
+                ythrow yexception() << "Federated credentials are only supported for Nebius access service type";
+            }
+
             auto jwt = auth["federated_creds"];
             auto tokenPath = jwt["k8s_token_path"].as<std::string>("");
             JwtTokenEndpoint = jwt["token_service_endpoint"].as<std::string>("");
@@ -127,13 +138,6 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
 
         if (parsedArgs.FindLongOptParseResult("https-port") == nullptr) {
             HttpsPort = server["https_port"].as<ui16>(0);
-        }
-    }
-
-    if (generic["access_service_type"]) {
-        auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
-        if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &AccessServiceType)) {
-            ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
         }
     }
 }

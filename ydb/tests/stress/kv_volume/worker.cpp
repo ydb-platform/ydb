@@ -2,6 +2,7 @@
 
 #include "utils.h"
 
+#include <util/system/datetime.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 
@@ -17,6 +18,7 @@ using namespace std::chrono_literals;
 namespace {
 
 constexpr ui32 DefaultActionMaxInFlight = 30;
+constexpr auto MaxNanoSleepChunk = std::chrono::milliseconds(1);
 
 ui64 ToLatencyMs(std::chrono::steady_clock::duration duration) {
     const ui64 latencyUs = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
@@ -273,11 +275,27 @@ void TWorker::WaitForActions() {
 void TWorker::PeriodicLoop(ui32 actionId, ui32 periodUs, std::chrono::steady_clock::time_point endAt) {
     auto period = std::chrono::microseconds(std::max<ui32>(1, periodUs));
     auto nextRun = std::chrono::steady_clock::now();
+    const auto maxSleepChunk = std::chrono::duration_cast<std::chrono::steady_clock::duration>(MaxNanoSleepChunk);
 
     while (!IsStopped() && nextRun < endAt) {
         ScheduleAction(actionId);
         nextRun += period;
-        std::this_thread::sleep_until(nextRun);
+
+        while (!IsStopped()) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= nextRun) {
+                break;
+            }
+
+            const auto remaining = nextRun - now;
+            const auto sleepFor = std::min(remaining, maxSleepChunk);
+            const auto sleepNs = std::chrono::duration_cast<std::chrono::nanoseconds>(sleepFor).count();
+            if (sleepNs == 0) {
+                break;
+            }
+
+            NanoSleep(static_cast<ui64>(sleepNs));
+        }
     }
 }
 

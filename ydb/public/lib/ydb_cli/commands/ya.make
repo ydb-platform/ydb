@@ -12,6 +12,7 @@ SRCS(
     topic_readwrite_scenario.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
+    ydb_actor_tracing.cpp
     ydb_bridge.cpp
     ydb_cluster.cpp
     ydb_config.cpp

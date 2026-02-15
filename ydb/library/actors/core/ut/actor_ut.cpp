@@ -635,7 +635,6 @@ Y_UNIT_TEST_SUITE(TestAliases) {
         {}
 
         void Bootstrap() {
-            Cerr << "Actor " << SelfId() << " sending TEvPing to " << Target << Endl;
             Send(Target, new TEvents::TEvPing, IEventHandle::FlagTrackDelivery, Cookie);
             Become(&TThis::StateWork);
         }
@@ -648,13 +647,11 @@ Y_UNIT_TEST_SUITE(TestAliases) {
         }
 
         void Handle(TEvents::TEvPong::TPtr& ev) {
-            Cerr << "Actor " << SelfId() << " received TEvPong from " << ev->Sender << Endl;
             Send(NotifyTo, new TEvents::TEvGone, 0, Cookie);
             PassAway();
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-            Cerr << "Actor " << SelfId() << " received TEvUndelivered from " << ev->Sender << Endl;
             Y_ABORT_UNLESS(ev->Sender == Target);
             Send(NotifyTo, new TEvents::TEvGone, 0, Cookie);
             PassAway();
@@ -673,7 +670,6 @@ Y_UNIT_TEST_SUITE(TestAliases) {
 
         void Bootstrap() {
             MyAlias = RegisterAlias();
-            Cerr << "Actor " << SelfId() << " registered alias " << MyAlias << Endl;
             Register(new TSendPingActor(MyAlias, 1, SelfId()));
             Register(new TSendPingActor(MyAlias, 2, SelfId()));
             Become(&TThis::StateWork);
@@ -687,7 +683,6 @@ Y_UNIT_TEST_SUITE(TestAliases) {
         }
 
         void Handle(TEvents::TEvPing::TPtr& ev) {
-            Cerr << "Actor " << SelfId() << " received TEvPing from " << ev->Sender << Endl;
             Y_ABORT_UNLESS(ev->Recipient == MyAlias);
             Y_ABORT_UNLESS(ev->GetRecipientRewrite() == SelfId());
             Y_ABORT_UNLESS(TActivationContext::AsActorContext().SelfID == SelfId());
@@ -700,7 +695,6 @@ Y_UNIT_TEST_SUITE(TestAliases) {
         }
 
         void Handle(TEvents::TEvGone::TPtr& ev) {
-            Cerr << "Actor " << SelfId() << " received TEvGone from " << ev->Sender << Endl;
             ReceivedGone.insert(ev->Cookie);
             if (ReceivedGone.size() >= 2) {
                 Y_ABORT_UNLESS(ReceivedPing.size() == 1);

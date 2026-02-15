@@ -115,6 +115,9 @@
 #include <ydb/library/grpc/server/actors/logger.h>
 
 #include <ydb/services/auth/grpc_service.h>
+#include <ydb/services/actor_tracing/grpc_service.h>
+#include <ydb/core/actor_tracing/tracing_service.h>
+#include <ydb/core/actor_tracing/tracing_events.h>
 #include <ydb/services/bridge/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/config/grpc_service.h>
@@ -874,6 +877,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 #endif
         TServiceCfg hasSecretService = services.empty();
         names["secret"] = &hasSecretService;
+        TServiceCfg hasActorTracing = services.empty();
+        names["actor_tracing"] = &hasActorTracing;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -1181,7 +1186,6 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasBridge) {
             server.AddService(new NGRpcService::TBridgeGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
-
         if (hasTestShard) {
             server.AddService(new NGRpcService::TTestShardGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
@@ -1194,6 +1198,9 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
             for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxies[0])) {
                 server.AddService(service);
             }
+        }
+        if (hasActorTracing) {
+            server.AddService(new NGRpcService::TActorTracingGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
     };
 
@@ -1803,6 +1810,10 @@ void TKikimrRunner::InitializeActorSystem(
         setup->LocalServices.emplace_back(MakeMonBlobRangeId(), TActorSetupCmd(CreateMonBlobRangeActor(),
             TMailboxType::HTSwap, AppData->SystemPoolId));
     }
+
+    setup->LocalServices.emplace_back(
+        NActorTracing::MakeActorTracingServiceId(runConfig.NodeId),
+        TActorSetupCmd(NActorTracing::CreateActorTracingService(), TMailboxType::HTSwap, AppData->SystemPoolId));
 
     ApplyLogSettings(runConfig);
 

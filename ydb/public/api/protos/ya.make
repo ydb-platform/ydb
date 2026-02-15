@@ -26,6 +26,7 @@ SRCS(
     draft/ydb_view.proto
     draft/ymq.proto
     persqueue_error_codes_v1.proto
+    ydb_actor_tracing.proto
     ydb_auth.proto
     ydb_bridge_common.proto
     ydb_clickhouse_internal.proto

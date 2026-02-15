@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package NKikimrActorTracing;
+
+message TEvTraceStartRequest {
+}
+
+message TEvTraceStopRequest {
+}
+
+message TEvTraceFetchRequest {
+}
+
+message TEvTraceStartResponse {
+    bool Success = 1;
+    string Error = 2;
+}
+
+message TEvTraceStopResponse {
+    bool Success = 1;
+    string Error = 2;
+}
+
+message TEvTraceFetchResponse {
+    bool Success = 1;
+    string Error = 2;
+    bytes TraceData = 3;
+}

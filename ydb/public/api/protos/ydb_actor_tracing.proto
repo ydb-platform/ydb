@@ -1,0 +1,42 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.ActorTracing;
+option java_package = "com.yandex.ydb.actor_tracing";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+message TraceStartRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    uint32 buffer_size_per_thread = 2;
+}
+
+message TraceStartResult {
+}
+
+message TraceStartResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message TraceStopRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message TraceStopResult {
+}
+
+message TraceStopResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message TraceFetchRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message TraceFetchResult {
+    bytes trace_data = 1;
+}
+
+message TraceFetchResponse {
+    Ydb.Operations.Operation operation = 1;
+}

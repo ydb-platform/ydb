@@ -10,6 +10,7 @@ IF (OS_WINDOWS)
 ENDIF()
 
 SRCS(
+    actor_tracing.proto
     alloc.proto
     auth.proto
     backup.proto

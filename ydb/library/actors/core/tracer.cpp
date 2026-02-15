@@ -5,14 +5,9 @@
 
 #include <library/cpp/containers/concurrent_hash/concurrent_hash.h>
 #include <library/cpp/containers/ring_buffer/ring_buffer.h>
-#include <library/cpp/threading/queue/mpsc_htswap.h>
 
 #include <util/datetime/base.h>
 #include <util/system/thread.h>
-
-#ifdef DEBUG_TRACER_MANUAL
-#include <util/stream/file.h>
-#endif
 
 namespace NActors::NTracing {
 
@@ -26,14 +21,10 @@ namespace NActors::NTracing {
             event.Timestamp = TInstant::Now().MicroSeconds();
             auto& threadData = ThreadId2Data.InsertIfAbsentWithInit(
                 TThread::CurrentThreadId(),
-                [&queue = this->Queue, &settings = this->Settings] {
-                    auto buffer = MakeAtomicShared<TRingBuffer>(settings.MaxBufferSizePerThread);
-                    auto queueItem = MakeHolder<TRingBufferWithTid>(TRingBufferWithTid{
-                        .Buffer = buffer,
-                        .ThreadId = TThread::CurrentThreadId(),
-                    });
-                    queue.Push(std::move(queueItem));
-                    return TThreadData{.Buffer = std::move(buffer)};
+                [&settings = this->Settings] {
+                    return TThreadData{
+                        .Buffer = MakeAtomicShared<TRingBuffer>(settings.MaxBufferSizePerThread),
+                    };
                 }
             );
             threadData.Buffer->PushBack(std::move(event));
@@ -55,15 +46,16 @@ namespace NActors::NTracing {
             };
         }
 
-#ifdef DEBUG_TRACER_MANUAL
-        void Dump() {
-            auto chunk = GetTraceChunk();
-            auto buf = SerializeTrace(chunk, 0);
-            TFileOutput fout("actors_dump.bin");
-            fout.Write(buf.Data(), buf.Size());
-            fout.Flush();
+        void ClearBuffers() {
+            for (size_t i = 0; i < DEFAULT_BUCKET_COUNT; ++i) {
+                auto& bucket = ThreadId2Data.Buckets[i];
+                TThreadIdMapping::TBucketGuard guard(bucket.GetMutex());
+                for (auto& [threadId, threadData] : bucket.GetMap()) {
+                    threadData.Buffer->Clear();
+                    threadData.EventNameDict.clear();
+                }
+            }
         }
-#endif
 
     private:
         TActivityDict BuildActivityDict() const {
@@ -81,22 +73,16 @@ namespace NActors::NTracing {
         std::pair<TVector<TTraceEvent>, TEventNamesDict> CollectEvents() {
             TVector<TTraceEvent> events;
             TEventNamesDict eventNames;
-            while (!Queue.IsEmpty()) {
-                auto bufferItem = Queue.Pop();
-                if (!bufferItem) {
-                    continue;
-                }
-                {
-                    auto threadData = ThreadId2Data.Remove(bufferItem->ThreadId);
-                    eventNames.insert(
-                        std::make_move_iterator(threadData.EventNameDict.begin()),
-                        std::make_move_iterator(threadData.EventNameDict.end())
-                    );
-                }
-                auto& buffer = *bufferItem->Buffer;
-                events.reserve(events.size() + buffer.AvailSize());
-                for (size_t idx = buffer.FirstIndex(); idx < buffer.TotalSize(); ++idx) {
-                    events.push_back(buffer[idx]);
+            for (size_t i = 0; i < DEFAULT_BUCKET_COUNT; ++i) {
+                auto& bucket = ThreadId2Data.Buckets[i];
+                TThreadIdMapping::TBucketGuard guard(bucket.GetMutex());
+                for (auto& [threadId, threadData] : bucket.GetMap()) {
+                    auto& buffer = *threadData.Buffer;
+                    events.reserve(events.size() + buffer.AvailSize());
+                    for (size_t idx = buffer.FirstIndex(); idx < buffer.TotalSize(); ++idx) {
+                        events.push_back(buffer[idx]);
+                    }
+                    eventNames.insert(threadData.EventNameDict.begin(), threadData.EventNameDict.end());
                 }
             }
             return {std::move(events), std::move(eventNames)};
@@ -114,12 +100,6 @@ namespace NActors::NTracing {
         static constexpr size_t DEFAULT_BUCKET_COUNT = 64;
         using TThreadIdMapping = TConcurrentHashMap<TThread::TId, TThreadData, DEFAULT_BUCKET_COUNT, TSpinLock>;
         TThreadIdMapping ThreadId2Data;
-
-        struct TRingBufferWithTid {
-            TRingBufferPtr Buffer;
-            TThread::TId ThreadId;
-        };
-        NThreading::THTSwapQueue<THolder<TRingBufferWithTid>> Queue;
     };
 
     class TActorTracer : public IActorTracer {
@@ -181,6 +161,7 @@ namespace NActors::NTracing {
         }
 
         void Start() override {
+            TracerImpl.ClearBuffers();
             Started.store(true, std::memory_order_release);
         }
 
@@ -194,9 +175,6 @@ namespace NActors::NTracing {
 
         ~TActorTracer() override {
             Stop();
-#ifdef DEBUG_TRACER_MANUAL
-            TracerImpl.Dump();
-#endif
         }
 
     private:

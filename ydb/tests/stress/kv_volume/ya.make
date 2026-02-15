@@ -10,7 +10,7 @@ SRCS(
     run_display.cpp
     run_tui.cpp
     scroller.cpp
-    data_storage.cpp
+    key_bucket.cpp
     keyvalue_client.cpp
     keyvalue_client_v1.cpp
     keyvalue_client_v2.cpp

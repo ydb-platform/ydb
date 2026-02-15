@@ -1,7 +1,7 @@
 #pragma once
 
-#include "data_storage.h"
 #include "initial_load_progress.h"
+#include "key_bucket.h"
 #include "keyvalue_client.h"
 #include "run_stats.h"
 #include "types.h"
@@ -12,7 +12,6 @@
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/system/rwlock.h>
 #include <util/system/types.h>
 
 #include <atomic>
@@ -44,16 +43,11 @@ public:
 
 private:
     struct TExecutionContext {
-        struct TStoredKey {
-            TString Key;
-            TKeyInfo Info;
-        };
-
         TExecutionContext(
             ui64 executionId,
             TString actionName,
             std::shared_ptr<TExecutionContext> parent,
-            TDataStorage* workerStorage);
+            TKeyBucket* workerStorage);
         ~TExecutionContext();
 
         void AddKey(const TString& key, const TKeyInfo& keyInfo);
@@ -65,9 +59,8 @@ private:
         const std::shared_ptr<TExecutionContext> Parent;
 
     private:
-        TDataStorage* const WorkerStorage_;
-        TRWMutex Mutex_;
-        TVector<TStoredKey> Keys_;
+        TKeyBucket* const WorkerStorage_;
+        TKeyBucket Keys_;
     };
 
     using TExecutionContextPtr = std::shared_ptr<TExecutionContext>;
@@ -100,8 +93,8 @@ private:
     bool ExecuteWriteCommand(
         const TString& actionName,
         const NKikimrKeyValue::ActionCommand_Write& writeCommand,
-        std::optional<ui32> actionStatsIndex = std::nullopt,
-        const TExecutionContextPtr& executionContext = nullptr);
+        std::optional<ui32> actionStatsIndex,
+        const TExecutionContextPtr& executionContext);
     void ExecuteReadCommand(
         const NKikimrKeyValue::Action& action,
         ui32 actionStatsIndex,
@@ -128,7 +121,7 @@ private:
 
     std::atomic<bool> StopRequested_ = false;
 
-    TDataStorage WorkerDataStorage_;
+    TKeyBucket WorkerDataStorage_;
     TExecutionContextPtr InitialContext_;
 
     THashMap<TString, TActionEntry> ActionsByName_;

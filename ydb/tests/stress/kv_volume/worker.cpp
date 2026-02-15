@@ -32,7 +32,7 @@ TWorker::TExecutionContext::TExecutionContext(
     ui64 executionId,
     TString actionName,
     std::shared_ptr<TExecutionContext> parent,
-    TDataStorage* workerStorage)
+    TKeyBucket* workerStorage)
     : ExecutionId(executionId)
     , ActionName(std::move(actionName))
     , Parent(std::move(parent))
@@ -45,80 +45,22 @@ TWorker::TExecutionContext::~TExecutionContext() {
         return;
     }
 
-    for (const auto& key : Keys_) {
-        WorkerStorage_->AddKey(ActionName, key.Key, key.Info);
+    const TVector<std::pair<TString, TKeyInfo>> remaining = Keys_.Drain();
+    if (!remaining.empty()) {
+        WorkerStorage_->AddKeys(remaining);
     }
 }
 
 void TWorker::TExecutionContext::AddKey(const TString& key, const TKeyInfo& keyInfo) {
-    TWriteGuard lock(Mutex_);
-    Keys_.push_back(TStoredKey{key, keyInfo});
+    Keys_.AddKey(key, keyInfo);
 }
 
 void TWorker::TExecutionContext::AddKeys(const TVector<std::pair<TString, TKeyInfo>>& keys) {
-    if (keys.empty()) {
-        return;
-    }
-
-    TWriteGuard lock(Mutex_);
-    Keys_.reserve(Keys_.size() + keys.size());
-    for (const auto& [key, keyInfo] : keys) {
-        Keys_.push_back(TStoredKey{key, keyInfo});
-    }
+    Keys_.AddKeys(keys);
 }
 
 TVector<std::pair<TString, TKeyInfo>> TWorker::TExecutionContext::PickKeys(ui32 count, bool erase) {
-    if (count == 0) {
-        return {};
-    }
-
-    if (erase) {
-        TWriteGuard lock(Mutex_);
-
-        if (Keys_.empty()) {
-            return {};
-        }
-
-        const size_t limit = std::min<size_t>(count, Keys_.size());
-        TVector<std::pair<TString, TKeyInfo>> pickedKeys;
-        pickedKeys.reserve(limit);
-
-        for (size_t i = 0; i < limit; ++i) {
-            std::uniform_int_distribution<size_t> distribution(0, Keys_.size() - 1);
-            const size_t pickedIdx = distribution(RandomEngine());
-            if (pickedIdx + 1 != Keys_.size()) {
-                std::swap(Keys_[pickedIdx], Keys_.back());
-            }
-            TStoredKey picked = std::move(Keys_.back());
-            Keys_.pop_back();
-            pickedKeys.emplace_back(std::move(picked.Key), picked.Info);
-        }
-        return pickedKeys;
-    }
-
-    TReadGuard lock(Mutex_);
-
-    if (Keys_.empty()) {
-        return {};
-    }
-
-    const size_t limit = std::min<size_t>(count, Keys_.size());
-    TVector<std::pair<TString, TKeyInfo>> pickedKeys;
-    pickedKeys.reserve(std::min(limit, Keys_.size()));
-
-    if (limit >= Keys_.size()) {
-        for (const auto& key : Keys_) {
-            pickedKeys.emplace_back(key.Key, key.Info);
-        }
-        return pickedKeys;
-    }
-
-    for (size_t idx = 0; idx < limit; ++idx) {
-        const auto& key = Keys_[idx];
-        pickedKeys.emplace_back(key.Key, key.Info);
-    }
-
-    return pickedKeys;
+    return Keys_.PickKeys(count, erase);
 }
 
 TWorker::TWorker(
@@ -197,8 +139,8 @@ TVector<std::pair<TString, TKeyInfo>> TWorker::PickSourceKeys(
         return {};
     }
 
-    auto pickFromWorker = [this, count, erase](const TString& sourceAction) {
-        return WorkerDataStorage_.PickKeys({sourceAction}, count, erase);
+    auto pickFromWorker = [this, count, erase]() {
+        return WorkerDataStorage_.PickKeys(count, erase);
     };
 
     auto pickFromInitial = [this, count, erase, &pickFromWorker]() {
@@ -208,7 +150,7 @@ TVector<std::pair<TString, TKeyInfo>> TWorker::PickSourceKeys(
                 return keys;
             }
         }
-        return pickFromWorker("__initial__");
+        return pickFromWorker();
     };
 
     if (!action.has_action_data_mode()) {
@@ -229,7 +171,7 @@ TVector<std::pair<TString, TKeyInfo>> TWorker::PickSourceKeys(
                 return sourceContext->PickKeys(count, erase);
             }
 
-            return pickFromWorker(sourceAction);
+            return pickFromWorker();
         }
         case NKikimrKeyValue::ActionDataMode::MODE_NOT_SET:
             return pickFromInitial();
@@ -487,13 +429,7 @@ bool TWorker::ExecuteWriteCommand(
         bytesWritten += value.size();
     }
 
-    if (executionContext) {
-        executionContext->AddKeys(writtenKeys);
-    } else {
-        for (const auto& [key, keyInfo] : writtenKeys) {
-            WorkerDataStorage_.AddKey(actionName, key, keyInfo);
-        }
-    }
+    executionContext->AddKeys(writtenKeys);
 
     if (actionStatsIndex) {
         Stats_.RecordWriteBytes(*actionStatsIndex, bytesWritten);

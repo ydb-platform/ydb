@@ -100,6 +100,7 @@ private:
             HFunc(TEvPQProxy::TEvGetStatus, Handle)
             HFunc(TEvPQProxy::TEvRestartPipe, Handle)
             HFunc(TEvPQProxy::TEvDirectReadAck, Handle)
+            HFunc(TEvPQProxy::TEvUpdateReadMetrics, Handle)
 
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);

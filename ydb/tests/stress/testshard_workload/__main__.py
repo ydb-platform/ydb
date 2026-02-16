@@ -16,7 +16,7 @@ if __name__ == '__main__':
     parser.add_argument('--channels', default=None, help='Comma-separated list of storage channels (e.g., /Root/db1:ssd,/Root/db1:ssd,/Root/db1:ssd). \
                                                           Required, if database is /Root')
     parser.add_argument('--tsserver-port', default=35000, type=lambda x: int(x), help='Port for TestShard validation server')
-    parser.add_argument('--tsserver-host', default='localhost', type=lambda x: int(x), help='Host of a TestShard validation server')
+    parser.add_argument('--tsserver-host', default='localhost', help='Host of a TestShard validation server')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
 
     args = parser.parse_args()

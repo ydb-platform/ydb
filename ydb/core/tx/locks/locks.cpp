@@ -214,6 +214,11 @@ void TLockInfo::OnRemoved() {
         Points.clear();
         Ranges.clear();
     }
+
+    while (!OnRemovedCallbacks.Empty()) {
+        auto* callback = OnRemovedCallbacks.PopFront();
+        callback->Run();
+    }
 }
 
 void TLockInfo::PersistLock(ILocksDb* db) {
@@ -557,6 +562,15 @@ void TLockInfo::AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>
 
 // TTableLocks
 
+TTableLocks::~TTableLocks() {
+    for (auto it = RuntimeLocks.begin(); it != RuntimeLocks.end(); ++it) {
+        // Make sure to detach all lock holders
+        while (it->second) {
+            it->second.PopFront();
+        }
+    }
+}
+
 void TTableLocks::AddShardLock(TLockInfo* lock) {
     ShardLocks.insert(lock);
 }
@@ -611,6 +625,36 @@ void TTableLocks::RemoveRangeLock(TLockInfo* lock) {
 
 void TTableLocks::RemoveWriteLock(TLockInfo* lock) {
     WriteLocks.erase(lock);
+}
+
+TTableLocks::TRuntimeLockHolder TTableLocks::AddRuntimeLock(TConstArrayRef<TCell> key) {
+    auto it = RuntimeLocks.find(key);
+    if (it == RuntimeLocks.end()) {
+        auto res = RuntimeLocks.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(TOwnedCellVec(key)),
+            std::forward_as_tuple());
+        Y_ENSURE(res.second);
+        it = res.first;
+    }
+    TRuntimeLockHolder holder(this, it);
+    it->second.PushBack(&holder);
+    return holder;
+}
+
+void TTableLocks::RemoveRuntimeLock(TRuntimeLocks::iterator key, TRuntimeLockHolder* holder) {
+    Y_ENSURE(key->second);
+    const bool wasFirst = key->second.Front() == holder;
+    holder->Unlink();
+    if (wasFirst) {
+        if (key->second) {
+            // Activate the next lock holder
+            key->second.Front()->Activate();
+        } else {
+            // This key has no holders, remove
+            RuntimeLocks.erase(key);
+        }
+    }
 }
 
 // TLockLocker
@@ -1696,6 +1740,12 @@ bool TSysLocks::RestorePersistentState(ILocksDb* db) {
         }
     }
     return false;
+}
+
+TRuntimeLockHolder TSysLocks::AddRuntimeLock(const TTableId& tableId, TConstArrayRef<TCell> key) {
+    auto* table = Locker.FindTablePtr(tableId);
+    Y_ENSURE(table, "Cannot find table " << tableId);
+    return table->AddRuntimeLock(key);
 }
 
 }}

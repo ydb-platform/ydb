@@ -1,12 +1,12 @@
-#include "blobstorage_pdisk_util_flightcontrol2.h"
+#include "blobstorage_pdisk_util_bytesflightcontrol.h"
 
 namespace NKikimr {
 namespace NPDisk {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TFlightControl2
+// TBytesFlightControl
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-TFlightControl2::TFlightControl2(ui64 inFlightRequestsLimit, ui64 inFlightBytesLimit)
+TBytesFlightControl::TBytesFlightControl(ui64 inFlightRequestsLimit, ui64 inFlightBytesLimit)
     : InFlightRequestsLimit(inFlightRequestsLimit)
     , InFlightBytesLimit(inFlightBytesLimit)
     , CachedFirstIncompleteIdx(1)
@@ -19,11 +19,11 @@ TFlightControl2::TFlightControl2(ui64 inFlightRequestsLimit, ui64 inFlightBytesL
     Y_VERIFY(inFlightBytesLimit > 0);
 }
 
-void TFlightControl2::Initialize(const TString& logPrefix) {
+void TBytesFlightControl::Initialize(const TString& logPrefix) {
     PDiskLogPrefix = logPrefix;
 }
 
-ui64 TFlightControl2::TryScheduleLocked(ui64 size) {
+ui64 TBytesFlightControl::TryScheduleLocked(ui64 size) {
     if (InFlightRequests >= InFlightRequestsLimit) {
         return 0;
     }
@@ -44,13 +44,13 @@ ui64 TFlightControl2::TryScheduleLocked(ui64 size) {
 // Returns 0 in case of scheduling error
 // Operation Idx otherwise
 // May sometimes return 0 when it already can schedule
-ui64 TFlightControl2::TrySchedule(ui64 size) {
+ui64 TBytesFlightControl::TrySchedule(ui64 size) {
     TGuard<TMutex> guard(ScheduleMutex);
     return TryScheduleLocked(size);
 }
 
 // Blocking Schedule method
-ui64 TFlightControl2::Schedule(double& blockedMs, ui64 size) {
+ui64 TBytesFlightControl::Schedule(double& blockedMs, ui64 size) {
     NHPTimer::STime beginTime = 0;
     TGuard<TMutex> guard(ScheduleMutex);
     while (true) {
@@ -65,7 +65,7 @@ ui64 TFlightControl2::Schedule(double& blockedMs, ui64 size) {
     }
 }
 
-void TFlightControl2::MarkComplete(ui64 idx, ui64 size) {
+void TBytesFlightControl::MarkComplete(ui64 idx, ui64 size) {
     TGuard<TMutex> guard(ScheduleMutex);
     size = std::min(size, InFlightBytesLimit);
 
@@ -102,7 +102,7 @@ void TFlightControl2::MarkComplete(ui64 idx, ui64 size) {
     ScheduleCondVar.Signal();
 }
 
-ui64 TFlightControl2::FirstIncompleteIdx() {
+ui64 TBytesFlightControl::FirstIncompleteIdx() {
     return AtomicGet(CachedFirstIncompleteIdx);
 }
 

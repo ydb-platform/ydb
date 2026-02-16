@@ -12,9 +12,9 @@ namespace NKikimr {
 namespace NPDisk {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TFlightControl2
+// TBytesFlightControl
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class TFlightControl2 {
+class TBytesFlightControl {
     struct TMinHeapCompare {
         bool operator()(ui64 lhs, ui64 rhs) const {
             return lhs > rhs;
@@ -40,7 +40,7 @@ class TFlightControl2 {
 public:
     static constexpr ui64 DefaultInFlightBytesLimit = 1ull << 20; // 1 MiB
 
-    TFlightControl2(ui64 inFlightRequestsLimit, ui64 inFlightBytesLimit = DefaultInFlightBytesLimit);
+    TBytesFlightControl(ui64 inFlightRequestsLimit, ui64 inFlightBytesLimit = DefaultInFlightBytesLimit);
 
     void Initialize(const TString& logPrefix);
 

@@ -50,6 +50,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
     if (!maybeReturning) {
         return node;
     }
+
     auto returning = maybeReturning.Cast();
     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returning.Table().Path());
 

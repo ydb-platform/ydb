@@ -1058,15 +1058,19 @@ private:
         }
         Y_DEBUG_ABORT_UNLESS(phaseResults.size() == computedInputs.size());
 
-        auto phaseQueryNode = Build<TKqlQuery>(ctx, query.Pos())
-            .Results()
+        auto phaseQueryNode = KqpCtx->Config->GetEnableIndexStreamWrite()
+            ? Build<TKqlQuery>(ctx, query.Pos())
+                .Results()
+                    .Add(phaseResults)
+                    .Build()
+                .Effects()
+                    .Build()
+                .Done().Ptr()
+            : Build<TKqlQueryResultList>(ctx, query.Pos())
                 .Add(phaseResults)
-                .Build()
-            .Effects()
-                .Build()
-            .Done();
+                .Done().Ptr();
 
-        auto tx = BuildTx(phaseQueryNode.Ptr(), ctx, /* isPrecompute */ true);
+        auto tx = BuildTx(phaseQueryNode, ctx, /* isPrecompute */ true);
 
         if (!tx.IsValid()) {
             return TStatus::Error;

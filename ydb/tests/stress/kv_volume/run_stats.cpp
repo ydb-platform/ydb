@@ -106,9 +106,13 @@ size_t TRunStats::FindLatencyBucket(ui64 latencyMs) {
 }
 
 void TRunStats::UpdateMax(TPaddedAtomicUi64& maxValue, ui64 candidate) {
-    ui64 current = maxValue.Value.load(std::memory_order_relaxed);
+    ui64 current = maxValue.Value.load(std::memory_order_acquire);
     while (current < candidate
-        && !maxValue.Value.compare_exchange_weak(current, candidate, std::memory_order_relaxed, std::memory_order_relaxed))
+        && !maxValue.Value.compare_exchange_weak(
+            current,
+            candidate,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire))
     {
     }
 }
@@ -126,7 +130,7 @@ TRunStats::TLatencyHistogram TRunStats::BuildHistogramSnapshot(const TAtomicLate
         result.Buckets[i] = count;
         result.Samples += count;
     }
-    result.MaxMs = histogram.MaxMs.Value.load(std::memory_order_relaxed);
+    result.MaxMs = histogram.MaxMs.Value.load(std::memory_order_acquire);
     return result;
 }
 

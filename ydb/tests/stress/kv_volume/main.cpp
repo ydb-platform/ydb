@@ -210,6 +210,7 @@ bool ValidateConfig(const NKikimrKeyValue::KeyValueVolumeStressLoad& config, TSt
 
     THashMap<TString, ui32> actionIndexByName;
     actionIndexByName.reserve(config.actions_size());
+    const ui32 actionsCount = static_cast<ui32>(config.actions_size());
     ui32 actionIndex = 0;
     for (const auto& action : config.actions()) {
         if (action.name().empty()) {
@@ -223,56 +224,17 @@ bool ValidateConfig(const NKikimrKeyValue::KeyValueVolumeStressLoad& config, TSt
         ++actionIndex;
     }
 
-    TVector<ui32> dsuParent(config.actions_size());
-    TVector<ui8> dsuRank(config.actions_size(), 0);
-    for (ui32 i = 0; i < dsuParent.size(); ++i) {
-        dsuParent[i] = i;
-    }
+    TVector<TVector<ui32>> childrenByAction(actionsCount);
 
-    auto dsuFind = [&](const auto& self, ui32 v) -> ui32 {
-        if (dsuParent[v] != v) {
-            dsuParent[v] = self(self, dsuParent[v]);
-        }
-        return dsuParent[v];
-    };
-
-    auto dsuUnion = [&](ui32 a, ui32 b) -> bool {
-        a = dsuFind(dsuFind, a);
-        b = dsuFind(dsuFind, b);
-        if (a == b) {
-            return false;
-        }
-        if (dsuRank[a] < dsuRank[b]) {
-            std::swap(a, b);
-        }
-        dsuParent[b] = a;
-        if (dsuRank[a] == dsuRank[b]) {
-            ++dsuRank[a];
-        }
-        return true;
-    };
-
-    for (const auto& action : config.actions()) {
+    for (ui32 actionId = 0; actionId < actionsCount; ++actionId) {
+        const auto& action = config.actions(actionId);
         if (action.has_parent_action() && !action.parent_action().empty()) {
             const auto parentIt = actionIndexByName.find(action.parent_action());
             if (parentIt == actionIndexByName.end()) {
                 *error = TStringBuilder() << "unknown parent_action: " << action.parent_action();
                 return false;
             }
-
-            const auto childIt = actionIndexByName.find(action.name());
-            if (childIt == actionIndexByName.end()) {
-                *error = TStringBuilder() << "unknown action: " << action.name();
-                return false;
-            }
-            if (!dsuUnion(childIt->second, parentIt->second)) {
-                *error = TStringBuilder()
-                    << "cyclic parent_action dependency detected: "
-                    << action.name()
-                    << " -> "
-                    << action.parent_action();
-                return false;
-            }
+            childrenByAction[parentIt->second].push_back(actionId);
         }
 
         if (action.has_action_data_mode()
@@ -290,6 +252,67 @@ bool ValidateConfig(const NKikimrKeyValue::KeyValueVolumeStressLoad& config, TSt
                 *error = TStringBuilder() << "unknown source action in from_prev_actions: " << sourceAction;
                 return false;
             }
+        }
+    }
+
+    constexpr ui8 VisitWhite = 0;
+    constexpr ui8 VisitGray = 1;
+    constexpr ui8 VisitBlack = 2;
+
+    TVector<ui8> visitState(actionsCount, VisitWhite);
+    TVector<ui32> dfsStack;
+    dfsStack.reserve(actionsCount);
+
+    auto setCycleError = [&](ui32 cycleNode) {
+        size_t cycleStart = 0;
+        while (cycleStart < dfsStack.size() && dfsStack[cycleStart] != cycleNode) {
+            ++cycleStart;
+        }
+
+        TStringBuilder builder;
+        builder << "cyclic parent_action dependency detected: ";
+        if (cycleStart >= dfsStack.size()) {
+            builder << config.actions(cycleNode).name() << " -> " << config.actions(cycleNode).name();
+        } else {
+            for (size_t i = cycleStart; i < dfsStack.size(); ++i) {
+                builder << config.actions(dfsStack[i]).name() << " -> ";
+            }
+            builder << config.actions(cycleNode).name();
+        }
+
+        *error = builder;
+    };
+
+    auto dfs = [&](const auto& self, ui32 actionId) -> bool {
+        visitState[actionId] = VisitGray;
+        dfsStack.push_back(actionId);
+
+        for (ui32 childId : childrenByAction[actionId]) {
+            if (visitState[childId] == VisitWhite) {
+                if (!self(self, childId)) {
+                    return false;
+                }
+                continue;
+            }
+
+            if (visitState[childId] == VisitGray) {
+                setCycleError(childId);
+                return false;
+            }
+        }
+
+        dfsStack.pop_back();
+        visitState[actionId] = VisitBlack;
+        return true;
+    };
+
+    for (ui32 actionId = 0; actionId < actionsCount; ++actionId) {
+        if (visitState[actionId] != VisitWhite) {
+            continue;
+        }
+
+        if (!dfs(dfs, actionId)) {
+            return false;
         }
     }
 

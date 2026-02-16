@@ -1,4 +1,3 @@
-
 #include "dq_block_hash_join.h"
 
 #include <yql/essentials/minikql/comp_nodes/mkql_blocks.h>
@@ -27,24 +26,11 @@ struct TDqBlockJoinContext {
     TDqJoinImplRenames Renames;
     EJoinKind Kind;
     TSides<i32> TempStateIndes;
-
-    // Takes ctx by parameter to avoid storing a mutable pointer in the shared
-    // computation-node struct (TBlockHashJoinWrapper and its Meta_ are shared
-    // across compute actors; writing GlobalContext was a data race).
-    TSides<TVector<TType*>> GetUserTypes(TComputationContext& ctx) const {
-        TSides<TVector<TType*>> ret;
-        for (ESide side : EachSide) {
-            for (int index = 0; index < std::ssize(InputTypes.SelectSide(side)) - 1; ++index) {
-                TType* thisType = InputTypes.SelectSide(side)[index]->GetItemType();
-                if (Kind == EJoinKind::Left && side == ESide::Build && !thisType->IsOptional()) {
-                    ret.SelectSide(side).push_back(TOptionalType::Create(thisType, ctx.TypeEnv));
-                } else {
-                    ret.SelectSide(side).push_back(thisType);
-                }
-            }
-        }
-        return ret;
-    }
+    // Pre-computed during graph construction in WrapDqBlockHashJoin using the
+    // program's TTypeEnvironment.  This avoids creating TOptionalType objects
+    // at runtime (inside DoCalculate) whose lifetime depends on the
+    // TComputationContext – which may differ between iterations/retries.
+    TSides<TVector<TType*>> UserTypes;
 };
 
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
@@ -225,7 +211,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
 
         TTypeInfoHelper helper;
         TSides<std::unique_ptr<IBlockLayoutConverter>> layouts;
-        auto userTypes = Meta_->GetUserTypes(ctx);
+        const auto& userTypes = Meta_->UserTypes;
         for(ESide side: EachSide) {
             TVector<NPackedTuple::EColumnRole> roles(userTypes.SelectSide(side).size(), NPackedTuple::EColumnRole::Payload);
             for (int column : Meta_->KeyColumns.SelectSide(side)) {
@@ -407,6 +393,18 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     for(ESide side: EachSide) {
         meta.TempStateIndes.SelectSide(side) = std::exchange(ctx.Mutables.CurValueIndex, meta.InputTypes.SelectSide(side).size() + ctx.Mutables.CurValueIndex);
     }
+
+    for (ESide side : EachSide) {
+        for (int index = 0; index < std::ssize(meta.InputTypes.SelectSide(side)) - 1; ++index) {
+            TType* thisType = meta.InputTypes.SelectSide(side)[index]->GetItemType();
+            if (meta.Kind == EJoinKind::Left && side == ESide::Build && !thisType->IsOptional()) {
+                meta.UserTypes.SelectSide(side).push_back(TOptionalType::Create(thisType, ctx.Env));
+            } else {
+                meta.UserTypes.SelectSide(side).push_back(thisType);
+            }
+        }
+    }
+
     using enum EJoinKind;
     if (joinKind == Inner) {
         return new TBlockHashJoinWrapper<Inner>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});

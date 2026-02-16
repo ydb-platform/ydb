@@ -35,6 +35,33 @@ inline TString GetColumnName(std::string_view label, const TItemExprType *key) {
     return ToString(key->GetName());
 }
 
+std::optional<ui32> FindJoinKeyIndex(const TStructExprType* itemType, TStringBuf keyName,
+    std::string_view tableLabel, bool leftSide, std::optional<ui32> keyPosition = std::nullopt) {
+    if (auto idx = itemType->FindItem(keyName)) {
+        return *idx;
+    }
+    if (!tableLabel.empty()) {
+        if (keyName.StartsWith(tableLabel) && keyName.size() > tableLabel.size() && keyName[tableLabel.size()] == '.') {
+            auto shortName = keyName.substr(tableLabel.size() + 1);
+            if (auto idx = itemType->FindItem(shortName)) {
+                return *idx;
+            }
+        }
+        TString prefixed = TString(tableLabel) + "." + TString(keyName);
+        if (auto idx = itemType->FindItem(prefixed)) {
+            return *idx;
+        }
+    }
+    if (keyPosition) {
+        const char* prefix = leftSide ? "_yql_dq_key_left_" : "_yql_dq_key_right_";
+        TString remappedName = TString(prefix) + ToString(*keyPosition);
+        if (auto idx = itemType->FindItem(remappedName)) {
+            return *idx;
+        }
+    }
+    return std::nullopt;
+}
+
 std::pair<TExprNode::TListType, TExprNode::TListType> JoinKeysToAtoms(TExprContext& ctx, const TDqJoinBase& join,
     std::string_view leftTableLabel, std::string_view rightTableLabel)
 {
@@ -917,13 +944,13 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
 
         auto leftName = leftKeyColumnNodes[i]->Content();
-        auto leftIndex = itemTypeLeft->FindItem(leftName);
-        YQL_ENSURE(leftIndex);
+        auto leftIndex = FindJoinKeyIndex(itemTypeLeft, leftName, leftTableLabel, true, i);
+        YQL_ENSURE(leftIndex, "Left join key column '" << leftName << "' not found in left input type (left label: '" << leftTableLabel << "')");
         const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
 
         auto rightName = rightKeyColumnNodes[i]->Content();
-        auto rightIndex = itemTypeRight->FindItem(rightName);
-        YQL_ENSURE(rightIndex);
+        auto rightIndex = FindJoinKeyIndex(itemTypeRight, rightName, rightTableLabel, false, i);
+        YQL_ENSURE(rightIndex, "Right join key column '" << rightName << "' not found in right input type (right label: '" << rightTableLabel << "')");
         const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
 
         bool hasOptional = false;

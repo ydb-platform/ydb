@@ -1,0 +1,1 @@
+SELECT column_1 , COUNT ( column_0 ) AS id , SUM ( column_2 ) AS id FROM table_0 GROUP BY column_1 ORDER BY id DESC LIMIT 0

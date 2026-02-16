@@ -99,7 +99,7 @@ bool TInFlightController::IsMemoryLimitReached() const {
 TDuration TInFlightController::GetOverflowDuration() {
     TDuration carry = TDuration::Zero();
     if (InFlightFullSince != TInstant::Zero()) {
-        carry = TInstant::Now() - InFlightFullSince;
+        carry = Min(TInstant::Now() - InFlightFullSince, SLIDING_WINDOW_SIZE);
     }
 
     return SlidingWindow.GetValue() + carry;

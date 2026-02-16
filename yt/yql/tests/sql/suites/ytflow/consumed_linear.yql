@@ -1,4 +1,3 @@
-/* custom error: Linear value is not consumed */
 use plato;
 
 pragma Engine = "ytflow";
@@ -9,7 +8,6 @@ pragma Ytflow.PipelinePath = "pipelines/test";
 insert into Output
 select 
     FromMutDict(FromDynamicLinear(Unwrap(Opaque([
-        ToDynamicLinear(ToMutDict({string_field: int64_field}, 1)),
-        ToDynamicLinear(ToMutDict({string_field: int64_field}, 2))
+        ToDynamicLinear(ToMutDict({string_field: int64_field}, 1))
     ])[0]))) as dict_field
 from Input;

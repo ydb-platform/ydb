@@ -139,7 +139,6 @@ protected:
         AFL_VERIFY(thisChunkIndex.Max->type->Equals(thisChunkIndex.Min->type));
 
         auto serializedIndex = NArrowProtocol::Serialize(thisChunkIndex);
-        // const TString indexData = NArrow::NScalar::TSerializer::SerializePayloadToString(serializedIndex).DetachResult();
         return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, serializedIndex.size(), serializedIndex) };
     }
 
@@ -173,11 +172,11 @@ protected:
                 AFL_VERIFY_UNREACHABLE();
         }
     }
+
     virtual bool DoCheckValue(const TString& data, [[maybe_unused]] const std::optional<ui64> cat,
         const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op) const override {
         AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to minmax index");
         TKeyPair chunkValue = NArrowProtocol::Deserialize(data, MinMaxType);
-
         return !Skip(chunkValue, requestValue, op);
     }
 

@@ -2,8 +2,6 @@
 #include "fulltext_workload_generator.h"
 #include "fulltext_data_generator.h"
 
-#include <util/string/builder.h>
-
 namespace NYdbWorkload {
 
     void TFulltextWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {

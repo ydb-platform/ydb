@@ -3,7 +3,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
-#include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/generic/vector.h>
@@ -39,7 +38,7 @@ namespace NYdbWorkload {
                                            NYdb::NQuery::TTxControl::NoTx())
                                     .GetValueSync();
 
-            Y_ENSURE(result.IsSuccess(), std::format("Failed to read query table: %s", result.GetIssues().ToString().c_str()));
+            Y_ENSURE(result.IsSuccess(), std::format("Failed to read query table: {}", result.GetIssues().ToString().c_str()));
 
             resultSet = result.GetResultSet(0);
             return result;
@@ -71,7 +70,7 @@ namespace NYdbWorkload {
             }
         }
 
-        Y_ENSURE(!Queries.empty(), std::format("Query table '%s' is empty or has no 'query' column", queryTablePath.c_str()));
+        Y_ENSURE(!Queries.empty(), std::format("Query table '{}' is empty or has no 'query' column", queryTablePath.c_str()));
         Cout << "Loaded " << Queries.size() << " queries from table " << queryTablePath << Endl;
     }
 
@@ -112,19 +111,18 @@ namespace NYdbWorkload {
     TQueryInfoList TFulltextWorkloadGenerator::Select() {
         Y_ENSURE(!Queries.empty(), "No queries loaded from query table");
 
-        CurrentIndex = (CurrentIndex + 1) % Queries.size();
         const TString& queryText = Queries[CurrentIndex];
+        CurrentIndex = (CurrentIndex + 1) % Queries.size();
 
         const TString query = std::format(
             R"sql(
-            DECLARE $query AS Utf8;
-            SELECT *
-            FROM `{}/{}` VIEW `{}`
-            WHERE FulltextMatch(`text`, $query)
-            {};
-        )sql",
-            Params.DbPath.c_str(),
-            Params.TableName.c_str(),
+                DECLARE $query AS Utf8;
+                SELECT *
+                FROM `{}` VIEW `{}`
+                WHERE FulltextMatch(`text`, $query)
+                {};
+            )sql",
+            Params.GetFullTableName(Params.TableName.c_str()).c_str(),
             Params.IndexName.c_str(),
             (Params.Limit != 0 ? std::format("LIMIT {}", Params.Limit) : "").c_str());
 

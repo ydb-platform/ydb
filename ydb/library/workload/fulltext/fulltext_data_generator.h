@@ -14,9 +14,9 @@ namespace NYdbWorkload {
     public:
         TFulltextWorkloadDataInitializer(const TFulltextWorkloadParams& params);
 
-        virtual void ConfigureOpts(NLastGetopt::TOpts& opts) override;
-        virtual TBulkDataGeneratorList DoGetBulkInitialData() override;
-        virtual int PostImport() override;
+        void ConfigureOpts(NLastGetopt::TOpts& opts) override;
+        TBulkDataGeneratorList DoGetBulkInitialData() override;
+        int PostImport() override;
     };
 
 } // namespace NYdbWorkload

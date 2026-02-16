@@ -12,7 +12,7 @@ namespace NYdbWorkload {
     namespace {
 
         TString ExtractIndexParams(const TFulltextWorkloadParams& params) {
-            THashMap<TString, TString> indexParams;
+            THashMap<TStringBuf, TStringBuf> indexParams;
 
             for (const auto& param : params.IndexParams) {
                 const size_t pos = param.find('=');
@@ -20,14 +20,21 @@ namespace NYdbWorkload {
                     continue;
                 }
 
-                const TString name = param.substr(0, pos);
-                const TString value = param.substr(pos + 1);
+                const TStringBuf name = TStringBuf(param).substr(0, pos);
+                const TStringBuf value = TStringBuf(param).substr(pos + 1);
                 indexParams[name] = value;
             }
 
             TStringBuilder builder;
+            bool first = true;
             for (const auto& [name, value] : indexParams) {
-                builder << name << "=" << value << ",";
+                if (!first) {
+                    builder << ",";
+                } else {
+                    first = false;
+                }
+
+                builder << name << "=" << value;
             }
             return builder;
         }
@@ -70,19 +77,19 @@ namespace NYdbWorkload {
     }
 
     int TFulltextWorkloadDataInitializer::PostImport() {
-        const TString ddlQuery = std::format(R"sql(
-            ALTER TABLE `{0}/{1}`
-            ADD INDEX `{2}`
-            GLOBAL SYNC USING {3}
-            ON (text) WITH (
-                {4}
-            );
-        )sql",
-                                             Params.DbPath.c_str(),
-                                             Params.TableName.c_str(),
-                                             Params.IndexName.c_str(),
-                                             Params.IndexType.c_str(),
-                                             ExtractIndexParams(Params).c_str());
+        const TString ddlQuery = std::format(
+            R"sql(
+                ALTER TABLE `{0}`
+                ADD INDEX `{1}`
+                GLOBAL SYNC USING {2}
+                ON (text) WITH (
+                    {3}
+                );
+            )sql",
+            Params.GetFullTableName(Params.TableName.c_str()).c_str(),
+            Params.IndexName.c_str(),
+            Params.IndexType.c_str(),
+            ExtractIndexParams(Params).c_str());
 
         const auto result = Params.QueryClient->RetryQuerySync([&ddlQuery](NYdb::NQuery::TSession session) {
             return session.ExecuteQuery(ddlQuery, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();

@@ -63,6 +63,7 @@ namespace NKikimr::NDDisk {
 
             void Occupy(ui32 sectorsCount, std::vector<TPersistentBufferSectorInfo>& result);
             void Free(ui32 fromSectorIdx, ui32 toSectorIdx);
+            void MarkOccupied(ui32 fromSectorIdx, ui32 toSectorIdx);
             TChunkRank GetRank() const { return {ChunkIdx, FreeSpace}; }
 
             TChunkSpaceOccupation(TChunksQueue& ownerChunksQueue, ui32 chunkIdx, ui32 first, ui32 last);
@@ -83,6 +84,7 @@ namespace NKikimr::NDDisk {
 
         std::vector<TPersistentBufferSectorInfo> Occupy(ui32 sectorsCount);
         void Free(const std::vector<TPersistentBufferSectorInfo>& locations);
+        void MarkOccupied(const std::vector<TPersistentBufferSectorInfo>& locations);
         void AddNewChunk(ui32 chunkIdx);
         ui32 GetFreeSpace() const {
             return FreeSpace;

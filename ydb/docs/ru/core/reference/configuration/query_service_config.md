@@ -1,8 +1,8 @@
 # query_service_config
 
-Секция `query_service_config` описывает параметры работы {{ ydb-short-name }} с внешними источниками данных с использованием [федеративных запросов](../../concepts/federated_query/index.md).
+Секция `query_service_config` описывает параметры работы {{ ydb-short-name }} с внешними источниками данных с использованием [федеративных запросов](../../concepts/query_execution/federated_query/index.md).
 
-Если для доступа к нужному вам источнику требуется развернуть [коннектор](../../concepts/federated_query/architecture.md#connectors), его необходимо также настроить по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
+Если для доступа к нужному вам источнику требуется развернуть [коннектор](../../concepts/query_execution/federated_query/architecture.md#connectors), его необходимо также настроить по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
 
 ## Описание параметров
 

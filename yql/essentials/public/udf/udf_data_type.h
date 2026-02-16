@@ -321,6 +321,11 @@ inline bool IsValidLayoutValue<TInterval>(typename TDataType<TInterval>::TLayout
 }
 
 template <>
+inline bool IsValidLayoutValue<TInterval64>(typename TDataType<TInterval64>::TLayout value) {
+    return value >= -MAX_INTERVAL64 && value <= MAX_INTERVAL64;
+}
+
+template <>
 inline bool IsValidLayoutValue<TDate32>(typename TDataType<TDate32>::TLayout value) {
     return value >= MIN_DATE32 && value <= MAX_DATE32;
 }

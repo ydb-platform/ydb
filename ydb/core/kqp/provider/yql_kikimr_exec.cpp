@@ -1657,6 +1657,12 @@ bool ParseCompressionSettings(
         }
     }
 
+    if (compression->has_compression_level() && !compression->has_algorithm()) {
+        ctx.AddError(TIssue(ctx.GetPosition(settings.Pos()), TStringBuilder()
+            << "compression level specified without an algorithm"));
+        return false;
+    }
+
     return true;
 }
 

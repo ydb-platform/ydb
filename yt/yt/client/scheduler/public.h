@@ -168,7 +168,7 @@ DEFINE_ENUM(EAbortReason,
     ((SchedulingOperationDisabled)     (106))
     ((SchedulingOperationIsNotAlive)   (107))
     ((SchedulingLast)                  (199))
-    ((DistributedJobGroupDisbanded)    (200))
+    ((JobCollectiveDisbanded)          (200))
 );
 
 DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);

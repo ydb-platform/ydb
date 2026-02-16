@@ -99,8 +99,21 @@ TOrderedPartitioner::TOrderedPartitionerOutput TOrderedPartitioner::PartitionFmr
     TTaskTableInputRef task_input;
     for (const auto& fmrTable : fmrTablesScope) {
         auto partIds = PartIdsForTables_.at(fmrTable.FmrTableId);
-
-        TFmrTableInputRef currentInputRef{.TableId = fmrTable.FmrTableId.Id, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups};
+        auto getOrAddCurrentInputRef = [] (TTaskTableInputRef& currentTaskInput, const TFmrTableRef& currentTableRef) -> TFmrTableInputRef& {
+            for (auto& taskInputRef : currentTaskInput.Inputs) {
+                auto* fmrInputRef = std::get_if<TFmrTableInputRef>(&taskInputRef);
+                YQL_ENSURE(fmrInputRef, "Ordered partitioner expected only TFmrTableInputRef for FMR scope");
+                if (fmrInputRef->TableId == currentTableRef.FmrTableId.Id) {
+                    return *fmrInputRef;
+                }
+            }
+            currentTaskInput.Inputs.emplace_back(TFmrTableInputRef{
+                .TableId = currentTableRef.FmrTableId.Id,
+                .Columns = currentTableRef.Columns,
+                .SerializedColumnGroups = currentTableRef.SerializedColumnGroups
+            });
+            return std::get<TFmrTableInputRef>(currentTaskInput.Inputs.back());
+        };
 
         for (const auto& partId : partIds) {
             const std::vector<TChunkStats>& stats = PartIdStats_.at(partId);
@@ -113,7 +126,6 @@ TOrderedPartitioner::TOrderedPartitionerOutput TOrderedPartitioner::PartitionFmr
                     chunkEnd++;
                 }
 
-                bool isLast = chunkEnd == stats.size();
                 bool isFull =  chunkWeight >= fmrWeightPerPart;
 
                 TTableRange range{
@@ -122,18 +134,14 @@ TOrderedPartitioner::TOrderedPartitionerOutput TOrderedPartitioner::PartitionFmr
                     .MaxChunk = chunkEnd
                 };
 
+                auto& currentInputRef = getOrAddCurrentInputRef(task_input, fmrTable);
                 currentInputRef.TableRanges.push_back(range);
                 chunkStart = chunkEnd;
 
-                if (isLast || isFull) {
-                    task_input.Inputs.push_back(currentInputRef);
-                    currentInputRef = TFmrTableInputRef{.TableId = fmrTable.FmrTableId.Id, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups};
-
-                    if (isFull) {
-                        result.append(task_input);
-                        task_input = TTaskTableInputRef();
-                        chunkWeight = 0;
-                    }
+                if (isFull) {
+                    result.append(task_input);
+                    task_input = TTaskTableInputRef();
+                    chunkWeight = 0;
                 }
             }
         }

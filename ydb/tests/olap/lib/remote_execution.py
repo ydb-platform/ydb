@@ -7,7 +7,10 @@ import subprocess
 import logging
 import yatest.common
 import shutil
+import shlex
 import allure
+import random
+from contextlib import AbstractContextManager
 from time import time
 from typing import Union, Optional, Tuple, List, Dict, Any, NamedTuple
 
@@ -610,3 +613,93 @@ def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp
             results[host] = False
 
     return results
+
+
+def get_remote_tmp_path(host: str, *localpath: str) -> str:
+    tmpdir = '/tmp'
+    if is_localhost(host):
+        tmpdir = os.getenv('TMP') or os.getenv('TMPDIR') or yatest.common.work_path()
+    if not localpath:
+        return tmpdir
+    return os.path.join(tmpdir, *localpath)
+
+
+class LongRemoteExecution(AbstractContextManager):
+    def __init__(self, host: str, *cmd: str):
+        self.host = host
+        self.cmd = shlex.join(cmd)
+        self_hash = f're_{abs(hash((self.host, self.cmd)))}_{random.randint(0, 1000000)}'
+        tmpdir = get_remote_tmp_path(self.host, self_hash)
+        self._script_path = os.path.join(tmpdir, f'run_{self_hash}.sh')
+        self._out_path = os.path.join(tmpdir, 'out.txt')
+        self._err_path = os.path.join(tmpdir, 'err.txt')
+        self._return_code_path = os.path.join(tmpdir, 'rc')
+        self._pid_path = os.path.join(tmpdir, 'pid')
+        self._return_code = None
+        self._out = None
+        self._err = None
+        self._finished = False
+        self.allure = None
+
+    def start(self) -> None:
+        assert not self._finished, 'command cannot be started again'
+        local_script_path = yatest.common.work_path(os.path.basename(self._script_path))
+        with open(local_script_path, 'w') as script_file:
+            script_file.write(f'''#!/bin/bash
+                {self.cmd} >{self._out_path} 2>{self._err_path}
+                echo -n $? >{self._return_code_path}
+            ''')
+        deploy_result = deploy_binary(local_script_path, self.host, os.path.dirname(self._script_path))
+        assert deploy_result.get('success', False), deploy_result.get('error', '')
+        execute_command(self.host, f'start-stop-daemon --start --pidfile {self._pid_path} --make-pid --background --no-close --exec {self._script_path}')
+
+    def is_running(self) -> bool:
+        if self._finished:
+            return False
+        cmd = f'start-stop-daemon --status --pidfile {self._pid_path}'
+        self._finished = execute_command(self.host, cmd, raise_on_error=False).exit_code != 0
+        return not self._finished
+
+    def terminate(self) -> None:
+        execute_command(self.host, f'start-stop-daemon --stop --pidfile {self._pid_path}', raise_on_error=False)
+
+    def _get_content(self, path: str) -> Optional[str]:
+        res = execute_command(self.host, f'cat {path}', raise_on_error=False)
+        if res.exit_code != 0:
+            return None
+        return res.stdout
+
+    @property
+    def stdout(self) -> str:
+        if self._out is None:
+            self._out = self._get_content(self._out_path)
+        return self._out or ''
+
+    @property
+    def stderr(self) -> str:
+        if self._err is None:
+            self._err = self._get_content(self._err_path)
+        return self._err or ''
+
+    @property
+    def return_code(self) -> Optional[int]:
+        if self._return_code is None:
+            rc = self._get_content(self._return_code_path)
+            if rc is not None:
+                self._return_code = int(rc)
+        return self._return_code
+
+    def __enter__(self):
+        self.allure = allure.step('Run remote command')
+        self.allure.params = {'host': self.host, 'command': self.cmd}
+        self.allure.__enter__()
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.terminate()
+        if self.return_code is not None:
+            allure.attach(str(self.return_code), 'return code', allure.attachment_type.TEXT)
+        allure.attach(self.stdout, 'remote stdout', allure.attachment_type.TEXT)
+        allure.attach(self.stderr, 'remote stderr', allure.attachment_type.TEXT)
+        self.allure.__exit__(exc_type, exc_val, exc_tb)

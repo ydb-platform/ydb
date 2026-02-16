@@ -86,10 +86,10 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(inserted && inserted2);
         FreeSpace += toSectorIdx - fromSectorIdx + 1;
         auto replace = [this](TSpaceRange newRange, auto it1, auto it2) {
-            FreeSectors.erase(it1);
-            FreeSectors.erase(it2);
             FreeSectorsPriorityQueue.erase(*it1);
             FreeSectorsPriorityQueue.erase(*it2);
+            FreeSectors.erase(it1);
+            FreeSectors.erase(it2);
             auto [newIt, inserted] = FreeSectors.insert(newRange);
             auto [_, inserted2] = FreeSectorsPriorityQueue.insert(newRange);
             Y_ABORT_UNLESS(inserted && inserted2);
@@ -135,9 +135,38 @@ namespace NKikimr::NDDisk {
         return result;
     }
 
+
+    void TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::MarkOccupied(ui32 fromSectorIdx, ui32 toSectorIdx) {
+        OwnerChunksQueue.erase(GetRank());
+        Y_ABORT_UNLESS(FreeSpace >= toSectorIdx - fromSectorIdx + 1);
+        FreeSpace -= toSectorIdx - fromSectorIdx + 1;
+        TSpaceRange searchSpace{fromSectorIdx, toSectorIdx};
+        auto it = FreeSectors.lower_bound(searchSpace);
+        if (it == FreeSectors.end() || it->First > fromSectorIdx) {
+            it--;
+        }
+        Y_ABORT_UNLESS(it != FreeSectors.end() && it->First <= fromSectorIdx && it->Last >= toSectorIdx);
+        ui32 iFirst = it->First;
+        ui32 iLast = it->Last;
+        FreeSectors.erase(it);
+        FreeSectorsPriorityQueue.erase(*it);
+        if (iFirst != fromSectorIdx) {
+            auto [it2, inserted] = FreeSectors.insert({iFirst, fromSectorIdx - 1});
+            Y_ABORT_UNLESS(inserted);
+            auto [_, inserted2] = FreeSectorsPriorityQueue.insert(*it2);
+            Y_ABORT_UNLESS(inserted2);
+        }
+        if (iLast != toSectorIdx) {
+            auto [it2, inserted] = FreeSectors.insert({toSectorIdx + 1, iLast});
+            Y_ABORT_UNLESS(inserted);
+            auto [_, inserted2] = FreeSectorsPriorityQueue.insert(*it2);
+            Y_ABORT_UNLESS(inserted2);
+        }
+        OwnerChunksQueue.insert(GetRank());
+    }
+
     void TPersistentBufferSpaceAllocator::Free(const std::vector<TPersistentBufferSectorInfo>& locations) {
-        ui32 startLoc = 0;
-        for (ui32 i = 1; i <= locations.size(); i++) {
+        for (ui32 i = 1, startLoc = 0; i <= locations.size(); i++) {
             if (i == locations.size()
                 || locations[i].ChunkIdx != locations[startLoc].ChunkIdx
                 || locations[i].SectorIdx != locations[startLoc].SectorIdx + i - startLoc) {
@@ -156,5 +185,20 @@ namespace NKikimr::NDDisk {
         OwnedChunks.push_back(chunkIdx);
         FreeSpace += SectorsInChunk;
     }
+
+    void TPersistentBufferSpaceAllocator::MarkOccupied(const std::vector<TPersistentBufferSectorInfo>& locations) {
+        for (ui32 i = 1, startLoc = 0; i <= locations.size(); i++) {
+            if (i == locations.size()
+                || locations[i].ChunkIdx != locations[startLoc].ChunkIdx
+                || locations[i].SectorIdx != locations[startLoc].SectorIdx + i - startLoc) {
+                const auto& it = FreeSpaceMap.find(locations[startLoc].ChunkIdx);
+                Y_ABORT_UNLESS(it != FreeSpaceMap.end());
+                it->second.MarkOccupied(locations[startLoc].SectorIdx, locations[i - 1].SectorIdx);
+                FreeSpace -= locations[i - 1].SectorIdx - locations[startLoc].SectorIdx + 1;
+                startLoc = i;
+            }
+        }
+    }
+
 
 } // NKikimr::NDDisk

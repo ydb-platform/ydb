@@ -316,7 +316,7 @@ message TTableServiceConfig {
 
     optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 2, (InvalidateCompileCache) = true];
 
-    optional bool EnableConstantFolding = 65 [ default = true, (InvalidateCompileCache) = true];
+    reserved 65; // EnableConstantFolding
 
     reserved 66; // EnableImplicitQueryParameterTypes
 
@@ -420,7 +420,7 @@ message TTableServiceConfig {
 
     optional bool EnableTempTablesForUser = 95 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableKqpScanQueryUseLlvm = 97 [default = true];
 
@@ -433,9 +433,9 @@ message TTableServiceConfig {
 
     optional bool EnableDataShardCreateTableAs = 102 [default = true, (InvalidateCompileCache) = true];
 
-    optional uint64 ExtractPredicateParameterListSizeLimit = 103 [default = 9999, (InvalidateCompileCache) = true];
+    optional uint64 ExtractPredicateParameterListSizeLimit = 103 [default = 0, (InvalidateCompileCache) = true];
 
-    optional bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = 104 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = 104 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
 

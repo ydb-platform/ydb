@@ -13,7 +13,7 @@ TRUNCATE TABLE <table_name>;
 * Во время выполнения операции таблица блокируется на чтение и запись.
 * Операцию нельзя прервать или отменить после начала выполнения.
 * Операцию нельзя выполнить, если у таблицы есть:
-    - [асинхронный вторичный индекс](../../../concepts/secondary_indexes.md#async),
+    - [асинхронный вторичный индекс](../../../concepts/query_execution/secondary_indexes.md#async),
     - [поток изменений](alter_table/changefeed.md),
     - [асинхронная репликация](../../../concepts/async-replication.md).
 

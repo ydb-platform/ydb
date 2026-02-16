@@ -48,6 +48,7 @@ public:
    */
   void UnInstall();
 
+  opentelemetry::sdk::common::internal_log::LogLevel log_level;
   opentelemetry::sdk::resource::Resource resource;
   std::shared_ptr<opentelemetry::sdk::trace::TracerProvider> tracer_provider;
   std::shared_ptr<opentelemetry::context::propagation::TextMapPropagator> propagator;

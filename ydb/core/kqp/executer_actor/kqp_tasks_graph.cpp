@@ -1476,6 +1476,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
         }
     }
 
+    if (const auto& infoAggregator = GetMeta().DqInfoAggregator) {
+        NActorsProto::TActorId actorIdProto;
+        ActorIdToProto(infoAggregator, &actorIdProto);
+        (*result->MutableTaskParams())["dq_info_aggregator"] = actorIdProto.SerializeAsString();
+    }
+
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);
@@ -2470,12 +2476,12 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
-    if (fullTextSource.HasQueryMode()) {
+    if (fullTextSource.HasDefaultOperator()) {
         auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetQueryMode(),
+            stageInfo, fullTextSource.GetDefaultOperator(),
             TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
         if (value.HasValue()) {
-            settings->SetQueryMode(TString(value.AsStringRef()));
+            settings->SetDefaultOperator(TString(value.AsStringRef()));
         }
     }
 

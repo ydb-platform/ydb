@@ -1,5 +1,5 @@
 diff --git a/include/__config b/include/__config
-index fe01b58..171c171 100644
+index 658a7e1..db71851 100644
 --- a/include/__config
 +++ b/include/__config
 @@ -526,7 +526,7 @@ typedef __char32_t char32_t;
@@ -11,7 +11,7 @@ index fe01b58..171c171 100644
  #    define _LIBCPP_HIDE_FROM_ABI                                                                                      \
        _LIBCPP_HIDDEN _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION                                                       \
        __attribute__((__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))))
-@@ -825,7 +825,8 @@ typedef __char32_t char32_t;
+@@ -821,7 +821,8 @@ typedef __char32_t char32_t;
          defined(__APPLE__) ||                                                                                          \
          defined(__MVS__) ||                                                                                            \
          defined(_AIX) ||                                                                                               \

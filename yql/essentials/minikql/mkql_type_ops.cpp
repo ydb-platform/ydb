@@ -93,6 +93,20 @@ TStringBuf AdaptLegacyYqlType(const TStringBuf& type) {
     return type;
 }
 
+namespace {
+
+template <typename T>
+bool IsValidValue(const NUdf::TUnboxedValuePod& value) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    bool result = bool(value) && NUdf::IsValidLayoutValue<T>(value.Get<TLayout>());
+    if constexpr (NUdf::TTzDataType<T>::Result) {
+        result = result && IsValidTimezoneId(value.GetTimezoneId());
+    }
+    return result;
+}
+
+} // namespace
+
 bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
     switch (type) {
         case NUdf::EDataSlot::Bool:
@@ -113,46 +127,46 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
             return bool(value) && !NYql::NDecimal::IsError(value.GetInt128());
 
         case NUdf::EDataSlot::Date:
-            return bool(value) && value.Get<ui16>() < NUdf::MAX_DATE;
+            return IsValidValue<NUdf::TDate>(value);
 
         case NUdf::EDataSlot::Datetime:
-            return bool(value) && value.Get<ui32>() < NUdf::MAX_DATETIME;
+            return IsValidValue<NUdf::TDatetime>(value);
 
         case NUdf::EDataSlot::Timestamp:
-            return bool(value) && value.Get<ui64>() < NUdf::MAX_TIMESTAMP;
+            return IsValidValue<NUdf::TTimestamp>(value);
 
         case NUdf::EDataSlot::Interval:
-            return bool(value) && (ui64)std::abs(value.Get<i64>()) < NUdf::MAX_TIMESTAMP;
+            return IsValidValue<NUdf::TInterval>(value);
 
         case NUdf::EDataSlot::Date32:
-            return bool(value) && value.Get<i32>() >= NUdf::MIN_DATE32 && value.Get<i32>() <= NUdf::MAX_DATE32;
+            return IsValidValue<NUdf::TDate32>(value);
 
         case NUdf::EDataSlot::Datetime64:
-            return bool(value) && value.Get<i64>() >= NUdf::MIN_DATETIME64 && value.Get<i64>() <= NUdf::MAX_DATETIME64;
+            return IsValidValue<NUdf::TDatetime64>(value);
 
         case NUdf::EDataSlot::Timestamp64:
-            return bool(value) && value.Get<i64>() >= NUdf::MIN_TIMESTAMP64 && value.Get<i64>() <= NUdf::MAX_TIMESTAMP64;
+            return IsValidValue<NUdf::TTimestamp64>(value);
 
         case NUdf::EDataSlot::Interval64:
-            return bool(value) && (ui64)std::abs(value.Get<i64>()) <= NUdf::MAX_INTERVAL64;
+            return IsValidValue<NUdf::TInterval64>(value);
 
         case NUdf::EDataSlot::TzDate:
-            return bool(value) && value.Get<ui16>() < NUdf::MAX_DATE && value.GetTimezoneId() < NTi::GetTimezones().size();
+            return IsValidValue<NUdf::TTzDate>(value);
 
         case NUdf::EDataSlot::TzDatetime:
-            return bool(value) && value.Get<ui32>() < NUdf::MAX_DATETIME && value.GetTimezoneId() < NTi::GetTimezones().size();
+            return IsValidValue<NUdf::TTzDatetime>(value);
 
         case NUdf::EDataSlot::TzTimestamp:
-            return bool(value) && value.Get<ui64>() < NUdf::MAX_TIMESTAMP && value.GetTimezoneId() < NTi::GetTimezones().size();
+            return IsValidValue<NUdf::TTzTimestamp>(value);
 
         case NUdf::EDataSlot::TzDate32:
-            return bool(value) && value.Get<i32>() >= NUdf::MIN_DATE32 && value.Get<i32>() <= NUdf::MAX_DATE32 && value.GetTimezoneId() < NTi::GetTimezones().size();
+            return IsValidValue<NUdf::TTzDate32>(value);
 
         case NUdf::EDataSlot::TzDatetime64:
-            return bool(value) && value.Get<i64>() >= NUdf::MIN_DATETIME64 && value.Get<i64>() <= NUdf::MAX_DATETIME64 && value.GetTimezoneId() < NTi::GetTimezones().size();
+            return IsValidValue<NUdf::TTzDatetime64>(value);
 
         case NUdf::EDataSlot::TzTimestamp64:
-            return bool(value) && value.Get<i64>() >= NUdf::MIN_TIMESTAMP64 && value.Get<i64>() <= NUdf::MAX_TIMESTAMP64 && value.GetTimezoneId() < NTi::GetTimezones().size();
+            return IsValidValue<NUdf::TTzTimestamp64>(value);
 
         case NUdf::EDataSlot::Utf8:
             return bool(value) && IsUtf8(value.AsStringRef());

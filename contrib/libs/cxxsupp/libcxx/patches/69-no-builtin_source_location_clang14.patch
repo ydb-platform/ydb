@@ -1,15 +1,15 @@
 diff --git a/include/source_location b/include/source_location
-index faa6b0e..e10da2e 100644
+index b4777ce..4ac6363 100644
 --- a/include/source_location
 +++ b/include/source_location
-@@ -54,12 +54,23 @@ class source_location {
+@@ -55,12 +55,23 @@ class source_location {
    // in constant evaluation, so we don't want to use `void*` as the argument
    // type unless the builtin returned that, anyhow, and the invalid cast is
    // unavoidable.
 +#  if __has_builtin(__builtin_source_location)
-   using __bsl_ty = decltype(__builtin_source_location());
+   using __bsl_ty _LIBCPP_NODEBUG = decltype(__builtin_source_location());
 +#  else
-+  using __bsl_ty = __impl*;
++  using __bsl_ty _LIBCPP_NODEBUG = __impl*;
 +#  endif
  
  public:

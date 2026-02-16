@@ -410,6 +410,7 @@ def _create_pm(unit: NotsUnitType) -> 'PackageManager':
         nodejs_bin_path=None,
         script_path=None,
         module_path=module_path,
+        inject_peers=unit.get("_INJECT_PEERS_ARG") is not None,
     )
 
 

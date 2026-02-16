@@ -39,9 +39,9 @@
 
 - В рамках первоначального развёртывания кластера {{ ydb-short-name }}:
 
-    - [Ansible](../../devops/deployment-options/ansible/initial-deployment/index.md)
-    - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
-    - [Вручную](../../devops/deployment-options/manual/initial-deployment.md)
+- [Ansible](../../devops/deployment-options/ansible/initial-deployment/index.md)
+- [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
+- [Вручную](../../devops/deployment-options/manual/initial-deployment/index.md)
 
 - В рамках [поиска и устранения неисправностей](../../troubleshooting/index.md)
 - В рамках [усиления безопасности](../../security/index.md)
@@ -49,4 +49,3 @@
 ## Примеры конфигураций кластеров
 
 Модельные конфигурации кластера для развертывания можно найти в [репозитории](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Изучите их перед развертыванием кластера.
-

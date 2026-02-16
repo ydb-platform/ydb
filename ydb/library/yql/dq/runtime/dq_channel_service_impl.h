@@ -125,8 +125,10 @@ public:
     TChannelStub(const TChannelFullInfo& info) : IChannelBuffer(info) {
         PushStats.ChannelId = info.ChannelId;
         PushStats.SrcStageId = info.SrcStageId;
+        PushStats.Level = info.Level;
         PopStats.ChannelId = info.ChannelId;
         PopStats.DstStageId = info.DstStageId;
+        PopStats.Level = info.Level;
     }
 
     ~TChannelStub() override {
@@ -200,8 +202,10 @@ public:
     {
         PushStats.ChannelId = info.ChannelId;
         PushStats.SrcStageId = info.SrcStageId;
+        PushStats.Level = info.Level;
         PopStats.ChannelId = info.ChannelId;
         PopStats.DstStageId = info.DstStageId;
+        PopStats.Level = info.Level;
     }
 
     ~TLocalBuffer() override;
@@ -373,8 +377,10 @@ public:
         : IChannelBuffer(descriptor->Info), NodeState(nodeState), Descriptor(descriptor) {
         PushStats.ChannelId = descriptor->Info.ChannelId;
         PushStats.SrcStageId = descriptor->Info.SrcStageId;
+        PushStats.Level = descriptor->Info.Level;
         PopStats.ChannelId = descriptor->Info.ChannelId;
         PopStats.DstStageId = descriptor->Info.DstStageId;
+        PopStats.Level = descriptor->Info.Level;
     }
 
     ~TOutputBuffer() override;
@@ -464,8 +470,10 @@ public:
         : IChannelBuffer(descriptor->Info), NodeState(nodeState), Descriptor(descriptor) {
         PushStats.ChannelId = descriptor->Info.ChannelId;
         PushStats.SrcStageId = descriptor->Info.SrcStageId;
+        PushStats.Level = descriptor->Info.Level;
         PopStats.ChannelId = descriptor->Info.ChannelId;
         PopStats.DstStageId = descriptor->Info.DstStageId;
+        PopStats.Level = descriptor->Info.Level;
     }
 
     ~TInputBuffer() override;
@@ -570,7 +578,7 @@ public:
     void CleanupUnbound();
     void FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
-    void SendAckWithError(ui64 cookie);
+    void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor);

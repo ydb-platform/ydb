@@ -13,8 +13,8 @@ import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/compaction.proto";
 import "ydb/core/protos/config_metrics.proto";
 import "ydb/core/protos/config_units.proto";
-import "ydb/core/protos/counters_schemeshard.proto";
 import "ydb/core/protos/data_integrity_trails.proto";
+import "ydb/core/protos/schemeshard_config.proto";
 import "ydb/core/protos/datashard_config.proto";
 import "ydb/core/protos/drivemodel.proto";
 import "ydb/core/protos/feature_flags.proto";
@@ -185,7 +185,7 @@ message TStaticNameserviceConfig {
     repeated string AcceptUUID = 3;
     optional bool SuppressVersionCheck = 4;
     optional ENameserviceType Type = 5;
-    optional bool KeepSocket = 6 [default = true];
+    optional bool KeepSocket = 6 [default = false];
     optional bool ForceTcp = 7 [default = false];
     optional EDnsResolverType DnsResolverType = 8 [default = ARES];
     optional bool AddTrailingDot = 9 [default = false];
@@ -615,11 +615,13 @@ message TMonitoringConfig {
     optional string MonitoringCertificate = 14 [(Ydb.sensitive) = true];
     optional string MonitoringCertificateFile = 15;
     optional string MonitoringPrivateKeyFile = 20;
+    optional string MonitoringCaFile = 23;
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
     optional bool HideHttpEndpoint = 19 [default = false];
     optional bool RequireCountersAuthentication = 21 [default = false];
+    optional bool RequireHealthcheckAuthentication = 22 [default = false];
 }
 
 message TRestartsCountConfig {
@@ -1994,6 +1996,18 @@ message TImmediateControlsConfig {
             MaxValue: 4096,
             DefaultValue: 3
         }];
+        optional uint64 UsePayload = 2 [(ControlOptions) = {
+            Description: "Use payload transport for KeyValue read responses",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
+        optional uint64 UseCustomSerialization = 3 [(ControlOptions) = {
+            Description: "Use custom serialization for KeyValue requests and responses",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
     }
 
     message TKQPSessionControls {
@@ -2398,10 +2412,10 @@ message THiveConfig {
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
     optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
-    optional uint64 MaxChannelHistorySize = 69 [default = 10];
+    optional uint64 MaxChannelHistorySize = 69 [default = 200];
     optional uint64 StorageInfoRefreshFrequency = 70 [default = 600000]; // send a query to BSC every x milliseconds
-    optional double MinStorageScatterToBalance = 71 [default = 0.5]; // storage balancer trigger threshold (enabled by default)
-    optional double MinGroupUsageToBalance = 72 [default = 0.05];
+    optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger threshold (disabled by default)
+    optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
@@ -2547,37 +2561,7 @@ message TColumnShardConfig {
     optional bool EnableCursorV1 = 68 [default = false];
 }
 
-message TSchemeShardConfig {
-    message TInFlightCounterConfig {
-        optional NKikimr.NSchemeShard.ESimpleCounters Type = 1;
-        // after this amount scheme shard begin to abort the operations
-        // to disable set to 0
-        optional uint32 InFlightLimit = 2 [default = 10000];
-    }
-    // after this amount of time we forcibly write full stats to local DB
-    // to disable set to 0
-    optional uint32 StatsBatchTimeoutMs = 1 [default = 100];
-
-    // number of shards stats to batch together
-    // to disable set to 0
-    optional uint32 StatsMaxBatchSize = 2 [default = 100];
-
-    optional uint32 StatsMaxExecuteMs = 3 [default = 10];
-
-    repeated TInFlightCounterConfig InFlightCounterConfig = 4;
-
-    // number of shards per table
-    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
-
-    // number of shards per table
-    // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
-    optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
-
-    // number of shards per table
-    // database level default for TTL mechanics
-    // 0 means no limit
-    optional uint32 MaxTTLShardsInFlight = 7 [default = 0];
-}
+// TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto
 
 message TCompactionConfig {
     message TBackgroundCompactionConfig {

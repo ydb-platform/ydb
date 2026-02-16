@@ -283,6 +283,11 @@ message TMoveTable {
     optional string DstPath = 3;
 }
 
+message TCopyTable {
+    optional uint64 SrcPathId = 1;
+    optional uint64 DstPathId = 2;
+}
+
 message TInitShard {
     optional uint32 DataChannelCount = 1;
     optional uint64 OwnerPathId = 2;
@@ -333,6 +338,7 @@ message TSchemaTxBody {
         TAlterTable AlterTable = 5;
         TAlterStore AlterStore = 6;
         TMoveTable MoveTable = 7;
+        TCopyTable CopyTable = 8;
     }
 
     optional NKikimrSchemeOp.TGranuleShardingInfo GranuleShardingInfo = 20;

@@ -13,11 +13,11 @@ int CompareKeyRows(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary
 struct TFmrTableKeysBoundary {
     TString Row;
     TRowIndexMarkup Markup;
-    TVector<ESortOrder> SortOrders;
+    std::vector<ESortOrder> SortOrders;
 
     TFmrTableKeysBoundary() = default;
 
-    TFmrTableKeysBoundary(TStringBuf row, const TVector<TString>& keyColumns, TVector<ESortOrder> sortOrders)
+    TFmrTableKeysBoundary(TStringBuf row, const std::vector<TString>& keyColumns, std::vector<ESortOrder> sortOrders)
         : Row(row)
         , SortOrders(std::move(sortOrders))
     {
@@ -138,7 +138,7 @@ class TBinaryYsonComparator {
 public:
     TBinaryYsonComparator(
         TStringBuf blobData,
-        TVector<ESortOrder> sortOrders
+        std::vector<ESortOrder> sortOrders
     )
         : BlobData_(blobData)
         , SortOrders_(std::move(sortOrders))
@@ -156,7 +156,7 @@ public:
 
 private:
     TStringBuf BlobData_;
-    TVector<ESortOrder> SortOrders_;
+    std::vector<ESortOrder> SortOrders_;
 };
 
 } // namespace NYql::NFmr

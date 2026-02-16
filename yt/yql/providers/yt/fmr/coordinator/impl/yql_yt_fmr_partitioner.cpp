@@ -95,6 +95,10 @@ void TFmrPartitioner::HandleFmrLeftoverRanges(
     std::vector<TTaskTableInputRef>& fmrTasks,
     std::vector<TLeftoverRange>& leftoverRanges
 ) {
+    if (leftoverRanges.empty()) {
+        return;
+    }
+
     TTaskTableInputRef currentTask{};
     ui64 curDataWeight = 0;
     TFmrTableInputRef curFmrTable;
@@ -122,8 +126,12 @@ void TFmrPartitioner::HandleFmrLeftoverRanges(
         curDataWeight += range.DataWeight;
     }
 
-    currentTask.Inputs.emplace_back(curFmrTable);
-    fmrTasks.emplace_back(currentTask);
+    if (curFmrTable != TFmrTableInputRef()) {
+        currentTask.Inputs.emplace_back(curFmrTable);
+    }
+    if (!currentTask.Inputs.empty()) {
+        fmrTasks.emplace_back(currentTask);
+    }
 }
 
 bool TFmrPartitioner::CheckMaxTasksSize(const std::vector<TTaskTableInputRef>& currentFmrTasks) {

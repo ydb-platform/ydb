@@ -113,6 +113,8 @@ def generate_certificates(certs_tmp_dir):
 def create_ydb_configurator(
     certificates,
     enforce_user_token_requirement=True,
+    require_counters_authentication=None,
+    require_healthcheck_authentication=None,
 ):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
@@ -133,7 +135,22 @@ def create_ydb_configurator(
     config_generator.yaml_config['domains_config']['security_config']['monitoring_allowed_sids'] = [
         'monitoring@builtin'
     ]
-    # administration_allowed_sids is already set due to default_clusteradmin
+    assert (
+        'administration_allowed_sids' in config_generator.yaml_config['domains_config']['security_config']
+        and len(config_generator.yaml_config['domains_config']['security_config']['administration_allowed_sids']) > 0
+    ), "administration_allowed_sids was supposed to be set due to default_clusteradmin"
+
+    if require_counters_authentication is not None or require_healthcheck_authentication is not None:
+        if 'monitoring_config' not in config_generator.yaml_config:
+            config_generator.yaml_config['monitoring_config'] = {}
+        if require_counters_authentication is not None:
+            config_generator.yaml_config['monitoring_config'][
+                'require_counters_authentication'
+            ] = require_counters_authentication
+        if require_healthcheck_authentication is not None:
+            config_generator.yaml_config['monitoring_config'][
+                'require_healthcheck_authentication'
+            ] = require_healthcheck_authentication
 
     return config_generator
 
@@ -161,6 +178,32 @@ def ydb_cluster_without_enforce_user_token(certificates):
     configurator = create_ydb_configurator(
         certificates,
         enforce_user_token_requirement=False,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_require_counters_auth(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        require_counters_authentication=True,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_require_healthcheck_auth(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        require_healthcheck_authentication=True,
     )
     cluster = KiKiMR(configurator)
     cluster.start()
@@ -198,9 +241,17 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'user@builtin': 403,
         'database@builtin': 403,
         'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 403,
-    },  # TODO(yurikiselev): Fix 403 for admins (issue #33400)
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck?database=%2FRoot': {
+        None: 200,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
     '/ping': {
         None: 200,
         'user@builtin': 200,
@@ -301,6 +352,14 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/healthcheck': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck?database=%2FRoot': {
         None: 200,
         'user@builtin': 200,
         'database@builtin': 200,
@@ -416,3 +475,79 @@ def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
 
 def test_without_enforce_user_token(ydb_cluster_without_enforce_user_token):
     _test_endpoints(ydb_cluster_without_enforce_user_token, EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN)
+
+
+def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):
+    EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH = {
+        '/counters': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/counters/hosts': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/ping': {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },  # checks this just in case
+    }
+    _test_endpoints(ydb_cluster_with_require_counters_auth, EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH)
+
+
+def test_with_require_healthcheck_authentication(ydb_cluster_with_require_healthcheck_auth):
+    EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH = {
+        '/healthcheck?format=prometheus': {
+            None: 403,  # TODO(yurikiselev): Fix 403 here and below, should be 401 (issue #33354)
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck': {
+            None: 403,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck?database=%2FRoot': {
+            None: 403,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck?database=%2FRoot&format=prometheus': {
+            None: 403,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/ping': {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },  # checks this just in case
+    }
+    _test_endpoints(ydb_cluster_with_require_healthcheck_auth, EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH)

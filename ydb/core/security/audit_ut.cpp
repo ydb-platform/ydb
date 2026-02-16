@@ -16,6 +16,17 @@ namespace NKikimr {
 
 namespace {
 
+void WaitForAuditLogLines(const std::vector<std::string>& lines,
+    size_t expectedLines, TDuration timeout = TDuration::MilliSeconds(500))
+{
+    auto deadline = TInstant::Now() + timeout;
+    while (lines.size() < expectedLines && TInstant::Now() < deadline) {
+        Sleep(TDuration::MilliSeconds(50));
+    }
+    UNIT_ASSERT_C(lines.size() == expectedLines,
+        "Audit log line did not appear within timeout. Expected: " << expectedLines << ", got: " << lines.size());
+}
+
 void EatWholeString(NHttp::THttpIncomingRequestPtr request, const TString& data) {
     auto size = std::min(request->Avail(), data.size());
     memcpy(request->Pos(), data.data(), size);
@@ -113,7 +124,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // User creation adds 1 audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         // test body
         const auto target = env.GetWebLoginService();
@@ -134,7 +145,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // After login, we should have 1 additional audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -181,7 +192,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // User creation adds 1 audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         // test body
         const auto target = env.GetWebLoginService();
@@ -201,7 +212,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // After failed login, we should have 1 additional audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -273,7 +284,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // After LDAP login, we should have 1 additional audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -347,7 +358,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // After failed LDAP login, we should have 1 additional audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -420,7 +431,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // After failed LDAP login, we should have 1 additional audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -494,7 +505,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // After failed LDAP login, we should have 1 additional audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -518,7 +529,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // User creation adds 1 audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         // test body
         const auto target = env.GetWebLoginService();
@@ -540,7 +551,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         // After login, we should have 1 additional audit log entry
         expectedLines += 1;
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+        WaitForAuditLogLines(lines, expectedLines);
 
         // Then we are ready to test some authentication on /logout
         {  // no cookie
@@ -553,7 +564,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
             UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "401");
 
             // no audit record for actions without auth
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+            WaitForAuditLogLines(lines, expectedLines);
         }
         {  // bad cookie
             env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
@@ -565,7 +576,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
             UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "403");
 
             // no audit record for actions without auth
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+            WaitForAuditLogLines(lines, expectedLines);
         }
         {  // good cookie
             env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
@@ -582,7 +593,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
             // After logout, we should have 1 additional audit log entry
             expectedLines += 1;
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+            WaitForAuditLogLines(lines, expectedLines);
 
             auto last = FindAuditLine(lines, "operation=LOGOUT");
             UNIT_ASSERT_STRING_CONTAINS(last, "component=web-login");
@@ -637,35 +648,35 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
         {
             CreateUser(env, user, password);
             expectedLines += 1;
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+            WaitForAuditLogLines(lines, expectedLines);
             check("CREATE USER");
         }
 
         {
             ChangeUserPassword(env, user, newPassword);
             expectedLines += 1;
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+            WaitForAuditLogLines(lines, expectedLines);
             check("MODIFY USER", {"password"});
         }
 
         {
             ChangeUserIsEnabled(env, user, false);
             expectedLines += 1;
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+            WaitForAuditLogLines(lines, expectedLines);
             check("MODIFY USER", {"blocking"});
         }
 
         {
             ChangeUserIsEnabled(env, user, true);
             expectedLines += 1;
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+            WaitForAuditLogLines(lines, expectedLines);
             check("MODIFY USER", {"unblocking"});
         }
 
         {
             ChangeUserPasswordHash(env, user, hash);
             expectedLines += 1;
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+            WaitForAuditLogLines(lines, expectedLines);
             check("MODIFY USER", {"password"});
         }
 
@@ -677,7 +688,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
             ).GetValueSync();
 
             expectedLines += 1;
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
+            WaitForAuditLogLines(lines, expectedLines);
             check("MODIFY USER", {"password", "blocking"});
         }
     }

@@ -49,14 +49,15 @@
                                                 "Operators": [
                                                     {
                                                         "Columns": "Key, Text, __ydb_full_text_relevance",
+                                                        "DefaultOperator": "\"or\"",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
+                                                        "ItemsLimit": "\"1001\"",
                                                         "MinimumShouldMatch": "\"1\"",
                                                         "MinimumShouldMatchExplained": "1",
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",
                                                         "QueryColumns": "Text",
-                                                        "QueryMode": "\"or\"",
                                                         "RelevanceQuery": "True",
                                                         "SearchTerms": "cats, dogs",
                                                         "Table": "/local/base_fulltext_relevance_minimum_should_match_sql_plan/FullTextTable"

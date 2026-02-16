@@ -75,8 +75,17 @@ void TKeyedWriteSessionEventLoop::CheckAcksOrder() {
     std::lock_guard lock(Lock_);
     size_t expectedAck = 1;
     UNIT_ASSERT_C(AckedSeqNos_.size() == AckOrder_.size(), TStringBuilder() << "Unexpected number of acks: got " << AckOrder_.size() << ", expected " << AckedSeqNos_.size());
+    size_t index = 0;
     for (const auto& ack : AckOrder_) {
-        UNIT_ASSERT_VALUES_EQUAL_C(ack, expectedAck, TStringBuilder() << "Unexpected ack order: got " << ack << ", expected " << expectedAck);
+        TStringBuilder sb;
+        if (ack != expectedAck) {
+            for (size_t i = std::min(size_t(0), index - 10); i < std::min(index + 10, AckOrder_.size()); i++) {
+                sb << "Ack " << i << ": " << AckOrder_[i] << " ";
+            }
+
+            sb << "Unexpected ack order: got " << ack << ", expected " << expectedAck;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(ack, expectedAck, sb);
         expectedAck++;
     }
 }

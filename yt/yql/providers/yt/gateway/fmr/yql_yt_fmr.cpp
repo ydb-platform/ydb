@@ -440,6 +440,15 @@ public:
                     meta.DoesExist = true;
                     SetFmrTableMeta(fmrOutputTableId, meta, sessionId);
 
+                    // Preserve stats for alias anonymous tables so GetTableInfo sees real row/chunk counters.
+                    auto inputStats = GetFmrTableStats(inputFmrId, sessionId);
+                    inputStats.Id = "fmr_" + fmrOutputTableId.Id;
+                    inputStats.ModifyTime = TInstant::Now().Seconds();
+                    SetFmrTableStats(fmrOutputTableId, inputStats, sessionId);
+
+                    TFmrTableRef inputTable = GetFmrTableRef(inputFmrId, sessionId);
+                    SetTableSortingSpec(fmrOutputTableId, inputTable.SortColumns, inputTable.SortOrder, sessionId);
+
                     TPublishResult publishResult;
                     publishResult.SetSuccess();
                     return MakeFuture<TPublishResult>(publishResult);
@@ -464,6 +473,18 @@ public:
                 publishResult.AddIssues(GetIssuesFromFmrErrors(anonTablesMergeResult.Errors, pos));
                 if (anonTablesMergeResult.Success()) {
                     publishResult.SetSuccess();
+                    YQL_ENSURE(
+                        anonTablesMergeResult.TablesStats.size() == 1,
+                        "Expected exactly one output table stats entry for anonymous publish merge");
+
+                    const auto& tableStats = anonTablesMergeResult.TablesStats[0];
+                    TYtTableStatInfo stats;
+                    stats.Id = "fmr_" + fmrOutputTableId.Id;
+                    stats.RecordsCount = tableStats.Rows;
+                    stats.DataSize = tableStats.DataWeight;
+                    stats.ChunkCount = tableStats.Chunks;
+                    stats.ModifyTime = TInstant::Now().Seconds();
+                    SetFmrTableStats(fmrOutputTableId, stats, sessionId);
                 }
 
                 TYtTableMetaInfo meta;
@@ -742,6 +763,9 @@ private:
                     << " (was pointing to " << tableId << ")";
                     anonTableInfo.TableMeta = fmrTables[tableId].TableMeta;
                     anonTableInfo.TableStats = fmrTables[tableId].TableStats;
+                    anonTableInfo.ColumnGroupSpec = fmrTables[tableId].ColumnGroupSpec;
+                    anonTableInfo.SortColumns = fmrTables[tableId].SortColumns;
+                    anonTableInfo.SortOrder = fmrTables[tableId].SortOrder;
                     anonTableInfo.AnonymousTableFmrIdAlias = Nothing();
                 }
             }
@@ -784,7 +808,10 @@ private:
     TFmrTableRef GetFmrTableRef(TFmrTableId fmrTableId, const TString& sessionId, const std::vector<TString>& columns = {}, const TMaybe<TString>& serializedColumnGroups = Nothing()) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
         auto alias = GetAliasOrFmrId(fmrTableId, sessionId);
+        auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
         TFmrTableRef fmrTableRef{alias};
+        fmrTableRef.SortColumns = fmrTableInfo[alias].SortColumns;
+        fmrTableRef.SortOrder = fmrTableInfo[alias].SortOrder;
         if (!columns.empty()) {
             fmrTableRef.Columns = columns;
         }
@@ -802,6 +829,12 @@ private:
         fmrTableInfo[fmrTableId].ColumnGroupSpec = columnGroupSpec;
     }
 
+    void SetTableSortingSpec(const TFmrTableId& fmrTableId, const std::vector<TString>& sortColumns, const std::vector<ESortOrder>& sortOrder, const TString& sessionId) {
+        auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+        fmrTableInfo[fmrTableId].SortColumns = sortColumns;
+        fmrTableInfo[fmrTableId].SortOrder = sortOrder;
+    }
+
     TString GetColumnGroupSpec(const TFmrTableId& fmrTableId, const TString& sessionId) {
         auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
         TString columnGroupSpec = fmrTableInfo[fmrTableId].ColumnGroupSpec;
@@ -816,8 +849,11 @@ private:
     }
 
     TYtTableStatInfo GetFmrTableStats(const TFmrTableId& fmrTableId, const TString& sessionId) {
-        auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
-        return fmrTableInfo[fmrTableId].TableStats;
+        YQL_ENSURE(Sessions_.contains(sessionId), "Session not found while reading table stats: " << sessionId);
+        const auto& fmrTableInfo = Sessions_.at(sessionId)->FmrTables;
+        auto it = fmrTableInfo.find(fmrTableId);
+        YQL_ENSURE(it != fmrTableInfo.end(), "FMR table not found while reading table stats: " << fmrTableId);
+        return it->second.TableStats;
     }
 
     void SetFmrTableMeta(const TFmrTableId& fmrTableId, const TYtTableMetaInfo& meta, const TString& sessionId) {
@@ -846,8 +882,6 @@ private:
 
     void FinalizeSortedUploadOperation(const TString& operationId, const TString& sessionId, const std::vector<TString>& fragmentResultsYson) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
-
-        YQL_CLOG(TRACE, FastMapReduce) << "GATEWAY got "<< fragmentResultsYson.size() << " fragment result: ";
         auto& session = Sessions_[sessionId];
         auto writeSession = session->OperationStates.SortedUploadOperations[operationId];
         DistributedUploadSessions_[writeSession]->Finish(fragmentResultsYson);
@@ -965,7 +999,7 @@ private:
         return columnGroups;
     }
 
-    bool GetIsOrdered(const TOutputInfo& outputTable) {
+    bool GetIsSorted(const TOutputInfo& outputTable) {
         bool isOrdered = false;
         if (outputTable.Spec.HasKey(YqlRowSpecAttribute)) {
             const auto& rowSpec = outputTable.Spec[YqlRowSpecAttribute];
@@ -974,6 +1008,38 @@ private:
             }
         }
         return isOrdered;
+    }
+
+    std::vector<TString> GetTableSortedColumns(const TOutputInfo& outputTable) {
+        std::vector<TString> columns;
+
+        if (outputTable.Spec.HasKey(YqlRowSpecAttribute)) {
+            const auto& rowSpec = outputTable.Spec[YqlRowSpecAttribute];
+            if (rowSpec.HasKey("SortedBy") && !rowSpec["SortedBy"].AsList().empty()) {
+                for (const auto& item : rowSpec["SortedBy"].AsList()) {
+                    columns.emplace_back(item.AsString());
+                }
+            }
+        }
+        return columns;
+    }
+
+    std::vector<ESortOrder> GetTableSortedOrders(const TOutputInfo& outputTable) {
+        std::vector<ESortOrder> sortOrders;
+
+        if (outputTable.Spec.HasKey(YqlRowSpecAttribute)) {
+            const auto& rowSpec = outputTable.Spec[YqlRowSpecAttribute];
+            if (rowSpec.HasKey("SortDirections") && !rowSpec["SortDirections"].AsList().empty()) {
+                for (const auto& item : rowSpec["SortDirections"].AsList()) {
+                    ESortOrder sortOrder = ESortOrder::Ascending;
+                    if (item.AsInt64() < 0) {
+                        sortOrder = ESortOrder::Descending;
+                    }
+                    sortOrders.emplace_back(sortOrder);
+                }
+            }
+        }
+        return sortOrders;
     }
 
     template<class TOptions>
@@ -1151,7 +1217,7 @@ private:
         for (auto& ctx: execCtxs) {
             for (ui64 tableIndex = 0; tableIndex < ctx->OutTables_.size(); ++tableIndex) {
                 const auto& outputTable = ctx->OutTables_[tableIndex];
-                bool isOrdered = GetIsOrdered(outputTable);
+                bool isOrdered = GetIsSorted(outputTable);
                 if (isOrdered) {
                     uploadFmrTableToYtFutures.emplace_back(SortedUploadTableFromFmrToYt(ctx, tableIndex));
                 } else {
@@ -1204,7 +1270,13 @@ private:
             .FmrTableId = outputTableFmrId,
             .SerializedColumnGroups = columnGroupSpec
         };
-
+        if (GetIsSorted(outputTable)) {
+            fmrOutputTable.SortColumns = GetTableSortedColumns(outputTable);
+            fmrOutputTable.SortOrder = GetTableSortedOrders(outputTable);
+            SetTableSortingSpec(outputTableFmrId, fmrOutputTable.SortColumns, fmrOutputTable.SortOrder, sessionId);
+            return ExecSortedMerge(execCtx->InputTables_, fmrOutputTable, outputCluster, sessionId, execCtx->Options_.Config());
+        }
+        SetTableSortingSpec(outputTableFmrId, {}, {}, sessionId);
         return ExecMerge(execCtx->InputTables_, fmrOutputTable, outputCluster, sessionId, execCtx->Options_.Config());
     }
 
@@ -1237,6 +1309,86 @@ private:
         return GetRunningOperationFuture(mergeOperationRequest, sessionId);
     }
 
+    TFuture<TFmrOperationResult> ExecSortedMerge(
+        const std::vector<TInputInfo>& inputTables,
+        const TFmrTableRef& fmrOutputTable,
+        const TString& outputCluster,
+        const TString& sessionId,
+        TYtSettings::TConstPtr& config)
+    {
+        auto [mergeInputTables, clusterConnections] = GetInputTablesAndConnections(inputTables, sessionId, config);
+
+        std::vector<TString> ytInputTables;
+        std::vector<TString> unsortedInputTables;
+        std::vector<TString> incompatibleSortedInputTables;
+        for (const auto& inputTable : mergeInputTables) {
+            if (auto ytInput = std::get_if<TYtTableRef>(&inputTable)) {
+                ytInputTables.emplace_back(ytInput->GetCluster() + "." + ytInput->GetPath());
+                continue;
+            }
+
+            const auto& fmrInput = std::get<TFmrTableRef>(inputTable);
+            const bool hasSortingSpec = !fmrInput.SortColumns.empty() && !fmrInput.SortOrder.empty();
+            if (!hasSortingSpec) {
+                unsortedInputTables.emplace_back(fmrInput.FmrTableId.Id);
+                continue;
+            }
+
+            if (fmrInput.SortColumns != fmrOutputTable.SortColumns || fmrInput.SortOrder != fmrOutputTable.SortOrder) {
+                incompatibleSortedInputTables.emplace_back(fmrInput.FmrTableId.Id);
+            }
+        }
+
+        if (!ytInputTables.empty()) {
+            TFmrOperationResult result;
+            result.Errors.emplace_back(TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "SortedMerge supports only inputs present in FMR. Inputs resolved to YT tables: " + JoinRange(", ", ytInputTables.begin(), ytInputTables.end())
+            });
+            return MakeFuture(result);
+        }
+
+        if (!unsortedInputTables.empty()) {
+            TFmrOperationResult result;
+            result.Errors.emplace_back(TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "SortedMerge requires sorted FMR inputs. Missing sorting metadata for tables: " + JoinRange(", ", unsortedInputTables.begin(), unsortedInputTables.end())
+            });
+            return MakeFuture(result);
+        }
+
+        if (!incompatibleSortedInputTables.empty()) {
+            TFmrOperationResult result;
+            result.Errors.emplace_back(TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "SortedMerge input sorting spec is incompatible with output sorting spec for tables: " + JoinRange(", ", incompatibleSortedInputTables.begin(), incompatibleSortedInputTables.end())
+            });
+            return MakeFuture(result);
+        }
+
+        TSortedMergeOperationParams sortedMergeOperationParams{.Input = mergeInputTables, .Output = fmrOutputTable};
+        TStartOperationRequest sortedMergeOperationRequest{
+            .TaskType = ETaskType::SortedMerge,
+            .OperationParams = sortedMergeOperationParams,
+            .SessionId = sessionId,
+            .IdempotencyKey = GenerateId(),
+            .NumRetries = 1,
+            .ClusterConnections = clusterConnections,
+            .FmrOperationSpec = config->FmrOperationSpec.Get(outputCluster)
+        };
+
+        std::vector<TString> inputPaths;
+        std::transform(inputTables.begin(), inputTables.end(), std::back_inserter(inputPaths), [](const auto& table) {
+            return table.Cluster + "." + table.Name;}
+        );
+
+        YQL_CLOG(INFO, FastMapReduce) << "Starting merge from tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to fmr table " << fmrOutputTable.FmrTableId;
+        return GetRunningOperationFuture(sortedMergeOperationRequest, sessionId);
+    }
+
     TFuture<TFmrOperationResult> DoMap(
         TYtMap map,
         const TExecContextSimple<TRunOptions>::TPtr& execCtx,
@@ -1255,13 +1407,20 @@ private:
         for (ui64 i = 0; i < outputTables.size(); ++i) {
             auto& outputTable = outputTables[i];
             TFmrTableId outputTableFmrId(execCtx->Cluster_, outputTable.Path);
-            auto columnGroupSpec = outputTableColumnGroups[0];
+            auto columnGroupSpec = outputTableColumnGroups[i];
             SetColumnGroupSpec(outputTableFmrId, columnGroupSpec, sessionId);
 
             TFmrTableRef fmrOutputTable{
                 .FmrTableId = outputTableFmrId,
                 .SerializedColumnGroups = columnGroupSpec
             };
+            if (GetIsSorted(outputTable)) {
+                fmrOutputTable.SortColumns = GetTableSortedColumns(outputTable);
+                fmrOutputTable.SortOrder = GetTableSortedOrders(outputTable);
+                SetTableSortingSpec(outputTableFmrId, fmrOutputTable.SortColumns, fmrOutputTable.SortOrder, sessionId);
+            } else {
+                SetTableSortingSpec(outputTableFmrId, {}, {}, sessionId);
+            }
             fmrOutputTables.emplace_back(fmrOutputTable);
         }
 
@@ -1451,6 +1610,8 @@ private:
         ETablePresenceStatus TablePresenceStatus = ETablePresenceStatus::Undefined; // Is table present in yt, fmr or both
         TMaybe<TFmrTableId> AnonymousTableFmrIdAlias = Nothing(); // Path to fmr table corresponding to anonymous table id.
         TString ColumnGroupSpec; // Serialized column group spec for fmr table.
+        std::vector<TString> SortColumns; // Sorting columns for fmr table.
+        std::vector<ESortOrder> SortOrder; // Sorting order for sorting columns.
         TYtTableStatInfo TableStats;
         TYtTableMetaInfo TableMeta;
     };

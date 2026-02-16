@@ -11,6 +11,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
             NKikimrServices::PQ_MLP_COMMITTER,
             NKikimrServices::PQ_MLP_UNLOCKER,
             NKikimrServices::PQ_MLP_DEADLINER,
+            NKikimrServices::PQ_MLP_PURGER,
             NKikimrServices::PQ_MLP_CONSUMER,
             NKikimrServices::PQ_MLP_ENRICHER,
             NKikimrServices::PQ_MLP_DLQ_MOVER,
@@ -51,9 +52,19 @@ TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& t
     return client.CreateTopic(topicName, settings).GetValueSync();
 }
 
-TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount, bool keepMessagesOrder) {
+TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount,
+        bool keepMessagesOrder, bool autopartitioning) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
-            .PartitioningSettings(partitionCount, partitionCount)
+            .BeginConfigurePartitioningSettings()
+                .MinActivePartitions(partitionCount)
+                .MaxActivePartitions(128)
+                .BeginConfigureAutoPartitioningSettings()
+                    .Strategy(autopartitioning ? EAutoPartitioningStrategy::ScaleUp : EAutoPartitioningStrategy::Disabled)
+                    .StabilizationWindow(TDuration::Seconds(1))
+                    .UpUtilizationPercent(2)
+                    .DownUtilizationPercent(1)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings()
             .BeginAddSharedConsumer(consumerName)
                 .KeepMessagesOrder(keepMessagesOrder)
                 .BeginDeadLetterPolicy()
@@ -121,6 +132,15 @@ TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& runtime, 
     return readerId;
 }
 
+TActorId CreatePurgerActor(NActors::TTestActorRuntime& runtime, TPurgerSettings&& settings) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto readerId = runtime.Register(CreatePurger(edgeId, std::move(settings)));
+    runtime.EnableScheduleForActor(readerId);
+    runtime.DispatchEvents();
+
+    return readerId;
+}
+
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath) {
     auto edgeId = runtime.AllocateEdgeActor();
     auto readerId = runtime.Register(NDescriber::CreateDescriberActor(edgeId, databasePath, {topicPath}));
@@ -136,6 +156,10 @@ THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtim
 
 THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return runtime.GrabEdgeEvent<TEvReadResponse>(timeout);
+}
+
+THolder<TEvPurgeResponse> GetPurgeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    return runtime.GrabEdgeEvent<TEvPurgeResponse>(timeout);
 }
 
 THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
@@ -159,6 +183,27 @@ void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::Status
     UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
         Ydb::StatusIds::StatusCode_Name(errorCode), response->ErrorDescription);
     UNIT_ASSERT_VALUES_EQUAL(response->ErrorDescription, message);
+}
+
+void AssertPurgeError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout) {
+    auto response = GetPurgeResponse(runtime, timeout);
+    if (!response) {
+        UNIT_FAIL("Timeout");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
+        Ydb::StatusIds::StatusCode_Name(errorCode), response->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(response->ErrorDescription, message);
+}
+
+void AssertPurgeOK(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    auto response = GetPurgeResponse(runtime, timeout);
+    if (!response) {
+        UNIT_FAIL("Timeout");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
+        Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
 }
 
 void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount) {

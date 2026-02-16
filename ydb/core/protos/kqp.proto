@@ -908,7 +908,7 @@ message TKqpFullTextSourceSettings {
 
     optional double K1Factor = 12;
     optional double BFactor = 13;
-    optional string QueryMode = 14;
+    optional string DefaultOperator = 14;
     optional string MinimumShouldMatch = 15;
 };
 

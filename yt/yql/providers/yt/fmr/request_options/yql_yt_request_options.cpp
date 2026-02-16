@@ -182,6 +182,10 @@ TFmrTableOutputRef::TFmrTableOutputRef(const TString& tableId, const TMaybe<TStr
 TFmrTableOutputRef::TFmrTableOutputRef(const TFmrTableRef& fmrTableRef)
     : TableId(fmrTableRef.FmrTableId.Id)
     , SerializedColumnGroups(fmrTableRef.SerializedColumnGroups)
+    , SortingColumns(TSortingColumns{
+        .Columns = fmrTableRef.SortColumns,
+        .SortOrders = fmrTableRef.SortOrder
+    })
 {
 }
 
@@ -190,7 +194,9 @@ void TFmrTableOutputRef::Save(IOutputStream* buffer) const {
         buffer,
         TableId,
         PartId,
-        SerializedColumnGroups
+        SerializedColumnGroups,
+        SortingColumns.Columns,
+        SortingColumns.SortOrders
     );
 }
 
@@ -199,7 +205,9 @@ void TFmrTableOutputRef::Load(IInputStream* buffer) {
         buffer,
         TableId,
         PartId,
-        SerializedColumnGroups
+        SerializedColumnGroups,
+        SortingColumns.Columns,
+        SortingColumns.SortOrders
     );
 }
 

@@ -591,6 +591,12 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7)\n;\n"},
         {"alter table user alter column val set compression(algorithm=zstd, level=2)",
          "ALTER TABLE user\n\tALTER COLUMN val SET COMPRESSION (algorithm = zstd, level = 2)\n;\n"},
+        {"alter table user compact",
+         "ALTER TABLE user\n\tCOMPACT\n;\n"},
+        {"alter table user compact with(cascade=FaLsE)",
+         "ALTER TABLE user\n\tCOMPACT WITH (cascade = FALSE)\n;\n"},
+        {"alter table user compact with(cascade=TruE,max_shards_in_flight=3)",
+         "ALTER TABLE user\n\tCOMPACT WITH (cascade = TRUE, max_shards_in_flight = 3)\n;\n"},
     };
 
     TSetup setup;
@@ -1600,6 +1606,8 @@ Y_UNIT_TEST(CreateTableTrailingComma) {
          "CREATE TABLE tableName (\n\tKey Uint32,\n\tPRIMARY KEY (Key),\n);\n"},
         {"CREATE TABLE tableName (Key Uint32,);",
          "CREATE TABLE tableName (\n\tKey Uint32,\n);\n"},
+        {"CREATE TABLE tableName (Key Uint32) WITH (STORE = COLUMN,);",
+         "CREATE TABLE tableName (\n\tKey Uint32\n)\nWITH (STORE = COLUMN,\n);\n"},
     };
     TSetup setup;
     setup.Run(cases);

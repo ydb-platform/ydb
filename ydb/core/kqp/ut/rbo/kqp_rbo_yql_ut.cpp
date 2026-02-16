@@ -1,10 +1,13 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-
+#include <ydb/core/statistics/ut_common/ut_common.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
@@ -19,6 +22,9 @@ namespace {
 
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
+using namespace NYdb;
+using namespace NYdb::NTable;
+using namespace NStat;
 
 double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nIterations) {
     auto db = kikimr.GetTableClient();
@@ -1278,7 +1284,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
 
         std::vector<std::string> queries = {
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.c), t1.b FROM `/Root/t1` as t1 group by t1.b having sum(t1.c) > 0 order by t1.b;
@@ -1287,27 +1292,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.c), t1.b FROM `/Root/t1` as t1 group by t1.b having sum(t1.c) < 10 order by t1.b;
             )",
-            */
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.c), t1.b FROM `/Root/t1` as t1 group by t1.b having sum(t1.a) >= 1 and sum(t1.c) <= 10 order by t1.b;
             )",
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.c), t1.a FROM `/Root/t1` as t1 group by t1.a having sum(t1.c) > 1 and sum(t1.c) < 3 order by t1.a;
             )",
-            */
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.a), t1.c FROM `/Root/t1` as t1 group by t1.c having sum(t1.a + 1) >= 1 order by t1.c;
             )",
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.a), t1.c FROM `/Root/t1` as t1 group by t1.c having sum(t1.a) + 2 >= 2 order by t1.c;
             )",
-            */
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.a), t1.c FROM `/Root/t1` as t1 group by t1.c having sum(t1.a + 3) + 2 >= 5 order by t1.c;
@@ -1320,12 +1320,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.a + 1) + 11, t1.c FROM `/Root/t1` as t1 group by t1.c having sum(t1.a + 1) + sum(t1.a + 2) >= 5 order by t1.c;
             )",
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.a) as a_sum FROM `/Root/t1` as t1 having sum(t1.a) >= 5 order by a_sum;
             )",
-            */
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT sum(t1.a) FROM `/Root/t1` as t1 having sum(t1.b) >= 5 order by sum(t1.a)
@@ -1337,16 +1335,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         };
 
         std::vector<std::string> results = {
-            //R"([[[30];[1]];[[25];[2]]])",
-            //R"([])",
+            R"([[[30];[1]];[[25];[2]]])",
             R"([])",
-            //R"([[[2];1]])",
+            R"([])",
+            R"([[[2];1]])",
             R"([[0;[1]];[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]];[9;[10]]])",
-            //R"([[0;[1]];[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]];[9;[10]]])",
+            R"([[0;[1]];[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]];[9;[10]]])",
             R"([[0;[1]];[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]];[9;[10]]])",
             R"([[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]];[9;[10]]])",
             R"([[13;[2]];[14;[3]];[15;[4]];[16;[5]];[17;[6]];[18;[7]];[19;[8]];[20;[9]];[21;[10]]])",
-            //R"([[[45]]])",
+            R"([[[45]]])",
             R"([[[45]]])",
             R"([])",
         };
@@ -1357,6 +1355,69 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ColumnStatistics, ColumnStore) {
+        auto enableNewRbo = [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableTableServiceConfig()->SetEnableNewRBO(true);
+            // Fallback is enabled, because analyze uses UDAF which are not supported in NEW RBO.
+            settings.AppConfig->MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+            settings.AppConfig->MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+            settings.AppConfig->MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+            settings.AppConfig->MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        };
+
+        TTestEnv env(1, 1, true, enableNewRbo);
+        CreateDatabase(env, "Database");
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/Database/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            )
+        )";
+
+        if (ColumnStore) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto result = session.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        NYdb::TValueBuilder rowsTable;
+        rowsTable.BeginList();
+        for (size_t i = 0, e = (1 << 4); i < e; ++i) {
+            rowsTable.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i + 1)
+                .EndStruct();
+        }
+        rowsTable.EndList();
+
+        auto resultUpsert = client.BulkUpsert("/Root/Database/t1", rowsTable.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        result = session.ExecuteSchemeQuery(Sprintf(R"(ANALYZE `Root/%s/%s`)", "Database", "t1")).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t1.a, t1.b from `/Root/Database/t1` as t1 where t1.a > 10;
+            )",
+        };
+
+        auto session2 = client.GetSession().GetValueSync().GetSession();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 

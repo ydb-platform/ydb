@@ -196,7 +196,7 @@ TOperationId TOperationPreparer::StartOperation(
     YT_LOG_INFO("Operation %v started (%v): %v",
         operationId,
         type,
-        GetOperationWebInterfaceUrl(GetContext().ServerName, operationId));
+        GetOperationWebInterfaceUrl(GetContext().ServerName, operationId, GetClient()));
 
     TOperationExecutionTimeTracker::Get()->Start(operationId);
 

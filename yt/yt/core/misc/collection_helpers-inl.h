@@ -236,6 +236,27 @@ const T& GetOrCrash(const std::variant<TVariantArgs...>& variant)
     return *item;
 }
 
+template<typename T>
+T& GetOrCrash(std::optional<T>& opt)
+{
+    YT_VERIFY(opt.has_value(), "GetOrCrash failed, value is nullopt");
+    return *opt;
+}
+
+template<typename T>
+const T& GetOrCrash(const std::optional<T>& opt)
+{
+    YT_VERIFY(opt.has_value(), "GetOrCrash failed, value is nullopt");
+    return *opt;
+}
+
+template<typename T>
+T&& GetOrCrash(std::optional<T>&& opt)
+{
+    YT_VERIFY(opt.has_value(), "GetOrCrash failed, value is nullopt");
+    return *std::move(opt);
+}
+
 template <class TMap, class TKey>
 typename TMap::mapped_type GetOrDefault(
     const TMap& map,

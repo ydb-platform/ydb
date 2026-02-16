@@ -36,6 +36,10 @@ if TYPE_CHECKING:  # pragma: no cover
     # std imports
     from collections.abc import Iterator
 
+# Maximum backward scan distance when finding grapheme cluster boundaries.
+# Covers all known Unicode grapheme clusters with margin; longer sequences are pathological.
+MAX_GRAPHEME_SCAN = 32
+
 
 class GCB(IntEnum):
     """Grapheme Cluster Break property values."""
@@ -56,7 +60,10 @@ class GCB(IntEnum):
     LVT = 13
 
 
-@lru_cache(maxsize=1000)
+# All lru_cache sizes in this file use maxsize=1024, chosen by benchmarking UDHR data (500+
+# languages) and considering typical process-long sessions: western scripts need ~64 unique
+# codepoints, but CJK could reach ~2000 -- but likely not.
+@lru_cache(maxsize=1024)
 def _grapheme_cluster_break(ucs: int) -> GCB:
     # pylint: disable=too-many-branches,too-complex
     """Return the Grapheme_Cluster_Break property for a codepoint."""
@@ -91,25 +98,25 @@ def _grapheme_cluster_break(ucs: int) -> GCB:
     return GCB.OTHER
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=1024)
 def _is_extended_pictographic(ucs: int) -> bool:
     """Check if codepoint has Extended_Pictographic property."""
     return bool(_bisearch(ucs, EXTENDED_PICTOGRAPHIC))
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=1024)
 def _is_incb_linker(ucs: int) -> bool:
     """Check if codepoint has InCB=Linker property."""
     return bool(_bisearch(ucs, INCB_LINKER))
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=1024)
 def _is_incb_consonant(ucs: int) -> bool:
     """Check if codepoint has InCB=Consonant property."""
     return bool(_bisearch(ucs, INCB_CONSONANT))
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=1024)
 def _is_incb_extend(ucs: int) -> bool:
     """Check if codepoint has InCB=Extend property."""
     return bool(_bisearch(ucs, INCB_EXTEND))
@@ -122,7 +129,7 @@ class BreakResult(NamedTuple):
     ri_count: int
 
 
-@lru_cache(maxsize=196)  # 14 GCB values × 14 = 196 max combinations
+@lru_cache(maxsize=1024)
 def _simple_break_check(prev_gcb: GCB, curr_gcb: GCB) -> BreakResult | None:
     """
     Check simple GCB-pair-based break rules (cacheable).
@@ -257,12 +264,12 @@ def iter_graphemes(
 
     Example::
 
-        >>> list(iter_graphemes('cafe\\u0301'))
-        ['c', 'a', 'f', 'e\\u0301']
-        >>> list(iter_graphemes('\\U0001F468\\u200D\\U0001F469\\u200D\\U0001F467'))
-        ['o', 'k', '\\U0001F468\\u200D\\U0001F469\\u200D\\U0001F467']
-        >>> list(iter_graphemes('\\U0001F1FA\\U0001F1F8'))
-        ['o', 'k', '\\U0001F1FA\\U0001F1F8']
+        >>> list(iter_graphemes('cafe\u0301'))
+        ['c', 'a', 'f', 'e\u0301']
+        >>> list(iter_graphemes('\U0001F468\u200D\U0001F469\u200D\U0001F467'))
+        ['o', 'k', '\U0001F468\u200D\U0001F469\u200D\U0001F467']
+        >>> list(iter_graphemes('\U0001F1FA\U0001F1F8'))
+        ['o', 'k', '\U0001F1FA\U0001F1F8']
 
     .. versionadded:: 0.3.0
     """
@@ -304,3 +311,118 @@ def iter_graphemes(
 
     # Yield the final cluster
     yield unistr[cluster_start:end]
+
+
+def _find_cluster_start(text: str, pos: int) -> int:
+    """
+    Find the start of the grapheme cluster containing the character before pos.
+
+    Scans backwards from pos to find a safe starting point, then iterates forward using standard
+    break rules to find the actual cluster boundary.
+
+    :param text: The Unicode string.
+    :param pos: Position to search before (exclusive).
+    :returns: Start position of the grapheme cluster.
+    """
+    target_cp = ord(text[pos - 1])
+
+    # GB3: CR x LF - LF after CR is part of same cluster
+    if target_cp == 0x0A and pos >= 2 and text[pos - 2] == '\r':
+        return pos - 2
+
+    # Fast path: ASCII (except LF) starts its own cluster
+    if target_cp < 0x80:
+        # GB9b: Check for preceding PREPEND (rare: Arabic/Brahmic)
+        if pos >= 2 and target_cp >= 0x20:
+            prev_cp = ord(text[pos - 2])
+            if prev_cp >= 0x80 and _grapheme_cluster_break(prev_cp) == GCB.PREPEND:
+                return _find_cluster_start(text, pos - 1)
+        return pos - 1
+
+    # Scan backward to find a safe starting point
+    safe_start = pos - 1
+    while safe_start > 0 and (pos - safe_start) < MAX_GRAPHEME_SCAN:
+        cp = ord(text[safe_start])
+        if 0x20 <= cp < 0x80:  # ASCII always starts a cluster
+            break
+        if _grapheme_cluster_break(cp) == GCB.CONTROL:  # GB4
+            break
+        safe_start -= 1
+
+    # Verify forward to find the actual cluster boundary
+    cluster_start = safe_start
+    left_gcb = _grapheme_cluster_break(ord(text[safe_start]))
+    ri_count = 1 if left_gcb == GCB.REGIONAL_INDICATOR else 0
+
+    for i in range(safe_start + 1, pos):
+        right_gcb = _grapheme_cluster_break(ord(text[i]))
+        result = _should_break(left_gcb, right_gcb, text, i, ri_count)
+        ri_count = result.ri_count
+        if result.should_break:
+            cluster_start = i
+        left_gcb = right_gcb
+
+    return cluster_start
+
+
+def grapheme_boundary_before(unistr: str, pos: int) -> int:
+    r"""
+    Find the grapheme cluster boundary immediately before a position.
+
+    :param unistr: The Unicode string to search.
+    :param pos: Position in the string (0 < pos <= len(unistr)).
+    :returns: Start index of the grapheme cluster containing the character at pos-1.
+
+    Example::
+
+        >>> grapheme_boundary_before('Hello \U0001F44B\U0001F3FB', 8)
+        6
+        >>> grapheme_boundary_before('a\r\nb', 3)
+        1
+
+    .. versionadded:: 0.3.6
+    """
+    if pos <= 0:
+        return 0
+    return _find_cluster_start(unistr, min(pos, len(unistr)))
+
+
+def iter_graphemes_reverse(
+    unistr: str,
+    start: int = 0,
+    end: int | None = None,
+) -> Iterator[str]:
+    r"""
+    Iterate over grapheme clusters in reverse order (last to first).
+
+    :param unistr: The Unicode string to segment.
+    :param start: Starting index (default 0).
+    :param end: Ending index (default len(unistr)).
+    :yields: Grapheme cluster substrings in reverse order.
+
+    Example::
+
+        >>> list(iter_graphemes_reverse('cafe\u0301'))
+        ['e\u0301', 'f', 'a', 'c']
+
+    .. versionadded:: 0.3.6
+    """
+    if not unistr:
+        return
+
+    length = len(unistr)
+
+    end = length if end is None else min(end, length)
+    start = max(start, 0)
+
+    if start >= end or start >= length:
+        return
+
+    pos = end
+    while pos > start:
+        cluster_start = _find_cluster_start(unistr, pos)
+        # Don't yield partial graphemes that extend before start
+        if cluster_start < start:
+            break
+        yield unistr[cluster_start:pos]
+        pos = cluster_start

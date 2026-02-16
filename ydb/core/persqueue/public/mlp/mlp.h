@@ -16,6 +16,7 @@ enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
     EvWriteResponse,
     EvChangeResponse,
+    EvPurgeResponse,
     EvEnd
 };
 
@@ -77,6 +78,19 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
     };
     std::vector<TResult> Messages;
 };
+
+struct TEvPurgeResponse : public NActors::TEventLocal<TEvPurgeResponse, EEv::EvPurgeResponse> {
+
+    TEvPurgeResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
+        : Status(status)
+        , ErrorDescription(std::move(errorDescription))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorDescription;
+};
+
 
 struct TWriterSettings {
     TString DatabasePath;
@@ -151,5 +165,17 @@ struct TMessageDeadlineChangerSettings {
 
 // Return TEvChangeResponse
 IActor* CreateMessageDeadlineChanger(const NActors::TActorId& parentId, TMessageDeadlineChangerSettings&& settings);
+
+struct TPurgerSettings {
+    TString DatabasePath;
+    TString TopicName;
+    TString Consumer;
+
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+};
+
+// Return TEvPurgeResponse
+IActor* CreatePurger(const NActors::TActorId& parentId, TPurgerSettings&& settings);
+
 
 } // NKikimr::NPQ::NMLP

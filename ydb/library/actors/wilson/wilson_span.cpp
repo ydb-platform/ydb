@@ -56,7 +56,7 @@ namespace NWilson {
 
     TSpan::TSpan(ui8 verbosity, TTraceId parentId, std::variant<std::optional<TString>, const char*> name,
             TFlags flags, NActors::TActorSystem* actorSystem)
-        : Data(parentId
+        : Data(parentId && parentId.IsWilsonTrace()
                 ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags, actorSystem)
                 : nullptr)
     {
@@ -124,9 +124,11 @@ namespace NWilson {
 
     void TSpan::End() {
         if (Y_UNLIKELY(*this)) {
-            Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
-            Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
-            Data->Span.set_end_time_unix_nano(TimeUnixNano());
+            if (!Data->EndAsIs) {
+                Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
+                Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
+                Data->Span.set_end_time_unix_nano(TimeUnixNano());
+            }
             Send();
         } else {
             VerifyNotSent();
@@ -143,6 +145,22 @@ namespace NWilson {
         , ActorSystem(actorSystem ? actorSystem : (NActors::TlsActivationContext ? NActors::TActivationContext::ActorSystem() : nullptr))
     {
         Y_DEBUG_ABORT_UNLESS(ActorSystem, "Attempting to create NWilson::TSpan outside of actor system without providing actorSystem pointer");
+    }
+
+    TSpan TSpan::ConstructTerminated(const NWilson::TTraceId& parentId, const NWilson::TTraceId& spanId,
+            TInstant startTs, TInstant endTs, NTraceProto::Status::StatusCode statusCode, const TString& name) {
+        TSpan res;
+        res.Data = std::make_unique<TData>(TInstant::Zero(), 0, NWilson::TTraceId(spanId), EFlags::NONE,
+                nullptr);
+        res.Data->Span.set_trace_id(parentId.GetTraceIdPtr(), parentId.GetTraceIdSize());
+        res.Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
+        res.Data->Span.set_span_id(spanId.GetSpanIdPtr(), spanId.GetSpanIdSize());
+        res.Data->Span.set_start_time_unix_nano(startTs.NanoSeconds());
+        res.Data->Span.set_end_time_unix_nano(endTs.NanoSeconds());
+        res.Data->Span.mutable_status()->set_code(statusCode);
+        res.Name(name);
+        res.Data->EndAsIs = true;
+        return res;
     }
 
 } // NWilson

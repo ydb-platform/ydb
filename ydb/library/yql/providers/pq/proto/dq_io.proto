@@ -93,6 +93,8 @@ message TDqPqTopicSource {
     repeated uint64 NodeIds = 25;
     bool UseActorSystemThreadsInTopicClient = 26;
     bool SkipJsonErrors = 27;
+    google.protobuf.Duration MaxPartitionReadSkew = 28;
+    uint64 ReadSessionBufferBytes = 29;
 }
 
 message TDqPqTopicSink {

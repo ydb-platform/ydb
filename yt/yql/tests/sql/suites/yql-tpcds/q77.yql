@@ -1,0 +1,164 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: YqlSelect unsupported: (union_op select_stmt_intersect)* */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+$ss = (
+    SELECT
+        s_store_sk,
+        Sum(ss_ext_sales_price) AS sales,
+        Sum(ss_net_profit) AS profit
+    FROM
+        plato.store_sales
+    ,
+        plato.date_dim
+    ,
+        plato.store
+    WHERE
+        ss_sold_date_sk == d_date_sk
+        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30))
+        AND ss_store_sk == s_store_sk
+    GROUP BY
+        s_store_sk
+);
+
+$sr = (
+    SELECT
+        s_store_sk,
+        Sum(sr_return_amt) AS returns,
+        Sum(sr_net_loss) AS profit_loss
+    FROM
+        plato.store_returns
+    ,
+        plato.date_dim
+    ,
+        plato.store
+    WHERE
+        sr_returned_date_sk == d_date_sk
+        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30))
+        AND sr_store_sk == s_store_sk
+    GROUP BY
+        s_store_sk
+);
+
+$cs = (
+    SELECT
+        cs_call_center_sk,
+        Sum(cs_ext_sales_price) AS sales,
+        Sum(cs_net_profit) AS profit
+    FROM
+        plato.catalog_sales
+    ,
+        plato.date_dim
+    WHERE
+        cs_sold_date_sk == d_date_sk
+        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30))
+    GROUP BY
+        cs_call_center_sk
+);
+
+$cr = (
+    SELECT
+        cr_call_center_sk,
+        Sum(cr_return_amount) AS returns,
+        Sum(cr_net_loss) AS profit_loss
+    FROM
+        plato.catalog_returns
+    ,
+        plato.date_dim
+    WHERE
+        cr_returned_date_sk == d_date_sk
+        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30))
+    GROUP BY
+        cr_call_center_sk
+);
+
+$ws = (
+    SELECT
+        wp_web_page_sk,
+        Sum(ws_ext_sales_price) AS sales,
+        Sum(ws_net_profit) AS profit
+    FROM
+        plato.web_sales
+    ,
+        plato.date_dim
+    ,
+        plato.web_page
+    WHERE
+        ws_sold_date_sk == d_date_sk
+        AND d_date BETWEEN CAST('1998-08-04' AS date) AND (CAST('1998-08-04' AS date) + DateTime::IntervalFromDays(30))
+        AND ws_web_page_sk == wp_web_page_sk
+    GROUP BY
+        wp_web_page_sk
+);
+
+$wr = (
+    SELECT
+        wp_web_page_sk,
+        Sum(wr_return_amt) AS returns,
+        Sum(wr_net_loss) AS profit_loss
+    FROM
+        plato.web_returns
+    ,
+        plato.date_dim
+    ,
+        plato.web_page
+    WHERE
+        wr_returned_date_sk == d_date_sk
+        AND d_date BETWEEN CAST('1998-08-04' AS date) AND (CAST('1998-08-04' AS date) + DateTime::IntervalFromDays(30))
+        AND wr_web_page_sk == wp_web_page_sk
+    GROUP BY
+        wp_web_page_sk
+);
+
+SELECT
+    channel,
+    id,
+    Sum(sales) AS sales,
+    Sum(returns) AS returns,
+    Sum(profit) AS profit
+FROM (
+    SELECT
+        'store channel' AS channel,
+        ss.s_store_sk AS id,
+        sales,
+        Coalesce(returns, 0) AS returns,
+        (profit - Coalesce(profit_loss, 0)) AS profit
+    FROM
+        $ss AS ss
+    LEFT JOIN
+        $sr AS sr
+    ON
+        ss.s_store_sk == sr.s_store_sk
+    UNION ALL
+    SELECT
+        'catalog channel' AS channel,
+        cs_call_center_sk AS id,
+        sales,
+        returns,
+        (profit - profit_loss) AS profit
+    FROM
+        $cs AS cs
+    ,
+        $cr AS cr
+    UNION ALL
+    SELECT
+        'web channel' AS channel,
+        ws.wp_web_page_sk AS id,
+        sales,
+        Coalesce(returns, 0) AS returns,
+        (profit - Coalesce(profit_loss, 0)) AS profit
+    FROM
+        $ws AS ws
+    LEFT JOIN
+        $wr AS wr
+    ON
+        ws.wp_web_page_sk == wr.wp_web_page_sk
+) AS x
+GROUP BY
+    ROLLUP (channel, id)
+ORDER BY
+    channel,
+    id
+LIMIT 100;

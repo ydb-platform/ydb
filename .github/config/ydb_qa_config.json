@@ -14,8 +14,12 @@
               "github_issue_mapping": "test_results/analytics/github_issue_mapping",
               "flaky_tests_window": "test_results/analytics/flaky_tests_window_1_days",
               "all_tests_with_owner_and_mute": "test_results/all_tests_with_owner_and_mute",
+              "pr_blocked_by_failed_tests_rich": "test_results/analytics/pr_blocked_by_failed_tests_rich",
+              "pr_blocked_by_tests": "test_results/analytics/pr_blocked_by_tests",
               "binary_size": "binary_size",
-              "issues": "github_data/issues"
+              "issues": "github_data/issues",
+              "pull_requests": "github_data/pull_requests"
+
           }
       },
       "statistics": {

@@ -19,12 +19,7 @@ SELECT
     CAST(dec_5_2 AS Decimal(6, 0)) AS upcast_rounded_5_2,
     CAST(dec_3_1 AS Decimal(7, 3)) AS upcast_extended_3_1,
     CAST(dec_5_2 AS Decimal(3, 1)) AS downcast_rounded_5_2,
-    CAST(dec_7_0 AS Decimal(5, 2)) AS downcast_extended_7_0,
-    
-    AsList(CAST(1 as Decimal(4, 3)), CAST(2 as Decimal(5, 4))),
-    AsList(CAST(1 as Decimal(4, 3)), CAST(2 as Decimal(9, 2))),
-    AsList(CAST(1 as Decimal(33, 16)), CAST(2 as Decimal(33, 18))), -- (35, 18)
-    AsList(CAST(1 as Decimal(30, 10)), CAST(2 as Decimal(20, 15)))  -- (35, 15)
+    CAST(dec_7_0 AS Decimal(5, 2)) AS downcast_extended_7_0
 FROM (
     SELECT
         str AS a_str,

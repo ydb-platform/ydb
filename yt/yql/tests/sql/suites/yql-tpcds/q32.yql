@@ -1,0 +1,42 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: muted */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    Ensure(0, FALSE, 'muted: flaky: Error: Name not found: discount')
+;
+/*
+SELECT
+    Sum(cs_ext_discount_amt) AS `excess discount amount`
+FROM
+    plato.catalog_sales
+,
+    plato.item
+,
+    plato.date_dim
+WHERE
+    i_manufact_id == 269
+    AND i_item_sk == cs_item_sk
+    AND d_date BETWEEN CAST('1998-03-18' AS Date) AND (
+        CAST('1998-03-18' AS Date) + DateTime::IntervalFromDays(90)
+    )
+    AND d_date_sk == cs_sold_date_sk
+    AND cs_ext_discount_amt
+    > (
+        SELECT
+            1.3 * Avg(cs_ext_discount_amt)
+        FROM
+            plato.catalog_sales
+        ,
+            plato.date_dim
+        WHERE
+            cs_item_sk == i_item_sk
+            AND d_date BETWEEN CAST('1998-03-18' AS Date) AND (
+                CAST('1998-03-18' AS Date) + DateTime::IntervalFromDays(90)
+            )
+            AND d_date_sk == cs_sold_date_sk
+    )
+LIMIT 100;
+*/;

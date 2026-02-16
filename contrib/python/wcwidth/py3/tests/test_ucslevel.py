@@ -1,189 +1,58 @@
 """Unicode version level tests for wcwidth."""
-# std imports
-import warnings
-
-# 3rd party
-import pytest
-
 # local
 import wcwidth
 
 
+def test_list_versions_single():
+    """list_versions returns only the latest version."""
+    versions = wcwidth.list_versions()
+    assert len(versions) == 1
+    assert versions[0] == "17.0.0"
+
+
 def test_latest():
-    """wcwidth._wcmatch_version('latest') returns tail item."""
-    # given,
+    """wcwidth._wcmatch_version('latest') returns the latest version."""
     expected = wcwidth.list_versions()[-1]
-
-    # exercise,
     result = wcwidth._wcmatch_version('latest')
-
-    # verify.
     assert result == expected
 
 
-def test_exact_410_str():
-    """wcwidth._wcmatch_version('4.1.0') returns equal value (str)."""
-    # given,
-    given = expected = '4.1.0'
-
-    # exercise,
-    result = wcwidth._wcmatch_version(given)
-
-    # verify.
+def test_auto():
+    """wcwidth._wcmatch_version('auto') returns the latest version."""
+    expected = wcwidth.list_versions()[-1]
+    result = wcwidth._wcmatch_version('auto')
     assert result == expected
 
 
-def test_exact_410_unicode():
-    """wcwidth._wcmatch_version(u'4.1.0') returns equal value (unicode)."""
-    # given,
-    given = expected = '4.1.0'
-
-    # exercise,
-    result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
-
-
-def test_nearest_505_str():
-    """
-    wcwidth._wcmatch_version('5.0.5') returns nearest '5.0.0'.
-
-    (str)
-    """
-    # given
-    given, expected = '5.0.5', '5.0.0'
-
-    # exercise
-    result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
+def test_wcmatch_version_always_latest():
+    """_wcmatch_version always returns latest regardless of input."""
+    latest = wcwidth.list_versions()[-1]
+    assert wcwidth._wcmatch_version('4.1.0') == latest
+    assert wcwidth._wcmatch_version('9.0.0') == latest
+    assert wcwidth._wcmatch_version('auto') == latest
+    assert wcwidth._wcmatch_version('latest') == latest
+    assert wcwidth._wcmatch_version('invalid') == latest
+    assert wcwidth._wcmatch_version('999.0.0') == latest
+    assert wcwidth._wcmatch_version('x.y.z') == latest
+    assert wcwidth._wcmatch_version('8') == latest
+    assert wcwidth._wcmatch_version('5.0.5') == latest
 
 
-def test_nearest_505_unicode():
-    """
-    wcwidth._wcmatch_version(u'5.0.5') returns nearest u'5.0.0'.
-
-    (unicode)
-    """
-    # given
-    given, expected = '5.0.5', '5.0.0'
-
-    # exercise
-    result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
-
-
-def test_nearest_lowint40_str():
-    """wcwidth._wcmatch_version('4.0') returns nearest '4.1.0'."""
-    # given
-    given, expected = '4.0', '4.1.0'
-    warnings.resetwarnings()
+def test_env_var_ignored(monkeypatch):
+    """UNICODE_VERSION environment variable is ignored."""
+    monkeypatch.setenv('UNICODE_VERSION', '4.1.0')
     wcwidth._wcmatch_version.cache_clear()
-
-    # exercise
-    with pytest.warns(UserWarning):
-        # warns that given version is lower than any available
-        result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
+    assert wcwidth._wcmatch_version('auto') == wcwidth.list_versions()[-1]
 
 
-def test_nearest_lowint40_unicode():
-    """wcwidth._wcmatch_version(u'4.0') returns nearest u'4.1.0'."""
-    # given
-    given, expected = '4.0', '4.1.0'
-    warnings.resetwarnings()
-    wcwidth._wcmatch_version.cache_clear()
+def test_unicode_version_param_ignored():
+    """unicode_version parameter is ignored in wcwidth/wcswidth."""
+    # wcwidth should work the same regardless of unicode_version value
+    assert wcwidth.wcwidth('A', unicode_version='4.1.0') == 1
+    assert wcwidth.wcwidth('A', unicode_version='latest') == 1
+    assert wcwidth.wcwidth('A', unicode_version='invalid') == 1
 
-    # exercise
-    with pytest.warns(UserWarning):
-        # warns that given version is lower than any available
-        result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
-
-
-def test_nearest_800_str():
-    """wcwidth._wcmatch_version('8') returns nearest '8.0.0'."""
-    # given
-    given, expected = '8', '8.0.0'
-
-    # exercise
-    result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
-
-
-def test_nearest_800_unicode():
-    """wcwidth._wcmatch_version(u'8') returns nearest u'8.0.0'."""
-    # given
-    given, expected = '8', '8.0.0'
-
-    # exercise
-    result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
-
-
-def test_nearest_999_str():
-    """wcwidth._wcmatch_version('999.0') returns nearest (latest)."""
-    # given
-    given, expected = '999.0', wcwidth.list_versions()[-1]
-
-    # exercise
-    result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
-
-
-def test_nearest_999_unicode():
-    """wcwidth._wcmatch_version(u'999.0') returns nearest (latest)."""
-    # given
-    given, expected = '999.0', wcwidth.list_versions()[-1]
-
-    # exercise
-    result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
-
-
-def test_nonint_unicode():
-    """wcwidth._wcmatch_version(u'x.y.z') returns latest (unicode)."""
-    # given
-    given, expected = 'x.y.z', wcwidth.list_versions()[-1]
-    warnings.resetwarnings()
-    wcwidth._wcmatch_version.cache_clear()
-
-    # exercise
-    with pytest.warns(UserWarning):
-        # warns that given version is not valid
-        result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
-
-
-def test_nonint_str():
-    """wcwidth._wcmatch_version(u'x.y.z') returns latest (str)."""
-    # given
-    given, expected = 'x.y.z', wcwidth.list_versions()[-1]
-    warnings.resetwarnings()
-    wcwidth._wcmatch_version.cache_clear()
-
-    # exercise
-    with pytest.warns(UserWarning):
-        # warns that given version is not valid
-        result = wcwidth._wcmatch_version(given)
-
-    # verify.
-    assert result == expected
+    # wcswidth should work the same regardless of unicode_version value
+    assert wcwidth.wcswidth('hello', unicode_version='4.1.0') == 5
+    assert wcwidth.wcswidth('hello', unicode_version='latest') == 5
+    assert wcwidth.wcswidth('hello', unicode_version='invalid') == 5

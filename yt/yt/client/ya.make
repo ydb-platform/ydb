@@ -146,6 +146,7 @@ SRCS(
     table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
     table_client/table_upload_options.cpp
+    table_client/tracked_memory_chunk_provider.cpp
     table_client/logical_type.cpp
     table_client/merge_table_schemas.cpp
     table_client/name_table.cpp
@@ -201,8 +202,10 @@ SRCS(
 
     complex_types/check_yson_token.cpp
     complex_types/check_type_compatibility.cpp
+    complex_types/common_yson_converters.cpp
     complex_types/infinite_entity.cpp
     complex_types/merge_complex_types.cpp
+    complex_types/positional_yson_translation.cpp
     complex_types/time_text.cpp
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp
@@ -256,6 +259,7 @@ RECURSE_FOR_TESTS(
     api/unittests
     arrow/unittests
     query_client/unittests
+    queue_client/unittests
     signature/unittests
     table_client/unittests
     unittests

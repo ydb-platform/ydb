@@ -7,18 +7,50 @@ proper handling of Unicode grapheme clusters and character display widths.
 from __future__ import annotations
 
 # std imports
+import re
+import secrets
 import textwrap
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 # local
 from .wcwidth import width as _width
 from .wcwidth import iter_sequences
 from .grapheme import iter_graphemes
+from .sgr_state import propagate_sgr as _propagate_sgr
 from .escape_sequences import ZERO_WIDTH_PATTERN
 
 if TYPE_CHECKING:  # pragma: no cover
     from typing import Any, Literal
+
+
+class _HyperlinkState(NamedTuple):
+    """State for tracking an open OSC 8 hyperlink across line breaks."""
+
+    url: str  # hyperlink target URL
+    params: str  # id=xxx and other key=value pairs separated by :
+    terminator: str  # BEL (\x07) or ST (\x1b\\)
+
+
+# Hyperlink parsing: captures (params, url, terminator)
+_HYPERLINK_OPEN_RE = re.compile(r'\x1b]8;([^;]*);([^\x07\x1b]*)(\x07|\x1b\\)')
+
+
+def _parse_hyperlink_open(seq: str) -> _HyperlinkState | None:
+    """Parse OSC 8 open sequence, return state or None."""
+    if (m := _HYPERLINK_OPEN_RE.match(seq)):
+        return _HyperlinkState(url=m.group(2), params=m.group(1), terminator=m.group(3))
+    return None
+
+
+def _make_hyperlink_open(url: str, params: str, terminator: str) -> str:
+    """Generate OSC 8 open sequence."""
+    return f'\x1b]8;{params};{url}{terminator}'
+
+
+def _make_hyperlink_close(terminator: str) -> str:
+    """Generate OSC 8 close sequence."""
+    return f'\x1b]8;;{terminator}'
 
 
 class SequenceTextWrapper(textwrap.TextWrapper):
@@ -34,6 +66,11 @@ class SequenceTextWrapper(textwrap.TextWrapper):
     The key difference from the blessed implementation is the addition of grapheme cluster support
     via :func:`~.iter_graphemes`, providing width calculation for ZWJ emoji sequences, VS-16 emojis
     and variations, regional indicator flags, and combining characters.
+
+    OSC 8 hyperlinks are handled specially: when a hyperlink must span multiple lines, each line
+    receives complete open/close sequences with a shared ``id`` parameter, ensuring terminals
+    treat the fragments as a single hyperlink for hover underlining. If the original hyperlink
+    already has an ``id`` parameter, it is preserved; otherwise, one is generated.
     """
 
     def __init__(self, width: int = 70, *,
@@ -54,6 +91,11 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         self.control_codes = control_codes
         self.tabsize = tabsize
         self.ambiguous_width = ambiguous_width
+
+    @staticmethod
+    def _next_hyperlink_id() -> str:
+        """Generate unique hyperlink id as 8-character hex string."""
+        return secrets.token_hex(4)
 
     def _width(self, text: str) -> int:
         """Measure text width accounting for sequences."""
@@ -77,17 +119,25 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         return ''.join(result)
 
     def _split(self, text: str) -> list[str]:  # pylint: disable=too-many-locals
-        """
+        r"""
         Sequence-aware variant of :meth:`textwrap.TextWrapper._split`.
 
         This method ensures that terminal escape sequences don't interfere with the text splitting
         logic, particularly for hyphen-based word breaking. It builds a position mapping from
         stripped text to original text, calls the parent's _split on stripped text, then maps chunks
         back.
+
+        OSC hyperlink sequences are treated as word boundaries::
+
+            >>> wrap('foo \x1b]8;;https://example.com\x07link\x1b]8;;\x07 bar', 6)
+            ['foo', '\x1b]8;;https://example.com\x07link\x1b]8;;\x07', 'bar']
+
+        Both BEL (``\x07``) and ST (``\x1b\\``) terminators are supported.
         """
         # pylint: disable=too-many-locals,too-many-branches
         # Build a mapping from stripped text positions to original text positions.
-        # We track where each character ENDS so that sequences between characters
+        #
+        # Track where each character ENDS so that sequences between characters
         # attach to the following text (not preceding text). This ensures sequences
         # aren't lost when whitespace is dropped.
         #
@@ -95,16 +145,34 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         char_end: list[int] = []
         stripped_text = ''
         original_pos = 0
+        prev_was_hyperlink_close = False
 
         for segment, is_seq in iter_sequences(text):
             if not is_seq:
+                # Conditionally insert space after hyperlink close to force word boundary
+                if prev_was_hyperlink_close and segment and not segment[0].isspace():
+                    stripped_text += ' '
+                    char_end.append(original_pos)
                 for char in segment:
                     original_pos += 1
                     char_end.append(original_pos)
                     stripped_text += char
+                prev_was_hyperlink_close = False
             else:
+                is_hyperlink_close = segment.startswith(('\x1b]8;;\x1b\\', '\x1b]8;;\x07'))
+
+                # Conditionally insert space before OSC sequences to artificially create word
+                # boundary, but *not* before hyperlink close sequences, to ensure hyperlink is
+                # terminated on the same line.
+                if (segment.startswith('\x1b]') and stripped_text and not
+                        stripped_text[-1].isspace()):
+                    if not is_hyperlink_close:
+                        stripped_text += ' '
+                        char_end.append(original_pos)
+
                 # Escape sequences advance position but don't add to stripped text
                 original_pos += len(segment)
+                prev_was_hyperlink_close = is_hyperlink_close
 
         # Add sentinel for final position
         char_end.append(original_pos)
@@ -137,7 +205,9 @@ class SequenceTextWrapper(textwrap.TextWrapper):
                 end_orig = char_end[stripped_pos + chunk_len - 1]
 
             # Extract the corresponding portion from the original text
-            result.append(text[start_orig:end_orig])
+            # Skip empty chunks (from virtual spaces inserted at OSC boundaries)
+            if start_orig != end_orig:
+                result.append(text[start_orig:end_orig])
             stripped_pos += chunk_len
 
         return result
@@ -147,14 +217,23 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         Wrap chunks into lines using sequence-aware width.
 
         Override TextWrapper._wrap_chunks to use _width instead of len. Follows stdlib's algorithm:
-        greedily fill lines, handle long words.
+        greedily fill lines, handle long words.  Also handle OSC hyperlink processing. When
+        hyperlinks span multiple lines, each line gets complete open/close sequences with matching
+        id parameters for hover underlining continuity per OSC 8 spec.
         """
-        # pylint: disable=too-many-branches
+        # pylint: disable=too-many-branches,too-many-statements,too-complex,too-many-locals
+        # pylint: disable=too-many-nested-blocks
+        # the hyperlink code in particular really pushes the complexity rating of this method.
+        # preferring to keep it "all in one method" because of so much local state and manipulation.
         if not chunks:
             return []
 
         lines: list[str] = []
         is_first_line = True
+
+        hyperlink_state: _HyperlinkState | None = None
+        # Track the id we're using for the current hyperlink continuation
+        current_hyperlink_id: str | None = None
 
         # Arrange in reverse order so items can be efficiently popped
         chunks = list(reversed(chunks))
@@ -166,6 +245,12 @@ class SequenceTextWrapper(textwrap.TextWrapper):
             # Get the indent and available width for current line
             indent = self.initial_indent if is_first_line else self.subsequent_indent
             line_width = self.width - self._width(indent)
+
+            # If continuing a hyperlink from previous line, prepend open sequence
+            if hyperlink_state is not None:
+                open_seq = _make_hyperlink_open(
+                    hyperlink_state.url, hyperlink_state.params, hyperlink_state.terminator)
+                chunks[-1] = open_seq + chunks[-1]
 
             # Drop leading whitespace (except at very start)
             # When dropping, transfer any sequences to the next chunk.
@@ -212,6 +297,41 @@ class SequenceTextWrapper(textwrap.TextWrapper):
 
             if current_line:
                 line_content = ''.join(current_line)
+
+                # Track hyperlink state through this line's content
+                new_state = self._track_hyperlink_state(line_content, hyperlink_state)
+
+                # If we end inside a hyperlink, append close sequence
+                if new_state is not None:
+                    # Ensure we have an id for continuation
+                    if current_hyperlink_id is None:
+                        if 'id=' in new_state.params:
+                            current_hyperlink_id = new_state.params
+                        elif new_state.params:
+                            # Prepend id to existing params (per OSC 8 spec, params can have
+                            # multiple key=value pairs separated by :)
+                            current_hyperlink_id = (
+                                f'id={self._next_hyperlink_id()}:{new_state.params}')
+                        else:
+                            current_hyperlink_id = f'id={self._next_hyperlink_id()}'
+                    line_content = line_content + _make_hyperlink_close(new_state.terminator)
+
+                    # Also need to inject the id into the opening sequence if it didn't have one
+                    if 'id=' not in new_state.params:
+                        # Find and replace the original open sequence with one that has id
+                        old_open = _make_hyperlink_open(
+                            new_state.url, new_state.params, new_state.terminator)
+                        new_open = _make_hyperlink_open(
+                            new_state.url, current_hyperlink_id, new_state.terminator)
+                        line_content = line_content.replace(old_open, new_open, 1)
+
+                    # Update state for next line, using computed id
+                    hyperlink_state = _HyperlinkState(
+                        new_state.url, current_hyperlink_id, new_state.terminator)
+                else:
+                    hyperlink_state = None
+                    current_hyperlink_id = None  # Reset id when hyperlink closes
+
                 # Strip trailing whitespace when drop_whitespace is enabled
                 # (matches CPython #140627 fix behavior)
                 if self.drop_whitespace:
@@ -220,6 +340,25 @@ class SequenceTextWrapper(textwrap.TextWrapper):
                 is_first_line = False
 
         return lines
+
+    def _track_hyperlink_state(
+            self, text: str,
+            state: _HyperlinkState | None) -> _HyperlinkState | None:
+        """
+        Track hyperlink state through text.
+
+        :param text: Text to scan for hyperlink sequences.
+        :param state: Current state or None if outside hyperlink.
+        :returns: Updated state after processing text.
+        """
+        for segment, is_seq in iter_sequences(text):
+            if is_seq:
+                parsed_link = _parse_hyperlink_open(segment)
+                if parsed_link is not None and parsed_link.url:  # has URL = open
+                    state = parsed_link
+                elif segment.startswith(('\x1b]8;;\x1b\\', '\x1b]8;;\x07')):  # close
+                    state = None
+        return state
 
     def _handle_long_word(self, reversed_chunks: list[str],
                           cur_line: list[str], cur_len: int,
@@ -235,8 +374,9 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         else:
             space_left = width - cur_len
 
+        chunk = reversed_chunks[-1]
+
         if self.break_long_words:
-            chunk = reversed_chunks[-1]
             break_at_hyphen = False
             hyphen_end = 0
 
@@ -303,8 +443,8 @@ class SequenceTextWrapper(textwrap.TextWrapper):
                     idx = match.end()
                     continue
 
-            # Get grapheme
-            grapheme = next(iter_graphemes(text[idx:]))
+            # Get grapheme (use start= to avoid slice allocation)
+            grapheme = next(iter_graphemes(text, start=idx))
 
             grapheme_width = self._width(grapheme)
             if width_so_far + grapheme_width > max_width:
@@ -329,7 +469,8 @@ def wrap(text: str, width: int = 70, *,
          initial_indent: str = '',
          subsequent_indent: str = '',
          break_long_words: bool = True,
-         break_on_hyphens: bool = True) -> list[str]:
+         break_on_hyphens: bool = True,
+         propagate_sgr: bool = True) -> list[str]:
     r"""
     Wrap text to fit within given width, returning a list of wrapped lines.
 
@@ -347,16 +488,28 @@ def wrap(text: str, width: int = 70, *,
     :param subsequent_indent: String prepended to subsequent lines.
     :param break_long_words: If True, break words longer than width.
     :param break_on_hyphens: If True, allow breaking at hyphens.
+    :param propagate_sgr: If True (default), SGR (terminal styling) sequences
+        are propagated across wrapped lines. Each line ends with a reset
+        sequence and the next line begins with the active style restored.
     :returns: List of wrapped lines without trailing newlines.
+
+    SGR (terminal styling) sequences are propagated across wrapped lines
+    by default. Each line ends with a reset sequence and the next line
+    begins with the active style restored::
+
+        >>> wrap('\x1b[1;34mHello world\x1b[0m', width=6)
+        ['\x1b[1;34mHello\x1b[0m', '\x1b[1;34mworld\x1b[0m']
+
+    Set ``propagate_sgr=False`` to disable this behavior.
 
     Like :func:`textwrap.wrap`, newlines in the input text are treated as
     whitespace and collapsed. To preserve paragraph breaks, wrap each
     paragraph separately::
 
-        >>> text = 'First line.\\nSecond line.'
+        >>> text = 'First line.\nSecond line.'
         >>> wrap(text, 40)  # newline collapsed to space
         ['First line. Second line.']
-        >>> [line for para in text.split('\\n')
+        >>> [line for para in text.split('\n')
         ...  for line in (wrap(para, 40) if para else [''])]
         ['First line.', 'Second line.']
 
@@ -369,6 +522,9 @@ def wrap(text: str, width: int = 70, *,
            Class interface for advanced wrapping options.
 
     .. versionadded:: 0.3.0
+
+    .. versionchanged:: 0.5.0
+       Added ``propagate_sgr`` parameter (default True).
 
     Example::
 
@@ -388,4 +544,9 @@ def wrap(text: str, width: int = 70, *,
         break_long_words=break_long_words,
         break_on_hyphens=break_on_hyphens,
     )
-    return wrapper.wrap(text)
+    lines = wrapper.wrap(text)
+
+    if propagate_sgr:
+        lines = _propagate_sgr(lines)
+
+    return lines

@@ -14,7 +14,7 @@ index 6980e40..40a7ff5 100644
  _LIBCPP_END_NAMESPACE_STD
  
 diff --git a/include/__vector/vector.h b/include/__vector/vector.h
-index 6ba7ba7..5138683 100644
+index 3a7ae53..3cc4f40 100644
 --- a/include/__vector/vector.h
 +++ b/include/__vector/vector.h
 @@ -52,6 +52,7 @@
@@ -104,7 +104,7 @@ index 6ba7ba7..5138683 100644
  _LIBCPP_CONSTEXPR_SINCE_CXX20 void vector<_Tp, _Allocator>::swap(vector& __x)
  #if _LIBCPP_STD_VER >= 14
 diff --git a/include/__vector/vector_bool.h b/include/__vector/vector_bool.h
-index 36eb7f3..562480c 100644
+index 2b721e0..0eaa939 100644
 --- a/include/__vector/vector_bool.h
 +++ b/include/__vector/vector_bool.h
 @@ -63,6 +63,8 @@ _LIBCPP_PUSH_MACROS
@@ -116,7 +116,7 @@ index 36eb7f3..562480c 100644
  template <class _Allocator>
  struct hash<vector<bool, _Allocator> >;
  
-@@ -352,7 +354,9 @@ public:
+@@ -371,7 +373,9 @@ public:
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 iterator erase(const_iterator __position);
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 iterator erase(const_iterator __first, const_iterator __last);
  
@@ -127,7 +127,7 @@ index 36eb7f3..562480c 100644
  
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void swap(vector&)
  #if _LIBCPP_STD_VER >= 14
-@@ -1101,6 +1105,30 @@ struct _LIBCPP_TEMPLATE_VIS hash<vector<bool, _Allocator> >
+@@ -1117,6 +1121,30 @@ struct _LIBCPP_TEMPLATE_VIS hash<vector<bool, _Allocator> >
      return __vec.__hash_code();
    }
  };

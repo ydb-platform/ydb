@@ -1,0 +1,95 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: Window and aggregation functions are not allowed in this context */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    asceding.rnk,
+    i1.i_product_name AS best_performing,
+    i2.i_product_name AS worst_performing
+FROM (
+    SELECT
+        *
+    FROM (
+        SELECT
+            item_sk,
+            Rank() OVER (
+                ORDER BY
+                    rank_col ASC
+            ) AS rnk
+        FROM (
+            SELECT
+                ss_item_sk AS item_sk,
+                Avg(ss_net_profit) AS rank_col
+            FROM
+                plato.store_sales AS ss1
+            WHERE
+                ss_store_sk == 2
+            GROUP BY
+                ss_item_sk
+            HAVING
+                Avg(ss_net_profit) > 0.9 * (
+                    SELECT
+                        Avg(ss_net_profit) AS rank_col
+                    FROM
+                        plato.store_sales
+                    WHERE
+                        ss_store_sk == 2
+                        AND ss_hdemo_sk IS NULL
+                    GROUP BY
+                        ss_store_sk
+                )
+        ) AS V1
+    ) AS V11
+    WHERE
+        rnk < 11
+) AS asceding
+, (
+    SELECT
+        *
+    FROM (
+        SELECT
+            item_sk,
+            Rank() OVER (
+                ORDER BY
+                    rank_col DESC
+            ) AS rnk
+        FROM (
+            SELECT
+                ss_item_sk AS item_sk,
+                Avg(ss_net_profit) AS rank_col
+            FROM
+                plato.store_sales AS ss1
+            WHERE
+                ss_store_sk == 2
+            GROUP BY
+                ss_item_sk
+            HAVING
+                Avg(ss_net_profit) > 0.9 * (
+                    SELECT
+                        Avg(ss_net_profit) AS rank_col
+                    FROM
+                        plato.store_sales
+                    WHERE
+                        ss_store_sk == 2
+                        AND ss_hdemo_sk IS NULL
+                    GROUP BY
+                        ss_store_sk
+                )
+        ) AS V2
+    ) AS V21
+    WHERE
+        rnk < 11
+) AS descending
+,
+    plato.item AS i1
+,
+    plato.item AS i2
+WHERE
+    asceding.rnk == descending.rnk
+    AND i1.i_item_sk == asceding.item_sk
+    AND i2.i_item_sk == descending.item_sk
+ORDER BY
+    asceding.rnk
+LIMIT 100;

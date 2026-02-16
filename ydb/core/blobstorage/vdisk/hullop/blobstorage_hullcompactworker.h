@@ -601,10 +601,29 @@ namespace NKikimr {
                 const ui32 wholeKeep = IndexMerger.GetNumKeepFlags() - subsKeep; // they are counted too
                 const ui32 wholeDoNotKeep = IndexMerger.GetNumDoNotKeepFlags() - subsDoNotKeep; // so are they
 
-                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {subsKeep, subsDoNotKeep, wholeKeep,
-                    wholeDoNotKeep}, HullCtx->AllowKeepFlags, AllowGarbageCollection);
+                NGcOpt::TKeepFlagStat keepFlagStat;
+                if (IsFresh) {
+                    keepFlagStat.Needed = true;
+                } else {
+                    keepFlagStat = {subsKeep, subsDoNotKeep, wholeKeep, wholeDoNotKeep};
+                }
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), keepFlagStat, HullCtx->AllowKeepFlags,
+                    AllowGarbageCollection);
 
-                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinHugeBlobInBytes), keep.KeepData);
+                const TLogoBlobID& id = Key.LogoBlobID();
+                if (!TBlobStorageGroupType::IsCrcModeValid(id.CrcMode())) {
+                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_SKELETON, HullCtx->VCtx->VDiskLogPrefix
+                        << "invalid CrcMode in BlobId found during compaction"
+                        << " BlobId# " << id.ToString()
+                        << " KeepIndex# " << keep.KeepIndex
+                        << " KeepData# " << keep.KeepData
+                        << " SubsKeep# " << subsKeep
+                        << " SubsDoNotKeep# " << subsDoNotKeep
+                        << " WholeKeep# " << wholeKeep
+                        << " WholeDoNotKeep# " << wholeDoNotKeep);
+                }
+
+                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, id, MinHugeBlobInBytes), keep.KeepData);
             } else {
                 keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {}, HullCtx->AllowKeepFlags,
                     AllowGarbageCollection);

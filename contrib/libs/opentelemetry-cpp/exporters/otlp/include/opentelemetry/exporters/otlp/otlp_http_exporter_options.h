@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 #include "opentelemetry/exporters/otlp/otlp_environment.h"
@@ -125,6 +126,13 @@ struct OPENTELEMETRY_EXPORT OtlpHttpExporterOptions
 
   /** The backoff will be multiplied by this value after each retry attempt. */
   float retry_policy_backoff_multiplier{};
+
+  /** Collection Limits. No limit by default. */
+  std::uint32_t max_attributes           = std::numeric_limits<std::uint32_t>::max();
+  std::uint32_t max_events               = std::numeric_limits<std::uint32_t>::max();
+  std::uint32_t max_links                = std::numeric_limits<std::uint32_t>::max();
+  std::uint32_t max_attributes_per_event = std::numeric_limits<std::uint32_t>::max();
+  std::uint32_t max_attributes_per_link  = std::numeric_limits<std::uint32_t>::max();
 };
 
 }  // namespace otlp

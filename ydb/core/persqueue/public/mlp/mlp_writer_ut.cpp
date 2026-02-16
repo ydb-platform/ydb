@@ -295,6 +295,37 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             }
         }
     }
+
+    Y_UNIT_TEST(WriteToAutopartitioningTopic) {
+        auto setup = CreateSetup();
+
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, false, true);
+
+        auto& runtime = setup->GetRuntime();
+
+        auto end = TInstant::Now() + TDuration::Seconds(5);
+        while (TInstant::Now() < end) {
+            CreateWriterActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Messages = {
+                    {
+                        .Index = 3,
+                        .MessageBody = TString(100_KB, 'a'),
+                        .MessageGroupId = TStringBuilder() << "message_group_id-" << RandomNumber<ui64>(100000)
+                    }
+                }
+            });
+        }
+
+        {
+            auto client = setup->MakeClient();
+            auto describe = client.DescribeTopic(GetTopicPath("/Root/topic1")).GetValueSync();
+            UNIT_ASSERT_GE_C(describe.GetTopicDescription().GetPartitions().size(), 3, "Split must be done");
+        }
+    }
+
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

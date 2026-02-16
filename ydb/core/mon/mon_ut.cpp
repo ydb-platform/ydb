@@ -43,7 +43,7 @@ struct THttpMonTestEnvOptions {
     ERegKind RegKind = ERegKind::None;
     TVector<TString> ActorAllowedSIDs;
     TVector<TString> TicketParserGroupSIDs = DEFAULT_TICKET_PARSER_GROUPS;
-    bool UseAuth = true;
+    TMon::EAuthMode AuthMode = TMon::EAuthMode::Enforce;
 };
 
 class THttpMonTestEnv {
@@ -91,7 +91,7 @@ public:
                     .RelPath = TEST_MON_PATH,
                     .ActorSystem = Runtime->GetActorSystem(0),
                     .ActorId = TestActorId,
-                    .UseAuth = Options.UseAuth,
+                    .AuthMode = Options.AuthMode,
                     .AllowedSIDs = Options.ActorAllowedSIDs,
                 });
                 break;
@@ -102,7 +102,7 @@ public:
                 mon->RegisterActorHandler({
                     .Path = MakeDefaultUrl(),
                     .Handler = TestActorId,
-                    .UseAuth = Options.UseAuth,
+                    .AuthMode = Options.AuthMode,
                     .AllowedSIDs = Options.ActorAllowedSIDs,
                 });
                 break;
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(ActorPage) {
     Y_UNIT_TEST(NoUseAuthOk) {
         THttpMonTestEnv env({
             .RegKind = THttpMonTestEnvOptions::ERegKind::ActorPage,
-            .UseAuth = false,
+            .AuthMode = TMon::EAuthMode::Disabled,
         });
 
         TStringStream responseStream;
@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(ActorHandler) {
     Y_UNIT_TEST(NoUseAuthOk) {
         THttpMonTestEnv env({
             .RegKind = THttpMonTestEnvOptions::ERegKind::ActorHandler,
-            .UseAuth = false,
+            .AuthMode = TMon::EAuthMode::Disabled,
         });
 
         TStringStream responseStream;

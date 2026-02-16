@@ -78,8 +78,8 @@ int TSortedMergeReader::CompareSources(ui32 lhsSourceId, ui32 rhsSourceId) const
 }
 
 TSortedMergeReader::TSortedMergeReader(
-    TVector<IBlockIterator::TPtr> inputs,
-    TVector<ESortOrder> sortOrders
+    std::vector<IBlockIterator::TPtr> inputs,
+    std::vector<ESortOrder> sortOrders
 )
     : SortOrders_(std::move(sortOrders))
 {

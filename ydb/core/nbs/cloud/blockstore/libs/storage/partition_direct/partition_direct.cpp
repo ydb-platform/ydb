@@ -8,20 +8,19 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TActorId CreatePartitionTablet(
+NActors::TActorId CreatePartitionTablet(
     const NActors::TActorId& owner,
-    TStorageConfig storageConfig,
+    NYdb::NBS::NProto::TStorageConfig storageConfig,
     NKikimrBlockStore::TVolumeConfig volumeConfig)
 {
     auto actor = std::make_unique<TPartitionActor>(
         std::move(storageConfig),
-        std::move(volumeConfig),
-        AppData()->Counters);
+        std::move(volumeConfig));
 
-    return TActivationContext::Register(
+    return NActors::TActivationContext::Register(
         actor.release(),
         owner,
-        TMailboxType::ReadAsFilled,
+        NActors::TMailboxType::ReadAsFilled,
         NKikimr::AppData()->SystemPoolId);
 }
 

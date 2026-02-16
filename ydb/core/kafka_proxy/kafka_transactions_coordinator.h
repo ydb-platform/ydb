@@ -19,7 +19,7 @@ namespace NKafka {
 
     It validates that requester is not a zombie (by checking request's tranasactional_id+producer_id+producer_epoch)
     It does so by maintaining a set of the most relevant for this node tranasactional_id+producer_id+producer_epoch.
-    Recieves updates from init_producer_id_actors.
+    Receives updates from init_producer_id_actors.
     */
 
     const ui32 TABLES_COUNT = 2;

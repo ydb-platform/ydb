@@ -16,9 +16,3 @@
 -    test_file = os.path.join(os.path.dirname(__file__), 'GraphemeBreakTest.txt')
 +    import yatest.common as yc
 +    test_file = os.path.join(os.path.dirname(yc.source_path(__file__)), 'GraphemeBreakTest.txt')
---- contrib/python/wcwidth/py3/tests/test_table_integrity.py	(index)
-+++ contrib/python/wcwidth/py3/tests/test_table_integrity.py	(working tree)
-@@ -13 +13,2 @@ def test_verify_table_integrity():
--    subprocess.check_output([sys.executable, os.path.join(os.path.dirname(__file__),
-+    import yatest.common as yc
-+    subprocess.check_output([sys.executable, os.path.join(os.path.dirname(yc.source_path(__file__)),

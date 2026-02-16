@@ -8,6 +8,7 @@
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
@@ -167,6 +168,56 @@ public:
         return HandleFmrJob(mergeJobFunc, ETaskType::Merge);
     }
 
+    virtual std::variant<TFmrError, TStatistics> SortedMerge(
+        const TSortedMergeTaskParams& params,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& /*clusterConnections*/,
+        std::shared_ptr<std::atomic<bool>> cancelFlag
+    ) override {
+        auto sortedMergeJobFunc = [&, cancelFlag] () -> TStatistics {
+            const auto taskTableInputRef = params.Input;
+            const auto output = params.Output;
+
+            auto& parseRecordSettings = Settings_.ParseRecordSettings;
+            YQL_ENSURE(!output.SortingColumns.Columns.empty(), "SortedMerge output key columns must be set");
+
+            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
+                output.TableId,
+                output.PartId,
+                TableDataService_,
+                output.SerializedColumnGroups,
+                Settings_.FmrWriterSettings,
+                output.SortingColumns
+            );
+            TMaybe<TMutex> mutex = TMutex();
+            std::vector<IBlockIterator::TPtr> blockIterators;
+            for (const auto& inputTableRef : taskTableInputRef.Inputs) {
+                if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
+                    blockIterators.push_back(MakeIntrusive<TTDSBlockIterator>(
+                        fmrInput->TableId,
+                        fmrInput->TableRanges,
+                        TableDataService_,
+                        output.SortingColumns.Columns,
+                        output.SortingColumns.SortOrders,
+                        fmrInput->Columns,
+                        fmrInput->SerializedColumnGroups,
+                        fmrInput->IsFirstRowInclusive,
+                        fmrInput->FirstRowKeys,
+                        fmrInput->LastRowKeys
+                    ));
+                } else {
+                    throw TFmrNonRetryableJobException() << "YtTables unsupported inside SortedMerge task";
+                }
+            }
+
+            NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators, output.SortingColumns.SortOrders);
+            ParseRecords(mergeReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+
+            tableDataServiceWriter->Flush();
+            return TStatistics({{output, tableDataServiceWriter->GetStats()}});
+        };
+        return HandleFmrJob(sortedMergeJobFunc, ETaskType::SortedMerge);
+    }
+
     virtual std::variant<TFmrError, TStatistics> Map(
         const TMapTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
@@ -243,6 +294,8 @@ TJobResult RunJob(
             return job->Map(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
         } else if constexpr (std::is_same_v<T, TSortedUploadTaskParams>) {
             return job->SortedUpload(taskParams, task->ClusterConnections, cancelFlag);
+        } else if constexpr (std::is_same_v<T, TSortedMergeTaskParams>) {
+            return job->SortedMerge(taskParams, task->ClusterConnections, cancelFlag);
         } else {
             ythrow yexception() << "Unsupported task type";
         }

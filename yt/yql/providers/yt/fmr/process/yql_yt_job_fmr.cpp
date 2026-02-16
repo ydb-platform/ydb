@@ -4,6 +4,7 @@
 #include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NFmr {
@@ -137,7 +138,23 @@ void TFmrUserJob::InitializeFmrUserJob() {
     TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery);
 
     for (auto& fmrTable: OutputTables_) {
-        TableDataServiceWriters_.emplace_back(MakeIntrusive<TFmrTableDataServiceWriter>(fmrTable.TableId, fmrTable.PartId, TableDataService_, fmrTable.SerializedColumnGroups)); // TODO - settings
+        if (!fmrTable.SortingColumns.Columns.empty()) {
+            TableDataServiceWriters_.emplace_back(MakeIntrusive<TFmrTableDataServiceSortedWriter>(
+                fmrTable.TableId,
+                fmrTable.PartId,
+                TableDataService_,
+                fmrTable.SerializedColumnGroups,
+                TFmrWriterSettings(),
+                fmrTable.SortingColumns
+            )); // TODO - settings
+        } else {
+            TableDataServiceWriters_.emplace_back(MakeIntrusive<TFmrTableDataServiceWriter>(
+                fmrTable.TableId,
+                fmrTable.PartId,
+                TableDataService_,
+                fmrTable.SerializedColumnGroups
+            )); // TODO - settings
+        }
     }
 }
 

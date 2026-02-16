@@ -19,6 +19,6 @@ namespace semconv
 /**
  * The URL of the OpenTelemetry schema for these keys and values.
  */
-static constexpr const char *kSchemaUrl = "https://opentelemetry.io/schemas/1.38.0";
+static constexpr const char *kSchemaUrl = "https://opentelemetry.io/schemas/1.39.0";
 }  // namespace semconv
 OPENTELEMETRY_END_NAMESPACE

@@ -1,0 +1,90 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: YqlSelect unsupported: JOIN with an asterisk projection */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    ca_state,
+    cd_gender,
+    cd_marital_status,
+    cd_dep_count,
+    Count(*) AS cnt1,
+    Avg(cd_dep_count) AS a1,
+    Max(cd_dep_count) AS x1,
+    Sum(cd_dep_count) AS s1,
+    cd_dep_employed_count,
+    Count(*) AS cnt2,
+    Avg(cd_dep_employed_count) AS a2,
+    Max(cd_dep_employed_count) AS x2,
+    Sum(cd_dep_employed_count) AS s2,
+    cd_dep_college_count,
+    Count(*) AS cnt3,
+    Avg(cd_dep_college_count) AS a3,
+    Max(cd_dep_college_count) AS x3,
+    Sum(cd_dep_college_count) AS s3
+FROM
+    plato.customer AS c
+,
+    plato.customer_address AS ca
+,
+    plato.customer_demographics
+WHERE
+    c.c_current_addr_sk == ca.ca_address_sk
+    AND cd_demo_sk == c.c_current_cdemo_sk
+    AND EXISTS (
+        SELECT
+            *
+        FROM
+            plato.store_sales
+        ,
+            plato.date_dim
+        WHERE
+            c.c_customer_sk == ss_customer_sk
+            AND ss_sold_date_sk == d_date_sk
+            AND d_year == 1999
+            AND d_qoy < 4
+    )
+    AND (
+        EXISTS (
+            SELECT
+                *
+            FROM
+                plato.web_sales
+            ,
+                plato.date_dim
+            WHERE
+                c.c_customer_sk == ws_bill_customer_sk
+                AND ws_sold_date_sk == d_date_sk
+                AND d_year == 1999
+                AND d_qoy < 4
+        )
+        OR EXISTS (
+            SELECT
+                *
+            FROM
+                plato.catalog_sales
+            ,
+                plato.date_dim
+            WHERE
+                c.c_customer_sk == cs_ship_customer_sk
+                AND cs_sold_date_sk == d_date_sk
+                AND d_year == 1999
+                AND d_qoy < 4
+        )
+    )
+GROUP BY
+    ca_state,
+    cd_gender,
+    cd_marital_status,
+    cd_dep_count,
+    cd_dep_employed_count,
+    cd_dep_college_count
+ORDER BY
+    ca_state,
+    cd_gender,
+    cd_marital_status,
+    cd_dep_count,
+    cd_dep_employed_count,
+    cd_dep_college_count
+LIMIT 100;

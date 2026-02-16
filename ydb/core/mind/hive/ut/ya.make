@@ -24,6 +24,8 @@ SRCS(
     tenants_ut.cpp
     hive_ut.cpp
     hive_impl_ut.cpp
+    ut_common.cpp
+    ut_common.h
 )
 
 END()

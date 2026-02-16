@@ -257,12 +257,13 @@ public:
     void HandleExecute(TEvKqpExecuter::TEvTxDelayedExecution::TPtr& ev) {
         RequestCounters->Counters->BatchOperationRetries->Inc();
 
-        auto& partInfo = StartedPartitions[ev->Get()->PartitionIdx];
-
         PE_STLOG_D("Delayed execution timer fired",
             (PartitionIndex, ev->Get()->PartitionIdx));
 
-        RetryPartExecution(partInfo);
+        auto it = StartedPartitions.find(ev->Get()->PartitionIdx);
+        if (it != StartedPartitions.end()) {
+            RetryPartExecution(it->second);
+        }
     }
 
     void HandleExecute(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -454,6 +455,7 @@ private:
         switch (settings->GetType()) {
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT:
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL:
                 OperationType = TKeyDesc::ERowOperation::Update;
                 break;
             case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
@@ -546,7 +548,16 @@ private:
     }
 
     void CreateExecuterWithBuffer(TPartitionIndex partitionIndex, bool isRetry) {
-        auto partInfo = (isRetry) ? StartedPartitions[partitionIndex] : CreatePartition(partitionIndex);
+        TBatchPartitionInfo::TPtr partInfo;
+        if (isRetry) {
+            auto it = StartedPartitions.find(partitionIndex);
+            if (it == StartedPartitions.end()) {
+                return;
+            }
+            partInfo = it->second;
+        } else {
+            partInfo = CreatePartition(partitionIndex);
+        }
         auto txAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
 
         IKqpGateway::TExecPhysicalRequest newRequest(txAlloc);

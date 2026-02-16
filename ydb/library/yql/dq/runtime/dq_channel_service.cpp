@@ -507,7 +507,11 @@ bool TOutputDescriptor::IsTerminatedOrAborted() {
 
 void TOutputDescriptor::AbortChannel(const TString& message) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.InputActorId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(message).Release());
+        ActorSystem->Send(Info.InputActorId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(
+            TStringBuilder() << "Channel: " << Info.ChannelId
+            << ", SrcStageId: " << Info.SrcStageId << ", DstStageId: " << Info.DstStageId
+            << ", " << message
+        ).Release());
     }
 }
 
@@ -956,13 +960,14 @@ void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 coo
     ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, cookie));
 }
 
-void TNodeState::SendAckWithError(ui64 cookie) {
+void TNodeState::SendAckWithError(ui64 cookie, const TString& message) {
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
     evAck->Record.SetGenMajor(PeerGenMajor);
     evAck->Record.SetGenMinor(PeerGenMinor);
     evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::ERROR);
     evAck->Record.SetSeqNo(ConfirmedSeqNo);
+    evAck->Record.SetMessage(message);
 
     SendAck(evAck, cookie);
 }
@@ -973,12 +978,16 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     TChannelFullInfo info(record.GetChannelId(),
         NActors::ActorIdFromProto(record.GetSrcActorId()),
-        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0);
+        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
     auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
-        SendAckWithError(ev->Cookie);
+        SendAckWithError(ev->Cookie,
+            TStringBuilder() << "Can't find peer for Info: {ChannelId: " << info.ChannelId
+            << ", OutputActorId: " << info.OutputActorId
+            << ", InputActorId: " << info.InputActorId << "} Leading:" << record.GetLeading()
+        );
         return;
     }
 
@@ -986,7 +995,10 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         if (descriptor->PeerActorId != PeerActorId || descriptor->PeerGenMajor != PeerGenMajor) {
             descriptor->Terminate();
             InputDescriptors.erase(info);
-            SendAckWithError(ev->Cookie);
+            SendAckWithError(ev->Cookie,
+                TStringBuilder() << "Generation mismatch: " << descriptor->PeerActorId << " vs "
+                << PeerActorId << " (actual), " << descriptor->PeerGenMajor << " vs " << PeerGenMajor << " (actual)"
+            );
             return;
         }
     } else {
@@ -1333,7 +1345,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 if (!item->Descriptor->IsTerminatedOrAborted()) {
                     if (item->Descriptor->CheckGenMajor(GenMajor, "by Ack")) {
                         if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
-                            item->Descriptor->AbortChannel("By Remote Side");
+                            item->Descriptor->AbortChannel("(Peer) " + record.GetMessage());
                         } else {
                             auto earlyFinished = record.GetEarlyFinished();
                             auto popBytes = record.GetPopBytes();
@@ -1389,7 +1401,7 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     TChannelFullInfo info(record.GetChannelId(),
         NActors::ActorIdFromProto(record.GetSrcActorId()),
-        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0);
+        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
     auto descriptor = GetOrCreateOutputDescriptor(info, false, popBytes == 0);
     if (!descriptor) {
@@ -1507,7 +1519,11 @@ void TNodeState::CleanupUnbound() {
         if (front.second > now) {
             break;
         }
-        InputDescriptors.erase(front.first);
+        if (auto it = InputDescriptors.find(front.first); it != InputDescriptors.end()) {
+            if (!it->second->IsBound) {
+                InputDescriptors.erase(it);
+            }
+        }
         UnboundInputs.pop();
     }
     while (!UnboundOutputs.empty()) {
@@ -1515,7 +1531,11 @@ void TNodeState::CleanupUnbound() {
         if (front.second > now) {
             break;
         }
-        OutputDescriptors.erase(front.first);
+        if (auto it = OutputDescriptors.find(front.first); it != OutputDescriptors.end()) {
+            if (!it->second->IsBound) {
+                OutputDescriptors.erase(it);
+            }
+        }
         UnboundOutputs.pop();
     }
 }
@@ -1656,12 +1676,12 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     TChannelFullInfo info(record.GetChannelId(),
         NActors::ActorIdFromProto(record.GetSrcActorId()),
-        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0);
+        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
     auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
-        SendAckWithError(ev->Cookie);
+        SendAckWithError(ev->Cookie, "[TDebugNodeState] Can't find peer for not leading message");
         return;
     }
 
@@ -1831,16 +1851,12 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
 // unbinded channels
 
 IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelSettings& settings) {
-    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId));
-    buffer->PushStats.Level = settings.Level;
-    buffer->PopStats.Level = settings.Level;
+    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqOutputChannel(Self, settings, buffer, false);
 }
 
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSettings& settings) {
-    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId));
-    buffer->PushStats.Level = settings.Level;
-    buffer->PopStats.Level = settings.Level;
+    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqInputChannel(Self, settings, buffer);
 }
 
@@ -1901,8 +1917,6 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
     if (Aggregator) {
         buffer->SetFillAggregator(Aggregator);
     }
-    buffer->PushStats.Level = Serializer->Buffer->PushStats.Level;
-    buffer->PopStats.Level = Serializer->Buffer->PopStats.Level;
     Serializer->Buffer = buffer;
     Service.reset();
 }
@@ -1915,8 +1929,6 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
     Buffer->Info.OutputActorId = outputActorId;
     Buffer->Info.InputActorId = inputActorId;
     auto buffer = service->GetInputBuffer(Buffer->Info);
-    buffer->PushStats.Level = Buffer->PushStats.Level;
-    buffer->PopStats.Level = Buffer->PopStats.Level;
     Buffer = buffer;
     Service.reset();
 }

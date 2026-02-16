@@ -119,8 +119,6 @@ foreach (var row in resultSet.Rows)
 }
 ```
 
-{% include [scan_query.md](steps/08_scan_query.md) %}
-
 ```c#
 await queryClient.Stream(
     $"SELECT title FROM seasons ORDER BY series_id, season_id;",

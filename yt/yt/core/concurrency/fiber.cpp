@@ -281,7 +281,7 @@ TInstant TFiberIntrospectionBase::GetWaitingSince() const
 {
     // Locked by introspector
     YT_VERIFY(GetState() == EFiberState::Introspecting);
-    return WaitingSince_;
+    return CpuInstantToInstant(WaitingSince_);
 }
 
 TFls* TFiberIntrospectionBase::GetFls()
@@ -311,7 +311,7 @@ void TFiberIntrospectionBase::OnCallbackExecutionFinished()
 
 void TFiberIntrospectionBase::SetWaiting()
 {
-    WaitingSince_ = CpuInstantToInstant(GetApproximateCpuInstant());
+    WaitingSince_ = GetApproximateCpuInstant();
 
     // Release lock that should be acquired by running fiber.
     YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Running);

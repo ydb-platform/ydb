@@ -11,7 +11,6 @@ ELSE()
 ENDIF()
 
 SRCS(
-    kqp_indexes_fulltext_ut.cpp
     kqp_indexes_multishard_ut.cpp
     kqp_indexes_prefixed_vector_ut.cpp
     kqp_indexes_ut.cpp
@@ -32,3 +31,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    fulltext
+)

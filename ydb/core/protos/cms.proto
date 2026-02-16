@@ -159,14 +159,13 @@ enum EAvailabilityMode {
     // of parity parts in that group.
     // Compute nodes are handled as in default mode.
     MODE_KEEP_AVAILABLE = 1;
-    // In this mode CMS allows at most 1 locked disk in a group
-    // ignoring its parity parts count. Allows to restart nodes
-    // even if multiple disks of some group are down. Using
-    // this mode might cause data unavailability.
-    // For compute nodes CMS follows tenant and cluster policies
-    // but allows to restart at least one node for tenant or
-    // cluster.
+    // This mode ignores all cluster availability checks.
+    // Using this mode might cause data unavailability.
     MODE_FORCE_RESTART = 2;
+    // Behaves like MODE_MAX_AVAILABILITY but automatically
+    // falls back to MODE_KEEP_AVAILABLE when it is not possible
+    // to restart nodes using MODE_MAX_AVAILABILITY.
+    MODE_SMART_AVAILABILITY = 3;
 }
 
 message TPermissionRequest {

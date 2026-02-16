@@ -1,5 +1,6 @@
 #include "topic_workload_writer_producer.h"
 #include "topic_workload_writer.h"
+#include "topic_workload_writer_producer_utils.h"
 
 using namespace NYdb::NConsoleClient;
 
@@ -61,27 +62,11 @@ void TTopicWorkloadWriterProducer::Close() {
 
 
 TString TTopicWorkloadWriterProducer::GetGeneratedMessage() const {
-    return Params_.GeneratedMessages[MessageId_ % TTopicWorkloadWriterWorker::GENERATED_MESSAGES_COUNT];
-}
-
-static TString GenerateMetaKeyValue(ui64 messageId, const TTopicWorkloadWriterParams& params) {
-    TString keyValue;
-    if (params.KeyPrefix.Defined()) {
-        TStringOutput so(keyValue);
-        so << *params.KeyPrefix;
-        if (params.KeyCount > 0) {
-            so << '.' << ((messageId + params.KeySeed) % params.KeyCount);
-        }
-    }
-    return keyValue;
+    return NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetGeneratedMessage(Params_, MessageId_);
 }
 
 NYdb::NTopic::TWriteMessage::TMessageMeta TTopicWorkloadWriterProducer::GenerateMessageMeta() const {
-    NYdb::NTopic::TWriteMessage::TMessageMeta meta;
-    if (Params_.KeyPrefix.Defined()) {
-        meta.emplace_back("__key", GenerateMetaKeyValue(MessageId_, Params_));
-    }
-    return meta;
+    return NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GenerateOptionalKeyMeta(MessageId_, Params_);
 }
 
 bool TTopicWorkloadWriterProducer::WaitForInitSeqNo() {

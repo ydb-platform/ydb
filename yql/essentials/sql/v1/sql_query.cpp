@@ -191,7 +191,8 @@ bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
             "batch_size_bytes",
             "directory",
             "metrics_level",
-        };
+            "v_cpu_rate_limit"};
+
         for (const auto& names : REPLICATION_AND_TRANSFER_SECRETS_SETTINGS) {
             settings.insert(names.Name);
             settings.insert(names.Path);
@@ -1488,9 +1489,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                auto requiredLangVer = MakeLangVersion(2025, 5);
-                if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
-                    Error() << "CREATE VIEW is not available before language version " << FormatLangVersion(requiredLangVer);
+                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                        Ctx_.Pos(), "CREATE VIEW", MakeLangVersion(2025, 5))) {
                     return false;
                 }
             }
@@ -1560,9 +1560,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                auto requiredLangVer = MakeLangVersion(2025, 5);
-                if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
-                    Error() << "DROP VIEW is not available before language version " << FormatLangVersion(requiredLangVer);
+                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                        Ctx_.Pos(), "DROP VIEW", MakeLangVersion(2025, 5))) {
                     return false;
                 }
             }
@@ -2648,6 +2647,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction20: {
+            // COMPACT WITH (...)
+            const auto& alterRule = node.GetAlt_alter_table_action20().GetRule_alter_table_compact1();
+
+            if (!AlterTableCompact(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -3056,6 +3065,27 @@ bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefe
 
 void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params) {
     params.DropChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+}
+
+bool TSqlQuery::AlterTableCompact(const TRule_alter_table_compact& node, TAlterTableParameters& params) {
+    auto& compactEntry = params.Compact.Emplace();
+    if (!node.HasBlock2()) {
+        return true;
+    }
+
+    const auto& settingsNode = node.GetBlock2().GetRule_with_compact_settings1();
+    const auto& firstEntry = settingsNode.GetRule_compact_setting_entry3();
+    if (!AddCompactSetting(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_compact_setting_value3(), compactEntry)) {
+        return false;
+    }
+    for (const auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_compact_setting_entry2();
+        if (!AddCompactSetting(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_compact_setting_value3(), compactEntry)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 namespace {
@@ -3701,14 +3731,8 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt("YqlSelect", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
-        const NYql::TLangVersion langVer = YqlSelectLangVersion();
-        if (!IsBackwardCompatibleFeatureAvailable(
-                ctx.Settings.LangVer,
-                langVer,
-                ctx.Settings.BackportMode))
-        {
-            query.Error() << "YqlSelect is not available before "
-                          << FormatLangVersion(langVer);
+        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                ctx.Pos(), "YqlSelect", YqlSelectLangVersion())) {
             return Nothing();
         }
 

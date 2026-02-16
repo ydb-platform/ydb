@@ -56,11 +56,15 @@ class TDocId;
 namespace {
 
 TString WildcardToRegex(const TStringBuf wildcardPattern) {
-    static const TStringBuf special = R"(^$.\+?()|{}[])";
+    static const TStringBuf special = R"(^$.\+*?()|{}[])";
     TStringBuilder builder;
     for (char c : wildcardPattern) {
-        if (c == '*') {
-            builder << '.';
+        if (c == '%') {
+            builder << ".*";
+            continue;
+        } else if (c == '_') {
+            builder << ".";
+            continue;
         } else if (special.find(c) != TStringBuf::npos) {
             builder << '\\';
         }
@@ -175,6 +179,7 @@ public:
         record.SetMaxRows(MaxRowsDefaultQuota);
         record.SetMaxBytes(MaxBytesDefaultQuota);
         record.SetResultFormat(UseArrowFormat ? NKikimrDataEvents::FORMAT_ARROW : NKikimrDataEvents::FORMAT_CELLVEC);
+
         return request;
     }
 
@@ -258,19 +263,19 @@ class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     double K1Factor = K1_FACTOR_DEFAULT;
     double BFactor = B_FACTOR_DEFAULT;
     const TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
-    const EQueryMode QueryMode;
+    const EDefaultOperator DefaultOperator;
     ui32 MinimumShouldMatch;
 
 public:
     TQueryCtx(size_t wordCount, ui64 totalDocLength, ui64 docCount,
-        EQueryMode queryMode,
+        EDefaultOperator defaultOperator,
         ui32 minimumShouldMatch,
         const TVector<std::pair<i32, NScheme::TTypeInfo>> resultCellIndices)
         : DocCount(docCount)
         , AvgDL(docCount > 0 ? static_cast<double>(totalDocLength) / docCount : 1.0)
         , IDFValues(wordCount, 0.0)
         , ResultCellIndices(resultCellIndices)
-        , QueryMode(queryMode)
+        , DefaultOperator(defaultOperator)
         , MinimumShouldMatch(minimumShouldMatch)
     {
     }
@@ -309,8 +314,8 @@ public:
         return BFactor;
     }
 
-    EQueryMode GetQueryMode() const {
-        return QueryMode;
+    EDefaultOperator GetDefaultOperator() const {
+        return DefaultOperator;
     }
 
     ui32 GetMinimumShouldMatch() const {
@@ -377,6 +382,10 @@ public:
 
     void AddRow(const TConstArrayRef<TCell>& row) {
         RowCells = TOwnedCellVec(row);
+    }
+
+    TCell GetKeyCell(const size_t idx) const {
+        return KeyCells.at(idx);
     }
 
     TCell GetResultCell(const size_t idx) const {
@@ -1753,7 +1762,7 @@ private:
 
         const auto analyzersForQuery = NFulltext::GetAnalyzersForQuery(analyzers);
 
-        for (const TString& queryToken : NFulltext::Analyze(TString(query), analyzersForQuery, '*')) {
+        for (const TString& queryToken : NFulltext::Analyze(TString(query), analyzersForQuery, {'%', '_'})) {
             const TString pattern = WildcardToRegex(queryToken);
             TVector<wchar32> ucs4Pattern;
             NPire::NEncodings::Utf8().FromLocal(
@@ -1795,10 +1804,11 @@ private:
         }
 
         if (Words.empty()) {
-            NotifyCA();
+            RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            return false;
         }
 
-        return !Words.empty();
+        return true;
     }
 
     void FetchDocumentDetails(std::vector<TDocumentInfo::TPtr>& docInfos) {
@@ -1819,9 +1829,11 @@ private:
         }
 
         if (MainTableCovered) {
-            YQL_ENSURE(PostfilterMatchers.empty());
+            const bool skipPostfilter = PostfilterMatchers.empty();
             for(auto& doc: docInfos) {
-                ResultQueue.emplace_back(std::move(doc));
+                if (skipPostfilter || Postfilter(doc->GetKeyCell(SearchColumnIdx).AsBuf())) {
+                    ResultQueue.emplace_back(std::move(doc));
+                }
             }
             NotifyCA();
             return;
@@ -1881,20 +1893,20 @@ private:
         }
 
         TString explain;
-        EQueryMode queryMode = QueryModeFromString(Settings->GetQueryMode(), explain);
+        EDefaultOperator defaultOperator = DefaultOperatorFromString(Settings->GetDefaultOperator(), explain);
         if (!explain.empty()) {
             RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
             return;
         }
 
-        ui32 minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), queryMode, Settings->GetMinimumShouldMatch(), explain);
+        ui32 minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), defaultOperator, Settings->GetMinimumShouldMatch(), explain);
         if (!explain.empty()) {
             RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
             return;
         }
 
         QueryCtx = MakeIntrusive<TQueryCtx>(
-            Words.size(), SumDocLength, DocCount, queryMode, minimumShouldMatch, ResultCellIndices);
+            Words.size(), SumDocLength, DocCount, defaultOperator, minimumShouldMatch, ResultCellIndices);
 
         if (DictTableReader) {
             for (auto& word: Words) {
@@ -1912,7 +1924,7 @@ private:
             }
         }
 
-        if (queryMode == EQueryMode::And) {
+        if (defaultOperator == EDefaultOperator::And) {
             MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm>(
                 std::move(streams),
                 minimumShouldMatch,
@@ -2274,15 +2286,14 @@ public:
         ReadsState.SendEvRead(shardId, request, TReadInfo{.ReadKind = EReadKind_TotalStats, .Cookie = readId, .ShardId = shardId});
     }
 
-    bool Postfilter(const TDocumentInfo& documentInfo) const {
+    bool Postfilter(const TStringBuf value) const {
         auto analyzers = IndexDescription.GetSettings().columns(0).analyzers();
         // Prevent splitting tokens into ngrams
         analyzers.set_use_filter_ngram(false);
         analyzers.set_use_filter_edge_ngram(false);
 
         for (const auto& matcher : PostfilterMatchers) {
-            YQL_ENSURE(SearchColumnIdx != -1);
-            const TString searchColumnValue(documentInfo.GetResultCell(SearchColumnIdx).AsBuf()); // TODO: don't copy
+            const TString searchColumnValue(value); // TODO: don't copy
 
             bool found = false;
             for (const auto& valueToken : NFulltext::Analyze(searchColumnValue, analyzers)) {
@@ -2313,7 +2324,7 @@ public:
             auto& doc = readItems.GetItem();
             YQL_ENSURE(NKikimr::TCellVectorsEquals{}(doc->GetDocumentId(), GetDocumentId(row)), "detected out of order document reading");
             doc->AddRow(row);
-            if (PostfilterMatchers.empty() || Postfilter(doc.GetRef())) {
+            if (PostfilterMatchers.empty() || Postfilter(doc->GetResultCell(SearchColumnIdx).AsBuf())) {
                 ResultQueue.push_back(std::move(doc));
             }
 

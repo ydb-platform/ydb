@@ -1,0 +1,135 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+$sr_items = (
+    SELECT
+        i_item_id AS item_id,
+        Sum(sr_return_quantity) AS sr_item_qty
+    FROM
+        plato.store_returns
+    ,
+        plato.item
+    ,
+        plato.date_dim
+    WHERE
+        sr_item_sk == i_item_sk
+        AND d_date IN (
+            SELECT
+                d_date
+            FROM
+                plato.date_dim
+            WHERE
+                d_week_seq IN (
+                    SELECT
+                        d_week_seq
+                    FROM
+                        plato.date_dim
+                    WHERE
+                        d_date IN (
+                            CAST('1998-01-02' AS date),
+                            CAST('1998-10-15' AS date),
+                            CAST('1998-11-10' AS date)
+                        )
+                )
+        )
+        AND sr_returned_date_sk == d_date_sk
+    GROUP BY
+        i_item_id
+);
+
+$cr_items = (
+    SELECT
+        i_item_id AS item_id,
+        Sum(cr_return_quantity) AS cr_item_qty
+    FROM
+        plato.catalog_returns
+    ,
+        plato.item
+    ,
+        plato.date_dim
+    WHERE
+        cr_item_sk == i_item_sk
+        AND d_date IN (
+            SELECT
+                d_date
+            FROM
+                plato.date_dim
+            WHERE
+                d_week_seq IN (
+                    SELECT
+                        d_week_seq
+                    FROM
+                        plato.date_dim
+                    WHERE
+                        d_date IN (
+                            CAST('1998-01-02' AS date),
+                            CAST('1998-10-15' AS date),
+                            CAST('1998-11-10' AS date)
+                        )
+                )
+        )
+        AND cr_returned_date_sk == d_date_sk
+    GROUP BY
+        i_item_id
+);
+
+$wr_items = (
+    SELECT
+        i_item_id AS item_id,
+        Sum(wr_return_quantity) AS wr_item_qty
+    FROM
+        plato.web_returns
+    ,
+        plato.item
+    ,
+        plato.date_dim
+    WHERE
+        wr_item_sk == i_item_sk
+        AND d_date IN (
+            SELECT
+                d_date
+            FROM
+                plato.date_dim
+            WHERE
+                d_week_seq IN (
+                    SELECT
+                        d_week_seq
+                    FROM
+                        plato.date_dim
+                    WHERE
+                        d_date IN (
+                            CAST('1998-01-02' AS Date),
+                            CAST('1998-10-15' AS Date),
+                            CAST('1998-11-10' AS Date)
+                        )
+                )
+        )
+        AND wr_returned_date_sk == d_date_sk
+    GROUP BY
+        i_item_id
+);
+
+SELECT
+    sr_items.item_id,
+    sr_item_qty,
+    sr_item_qty / (sr_item_qty + cr_item_qty + wr_item_qty) / 3.0 * 100 AS sr_dev,
+    cr_item_qty,
+    cr_item_qty / (sr_item_qty + cr_item_qty + wr_item_qty) / 3.0 * 100 AS cr_dev,
+    wr_item_qty,
+    wr_item_qty / (sr_item_qty + cr_item_qty + wr_item_qty) / 3.0 * 100 AS wr_dev,
+    (sr_item_qty + cr_item_qty + wr_item_qty) / 3.0 AS average
+FROM
+    $sr_items AS sr_items
+,
+    $cr_items AS cr_items
+,
+    $wr_items AS wr_items
+WHERE
+    sr_items.item_id == cr_items.item_id
+    AND sr_items.item_id == wr_items.item_id
+ORDER BY
+    sr_items.item_id,
+    sr_item_qty
+LIMIT 100;

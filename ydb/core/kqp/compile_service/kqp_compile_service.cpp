@@ -145,7 +145,12 @@ public:
                 auto result = std::move(request);
                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                     "Drop compilation request because session is not longer wait for response");
-                QueryIndex[result.Query].erase(curIt);
+                if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
+                    qIt->second.erase(curIt);
+                    if (qIt->second.empty()) {
+                        QueryIndex.erase(qIt);
+                    }
+                }
                 Queue.erase(curIt);
                 continue;
             }
@@ -154,7 +159,12 @@ public:
                 auto result = std::move(request);
 
                 Counters->ReportCompileQueueWaitTime(now - result.CompileQueueEnqueuedAt);
-                QueryIndex[result.Query].erase(curIt);
+                if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
+                    qIt->second.erase(curIt);
+                    if (qIt->second.empty()) {
+                        QueryIndex.erase(qIt);
+                    }
+                }
                 Queue.erase(curIt);
 
                 return result;

@@ -529,16 +529,16 @@
     ],
     "test.test[expr-cast_decimal-default.txt-Debug]": [
         {
-            "checksum": "f4d5d9897fb3c8fa45f67e69e97e4a6a",
-            "size": 2344,
-            "uri": "https://{canondata_backend}/1881367/2d9d0d3d1ddc9faf1368797d4ac0c730a540cd0c/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Debug_/opt.yql"
+            "checksum": "91294751a47cfcb87a5a3af5e0db632c",
+            "size": 1564,
+            "uri": "https://{canondata_backend}/1773845/486531303c5d3ec35ed8056fbdb4be070aadc061/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[expr-cast_decimal-default.txt-Results]": [
         {
-            "checksum": "b57165ab0c7a5165085c351444b6c5fd",
-            "size": 19328,
-            "uri": "https://{canondata_backend}/1881367/2d9d0d3d1ddc9faf1368797d4ac0c730a540cd0c/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Results_/results.txt"
+            "checksum": "7bede4f19295253e7740f658c336afed",
+            "size": 14064,
+            "uri": "https://{canondata_backend}/1773845/486531303c5d3ec35ed8056fbdb4be070aadc061/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Results_/results.txt"
         }
     ],
     "test.test[expr-cast_string_implicit-default.txt-Debug]": [
@@ -1077,6 +1077,20 @@
             "checksum": "614db072a68d481923c6fa4812882c7d",
             "size": 1906,
             "uri": "https://{canondata_backend}/1031349/7e9a56e45868d5ebe967695a6279fd0bfb6b7d71/resource.tar.gz#test.test_params-tuple--Results_/results.txt"
+        }
+    ],
+    "test.test[pg-YQL_20895_projection_depth_3-default.txt-Debug]": [
+        {
+            "checksum": "630689efb8abba804ff1062bd4cb437c",
+            "size": 1741,
+            "uri": "https://{canondata_backend}/1031349/d43656a0a09a52891684f1f38134a39d8c0554b5/resource.tar.gz#test.test_pg-YQL_20895_projection_depth_3-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-YQL_20895_projection_depth_3-default.txt-Results]": [
+        {
+            "checksum": "6a00eb838183e16098feefe4a7d81bed",
+            "size": 733,
+            "uri": "https://{canondata_backend}/1031349/d43656a0a09a52891684f1f38134a39d8c0554b5/resource.tar.gz#test.test_pg-YQL_20895_projection_depth_3-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-aggregate_ctx-default.txt-Debug]": [

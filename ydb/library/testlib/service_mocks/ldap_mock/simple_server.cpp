@@ -48,12 +48,12 @@ void TSimpleServer::Stop() {
     if (ListenSocket >= 0) {
         ::shutdown(ListenSocket, SHUT_RDWR);
         ::close(ListenSocket);
-        ListenSocket = -1;
     }
 
     if (Worker.joinable()) {
         Worker.join();
     }
+    ListenSocket = -1;
     if (Ctx) {
         Ctx.Destroy();
     }

@@ -18,11 +18,14 @@ struct TJoinDescription {
     TJoinSourceData RightSource;
     TDqSetup<false, true>* Setup;
     std::optional<TDqUserRenames> CustomRenames;
+    int BlockSize = 128;
+    bool SliceBlocks = false;
 };
 
 bool IsBlockJoin(ETestedJoinAlgo algo);
 
-THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr);
+THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
+                                                     bool withSpiller = true);
 
 i32 ResultColumnCount(ETestedJoinAlgo algo, TJoinDescription descr);
 } // namespace NKikimr::NMiniKQL

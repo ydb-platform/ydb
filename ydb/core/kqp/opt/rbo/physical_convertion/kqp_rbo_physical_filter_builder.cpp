@@ -23,7 +23,7 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         colNamesToIndices.emplace(inputColumns[i].GetFullName(), i);
     }
 
-    auto lambda = TCoLambda(Filter->FilterLambda);
+    auto lambda = TCoLambda(Filter->FilterExpr.Node);
     auto lambdaBody = lambda.Body().Ptr();
     const bool isPg = lambdaBody->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg;
 

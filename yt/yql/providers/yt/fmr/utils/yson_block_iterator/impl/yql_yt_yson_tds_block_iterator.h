@@ -13,11 +13,11 @@ public:
 
     TTDSBlockIterator(
         TString tableId,
-        TVector<TTableRange> tableRanges,
+        std::vector<TTableRange> tableRanges,
         ITableDataService::TPtr tableDataService,
-        TVector<TString> keyColumns,
-        TVector<ESortOrder> sortOrders,
-        TVector<TString> neededColumns,
+        std::vector<TString> keyColumns,
+        std::vector<ESortOrder> sortOrders,
+        std::vector<TString> neededColumns,
         TString serializedColumnGroupsSpec = {},
         TMaybe<bool> isFirstRowKeysInclusive = Nothing(),
         TMaybe<TString> firstRowKeys = Nothing(),
@@ -35,11 +35,11 @@ private:
 
 private:
     const TString TableId_;
-    TVector<TTableRange> TableRanges_;
+    std::vector<TTableRange> TableRanges_;
     const ITableDataService::TPtr TableDataService_;
-    const TVector<TString> KeyColumns_;
-    TVector<ESortOrder> SortOrders_;
-    const TVector<TString> NeededColumns_;
+    const std::vector<TString> KeyColumns_;
+    std::vector<ESortOrder> SortOrders_;
+    const std::vector<TString> NeededColumns_;
     const TString SerializedColumnGroupsSpec_;
 
     ui64 CurrentRange_ = 0;

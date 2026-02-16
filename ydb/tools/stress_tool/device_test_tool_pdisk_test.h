@@ -249,6 +249,11 @@ struct TPDiskTest : public TPerfTest {
         bool isErasureEncode = false;
         TFormatOptions options;
         options.IsErasureEncodeUserLog = isErasureEncode;
+        if (Cfg.SectorMap) {
+            options.SectorMap = Cfg.SectorMap;
+            options.EnableSmallDiskOptimization = false;
+            diskSize = Cfg.SectorMap->DeviceSize;
+        }
         FormatPDisk(Cfg.Path, diskSize, 4 << 10, ChunkSize, PDiskGuid,
             chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Info", options);
     }
@@ -285,6 +290,10 @@ struct TPDiskTest : public TPerfTest {
         pDiskConfig->DeviceInFlight = TestProto.GetDeviceInFlight() != 0 ? FastClp2(TestProto.GetDeviceInFlight()) : 4;
         pDiskConfig->UseNoopScheduler = true;
         pDiskConfig->FeatureFlags.SetEnableSeparateSubmitThreadForPDisk(true);
+        if (Cfg.SectorMap) {
+            pDiskConfig->SectorMap = Cfg.SectorMap;
+            pDiskConfig->EnableSectorEncryption = false;
+        }
         if (!TestProto.GetEnableTrim()) {
             pDiskConfig->DriveModelTrimSpeedBps = 0;
         }

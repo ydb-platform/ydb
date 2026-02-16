@@ -473,7 +473,6 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDrop) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
 
@@ -503,7 +502,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::Finished,
-                                    NLs::ChildrenCount(2)});
+                                    NLs::ChildrenCount(3)});
 
                 dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                                  {NLs::Finished,
@@ -519,14 +518,13 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::Finished,
-                                    NLs::ChildrenCount(1)});
+                                    NLs::ChildrenCount(2)});
             }
         });
     }
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDropSimultaneously) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
             {
@@ -561,14 +559,13 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::Finished,
-                                    NLs::ChildrenCount(0)});
+                                    NLs::ChildrenCount(1)});
             }
         });
     }
 
     Y_UNIT_TEST(DropIndexedTableAndForceDropSimultaneously) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
 
@@ -618,8 +615,8 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::Finished,
-                                    NLs::PathVersionOneOf({10, 11}),
-                                    NLs::ChildrenCount(1)});
+                                    NLs::PathVersionOneOf({13, 14}),
+                                    NLs::ChildrenCount(2)});
             }
         });
     }

@@ -1,3 +1,0 @@
-/* custom error: Cannot infer common type for Decimal and Decimal: */
-select min_of(cast(1 as Decimal(20, 8)), cast(2 as Decimal(35, 6)))
--- Decimal(37, 8) :(

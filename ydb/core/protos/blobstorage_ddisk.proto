@@ -12,6 +12,7 @@ message TReplyStatus {
         SESSION_MISMATCH = 5;
         INCORRECT_REQUEST = 6;
         MISSING_RECORD = 7;
+        OUTDATED = 8;
     }
 }
 
@@ -127,6 +128,7 @@ message TEvWritePersistentBuffer {
 message TEvWritePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
+    optional double FreeSpace = 3;
 }
 
 message TEvReadPersistentBuffer {
@@ -142,17 +144,46 @@ message TEvReadPersistentBufferResult {
     TReadResult ReadResult = 3;
 }
 
-message TEvFlushPersistentBuffer {
-    TQueryCredentials Credentials = 1;
-    TBlockSelector Selector = 2;
-    uint64 Lsn = 3;
-    TDDiskId DDiskId = 4;
-    fixed64 DDiskInstanceGuid = 5;
-}
-
-message TEvFlushPersistentBufferResult {
+message TSegmentResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
+}
+
+message TEvSyncWithPersistentBuffer {
+    message TSegment {
+        TBlockSelector Selector = 1;
+        uint64 Lsn = 2;
+    }
+
+    TQueryCredentials Credentials = 1;
+    repeated TSegment Segments = 2;
+    TDDiskId DDiskId = 3;
+    fixed64 DDiskInstanceGuid = 4;
+}
+
+message TEvSyncWithPersistentBufferResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+
+    repeated TSegmentResult SegmentResults = 3;
+}
+
+message TEvSyncWithDDisk {
+    message TSegment {
+        TBlockSelector Selector = 1;
+    }
+
+    TQueryCredentials Credentials = 1;
+    repeated TSegment Segments = 2;
+    TDDiskId DDiskId = 3;
+    fixed64 DDiskInstanceGuid = 4;
+}
+
+message TEvSyncWithDDiskResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+
+    repeated TSegmentResult SegmentResults = 3;
 }
 
 message TEvErasePersistentBuffer {
@@ -161,9 +192,21 @@ message TEvErasePersistentBuffer {
     uint64 Lsn = 3;
 }
 
+
+message TEvBatchErasePersistentBuffer {
+    message TEraseInfo {
+        TBlockSelector Selector = 1;
+        uint64 Lsn = 2;
+    }
+    
+    TQueryCredentials Credentials = 1;
+    repeated TEvErasePersistentBuffer Erases = 2;
+}
+
 message TEvErasePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
+    optional double FreeSpace = 3;
 }
 
 message TEvListPersistentBuffer {

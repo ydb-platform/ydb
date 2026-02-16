@@ -1087,7 +1087,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         typedef void(*TFunc)(TInputBuf&, void*);
         auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
         NUdf::TUnboxedValue val;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data: unexpected data length");
     }
 
     Y_UNIT_TEST(TestReadTzInvalidTime) {
@@ -1101,7 +1101,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         typedef void(*TFunc)(TInputBuf&, void*);
         auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
         NUdf::TUnboxedValue val;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data: time point is out of range");
     }
 
     Y_UNIT_TEST(TestReadTzInvalidTz) {
@@ -1121,7 +1121,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
             TReadSetup setup("ReadTzTimestamp", TStringBuf(buf, sizeof(buf)));
             typedef void(*TFunc)(TInputBuf&, void*);
             auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
-            UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp data");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp data: unknown timezone");
         }
         {
             const ui16 validTzId = 587;

@@ -312,7 +312,8 @@
             "Children": [
                 {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList"},
-                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -363,7 +364,8 @@
             "Base": "TKqlUpdateRowsBase",
             "Match": {"Type": "Callable", "Name": "TKqlUpdateRowsIndex"},
             "Children": [
-                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "IsBatch", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -574,7 +576,8 @@
             "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"},
             "Children": [
                 {"Index": 2, "Name": "ReturningColumns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 3, "Name": "IsBatch", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

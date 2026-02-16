@@ -20,13 +20,16 @@ namespace NKikimr::NDDisk {
             EvWriteResult,
             EvRead,
             EvReadResult,
+            EvSyncWithPersistentBuffer,
+            EvSyncWithPersistentBufferResult,
+            EvSyncWithDDisk,
+            EvSyncWithDDiskResult,
             EvWritePersistentBuffer,
             EvWritePersistentBufferResult,
             EvReadPersistentBuffer,
             EvReadPersistentBufferResult,
-            EvFlushPersistentBuffer,
-            EvFlushPersistentBufferResult,
             EvErasePersistentBuffer,
+            EvBatchErasePersistentBuffer,
             EvErasePersistentBufferResult,
             EvListPersistentBuffer,
             EvListPersistentBufferResult,
@@ -164,13 +167,16 @@ namespace NKikimr::NDDisk {
     struct TEvWriteResult;
     struct TEvRead;
     struct TEvReadResult;
+    struct TEvSyncWithPersistentBuffer;
+    struct TEvSyncWithPersistentBufferResult;
+    struct TEvSyncWithDDisk;
+    struct TEvSyncWithDDiskResult;
     struct TEvWritePersistentBuffer;
     struct TEvWritePersistentBufferResult;
     struct TEvReadPersistentBuffer;
     struct TEvReadPersistentBufferResult;
-    struct TEvFlushPersistentBuffer;
-    struct TEvFlushPersistentBufferResult;
     struct TEvErasePersistentBuffer;
+    struct TEvBatchErasePersistentBuffer;
     struct TEvErasePersistentBufferResult;
     struct TEvListPersistentBuffer;
     struct TEvListPersistentBufferResult;
@@ -287,11 +293,12 @@ namespace NKikimr::NDDisk {
         TEvWritePersistentBufferResult() = default;
 
         TEvWritePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
+            Record.SetFreeSpace(freeSpace);
         }
     };
 
@@ -325,41 +332,6 @@ namespace NKikimr::NDDisk {
         }
     };
 
-    DECLARE_DDISK_EVENT(FlushPersistentBuffer) {
-        using TResult = TEvFlushPersistentBufferResult;
-
-        TEvFlushPersistentBuffer() = default;
-
-        TEvFlushPersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
-                std::optional<std::tuple<ui32, ui32, ui32>> ddiskId, std::optional<ui64> ddiskInstanceGuid) {
-            creds.Serialize(Record.MutableCredentials());
-            selector.Serialize(Record.MutableSelector());
-            Record.SetLsn(lsn);
-            if (ddiskId) {
-                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
-                auto *m = Record.MutableDDiskId();
-                m->SetNodeId(nodeId);
-                m->SetPDiskId(pdiskId);
-                m->SetDDiskSlotId(ddiskSlotId);
-            }
-            if (ddiskInstanceGuid) {
-                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
-            }
-        }
-    };
-
-    DECLARE_DDISK_EVENT(FlushPersistentBufferResult) {
-        TEvFlushPersistentBufferResult() = default;
-
-        TEvFlushPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt) {
-            Record.SetStatus(status);
-            if (errorReason) {
-                Record.SetErrorReason(*errorReason);
-            }
-        }
-    };
-
     DECLARE_DDISK_EVENT(ErasePersistentBuffer) {
         using TResult = TEvErasePersistentBufferResult;
 
@@ -372,15 +344,31 @@ namespace NKikimr::NDDisk {
         }
     };
 
+    DECLARE_DDISK_EVENT(BatchErasePersistentBuffer) {
+        using TResult = TEvErasePersistentBufferResult;
+
+        TEvBatchErasePersistentBuffer() = default;
+
+        TEvBatchErasePersistentBuffer(const TQueryCredentials& creds, const std::vector<std::tuple<TBlockSelector, ui64>>& erases) {
+            creds.Serialize(Record.MutableCredentials());
+            for (auto& [selector, lsn] : erases) {
+                auto* erase = Record.AddErases();
+                selector.Serialize(erase->MutableSelector());
+                erase->SetLsn(lsn);
+            }
+        }
+    };
+
     DECLARE_DDISK_EVENT(ErasePersistentBufferResult) {
         TEvErasePersistentBufferResult() = default;
 
         TEvErasePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
+            Record.SetFreeSpace(freeSpace);
         }
     };
 
@@ -402,6 +390,99 @@ namespace NKikimr::NDDisk {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
+
+    DECLARE_DDISK_EVENT(SyncWithPersistentBuffer) {
+        using TResult = TEvSyncWithPersistentBufferResult;
+
+        TEvSyncWithPersistentBuffer() = default;
+
+        TEvSyncWithPersistentBuffer(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
+                std::optional<ui64> ddiskInstanceGuid) {
+            creds.Serialize(Record.MutableCredentials());
+            if (ddiskId) {
+                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
+                auto *m = Record.MutableDDiskId();
+                m->SetNodeId(nodeId);
+                m->SetPDiskId(pdiskId);
+                m->SetDDiskSlotId(ddiskSlotId);
+            }
+            if (ddiskInstanceGuid) {
+                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
+            }
+        }
+
+        void AddSegment(const TBlockSelector& selector, ui64 lsn) {
+            auto *segment = Record.AddSegments();
+            selector.Serialize(segment->MutableSelector());
+            segment->SetLsn(lsn);
+        }
+    };
+
+    DECLARE_DDISK_EVENT(SyncWithPersistentBufferResult) {
+        TEvSyncWithPersistentBufferResult() = default;
+
+        TEvSyncWithPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+
+        void AddSegmentResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
+            auto *result = Record.AddSegmentResults();
+            result->SetStatus(status);
+            if (errorReason) {
+                result->SetErrorReason(errorReason);
+            }
+        }
+    };
+
+    DECLARE_DDISK_EVENT(SyncWithDDisk) {
+        using TResult = TEvSyncWithDDiskResult;
+
+        TEvSyncWithDDisk() = default;
+
+        TEvSyncWithDDisk(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
+                std::optional<ui64> ddiskInstanceGuid) {
+            creds.Serialize(Record.MutableCredentials());
+            if (ddiskId) {
+                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
+                auto *m = Record.MutableDDiskId();
+                m->SetNodeId(nodeId);
+                m->SetPDiskId(pdiskId);
+                m->SetDDiskSlotId(ddiskSlotId);
+            }
+            if (ddiskInstanceGuid) {
+                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
+            }
+        }
+
+        void AddSegment(const TBlockSelector& selector) {
+            auto *segment = Record.AddSegments();
+            selector.Serialize(segment->MutableSelector());
+        }
+    };
+    
+    DECLARE_DDISK_EVENT(SyncWithDDiskResult) {
+        TEvSyncWithDDiskResult() = default;
+
+        TEvSyncWithDDiskResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+
+        void AddSegmentResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
+            auto *result = Record.AddSegmentResults();
+            result->SetStatus(status);
+            if (errorReason) {
+                result->SetErrorReason(errorReason);
             }
         }
     };

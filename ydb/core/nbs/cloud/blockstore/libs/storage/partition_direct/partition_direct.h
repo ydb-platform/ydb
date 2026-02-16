@@ -7,13 +7,11 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-using namespace NYdb::NBS::NProto;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 NActors::TActorId CreatePartitionTablet(
     const NActors::TActorId& owner,
-    TStorageConfig storageConfig,
+    NYdb::NBS::NProto::TStorageConfig storageConfig,
     NKikimrBlockStore::TVolumeConfig volumeConfig
 );
 

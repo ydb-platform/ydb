@@ -175,8 +175,9 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
                     TPath& srcPath)
 {
     const auto isBackupTable = context.SS->IsBackupTable(srcPath->PathId);
+    const EPathCategory pathCategory = isBackupTable ? EPathCategory::Backup : EPathCategory::Regular;
     DecAliveChildrenDirect(operationId, srcPath.Parent().Base(), context, isBackupTable);
-    srcPath.DomainInfo()->DecPathsInside(context.SS, 1, isBackupTable);
+    srcPath.DomainInfo()->DecPathsInside(context.SS, 1, pathCategory);
 
     srcPath->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
@@ -656,8 +657,8 @@ public:
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         return HandleReplyImpl(ev, context);
     }
-};    
-    
+};
+
 class TDone: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -689,7 +690,7 @@ public:
         context.OnComplete.Send(ackTo, std::move(event));
         return false;
     }
-    
+
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         return HandleReplyImpl(ev, context);
     }

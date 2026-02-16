@@ -2,6 +2,22 @@
 
 namespace NKikimr::NKqp::NBatchOperations {
 
+bool IsIndexSupported(NYql::TIndexDescription::EType type, bool enabledIndexStreamWrite) {
+    switch (type) {
+        case NYql::TIndexDescription::EType::GlobalSync:
+        case NYql::TIndexDescription::EType::GlobalAsync:
+            return true;
+        case NYql::TIndexDescription::EType::GlobalSyncUnique:
+            return enabledIndexStreamWrite;
+        case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+        case NYql::TIndexDescription::EType::GlobalFulltextPlain:
+        case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
+            return false;
+    }
+    Y_UNREACHABLE();
+    return false;
+}
+
 TSerializedTableRange MakePartitionRange(TMaybe<TKeyDesc::TPartitionRangeInfo> begin, TMaybe<TKeyDesc::TPartitionRangeInfo> end, size_t keySize) {
     TVector<TCell> tableBegin;
     TVector<TCell> tableEnd;

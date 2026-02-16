@@ -78,31 +78,44 @@ void TSortedPartitioner::TChunkContainer::UpdateKeyRange(const TFmrTableKeysRang
     }
 }
 
-TSortedPartitioner::TFMRTablesChunkPool::TFMRTablesChunkPool(
+TSortedPartitioner::TFmrTablesChunkPool::TFmrTablesChunkPool(
     const std::vector<TFmrTableRef>& inputTables,
     const std::unordered_map<TFmrTableId, std::vector<TString>>& partIdsForTables,
     const std::unordered_map<TString, std::vector<TChunkStats>>& partIdStats,
-    const TSortedPartitionSettings& settings
+    const TSortingColumns& KeyColumns
 )
     : PartIdsForTables_(partIdsForTables)
     , PartIdStats_(partIdStats)
-    , Settings_(settings)
+    , KeyColumns_(KeyColumns)
 {
     InitTableInputs(inputTables);
 }
 
-void TSortedPartitioner::TFMRTablesChunkPool::InitTableInputs(const std::vector<TFmrTableRef>& inputTables) {
+void TSortedPartitioner::TFmrTablesChunkPool::InitTableInputs(const std::vector<TFmrTableRef>& inputTables) {
     TableOrder_.clear();
     TableOrder_.reserve(inputTables.size());
 
     for (const auto& table : inputTables) {
         const TString& tableId = table.FmrTableId.Id;
+        Y_ENSURE(
+            PartIdsForTables_.contains(tableId),
+            "No partitions metadata found for input FMR table: " << tableId);
+
         const auto& partIds = PartIdsForTables_.at(tableId);
+        Y_ENSURE(
+            !partIds.empty(),
+            "SortedPartitioner requires at least one partition for input table: " << tableId);
         TableOrder_.push_back(tableId);
 
         std::vector<TChunkUnit> chunks;
+        ui64 tableChunkCount = 0;
         for (const auto& partId : partIds) {
+            Y_ENSURE(
+                PartIdStats_.contains(partId),
+                "No chunk stats found for partId: " << partId << " (table: " << tableId << ")");
+
             const auto& stats = PartIdStats_.at(partId);
+            tableChunkCount += stats.size();
             for (ui64 chunkIdx = 0; chunkIdx < stats.size(); ++chunkIdx) {
                 const auto& chunk = stats[chunkIdx];
                 Y_ENSURE(chunk.SortedChunkStats.IsSorted, "Every FMR chunk inside SortedPartitioner must be sorted");
@@ -110,8 +123,8 @@ void TSortedPartitioner::TFMRTablesChunkPool::InitTableInputs(const std::vector<
                     ythrow yexception() << "Every FMR chunk inside SortedPartitioner must have first and last key bounds";
                 }
 
-                auto firstBound = MakeKeyBound(chunk.SortedChunkStats.FirstRowKeys, Settings_.KeyColumns);
-                auto lastBound = MakeKeyBound(chunk.SortedChunkStats.LastRowKeys, Settings_.KeyColumns);
+                auto firstBound = MakeKeyBound(chunk.SortedChunkStats.FirstRowKeys, KeyColumns_);
+                auto lastBound = MakeKeyBound(chunk.SortedChunkStats.LastRowKeys, KeyColumns_);
                 TFmrTableKeysRange KeyRange{.IsEmpty = false};
                 KeyRange.SetFirstKeysBound(std::move(firstBound), true);
                 KeyRange.SetLastKeysBound(std::move(lastBound), true);
@@ -125,6 +138,9 @@ void TSortedPartitioner::TFMRTablesChunkPool::InitTableInputs(const std::vector<
                 });
             }
         }
+        Y_ENSURE(
+            tableChunkCount > 0,
+            "SortedPartitioner requires at least one chunk for input table: " << tableId);
 
         std::stable_sort(chunks.begin(), chunks.end(), [](const TChunkUnit& a, const TChunkUnit& b) {
             Y_ENSURE(a.KeyRange.IsFirstKeySet() && b.KeyRange.IsFirstKeySet(), "Chunk key bounds must be set");
@@ -144,23 +160,23 @@ void TSortedPartitioner::TFMRTablesChunkPool::InitTableInputs(const std::vector<
     }
 }
 
-bool TSortedPartitioner::TFMRTablesChunkPool::IsNotEmpty() const {
+bool TSortedPartitioner::TFmrTablesChunkPool::IsNotEmpty() const {
     return std::any_of(TableInputs_.begin(), TableInputs_.end(),
         [](const auto& pair) { return !pair.second.empty(); });
 }
 
-void TSortedPartitioner::TFMRTablesChunkPool::PutBack(TChunkUnit chunk) {
+void TSortedPartitioner::TFmrTablesChunkPool::PutBack(TChunkUnit chunk) {
     TableInputs_[chunk.TableId].push_front(std::move(chunk));
 }
 
-void TSortedPartitioner::TFMRTablesChunkPool::UpdateFilterBoundary(const TString& tableId, const TSortedPartitionerFilterBoundary& FilterBoundary) {
+void TSortedPartitioner::TFmrTablesChunkPool::UpdateFilterBoundary(const TString& tableId, const TSortedPartitionerFilterBoundary& FilterBoundary) {
     auto [it, inserted] = FilterBoundaries_.try_emplace(tableId, FilterBoundary);
     if (!inserted) {
         it->second = GetMaxFilterBoundary(tableId, FilterBoundary);
     }
 }
 
-TMaybe<TSortedPartitionerFilterBoundary> TSortedPartitioner::TFMRTablesChunkPool::GetFilterBoundary(const TString& tableId) const {
+TMaybe<TSortedPartitionerFilterBoundary> TSortedPartitioner::TFmrTablesChunkPool::GetFilterBoundary(const TString& tableId) const {
     auto it = FilterBoundaries_.find(tableId);
     if (it == FilterBoundaries_.end()) {
         return Nothing();
@@ -168,7 +184,7 @@ TMaybe<TSortedPartitionerFilterBoundary> TSortedPartitioner::TFMRTablesChunkPool
     return TMaybe<TSortedPartitionerFilterBoundary>(it->second);
 }
 
-TFmrTableKeysRange TSortedPartitioner::TFMRTablesChunkPool::GetEffectiveKeysRange(const TChunkUnit& chunk) const {
+TFmrTableKeysRange TSortedPartitioner::TFmrTablesChunkPool::GetEffectiveKeysRange(const TChunkUnit& chunk) const {
     auto FilterBoundary = GetFilterBoundary(chunk.TableId);
     if (FilterBoundary.Defined()) {
         auto tmpFilterBoundary = TSortedPartitionerFilterBoundary{.FilterBoundary=*chunk.KeyRange.FirstKeysBound, .IsInclusive=true};
@@ -181,11 +197,11 @@ TFmrTableKeysRange TSortedPartitioner::TFMRTablesChunkPool::GetEffectiveKeysRang
     return chunk.KeyRange;
 }
 
-const std::vector<TString>& TSortedPartitioner::TFMRTablesChunkPool::GetTableOrder() const {
+const std::vector<TString>& TSortedPartitioner::TFmrTablesChunkPool::GetTableOrder() const {
     return TableOrder_;
 }
 
-TMaybe<TSortedPartitioner::TChunkUnit> TSortedPartitioner::TFMRTablesChunkPool::ReadNextChunk(const TString& tableId) {
+TMaybe<TSortedPartitioner::TChunkUnit> TSortedPartitioner::TFmrTablesChunkPool::ReadNextChunk(const TString& tableId) {
     auto it = TableInputs_.find(tableId);
     if (it == TableInputs_.end()) {
         return Nothing();
@@ -200,7 +216,7 @@ TMaybe<TSortedPartitioner::TChunkUnit> TSortedPartitioner::TFMRTablesChunkPool::
     return chunk;
 }
 
-TSortedPartitionerFilterBoundary TSortedPartitioner::TFMRTablesChunkPool::GetMaxFilterBoundary(const TString& tableId, const TSortedPartitionerFilterBoundary& FilterBoundary) const {
+TSortedPartitionerFilterBoundary TSortedPartitioner::TFmrTablesChunkPool::GetMaxFilterBoundary(const TString& tableId, const TSortedPartitionerFilterBoundary& FilterBoundary) const {
     auto it = FilterBoundaries_.find(tableId);
     if (it == FilterBoundaries_.end() || it->second.FilterBoundary < FilterBoundary.FilterBoundary) {
         return FilterBoundary;
@@ -214,7 +230,7 @@ TSortedPartitionerFilterBoundary TSortedPartitioner::TFMRTablesChunkPool::GetMax
     return it->second;
 }
 
-TMaybe<TSortedPartitioner::TSlice> TSortedPartitioner::ReadSlice(TFMRTablesChunkPool& chunkPool) {
+TMaybe<TSortedPartitioner::TSlice> TSortedPartitioner::ReadSlice(TFmrTablesChunkPool& chunkPool) {
     TChunkContainer container;
     std::vector<TFmrTableKeysRange> effectiveRanges;
     effectiveRanges.reserve(chunkPool.GetTableOrder().size());
@@ -344,22 +360,26 @@ TTaskTableInputRef TSortedPartitioner::CreateTaskInputFromSlices(const std::vect
         }
         const auto& chunks = it->second;
 
-        std::unordered_map<TString, TTableRange> byPart;
-        for (const auto& c : chunks) {
-            auto& r = byPart[c.PartId];
-            if (r.PartId.empty()) {
-                r.PartId = c.PartId;
-                r.MinChunk = c.ChunkIndex;
-                r.MaxChunk = c.ChunkIndex + 1;
-            } else {
-                r.MinChunk = std::min(r.MinChunk, c.ChunkIndex);
-                r.MaxChunk = std::max(r.MaxChunk, c.ChunkIndex + 1);
-            }
-        }
         std::vector<TTableRange> tableRanges;
-        tableRanges.reserve(byPart.size());
-        for (auto& [_, r] : byPart) {
-            tableRanges.push_back(std::move(r));
+        tableRanges.reserve(chunks.size());
+        std::unordered_map<TString, size_t> byPartIndex;
+        byPartIndex.reserve(chunks.size());
+        std::unordered_map<TString, std::vector<ui64>> chunkIndexesByPart;
+        chunkIndexesByPart.reserve(chunks.size());
+        for (const auto& c : chunks) {
+            auto [it, inserted] = byPartIndex.try_emplace(c.PartId, tableRanges.size());
+            if (inserted) {
+                tableRanges.push_back(TTableRange{
+                    .PartId = c.PartId,
+                    .MinChunk = c.ChunkIndex,
+                    .MaxChunk = c.ChunkIndex + 1
+                });
+            } else {
+                auto& range = tableRanges[it->second];
+                range.MinChunk = std::min(range.MinChunk, c.ChunkIndex);
+                range.MaxChunk = std::max(range.MaxChunk, c.ChunkIndex + 1);
+            }
+            chunkIndexesByPart[c.PartId].push_back(c.ChunkIndex);
         }
 
         TFmrTableKeysBoundary leftKey = *taskRange.FirstKeysBound;
@@ -398,10 +418,12 @@ TTaskTableInputRef TSortedPartitioner::CreateTaskInputFromSlices(const std::vect
 TSortedPartitioner::TSortedPartitioner(
     const std::unordered_map<TFmrTableId, std::vector<TString>>& partIdsForTables,
     const std::unordered_map<TString, std::vector<TChunkStats>>& partIdStats,
+    TSortingColumns KeyColumns,
     const TSortedPartitionSettings& settings
 )
     : PartIdsForTables_(partIdsForTables)
     , PartIdStats_(partIdStats)
+    , KeyColumns_(std::move(KeyColumns))
     , Settings_(settings)
 {
 }
@@ -428,11 +450,11 @@ std::pair<std::vector<TTaskTableInputRef>, bool> TSortedPartitioner::PartitionTa
 
 std::vector<TTaskTableInputRef> TSortedPartitioner::PartitionFmrTables(const std::vector<TFmrTableRef>& inputTables) {
     Y_ENSURE(Settings_.FmrPartitionSettings.MaxDataWeightPerPart > 0, "MaxDataWeightPerPart must be > 0");
-    Y_ENSURE(!Settings_.KeyColumns.Columns.empty(), "KeyColumns must be set for SortedPartitioner");
+    Y_ENSURE(!KeyColumns_.Columns.empty(), "KeyColumns must be set for SortedPartitioner");
 
     std::vector<TTaskTableInputRef> tasks;
 
-    TFMRTablesChunkPool chunkPool(inputTables, PartIdsForTables_, PartIdStats_, Settings_);
+    TFmrTablesChunkPool chunkPool(inputTables, PartIdsForTables_, PartIdStats_, KeyColumns_);
     const ui64 maxWeight = Settings_.FmrPartitionSettings.MaxDataWeightPerPart;
 
     std::vector<TSlice> currentSlices;

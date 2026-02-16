@@ -619,7 +619,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             if (goodStatuses.empty() || Count(goodStatuses, ev->Status)) {
                 return true;
             } else {
-                LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " recieved not OK, msg# "
+                LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received not OK, msg# "
                         << ev->ToString());
                 IsWorkingNow = false;
                 ctx.Send(ctx.SelfID, new TEvStopTest());
@@ -640,7 +640,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::NODATA})) {
                     return;
                 }
-                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " recieved " << res->ToString());
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
                 Generation = res->BlockedGeneration + 1;
                 IssueTEvBlock(ctx);
             };
@@ -656,12 +656,12 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::ALREADY})) {
                     return;
                 } else if (res->Status == NKikimrProto::EReplyStatus::ALREADY && GroupBlockRetries-- > 0) {
-                    LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " recieved " << res->ToString());
+                    LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
                     IssueTEvBlock(ctx);
                     return;
                 }
 
-                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " recieved " << res->ToString());
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
                 // For work use next generation after blocked
                 ++Generation;
                 IssueLastBlob(ctx);
@@ -701,7 +701,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
-                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " recieved " << res->ToString());
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
                 MakeInitialAllocation(ctx);
             };
 
@@ -782,7 +782,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
-                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " recieved " << res->ToString());
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
 
                 if (IsWorkingNow) {
                     ctx.Send(ctx.SelfID, new TEvStopTest());
@@ -1491,7 +1491,7 @@ public:
         if (TestDuration.Defined()) {
             EarlyStop = TActivationContext::Monotonic() - TestStartTime < TestDuration;
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load tablet recieved PoisonPill, going to die");
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load tablet received PoisonPill, going to die");
         for (auto& writer : TabletWriters) {
             writer->StopWorking(ctx); // Sends TEvStopTest then all garbage is collected
         }

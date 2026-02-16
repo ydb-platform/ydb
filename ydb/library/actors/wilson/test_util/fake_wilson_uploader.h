@@ -114,7 +114,10 @@ namespace NWilson {
         }
 
         void Handle(NWilson::TEvWilson::TPtr ev) {
-            auto& span = ev->Get()->Span;
+            TOtelSpan& span = ev->Get()->Span;
+            TOtelSpan spanCopy;
+            spanCopy.CopyFrom(span);
+            Spans.push_back(std::move(spanCopy));
             const TString &traceId = span.trace_id();
             const TString &spanId = span.span_id();
             const TString &parentSpanId = span.parent_span_id();
@@ -161,7 +164,10 @@ namespace NWilson {
         );
 
     public:
+        using TOtelSpan = opentelemetry::proto::trace::v1::Span;
+
         std::unordered_map<TString, Trace> Traces;
+        std::vector<TOtelSpan> Spans;
 
         TString PrintTraces() const {
             TStringStream str;

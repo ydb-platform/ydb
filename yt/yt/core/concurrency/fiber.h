@@ -78,7 +78,7 @@ private:
     std::atomic<TFiberId> FiberId_ = InvalidFiberId;
 
     // Guarded by State_.
-    TInstant WaitingSince_ = TInstant::Zero();
+    TCpuInstant WaitingSince_ = 0;
     TFls* Fls_ = nullptr;
 
     EFiberState TryLockAsIntrospector() noexcept;

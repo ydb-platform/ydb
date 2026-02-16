@@ -727,8 +727,11 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Table = Arg<1>();
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helperDisabled(TKikimrSettings().SetWithSampleTables(false));
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnshardBool(false);
+        TTestHelper helperDisabled(TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags));
         TTestHelper::TColumnTable col;
+        
         TVector<TTestHelper::TColumnSchema> schema;
 
         TVector<TRow> rows = { { 1, 100, true }, { 2, 200, false } };

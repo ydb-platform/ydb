@@ -2,8 +2,8 @@ r"""
 Terminal escape sequence patterns.
 
 This module provides regex patterns for matching terminal escape sequences. All patterns match
-sequences that begin with ESC (\\x1b). Before calling re.match with these patterns, callers should
-first check that the character at the current position is ESC for optimal performance.
+sequences that begin with ESC (``\x1b``). Before calling re.match with these patterns, callers
+should first check that the character at the current position is ESC for optimal performance.
 """
 # std imports
 import re

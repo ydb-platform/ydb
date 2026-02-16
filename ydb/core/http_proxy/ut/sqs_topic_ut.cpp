@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             {"MessageId", "MessageId"},
         };
 
-        static void CompareCommonSendAndRecievedAttrubutes(const NJson::TJsonValue& jsonSend, const NJson::TJsonValue& jsonReceived, TStringBuf caseName = {}) {
+        static void CompareCommonSendAndReceivedAttrubutes(const NJson::TJsonValue& jsonSend, const NJson::TJsonValue& jsonReceived, TStringBuf caseName = {}) {
             for (const auto& [keyS, keyR] : CommonReceiveMessageAttributes) {
                 UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, keyS), GetByPath<TString>(jsonReceived, keyR), LabeledOutput(keyS, caseName));
             }
@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+            CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
             // Second call during visibility timeout
             jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}, {"VisibilityTimeout", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+            CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
 
             do {
                 Sleep(TDuration::MilliSeconds(350));
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+            CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageGroup, TFixture) {
@@ -1481,5 +1481,30 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
     }
 
+    Y_UNIT_TEST_F(TestPurgeQueue, TFixture) {
+        auto json = PurgeQueue({{"QueueUrl", "unknown-queue-url"}}, 400);
+        //UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ValidationException");
+        //UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Invalid queue url");
+
+        json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-0"}});
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-1"}});
+
+        // All available messages in a queue (including in-flight messages) should be deleted.
+        // Set VisibilityTimeout to large value to be sure the message is in-flight during the test.
+        ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"VisibilityTimeout", 43000}});  // ~12 hours
+
+        //WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+        //    return json["Attributes"]["ApproximateNumberOfMessages"] == "2" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "1";
+        //});
+
+        PurgeQueue({{"QueueUrl", queueUrl}});
+
+        //WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+        //    return json["Attributes"]["ApproximateNumberOfMessages"] == "0" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        //});
+    }
 
 } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy)

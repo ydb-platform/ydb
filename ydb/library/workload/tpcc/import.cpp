@@ -597,7 +597,7 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::p
             || status == EStatus::UNAUTHORIZED || status == EStatus::SCHEME_ERROR;
         if (shouldFail) {
             LOG_E(operationName << " failed: " << result.GetIssues().ToOneLineString());
-            RequestStop();
+            RequestStopWithError();
             return;
         }
 
@@ -609,7 +609,7 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::p
         } else {
             LOG_E(operationName << " failed after " << UPSERT_MAX_RETRIES << " retries: "
                     << result.GetIssues().ToOneLineString());
-            RequestStop();
+            RequestStopWithError();
             return;
         }
     }
@@ -743,6 +743,12 @@ void LoadRange(
 
 //-----------------------------------------------------------------------------
 
+bool IsOperationStarted(TStatus operationStatus) {
+    return operationStatus.IsSuccess() || operationStatus.GetStatus() == EStatus::STATUS_UNDEFINED;
+}
+
+//-----------------------------------------------------------------------------
+
 TOperation::TOperationId CreateIndex(
     NTable::TTableClient& client,
     const TString& path,
@@ -764,14 +770,18 @@ TOperation::TOperationId CreateIndex(
     TOperation::TOperationId operationId;
     auto result = client.RetryOperationSync([&](NTable::TSession session) {
         auto opResult = session.AlterTableLong(tablePath, settings).GetValueSync();
-        if (opResult.Ready() && !opResult.Status().IsSuccess()) {
+        if (IsOperationStarted(opResult.Status())) {
+            operationId = opResult.Id();
+            LOG_I("Started index creation for " << indexName << ": " << operationId.ToString());
+            if (operationId.GetKind() == TOperation::TOperationId::BUILD_INDEX) {
+                return TStatus(EStatus::SUCCESS, NIssue::TIssues());
+            }
+            return opResult.Status();
+        } else {
             LOG_W("Failed to create index " << indexName << " for " << tablePath << ": "
                 << opResult.ToString() << ", retrying");
             return opResult.Status();
-        } else {
-            operationId = opResult.Id();
         }
-        return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     });
 
     if (operationId.GetKind() == TOperation::TOperationId::UNUSED) {
@@ -1051,7 +1061,7 @@ public:
                     auto progress = GetIndexProgress(operationClient, indexState.Id, Log.get());
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
-                        RequestStop();
+                        RequestStopWithError();
                         break;
                     }
                     indexState.Progress = *progress;
@@ -1139,6 +1149,8 @@ public:
 
             LOG_I("TPC-C data import completed successfully in " << duration.ToString()
                   << " (avg: " << avgSpeedMiBsStr << " MiB/s)");
+        } else {
+            ythrow yexception() << "either there was a critical error or user cancelled the import. See the logs.";
         }
     }
 

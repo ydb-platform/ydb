@@ -23,6 +23,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/interop
     library/cpp/random_provider
     library/cpp/time_provider
 

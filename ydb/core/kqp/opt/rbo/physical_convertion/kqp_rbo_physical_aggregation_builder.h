@@ -119,5 +119,5 @@ private:
     // This Map represents a simple physical aggregation functions.
     const THashMap<TString, TString> AggregationFunctionToAggregationCallable{{"sum", "AggrAdd"}, {"min", "AggrMin"}, {"max", "AggrMax"}};
     // The name of the physical aggregation.
-    static constexpr TStringBuf PhysicalAggregationName = "WideCombiner";
+    static constexpr TStringBuf PhysicalAggregationName = "DqPhyHashCombine";
 };

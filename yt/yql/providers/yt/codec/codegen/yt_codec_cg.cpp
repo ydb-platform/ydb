@@ -36,8 +36,20 @@ extern "C" void ThrowBadDecimal() {
     throw yexception() << "Invalid decimal data";
 }
 
-extern "C" void ThrowBadTz(int slot) {
-    throw yexception() << "Invalid " << (NUdf::EDataSlot)slot << " data";
+extern "C" void ThrowBadTz(int slot, EBadTzReason reason) {
+    TStringBuf reasonStr;
+    switch (reason) {
+    case EBadTzReason::BAD_TZ_LENGTH:
+        reasonStr = ": unexpected data length";
+        break;
+    case EBadTzReason::BAD_TZ_TIME:
+        reasonStr = ": time point is out of range";
+        break;
+    case EBadTzReason::BAD_TZ_TIMEZONE:
+        reasonStr = ": unknown timezone";
+        break;
+    }
+    throw yexception() << "Invalid " << static_cast<NUdf::EDataSlot>(slot) << " data" << reasonStr;
 }
 
 extern "C" void YtCodecReadString(void* vbuf, void* vpod) {

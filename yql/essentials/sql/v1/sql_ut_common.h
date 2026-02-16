@@ -2835,6 +2835,42 @@ Y_UNIT_TEST(DuplicateSemicolonsAreAllowedBetweenLambdaStatements) {
     UNIT_ASSERT(SqlToYql(req).IsOk());
 }
 
+Y_UNIT_TEST(ForStatementLangVerFailure) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        FOR $i IN AsList(1,2,3) DO BEGIN
+            SELECT $i;
+        END DO;
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToString(),
+        "FOR without EVALUATE is not available before language version 2025.05");
+}
+
+Y_UNIT_TEST(ForStatementLangVerSuccess) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        FOR $i IN AsList(1,2,3) DO BEGIN
+            SELECT $i;
+        END DO;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(ParallelForStatementLangVer) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        PARALLEL FOR $i IN AsList(1,2,3) DO BEGIN
+            SELECT $i;
+        END DO;
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToString(),
+        "PARALLEL FOR is not available before language version 2025.05");
+}
+
 Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
     NYql::TAstParseResult res1 = SqlToYql(R"foo(SELECT 'a\\';)foo");
     NYql::TAstParseResult res2 = SqlToYql(R"foo(SELECT "a\\";)foo");
@@ -3935,6 +3971,52 @@ Y_UNIT_TEST(AlterTableYtNotSupported) {
                         "<main>:1:19: Error: ALTER TABLE is not supported for yt provider.\n");
 }
 
+Y_UNIT_TEST(AlterTableCompactIsCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table COMPACT;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableCompactWithSettingsIsCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableCompactWithSettingsWrongValues) {
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (cascade = 23, MAX_SHARDS_IN_FLIGHT = 2);
+    )sql", "<main>:3:55: Error: CASCADE value should be a boolean\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, max_shards_in_flight = "abc");
+    )sql", "<main>:3:84: Error: MAX_SHARDS_IN_FLIGHT value should be a Int32\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, some_option = 3);
+    )sql", "<main>:3:87: Error: SOME_OPTION: unknown setting for compact\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, max_shards_in_flight = 5000000000);
+    )sql", "<main>:3:84: Error: MAX_SHARDS_IN_FLIGHT value should be a Int32\n");
+}
+
+Y_UNIT_TEST(AlterTableCompactWithSettingsDuplicatedValues) {
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
+    )sql", "<main>:3:87: Error: Duplicated CASCADE\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, MAX_SHARDS_IN_FLIGHT = 10);
+    )sql", "<main>:3:87: Error: Duplicated MAX_SHARDS_IN_FLIGHT\n");
+}
+
 Y_UNIT_TEST(AlterSequence) {
     UNIT_ASSERT(SqlToYql(R"(
             USE ydb;
@@ -4610,6 +4692,7 @@ Y_UNIT_TEST(LinearAsColumnOrType) {
 Y_UNIT_TEST(CreateTableTrailingComma) {
     UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
     UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32,);").IsOk());
+    UNIT_ASSERT(SqlToYql(R"sql(USE ydb; CREATE TABLE tableName (Key Uint32) WITH (STORE = COLUMN,);)sql").IsOk());
 }
 
 Y_UNIT_TEST(BetweenSymmetric) {
@@ -7036,9 +7119,9 @@ Y_UNIT_TEST(For) {
                   "  select 1;\n"
                   "end define;\n"
                   "\n"
-                  "for $i in ListFromRange(1, 10)\n"
+                  "evaluate for $i in ListFromRange(1, 10)\n"
                   "do $a();";
-    CheckUnused(req, "$i", 5, 5);
+    CheckUnused(req, "$i", 5, 14);
 }
 
 Y_UNIT_TEST(LambdaParams) {
@@ -10466,6 +10549,35 @@ Y_UNIT_TEST(MetricsLevelBadNumericValue) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid numeric value for metrics_value");
 }
+
+Y_UNIT_TEST(TransferCPULimit) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $b($x); }
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+            V_CPU_RATE_LIMIT = 1.5
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTransferWithCPULimit) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        ALTER TRANSFER `TransferName`
+        SET (
+            V_CPU_RATE_LIMIT = 4
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
 } // Y_UNIT_TEST_SUITE(Transfer)
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {
@@ -11677,7 +11789,7 @@ Y_UNIT_TEST(LangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         res.Issues.ToOneLineString(),
-        "YqlSelect is not available before 2025.05");
+        "YqlSelect is not available before language version 2025.05");
 }
 
 Y_UNIT_TEST(AutoTopLevel) {

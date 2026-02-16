@@ -62,6 +62,8 @@ namespace {
         { EMessagingFormat::Concatenated, "Concatenated output stream of messages."}, // TODO(shmel1k@): improve,
         { EMessagingFormat::JsonStreamConcat, "Concatenated Json stream of envelopes with metadata and messages in the ""body"" attribute." }, // TODO(shmel1k@): improve,
         { EMessagingFormat::JsonArray, "Json array of envelopes with metadata and messages in the ""body"" attribute." }, // TODO(shmel1k@): improve,
+        { EMessagingFormat::Csv, "CSV format with header row containing metadata field names." },
+        { EMessagingFormat::Tsv, "TSV format with header row containing metadata field names." },
     };
 } // anonymous namespace
 

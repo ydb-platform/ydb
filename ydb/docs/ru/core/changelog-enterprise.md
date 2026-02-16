@@ -42,7 +42,7 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/27528) [ошибка](https://github.com/ydb-platform/ydb/issues/27193), из-за которой некоторые запросы бенчмарка TPC-H 1000 могли завершаться с ошибкой
 * Исправлен ряд проблем, связанных с инициализацией кластера:
   * [Исправлена](https://github.com/ydb-platform/ydb/pull/25678) [ошибка](https://github.com/ydb-platform/ydb/issues/25023), из-за которой инициализация кластера могла зависать при обязательной авторизации
-  * [Исправлена](https://github.com/ydb-platform/ydb/pull/28886) [проблема](https://github.com/ydb-platform/ydb/issues/27228) из-за которой создание новых баз данных сразу после развёртывания кластера было невозможно в течение нескольких минут
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/28886) [проблема](https://github.com/ydb-platform/ydb/issues/27228), из-за которой создание новых баз данных сразу после развёртывания кластера было невозможно в течение нескольких минут
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/28655) [ошибка](https://github.com/ydb-platform/ydb/issues/28510), при которой мог возникать race condition и клиенты получали ошибку `Could not find correct token validator`, если использовались недавно выданные токены до обновления состояния `LoginProvider`
 
 ## Версия 25.1 {#25-1}

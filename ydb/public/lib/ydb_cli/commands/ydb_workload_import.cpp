@@ -252,7 +252,7 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
         }
     }
 
-    if (Initializer->PostImport() == EXIT_FAILURE) {
+    if (AtomicGet(ErrorsCount) == 0 && Initializer->PostImport() != EXIT_SUCCESS) {
         AtomicIncrement(ErrorsCount);
     }
     return AtomicGet(ErrorsCount) ? EXIT_FAILURE : EXIT_SUCCESS;

@@ -7,7 +7,7 @@ TInFlightController::TInFlightController()
     : LayoutUnitSize(1)
     , TotalSize(0)
     , MaxAllowedSize(MAX_LAYOUT_COUNT)
-    , SlidingWindow(TDuration::Seconds(1), 60)
+    , SlidingWindow(SLIDING_WINDOW_SIZE, SLIDING_WINDOW_UNITS_COUNT)
 {
 }
 
@@ -15,7 +15,7 @@ TInFlightController::TInFlightController(ui64 MaxAllowedSize)
     : LayoutUnitSize(MaxAllowedSize / MAX_LAYOUT_COUNT)
     , TotalSize(0)
     , MaxAllowedSize(MaxAllowedSize)
-    , SlidingWindow(TDuration::Seconds(1), 60)
+    , SlidingWindow(SLIDING_WINDOW_SIZE, SLIDING_WINDOW_UNITS_COUNT)
 {
     if (MaxAllowedSize > 0 && LayoutUnitSize == 0) {
         LayoutUnitSize = 1;

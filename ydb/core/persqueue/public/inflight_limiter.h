@@ -20,8 +20,12 @@ namespace NKikimr::NPQ {
 // 4 - Size 80
 // Then the deque will be [2, 4, 4]
 struct TInFlightController {
+private:
     constexpr static ui64 MAX_LAYOUT_COUNT = 1024;
+    constexpr static TDuration SLIDING_WINDOW_SIZE = TDuration::Seconds(60);
+    constexpr static ui64 SLIDING_WINDOW_UNITS_COUNT = 60;
 
+public:
     TInFlightController();
     TInFlightController(ui64 MaxAllowedSize);
     

@@ -1836,7 +1836,6 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
 }
 
 void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext&) {
-    LOG_D("Handle TEvPQ::TEvUpdateReadMetrics");
     auto inFlightOverflowDuration = ev->Get()->InFlightOverflowDuration;
     if (PartitionCountersLabeled) {
         PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Set(inFlightOverflowDuration.MilliSeconds());

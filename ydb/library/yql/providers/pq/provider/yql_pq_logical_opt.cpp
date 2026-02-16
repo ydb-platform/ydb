@@ -53,18 +53,6 @@ std::unordered_set<TString> GetUsedColumnNames(const TCoExtractMembers& extractM
     return usedColumnNames;
 }
 
-void GetUsedWatermarkColumnNames(const TExprBase& expr, std::unordered_set<TString>& result) {
-    if (const auto maybeMember = expr.Maybe<TCoMember>()) {
-        const auto member = maybeMember.Cast();
-        result.insert(member.Name().StringValue());
-        return;
-    }
-
-    for (const auto& child : expr.Raw()->Children()) {
-        GetUsedWatermarkColumnNames(TExprBase(child), result);
-    }
-}
-
 TVector<TCoNameValueTuple> DropUnusedMetadata(const TPqTopic& pqTopic, const std::unordered_set<TString>& usedColumnNames) {
     TVector<TCoNameValueTuple> newSourceMetadata;
     for (auto metadataItem : pqTopic.Metadata()) {
@@ -205,11 +193,6 @@ public:
         const auto& pqTopic = dqPqTopicSource.Topic();
 
         auto usedColumnNames = GetUsedColumnNames(extractMembers);
-        if (const auto maybeWatermark = dqPqTopicSource.Watermark()) {
-            const auto watermark = maybeWatermark.Cast();
-            GetUsedWatermarkColumnNames(watermark, usedColumnNames);
-        }
-
         const TStructExprType* inputRowType = pqTopic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         const TStructExprType* outputRowType = node.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         if (outputRowType->GetSize() == 0 && inputRowType->GetSize() > 0) {

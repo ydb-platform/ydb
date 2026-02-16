@@ -244,6 +244,15 @@ public:
             if (!EnsureSpecificDataType(*watermark, EDataSlot::Timestamp, ctx, true)) {
                 return TStatus::Error;
             }
+
+            const TCoLambda lambda(watermark);
+            const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
+            const auto lambdaBody = lambda.Body();
+            if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
+                ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), TStringBuilder()
+                    << "Bad watermark expression"));
+                return TStatus::Error;
+            }
         }
 
         input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
@@ -298,27 +307,8 @@ public:
         }
 
         if (TDqPqTopicSource::idx_Watermark < input->ChildrenSize()) {
-            auto& watermark = input->ChildRef(TDqPqTopicSource::idx_Watermark);
-            const auto status = ConvertToLambda(watermark, ctx, 1, 1);
-            if (status != TStatus::Ok) {
-                return status;
-            }
-            if (!UpdateLambdaAllArgumentsTypes(watermark, {rowType->GetTypeAnn()->Cast<TTypeExprType>()->GetType()}, ctx)) {
-                return TStatus::Error;
-            }
-            if (!watermark->GetTypeAnn()) {
-                return TStatus::Repeat;
-            }
-            if (!EnsureSpecificDataType(*watermark, EDataSlot::Timestamp, ctx, true)) {
-                return TStatus::Error;
-            }
-
-            const TCoLambda lambda(watermark);
-            const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
-            const auto lambdaBody = lambda.Body();
-            if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
-                ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), TStringBuilder()
-                    << "Bad watermark expression"));
+            const auto watermark = input->Child(TDqPqTopicSource::idx_Watermark);
+            if (!EnsureAtom(*watermark, ctx)) {
                 return TStatus::Error;
             }
         }

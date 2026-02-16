@@ -11,7 +11,7 @@
 (let $10 '('"UseSsl" '"1"))
 (let $11 '('('"Consumer" '"test_client") $8 $9 '('"ReconnectPeriod" '"") '('"Format" '"raw") '('"ReadGroup" '"fqrun") $10))
 (let $12 (SecureParam '"cluster:default_pq"))
-(let $13 (DqPqTopicSource $3 $7 '('"Data") $11 $12 '"" $6))
+(let $13 (DqPqTopicSource $3 $7 '('"Data") $11 $12 '"" $6 '""))
 (let $14 (DataSink '"pq" '"pq"))
 (let $15 (PqTopic '"pq" '"local" '"test_topic_output" $5 '() $6))
 (let $16 (DqPqTopicSink $15 '($8 $10) $12))

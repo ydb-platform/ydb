@@ -75,7 +75,7 @@
                 {"Index": 4, "Name": "Token", "Type": "TCoSecureParam"},
                 {"Index": 5, "Name": "FilterPredicate", "Type": "TCoAtom"},
                 {"Index": 6, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 7, "Name": "Watermark", "Type": "TCoLambda", "Optional": true}
+                {"Index": 7, "Name": "Watermark", "Type": "TCoAtom"}
             ]
         },
         {

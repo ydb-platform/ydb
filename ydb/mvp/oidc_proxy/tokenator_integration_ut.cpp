@@ -68,7 +68,7 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
     jwt->SetAuthMethod(ctx.JwtAuthMethod);
     jwt->SetName("nebiusJwt");
     jwt->SetAccountId(ctx.SaId);
-    jwt->SetToken(ctx.JwtToken);
+    jwt->SetFederatedJwtToken(ctx.JwtToken);
     jwt->SetEndpoint(endpoint);
 
     const TString fixedIamToken = "iam_from_tokenator";

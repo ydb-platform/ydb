@@ -287,7 +287,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                     break;
                 }
                 case NMvp::TJwtInfo::federated_creds: {
-                    auto fToken = jwtInfo->federated_jwt_token();
+                    auto fToken = jwtInfo->federatedjwttoken();
                     request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
                     request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
                     request.set_subject_token_type("urn:nebius:params:oauth:token-type:subject_identifier");
@@ -297,7 +297,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                     break;
                 }
                 default:
-                    ythrow yexception() << "Unsupported JWT auth method: " << jwtInfo->authmethod();
+                    ythrow yexception() << "Unsupported JWT auth method: " << static_cast<int>(jwtInfo->authmethod());
             }
 
             RequestCreateToken<nebius::iam::v1::TokenExchangeService,

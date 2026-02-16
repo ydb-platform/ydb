@@ -2144,8 +2144,11 @@ private:
         if (Request.SaveQueryPhysicalGraph) {
             SavePhysicalGraph();
         } else {
+            // TODO: don't resolve shards here.
             ResolveShards();
         }
+
+        // TODO: go to proper state.
     }
 
     void SavePhysicalGraph() {
@@ -2179,8 +2182,7 @@ private:
             }
 
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
-            auto kqpShardsResolver = CreateKqpShardsResolver(
-                SelfId(), TxId, TasksGraph.GetMeta().UseFollowers, std::move(shardIds));
+            auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), TxId, TasksGraph.GetMeta().UseFollowers, std::move(shardIds));
             RegisterWithSameMailbox(kqpShardsResolver);
             Become(&TKqpDataExecuter::WaitResolveState);
         } else {

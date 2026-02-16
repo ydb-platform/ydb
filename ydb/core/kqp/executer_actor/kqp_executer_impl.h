@@ -149,7 +149,6 @@ public:
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
-        , HasOlapTable(false)
         , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(executerConfig.TableServiceConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
@@ -284,6 +283,7 @@ protected:
             KQP_STLOG_D(KQPEX, sb,
                 (trace_id, TraceId()));
         }
+
         return true;
     }
 
@@ -1640,7 +1640,7 @@ protected:
     const TGUCSettings::TPtr GUCSettings;
 
     TActorId BufferActorId;
-    IKqpTransactionManagerPtr TxManager;
+    IKqpTransactionManagerPtr TxManager; // used by Data executer
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NFormats::TFormatsSettings FormatsSettings;
@@ -1682,8 +1682,8 @@ protected:
 
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
-    bool HasOlapTable = false;
-    bool HasDatashardSourceScan = false;
+    bool HasOlapTable = false;              // used by Data executer
+    bool HasDatashardSourceScan = false;    // used by Data executer
     bool UnknownAffectedShardCount = false; // used by Data executer
 
     THashMap<ui64, TActorId> ResultChannelToComputeActor;

@@ -94,6 +94,7 @@ void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, const NYql::ERequestSort
         // Validate parameters
         YQL_ENSURE(taskMeta.ReadInfo.ItemsLimit == itemsLimit);
         YQL_ENSURE(taskMeta.ReadInfo.GetSorting() == sorting);
+        // TODO: why no check for ReadType?
         return;
     }
 
@@ -1660,6 +1661,9 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
             NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
             YQL_ENSURE(taskInfo.GetMeta().UnpackTo(&meta), "Failed to parse task meta");
 
+            // TODO: this affects setting proper metadata for Scan tasks,
+            //       but can't be replaced with `Type = Scan` because it will run the logic of binding task to node,
+            //       which is not implemented for restored graph.
             newTask.Meta.ScanTask = true;
 
             if (meta.HasEnableShardsSequentialScan()) {
@@ -2187,7 +2191,7 @@ std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetSca
 
 void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats) {
     THashMap<ui64, std::vector<ui64>> nodeTasks;
-    THashMap<ui64, std::vector<TShardInfoWithId>> nodeShards;
+    THashMap<ui64 /* nodeId */, std::vector<TShardInfoWithId>> nodeShards;
     THashMap<ui64, ui64> assignedShardsCount;
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -2708,21 +2712,22 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     THashMap<ui64, std::vector<ui64>> nodeTasks;
     THashMap<ui64, ui64> assignedShardsCount;
 
-    auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+    const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
     bool singlePartitionedStage = stage.GetIsSinglePartition();
 
+    // TODO: describe in comments the exact expected stage state.
     YQL_ENSURE(stage.GetSources(0).HasReadRangesSource());
     YQL_ENSURE(stage.GetSources(0).GetInputIndex() == 0 && stage.SourcesSize() == 1);
-    for (auto& input : stage.inputs()) {
+    for (const auto& input : stage.GetInputs()) {
         YQL_ENSURE(input.HasBroadcast());
     }
 
-    auto& source = stage.GetSources(0).GetReadRangesSource();
-
+    const auto& source = stage.GetSources(0).GetReadRangesSource();
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
     const auto& keyTypes = tableInfo->KeyColumnTypes;
 
+    // TODO: what is the difference with `stageInfo.Meta.IsOlap()`?
     YQL_ENSURE(tableInfo->TableKind != NKikimr::NKqp::ETableKind::Olap);
 
     auto columns = BuildKqpColumns(source, tableInfo);
@@ -2942,6 +2947,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
 
     if (!partitions.empty() && (isSequentialInFlight || singlePartitionedStage)) {
+        // TODO: try to get rid of PartitionPruner here.
         auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
 
         if (stats) {
@@ -2955,16 +2961,15 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             inFlightShards = source.GetSequentialInFlightShards();
         }
 
-        if (shardInfo.KeyReadRanges) {
+        Y_ENSURE(shardInfo.KeyReadRanges); // TODO: redundant check - remove later.
+
             const TMaybe<ui64> nodeId = singlePartitionedStage ? TMaybe<ui64>{GetMeta().ExecuterId.NodeId()} : Nothing();
             addPartition(startShard, nodeId, false, shardInfo, inFlightShards, TTaskType::SINGLE_SOURCE_SCAN);
             fillRangesForTasks();
+
             return singlePartitionedStage ? TMaybe<size_t>(partitions.size()) : Nothing();
         } else {
-            return 0;
-        }
-    } else {
-        for (auto& [shardId, shardInfo] : partitions) {
+        for (const auto& [shardId, shardInfo] : partitions) {
             addPartition(shardId, {}, true, shardInfo, {}, TTaskType::DEFAULT_SOURCE_SCAN);
         }
         fillRangesForTasks();
@@ -3177,6 +3182,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             if (buildFromSourceTasks) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource: {
+                        // TODO: is this case only for reading OLTP table with datashards?
                         if (auto partitionsCount = BuildScanTasksFromSource(stageInfo, limitTasksPerNode, stats)) {
                             sourceScanPartitionsCount += *partitionsCount;
                         } else {

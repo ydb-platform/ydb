@@ -28,7 +28,6 @@ private:
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
     YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
-    YDB_READONLY_DEF(ui64, QuerySpanId);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
@@ -127,7 +126,6 @@ private:
 
     YDB_READONLY_DEF(ui64, LockTxId);
     YDB_READONLY_DEF(ui32, LockNodeId);
-    YDB_READONLY_DEF(ui64, QuerySpanId);
 
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
@@ -246,10 +244,6 @@ public:
 
     ui32 LockNodeId() const override {
         return WriteTx ? WriteTx->GetLockNodeId() : 0;
-    }
-
-    ui64 QuerySpanId() const override {
-        return WriteTx ? WriteTx->GetQuerySpanId() : 0;
     }
 
     bool HasLockedWrites() const override {

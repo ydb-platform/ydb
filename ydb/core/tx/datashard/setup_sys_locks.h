@@ -43,7 +43,6 @@ struct TSetupSysLocks
     {
         LockTxId = op->LockTxId();
         LockNodeId = op->LockNodeId();
-        QuerySpanId = op->QuerySpanId();
 
         auto mvccVersion = self.GetMvccVersion(op.Get());
 

@@ -1208,16 +1208,6 @@ public:
             evWrite->Record.SetLockMode(LockMode);
         }
 
-        // Use the first batch's QuerySpanId for this shard. When batches from
-        // multiple queries are combined into a single EvWrite, we use the SpanId
-        // from the first batch (the earliest writer), which is the correct one
-        // for lock-break attribution (the earliest writer causes the conflict).
-        {
-            const ui64 spanId = ShardedWriteController->GetFirstBatchQuerySpanId(shardId);
-            if (spanId != 0) {
-                evWrite->Record.SetQuerySpanId(spanId);
-            }
-        }
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
@@ -3761,10 +3751,6 @@ public:
             // BreakerQuerySpanId comes from TxManager (set by per-table write actors), not this actor
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             evWrite->Record.SetOverloadSubscribe(++ExternalShardIdToOverloadSeqNo[shardId]);
-        }
-
-        if (QuerySpanId != 0) {
-            evWrite->Record.SetQuerySpanId(QuerySpanId);
         }
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "BufferActor");

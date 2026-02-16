@@ -52,10 +52,6 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     const NKikimrDataEvents::TEvWrite& record = ev.Record;
 
-    if (record.HasQuerySpanId()) {
-        QuerySpanId = record.GetQuerySpanId();
-    }
-
     if (record.GetLockTxId()) {
         LockTxId = record.GetLockTxId();
         LockNodeId = record.GetLockNodeId();
@@ -231,10 +227,6 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         }
     }
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
-
-    if (recordOperation.HasQuerySpanId()) {
-        QuerySpanId = recordOperation.GetQuerySpanId();
-    }
 
     SetTxKeys(tableInfo, tabletId, keyValidator);
 

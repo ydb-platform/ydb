@@ -16,6 +16,7 @@ items:
 - { name: BATCH UPDATE,                 href: batch-update.md,               when: feature_batch_operations }
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md,   when: feature_async_replication }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
+- { name: CREATE EXTERNAL DATA SOURCE,  href: create-external-data-source.md, when: feature_federated_queries }
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
 - { name: CREATE SECRET,                 href: create-secret.md}
 - { name: CREATE TABLE,                 include: { mode: link,               path: create_table/toc_p.yaml } }

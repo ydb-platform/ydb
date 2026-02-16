@@ -1000,7 +1000,7 @@ def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
 def on_ts_library_configure(unit: NotsUnitType) -> None:
     import lib.nots.package_manager.constants as constants
 
-    ts_outputs = unit.get("_TS_OUTPUTS")
+    ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
 
     if not ts_outputs:
         ymake.report_configure_error(
@@ -1020,6 +1020,16 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
         if nm_bundle_needed:
             nm_output = _build_directives(["hide", "output"], [constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME])
             unit.set(["_NODE_MODULES_BUNDLE_ARG", f"--nm-bundle yes {nm_output}"])
+
+    pj_files = set(pj.get_files())
+    missing_outputs = set(ts_outputs) - pj_files
+
+    if missing_outputs:
+        ymake.report_configure_error(
+            "\n"
+            f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
+            f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
+        )
 
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":

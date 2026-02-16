@@ -3118,7 +3118,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithResolvedTimestamps(TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStream::ResolvedTimestampsIntervalMs>(0)))
                     .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStream::SchemaChanges>(false))
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStream::AwsRegion>())
-                    .WithState(rowset.GetValue<Schema::CdcStream::State>());
+                    .WithState(rowset.GetValue<Schema::CdcStream::State>())
+                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStream::UserSIDs>(false));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3164,7 +3165,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithResolvedTimestamps(TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::ResolvedTimestampsIntervalMs>(0)))
                     .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::SchemaChanges>(false))
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>())
-                    .WithState(rowset.GetValue<Schema::CdcStreamAlterData::State>());
+                    .WithState(rowset.GetValue<Schema::CdcStreamAlterData::State>())
+                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::UserSIDs>(false));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -4302,9 +4304,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             if (!path->IsRoot()) {
-                const bool isBackupTable = Self->IsBackupTable(item.first);
+                bool isBackupTable = Self->IsBackupTable(item.first);
+                EPathCategory pathCategory;
+                if (isBackupTable) {
+                    pathCategory = EPathCategory::Backup;
+                } else if (path->IsSystemDirectory() || path->IsSysView()) {
+                    pathCategory = EPathCategory::System;
+                } else {
+                    pathCategory = EPathCategory::Regular;
+                }
+
                 parent->IncAliveChildrenPrivate(isBackupTable);
-                inclusiveDomainInfo->IncPathsInside(Self, 1, isBackupTable);
+                inclusiveDomainInfo->IncPathsInside(Self, 1, pathCategory);
             }
 
             Self->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(path->UserAttrs->Size());
@@ -4652,6 +4663,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Ydb::Topic::CreateTopicRequest topic;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(topic, rowset.GetValue<Schema::ImportItems::Topic>()));
                         item.Topic = topic;
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::SysView>()) {
+                        Ydb::Table::DescribeSystemViewResult sysView;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(sysView, rowset.GetValue<Schema::ImportItems::SysView>()));
+                        item.SysView = sysView;
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
@@ -5116,7 +5133,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         }
                     }
                 }
-                
+
                 if (rowset.HaveValue<Schema::ColumnTables::IsRestore>()) {
                     tableInfo->IsRestore = rowset.GetValue<Schema::ColumnTables::IsRestore>();
                 }

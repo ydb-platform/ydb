@@ -94,6 +94,7 @@ __all__ = [
 
 import __future__
 import difflib
+import functools
 import inspect
 import linecache
 import os
@@ -104,8 +105,26 @@ import traceback
 import unittest
 from io import StringIO, IncrementalNewlineDecoder
 from collections import namedtuple
+import _colorize  # Used in doctests
+from _colorize import ANSIColors, can_colorize
 
-TestResults = namedtuple('TestResults', 'failed attempted')
+
+class TestResults(namedtuple('TestResults', 'failed attempted')):
+    def __new__(cls, failed, attempted, *, skipped=0):
+        results = super().__new__(cls, failed, attempted)
+        results.skipped = skipped
+        return results
+
+    def __repr__(self):
+        if self.skipped:
+            return (f'TestResults(failed={self.failed}, '
+                    f'attempted={self.attempted}, '
+                    f'skipped={self.skipped})')
+        else:
+            # Leave the repr() unchanged for backward compatibility
+            # if skipped is zero
+            return super().__repr__()
+
 
 # There are 4 basic classes:
 #  - Example: a <source, want> pair, plus an intra-docstring line number.
@@ -1125,7 +1144,9 @@ class DocTestFinder:
         if inspect.ismethod(obj): obj = obj.__func__
         if isinstance(obj, property):
             obj = obj.fget
-        if inspect.isfunction(obj) and getattr(obj, '__doc__', None):
+        if isinstance(obj, functools.cached_property):
+            obj = obj.func
+        if inspect.isroutine(obj) and getattr(obj, '__doc__', None):
             # We don't use `docstring` var here, because `obj` can be changed.
             obj = inspect.unwrap(obj)
             try:
@@ -1164,8 +1185,10 @@ class DocTestRunner:
     """
     A class used to run DocTest test cases, and accumulate statistics.
     The `run` method is used to process a single DocTest case.  It
-    returns a tuple `(f, t)`, where `t` is the number of test cases
-    tried, and `f` is the number of test cases that failed.
+    returns a TestResults instance.
+
+        >>> save_colorize = _colorize.COLORIZE
+        >>> _colorize.COLORIZE = False
 
         >>> tests = DocTestFinder().find(_TestClass)
         >>> runner = DocTestRunner(verbose=False)
@@ -1178,26 +1201,28 @@ class DocTestRunner:
         _TestClass.square -> TestResults(failed=0, attempted=1)
 
     The `summarize` method prints a summary of all the test cases that
-    have been run by the runner, and returns an aggregated `(f, t)`
-    tuple:
+    have been run by the runner, and returns an aggregated TestResults
+    instance:
 
         >>> runner.summarize(verbose=1)
         4 items passed all tests:
            2 tests in _TestClass
            2 tests in _TestClass.__init__
            2 tests in _TestClass.get
-           1 tests in _TestClass.square
+           1 test in _TestClass.square
         7 tests in 4 items.
-        7 passed and 0 failed.
+        7 passed.
         Test passed.
         TestResults(failed=0, attempted=7)
 
-    The aggregated number of tried examples and failed examples is
-    also available via the `tries` and `failures` attributes:
+    The aggregated number of tried examples and failed examples is also
+    available via the `tries`, `failures` and `skips` attributes:
 
         >>> runner.tries
         7
         >>> runner.failures
+        0
+        >>> runner.skips
         0
 
     The comparison between expected outputs and actual outputs is done
@@ -1215,6 +1240,8 @@ class DocTestRunner:
     can be also customized by subclassing DocTestRunner, and
     overriding the methods `report_start`, `report_success`,
     `report_unexpected_exception`, and `report_failure`.
+
+        >>> _colorize.COLORIZE = save_colorize
     """
     # This divider string is used to separate failure messages, and to
     # separate sections of the summary.
@@ -1247,7 +1274,8 @@ class DocTestRunner:
         # Keep track of the examples we've run.
         self.tries = 0
         self.failures = 0
-        self._name2ft = {}
+        self.skips = 0
+        self._stats = {}
 
         # Create a fake output target for capturing doctest output.
         self._fakeout = _SpoofOut()
@@ -1292,7 +1320,10 @@ class DocTestRunner:
             'Exception raised:\n' + _indent(_exception_traceback(exc_info)))
 
     def _failure_header(self, test, example):
-        out = [self.DIVIDER]
+        red, reset = (
+            (ANSIColors.RED, ANSIColors.RESET) if can_colorize() else ("", "")
+        )
+        out = [f"{red}{self.DIVIDER}{reset}"]
         if test.filename:
             if test.lineno is not None and example.lineno is not None:
                 lineno = test.lineno + example.lineno + 1
@@ -1316,13 +1347,11 @@ class DocTestRunner:
         Run the examples in `test`.  Write the outcome of each example
         with one of the `DocTestRunner.report_*` methods, using the
         writer function `out`.  `compileflags` is the set of compiler
-        flags that should be used to execute examples.  Return a tuple
-        `(f, t)`, where `t` is the number of examples tried, and `f`
-        is the number of examples that failed.  The examples are run
-        in the namespace `test.globs`.
+        flags that should be used to execute examples.  Return a TestResults
+        instance.  The examples are run in the namespace `test.globs`.
         """
-        # Keep track of the number of failures and tries.
-        failures = tries = 0
+        # Keep track of the number of failed, attempted, skipped examples.
+        failures = attempted = skips = 0
 
         # Save the option flags (since option directives can be used
         # to modify them).
@@ -1334,6 +1363,7 @@ class DocTestRunner:
 
         # Process each example.
         for examplenum, example in enumerate(test.examples):
+            attempted += 1
 
             # If REPORT_ONLY_FIRST_FAILURE is set, then suppress
             # reporting after the first failure.
@@ -1351,10 +1381,10 @@ class DocTestRunner:
 
             # If 'SKIP' is set, then skip this example.
             if self.optionflags & SKIP:
+                skips += 1
                 continue
 
             # Record that we started this example.
-            tries += 1
             if not quiet:
                 self.report_start(out, test, example)
 
@@ -1449,19 +1479,22 @@ class DocTestRunner:
         # Restore the option flags (in case they were modified)
         self.optionflags = original_optionflags
 
-        # Record and return the number of failures and tries.
-        self.__record_outcome(test, failures, tries)
-        return TestResults(failures, tries)
+        # Record and return the number of failures and attempted.
+        self.__record_outcome(test, failures, attempted, skips)
+        return TestResults(failures, attempted, skipped=skips)
 
-    def __record_outcome(self, test, f, t):
+    def __record_outcome(self, test, failures, tries, skips):
         """
-        Record the fact that the given DocTest (`test`) generated `f`
-        failures out of `t` tried examples.
+        Record the fact that the given DocTest (`test`) generated `failures`
+        failures out of `tries` tried examples.
         """
-        f2, t2 = self._name2ft.get(test.name, (0,0))
-        self._name2ft[test.name] = (f+f2, t+t2)
-        self.failures += f
-        self.tries += t
+        failures2, tries2, skips2 = self._stats.get(test.name, (0, 0, 0))
+        self._stats[test.name] = (failures + failures2,
+                                  tries + tries2,
+                                  skips + skips2)
+        self.failures += failures
+        self.tries += tries
+        self.skips += skips
 
     __LINECACHE_FILENAME_RE = re.compile(r'<doctest '
                                          r'(?P<name>.+)'
@@ -1530,7 +1563,11 @@ class DocTestRunner:
         # Make sure sys.displayhook just prints the value to stdout
         save_displayhook = sys.displayhook
         sys.displayhook = sys.__displayhook__
-
+        saved_can_colorize = _colorize.can_colorize
+        _colorize.can_colorize = lambda *args, **kwargs: False
+        color_variables = {"PYTHON_COLORS": None, "FORCE_COLOR": None}
+        for key in color_variables:
+            color_variables[key] = os.environ.pop(key, None)
         try:
             return self.__run(test, compileflags, out)
         finally:
@@ -1539,6 +1576,10 @@ class DocTestRunner:
             sys.settrace(save_trace)
             linecache.getlines = self.save_linecache_getlines
             sys.displayhook = save_displayhook
+            _colorize.can_colorize = saved_can_colorize
+            for key, value in color_variables.items():
+                if value is not None:
+                    os.environ[key] = value
             if clear_globs:
                 test.globs.clear()
                 import builtins
@@ -1550,9 +1591,7 @@ class DocTestRunner:
     def summarize(self, verbose=None):
         """
         Print a summary of all the test cases that have been run by
-        this DocTestRunner, and return a tuple `(f, t)`, where `f` is
-        the total number of failed examples, and `t` is the total
-        number of tried examples.
+        this DocTestRunner, and return a TestResults instance.
 
         The optional `verbose` argument controls how detailed the
         summary is.  If the verbosity is not specified, then the
@@ -1560,66 +1599,98 @@ class DocTestRunner:
         """
         if verbose is None:
             verbose = self._verbose
-        notests = []
-        passed = []
-        failed = []
-        totalt = totalf = 0
-        for x in self._name2ft.items():
-            name, (f, t) = x
-            assert f <= t
-            totalt += t
-            totalf += f
-            if t == 0:
+
+        notests, passed, failed = [], [], []
+        total_tries = total_failures = total_skips = 0
+
+        for name, (failures, tries, skips) in self._stats.items():
+            assert failures <= tries
+            total_tries += tries
+            total_failures += failures
+            total_skips += skips
+
+            if tries == 0:
                 notests.append(name)
-            elif f == 0:
-                passed.append( (name, t) )
+            elif failures == 0:
+                passed.append((name, tries))
             else:
-                failed.append(x)
+                failed.append((name, (failures, tries, skips)))
+
+        ansi = _colorize.get_colors()
+        bold_green = ansi.BOLD_GREEN
+        bold_red = ansi.BOLD_RED
+        green = ansi.GREEN
+        red = ansi.RED
+        reset = ansi.RESET
+        yellow = ansi.YELLOW
+
         if verbose:
             if notests:
-                print(len(notests), "items had no tests:")
+                print(f"{_n_items(notests)} had no tests:")
                 notests.sort()
-                for thing in notests:
-                    print("   ", thing)
+                for name in notests:
+                    print(f"    {name}")
+
             if passed:
-                print(len(passed), "items passed all tests:")
-                passed.sort()
-                for thing, count in passed:
-                    print(" %3d tests in %s" % (count, thing))
+                print(f"{green}{_n_items(passed)} passed all tests:{reset}")
+                for name, count in sorted(passed):
+                    s = "" if count == 1 else "s"
+                    print(f" {green}{count:3d} test{s} in {name}{reset}")
+
         if failed:
-            print(self.DIVIDER)
-            print(len(failed), "items had failures:")
-            failed.sort()
-            for thing, (f, t) in failed:
-                print(" %3d of %3d in %s" % (f, t, thing))
+            print(f"{red}{self.DIVIDER}{reset}")
+            print(f"{_n_items(failed)} had failures:")
+            for name, (failures, tries, skips) in sorted(failed):
+                print(f" {failures:3d} of {tries:3d} in {name}")
+
         if verbose:
-            print(totalt, "tests in", len(self._name2ft), "items.")
-            print(totalt - totalf, "passed and", totalf, "failed.")
-        if totalf:
-            print("***Test Failed***", totalf, "failures.")
+            s = "" if total_tries == 1 else "s"
+            print(f"{total_tries} test{s} in {_n_items(self._stats)}.")
+
+            and_f = (
+                f" and {red}{total_failures} failed{reset}"
+                if total_failures else ""
+            )
+            print(f"{green}{total_tries - total_failures} passed{reset}{and_f}.")
+
+        if total_failures:
+            s = "" if total_failures == 1 else "s"
+            msg = f"{bold_red}***Test Failed*** {total_failures} failure{s}{reset}"
+            if total_skips:
+                s = "" if total_skips == 1 else "s"
+                msg = f"{msg} and {yellow}{total_skips} skipped test{s}{reset}"
+            print(f"{msg}.")
         elif verbose:
-            print("Test passed.")
-        return TestResults(totalf, totalt)
+            print(f"{bold_green}Test passed.{reset}")
+
+        return TestResults(total_failures, total_tries, skipped=total_skips)
 
     #/////////////////////////////////////////////////////////////////
     # Backward compatibility cruft to maintain doctest.master.
     #/////////////////////////////////////////////////////////////////
     def merge(self, other):
-        d = self._name2ft
-        for name, (f, t) in other._name2ft.items():
+        d = self._stats
+        for name, (failures, tries, skips) in other._stats.items():
             if name in d:
-                # Don't print here by default, since doing
-                #     so breaks some of the buildbots
-                #print("*** DocTestRunner.merge: '" + name + "' in both" \
-                #    " testers; summing outcomes.")
-                f2, t2 = d[name]
-                f = f + f2
-                t = t + t2
-            d[name] = f, t
+                failures2, tries2, skips2 = d[name]
+                failures = failures + failures2
+                tries = tries + tries2
+                skips = skips + skips2
+            d[name] = (failures, tries, skips)
+
+
+def _n_items(items: list | dict) -> str:
+    """
+    Helper to pluralise the number of items in a list.
+    """
+    n = len(items)
+    s = "" if n == 1 else "s"
+    return f"{n} item{s}"
+
 
 class OutputChecker:
     """
-    A class used to check the whether the actual output from a doctest
+    A class used to check whether the actual output from a doctest
     example matches the expected output.  `OutputChecker` defines two
     methods: `check_output`, which compares a given pair of outputs,
     and returns true if they match; and `output_difference`, which
@@ -1924,8 +1995,8 @@ def testmod(m=None, name=None, globs=None, verbose=None,
     from module m (or the current module if m is not supplied), starting
     with m.__doc__.
 
-    Also test examples reachable from dict m.__test__ if it exists and is
-    not None.  m.__test__ maps names to functions, classes and strings;
+    Also test examples reachable from dict m.__test__ if it exists.
+    m.__test__ maps names to functions, classes and strings;
     function and class docstrings are tested even if the name is private;
     strings are tested directly, as if they were docstrings.
 
@@ -2015,7 +2086,8 @@ def testmod(m=None, name=None, globs=None, verbose=None,
     else:
         master.merge(runner)
 
-    return TestResults(runner.failures, runner.tries)
+    return TestResults(runner.failures, runner.tries, skipped=runner.skips)
+
 
 def testfile(filename, module_relative=True, name=None, package=None,
              globs=None, verbose=None, report=True, optionflags=0,
@@ -2138,7 +2210,8 @@ def testfile(filename, module_relative=True, name=None, package=None,
     else:
         master.merge(runner)
 
-    return TestResults(runner.failures, runner.tries)
+    return TestResults(runner.failures, runner.tries, skipped=runner.skips)
+
 
 def run_docstring_examples(f, globs, verbose=False, name="NoName",
                            compileflags=None, optionflags=0):
@@ -2250,12 +2323,13 @@ class DocTestCase(unittest.TestCase):
 
         try:
             runner.DIVIDER = "-"*70
-            failures, tries = runner.run(
-                test, out=new.write, clear_globs=False)
+            results = runner.run(test, out=new.write, clear_globs=False)
+            if results.skipped == results.attempted:
+                raise unittest.SkipTest("all examples were skipped")
         finally:
             sys.stdout = old
 
-        if failures:
+        if results.failed:
             raise self.failureException(self.format_failure(new.getvalue()))
 
     def format_failure(self, err):

@@ -89,7 +89,8 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
-    TEvQueryRequest(const NACLib::TUserContext::TPtr& userCtx) : UserCtx(userCtx) {
+    TEvQueryRequest(const NACLib::TUserContext::TPtr& userCtx) 
+        : UserCtx(userCtx) {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 

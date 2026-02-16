@@ -87,14 +87,10 @@ class TaskGroup:
                 self._base_error is None):
             self._base_error = exc
 
-        propagate_cancellation_error = \
-            exc if et is exceptions.CancelledError else None
-        if self._parent_cancel_requested:
-            # If this flag is set we *must* call uncancel().
-            if self._parent_task.uncancel() == 0:
-                # If there are no pending cancellations left,
-                # don't propagate CancelledError.
-                propagate_cancellation_error = None
+        if et is not None and issubclass(et, exceptions.CancelledError):
+            propagate_cancellation_error = exc
+        else:
+            propagate_cancellation_error = None
 
         if et is not None:
             if not self._aborting:
@@ -145,10 +141,17 @@ class TaskGroup:
             finally:
                 exc = None
 
+        if self._parent_cancel_requested:
+            # If this flag is set we *must* call uncancel().
+            if self._parent_task.uncancel() == 0:
+                # If there are no pending cancellations left,
+                # don't propagate CancelledError.
+                propagate_cancellation_error = None
+
         # Propagate CancelledError if there is one, except if there
         # are other errors -- those have priority.
         try:
-            if propagate_cancellation_error and not self._errors:
+            if propagate_cancellation_error is not None and not self._errors:
                 try:
                     raise propagate_cancellation_error
                 finally:
@@ -156,10 +159,16 @@ class TaskGroup:
         finally:
             propagate_cancellation_error = None
 
-        if et is not None and et is not exceptions.CancelledError:
+        if et is not None and not issubclass(et, exceptions.CancelledError):
             self._errors.append(exc)
 
         if self._errors:
+            # If the parent task is being cancelled from the outside
+            # of the taskgroup, un-cancel and re-cancel the parent task,
+            # which will keep the cancel count stable.
+            if self._parent_task.cancelling():
+                self._parent_task.uncancel()
+                self._parent_task.cancel()
             try:
                 raise BaseExceptionGroup(
                     'unhandled errors in a TaskGroup',
@@ -175,22 +184,23 @@ class TaskGroup:
         Similar to `asyncio.create_task`.
         """
         if not self._entered:
+            coro.close()
             raise RuntimeError(f"TaskGroup {self!r} has not been entered")
         if self._exiting and not self._tasks:
+            coro.close()
             raise RuntimeError(f"TaskGroup {self!r} is finished")
         if self._aborting:
+            coro.close()
             raise RuntimeError(f"TaskGroup {self!r} is shutting down")
         if context is None:
-            task = self._loop.create_task(coro)
+            task = self._loop.create_task(coro, name=name)
         else:
-            task = self._loop.create_task(coro, context=context)
-        tasks._set_task_name(task, name)
+            task = self._loop.create_task(coro, name=name, context=context)
 
         # Always schedule the done callback even if the task is
         # already done (e.g. if the coro was able to complete eagerly),
         # otherwise if the task completes with an exception then it will cancel
         # the current task too early. gh-128550, gh-128588
-
         self._tasks.add(task)
         task.add_done_callback(self._on_task_done)
         try:

@@ -70,7 +70,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        Include/pymacro.h [74:74]
+        Include/pymacro.h [98:98]
 
 KEEP     BSD-3-Clause         0698eff80073369671d6becb418bb687
 BELONGS Lib/ya.make
@@ -184,7 +184,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        Python/pyhash.c [296:296]
+        Python/pyhash.c [287:287]
 
 KEEP     LicenseRef-scancode-unknown-license-reference AND Python-2.0 1c2c1c5dfdb955fa70190bef2cea30e4
 BELONGS ya.make
@@ -272,6 +272,56 @@ BELONGS Lib/ya.make
     Files with this license:
         Lib/optparse.py [48:73]
 
+KEEP     MIT AND MIT          2d229fcf116e5a7facba2d4dcccf15ba
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: Include/internal/mimalloc/mimalloc/prim.h at line 5, Include/internal/mimalloc/mimalloc/types.h at line 5, Objects/mimalloc/alloc-aligned.c at line 5, Objects/mimalloc/alloc-override.c at line 5, Objects/mimalloc/alloc-posix.c at line 5, Objects/mimalloc/alloc.c at line 5, Objects/mimalloc/arena.c at line 5, Objects/mimalloc/bitmap.c at line 5, Objects/mimalloc/bitmap.h at line 5, Objects/mimalloc/heap.c at line 5, Objects/mimalloc/options.c at line 5, Objects/mimalloc/os.c at line 5, Objects/mimalloc/page-queue.c at line 5, Objects/mimalloc/page.c at line 5, Objects/mimalloc/prim/osx/alloc-override-zone.c at line 5, Objects/mimalloc/prim/osx/prim.c at line 5, Objects/mimalloc/prim/prim.c at line 5, Objects/mimalloc/prim/unix/prim.c at line 5, Objects/mimalloc/prim/wasi/prim.c at line 5, Objects/mimalloc/prim/windows/prim.c at line 5, Objects/mimalloc/random.c at line 5, Objects/mimalloc/segment-map.c at line 5, Objects/mimalloc/segment.c at line 5, Objects/mimalloc/static.c at line 5, Objects/mimalloc/stats.c at line 5
+    License text:
+        This is free software; you can redistribute it and/or modify it under the
+        terms of the MIT license. A copy of the license can be found in the file
+        "LICENSE" at the root of this distribution.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 61.76
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        Include/internal/mimalloc/mimalloc.h [3:5]
+        Include/internal/mimalloc/mimalloc/atomic.h [3:5]
+        Include/internal/mimalloc/mimalloc/internal.h [3:5]
+        Include/internal/mimalloc/mimalloc/track.h [3:5]
+        Objects/mimalloc/init.c [3:5]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 64.71
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        Include/internal/mimalloc/mimalloc/prim.h [3:5]
+        Include/internal/mimalloc/mimalloc/types.h [3:5]
+        Objects/mimalloc/alloc-aligned.c [3:5]
+        Objects/mimalloc/alloc-override.c [3:5]
+        Objects/mimalloc/alloc-posix.c [3:5]
+        Objects/mimalloc/alloc.c [3:5]
+        Objects/mimalloc/arena.c [3:5]
+        Objects/mimalloc/bitmap.c [3:5]
+        Objects/mimalloc/bitmap.h [3:5]
+        Objects/mimalloc/heap.c [3:5]
+        Objects/mimalloc/options.c [3:5]
+        Objects/mimalloc/os.c [3:5]
+        Objects/mimalloc/page-queue.c [3:5]
+        Objects/mimalloc/page.c [3:5]
+        Objects/mimalloc/prim/osx/alloc-override-zone.c [3:5]
+        Objects/mimalloc/prim/osx/prim.c [3:5]
+        Objects/mimalloc/prim/prim.c [3:5]
+        Objects/mimalloc/prim/unix/prim.c [3:5]
+        Objects/mimalloc/prim/wasi/prim.c [3:5]
+        Objects/mimalloc/prim/windows/prim.c [3:5]
+        Objects/mimalloc/random.c [3:5]
+        Objects/mimalloc/segment-map.c [3:5]
+        Objects/mimalloc/segment.c [3:5]
+        Objects/mimalloc/static.c [3:5]
+        Objects/mimalloc/stats.c [3:5]
+
 KEEP     HPND                 2e7e6ffdddb0577238663b2a741b92d7
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -315,7 +365,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        Python/pyhash.c [299:315]
+        Python/pyhash.c [290:306]
 
 KEEP     GPL-1.0-or-later     37cb7e6cef44dfc70c1e318994d79e17
 BELONGS ya.make
@@ -327,19 +377,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
     Files with this license:
-        README.rst [228:228]
-
-KEEP     Python-2.0           3c3ec19dc9a19734ce8f55ba95e7b5f9
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: LICENSE at line 123, LICENSE at line 126, LICENSE at line 128, LICENSE at line 173, LICENSE at line 176, LICENSE at line 244, LICENSE at line 73, LICENSE at line 76
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: Python-2.0
-        Score           : 78.44
-        Match type      : TEXT
-        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
-    Files with this license:
-        LICENSE [73:265]
+        README.rst [231:231]
 
 KEEP     Python-2.0           3d11e9c5d2ec6fa34030df98ef2a220f
 BELONGS Lib/ya.make
@@ -397,7 +435,7 @@ BELONGS Lib/ya.make
         Match type      : NOTICE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        Lib/_pydatetime.py [1196:1196]
+        Lib/_pydatetime.py [1195:1195]
 
 KEEP     MIT AND Apache-2.0   451f44d41ca04c35a541c85bdc284bb3
 BELONGS Lib/ya.make
@@ -419,6 +457,20 @@ BELONGS Lib/ya.make
     Files with this license:
         Lib/wsgiref/validate.py [2:3]
 
+KEEP     BSD-3-Clause         46d3a844e933821ebdb401dff1a34bc0
+BELONGS ya.make
+    License text:
+        This is free software; you can redistribute it and/or modify it under the
+        terms of the MIT license. A copy of the license can be found in the file
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 52.38
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        Include/internal/mimalloc/mimalloc/atomic.h [3:4]
+        Include/internal/mimalloc/mimalloc/track.h [3:4]
+
 KEEP     0BSD                 484ef9e655027dbeef36aed8bd0f364b
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -428,7 +480,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
     Files with this license:
-        LICENSE [270:279]
+        LICENSE [268:277]
 
 KEEP     BSD-3-Clause         4a1cce1f1d5dec7babae892a03013a81
 BELONGS ya.make
@@ -454,18 +506,6 @@ BELONGS Lib/ya.make
     Files with this license:
         Lib/tabnanny.py [15:15]
 
-KEEP     Python-2.0           4c8677607b9c7aa8297b57895b4cf26f
-BELONGS ya.make
-    License text:
-            ._data = "See https://www.python.org/psf/license/",
-    Scancode info:
-        Original SPDX id: Python-2.0
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
-    Files with this license:
-        Python/deepfreeze/deepfreeze.c [128179:128179]
-
 KEEP     LicenseRef-scancode-warranty-disclaimer 50a3e16ca7c1aaf79e69114d558b25a0
 BELONGS Lib/ya.make
     License text:
@@ -476,7 +516,7 @@ BELONGS Lib/ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
     Files with this license:
-        Lib/typing.py [19:19]
+        Lib/typing.py [18:18]
 
 KEEP     Python-2.0           529370f0ade6de4c236c71be611a0a7c
 BELONGS Lib/ya.make
@@ -526,7 +566,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/gary-s-brown.LICENSE
     Files with this license:
-        Modules/binascii.c [646:647]
+        Modules/binascii.c [636:637]
 
 KEEP     Python-2.0           6a19cf8041a37669b2cd07b9cd3eace3
 BELONGS ya.make
@@ -596,6 +636,18 @@ BELONGS ya.make
         Modules/_decimal/libmpdec/typearith.h [4:25]
         Modules/_decimal/libmpdec/umodarith.h [4:25]
 
+KEEP     Public-Domain        6f7b3b02e5a4a7980cca1f9f0ba26b15
+BELONGS ya.make
+    License text:
+            * Written by Rusty Russell, public domain, http://ccodearchive.net/
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        Include/pymacro.h [72:72]
+
 KEEP     Python-2.0           70476ec62f03bf28831a83f1698568b7
 BELONGS ya.make
     License text:
@@ -619,7 +671,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        Python/pyhash.c [316:316]
+        Python/pyhash.c [307:307]
 
 KEEP     BSD-3-Clause         7f725e73b6f037dfaa8c3434e2385fe1
 BELONGS ya.make
@@ -632,6 +684,18 @@ BELONGS ya.make
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
         LICENSE [67:67]
+
+KEEP     Python-2.0           81338189286b23b5de03650cee77f042
+BELONGS Lib/ya.make
+    License text:
+        :license: Python License.
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        Lib/ast.py [21:21]
 
 KEEP     LicenseRef-scancode-warranty-disclaimer AND LicenseRef-scancode-warranty-disclaimer 872e33549379090ce272961e49a1f1cd
 BELONGS Lib/ya.make
@@ -663,17 +727,6 @@ BELONGS ya.make
     Files with this license:
         Python/getopt.c [10:20]
 
-KEEP     LicenseRef-scancode-python-cwi 8c1a804267e2c54c7dbe939ad4ae2b62
-BELONGS Lib/ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-python-cwi
-        Score           : 93.10
-        Match type      : TEXT
-        Links           : http://docs.python.org/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/python-cwi.LICENSE
-    Files with this license:
-        Lib/uu.py [6:19]
-
 KEEP     HPND                 8cb58c483d997cc1ca7ef5aab519b5d8
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -685,17 +738,6 @@ BELONGS ya.make
     Files with this license:
         Modules/syslogmodule.c [7:21]
 
-KEEP     LicenseRef-scancode-sun-source 8d43b0c05c4d81feaa9850a8fca99dce
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-sun-source
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/sun-source.LICENSE
-    Files with this license:
-        Modules/audioop.c [6:28]
-
 KEEP     LicenseRef-scancode-secret-labs-2011 918e715152457415d3422c7f4c6ffaaa
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -705,7 +747,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.pythonware.com/products/pil/license.htm, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/secret-labs-2011.LICENSE
     Files with this license:
-        Include/unicodeobject.h [36:55]
+        Include/unicodeobject.h [34:53]
 
 KEEP     Python-2.0 AND LicenseRef-scancode-other-permissive 989483c808f3288bf300b870509348e8
 BELONGS Lib/ya.make
@@ -762,7 +804,7 @@ BELONGS ya.make
 
 KEEP     BSD-3-Clause         a2ab686451c2b1fb821e813edadca0bf
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: LICENSE at line 267
+FILE_INCLUDE LICENSE found in files: LICENSE at line 265
     License text:
         ZERO-CLAUSE BSD LICENSE FOR CODE IN THE PYTHON DOCUMENTATION
     Scancode info:
@@ -771,7 +813,7 @@ FILE_INCLUDE LICENSE found in files: LICENSE at line 267
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        LICENSE [267:267]
+        LICENSE [265:265]
 
 KEEP     LicenseRef-scancode-other-permissive a35a8bdb172eec3c78ab3fae277dfcae
 BELONGS ya.make
@@ -867,30 +909,6 @@ BELONGS Lib/ya.make
         Lib/asyncio/events.py [4:4]
         Lib/asyncio/sslproto.py [2:2]
 
-KEEP     Public-Domain        b266d392bf1ca8d8ad431a6f04dfd53d
-BELONGS ya.make
-    License text:
-           Written by Rusty Russell, public domain, http://ccodearchive.net/ */
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 70.00
-        Match type      : REFERENCE
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
-    Files with this license:
-        Include/pymacro.h [60:60]
-
-KEEP     Python-2.0           b7712ac2503126c332787b5243cbc408
-BELONGS Lib/ya.make
-    License text:
-            :license: Python License.
-    Scancode info:
-        Original SPDX id: Python-2.0
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
-    Files with this license:
-        Lib/ast.py [25:25]
-
 KEEP     MIT                  b913b5721a19c7e97156090bd16b43c4
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -939,6 +957,44 @@ BELONGS ya.make
         Modules/_hacl/include/krml/FStar_UInt128_Verified.h [3:3]
         Modules/_hacl/include/krml/FStar_UInt_8_16_32_64.h [3:3]
 
+KEEP     LicenseRef-scancode-other-permissive AND HPND-sell-variant AND MIT-CMU c795a477659e7506843c9a17e720e854
+BELONGS Lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 89.43
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        Lib/_pyrepl/__init__.py [7:19]
+        Lib/_pyrepl/completing_reader.py [7:19]
+        Lib/_pyrepl/console.py [6:18]
+        Lib/_pyrepl/curses.py [7:19]
+        Lib/_pyrepl/fancy_termios.py [6:18]
+        Lib/_pyrepl/reader.py [8:20]
+        Lib/_pyrepl/unix_console.py [8:20]
+        Lib/_pyrepl/unix_eventqueue.py [7:19]
+        Lib/_pyrepl/windows_console.py [6:18]
+    Scancode info:
+        Original SPDX id: MIT-CMU
+        Score           : 79.86
+        Match type      : NOTICE
+        Links           : https://fedoraproject.org/wiki/Licensing:MIT?rd=Licensing/MIT#CMU_Style, https://spdx.org/licenses/MIT-CMU
+    Files with this license:
+        Lib/_pyrepl/base_eventqueue.py [7:19]
+        Lib/_pyrepl/historical_reader.py [6:18]
+        Lib/_pyrepl/readline.py [10:22]
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 68.90
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        Lib/_pyrepl/commands.py [8:20]
+        Lib/_pyrepl/input.py [6:18]
+        Lib/_pyrepl/keymap.py [7:19]
+        Lib/_pyrepl/simple_interact.py [7:19]
+
 KEEP     Python-2.0           ca2dc387d9c0c179b849eba48434e41b
 BELONGS ya.make
     License text:
@@ -952,6 +1008,17 @@ BELONGS ya.make
         Modules/md5module.c [13:13]
         Modules/sha1module.c [13:13]
         Modules/sha2module.c [14:14]
+
+KEEP     Bsd-Unmodified       d03391141ba79c78809a26eaefe69c59
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-unmodified
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-unmodified.LICENSE
+    Files with this license:
+        Python/qsbr.c [13:32]
 
 KEEP     Python-2.0           d15ac465f3caeea119b950d674b6fe58
 BELONGS Lib/ya.make
@@ -981,39 +1048,6 @@ BELONGS Lib/ya.make
         Lib/concurrent/futures/_base.py [2:2]
         Lib/concurrent/futures/process.py [2:2]
         Lib/concurrent/futures/thread.py [2:2]
-        Lib/lib2to3/fixer_base.py [2:2]
-        Lib/lib2to3/fixes/fix_apply.py [2:2]
-        Lib/lib2to3/fixes/fix_buffer.py [2:2]
-        Lib/lib2to3/fixes/fix_dict.py [2:2]
-        Lib/lib2to3/fixes/fix_exec.py [2:2]
-        Lib/lib2to3/fixes/fix_execfile.py [2:2]
-        Lib/lib2to3/fixes/fix_filter.py [2:2]
-        Lib/lib2to3/fixes/fix_has_key.py [2:2]
-        Lib/lib2to3/fixes/fix_intern.py [2:2]
-        Lib/lib2to3/fixes/fix_isinstance.py [2:2]
-        Lib/lib2to3/fixes/fix_long.py [2:2]
-        Lib/lib2to3/fixes/fix_map.py [2:2]
-        Lib/lib2to3/fixes/fix_ne.py [2:2]
-        Lib/lib2to3/fixes/fix_numliterals.py [4:4]
-        Lib/lib2to3/fixes/fix_print.py [2:2]
-        Lib/lib2to3/fixes/fix_reduce.py [2:2]
-        Lib/lib2to3/fixes/fix_repr.py [2:2]
-        Lib/lib2to3/fixes/fix_standarderror.py [2:2]
-        Lib/lib2to3/fixes/fix_types.py [2:2]
-        Lib/lib2to3/fixes/fix_xrange.py [2:2]
-        Lib/lib2to3/patcomp.py [2:2]
-        Lib/lib2to3/pgen2/__init__.py [2:2]
-        Lib/lib2to3/pgen2/conv.py [2:2]
-        Lib/lib2to3/pgen2/driver.py [2:2]
-        Lib/lib2to3/pgen2/driver.py [6:6]
-        Lib/lib2to3/pgen2/grammar.py [2:2]
-        Lib/lib2to3/pgen2/literals.py [2:2]
-        Lib/lib2to3/pgen2/parse.py [2:2]
-        Lib/lib2to3/pgen2/pgen.py [2:2]
-        Lib/lib2to3/pygram.py [2:2]
-        Lib/lib2to3/pytree.py [2:2]
-        Lib/lib2to3/refactor.py [2:2]
-        Lib/msilib/__init__.py [2:2]
         Lib/multiprocessing/__init__.py [12:12]
         Lib/multiprocessing/connection.py [7:7]
         Lib/multiprocessing/dummy/__init__.py [7:7]
@@ -1177,7 +1211,19 @@ BELONGS Lib/ya.make
         Match type      : TAG
         Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
     Files with this license:
-        Lib/site.py [443:443]
+        Lib/site.py [460:460]
+
+KEEP     Python-2.0           ef92b386f80ffee05849a2d81cabdf95
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 121, LICENSE at line 124, LICENSE at line 126, LICENSE at line 171, LICENSE at line 174, LICENSE at line 242, LICENSE at line 73, LICENSE at line 76
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 77.55
+        Match type      : TEXT
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        LICENSE [73:263]
 
 KEEP     LicenseRef-scancode-unknown-license-reference f488ff2759d4446215ccf983a020a815
 BELONGS Lib/ya.make
@@ -1200,7 +1246,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
     Files with this license:
-        Modules/selectmodule.c [1724:1743]
+        Modules/selectmodule.c [1734:1753]
 
 KEEP     X11-Hanson           fee24880a028f5d50965c0ed93a7a806
 BELONGS ya.make
@@ -1212,22 +1258,3 @@ BELONGS ya.make
         Links           : http://www.research.microsoft.com/~drh/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/x11-hanson.LICENSE
     Files with this license:
         Python/dtoa.c [3:16]
-
-KEEP     BSD-2-Clause AND GPL-2.0-only ff405483cba46cc13687b338c9150be5
-BELONGS Lib/ya.make
-    License text:
-        Unless explicitly stated otherwise, the description below is true
-    Scancode info:
-        Original SPDX id: BSD-2-Clause
-        Score           : 8.16
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
-    Files with this license:
-        Lib/aifc.py [3:3]
-    Scancode info:
-        Original SPDX id: GPL-2.0-only
-        Score           : 8.16
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
-    Files with this license:
-        Lib/aifc.py [3:3]

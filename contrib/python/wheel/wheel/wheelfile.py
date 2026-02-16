@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+__all__ = ["WHEEL_INFO_RE", "WheelFile", "WheelError"]
+
+import base64
 import csv
 import hashlib
+import logging
 import os.path
 import re
 import stat
@@ -10,17 +14,8 @@ from io import StringIO, TextIOWrapper
 from typing import IO, TYPE_CHECKING, Literal
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-from wheel.cli import WheelError
-from wheel.util import log, urlsafe_b64decode, urlsafe_b64encode
-
 if TYPE_CHECKING:
-    from typing import Protocol, Sized, Union
-
-    from typing_extensions import Buffer
-
-    StrPath = Union[str, os.PathLike[str]]
-
-    class SizedBuffer(Sized, Buffer, Protocol): ...
+    from _typeshed import SizedBuffer, StrPath
 
 
 # Non-greedy matching of an optional build number may be too clever (more
@@ -32,8 +27,27 @@ WHEEL_INFO_RE = re.compile(
 )
 MINIMUM_TIMESTAMP = 315532800  # 1980-01-01 00:00:00 UTC
 
+log = logging.getLogger("wheel")
 
-def get_zipinfo_datetime(timestamp: float | None = None):
+
+class WheelError(Exception):
+    pass
+
+
+def urlsafe_b64encode(data: bytes) -> bytes:
+    """urlsafe_b64encode without padding"""
+    return base64.urlsafe_b64encode(data).rstrip(b"=")
+
+
+def urlsafe_b64decode(data: bytes) -> bytes:
+    """urlsafe_b64decode without padding"""
+    pad = b"=" * (4 - (len(data) & 3))
+    return base64.urlsafe_b64decode(data + pad)
+
+
+def get_zipinfo_datetime(
+    timestamp: float | None = None,
+) -> tuple[int, int, int, int, int]:
     # Some applications need reproducible .whl files, but they can't do this without
     # forcing the timestamp of the individual ZipInfo objects. See issue #143.
     timestamp = int(os.environ.get("SOURCE_DATE_EPOCH", timestamp or time.time()))
@@ -140,8 +154,8 @@ class WheelFile(ZipFile):
 
         return ef
 
-    def write_files(self, base_dir: str):
-        log.info(f"creating '{self.filename}' and adding '{base_dir}' to it")
+    def write_files(self, base_dir: str) -> None:
+        log.info("creating %r and adding %r to it", self.filename, base_dir)
         deferred: list[tuple[str, str]] = []
         for root, dirnames, filenames in os.walk(base_dir):
             # Sort the directory names so that `os.walk` will walk them in a
@@ -184,7 +198,7 @@ class WheelFile(ZipFile):
         zinfo_or_arcname: str | ZipInfo,
         data: SizedBuffer | str,
         compress_type: int | None = None,
-    ):
+    ) -> None:
         if isinstance(zinfo_or_arcname, str):
             zinfo_or_arcname = ZipInfo(
                 zinfo_or_arcname, date_time=get_zipinfo_datetime()
@@ -201,7 +215,7 @@ class WheelFile(ZipFile):
             if isinstance(zinfo_or_arcname, ZipInfo)
             else zinfo_or_arcname
         )
-        log.info(f"adding '{fname}'")
+        log.info("adding %r", fname)
         if fname != self.record_path:
             hash_ = self._default_algorithm(data)
             self._file_hashes[fname] = (
@@ -210,7 +224,7 @@ class WheelFile(ZipFile):
             )
             self._file_sizes[fname] = len(data)
 
-    def close(self):
+    def close(self) -> None:
         # Write RECORD
         if self.fp is not None and self.mode == "w" and self._file_hashes:
             data = StringIO()

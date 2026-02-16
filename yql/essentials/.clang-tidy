@@ -51,6 +51,13 @@ Checks: >
   hicpp-exception-baseclass,
   hicpp-multiway-paths-covered,
   misc-definitions-in-headers,
+  misc-misleading-bidirectional,
+  misc-misleading-identifier,
+  misc-redundant-expression,
+  misc-static-assert,
+  misc-throw-by-value-catch-by-reference,
+  misc-unconventional-assign-operator,
+  misc-use-anonymous-namespace,
   modernize-use-override
 CheckOptions:
   - key: readability-identifier-naming.StructPrefix

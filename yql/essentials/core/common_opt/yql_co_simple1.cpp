@@ -11,6 +11,7 @@
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_window_features.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -3078,7 +3079,7 @@ TExprNode::TPtr BuildCalcOverWindowGroup(TCoCalcOverWindowGroup node, TExprNodeL
     return KeepColumnOrder(result, node.Ref(), ctx, typesCtx);
 }
 
-TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& ctx) {
+TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& sortSpec, const TExprNode::TPtr& frames, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     TExprNodeList normalized;
     bool changed = false;
     TExprNode::TPtr unboundedCurrentNode;
@@ -3137,6 +3138,17 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& c
                         .Atom(0, "currentRow", TNodeFlags::Default)
                     .Seal()
                 .Seal()
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                        if (!IsWindowNewPipelineEnabled(typesCtx)) {
+                            return parent;
+                        }
+                        parent.List(2)
+                                .Atom(0, "sortSpec", TNodeFlags::Default)
+                                .Add(1, sortSpec)
+                                .Seal();
+                        return parent;
+                    }
+                )
             .Seal()
             .Build());
 
@@ -3185,6 +3197,16 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& c
                                 .Atom(0, "0", TNodeFlags::Default)
                             .Seal()
                         .Seal()
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                            if (!IsWindowNewPipelineEnabled(typesCtx)) {
+                                return parent;
+                            }
+                            parent.List(2)
+                                    .Atom(0, "sortSpec", TNodeFlags::Default)
+                                    .Add(1, sortSpec)
+                                  .Seal();
+                            return parent;
+                        })
                     .Seal()
                     .Build();
             }
@@ -3214,7 +3236,8 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& c
 
 TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     auto origFrames = node.Frames().Ptr();
-    auto normalizedFrames = DoNormalizeFrames(origFrames, ctx);
+    auto sortSpec = node.SortSpec().Ptr();
+    auto normalizedFrames = DoNormalizeFrames(sortSpec, origFrames, ctx, typesCtx);
     if (normalizedFrames != origFrames) {
         auto result = ctx.ChangeChild(node.Ref(), TCoCalcOverWindowBase::idx_Frames, std::move(normalizedFrames));
         return KeepColumnOrder(result, node.Ref(), ctx, typesCtx);
@@ -3225,8 +3248,9 @@ TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowGroup node, TExprContext& ctx, 
     TExprNodeList normalizedCalcs;
     bool changed = false;
     for (auto calc : node.Calcs()) {
+        auto sortSpec = calc.SortSpec().Ptr();
         auto origFrames = calc.Frames().Ptr();
-        auto normalizedFrames = DoNormalizeFrames(origFrames, ctx);
+        auto normalizedFrames = DoNormalizeFrames(sortSpec, origFrames, ctx, typesCtx);
         if (normalizedFrames != origFrames) {
             changed = true;
             normalizedCalcs.emplace_back(ctx.ChangeChild(calc.Ref(), TCoCalcOverWindowTuple::idx_Frames, std::move(normalizedFrames)));
@@ -3980,7 +4004,7 @@ TExprNode::TPtr MemberOverFilterSkipNullMembers(const TExprNode::TPtr& node, TEx
 bool IsSqlWithNothingOrNullOpsEnabled(const TOptimizeContext& optCtx) {
     static const char OptName[] = "SqlInWithNothingOrNull";
     YQL_ENSURE(optCtx.Types);
-    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
+    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 } // namespace
@@ -6673,7 +6697,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             });
 
             EDataSlot payloadSlot;
-            const auto* payloadType = payload->GetTypeAnn();
+            const auto payloadType = payload->GetTypeAnn();
             if (payloadType->GetKind() == ETypeAnnotationKind::Null) {
                 // we treat NULL as Nothing(Utf8?)
                 payloadSlot = EDataSlot::Utf8;

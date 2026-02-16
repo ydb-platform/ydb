@@ -79,15 +79,15 @@ namespace NYdb::NConsoleClient {
             sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_SEND_MESSAGE_BATCH);
 
-            if (params.SetSubjectToken) {
+            if (params.SetSubjectToken && params.Token.Defined()) {
                 sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
+                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token->c_str());
             }
 
             {
                 std::unique_lock locker(*params.Mutex);
-                // Concurrency tasks are running in parallel and also Concurrency tasks are waiting in executor queue
-                while (*params.StartedCount >= params.Concurrency * 2) {
+                // WorkersCount tasks are running in parallel and also WorkersCount tasks are waiting in executor queue
+                while (*params.StartedCount >= params.WorkersCount * 2) {
                     params.FinishedCond->wait(locker);
                 }
 

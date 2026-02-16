@@ -12,6 +12,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/public/inflight_limiter.h>
 #include <ydb/core/util/ulid.h>
 
 #include <ydb/library/services/services.pb.h>
@@ -78,7 +79,7 @@ public:
                      const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
                      bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-                     const std::unordered_set<ui64>& notCommitedToFinishParents);
+                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -164,7 +165,7 @@ private:
                                                                       ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
                                                                       ui64 directReadId, ui64 sizeEstimate = 0) const;
 
-    const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<NPQ::TPartitionGraph> partitionGraph) const;
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const;
 
 private:
     const TActorId ParentId;
@@ -250,6 +251,8 @@ private:
     std::set<ui64> DirectReadsToPublish;
     std::set<ui64> UnpublishedDirectReads;
     std::set<ui64> DirectReadsToForget;
+
+    NPQ::TInFlightController PartitionInFlightMemoryController;
 
     enum class EDirectReadRestoreStage {
         None,

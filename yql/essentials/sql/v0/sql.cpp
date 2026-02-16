@@ -43,7 +43,9 @@ using NALP::SQLLexerTokens;
 
 using namespace NSQLGenerated;
 
-static TPosition GetPos(const TToken& token) {
+namespace {
+
+TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
 }
 
@@ -53,7 +55,7 @@ TIdentifier GetIdentifier(TTranslation& ctx, const TToken& node) {
     return TIdentifier(TPosition(token.GetColumn(), token.GetLine()), ctx.Identifier(token));
 }
 
-inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword_restricted& node) {
+TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword_restricted& node) {
     switch (node.Alt_case()) {
         case TRule_keyword_restricted::kAltKeywordRestricted1:
             return GetIdentifier(ctx, node.GetAlt_keyword_restricted1().GetRule_keyword_compat1());
@@ -68,7 +70,7 @@ inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword_restricte
     }
 }
 
-inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
+TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
     switch (node.Alt_case()) {
         case TRule_keyword::kAltKeyword1:
             return GetKeywordId(ctx, node.GetAlt_keyword1().GetRule_keyword_restricted1());
@@ -81,15 +83,15 @@ inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
     }
 }
 
-inline TString GetKeyword(TTranslation& ctx, const TRule_keyword& node) {
+TString GetKeyword(TTranslation& ctx, const TRule_keyword& node) {
     return GetKeywordId(ctx, node).Name;
 }
 
-inline TString GetKeyword(TTranslation& ctx, const TRule_keyword_restricted& node) {
+TString GetKeyword(TTranslation& ctx, const TRule_keyword_restricted& node) {
     return GetKeywordId(ctx, node).Name;
 }
 
-static TString Id(const TRule_id& node, TTranslation& ctx) {
+TString Id(const TRule_id& node, TTranslation& ctx) {
     // id: IDENTIFIER | keyword;
     switch (node.Alt_case()) {
         case TRule_id::kAltId1:
@@ -101,7 +103,7 @@ static TString Id(const TRule_id& node, TTranslation& ctx) {
     }
 }
 
-static TString Id(const TRule_id_schema& node, TTranslation& ctx) {
+TString Id(const TRule_id_schema& node, TTranslation& ctx) {
     switch (node.Alt_case()) {
         case TRule_id_schema::kAltIdSchema1:
             return ctx.Identifier(node.GetAlt_id_schema1().GetToken1());
@@ -112,12 +114,12 @@ static TString Id(const TRule_id_schema& node, TTranslation& ctx) {
     }
 }
 
-static std::pair<bool, TString> Id(const TRule_id_or_at& node, TTranslation& ctx) {
+std::pair<bool, TString> Id(const TRule_id_or_at& node, TTranslation& ctx) {
     bool hasAt = node.HasBlock1();
     return std::make_pair(hasAt, Id(node.GetRule_id2(), ctx) );
 }
 
-static TString Id(const TRule_id_table& node, TTranslation& ctx) {
+TString Id(const TRule_id_table& node, TTranslation& ctx) {
     // id_table: IDENTIFIER | keyword_restricted;
     switch (node.Alt_case()) {
     case TRule_id_table::kAltIdTable1:
@@ -129,13 +131,13 @@ static TString Id(const TRule_id_table& node, TTranslation& ctx) {
     }
 }
 
-static std::pair<bool, TString> Id(const TRule_id_table_or_at& node, TTranslation& ctx) {
+std::pair<bool, TString> Id(const TRule_id_table_or_at& node, TTranslation& ctx) {
     // id_table_or_at: AT? id_table;
     bool hasAt = node.HasBlock1();
     return std::make_pair(hasAt, Id(node.GetRule_id_table2(), ctx));
 }
 
-static TString Id(const TRule_id_expr& node, TTranslation& ctx) {
+TString Id(const TRule_id_expr& node, TTranslation& ctx) {
     switch (node.Alt_case()) {
         case TRule_id_expr::kAltIdExpr1:
             return ctx.Identifier(node.GetAlt_id_expr1().GetToken1());
@@ -150,7 +152,7 @@ static TString Id(const TRule_id_expr& node, TTranslation& ctx) {
     }
 }
 
-static TString Id(const TRule_in_id_expr& node, TTranslation& ctx) {
+TString Id(const TRule_in_id_expr& node, TTranslation& ctx) {
     switch (node.Alt_case()) {
         case TRule_in_id_expr::kAltInIdExpr1:
             return ctx.Identifier(node.GetAlt_in_id_expr1().GetToken1());
@@ -163,7 +165,7 @@ static TString Id(const TRule_in_id_expr& node, TTranslation& ctx) {
     }
 }
 
-static TIdentifier IdEx(const TRule_id& node, TTranslation& ctx) {
+TIdentifier IdEx(const TRule_id& node, TTranslation& ctx) {
     switch (node.Alt_case()) {
         case TRule_id::kAltId1:
             return GetIdentifier(ctx, node.GetAlt_id1());
@@ -174,7 +176,7 @@ static TIdentifier IdEx(const TRule_id& node, TTranslation& ctx) {
     }
 }
 
-static TString IdOrString(const TRule_id_or_string& node, TTranslation& ctx, bool rawString = false) {
+TString IdOrString(const TRule_id_or_string& node, TTranslation& ctx, bool rawString = false) {
     switch (node.Alt_case()) {
         case TRule_id_or_string::kAltIdOrString1: {
             return ctx.Identifier(node.GetAlt_id_or_string1().GetToken1());
@@ -191,7 +193,7 @@ static TString IdOrString(const TRule_id_or_string& node, TTranslation& ctx, boo
     Y_ABORT("You should change implementation according grammar changes");
 }
 
-static TString IdOrStringAsCluster(const TRule_id_or_string& node, TTranslation& ctx) {
+TString IdOrStringAsCluster(const TRule_id_or_string& node, TTranslation& ctx) {
     TString cluster = IdOrString(node, ctx);
     TString normalizedClusterName;
     if (!ctx.Context().GetClusterProvider(cluster, normalizedClusterName)) {
@@ -201,34 +203,34 @@ static TString IdOrStringAsCluster(const TRule_id_or_string& node, TTranslation&
     return normalizedClusterName;
 }
 
-static TString OptIdPrefixAsStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) {
+TString OptIdPrefixAsStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) {
     if (!node.HasBlock1()) {
         return defaultStr;
     }
     return IdOrString(node.GetBlock1().GetRule_id_or_string1(), ctx);
 }
 
-static TString OptIdPrefixAsClusterStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) {
+TString OptIdPrefixAsClusterStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) {
     if (!node.HasBlock1()) {
         return defaultStr;
     }
     return IdOrStringAsCluster(node.GetBlock1().GetRule_id_or_string1(), ctx);
 }
 
-static void PureColumnListStr(const TRule_pure_column_list& node, TTranslation& ctx, TVector<TString>& outList) {
+void PureColumnListStr(const TRule_pure_column_list& node, TTranslation& ctx, TVector<TString>& outList) {
     outList.push_back(IdOrString(node.GetRule_id_or_string2(), ctx));
     for (auto& block: node.GetBlock3()) {
         outList.push_back(IdOrString(block.GetRule_id_or_string2(), ctx));
     }
 }
 
-static TString NamedNodeImpl(const TRule_bind_parameter& node, TTranslation& ctx) {
+TString NamedNodeImpl(const TRule_bind_parameter& node, TTranslation& ctx) {
     // bind_parameter: DOLLAR id;
     auto id = Id(node.GetRule_id2(), ctx);
     return ctx.Token(node.GetToken1()) + id;
 }
 
-static TDeferredAtom PureColumnOrNamed(const TRule_pure_column_or_named& node, TTranslation& ctx) {
+TDeferredAtom PureColumnOrNamed(const TRule_pure_column_or_named& node, TTranslation& ctx) {
     switch (node.Alt_case()) {
     case TRule_pure_column_or_named::kAltPureColumnOrNamed1: {
         auto named = NamedNodeImpl(node.GetAlt_pure_column_or_named1().GetRule_bind_parameter1(), ctx);
@@ -247,7 +249,7 @@ static TDeferredAtom PureColumnOrNamed(const TRule_pure_column_or_named& node, T
     }
 }
 
-static bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node, TTranslation& ctx, TVector<TDeferredAtom>& outList) {
+bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node, TTranslation& ctx, TVector<TDeferredAtom>& outList) {
     outList.push_back(PureColumnOrNamed(node.GetRule_pure_column_or_named2(), ctx));
     if (outList.back().Empty()) {
         return false;
@@ -262,8 +264,6 @@ static bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node
 
     return true;
 }
-
-namespace {
 
 bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) {
     return node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLLexerTokens::TOKEN_DISTINCT;
@@ -290,9 +290,7 @@ std::pair<TString, bool> FlexType(const TRule_flex_type& node, TTranslation& ctx
     }
 }
 
-}
-
-static TColumnSchema ColumnSchemaImpl(const TRule_column_schema& node, TTranslation& ctx) {
+TColumnSchema ColumnSchemaImpl(const TRule_column_schema& node, TTranslation& ctx) {
     const bool nullable = !node.HasBlock3() || !node.GetBlock3().HasBlock1();
     const TString name(Id(node.GetRule_id_schema1(), ctx));
     const TPosition pos(ctx.Context().Pos());
@@ -300,7 +298,7 @@ static TColumnSchema ColumnSchemaImpl(const TRule_column_schema& node, TTranslat
     return TColumnSchema(pos, name, type.first, nullable, type.second);
 }
 
-static bool CreateTableEntry(const TRule_create_table_entry& node, TTranslation& ctx,
+bool CreateTableEntry(const TRule_create_table_entry& node, TTranslation& ctx,
     TVector<TColumnSchema>& columns, TVector<TIdentifier>& pkColumns,
     TVector<TIdentifier>& partitionByColumns, TVector<std::pair<TIdentifier, bool>>& orderByColumns)
 {
@@ -379,7 +377,7 @@ static bool CreateTableEntry(const TRule_create_table_entry& node, TTranslation&
     return true;
 }
 
-static std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TString view, TTranslation& ctx) {
+std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TString view, TTranslation& ctx) {
     if (nameWithAt.first) {
         view = "@";
         ctx.Context().IncrementMonCounter("sql_features", "AnonymousTable");
@@ -388,7 +386,7 @@ static std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& 
     return std::make_pair(nameWithAt.second, view);
 }
 
-static std::pair<TString, TString> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx) {
+std::pair<TString, TString> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx) {
     auto nameWithAt(Id(node.GetRule_id_table_or_at1(), ctx));
     TString view;
     if (node.HasBlock2()) {
@@ -399,7 +397,7 @@ static std::pair<TString, TString> TableKeyImpl(const TRule_table_key& node, TTr
     return TableKeyImpl(nameWithAt, view, ctx);
 }
 
-static TVector<TString> TableHintsImpl(const TRule_table_hints& node, TTranslation& ctx) {
+TVector<TString> TableHintsImpl(const TRule_table_hints& node, TTranslation& ctx) {
     TVector<TString> hints;
     auto& block = node.GetBlock2();
     switch (block.Alt_case()) {
@@ -418,23 +416,25 @@ static TVector<TString> TableHintsImpl(const TRule_table_hints& node, TTranslati
 }
 
 /// \return optional prefix
-static TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id) {
+TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id) {
     id = IdOrString(node.GetRule_id_or_string2(), ctx);
     return OptIdPrefixAsStr(node.GetRule_opt_id_prefix1(), ctx);
 }
 
-static TString ColumnNameAsSingleStr(TTranslation& ctx, const TRule_column_name& node) {
+TString ColumnNameAsSingleStr(TTranslation& ctx, const TRule_column_name& node) {
     TString body;
     const TString prefix = ColumnNameAsStr(ctx, node, body);
     return prefix ? prefix + '.' + body : body;
 }
 
-static void FillTargetList(TTranslation& ctx, const TRule_set_target_list& node, TVector<TString>& targetList) {
+void FillTargetList(TTranslation& ctx, const TRule_set_target_list& node, TVector<TString>& targetList) {
     targetList.push_back(ColumnNameAsSingleStr(ctx, node.GetRule_set_target2().GetRule_column_name1()));
     for (auto& block: node.GetBlock3()) {
         targetList.push_back(ColumnNameAsSingleStr(ctx, block.GetRule_set_target2().GetRule_column_name1()));
     }
 }
+
+} // namespace
 
 TVector<TString> GetContextHints(TContext& ctx) {
     TVector<TString> hints;
@@ -448,7 +448,9 @@ TVector<TString> GetContextHints(TContext& ctx) {
     return hints;
 }
 
-static TVector<TString> GetTableFuncHints(TStringBuf funcName) {
+namespace {
+
+TVector<TString> GetTableFuncHints(TStringBuf funcName) {
     TCiString func(funcName);
     if (func.StartsWith("range") || func.StartsWith("like") || func.StartsWith("regexp") || func.StartsWith("filter")
         || func.StartsWith("each")) {
@@ -460,7 +462,7 @@ static TVector<TString> GetTableFuncHints(TStringBuf funcName) {
 }
 
 
-static TTableRef SimpleTableRefImpl(const TRule_simple_table_ref& node, NSQLTranslation::ESqlMode mode, TTranslation& ctx) {
+TTableRef SimpleTableRefImpl(const TRule_simple_table_ref& node, NSQLTranslation::ESqlMode mode, TTranslation& ctx) {
     TMaybe<TTableRef> tr;
     TString cluster;
     switch (node.GetBlock1().Alt_case()) {
@@ -520,7 +522,7 @@ static TTableRef SimpleTableRefImpl(const TRule_simple_table_ref& node, NSQLTran
     return *tr;
 }
 
-static bool ValidateForCounters(const TString& input) {
+bool ValidateForCounters(const TString& input) {
     for (auto c : input) {
         if (!(IsAlnum(c) || c == '_')) {
             return false;
@@ -529,7 +531,7 @@ static bool ValidateForCounters(const TString& input) {
     return true;
 }
 
-static bool IsColumnsOnly(const TVector<TSortSpecificationPtr>& container) {
+bool IsColumnsOnly(const TVector<TSortSpecificationPtr>& container) {
     for (const auto& elem: container) {
         if (!elem->OrderExpr->GetColumnName()) {
             return false;
@@ -537,6 +539,8 @@ static bool IsColumnsOnly(const TVector<TSortSpecificationPtr>& container) {
     }
     return true;
 }
+
+} // namespace
 
 class TSqlTranslation: public TTranslation {
 protected:

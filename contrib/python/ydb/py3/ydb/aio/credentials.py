@@ -40,7 +40,7 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
     async def _make_token_request(self):
         pass
 
-    async def get_auth_token(self) -> str:
+    async def get_auth_token(self) -> str:  # type: ignore[override]
         for header, token in await self.auth_metadata():
             if header == YDB_AUTH_TICKET_HEADER:
                 return token

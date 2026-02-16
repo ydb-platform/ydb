@@ -434,8 +434,36 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoTestOrderByCosine(4, 0);
     }
 
-    Y_UNIT_TEST_TWIN(PrefixedVectorIndexOrderByCosineDistanceWithCover, Nullable) {
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceWithCover, Nullable) {
         DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING);
+    }
+
+    Y_UNIT_TEST_QUAD(OrderByCosineOnlyVectorCovered, Nullable, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, (Nullable ? F_NULLABLE : 0));
+        DoCreatePrefixedVectorIndex(session, 2, F_COVERING | F_SUFFIX_PK | (Overlap ? F_OVERLAP : 0));
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), (std::vector<std::string>{"user", "emb"}));
+            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), (std::vector<std::string>{"emb", "data"}));
+        }
+
+        // Check without F_COVERING here because user column is not covered and query still accesses the main table
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, 0);
     }
 
     Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffix, Nullable, Covered) {
@@ -925,6 +953,45 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpsertClusterChangeReturning, Covered) {
         DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `user`, `emb`, `data`) VALUES (91, "user_a", "\x03\x31\x02", "19") RETURNING `data`, `emb`, `user`, `pk`;)"),
             F_NULLABLE | F_RETURNING | (Covered ? F_COVERING : 0));
+    }
+
+    Y_UNIT_TEST_TWIN(TwoIndexUpsert, UseUpsert) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        const int flags = 0;
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, flags);
+        DoCreatePrefixedVectorIndex(session, 2, flags);
+
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index2
+                    GLOBAL USING vector_kmeans_tree
+                    ON (user, emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=3);
+                )")));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Insert/upsert to the table should succeed
+        {
+            auto updateQuery = Q_(Sprintf(
+                R"(%s INTO `/Root/TestTable` (`pk`, `user`, `emb`, `data`) VALUES (101, "user_a", "\x03\x31\x02", "20");)",
+                UseUpsert ? "UPSERT" : "INSERT"
+            ));
+            auto result = session.ExecuteDataQuery(updateQuery, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
     }
 
     Y_UNIT_TEST_TWIN(VectorSearchPushdown, Covered) {

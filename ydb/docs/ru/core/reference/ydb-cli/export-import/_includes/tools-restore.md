@@ -35,13 +35,16 @@
 
 Команда `admin database restore` восстанавливает базу данных из резервной копии на файловой системы, ранее выгруженную туда командой `admin database dump`, или подготовленную вручную в соответствии с правилами, описанными в статье [{#T}](../file-structure.md):
 
+{% include [limitation](./limitation-restore-column-tables.md) %}
+
+{% include [limitation](./limitation-restore-secrets.md) %}
+
 ```bash
 {{ ydb-cli }} [connection options] admin database restore -i <PATH> [options]
 ```
 
-{% include [limitation](./limitation-restore-column-tables.md) %}
-
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
 
 {% include [restore-database-nodes.md](./restore-database-nodes.md) %}
 
@@ -66,11 +69,13 @@
 
 Команда `tools restore` создает в базе данных объекты схемы данных и загружает в них данные из файловой системы, ранее выгруженные туда командой `tools dump`, или подготовленные вручную в соответствии с правилами, описанными в статье [Файловая структура](../file-structure.md):
 
+{% include [limitation](./limitation-restore-column-tables.md) %}
+
+{% include [limitation](./limitation-restore-secrets.md) %}
+
 ```bash
 {{ ydb-cli }} [connection options] tools restore -p <PATH> -i <PATH> [options]
 ```
-
-{% include [limitation](./limitation-restore-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 

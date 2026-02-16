@@ -21,7 +21,6 @@ namespace NYql::NFmr {
 
 class TFmrJob: public IFmrJob {
 public:
-
     TFmrJob(
         const TString& tableDataServiceDiscoveryFilePath,
         IYtJobService::TPtr ytJobService,
@@ -37,12 +36,12 @@ public:
         TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery);
     }
 
-    virtual std::variant<TError, TStatistics> Download(
+    virtual std::variant<TFmrError, TStatistics> Download(
         const TDownloadTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
-        try {
+        auto downloadJobFunc = [&, cancelFlag] () -> TStatistics {
             const auto ytTableTaskRef = params.Input;
             const auto output = params.Output;
             const auto tableId = output.TableId;
@@ -59,20 +58,17 @@ public:
             tableDataServiceWriter->Flush();
 
             TTableChunkStats stats = tableDataServiceWriter->GetStats();
-            auto statistics = TStatistics({{output, stats}});
-            return statistics;
-        } catch (...) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside download: " << CurrentExceptionMessage();
-            return TError(CurrentExceptionMessage());
-        }
+            return TStatistics({{output, stats}});
+        };
+        return HandleFmrJob(downloadJobFunc, ETaskType::Download);
     }
 
-    virtual std::variant<TError, TStatistics> Upload(
+    virtual std::variant<TFmrError, TStatistics> Upload(
         const TUploadTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
-        try {
+        auto uploadJobFunc = [&, cancelFlag] () -> TStatistics {
             const auto ytTable = params.Output;
             const auto tableId = params.Input.TableId;
             const auto tableRanges = params.Input.TableRanges;
@@ -87,18 +83,16 @@ public:
             ytTableWriter->Flush();
 
             return TStatistics(); // TODO - get actual stats from yt table.
-        } catch (...) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside upload: " << CurrentExceptionMessage();
-            return TError(CurrentExceptionMessage());
-        }
+        };
+        return HandleFmrJob(uploadJobFunc, ETaskType::Upload);
     }
 
-    virtual std::variant<TError, TStatistics> SortedUpload(
+    virtual std::variant<TFmrError, TStatistics> SortedUpload(
         const TSortedUploadTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
-        try {
+        auto sortedUploadJobFunc = [&, cancelFlag] () -> TStatistics {
             const auto tableId = params.Input.TableId;
             const auto tableRanges = params.Input.TableRanges;
             const auto neededColumns = params.Input.Columns;
@@ -122,7 +116,7 @@ public:
                 cancelFlag);
             writer->Finish();
 
-             auto fragmentResult = writer->GetResponse();
+            auto fragmentResult = writer->GetResponse();
             TString fragmentResultYson = NYT::NodeToYsonString(fragmentResult);
             TStatistics stats;
             stats.TaskResult = TTaskSortedUploadResult{
@@ -130,18 +124,16 @@ public:
                 .FragmentOrder = order
             };
             return stats;
-        } catch (...) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside distributed upload: " << CurrentExceptionMessage();
-            return TError(CurrentExceptionMessage());
-        }
+        };
+        return HandleFmrJob(sortedUploadJobFunc, ETaskType::SortedUpload);
     }
 
-    virtual std::variant<TError, TStatistics> Merge(
+    virtual std::variant<TFmrError, TStatistics> Merge(
         const TMergeTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
-        try {
+        auto mergeJobFunc = [&, cancelFlag] () -> TStatistics {
             const auto taskTableInputRef = params.Input;
             const auto output = params.Output;
 
@@ -150,6 +142,7 @@ public:
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(output.TableId, output.PartId, TableDataService_, output.SerializedColumnGroups, Settings_.FmrWriterSettings);
             auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads, parseRecordSettings.MaxQueueSize, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
             TMaybe<TMutex> mutex = TMutex();
+            std::exception_ptr mergeException;
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 threadPool->SafeAddFunc([&, tableDataServiceWriter] {
                     try {
@@ -158,22 +151,23 @@ public:
                             ParseRecords(tableReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
                         }
                     } catch (...) {
-                        YQL_CLOG(ERROR, FastMapReduce) << CurrentExceptionMessage();
-                        throw yexception() << CurrentExceptionMessage();
+                        mergeException = std::current_exception();
                     }
                 });
             }
             threadPool->Stop();
 
+            if (mergeException) {
+                std::rethrow_exception(mergeException);
+            }
+
             tableDataServiceWriter->Flush();
             return TStatistics({{output, tableDataServiceWriter->GetStats()}});
-        } catch (...) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside merge: " << CurrentExceptionMessage();
-            return TError(CurrentExceptionMessage());
-        }
+        };
+        return HandleFmrJob(mergeJobFunc, ETaskType::Merge);
     }
 
-    virtual std::variant<TError, TStatistics> Map(
+    virtual std::variant<TFmrError, TStatistics> Map(
         const TMapTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
@@ -182,15 +176,32 @@ public:
         const std::vector<TYtResourceInfo>& jobYtResources,
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
-        TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
-        TFmrUserJob mapJob;
-        // deserialize map job and fill params
-        TStringStream serializedJobStateStream(params.SerializedMapJobState);
-        mapJob.Load(serializedJobStateStream);
-        FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, userJobSettings, YtJobService_);
-        return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+        auto mapJobFunc = [&, this] () {
+            TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
+            TFmrUserJob mapJob;
+            // deserialize map job and fill params
+            TStringStream serializedJobStateStream(params.SerializedMapJobState);
+            mapJob.Load(serializedJobStateStream);
+            FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, userJobSettings, YtJobService_);
+            return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+        };
+        return HandleFmrJob(mapJobFunc, ETaskType::Map);
     }
     // TODO - figure out how to how to use cancel flag to kill map job.
+
+private:
+    std::variant<TFmrError, TStatistics> HandleFmrJob(auto fmrJobFunc, ETaskType fmrJobType) {
+        TString errorLogMessage;
+        EFmrErrorReason errorReason;
+        try {
+            return fmrJobFunc();
+        } catch (...) {
+            errorLogMessage = CurrentExceptionMessage();
+            errorReason = ParseFmrReasonFromErrorMessage(errorLogMessage);
+        }
+        YQL_CLOG(ERROR, FastMapReduce) << "Gotten exception inside fmr " << fmrJobType << " job with message " << errorLogMessage << " and reason " << errorReason;
+        return TFmrError{.Reason = errorReason, .ErrorMessage = errorLogMessage};
+    }
 
 private:
     ITableDataService::TPtr TableDataService_; // Table data service http client
@@ -237,12 +248,11 @@ TJobResult RunJob(
         }
     };
 
-    std::variant<TError, TStatistics> taskOutput = std::visit(processTask, task->TaskParams);
-    auto err = std::get_if<TError>(&taskOutput);
+    std::variant<TFmrError, TStatistics> taskOutput = std::visit(processTask, task->TaskParams);
+    auto err = std::get_if<TFmrError>(&taskOutput);
     if (err) {
-        ythrow yexception() << "Job failed with error: " << err->ErrorMessage;
+        return TJobResult{.TaskStatus = ETaskStatus::Failed, .Error = *err};
     }
-
     auto statistics = std::get_if<TStatistics>(&taskOutput);
     return {ETaskStatus::Completed, *statistics};
 };

@@ -2,10 +2,10 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#define Y_UNIT_TEST_TWIN(N, OPT)                                                                                   \
+#define Y_UNIT_TEST_TWIN_IMPL(N, OPT, F)                                                                           \
     template <bool OPT>                                                                                            \
-    struct TTestCase##N : public TCurrentTestCase {                                                                \
-        TTestCase##N() : TCurrentTestCase() {                                                                      \
+    struct TTestCase##N : public F {                                                                               \
+        TTestCase##N() : F() {                                                                                     \
             if constexpr (OPT) { Name_ = #N "+" #OPT; } else { Name_ = #N "-" #OPT; }                              \
         }                                                                                                          \
         static THolder<NUnitTest::TBaseTestCase> CreateOn()  { return ::MakeHolder<TTestCase##N<true>>();  }       \
@@ -22,6 +22,9 @@
     template <bool OPT>                                                                                            \
     void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
+#define Y_UNIT_TEST_TWIN(N, OPT) Y_UNIT_TEST_TWIN_IMPL(N, OPT, TCurrentTestCase)
+#define Y_UNIT_TEST_TWIN_F(N, OPT, F) Y_UNIT_TEST_TWIN_IMPL(N, OPT, F)
+
 #define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
     template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
     struct TTestRegistration##N {                                                                                                    \
@@ -35,5 +38,3 @@
     static TTestRegistration##N testRegistration##N;                                                                                 \
     template<bool OPT1, bool OPT2>                                                                                                   \
     void N(NUnitTest::TTestContext&)
-
-

@@ -329,7 +329,7 @@ protected:
 
         auto userCtx = record.GetUserCtx();
         if (userCtx != nullptr) {
-            if (!userCtx->UserSID.empty()) {
+            if (!userCtx->UserSID.empty() && Opts.UserSIDs) {
                 json["user"] = userCtx->UserSID;
             }
             if (!userCtx->UserTraceId.empty()) {
@@ -542,7 +542,7 @@ protected:
 
         auto userCtx = record.GetUserCtx();
         if (userCtx!=nullptr) {
-            if (!userCtx->UserSID.empty()) {
+            if (!userCtx->UserSID.empty() && Opts.UserSIDs) {
                 auto& userIdentityJson = json["userIdentity"];
                 if (userCtx->UserSID == BUILTIN_ACL_CDC_TTL) {
                     userIdentityJson["type"] = "Service";   
@@ -608,8 +608,8 @@ protected:
             }
         }
 
-        auto& payloadJson = valueJson["payload"];
-        payloadJson["source"] = NJson::TJsonMap({
+        auto& sourceJson = valueJson["payload"]["source"];
+        sourceJson = NJson::TJsonMap({
             {"version", "1.0.0"},
             {"connector", "ydb"},
             {"ts_ms", record.GetApproximateCreationDateTime().MilliSeconds()},
@@ -621,11 +621,11 @@ protected:
 
         auto userCtx = record.GetUserCtx();
         if (userCtx!=nullptr) {
-            if (!userCtx->UserSID.empty()) {
-                payloadJson["user"] = userCtx->UserSID;
+            if (!userCtx->UserSID.empty() && Opts.UserSIDs) {
+                sourceJson["user"] = userCtx->UserSID;
             }
             if (!userCtx->UserTraceId.empty()) {
-                payloadJson["trace_id"] = userCtx->UserTraceId;
+                sourceJson["trace_id"] = userCtx->UserTraceId;
             }
         }
     }

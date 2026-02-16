@@ -17,7 +17,10 @@
 #include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
+#include <ydb/core/tx/schemeshard/schemeshard_path_describer.h>
+#include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <util/generic/algorithm.h>
@@ -140,9 +143,16 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
         .FailOnRestrictedCreateInTempZone();
 
     if (path.IsResolved()) {
-        checks
-            .IsResolved()
-            .IsDeleted();
+        if (path->IsSysView()) {
+            checks
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting();
+        } else {
+            checks
+                .IsResolved()
+                .IsDeleted();
+        }
     } else {
         checks
             .NotEmpty()
@@ -588,6 +598,112 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
+    void ProcessSysViewRestore(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+        Y_ABORT_UNLESS(item.SysView);
+
+        NIceDb::TNiceDb db(txc.DB);
+        NYql::TIssues issues;
+
+        LOG_I("TImport::TTxProgress: ProcessSysViewRestore"
+            << ": info# " << importInfo->ToString()
+            << ", item# " << item.ToString(itemIdx)
+        );
+
+        const auto ev = DescribePath(Self, ctx, item.DstPathName);
+        const auto& describeResult = ev->GetRecord();
+        const auto status = describeResult.GetStatus();
+
+        if (status == NKikimrScheme::StatusPathDoesNotExist) {
+            LOG_I("TImport::TTxProgress: ProcessSysViewRestore"
+                << ", item# " << item.ToString(itemIdx)
+                << ": system view does not exist"
+            );
+
+            item.State = EState::Done;
+            return;
+        } else if (status == NKikimrScheme::StatusSuccess) {
+            Ydb::Table::DescribeSystemViewResult describeSysViewResult;
+            Ydb::StatusIds_StatusCode status;
+            TString error;
+
+            const auto& pathDescription = describeResult.GetPathDescription();
+            if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
+                LOG_I("TImport::TTxProgress: ProcessSysViewRestore"
+                    << ", item# " << item.ToString(itemIdx)
+                    << ": path is not a system view"
+                );
+
+                item.State = EState::Done;
+                return;
+            }
+
+            const auto compatibilityStatus = NYdb::NDump::CheckSysViewCompatibility(*item.SysView, describeSysViewResult);
+            if (!compatibilityStatus.IsSuccess()) {
+                LOG_E("TImport::TTxProgress: ProcessSysViewRestore"
+                    << ", item# " << item.ToString(itemIdx)
+                    << ": system view compatibility check failed"
+                );
+
+                return CancelAndPersist(db, importInfo, itemIdx, compatibilityStatus.GetIssues().ToString(),
+                    "sysview compatibility check failed");
+            } else {
+                if (item.Permissions.Empty()) {
+                    item.State = EState::Done;
+                    return;
+                } else {
+                    LOG_I("TImport::TTxProgress: ProcessSysViewRestore"
+                        << ", item# " << item.ToString(itemIdx)
+                        << ": needs to restore ACL"
+                    );
+
+                    AllocateTxId(*importInfo, itemIdx);
+                    return;
+                }
+            }
+        } else {
+            issues.AddIssue(TStringBuilder() << "can't get path'" << item.DstPathName << "' description");
+            return CancelAndPersist(db, importInfo, itemIdx, issues.ToString(), "invalid describe path status");
+        }
+    }
+
+    bool ReplaceSysViewACL(TImportInfo& importInfo, ui32 itemIdx, TTxId txId, TString& error) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        auto& item = importInfo.Items.at(itemIdx);
+        Y_ABORT_UNLESS(item.SysView);
+
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TImport::TTxProgress: RestoreSysViewPermissions propose"
+            << ": info# " << importInfo.ToString()
+            << ", item# " << item.ToString(itemIdx)
+            << ", txId# " << txId);
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+
+        auto path = TPath::Resolve(item.DstPathName, Self);
+        Y_ABORT_UNLESS(path);
+
+        // Only restore permissions, don't create the system view itself
+        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), Self->TabletID());
+        auto& record = propose->Record;
+
+        auto& modifyScheme = *record.AddTransaction();
+        modifyScheme.SetWorkingDir(path.Parent().PathString());
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+
+        auto& op = *modifyScheme.MutableModifyACL();
+        op.SetName(path.Base()->Name);
+
+        if (!FillACL(modifyScheme, item.Permissions, error)) {
+            return false;
+        }
+
+        Send(Self->SelfId(), std::move(propose));
+        return true;
+    }
+
     bool CreateTopic(TImportInfo& importInfo, ui32 itemIdx, TTxId txId, TString& error) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
         auto& item = importInfo.Items.at(itemIdx);
@@ -990,7 +1106,7 @@ private:
 
         SendNotificationsIfFinished(importInfo);
     }
-    
+
     TMaybe<TString> GetIssues(const TImportInfo::TItem& item, TTxId restoreTxId) {
         if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
             Y_ABORT_UNLESS(Self->ColumnTables.contains(item.DstPathId));
@@ -1232,12 +1348,19 @@ private:
         }
 
         if (!IsCreatedByQuery(item)) {
-            AllocateTxId(*importInfo, msg.ItemIdx);
+            if (item.SysView) {
+                ProcessSysViewRestore(txc, importInfo, msg.ItemIdx, ctx);
+            } else {
+                AllocateTxId(*importInfo, msg.ItemIdx);
+            }
         }
 
         Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
 
-        item.State = EState::CreateSchemeObject;
+        if (item.State != EState::Done) {
+            item.State = EState::CreateSchemeObject;
+        }
+
         Self->PersistImportItemState(db, *importInfo, msg.ItemIdx);
 
         const TString parentSrc = importInfo->GetItemSrcPrefix(msg.ItemIdx);
@@ -1264,7 +1387,19 @@ private:
             Self->PersistImportItemScheme(db, *importInfo, childIdx);
         }
 
+        const auto stateCounts = CountItemsByState(importInfo->Items);
+        if (AllDone(stateCounts)) {
+            importInfo->State = EState::Done;
+            importInfo->EndTime = TAppData::TimeProvider->Now();
+        }
+
         Self->PersistImportState(db, *importInfo);
+
+        SendNotificationsIfFinished(importInfo);
+
+        if (importInfo->IsFinished()) {
+            AuditLogImportEnd(*importInfo.Get(), Self);
+        }
     }
 
     void OnSchemaMappingResult(TTransactionContext& txc, const TActorContext& ctx) {
@@ -1413,6 +1548,16 @@ private:
                     itemIdx = i;
                     break;
                 }
+                if (item.SysView) {
+                    TString error;
+                    if (!ReplaceSysViewACL(*importInfo, i, txId, error)) {
+                        NIceDb::TNiceDb db(txc.DB);
+                        CancelAndPersist(db, importInfo, i, error, "restore sysview permissions failed");
+                        return;
+                    }
+                    itemIdx = i;
+                    break;
+                }
                 if (IsCreatedByQuery(item)) {
                     // We only need a txId for modify scheme transactions.
                     // If an object’s CreationQuery has not been prepared yet, it does not need a txId at this point.
@@ -1506,7 +1651,11 @@ private:
             }
         }
 
-        if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
+        if (record.GetStatus() == NKikimrScheme::StatusSuccess) {
+            Self->TxIdToImport.erase(txId);
+            txId = InvalidTxId;
+            item.State = EState::Done;
+        } else if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
             Self->TxIdToImport.erase(txId);
             txId = InvalidTxId;
 
@@ -1557,14 +1706,30 @@ private:
             return;
         }
 
-        if (item.State == EState::CreateSchemeObject) {
+        if (item.State == EState::Done || item.State == EState::CreateSchemeObject) {
             UpdateItemDstPathId(db, *importInfo, itemIdx);
             for (auto childIdx : item.ChildItems) {
                 UpdateItemDstPathId(db, *importInfo, childIdx);
             }
         }
 
-        SubscribeTx(*importInfo, itemIdx);
+        if (txId != InvalidTxId) {
+            SubscribeTx(*importInfo, itemIdx);
+        }
+
+        const auto stateCounts = CountItemsByState(importInfo->Items);
+        if (AllDone(stateCounts)) {
+            importInfo->State = EState::Done;
+            importInfo->EndTime = TAppData::TimeProvider->Now();
+        }
+
+        Self->PersistImportState(db, *importInfo);
+
+        SendNotificationsIfFinished(importInfo);
+
+        if (importInfo->IsFinished()) {
+            AuditLogImportEnd(*importInfo.Get(), Self);
+        }
     }
 
     void UpdateItemDstPathId(NIceDb::TNiceDb& db, TImportInfo& importInfo, ui32 itemIdx) {

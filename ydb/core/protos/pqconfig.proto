@@ -401,6 +401,10 @@ message TPQTabletConfig {
         optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
         optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
         optional bool ContentBasedDeduplication = 20 [default = false]; // For MLP consumers
+
+        optional uint32 MetricsLevel = 21;
+        // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
+        optional string MonitoringProjectId = 22;
     }
 
     repeated TConsumer Consumers = 37;
@@ -1328,6 +1332,7 @@ message TEvMLPGetPartitionResponse {
 message TEvMLPErrorResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     optional string ErrorMessage = 2;
+    optional uint32 PartitionId = 3;
 }
 
 // To PQTablet
@@ -1388,6 +1393,19 @@ message TEvMLPChangeMessageDeadlineRequest {
 // From PQTablet
 message TEvMLPChangeMessageDeadlineResponse {
 }
+
+// To PQTablet
+message TEvMLPPurgeRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+}
+
+// From PQTablet
+message TEvMLPPurgeResponse {
+    optional uint32 PartitionId = 1;
+}
+
 
 message TMLPMetrics {
     optional uint64 TotalCommittedMessageCount = 2;

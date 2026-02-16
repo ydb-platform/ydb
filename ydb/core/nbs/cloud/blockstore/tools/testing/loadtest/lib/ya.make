@@ -24,5 +24,4 @@ PEERDIR(
 END()
 
 RECURSE(
-    protos
 )

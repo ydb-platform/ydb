@@ -15,4 +15,4 @@
 #define ABIFLAGS ""
 #endif
 
-#include "../PC/pyconfig.h"
+#include "../PC/pyconfig.h.in"

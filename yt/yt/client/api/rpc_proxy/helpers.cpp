@@ -42,7 +42,8 @@ void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceP
         auto totalStreamingTimeout = config->DefaultTotalStreamingTimeout;
         NRpc::TStreamingParameters patchedParameters{
             .ReadTimeout = totalStreamingTimeout,
-            .WriteTimeout = totalStreamingTimeout};
+            .WriteTimeout = totalStreamingTimeout,
+        };
 
         proxy->DefaultClientAttachmentsStreamingParameters() = patchedParameters;
         proxy->DefaultServerAttachmentsStreamingParameters() = patchedParameters;

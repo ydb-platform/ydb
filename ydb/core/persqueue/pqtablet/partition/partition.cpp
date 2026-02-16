@@ -1863,7 +1863,7 @@ void TPartition::CheckHeadConsistency() const
 }
 
 ui64 TPartition::GetSizeLag(i64 offset) {
-    return BlobEncoder.GetSizeLag(offset);
+    return BlobEncoder.GetSizeLag(offset) + CompactionBlobEncoder.GetSizeLag(offset);
 }
 
 
@@ -1915,8 +1915,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         if (ts < MIN_TIMESTAMP_MS) {
             ts = Max<i64>();
         }
-        if (userInfo.WriteTimeLagMsByCommittedPerPartition) {
-            userInfo.WriteTimeLagMsByCommittedPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
+        for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+            perPartitionCounters.WriteTimeLagMsByCommittedPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
         SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_WRITE_TIME, ts);
 
@@ -1931,31 +1931,31 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         SET_METRIC(userInfo.LabeledCounters, METRIC_READ_TOTAL_TIME, snapshot.TotalLag.MilliSeconds());
 
         ts = snapshot.LastReadTimestamp.MilliSeconds();
-        if (userInfo.TimeSinceLastReadMsPerPartition) {
-            userInfo.TimeSinceLastReadMsPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
+        for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+            perPartitionCounters.TimeSinceLastReadMsPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
         SET_METRIC(userInfo.LabeledCounters, METRIC_LAST_READ_TIME, ts);
 
         {
             ui64 timeLag = userInfo.GetWriteLagMs();
-            if (userInfo.WriteTimeLagMsByLastReadPerPartition) {
-                userInfo.WriteTimeLagMsByLastReadPerPartition->Set(timeLag);
+            for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+                perPartitionCounters.WriteTimeLagMsByLastReadPerPartition->Set(timeLag);
             }
             SET_METRIC(userInfo.LabeledCounters, METRIC_WRITE_TIME_LAG, timeLag);
         }
 
         {
             auto lag = snapshot.ReadLag.MilliSeconds();
-            if (userInfo.ReadTimeLagMsPerPartition) {
-                userInfo.ReadTimeLagMsPerPartition->Set(lag);
+            for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+                perPartitionCounters.ReadTimeLagMsPerPartition->Set(lag);
             }
             SET_METRIC(userInfo.LabeledCounters, METRIC_READ_TIME_LAG, lag);
         }
 
         {
             ui64 lag = GetEndOffset() - userInfo.Offset;
-            if (userInfo.MessageLagByCommittedPerPartition) {
-                userInfo.MessageLagByCommittedPerPartition->Set(lag);
+            for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+                perPartitionCounters.MessageLagByCommittedPerPartition->Set(lag);
             }
 
             SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_MESSAGE_LAG, lag);
@@ -1963,8 +1963,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         }
 
         ui64 readMessageLag = GetEndOffset() - snapshot.ReadOffset;
-        if (userInfo.MessageLagByLastReadPerPartition) {
-            userInfo.MessageLagByLastReadPerPartition->Set(readMessageLag);
+        for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+            perPartitionCounters.MessageLagByLastReadPerPartition->Set(readMessageLag);
         }
 
         SET_METRICS_COUPLE(userInfo.LabeledCounters, METRIC_READ_MESSAGE_LAG, readMessageLag, METRIC_READ_TOTAL_MESSAGE_LAG);
@@ -2802,7 +2802,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         PQ_LOG_TX_D("The TxId " << t->GetTxId() << " is waiting for TEvGetWriteInfoResponse");
         return EProcessResult::NotReady;
     }
-    if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
+    if (t->WriteInfo && !t->WriteInfoApplied) { //Received write info but not applied
         result = ApplyWriteInfoResponse(*t, affectedSourceIdsAndConsumers);
         if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
             PQ_LOG_TX_D("The TxId " << t->GetTxId() << " must be blocked");
@@ -3441,13 +3441,15 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
-    if (MonitoringProjectId != Config.GetMonitoringProjectId() || !DetailedMetricsAreEnabled(Config)) {
+    if (MonitoringProjectId != Config.GetMonitoringProjectId()) {
+        UsersInfoStorage->ResetDetailedMetrics();
+        ResetDetailedMetrics();
+    } else if (!DetailedMetricsAreEnabled(Config)) {
         ResetDetailedMetrics();
     }
     MonitoringProjectId = Config.GetMonitoringProjectId();
-    if (DetailedMetricsAreEnabled(Config)) {
-        SetupDetailedMetrics();
-    }
+    SetupDetailedMetrics();
+    UsersInfoStorage->SetupDetailedMetrics(ActorContext());
 }
 
 
@@ -4576,15 +4578,13 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 void TPartition::SetupDetailedMetrics() {
-    if (!DetailedMetricsAreEnabled(Config)) {
+    if (!DetailedMetricsAreEnabled(Config) || IsSupportive()) {
         return;
     }
     if (WriteTimeLagMsByLastWritePerPartition) {
         // Don't recreate the counters if they already exist.
         return;
     }
-
-    UsersInfoStorage->SetupDetailedMetrics(ActorContext());
 
     auto subgroup = GetPerPartitionCounterSubgroup();
     if (!subgroup) {

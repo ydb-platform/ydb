@@ -1,3 +1,5 @@
+SUBSCRIBER(g:yql)
+
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/${MODDIR}
 )

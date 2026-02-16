@@ -127,7 +127,6 @@
             "NAIST-2003",
             "NOSL",
             "NPL-1.1",
-            "Nvidia-Gov",
             "OFL-1.1",
             "Oracle-Distribution-License",  // https://www.oracle.com/downloads/licenses/distribution-license.html
             "Oracle-FUTC",        // https://www.oracle.com/downloads/licenses/oracle-free-license.html
@@ -160,6 +159,7 @@
             "Artistic-1.0-Perl",
             "ClArtistic",
             "confluent-community-1.0",
+            "FSL-1.1-ALv2",
             "Moderne-Source-Available-License"
         ]
     },
@@ -235,7 +235,6 @@
             "DOC",
             "EDL-1.0",
             "Facebook-SDK",
-            "FDK",
             "FreeBSD-DOC",
             "FSFAP",
             "FTL",
@@ -275,6 +274,7 @@
             "LicenseRef-scancode-ams-fonts",
             "LicenseRef-scancode-bitstream",
             "LicenseRef-scancode-fftpack-2004",
+            "LicenseRef-scancode-fraunhofer-fdk-aac-codec",
             "LicenseRef-scancode-happy-bunny",
             "LicenseRef-scancode-mit-no-advert-export-control",
             "LicenseRef-scancode-nvidia-2002",

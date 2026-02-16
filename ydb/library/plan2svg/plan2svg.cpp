@@ -397,6 +397,34 @@ TScalarMetric::TScalarMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value
     Summary->Add(Value);
 }
 
+TString ParseTableOrIndexName(const TString& table) {
+    auto n = table.find_last_of('/');
+    if (n == table.npos) {
+        return table;
+    }
+
+    auto tableName = table.substr(n + 1);
+    if (n == 0 || tableName != "indexImplTable") {
+        return tableName;
+    }
+
+    auto ni = table.find_last_of('/', n - 1);
+    if (ni == table.npos) {
+        return table.substr(0, n);
+    }
+
+    if (ni == 0) {
+        return table.substr(ni + 1, n - ni - 1);
+    }
+
+    auto nt = table.find_last_of('/', ni - 1);
+    if (nt == table.npos) {
+        return table.substr(0, n);
+    } else {
+        return table.substr(nt + 1, nt - n - 1);
+    }
+}
+
 TString ParseColumns(const NJson::TJsonValue* node) {
     TStringBuilder builder;
     builder << '(';
@@ -675,7 +703,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
     }
 
-    stage->StatsNode = node.GetValueByPath("Stats");
+    if (!stage->StatsNode) {
+        stage->StatsNode = node.GetValueByPath("Stats");
+    }
     auto operators = node.GetValueByPath("Operators");
 
     std::vector<TOperatorInfo> externalOperators;
@@ -836,16 +866,11 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 } else if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                     TStringBuilder builder;
                     if (auto* tableNode = subNode.GetValueByPath("Table")) {
-                        auto table = tableNode->GetStringSafe();
-                        auto n = table.find_last_of('/');
-                        if (n != table.npos) {
-                            table = table.substr(n + 1);
-                        }
-                        builder << table;
+                        builder << ParseTableOrIndexName(tableNode->GetStringSafe());
                     }
                     builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
 
-                    if (name == "TableRangeScan") {
+                    if (name == "TablePointLookup" || name == "TableRangeScan") {
                         builder << ": ";
                         auto* readRangesNode = subNode.GetValueByPath("ReadRanges");
                         if (!readRangesNode) {
@@ -893,7 +918,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
 
                 std::vector<TOperatorInput> inputs;
 
-                if (auto* inputsArrayNode = subNode.GetValueByPath("Inputs")) {
+                auto* inputsArrayNode = subNode.GetValueByPath("Inputs");
+                if (inputsArrayNode && !inputsArrayNode->GetArraySafe().empty()) {
                     for (const auto& inputNode : inputsArrayNode->GetArray()) {
                         if (auto* internalOperatorIdNode = inputNode.GetValueByPath("InternalOperatorId")) {
                             auto internalOperatorId = internalOperatorIdNode->GetUIntegerSafe();
@@ -944,7 +970,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                 } else if (auto* precomputeRefNode = subNode.GetValueByPath("Input")) {
                     inputs.emplace_back();
-                    inputs.back().PrecomputeRef = precomputeRefNode->GetStringSafe();
+                    inputs.back().PrecomputeRef = "CTE " + precomputeRefNode->GetStringSafe();
                 }
 
                 if (externalOperator && !stage->External) {
@@ -993,7 +1019,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
 
-                    if (name == "TableFullScan" || name == "TableRangeScan") {
+                    if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                         Y_ENSURE(externalOperator);
                         if (stage->IngressName) {
                             ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
@@ -1014,7 +1040,16 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                         externalOperators.back().Blocks = true;
                                     }
                                 }
-                                if (auto* ingressNode = ingress0.GetValueByPath("Ingress")) {
+                                auto* ingressNode = ingress0.GetValueByPath("Ingress");
+                                if (ingressNode) {
+                                    if (!ingressNode->GetValueByPath("Bytes.Sum")) {
+                                        ingressNode = nullptr;
+                                    }
+                                }
+                                if (!ingressNode) {
+                                    ingressNode = ingress0.GetValueByPath("Push");
+                                }
+                                if (ingressNode) {
                                     if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
                                         stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
                                             *bytesNode, 0, 0,
@@ -1292,7 +1327,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         LoadStage(Stages.back(), subPlan, connection.get());
 
                         if (subNodeType == "Lookup" || subNodeType == "LookupJoin") {
-                            auto stage = Stages.back();
+                            // auto stage = Stages.back();
                             auto connection = std::make_shared<TConnection>(Viz.NextGroupId(), *stage, "External", 0);
                             stage->Connections.push_back(connection);
                             Stages.push_back(std::make_shared<TStage>(Viz.NextGroupId(), this, "External"));
@@ -1302,12 +1337,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             Stages.back()->External = true;
                             TStringBuilder builder;
                             if (auto* tableNode = plan.GetValueByPath("Table")) {
-                                auto table = tableNode->GetStringSafe();
-                                auto n = table.find_last_of('/');
-                                if (n != table.npos) {
-                                    table = table.substr(n + 1);
-                                }
-                                builder << table;
+                                builder << ParseTableOrIndexName(tableNode->GetStringSafe());
                             }
                             builder << ParseColumns(plan.GetValueByPath("Columns")) << " by " << ParseColumns(plan.GetValueByPath("LookupKeyColumns"));
                             Stages.back()->Operators.emplace_back("TableLookup", builder);
@@ -1359,7 +1389,16 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         if (auto* ingressTopNode = stage->StatsNode->GetValueByPath("Ingress")) {
                             // only 1 ingress node is possible (???)
                             auto& ingress0 = (*ingressTopNode)[0];
-                            if (auto* ingressNode = ingress0.GetValueByPath("Ingress")) {
+                            auto* ingressNode = ingress0.GetValueByPath("Ingress");
+                            if (ingressNode) {
+                                if (!ingressNode->GetValueByPath("Bytes.Sum")) {
+                                    ingressNode = nullptr;
+                                }
+                            }
+                            if (!ingressNode) {
+                                ingressNode = ingress0.GetValueByPath("Push");
+                            }
+                            if (ingressNode) {
                                 if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
                                     stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
                                         *bytesNode, 0, 0,
@@ -1382,13 +1421,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     LoadSource(plan, stage->Operators, ingressRowsNode);
-                } else if (subNodeType == "TableFullScan" || subNodeType == "TableRangeScan") {
-                    if (stage->IngressName) {
-                        ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
-                    }
-
+                } else if (subNodeType == "TableFullScan" || subNodeType == "TablePointLookup" || subNodeType == "TableRangeScan") {
                     NodeToSource.insert(connectionPlanNodeId);
-                    stage->IngressName = subNodeType;
                     LoadStage(stage, plan, outputConnection);
                 } else {
                     stage->Connections.push_back(std::make_shared<TConnection>(Viz.NextGroupId(), *stage, "Implicit", 0));
@@ -2213,32 +2247,34 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             }
         }
 
-        if (s->External) {
-            s->_Builder
-            << "<g><title>External Source, partitions: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
-                auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
-                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+        if (s->Tasks) {
+            if (s->External) {
                 s->_Builder
-                << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
-                << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
-            }
-            s->_Builder
-            << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
-            << "</g>" << Endl;
-        } else {
-            s->_Builder
-            << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
-                auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
-                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                << "<g><title>External Source, partitions: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+                if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
+                    auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
+                    auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                    s->_Builder
+                    << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
+                    << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+                }
                 s->_Builder
-                << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
-                << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+                << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
+                << "</g>" << Endl;
+            } else {
+                s->_Builder
+                << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+                if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
+                    auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
+                    auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                    s->_Builder
+                    << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
+                    << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+                }
+                s->_Builder
+                << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
+                << "</g>" << Endl;
             }
-            s->_Builder
-            << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
-            << "</g>" << Endl;
         }
 
         if (!s->Connections.empty()) {
@@ -2672,8 +2708,38 @@ TString TPlanVisualizer::PrintSvg() {
     ui32 offsetY = 0;
     ui32 timelineDelta = (UpdateTime > MaxTime) ? std::min<ui32>(Config.TimelineWidth * (UpdateTime - MaxTime) / UpdateTime, Config.TimelineWidth / 10) : 0;
 
+    ui64 maxSec = MaxTime / 1000;
+    ui64 deltaSec = 0;
+
+            if (maxSec <=  10) deltaSec = 1;
+    else if (maxSec <=  20) deltaSec = 2;
+    else if (maxSec <=  30) deltaSec = 3;
+    else if (maxSec <=  40) deltaSec = 4;
+    else if (maxSec <=  50) deltaSec = 5;
+    else if (maxSec <=  60) deltaSec = 6;
+    else if (maxSec <= 100) deltaSec = 10;
+    else if (maxSec <= 150) deltaSec = 15;
+    else if (maxSec <= 200) deltaSec = 20;
+    else if (maxSec <= 300) deltaSec = 30;
+    else if (maxSec <= 600) deltaSec = 60;
+    else if (maxSec <= 1200) deltaSec = 120;
+    else if (maxSec <= 1800) deltaSec = 180;
+    else if (maxSec <= 3600) deltaSec = 360;
+    else {
+        ui64 stepSec = maxSec / 10;
+        deltaSec = stepSec - (stepSec % 60);
+    }
+
+    auto x = Config.TimelineLeft + INTERNAL_GAP_X;
+    auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
+
     for (auto plan : Plans) {
         plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
+        for (ui64 t = 0; t < maxSec; t += deltaSec) {
+            ui64 x1 = t * w / maxSec;
+            auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
+            plan->_Builder << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT, timeLabel);
+        }
     }
 
     for (auto plan : Plans) {
@@ -2920,42 +2986,11 @@ TString TPlanVisualizer::PrintSvg() {
 )";
     svg << TString(background) << Endl;
 
-    {
-        ui64 maxSec = MaxTime / 1000;
-        ui64 deltaSec = 0;
-
-             if (maxSec <=  10) deltaSec = 1;
-        else if (maxSec <=  20) deltaSec = 2;
-        else if (maxSec <=  30) deltaSec = 3;
-        else if (maxSec <=  40) deltaSec = 4;
-        else if (maxSec <=  50) deltaSec = 5;
-        else if (maxSec <=  60) deltaSec = 6;
-        else if (maxSec <= 100) deltaSec = 10;
-        else if (maxSec <= 150) deltaSec = 15;
-        else if (maxSec <= 200) deltaSec = 20;
-        else if (maxSec <= 300) deltaSec = 30;
-        else if (maxSec <= 600) deltaSec = 60;
-        else if (maxSec <= 1200) deltaSec = 120;
-        else if (maxSec <= 1800) deltaSec = 180;
-        else if (maxSec <= 3600) deltaSec = 360;
-        else {
-            ui64 stepSec = maxSec / 10;
-            deltaSec = stepSec - (stepSec % 60);
-        }
-
-        auto x = Config.TimelineLeft + INTERNAL_GAP_X;
-        auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
-
-        for (ui64 t = 0; t < maxSec; t += deltaSec) {
-            ui64 x1 = t * w / maxSec;
-            svg
-                << "<line x1='" << x + x1 << "' y1='0' x2='" << x + x1 << "' y2='" << "100%" // offsetY
-                << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
-            auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
-            for (auto p : Plans) {
-                svg << SvgTextS(x + x1 + 2, p->OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT), timeLabel);
-            }
-        }
+    for (ui64 t = 0; t < maxSec; t += deltaSec) {
+        ui64 x1 = t * w / maxSec;
+        svg
+            << "<line x1='" << x + x1 << "' y1='0' x2='" << x + x1 << "' y2='" << "100%" // offsetY
+            << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
     }
 
     if (timelineDelta) {

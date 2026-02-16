@@ -34,6 +34,7 @@ extern "C" {
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
 #include <yql/essentials/parser/pg_wrapper/interface/raw_parser.h>
+#include <yql/essentials/parser/pg_wrapper/arena_ctx.h>
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -5269,11 +5270,11 @@ const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
     {NYql::KikimrProviderName, "insert_abort"},
     {NYql::YtProviderName, "append"}};
 
-NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
+NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
     TVector<NYql::TAstParseResult> results;
     TVector<TStmtParseInfo> stmtParseInfos;
     TConverter converter(results, settings, query, &stmtParseInfos, false, Nothing());
-    NYql::PGParse(query, converter);
+    parseResult.Visit(converter);
     if (stmtParseInfo) {
         Y_ENSURE(!stmtParseInfos.empty());
         *stmtParseInfo = stmtParseInfos.back();
@@ -5281,6 +5282,12 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
     Y_ENSURE(!results.empty());
     results.back().ActualSyntaxType = NYql::ESyntaxType::Pg;
     return std::move(results.back());
+}
+
+NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
+    NYql::TPGParseResult parseResult;
+    NYql::PGParse(query, parseResult);
+    return PGToYql(parseResult, query, settings, stmtParseInfo);
 }
 
 TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo) {

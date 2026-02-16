@@ -17,6 +17,8 @@ ENDIF()
 
 REQUIREMENTS(ram:32)
 
+SUBSCRIBER(g:yql)
+
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)
 

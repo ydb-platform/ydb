@@ -453,6 +453,7 @@ struct TShardedTableOptions {
         TMaybe<TString> AwsRegion;
         bool TopicAutoPartitioning = false;
         bool SchemaChanges = false;
+        bool UserSIDs = true;
     };
 
     struct TFamily {
@@ -538,7 +539,7 @@ ui64 AsyncCreateCopyTable(Tests::TServer::TPtr server,
                           bool isBackup = false);
 
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
-    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);
+    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false, ui64 cookie = 0);
 
 NKikimrTxDataShard::TEvCompactBorrowedResult CompactBorrowed(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId);

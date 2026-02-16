@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index 9db00cd..b4a91c4 100644
+index 658a7e1..db71851 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -522,7 +522,7 @@ typedef __char32_t char32_t;
+@@ -526,7 +526,7 @@ typedef __char32_t char32_t;
  // TODO: We provide a escape hatch with _LIBCPP_NO_ABI_TAG for folks who want to avoid increasing
  //       the length of symbols with an ABI tag. In practice, we should remove the escape hatch and
  //       use compression mangling instead, see https://github.com/itanium-cxx-abi/cxx-abi/issues/70.

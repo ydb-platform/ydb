@@ -344,14 +344,15 @@ using TTask = NYql::NDq::TTask<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskO
 
 class TKqpTasksGraph : public NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta> {
 public:
-    explicit TKqpTasksGraph(
+    TKqpTasksGraph(
         const TString& database,
         const TVector<IKqpGateway::TPhysicalTxData>& transactions,
         const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
         const TPartitionPrunerConfig& partitionPrunerConfig,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
         const TKqpRequestCounters::TPtr& counters,
-        TActorId bufferActorId
+        TActorId bufferActorId,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken
     );
 
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
@@ -430,6 +431,7 @@ private:
     void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
 
     std::vector<std::pair<ui64, i64>> BuildInternalSinksPriorityOrder();
+    TString ReplaceStructuredTokenReferences(const TString& token) const;
 
 private:
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
@@ -437,6 +439,7 @@ private:
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TKqpRequestCounters::TPtr Counters;
     TActorId BufferActorId; // TODO: not sure if it belongs here
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);

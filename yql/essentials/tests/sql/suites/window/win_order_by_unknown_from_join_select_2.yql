@@ -1,0 +1,26 @@
+$a = (
+    SELECT
+        1 AS x
+);
+
+$b = (
+    SELECT
+        1 AS x
+);
+
+SELECT
+    *
+FROM
+    $a AS a
+JOIN
+    $b AS b
+ON
+    a.x == b.x
+WINDOW
+    w AS (
+        PARTITION BY
+            x
+        ORDER BY
+            a.y
+    )
+;

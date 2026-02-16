@@ -16,12 +16,12 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         // Common params
-        config.Opts->AddLongOption("queue-url", "AWS queue URL.")
+        config.Opts->AddLongOption("queue-url", "Queue URL.")
             .Required()
             .StoreResult(&Scenario.QueueUrl);
-        config.Opts->AddLongOption("endpoint-override", "AWS queue endpoint.")
+        config.Opts->AddLongOption("queue-endpoint", "Queue endpoint.")
             .Optional()
-            .StoreResult(&Scenario.EndpointOverride);
+            .StoreResult(&Scenario.QueueEndpoint);
         config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
             .DefaultValue(60)
             .StoreResult(&Scenario.TotalSec);
@@ -45,15 +45,15 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(80.0)
             .StoreResult(&Scenario.Percentile);
         config.Opts
-            ->AddLongOption("consumers", "Number of concurrent consumers.")
+            ->AddLongOption("workers", "Number of concurrent workers.")
             .DefaultValue(1)
-            .StoreResult(&Scenario.Concurrency);
-        config.Opts->AddLongOption('a', "account", "AWS account ID.")
-            .Required()
+            .StoreResult(&Scenario.WorkersCount);
+        config.Opts->AddLongOption("aws-access-key-id", "AWS access key id.")
             .StoreResult(&Scenario.Account);
-        config.Opts->AddLongOption('t', "token", "AWS token.")
-            .Required()
+        config.Opts->AddLongOption("aws-session-token", "AWS session token.")
             .StoreResult(&Scenario.Token);
+        config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
+            .StoreResult(&Scenario.SecretKey);
         config.Opts->AddLongOption("error-messages-rate", "Error messages rate.")
             .Optional()
             .ManualDefaultValueDescription(
@@ -61,7 +61,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Scenario.ErrorMessagesRate);
         config.Opts
             ->AddLongOption("error-messages-destiny",
-                            "Error messages destiny (fatal, sucess-after-retry).")
+                            "Error messages destiny (fatal, success-after-retry).")
             .DefaultValue("fatal")
             .StoreResult(&Scenario.ErrorMessagesDestiny);
         config.Opts
@@ -80,9 +80,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("validate-fifo", "Validate FIFO queue.")
             .DefaultValue(false)
             .StoreTrue(&Scenario.ValidateFifo);
-        config.Opts->AddLongOption("use-json-api", "Use JSON API.")
+        config.Opts->AddLongOption("use-xml-api", "Use XML API.")
             .DefaultValue(false)
-            .StoreTrue(&Scenario.UseJsonAPI);
+            .StoreTrue(&Scenario.UseXmlAPI);
         config.Opts
             ->AddLongOption("request-timeout", "Request timeout in milliseconds.")
             .DefaultValue(2000)

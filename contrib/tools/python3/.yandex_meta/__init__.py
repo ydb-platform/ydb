@@ -17,14 +17,12 @@ from devtools.yamaker.project import NixSourceProject
 MODULES_WINDOWS = (
     "Modules/_winapi.c",
     "Modules/overlapped.c",
+    "Python/dynload_win.c",
 )
 
 MODULES_DARWIN = ("Modules/_scproxy.c",)
 
-MODULES_LINUX = ("Modules/spwdmodule.c",)
-
 MODULES_POSIX = (
-    "Modules/_cryptmodule.c",
     "Modules/_posixsubprocess.c",
     "Modules/fcntlmodule.c",
     "Modules/grpmodule.c",
@@ -32,6 +30,7 @@ MODULES_POSIX = (
     "Modules/resource.c",
     "Modules/syslogmodule.c",
     "Modules/termios.c",
+    "Python/dynload_shlib.c",
 )
 
 MODULES_INCLUDED = (
@@ -41,6 +40,10 @@ MODULES_INCLUDED = (
     "Modules/_ssl/debughelpers.c",
     "Modules/_ssl/misc.c",
 )
+
+
+def post_build(self):
+    shutil.copyfile(f"{self.srcdir}/PC/pyconfig.h.in", f"{self.dstdir}/PC/pyconfig.h.in")
 
 
 def post_install(self):
@@ -71,11 +74,10 @@ def post_install(self):
     )
     self.yamakes["bin"].module_args = ["python3"]
 
-    no_lib2to3_srcs = files(f"{self.dstdir}/Lib/lib2to3", rel=f"{self.dstdir}/Lib")
     self.yamakes["Lib"] = self.module(
         Py3Library,
         PEERDIR=["certs", "contrib/tools/python3/lib2/py"],
-        PY_SRCS=sorted(py_srcs(f"{self.dstdir}/Lib", remove=no_lib2to3_srcs) + ["_sysconfigdata_arcadia.py"]),
+        PY_SRCS=sorted(py_srcs(f"{self.dstdir}/Lib") + ["_sysconfigdata_arcadia.py"]),
         NO_LINT=True,
         NO_PYTHON_INCLUDES=True,
     )
@@ -100,18 +102,21 @@ def post_install(self):
     modules_srcs = filter(lambda x: not x.startswith("Modules/_sqlite/"), modules_srcs)
     modules_srcs = filter(lambda x: x not in MODULES_WINDOWS, modules_srcs)
     modules_srcs = filter(lambda x: x not in MODULES_DARWIN, modules_srcs)
-    modules_srcs = filter(lambda x: x not in MODULES_LINUX, modules_srcs)
     modules_srcs = filter(lambda x: x not in MODULES_POSIX, modules_srcs)
     modules_srcs = filter(lambda x: x not in MODULES_INCLUDED, modules_srcs)
 
-    src_srcs = files(f"{self.dstdir}/Objects", rel=self.dstdir, test=is_c_src)
-    src_srcs += files(f"{self.dstdir}/Parser", rel=self.dstdir, test=is_c_src)
-    src_srcs += files(f"{self.dstdir}/Python", rel=self.dstdir, test=is_c_src)
-    src_pc_srcs = files(f"{self.dstdir}/PC", rel=self.dstdir, test=is_c_src)
-    src_srcs.remove("Python/dynload_shlib.c")
-    src_srcs.remove("Python/dynload_win.c")
-    src_srcs.append("Python/deepfreeze/deepfreeze.c")
+    objects_src = files(f"{self.dstdir}/Objects", rel=self.dstdir, test=is_c_src)
+    objects_src = filter(lambda x: not x.startswith("Objects/mimalloc/"), objects_src)
+
+    python_src = files(f"{self.dstdir}/Python", rel=self.dstdir, test=is_c_src)
+    python_src = filter(lambda x: not x.startswith("Python/dynload_"), python_src)
+
+    src_srcs = files(f"{self.dstdir}/Parser", rel=self.dstdir, test=is_c_src)
     src_srcs.extend(modules_srcs)
+    src_srcs.extend(objects_src)
+    src_srcs.extend(python_src)
+
+    src_pc_srcs = files(f"{self.dstdir}/PC", rel=self.dstdir, test=is_c_src)
 
     self.yamakes["."] = self.module(
         Library,
@@ -132,8 +137,10 @@ def post_install(self):
             "contrib/libs/expat",
             "contrib/libs/libbz2",
             "contrib/restricted/libffi/include",
+            "contrib/tools/python3",
             "contrib/tools/python3/Include",
             "contrib/tools/python3/Include/internal",
+            "contrib/tools/python3/Include/internal/mimalloc",
             "contrib/tools/python3/Modules",
             "contrib/tools/python3/Modules/_decimal/libmpdec",
             "contrib/tools/python3/Modules/_hacl/include",
@@ -152,7 +159,7 @@ def post_install(self):
         SRCS=src_srcs,
         NO_COMPILER_WARNINGS=True,
         NO_UTIL=True,
-        SUPPRESSIONS=["tsan.supp"],
+        SUPPRESSIONS=["lsan.supp", "tsan.supp"],
     )
 
     self.yamakes["."].after(
@@ -203,22 +210,15 @@ def post_install(self):
     self.yamakes["."].after(
         "SRCS",
         Switch(
-            OS_WINDOWS=Linkable(SRCS=MODULES_WINDOWS + tuple(src_pc_srcs) + ("Python/dynload_win.c",)),
-            default=Linkable(SRCS=MODULES_POSIX + ("Python/dynload_shlib.c",)),
+            OS_DARWIN=Linkable(SRCS=MODULES_DARWIN),
+            OS_LINUX=Linkable(SRCS=("Python/asm_trampoline.S",)),
+            OS_WINDOWS=Linkable(SRCS=MODULES_WINDOWS + tuple(src_pc_srcs)),
         ),
     )
 
-    linux = Linkable(SRCS=MODULES_LINUX + ("Python/asm_trampoline.S",))
-    linux.before(
-        "SRCS",
-        Switch({"NOT MUSL": Linkable(EXTRALIBS=["crypt"])}),
-    )
     self.yamakes["."].after(
         "SRCS",
-        Switch(
-            OS_LINUX=linux,
-            OS_DARWIN=Linkable(SRCS=MODULES_DARWIN),
-        ),
+        Switch({"OS_LINUX OR OS_DARWIN": Linkable(SRCS=MODULES_POSIX)}),
     )
 
     for name, yamake in self.yamakes.items():
@@ -235,8 +235,8 @@ python3 = NixSourceProject(
         "lib2",
         "Lib/_sysconfigdata_arcadia.py",
         "Modules/config.c",
-        "Python/deepfreeze",
         "Python/frozen_modules",
+        "lsan.supp",
         "tsan.supp",
     ],
     disable_includes=[
@@ -266,6 +266,18 @@ python3 = NixSourceProject(
         "rtpLib.h",
         "taskLib.h",
         "vxCpuLib.h",
+        # ifdef __CYGWIN__
+        "cygwin/limits.h",
+        # ifdef HAVE_NETLINK_NETLINK_H
+        "netlink/netlink.h",
+        # ifdef __HAIKU__
+        "kernel/OS.h",
+        # ifdef __FreeBSD__
+        "sys/domainset.h",
+        # ifdef __sun
+        "synch.h",
+        "../src/prim/windows/etw.h",
+        "sanitizer/asan_interface.h",
     ],
     copy_sources=[
         "Include/**/*.h",
@@ -287,6 +299,7 @@ python3 = NixSourceProject(
     ],
     copy_sources_except=[
         "Modules/_test*.c",
+        "Modules/_testinternalcapi/set.c",
         "Modules/_ctypes/_ctypes_test*",
         "Modules/tkappinit.c",
         "Modules/readline.c",
@@ -307,6 +320,7 @@ python3 = NixSourceProject(
         "PC/config.c",
         "PC/config_minimal.c",
         "PC/dl_nt.c",
+        "PC/empty.c",
         "PC/frozen_dllmain.c",
         "PC/launcher.c",
         "PC/launcher2.c",
@@ -314,13 +328,19 @@ python3 = NixSourceProject(
         "Programs/_test*",
         "Python/bytecodes.c",
         "Python/dup2.c",
+        "Python/dynload_aix.c",
+        "Python/dynload_dl.c",
         "Python/dynload_hpux.c",
         "Python/dynload_stub.c",
         "Python/emscripten_signal.c",
         "Python/frozenmain.c",
+        "Python/strdup.c",
+        "Python/optimizer_bytecodes.c",
+        "Python/jit.c",
     ],
     platform_dispatchers=[
         "Include/pyconfig.h",
     ],
+    post_build=post_build,
     post_install=post_install,
 )

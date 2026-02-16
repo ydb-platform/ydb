@@ -3,10 +3,11 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_long.h"          // _PyLong_Size_t_Converter()
+#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
 PyDoc_STRVAR(_winapi_Overlapped_GetOverlappedResult__doc__,
 "GetOverlappedResult($self, wait, /)\n"
@@ -147,6 +148,76 @@ _winapi_ConnectNamedPipe(PyObject *module, PyObject *const *args, Py_ssize_t nar
     return_value = _winapi_ConnectNamedPipe_impl(module, handle, use_overlapped);
 
 exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(_winapi_CreateEventW__doc__,
+"CreateEventW($module, /, security_attributes, manual_reset,\n"
+"             initial_state, name)\n"
+"--\n"
+"\n");
+
+#define _WINAPI_CREATEEVENTW_METHODDEF    \
+    {"CreateEventW", _PyCFunction_CAST(_winapi_CreateEventW), METH_FASTCALL|METH_KEYWORDS, _winapi_CreateEventW__doc__},
+
+static HANDLE
+_winapi_CreateEventW_impl(PyObject *module,
+                          LPSECURITY_ATTRIBUTES security_attributes,
+                          BOOL manual_reset, BOOL initial_state,
+                          LPCWSTR name);
+
+static PyObject *
+_winapi_CreateEventW(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+
+    #define NUM_KEYWORDS 4
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(security_attributes), &_Py_ID(manual_reset), &_Py_ID(initial_state), &_Py_ID(name), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"security_attributes", "manual_reset", "initial_state", "name", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .format = "" F_POINTER "iiO&:CreateEventW",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    LPSECURITY_ATTRIBUTES security_attributes;
+    BOOL manual_reset;
+    BOOL initial_state;
+    LPCWSTR name = NULL;
+    HANDLE _return_value;
+
+    if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+        &security_attributes, &manual_reset, &initial_state, _PyUnicode_WideCharString_Opt_Converter, &name)) {
+        goto exit;
+    }
+    _return_value = _winapi_CreateEventW_impl(module, security_attributes, manual_reset, initial_state, name);
+    if ((_return_value == INVALID_HANDLE_VALUE) && PyErr_Occurred()) {
+        goto exit;
+    }
+    if (_return_value == NULL) {
+        Py_RETURN_NONE;
+    }
+    return_value = HANDLE_TO_PYNUM(_return_value);
+
+exit:
+    /* Cleanup for name */
+    PyMem_Free((void *)name);
+
     return return_value;
 }
 
@@ -296,6 +367,73 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(_winapi_CreateMutexW__doc__,
+"CreateMutexW($module, /, security_attributes, initial_owner, name)\n"
+"--\n"
+"\n");
+
+#define _WINAPI_CREATEMUTEXW_METHODDEF    \
+    {"CreateMutexW", _PyCFunction_CAST(_winapi_CreateMutexW), METH_FASTCALL|METH_KEYWORDS, _winapi_CreateMutexW__doc__},
+
+static HANDLE
+_winapi_CreateMutexW_impl(PyObject *module,
+                          LPSECURITY_ATTRIBUTES security_attributes,
+                          BOOL initial_owner, LPCWSTR name);
+
+static PyObject *
+_winapi_CreateMutexW(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+
+    #define NUM_KEYWORDS 3
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(security_attributes), &_Py_ID(initial_owner), &_Py_ID(name), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"security_attributes", "initial_owner", "name", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .format = "" F_POINTER "iO&:CreateMutexW",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    LPSECURITY_ATTRIBUTES security_attributes;
+    BOOL initial_owner;
+    LPCWSTR name = NULL;
+    HANDLE _return_value;
+
+    if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+        &security_attributes, &initial_owner, _PyUnicode_WideCharString_Opt_Converter, &name)) {
+        goto exit;
+    }
+    _return_value = _winapi_CreateMutexW_impl(module, security_attributes, initial_owner, name);
+    if ((_return_value == INVALID_HANDLE_VALUE) && PyErr_Occurred()) {
+        goto exit;
+    }
+    if (_return_value == NULL) {
+        Py_RETURN_NONE;
+    }
+    return_value = HANDLE_TO_PYNUM(_return_value);
+
+exit:
+    /* Cleanup for name */
+    PyMem_Free((void *)name);
+
+    return return_value;
+}
+
 PyDoc_STRVAR(_winapi_CreateNamedPipe__doc__,
 "CreateNamedPipe($module, name, open_mode, pipe_mode, max_instances,\n"
 "                out_buffer_size, in_buffer_size, default_timeout,\n"
@@ -403,26 +541,25 @@ PyDoc_STRVAR(_winapi_CreateProcess__doc__,
     {"CreateProcess", _PyCFunction_CAST(_winapi_CreateProcess), METH_FASTCALL, _winapi_CreateProcess__doc__},
 
 static PyObject *
-_winapi_CreateProcess_impl(PyObject *module,
-                           const Py_UNICODE *application_name,
+_winapi_CreateProcess_impl(PyObject *module, const wchar_t *application_name,
                            PyObject *command_line, PyObject *proc_attrs,
                            PyObject *thread_attrs, BOOL inherit_handles,
                            DWORD creation_flags, PyObject *env_mapping,
-                           const Py_UNICODE *current_directory,
+                           const wchar_t *current_directory,
                            PyObject *startup_info);
 
 static PyObject *
 _winapi_CreateProcess(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
-    const Py_UNICODE *application_name = NULL;
+    const wchar_t *application_name = NULL;
     PyObject *command_line;
     PyObject *proc_attrs;
     PyObject *thread_attrs;
     BOOL inherit_handles;
     DWORD creation_flags;
     PyObject *env_mapping;
-    const Py_UNICODE *current_directory = NULL;
+    const wchar_t *current_directory = NULL;
     PyObject *startup_info;
 
     if (!_PyArg_ParseStack(args, nargs, "O&OOOikOO&O:CreateProcess",
@@ -574,7 +711,7 @@ _winapi_GetExitCodeProcess(PyObject *module, PyObject *arg)
     if ((_return_value == PY_DWORD_MAX) && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = Py_BuildValue("k", _return_value);
+    return_value = PyLong_FromUnsignedLong(_return_value);
 
 exit:
     return return_value;
@@ -601,7 +738,7 @@ _winapi_GetLastError(PyObject *module, PyObject *Py_UNUSED(ignored))
     if ((_return_value == PY_DWORD_MAX) && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = Py_BuildValue("k", _return_value);
+    return_value = PyLong_FromUnsignedLong(_return_value);
 
 exit:
     return return_value;
@@ -914,6 +1051,138 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(_winapi_OpenEventW__doc__,
+"OpenEventW($module, /, desired_access, inherit_handle, name)\n"
+"--\n"
+"\n");
+
+#define _WINAPI_OPENEVENTW_METHODDEF    \
+    {"OpenEventW", _PyCFunction_CAST(_winapi_OpenEventW), METH_FASTCALL|METH_KEYWORDS, _winapi_OpenEventW__doc__},
+
+static HANDLE
+_winapi_OpenEventW_impl(PyObject *module, DWORD desired_access,
+                        BOOL inherit_handle, LPCWSTR name);
+
+static PyObject *
+_winapi_OpenEventW(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+
+    #define NUM_KEYWORDS 3
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(desired_access), &_Py_ID(inherit_handle), &_Py_ID(name), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"desired_access", "inherit_handle", "name", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .format = "kiO&:OpenEventW",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    DWORD desired_access;
+    BOOL inherit_handle;
+    LPCWSTR name = NULL;
+    HANDLE _return_value;
+
+    if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+        &desired_access, &inherit_handle, _PyUnicode_WideCharString_Converter, &name)) {
+        goto exit;
+    }
+    _return_value = _winapi_OpenEventW_impl(module, desired_access, inherit_handle, name);
+    if ((_return_value == INVALID_HANDLE_VALUE) && PyErr_Occurred()) {
+        goto exit;
+    }
+    if (_return_value == NULL) {
+        Py_RETURN_NONE;
+    }
+    return_value = HANDLE_TO_PYNUM(_return_value);
+
+exit:
+    /* Cleanup for name */
+    PyMem_Free((void *)name);
+
+    return return_value;
+}
+
+PyDoc_STRVAR(_winapi_OpenMutexW__doc__,
+"OpenMutexW($module, /, desired_access, inherit_handle, name)\n"
+"--\n"
+"\n");
+
+#define _WINAPI_OPENMUTEXW_METHODDEF    \
+    {"OpenMutexW", _PyCFunction_CAST(_winapi_OpenMutexW), METH_FASTCALL|METH_KEYWORDS, _winapi_OpenMutexW__doc__},
+
+static HANDLE
+_winapi_OpenMutexW_impl(PyObject *module, DWORD desired_access,
+                        BOOL inherit_handle, LPCWSTR name);
+
+static PyObject *
+_winapi_OpenMutexW(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+
+    #define NUM_KEYWORDS 3
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(desired_access), &_Py_ID(inherit_handle), &_Py_ID(name), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"desired_access", "inherit_handle", "name", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .format = "kiO&:OpenMutexW",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    DWORD desired_access;
+    BOOL inherit_handle;
+    LPCWSTR name = NULL;
+    HANDLE _return_value;
+
+    if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+        &desired_access, &inherit_handle, _PyUnicode_WideCharString_Converter, &name)) {
+        goto exit;
+    }
+    _return_value = _winapi_OpenMutexW_impl(module, desired_access, inherit_handle, name);
+    if ((_return_value == INVALID_HANDLE_VALUE) && PyErr_Occurred()) {
+        goto exit;
+    }
+    if (_return_value == NULL) {
+        Py_RETURN_NONE;
+    }
+    return_value = HANDLE_TO_PYNUM(_return_value);
+
+exit:
+    /* Cleanup for name */
+    PyMem_Free((void *)name);
+
+    return return_value;
+}
+
 PyDoc_STRVAR(_winapi_OpenFileMapping__doc__,
 "OpenFileMapping($module, desired_access, inherit_handle, name, /)\n"
 "--\n"
@@ -1134,6 +1403,162 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(_winapi_ReleaseMutex__doc__,
+"ReleaseMutex($module, /, mutex)\n"
+"--\n"
+"\n");
+
+#define _WINAPI_RELEASEMUTEX_METHODDEF    \
+    {"ReleaseMutex", _PyCFunction_CAST(_winapi_ReleaseMutex), METH_FASTCALL|METH_KEYWORDS, _winapi_ReleaseMutex__doc__},
+
+static PyObject *
+_winapi_ReleaseMutex_impl(PyObject *module, HANDLE mutex);
+
+static PyObject *
+_winapi_ReleaseMutex(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+
+    #define NUM_KEYWORDS 1
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(mutex), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"mutex", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .format = "" F_HANDLE ":ReleaseMutex",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    HANDLE mutex;
+
+    if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+        &mutex)) {
+        goto exit;
+    }
+    return_value = _winapi_ReleaseMutex_impl(module, mutex);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(_winapi_ResetEvent__doc__,
+"ResetEvent($module, /, event)\n"
+"--\n"
+"\n");
+
+#define _WINAPI_RESETEVENT_METHODDEF    \
+    {"ResetEvent", _PyCFunction_CAST(_winapi_ResetEvent), METH_FASTCALL|METH_KEYWORDS, _winapi_ResetEvent__doc__},
+
+static PyObject *
+_winapi_ResetEvent_impl(PyObject *module, HANDLE event);
+
+static PyObject *
+_winapi_ResetEvent(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+
+    #define NUM_KEYWORDS 1
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(event), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"event", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .format = "" F_HANDLE ":ResetEvent",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    HANDLE event;
+
+    if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+        &event)) {
+        goto exit;
+    }
+    return_value = _winapi_ResetEvent_impl(module, event);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(_winapi_SetEvent__doc__,
+"SetEvent($module, /, event)\n"
+"--\n"
+"\n");
+
+#define _WINAPI_SETEVENT_METHODDEF    \
+    {"SetEvent", _PyCFunction_CAST(_winapi_SetEvent), METH_FASTCALL|METH_KEYWORDS, _winapi_SetEvent__doc__},
+
+static PyObject *
+_winapi_SetEvent_impl(PyObject *module, HANDLE event);
+
+static PyObject *
+_winapi_SetEvent(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+
+    #define NUM_KEYWORDS 1
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(event), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"event", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .format = "" F_HANDLE ":SetEvent",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    HANDLE event;
+
+    if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+        &event)) {
+        goto exit;
+    }
+    return_value = _winapi_SetEvent_impl(module, event);
+
+exit:
+    return return_value;
+}
+
 PyDoc_STRVAR(_winapi_SetNamedPipeHandleState__doc__,
 "SetNamedPipeHandleState($module, named_pipe, mode,\n"
 "                        max_collection_count, collect_data_timeout, /)\n"
@@ -1257,6 +1682,77 @@ exit:
     /* Cleanup for name */
     PyMem_Free((void *)name);
 
+    return return_value;
+}
+
+PyDoc_STRVAR(_winapi_BatchedWaitForMultipleObjects__doc__,
+"BatchedWaitForMultipleObjects($module, /, handle_seq, wait_all,\n"
+"                              milliseconds=_winapi.INFINITE)\n"
+"--\n"
+"\n"
+"Supports a larger number of handles than WaitForMultipleObjects\n"
+"\n"
+"Note that the handles may be waited on other threads, which could cause\n"
+"issues for objects like mutexes that become associated with the thread\n"
+"that was waiting for them. Objects may also be left signalled, even if\n"
+"the wait fails.\n"
+"\n"
+"It is recommended to use WaitForMultipleObjects whenever possible, and\n"
+"only switch to BatchedWaitForMultipleObjects for scenarios where you\n"
+"control all the handles involved, such as your own thread pool or\n"
+"files, and all wait objects are left unmodified by a wait (for example,\n"
+"manual reset events, threads, and files/pipes).\n"
+"\n"
+"Overlapped handles returned from this module use manual reset events.");
+
+#define _WINAPI_BATCHEDWAITFORMULTIPLEOBJECTS_METHODDEF    \
+    {"BatchedWaitForMultipleObjects", _PyCFunction_CAST(_winapi_BatchedWaitForMultipleObjects), METH_FASTCALL|METH_KEYWORDS, _winapi_BatchedWaitForMultipleObjects__doc__},
+
+static PyObject *
+_winapi_BatchedWaitForMultipleObjects_impl(PyObject *module,
+                                           PyObject *handle_seq,
+                                           BOOL wait_all, DWORD milliseconds);
+
+static PyObject *
+_winapi_BatchedWaitForMultipleObjects(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+
+    #define NUM_KEYWORDS 3
+    static struct {
+        PyGC_Head _this_is_not_used;
+        PyObject_VAR_HEAD
+        PyObject *ob_item[NUM_KEYWORDS];
+    } _kwtuple = {
+        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
+        .ob_item = { &_Py_ID(handle_seq), &_Py_ID(wait_all), &_Py_ID(milliseconds), },
+    };
+    #undef NUM_KEYWORDS
+    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
+
+    #else  // !Py_BUILD_CORE
+    #  define KWTUPLE NULL
+    #endif  // !Py_BUILD_CORE
+
+    static const char * const _keywords[] = {"handle_seq", "wait_all", "milliseconds", NULL};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .format = "Oi|k:BatchedWaitForMultipleObjects",
+        .kwtuple = KWTUPLE,
+    };
+    #undef KWTUPLE
+    PyObject *handle_seq;
+    BOOL wait_all;
+    DWORD milliseconds = INFINITE;
+
+    if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+        &handle_seq, &wait_all, &milliseconds)) {
+        goto exit;
+    }
+    return_value = _winapi_BatchedWaitForMultipleObjects_impl(module, handle_seq, wait_all, milliseconds);
+
+exit:
     return return_value;
 }
 
@@ -1454,7 +1950,7 @@ _winapi_GetFileType(PyObject *module, PyObject *const *args, Py_ssize_t nargs, P
     if ((_return_value == PY_DWORD_MAX) && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = Py_BuildValue("k", _return_value);
+    return_value = PyLong_FromUnsignedLong(_return_value);
 
 exit:
     return return_value;
@@ -1628,4 +2124,4 @@ exit:
 
     return return_value;
 }
-/*[clinic end generated code: output=91b39b70024fa232 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=2304c62187a90140 input=a9049054013a1b77]*/

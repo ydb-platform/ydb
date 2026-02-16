@@ -1,9 +1,20 @@
 #include "yql_yt_request_options.h"
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
 
 namespace NYql::NFmr {
+
+EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage) {
+    TStringBuf message = errorMessage;
+    if (TryParseTerminationMessage(message).Defined()) {
+        return EFmrErrorReason::UdfTerminate;
+    } else if (message.contains(FmrNonRetryableJobExceptionMarker)) {
+        return EFmrErrorReason::RestartQuery;
+    }
+    return EFmrErrorReason::Unknown;
+}
 
 void TFmrUserJobSettings::Save(IOutputStream* buffer) const {
     ::SaveMany(
@@ -133,7 +144,10 @@ void TFmrTableInputRef::Save(IOutputStream* buffer) const {
         TableId,
         TableRanges,
         Columns,
-        SerializedColumnGroups
+        SerializedColumnGroups,
+        IsFirstRowInclusive,
+        FirstRowKeys,
+        LastRowKeys
     );
 }
 
@@ -143,7 +157,10 @@ void TFmrTableInputRef::Load(IInputStream* buffer) {
         TableId,
         TableRanges,
         Columns,
-        SerializedColumnGroups
+        SerializedColumnGroups,
+        IsFirstRowInclusive,
+        FirstRowKeys,
+        LastRowKeys
     );
 }
 
@@ -213,12 +230,17 @@ void TFmrTableId::Load(IInputStream* buffer) {
 }
 
 void TSortedChunkStats::Save(IOutputStream* buffer) const {
-    ::SaveMany(buffer, IsSorted,
-               NYT::NodeToYsonString(FirstRowKeys), NYT::NodeToYsonString(LastRowKeys));
+    ::SaveMany(
+        buffer,
+        IsSorted,
+        NYT::NodeToYsonString(FirstRowKeys),
+        NYT::NodeToYsonString(LastRowKeys)
+    );
 }
 
 void TSortedChunkStats::Load(IInputStream* buffer) {
-    TString FirstRowKeysStr, LastRowKeysStr;
+    TString FirstRowKeysStr;
+    TString LastRowKeysStr;
     ::LoadMany(buffer, IsSorted, FirstRowKeysStr, LastRowKeysStr);
     FirstRowKeys = NYT::NodeFromYsonString(FirstRowKeysStr);
     LastRowKeys = NYT::NodeFromYsonString(LastRowKeysStr);

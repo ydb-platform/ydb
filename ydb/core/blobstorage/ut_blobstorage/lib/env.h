@@ -9,6 +9,8 @@
 #include <ydb/core/base/blobstorage_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
+#include <ydb/library/actors/retro_tracing/retro_collector.h>
 
 static auto& Cconf = Cnull;
 
@@ -31,6 +33,8 @@ struct TEnvironmentSetup {
 
     static const std::initializer_list<ui32> DebugLogComponents;
     std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
+
+    std::unordered_map<ui32, NWilson::TFakeWilsonUploader*> FakeWilsonUploaders;
 
     struct TSettings {
         const ui32 NodeCount = 9;
@@ -70,6 +74,7 @@ struct TEnvironmentSetup {
         const ui64 PhantomFlagStorageLimitPerVDiskBytes = 10'000'000; // 10_MB
         const bool TinySyncLog = false;
         const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
+        const bool StartFakeWilsonCollectors = false;
     };
 
     const TSettings Settings;
@@ -558,7 +563,7 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
                 ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
-                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, false, false, true, Settings.EnablePhantomFlagStorage);
+                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
 
 #undef ADD_ICB_CONTROL
@@ -579,6 +584,13 @@ config:
             if (Settings.UseFakeConfigDispatcher) {
                 Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(nodeId), Runtime->Register(new TFakeConfigDispatcher(), nodeId));
             }
+            if (Settings.StartFakeWilsonCollectors) {
+                NWilson::TFakeWilsonUploader* fakeUploader = new NWilson::TFakeWilsonUploader;
+                FakeWilsonUploaders[nodeId] = fakeUploader;
+                Runtime->RegisterService(NWilson::MakeWilsonUploaderId(), Runtime->Register(fakeUploader, nodeId));
+            }
+            Runtime->RegisterService(NRetroTracing::MakeRetroCollectorId(),
+                    Runtime->Register(NRetroTracing::CreateRetroCollector(), nodeId));
         }
     }
 

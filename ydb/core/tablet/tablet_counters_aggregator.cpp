@@ -1880,7 +1880,7 @@ public:
     void ReplyAndDie(const TActorContext& ctx) {
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response(new TEvTabletCounters::TEvTabletLabeledCountersResponse);
 
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator all answers recieved - replying " << ctx.SelfID);
+        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator all answers received - replying " << ctx.SelfID);
 
         TVector<ui8> types;
         TVector<ui8> aggrFuncs;

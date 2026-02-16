@@ -63,6 +63,11 @@ public:
         const TExprNode& write,
         TExprContext& ctx) = 0;
 
+    virtual TExprNode::TPtr UpdateWriteContent(
+        const TExprNode::TPtr& write,
+        const TExprNode::TPtr& content,
+        TExprContext& ctx) = 0;
+
     virtual void FillSourceSettings(
         const TExprNode& source,
         ::google::protobuf::Any& settings,
@@ -103,6 +108,11 @@ public:
         TExprContext& ctx) override;
 
     TExprNode::TPtr GetWriteContent(const TExprNode& write, TExprContext& ctx) override;
+
+    TExprNode::TPtr UpdateWriteContent(
+        const TExprNode::TPtr& write,
+        const TExprNode::TPtr& content,
+        TExprContext& ctx) override;
 
     void FillSourceSettings(
         const TExprNode& source,

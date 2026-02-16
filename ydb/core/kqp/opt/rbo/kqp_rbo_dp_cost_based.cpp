@@ -18,7 +18,7 @@ using namespace NKikimr::NKqp;
 // However, the same alias can appear multiple times in a query, but might already be out of scope
 // So we first collect all join conditions and fetch aliases and mappings only for the columns used in join conditions
 
-std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> & cboTree, TVector<std::shared_ptr<TRelOptimizerNode>> & rels) {
+std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree>& cboTree, TVector<std::shared_ptr<TRelOptimizerNode>>& rels) {
     THashSet<TInfoUnit, TInfoUnit::THashFunction> allJoinColumns;
     std::shared_ptr<TJoinOptimizerNode> result;
 
@@ -27,7 +27,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
 
     for (auto op : cboTree->TreeNodes) {
         auto joinOp = CastOperator<TOpJoin>(op);
-        for (auto & [left, right] : joinOp->JoinKeys) {
+        for (const auto& [left, right] : joinOp->JoinKeys) {
             allJoinColumns.insert(left);
             allJoinColumns.insert(right);
         }
@@ -57,7 +57,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
         }
 
         TVector<TInfoUnit> mappedKeyColumns;
-        for (auto col : child->Props.Metadata->KeyColumns) {
+        for (const auto& col : child->Props.Metadata->KeyColumns) {
             mappedKeyColumns.push_back(cboTree->TreeRoot->Props.Metadata->MapColumn(col));
         }
 
@@ -98,10 +98,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
     return result;
 }
 
-std::shared_ptr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode> tree,
-        const TColumnLineage & lineage,
-        TPositionHandle pos) {
-
+std::shared_ptr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode> tree, const TColumnLineage& lineage, TPositionHandle pos) {
     if (tree->Kind == RelNodeType) {
         auto rel = std::static_pointer_cast<TRBORelOptimizerNode>(tree);
         return rel->Op;
@@ -133,7 +130,6 @@ std::shared_ptr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNo
         return res;
     }
 }
-
 }
 
 namespace NKikimr {

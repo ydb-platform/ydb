@@ -4,7 +4,7 @@
 namespace NYql {
 namespace NFastCheck {
 
-TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request) {
+TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request, TCheckState& state) {
     TMaybe<TIssue> verIssue;
     if (!CheckLangVersion(request.LangVer, GetMaxReleasedLangVersion(), verIssue)) {
         TCheckResponse response;
@@ -14,7 +14,7 @@ TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request) {
         return response;
     }
 
-    auto ret = DoRun(request);
+    auto ret = DoRun(request, state);
     if (!verIssue) {
         return ret;
     }

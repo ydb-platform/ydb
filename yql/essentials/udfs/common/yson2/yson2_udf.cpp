@@ -12,6 +12,7 @@
 #include <library/cpp/yson_pull/exceptions.h>
 
 #include <util/string/split.h>
+#include <util/generic/overloaded.h>
 
 using namespace NYql::NUdf;
 using namespace NYql::NDom;
@@ -20,9 +21,12 @@ using namespace NYsonPull;
 namespace {
 
 constexpr char OptionsResourceName[] = "Yson2.Options";
+constexpr char MutNodeResourceName[] = "Yson2.MutNode";
 
 using TOptionsResource = TResource<OptionsResourceName>;
 using TNodeResource = TResource<NodeResourceName>;
+using TMutNodeResource = TResource<MutNodeResourceName>;
+using TMutNodeLinear = TLinear<TMutNodeResource>;
 
 using TDictType = TDict<char*, TNodeResource>;
 using TInt64DictType = TDict<char*, i64>;
@@ -1667,6 +1671,456 @@ SIMPLE_STRICT_UDF_OPTIONS(TTryAsDict, TOptional<TDictType>(TAutoMap<TNodeResourc
     return AsDict<false>(args[0], valueBuilder);
 }
 
+struct TStringEquals {
+    bool operator()(const TUnboxedValuePod& x, const TUnboxedValuePod& y) const {
+        return x.AsStringRef() == y.AsStringRef();
+    }
+};
+
+struct TStringHash {
+    size_t operator()(const TUnboxedValuePod& x) const {
+        return THash<TStringBuf>()(x.AsStringRef());
+    }
+};
+
+struct TMutNode;
+
+using TMutNodeList = TVector<TMutNode, TStdAllocatorForUdf<TMutNode>>;
+using TMutNodeMap = THashMap<TUnboxedValue, TMutNode, TStringHash, TStringEquals, TStdAllocatorForUdf<TMutNode>>;
+
+struct TMutNode {
+    std::variant<TUnboxedValue, TMutNodeList, TMutNodeMap> Storage;
+
+    bool IsInvalidOrDeleted() const {
+        auto valuePtr = std::get_if<TUnboxedValue>(&Storage);
+        return valuePtr && (!*valuePtr || valuePtr->IsInvalid());
+    }
+
+    static void IncrementFreezedCount(const TMutNode& node, ui32& count) {
+        auto ptr = std::get_if<TUnboxedValue>(&node.Storage);
+        if (ptr) {
+            if (!*ptr) {
+                // skip deleted
+                return;
+            }
+
+            if (ptr->IsInvalid()) {
+                throw yexception() << "Can't freeze invalid node";
+            }
+        }
+
+        ++count;
+    }
+
+    static TUnboxedValue FreezeList(const TMutNodeList& value, const IValueBuilder* valueBuilder) {
+        ui32 count = 0;
+        for (const auto& v : value) {
+            IncrementFreezedCount(v, count);
+        }
+
+        TVector<TUnboxedValue> items(Reserve(count));
+        for (const auto& v : value) {
+            auto ptr = std::get_if<TUnboxedValue>(&v.Storage);
+            if (ptr && !*ptr) {
+                continue;
+            }
+
+            items.emplace_back(v.Freeze(valueBuilder));
+        }
+
+        return MakeList(items.data(), count, valueBuilder);
+    }
+
+    static TUnboxedValue FreezeDict(const TMutNodeMap& value, const IValueBuilder* valueBuilder) {
+        ui32 count = 0;
+        for (const auto& [k, v] : value) {
+            IncrementFreezedCount(v, count);
+        }
+
+        TVector<TPair, TStdAllocatorForUdf<TPair>> items(Reserve(count));
+        for (const auto& [k, v] : value) {
+            auto ptr = std::get_if<TUnboxedValue>(&v.Storage);
+            if (ptr && !*ptr) {
+                continue;
+            }
+
+            items.emplace_back(TPair(k, v.Freeze(valueBuilder)));
+        }
+
+        return MakeDict(items.data(), count);
+    }
+
+    TUnboxedValue Freeze(const IValueBuilder* valueBuilder) const {
+        // clang-format off
+        return std::visit(TOverloaded{
+            [](const TUnboxedValue& value) {
+                return value;
+            }, [valueBuilder](const TMutNodeList& value) {
+                return FreezeList(value, valueBuilder);
+            }, [valueBuilder](const TMutNodeMap& value)  {
+                return FreezeDict(value, valueBuilder);
+            }}, Storage);
+        // clang-format on
+    }
+
+    void MeltDict() {
+        auto originalValue = std::get<TUnboxedValue>(Storage);
+        auto nodeType = GetNodeType(originalValue);
+        if (nodeType != ENodeType::Dict) {
+            throw yexception() << "Expected dict node, but got :" << TDebugPrinter(originalValue);
+        }
+
+        Storage = TMutNodeMap();
+        auto& map = std::get<TMutNodeMap>(Storage);
+        map.reserve(originalValue.GetDictLength());
+        TUnboxedValue k, v;
+        for (auto it = originalValue.GetDictIterator(); it.NextPair(k, v);) {
+            map.emplace(k, v);
+        }
+    }
+
+    void MeltList() {
+        auto originalValue = std::get<TUnboxedValue>(Storage);
+        auto nodeType = GetNodeType(originalValue);
+        if (nodeType != ENodeType::List) {
+            throw yexception() << "Expected list node, but got :" << TDebugPrinter(originalValue);
+        }
+
+        Storage = TMutNodeList();
+        auto& list = std::get<TMutNodeList>(Storage);
+        if (!originalValue.IsBoxed()) {
+            // empty list
+            return;
+        }
+
+        auto elements = originalValue.GetElements();
+        Y_ENSURE(elements);
+        auto len = originalValue.GetListLength();
+        list.reserve(len);
+        for (ui64 i = 0; i < len; ++i) {
+            list.emplace_back(elements[i]);
+        }
+    }
+};
+
+class TMutNodeBuilder: public TManagedBoxedValue {
+public:
+    static TStringRef Tag() {
+        return TStringRef(MutNodeResourceName, std::strlen(MutNodeResourceName));
+    }
+
+    TStringRef GetResourceTag() const final {
+        return Tag();
+    }
+
+    void* GetResource() final {
+        return this;
+    }
+
+    static TMutNodeBuilder& From(TUnboxedValuePod value) {
+        Y_DEBUG_ABORT_UNLESS(value.GetResourceTag() == Tag());
+        return *(TMutNodeBuilder*)value.GetResource();
+    }
+
+    TUnboxedValue Freeze(const IValueBuilder* valueBuilder) {
+        ThrowIfInvalidOrDeleted(Root_);
+        return Root_.Freeze(valueBuilder);
+    }
+
+    void Upsert(TUnboxedValuePod value) {
+        Stack_.back().second->Storage = value;
+    }
+
+    void Insert(TUnboxedValuePod value) {
+        auto& node = *Stack_.back().second;
+        if (node.IsInvalidOrDeleted()) {
+            node.Storage = value;
+        }
+    }
+
+    void Update(TUnboxedValuePod value) {
+        auto& node = *Stack_.back().second;
+        if (!node.IsInvalidOrDeleted()) {
+            node.Storage = value;
+        }
+    }
+
+    void Remove() {
+        auto& node = *Stack_.back().second;
+        node.Storage = TUnboxedValue();
+    }
+
+    void Rewind() {
+        Stack_.clear();
+        Init();
+    }
+
+    void Up() {
+        if (Stack_.size() == 1) {
+            throw yexception() << "Already at top level";
+        }
+
+        Stack_.pop_back();
+    }
+
+    void Down(const TUnboxedValue& keyValue, bool createIfNotExists) {
+        auto key = keyValue.AsStringRef();
+        if (key.empty()) {
+            throw yexception() << "Empty key is not allowed";
+        }
+
+        char c = key.Data()[0];
+        if (c == '/') {
+            throw yexception() << "Key should be relative";
+        }
+
+        if (c == '<' || c == '=' || c == '>') {
+            DownList(key, keyValue, createIfNotExists);
+        } else {
+            DownDict(key, keyValue, createIfNotExists);
+        }
+    }
+
+    void DownDict(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
+        TString unescaped;
+        if (key.Contains('\\')) {
+            unescaped = UnescapeC(key);
+            key = unescaped;
+        }
+
+        auto& node = *Stack_.back().second;
+        if (node.IsInvalidOrDeleted() && !createIfNotExists) {
+            throw yexception() << "Current node is invalid or deleted";
+        }
+
+        if (std::holds_alternative<TMutNodeList>(node.Storage)) {
+            throw yexception() << "Can't traverse list by key";
+        }
+
+        if (!std::holds_alternative<TMutNodeMap>(node.Storage)) {
+            if (node.IsInvalidOrDeleted()) {
+                node.Storage = TMutNodeMap();
+            } else {
+                node.MeltDict();
+            }
+        }
+
+        auto& map = std::get<TMutNodeMap>(node.Storage);
+        if (createIfNotExists) {
+            auto [iter, inserted] = map.emplace(keyValue, TMutNode());
+            if (inserted) {
+                iter->second.Storage = TUnboxedValuePod::Invalid();
+            }
+
+            Stack_.push_back({keyValue, &iter->second});
+        } else {
+            auto iter = map.find(keyValue);
+            if (iter == map.cend()) {
+                throw yexception() << "Key " << key << " not exists";
+            }
+
+            Stack_.push_back({keyValue, &iter->second});
+        }
+    }
+
+    void DownList(TStringBuf key, const TUnboxedValue& keyValue, bool createIfNotExists) {
+        auto& node = *Stack_.back().second;
+        if (node.IsInvalidOrDeleted() && !createIfNotExists) {
+            throw yexception() << "Current node is invalid or deleted";
+        }
+
+        if (std::holds_alternative<TMutNodeMap>(node.Storage)) {
+            throw yexception() << "Can't traverse dict by index";
+        }
+
+        if (!std::holds_alternative<TMutNodeList>(node.Storage)) {
+            if (node.IsInvalidOrDeleted()) {
+                node.Storage = TMutNodeList();
+            } else {
+                node.MeltList();
+            }
+        }
+
+        auto& list = std::get<TMutNodeList>(node.Storage);
+
+        auto compare = key.Data()[0];
+        if (compare != '=' && !createIfNotExists) {
+            throw yexception() << "List resize is not allowed";
+        }
+
+        auto indexStr = key.substr(1);
+        ui64 effectiveIndex = 0;
+        if (indexStr == "last") {
+            effectiveIndex = list.empty() ? 0 : list.size() - 1;
+        } else if (indexStr == "first") {
+            effectiveIndex = 0;
+        } else {
+            if (!TryFromString(indexStr, effectiveIndex)) {
+                throw yexception() << "Invalid list index: " << key;
+            }
+        }
+
+        if (compare == '=') {
+            // traverse to the exact index
+            if (effectiveIndex >= list.size()) {
+                throw yexception() << "Index is bigger than list size";
+            }
+
+            Stack_.push_back({keyValue, &list[effectiveIndex]});
+        } else if (compare == '<') {
+            // insert before
+            if (effectiveIndex > 0 && effectiveIndex > list.size()) {
+                throw yexception() << "Index is bigger than list size";
+            }
+
+            list.insert(list.begin() + effectiveIndex, TMutNode{.Storage = TUnboxedValuePod::Invalid()});
+            Stack_.push_back({keyValue, &list[effectiveIndex]});
+        } else {
+            // insert after
+            if (effectiveIndex > 0 && effectiveIndex >= list.size()) {
+                throw yexception() << "Index is bigger than list size";
+            }
+
+            if (effectiveIndex + 1 < list.size()) {
+                list.insert(list.begin() + effectiveIndex + 1, TMutNode{.Storage = TUnboxedValuePod::Invalid()});
+                Stack_.push_back({keyValue, &list[effectiveIndex + 1]});
+            } else {
+                list.push_back(TMutNode{.Storage = TUnboxedValuePod::Invalid()});
+                Stack_.push_back({keyValue, &list.back()});
+            }
+        }
+    }
+
+    bool Exists() const {
+        return !Stack_.back().second->IsInvalidOrDeleted();
+    }
+
+    TUnboxedValue View(const IValueBuilder* valueBuilder) const {
+        if (Stack_.back().second->IsInvalidOrDeleted()) {
+            return {};
+        }
+
+        return Stack_.back().second->Freeze(valueBuilder);
+    }
+
+    TMutNodeBuilder()
+    {
+        Root_.Storage = TUnboxedValue(TUnboxedValuePod::Invalid());
+        Init();
+    }
+
+private:
+    void Init() {
+        Stack_.push_back({TUnboxedValue(TUnboxedValuePod::Embedded("")), &Root_});
+    }
+
+    void ThrowIfInvalidOrDeleted(const TMutNode& node) {
+        if (node.IsInvalidOrDeleted()) {
+            throw yexception() << "Invalid or deleted node is not allowed";
+        }
+    }
+
+    TMutNode Root_;
+    using TPathSegment = std::pair<TUnboxedValue, TMutNode*>;
+    TVector<TPathSegment, TStdAllocatorForUdf<TPathSegment>> Stack_;
+};
+
+SIMPLE_UDF_OPTIONS(TMutCreate, TMutNodeLinear(), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(args);
+    Y_UNUSED(valueBuilder);
+    return TUnboxedValuePod(new TMutNodeBuilder());
+}
+
+SIMPLE_UDF_OPTIONS(TMutFreeze, TNodeResource(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    return TMutNodeBuilder::From(args[0]).Freeze(valueBuilder);
+}
+
+SIMPLE_UDF_OPTIONS(TMutUpsert, TMutNodeLinear(TMutNodeLinear, TNodeResource), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    TMutNodeBuilder::From(args[0]).Upsert(args[1]);
+    return args[0];
+}
+
+SIMPLE_UDF_OPTIONS(TMutInsert, TMutNodeLinear(TMutNodeLinear, TNodeResource), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    TMutNodeBuilder::From(args[0]).Insert(args[1]);
+    return args[0];
+}
+
+SIMPLE_UDF_OPTIONS(TMutUpdate, TMutNodeLinear(TMutNodeLinear, TNodeResource), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    TMutNodeBuilder::From(args[0]).Update(args[1]);
+    return args[0];
+}
+
+SIMPLE_UDF_OPTIONS(TMutRemove, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    TMutNodeBuilder::From(args[0]).Remove();
+    return args[0];
+}
+
+SIMPLE_UDF_OPTIONS(TMutRewind, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    TMutNodeBuilder::From(args[0]).Rewind();
+    return args[0];
+}
+
+SIMPLE_UDF_OPTIONS(TMutUp, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    TMutNodeBuilder::From(args[0]).Up();
+    return args[0];
+}
+
+SIMPLE_UDF_OPTIONS(TMutDownOrCreate, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    TMutNodeBuilder::From(args[0]).Down(args[1], true);
+    return args[0];
+}
+
+SIMPLE_UDF_OPTIONS(TMutDown, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    TMutNodeBuilder::From(args[0]).Down(args[1], false);
+    return args[0];
+}
+
+using TMutTryDownReturn = TTuple<TMutNodeLinear, bool>;
+SIMPLE_UDF_OPTIONS(TMutTryDown, TMutTryDownReturn(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    bool success = false;
+    try {
+        TMutNodeBuilder::From(args[0]).Down(args[1], false);
+        success = true;
+    } catch (const yexception&)
+    {
+    }
+
+    TUnboxedValue* items;
+    auto ret = valueBuilder->NewArray(2, items);
+    items[0] = args[0];
+    items[1] = TUnboxedValuePod(success);
+    return ret;
+}
+
+using TMutExistsReturn = TTuple<TMutNodeLinear, bool>;
+SIMPLE_UDF_OPTIONS(TMutExists, TMutExistsReturn(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    bool exists = TMutNodeBuilder::From(args[0]).Exists();
+    TUnboxedValue* items;
+    auto ret = valueBuilder->NewArray(2, items);
+    items[0] = args[0];
+    items[1] = TUnboxedValuePod(exists);
+    return ret;
+}
+
+using TMutViewReturn = TTuple<TMutNodeLinear, TOptional<TNodeResource>>;
+SIMPLE_UDF_OPTIONS(TMutView, TMutViewReturn(TMutNodeLinear), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    auto view = TMutNodeBuilder::From(args[0]).View(valueBuilder);
+    TUnboxedValue* items;
+    auto ret = valueBuilder->NewArray(2, items);
+    items[0] = args[0];
+    items[1] = view;
+    return ret;
+}
+
 } // namespace
 
 // TODO: optimizer that marks UDFs as strict if Yson::Options(false as Strict) is given
@@ -1742,6 +2196,19 @@ SIMPLE_MODULE(TYson2Module,
               TAsList,
               TTryAsList,
               TAsDict,
-              TTryAsDict);
+              TTryAsDict,
+              TMutCreate,
+              TMutFreeze,
+              TMutUpsert,
+              TMutInsert,
+              TMutUpdate,
+              TMutRemove,
+              TMutRewind,
+              TMutUp,
+              TMutDownOrCreate,
+              TMutDown,
+              TMutTryDown,
+              TMutExists,
+              TMutView);
 
 REGISTER_MODULES(TYson2Module);

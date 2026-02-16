@@ -45,19 +45,26 @@ void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, c
     const TString operationId = record.GetOperationId();
     const auto status = record.GetStatus();
 
-    if (status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS) {
-        ALOG_CRIT(NKikimrServices::KQP_GATEWAY,
-            "TAnalyzeActor, TEvAnalyzeResponse has status=" << status);
-    }
-
+    NYql::IKikimrGateway::TGenericResult result;
     if (operationId != OperationId) {
         ALOG_CRIT(NKikimrServices::KQP_GATEWAY,
             "TAnalyzeActor, TEvAnalyzeResponse has operationId=" << operationId
             << " , but expected " << OperationId);
+        result.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
+        result.AddIssue(NYql::TIssue("ANALYZE failed: OperationId mismatch"));
+    } else if (status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS) {
+        ALOG_CRIT(NKikimrServices::KQP_GATEWAY,
+            "TAnalyzeActor, TEvAnalyzeResponse has status=" << status);
+        result.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
+        NYql::TIssue error("Executing ANALYZE");
+        for (const auto& issue : record.GetIssues()) {
+            error.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYql::IssueFromMessage(issue)));
+        }
+        result.AddIssue(error);
+    } else {
+        result.SetSuccess();
     }
 
-    NYql::IKikimrGateway::TGenericResult result;
-    result.SetSuccess();
     Promise.SetValue(std::move(result));
     this->Die(ctx);
 }

@@ -6524,6 +6524,11 @@
                 "ColumnId": 21,
                 "ColumnName": "ParentIndex",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "SysView",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6550,7 +6555,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7139,6 +7145,11 @@
                 "ColumnId": 10,
                 "ColumnName": "SchemaChanges",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "UserSIDs",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7154,7 +7165,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7232,6 +7244,11 @@
                 "ColumnId": 10,
                 "ColumnName": "SchemaChanges",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "UserSIDs",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7247,7 +7264,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -169,8 +169,8 @@ public:
 
     IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
         const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
+        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
+        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions, deprecatedPortionId)
         , StartReplaceKey(start)
         , FinishReplaceKey(finish)
         , Start(context->GetReadMetadata()->BuildSortedPosition(StartReplaceKey))
@@ -299,7 +299,7 @@ public:
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
         : TBase(EType::PlainPortion, sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
               portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
-              portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
+              portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount(), portion->GetPortionId())
         , Portion(portion)
         , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
     {

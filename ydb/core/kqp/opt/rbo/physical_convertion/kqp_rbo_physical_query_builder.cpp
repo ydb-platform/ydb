@@ -354,9 +354,6 @@ bool TPhysicalQueryBuilder::IsSuitableToPropagateWideBlocksThroughHashShuffleCon
     for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
         auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
         if (connection) {
-            // FIXME: Invalid invariant in dq_output_consumer.cpp: YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
-            // We could have a type (a, b) -> hash_shuffle(a, a, b)
-            return false;
             auto hashFuncType = RBOCtx.KqpCtx.Config->GetDqDefaultHashShuffleFuncType();
             if (connection.Cast().HashFunc().IsValid()) {
                 hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
@@ -432,8 +429,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 
     // auto &ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr newProgram;
-    auto status = ::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.PeepholeTypeAnnTransformer.GetRef(), RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false,
-                                     withFinalStageRules, {});
+    auto status =
+        ::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.PeepholeTypeAnnTransformer, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, withFinalStageRules, {});
     if (status != IGraphTransformer::TStatus::Ok) {
         ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Peephole optimization failed for stage in NEW RBO"));
         return nullptr;
@@ -443,12 +440,17 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 }
 
 void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
-    RBOCtx.TypeAnnTransformer->Rewind();
+    RBOCtx.TypeAnnTransformer.Rewind();
     TExprNode::TPtr output;
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
-        status = RBOCtx.TypeAnnTransformer->Transform(input, output, RBOCtx.ExprCtx);
+        status = RBOCtx.TypeAnnTransformer.Transform(input, output, RBOCtx.ExprCtx);
     } while (status == IGraphTransformer::TStatus::Repeat);
+
+    if (status != IGraphTransformer::TStatus::Ok) {
+        RBOCtx.ExprCtx.AddError(TIssue(RBOCtx.ExprCtx.GetPosition(input->Pos()), "Type inference failed for stage in NEW RBO"));
+    }
     Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
+
     input = output;
 }

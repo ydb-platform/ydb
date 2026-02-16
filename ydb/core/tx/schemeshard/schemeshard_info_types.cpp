@@ -102,7 +102,7 @@ void TSubDomainInfo::ApplyAuditSettings(const TSubDomainInfo::TMaybeAuditSetting
 }
 
 void TSubDomainInfo::UpdateCounters(IQuotaCounters* counters) {
-    counters->SetPathCount(GetPathsInside());
+    counters->SetPathCount(GetPathsInside() - GetBackupPaths() - GetSystemPaths());
 
     const auto shardsTotal = GetShardsInside();
     const auto backupShards = GetBackupShards();

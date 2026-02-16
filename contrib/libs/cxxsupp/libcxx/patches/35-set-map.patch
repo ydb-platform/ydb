@@ -1,40 +1,40 @@
 diff --git a/include/map b/include/map
-index fabf395..63df512 100644
+index 76d32ad..7100435 100644
 --- a/include/map
 +++ b/include/map
-@@ -1318,6 +1318,7 @@ public:
+@@ -1321,6 +1321,7 @@ public:
    _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __f, const_iterator __l) {
      return __tree_.erase(__f.__i_, __l.__i_);
    }
 +  _LIBCPP_REINITIALIZES_OBJECT
    _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT { __tree_.clear(); }
  
- #if _LIBCPP_STD_VER >= 17
-@@ -1952,6 +1953,7 @@ public:
+ #  if _LIBCPP_STD_VER >= 17
+@@ -1955,6 +1956,7 @@ public:
    }
- #endif
+ #  endif
  
 +  _LIBCPP_REINITIALIZES_OBJECT
    _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT { __tree_.clear(); }
  
    _LIBCPP_HIDE_FROM_ABI void swap(multimap& __m) _NOEXCEPT_(__is_nothrow_swappable_v<__base>) {
 diff --git a/include/set b/include/set
-index 5db0db8..b7dcafd 100644
+index 2784e82..c71fbe5 100644
 --- a/include/set
 +++ b/include/set
-@@ -775,6 +775,7 @@ public:
+@@ -778,6 +778,7 @@ public:
    _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __p) { return __tree_.erase(__p); }
    _LIBCPP_HIDE_FROM_ABI size_type erase(const key_type& __k) { return __tree_.__erase_unique(__k); }
    _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __f, const_iterator __l) { return __tree_.erase(__f, __l); }
 +  _LIBCPP_REINITIALIZES_OBJECT
    _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT { __tree_.clear(); }
  
- #if _LIBCPP_STD_VER >= 17
-@@ -1238,6 +1239,7 @@ public:
+ #  if _LIBCPP_STD_VER >= 17
+@@ -1241,6 +1242,7 @@ public:
    _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __p) { return __tree_.erase(__p); }
    _LIBCPP_HIDE_FROM_ABI size_type erase(const key_type& __k) { return __tree_.__erase_multi(__k); }
    _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __f, const_iterator __l) { return __tree_.erase(__f, __l); }
 +  _LIBCPP_REINITIALIZES_OBJECT
    _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT { __tree_.clear(); }
  
- #if _LIBCPP_STD_VER >= 17
+ #  if _LIBCPP_STD_VER >= 17

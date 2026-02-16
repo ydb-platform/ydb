@@ -1,13 +1,16 @@
 #include "sqs_topic_proxy.h"
 #include "actor.h"
 #include "change_message_visibility.h"
+#include "create_queue.h"
 #include "error.h"
 #include "delete_message.h"
 #include "get_queue_attributes.h"
 #include "list_queues.h"
+#include "purge_queue.h"
 #include "request.h"
 #include "receive_message.h"
 #include "send_message.h"
+#include "set_queue_attributes.h"
 #include "utils.h"
 
 #include <ydb/services/sqs_topic/queue_url/consumer.h>
@@ -154,10 +157,10 @@ namespace NKikimr::NGRpcService {
     DECLARE_RPC(ReceiveMessage);
     DECLARE_RPC(SendMessage);
     DECLARE_RPC(SendMessageBatch);
-    DECLARE_RPC_NI(CreateQueue);
-    DECLARE_RPC_NI(PurgeQueue);
+    DECLARE_RPC(CreateQueue);
+    DECLARE_RPC(SetQueueAttributes);
+    DECLARE_RPC(PurgeQueue);
     DECLARE_RPC_NI(DeleteQueue);
-    DECLARE_RPC_NI(SetQueueAttributes);
     DECLARE_RPC_NI(ListDeadLetterSourceQueues);
     DECLARE_RPC_NI(ListQueueTags);
     DECLARE_RPC_NI(TagQueue);

@@ -634,6 +634,17 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
     }
 }
 
+TExprNode::TPtr TWindowFrameSettings::GetSortSpec(const TExprNode& node, TExprContext& ctx) {
+    auto frameSpec = node.Child(0);
+    if (frameSpec->Type() != TExprNode::List) {
+        return nullptr;
+    }
+    if (!VerifySettings(frameSpec->Children(), ctx)) {
+        return nullptr;
+    }
+    return GetSettingByName(frameSpec->Children(), "sortSpec");
+}
+
 bool TWindowFrameSettings::IsFullPartition() const {
     return IsLeftInf() && IsRightInf();
 }

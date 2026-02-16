@@ -284,6 +284,7 @@ arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::E
         }
         // Apache arrow scalar validation is supported in ARROW-13132.
         // Add scalar support after library update (this is very similar to above array validation).
+        // NOLINTNEXTLINE(misc-redundant-expression)
         static_assert(ARROW_VERSION_MAJOR == 5, "If you see this message please notify owners about update and remove this assert.");
     } else {
         // Must be either arraylike or scalar.

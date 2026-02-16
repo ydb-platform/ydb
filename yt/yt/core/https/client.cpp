@@ -115,7 +115,7 @@ IClientPtr CreateClient(
     sslContext->Commit();
 
     auto dialerConfig = New<TDialerConfig>();
-    dialerConfig->AllowBypassTLS = config->AllowHTTP;
+    dialerConfig->AllowBypassTls = config->AllowHttp;
 
     auto tlsDialer = sslContext->CreateDialer(
         dialerConfig,

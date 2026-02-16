@@ -5,7 +5,7 @@
 
 #include <memory>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -48,4 +48,4 @@ using TTestResultsPtr = std::unique_ptr<TTestResults>;
 
 struct IClientFactory;
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

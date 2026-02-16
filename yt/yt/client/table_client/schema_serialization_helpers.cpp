@@ -61,9 +61,9 @@ void TSerializableColumnSchema::Register(TRegistrar registrar)
     registrar.BaseClassParameter("max_inline_hunk_size", &TThis::MaxInlineHunkSize_)
         .Default();
     registrar.BaseClassParameter("deleted", &TThis::Deleted_)
-        .Default(std::nullopt);
+        .Default();
     registrar.BaseClassParameter("constraint", &TThis::Constraint_)
-        .Default(std::nullopt);
+        .Default();
 
     registrar.Postprocessor([] (TSerializableColumnSchema* schema) {
         schema->RunPostprocessor();

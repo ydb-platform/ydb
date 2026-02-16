@@ -8,7 +8,7 @@ def camel_to_snake(s: str) -> str:
     """
     Convert CamelCase to snake_case.
     """
-    return "".join("_" + c.lower() if c.isupper() else c for c in s).lstrip("_")
+    return "".join(f"_{c.lower()}" if c.isupper() else c for c in s).lstrip("_")
 
 
 pre_pep8_method_names = """

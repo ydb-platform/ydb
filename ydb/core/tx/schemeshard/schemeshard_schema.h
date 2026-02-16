@@ -1685,6 +1685,7 @@ struct Schema : NIceDb::Schema {
         struct Metadata : Column<12, NScheme::NTypeIds::String> {};
         struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
         struct Topic : Column<20, NScheme::NTypeIds::String> {};
+        struct SysView : Column<22, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1718,7 +1719,8 @@ struct Schema : NIceDb::Schema {
             EncryptionIV,
             SrcPath,
             Topic,
-            ParentIndex
+            ParentIndex,
+            SysView
         >;
     };
 
@@ -1820,6 +1822,7 @@ struct Schema : NIceDb::Schema {
         struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
+        struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1832,7 +1835,8 @@ struct Schema : NIceDb::Schema {
             VirtualTimestamps,
             AwsRegion,
             ResolvedTimestampsIntervalMs,
-            SchemaChanges
+            SchemaChanges,
+            UserSIDs
         >;
     };
 
@@ -1847,6 +1851,7 @@ struct Schema : NIceDb::Schema {
         struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
+        struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1859,7 +1864,8 @@ struct Schema : NIceDb::Schema {
             VirtualTimestamps,
             AwsRegion,
             ResolvedTimestampsIntervalMs,
-            SchemaChanges
+            SchemaChanges,
+            UserSIDs
         >;
     };
 

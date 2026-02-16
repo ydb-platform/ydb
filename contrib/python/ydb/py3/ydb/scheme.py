@@ -2,7 +2,13 @@
 import abc
 import enum
 from abc import abstractmethod
+from typing import Generic, TYPE_CHECKING
+
 from . import issues, operation, settings as settings_impl, _apis
+from ._typing import DriverT
+
+if TYPE_CHECKING:
+    from .driver import Driver as SyncDriver  # noqa: F401
 
 
 @enum.unique
@@ -494,10 +500,12 @@ class ISchemeClient(abc.ABC):
         pass
 
 
-class BaseSchemeClient(ISchemeClient):
+class BaseSchemeClient(ISchemeClient, Generic[DriverT]):
     __slots__ = ("_driver",)
 
-    def __init__(self, driver):
+    _driver: DriverT
+
+    def __init__(self, driver: DriverT) -> None:
         self._driver = driver
 
     def make_directory(self, path, settings=None):
@@ -554,7 +562,7 @@ class BaseSchemeClient(ISchemeClient):
         )
 
 
-class SchemeClient(BaseSchemeClient):
+class SchemeClient(BaseSchemeClient["SyncDriver"]):
     def async_make_directory(self, path, settings=None):
         return self._driver.future(
             _make_directory_request_factory(path),

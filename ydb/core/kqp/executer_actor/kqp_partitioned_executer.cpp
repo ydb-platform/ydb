@@ -1,4 +1,5 @@
 #include "kqp_partitioned_executer.h"
+#include "kqp_executer_stats.h"
 #include "kqp_executer.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -63,6 +64,7 @@ public:
 
     explicit TKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : Request(std::move(settings.Request))
+        , Stats(Request.StatsMode)
         , SessionActorId(std::move(settings.SessionActorId))
         , FuncRegistry(std::move(settings.FuncRegistry))
         , TimeProvider(std::move(settings.TimeProvider))
@@ -103,6 +105,7 @@ public:
         Become(&TKqpPartitionedExecuter::PrepareState);
 
         PE_STLOG_I("Start resolving table partitions");
+        Stats.StartTs = TInstant::Now();
 
         FillTableMetaInfo();
         ResolvePartitioning();
@@ -254,12 +257,13 @@ public:
     void HandleExecute(TEvKqpExecuter::TEvTxDelayedExecution::TPtr& ev) {
         RequestCounters->Counters->BatchOperationRetries->Inc();
 
-        auto& partInfo = StartedPartitions[ev->Get()->PartitionIdx];
-
         PE_STLOG_D("Delayed execution timer fired",
             (PartitionIndex, ev->Get()->PartitionIdx));
 
-        RetryPartExecution(partInfo);
+        auto it = StartedPartitions.find(ev->Get()->PartitionIdx);
+        if (it != StartedPartitions.end()) {
+            RetryPartExecution(it->second);
+        }
     }
 
     void HandleExecute(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -413,6 +417,8 @@ private:
                 return "BATCH UPDATE";
             case TKeyDesc::ERowOperation::Erase:
                 return "BATCH DELETE";
+            case TKeyDesc::ERowOperation::Unknown:
+                return "BATCH";
             default:
                 return "";
         }
@@ -449,6 +455,7 @@ private:
         switch (settings->GetType()) {
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT:
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL:
                 OperationType = TKeyDesc::ERowOperation::Update;
                 break;
             case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
@@ -541,7 +548,16 @@ private:
     }
 
     void CreateExecuterWithBuffer(TPartitionIndex partitionIndex, bool isRetry) {
-        auto partInfo = (isRetry) ? StartedPartitions[partitionIndex] : CreatePartition(partitionIndex);
+        TBatchPartitionInfo::TPtr partInfo;
+        if (isRetry) {
+            auto it = StartedPartitions.find(partitionIndex);
+            if (it == StartedPartitions.end()) {
+                return;
+            }
+            partInfo = it->second;
+        } else {
+            partInfo = CreatePartition(partitionIndex);
+        }
         auto txAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
 
         IKqpGateway::TExecPhysicalRequest newRequest(txAlloc);
@@ -642,6 +658,9 @@ private:
     }
 
     void OnSuccessResponse(TBatchPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
+        Stats.TakeExecStats(std::move(*ev->Record.MutableResponse()->MutableResult()->MutableStats()));
+        Stats.AffectedPartitions.insert(partInfo->PartitionIndex);
+
         TSerializedCellVec minKey = GetMinCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
         if (minKey) {
             if (!IsKeyInPartition(minKey.GetCells(), partInfo)) {
@@ -804,6 +823,9 @@ private:
                 (Status, Ydb::StatusIds_StatusCode_Name(ReturnStatus)),
                 (Issues, ReturnIssues.ToOneLineString()));
 
+            Stats.FinishTs = TInstant::Now();
+            Stats.ExportExecStats(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
+
             if (ReturnStatus != Ydb::StatusIds::SUCCESS) {
                 return ReplyErrorAndDie(ReturnStatus, ReturnIssues);
             }
@@ -866,6 +888,7 @@ private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NBatchOperations::TSettings Settings;
 
+    TBatchOperationExecutionStats Stats;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
 
@@ -880,7 +903,7 @@ private:
     THashMap<TActorId, TBatchPartitionInfo::TPtr> ExecuterToPartition;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferToPartition;
 
-    TKeyDesc::ERowOperation OperationType;
+    TKeyDesc::ERowOperation OperationType = TKeyDesc::ERowOperation::Unknown;
     TTableId TableId;
 
     const TActorId SessionActorId;

@@ -19,7 +19,9 @@ NProto::TFmrError FmrErrorToProto(const TFmrError& error) {
     if (error.OperationId) {
         protoError.SetOperationId(*error.OperationId);
     }
-    protoError.SetJobId(*error.JobId);
+    if (error.JobId) {
+        protoError.SetJobId(*error.JobId);
+    }
     return protoError;
 }
 
@@ -37,7 +39,9 @@ TFmrError FmrErrorFromProto(const NProto::TFmrError& protoError) {
     if (protoError.HasOperationId()) {
         fmrError.OperationId = protoError.GetOperationId();
     }
-    fmrError.JobId = protoError.GetJobId();
+    if (protoError.HasJobId()) {
+        fmrError.JobId = protoError.GetJobId();
+    }
     return fmrError;
 }
 
@@ -140,6 +144,15 @@ NProto::TFmrTableInputRef FmrTableInputRefToProto(const TFmrTableInputRef& fmrTa
         protoFmrTableInputRef.AddColumns(column);
     }
     protoFmrTableInputRef.SetColumnGroups(fmrTableInputRef.SerializedColumnGroups);
+    if (fmrTableInputRef.IsFirstRowInclusive) {
+        protoFmrTableInputRef.SetIsFirstRowInclusive(*fmrTableInputRef.IsFirstRowInclusive);
+    }
+    if (fmrTableInputRef.FirstRowKeys) {
+        protoFmrTableInputRef.SetFirstRowKeys(*fmrTableInputRef.FirstRowKeys);
+    }
+    if (fmrTableInputRef.LastRowKeys) {
+        protoFmrTableInputRef.SetLastRowKeys(*fmrTableInputRef.LastRowKeys);
+    }
     return protoFmrTableInputRef;
 }
 
@@ -156,6 +169,8 @@ TFmrTableInputRef FmrTableInputRefFromProto(const NProto::TFmrTableInputRef& pro
         fmrTableInputRef.Columns.emplace_back(column);
     }
     fmrTableInputRef.SerializedColumnGroups = protoFmrTableInputRef.GetColumnGroups();
+    fmrTableInputRef.FirstRowKeys = protoFmrTableInputRef.HasFirstRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetFirstRowKeys()) : Nothing();
+    fmrTableInputRef.LastRowKeys = protoFmrTableInputRef.HasLastRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetLastRowKeys()) : Nothing();
     return fmrTableInputRef;
 }
 

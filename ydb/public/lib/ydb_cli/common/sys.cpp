@@ -9,10 +9,10 @@ namespace {
 
 // In future should be syncronized with 'ydb/core/tx/schemeshard/schemeshard_system_names.cpp'
 const THashSet<TStringBuf> SystemReservedNames = {
-    ".sys",
-    ".metadata",
-    ".tmp",
-    ".backups",
+    SYSVIEWS_DIR_NAME,
+    METADATA_DIR_NAME,
+    TMP_DIR_NAME,
+    BACKUPS_DIR_NAME,
 };
 
 }

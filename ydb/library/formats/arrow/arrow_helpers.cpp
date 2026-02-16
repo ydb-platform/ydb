@@ -205,7 +205,7 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(
         }
 
         if (reserve) {
-            TStatusValidator::Val   idate(builder->Reserve(reserve));
+            TStatusValidator::Validate(builder->Reserve(reserve));
         }
 
         builders.emplace_back(std::move(builder));
@@ -401,7 +401,6 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
     return ScalarCompare(x, y) < 0;
 }
 
-
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s) {
     AFL_VERIFY(c);
     if (!s) {
@@ -435,7 +434,6 @@ bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 posit
 
 int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
     Y_VERIFY_S(x.type->Equals(y.type), x.type->ToString() + " vs " + y.type->ToString());
-
 
     return SwitchTypeImpl<int, 0>(x.type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;

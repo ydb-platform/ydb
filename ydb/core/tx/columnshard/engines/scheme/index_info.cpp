@@ -593,6 +593,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
         Indexes = original.Indexes;
         for (auto&& i : diff.GetModifiedIndexes()) {
             if (!i.second) {
+                // It is possible to have a non-existent element here after merging schemas
                 Indexes.erase(i.first);
             } else {
                 auto it = Indexes.find(i.first);
@@ -704,8 +705,6 @@ std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(
             continue;
         }
         auto skipIndex = std::static_pointer_cast<NIndexes::TSkipIndex>(i.GetObjectPtrVerified());
-
-        AFL_VERIFY(skipIndex != nullptr);
         if (skipIndex->IsAppropriateFor(originalDataAddress, op)) {
             result.emplace_back(skipIndex);
         }

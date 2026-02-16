@@ -23,7 +23,8 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
     const auto& shard = context.SS->ShardInfos[shardIdx];
 
     if (shard.TabletType == ETabletType::BlockStorePartition ||
-        shard.TabletType == ETabletType::BlockStorePartition2)
+        shard.TabletType == ETabletType::BlockStorePartition2 ||
+        shard.TabletType == ETabletType::BlockStorePartitionDirect)
     {
         auto it = context.SS->BlockStoreVolumes.FindPtr(targetPath->PathId);
         Y_ABORT_UNLESS(it, "Missing BlockStoreVolume while creating BlockStorePartition tablet");
@@ -84,6 +85,7 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
         shard.TabletType == ETabletType::BlockStorePartition2 ||
         shard.TabletType == ETabletType::RTMRPartition) {
         // Partitions should never be booted by local
+        // Except for BlockStorePartitionDirect
         ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
     }
 

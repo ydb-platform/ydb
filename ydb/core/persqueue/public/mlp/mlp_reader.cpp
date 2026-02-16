@@ -112,7 +112,7 @@ void TReaderActor::DoRead() {
         Settings.TopicName,
         Settings.Consumer,
         PartitionId,
-        Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::Seconds(ConsumerConfig->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
+        Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::MilliSeconds(ConsumerConfig->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
         Settings.ProcessingTimeout ? Settings.ProcessingTimeout.value() : TDuration::Seconds(ConsumerConfig->GetDefaultProcessingTimeoutSeconds()),
         Settings.MaxNumberOfMessage
     );

@@ -30,6 +30,13 @@ void TFulltextWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECom
         opts.AddLongOption("index-param", "Fulltext index param. Can be specified multiple times. Format: `--index-param=\"<name>=<value>\" --index-param=...`.")
             .InsertTo(&IndexParams).DefaultValue("tokenizer=standard");
         break;
+    case TWorkloadParams::ECommandType::Run:
+        opts.AddLongOption("index-name", "Fulltext index name.")
+            .DefaultValue(IndexName).StoreResult(&IndexName);
+        opts.AddLongOption("query-table", "Name of the table that contains queries to use for select queries. The table must have a 'query' column.")
+            .Required()
+            .StoreResult(&QueryTable);
+        break;
     default:
         break;
     }

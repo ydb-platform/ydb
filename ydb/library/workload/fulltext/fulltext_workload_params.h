@@ -24,7 +24,7 @@ public:
     ui64 PartitionSizeMb = 0;
     bool AutoPartitioningByLoad = true;
 
-    TString QueryText = "Random";
+    TString QueryTable;
 };
 
 } // namespace NYdbWorkload

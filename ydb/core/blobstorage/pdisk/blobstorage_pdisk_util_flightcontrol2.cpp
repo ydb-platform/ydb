@@ -6,17 +6,17 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TFlightControl2
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-TFlightControl2::TFlightControl2(ui64 maxInFlightRequests, ui64 maxInFlightBytes)
-    : MaxInFlightRequests(maxInFlightRequests)
-    , MaxInFlightBytes(maxInFlightBytes)
+TFlightControl2::TFlightControl2(ui64 inFlightRequestsLimit, ui64 inFlightBytesLimit)
+    : InFlightRequestsLimit(inFlightRequestsLimit)
+    , InFlightBytesLimit(inFlightBytesLimit)
     , CachedFirstIncompleteIdx(1)
     , NextScheduleIdx(1)
     , InFlightRequests(0)
     , InFlightBytes(0)
     , FirstIncompleteIdxValue(1)
 {
-    Y_VERIFY(maxInFlightRequests > 0);
-    Y_VERIFY(maxInFlightBytes > 0);
+    Y_VERIFY(inFlightRequestsLimit > 0);
+    Y_VERIFY(inFlightBytesLimit > 0);
 }
 
 void TFlightControl2::Initialize(const TString& logPrefix) {
@@ -24,10 +24,14 @@ void TFlightControl2::Initialize(const TString& logPrefix) {
 }
 
 ui64 TFlightControl2::TryScheduleLocked(ui64 size) {
-    if (InFlightRequests >= MaxInFlightRequests) {
+    if (InFlightRequests >= InFlightRequestsLimit) {
         return 0;
     }
-    if (InFlightBytes > MaxInFlightBytes - size) {
+    size = std::min(size, InFlightBytesLimit);
+
+    if (InFlightBytes + size > InFlightBytesLimit) {
+        //Cerr << "reject because " << InFlightBytes << " >= " << InFlightBytesLimit << " size# " << size
+        //    << " InFlightRequests# " << InFlightRequests << Endl; 
         return 0;
     }
 
@@ -41,18 +45,12 @@ ui64 TFlightControl2::TryScheduleLocked(ui64 size) {
 // Operation Idx otherwise
 // May sometimes return 0 when it already can schedule
 ui64 TFlightControl2::TrySchedule(ui64 size) {
-    Y_VERIFY_S(size <= MaxInFlightBytes, PDiskLogPrefix << " size# " << size
-            << " MaxInFlightBytes# " << MaxInFlightBytes);
-
     TGuard<TMutex> guard(ScheduleMutex);
     return TryScheduleLocked(size);
 }
 
 // Blocking Schedule method
 ui64 TFlightControl2::Schedule(double& blockedMs, ui64 size) {
-    Y_VERIFY_S(size <= MaxInFlightBytes, PDiskLogPrefix << " size# " << size
-            << " MaxInFlightBytes# " << MaxInFlightBytes);
-
     NHPTimer::STime beginTime = 0;
     TGuard<TMutex> guard(ScheduleMutex);
     while (true) {
@@ -69,6 +67,7 @@ ui64 TFlightControl2::Schedule(double& blockedMs, ui64 size) {
 
 void TFlightControl2::MarkComplete(ui64 idx, ui64 size) {
     TGuard<TMutex> guard(ScheduleMutex);
+    size = std::min(size, InFlightBytesLimit);
 
     Y_VERIFY_S(idx >= FirstIncompleteIdxValue, PDiskLogPrefix << " idx# " << idx
             << " FirstIncompleteIdxValue# " << FirstIncompleteIdxValue);

@@ -27,19 +27,19 @@ class TFlightControl {
     void WakeUp();
 
 public:
-    TFlightControl(ui64 bits);
+    TFlightControl(ui64 maxInFlightRequests, ui64 inFlightBytesLimit = 0);
 
     void Initialize(const TString& logPrefix);
 
     // Returns 0 in case of scheduling error
     // Operation Idx otherwise
     // May sometimes return 0 when it already can schedule
-    ui64 TrySchedule();
+    ui64 TrySchedule(ui64 size);
 
     // Blocking version of TrySchedule
-    ui64 Schedule(double& blockedMs);
+    ui64 Schedule(double& blockedMs, ui64 size);
 
-    void MarkComplete(ui64 idx);
+    void MarkComplete(ui64 idx, ui64 size);
     ui64 FirstIncompleteIdx();
 };
 

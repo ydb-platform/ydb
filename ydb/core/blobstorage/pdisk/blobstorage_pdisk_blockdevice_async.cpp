@@ -42,68 +42,15 @@ template <bool UseNewFlightControl>
 class TFlightControlSelector;
 
 template <>
-class TFlightControlSelector<false> {
-    TFlightControl FlightControl;
-
+class TFlightControlSelector<false> : public TFlightControl {
 public:
-    TFlightControlSelector(ui64 maxInFlightRequests, ui64 maxInFlightBytes)
-        : FlightControl(CountTrailingZeroBits(maxInFlightRequests))
-    {
-        Y_UNUSED(maxInFlightBytes);
-    }
-
-    void Initialize(const TString& logPrefix) {
-        FlightControl.Initialize(logPrefix);
-    }
-
-    ui64 TrySchedule(ui64 size) {
-        Y_UNUSED(size);
-        return FlightControl.TrySchedule();
-    }
-
-    ui64 Schedule(double& blockedMs, ui64 size) {
-        Y_UNUSED(size);
-        return FlightControl.Schedule(blockedMs);
-    }
-
-    void MarkComplete(ui64 idx, ui64 size) {
-        Y_UNUSED(size);
-        FlightControl.MarkComplete(idx);
-    }
-
-    ui64 FirstIncompleteIdx() {
-        return FlightControl.FirstIncompleteIdx();
-    }
+    using TFlightControl::TFlightControl;
 };
 
 template <>
-class TFlightControlSelector<true> {
-    TFlightControl2 FlightControl;
-
+class TFlightControlSelector<true> : public TFlightControl2 {
 public:
-    TFlightControlSelector(ui64 maxInFlightRequests, ui64 maxInFlightBytes)
-        : FlightControl(maxInFlightRequests, maxInFlightBytes)
-    {}
-
-    void Initialize(const TString& logPrefix) {
-        FlightControl.Initialize(logPrefix);
-    }
-
-    ui64 TrySchedule(ui64 size) {
-        return FlightControl.TrySchedule(size);
-    }
-
-    ui64 Schedule(double& blockedMs, ui64 size) {
-        return FlightControl.Schedule(blockedMs, size);
-    }
-
-    void MarkComplete(ui64 idx, ui64 size) {
-        FlightControl.MarkComplete(idx, size);
-    }
-
-    ui64 FirstIncompleteIdx() {
-        return FlightControl.FirstIncompleteIdx();
-    }
+    using TFlightControl2::TFlightControl2;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -902,7 +849,7 @@ private:
 
     static constexpr int WaitTimeoutMs = 1;
     static constexpr int MaxEvents = 32;
-    static constexpr bool UseNewFlightControl = false;
+    static constexpr bool UseNewFlightControl = true;
     using TSelectedFlightControl = TFlightControlSelector<UseNewFlightControl>;
 
     ui64 DeviceInFlight;
@@ -937,7 +884,7 @@ public:
         , Flags(flags)
         , SectorMap(sectorMap)
         , DeviceInFlight(FastClp2(deviceInFlight))
-        , FlightControl(DeviceInFlight, TFlightControl2::DefaultMaxInFlightBytes)
+        , FlightControl(DeviceInFlight, TFlightControl2::DefaultInFlightBytesLimit)
         , LastWarning(IsPowerOf2(deviceInFlight) ? "" : "Device inflight must be a power of 2")
         , ReadOnly(readOnly)
     {

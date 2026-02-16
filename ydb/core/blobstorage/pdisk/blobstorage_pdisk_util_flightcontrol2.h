@@ -21,8 +21,8 @@ class TFlightControl2 {
         }
     };
 
-    const ui64 MaxInFlightRequests;
-    const ui64 MaxInFlightBytes;
+    const ui64 InFlightRequestsLimit;
+    const ui64 InFlightBytesLimit;
 
     TAtomic CachedFirstIncompleteIdx;
     ui64 NextScheduleIdx;
@@ -38,9 +38,9 @@ class TFlightControl2 {
     ui64 TryScheduleLocked(ui64 size);
 
 public:
-    static constexpr ui64 DefaultMaxInFlightBytes = 1ull << 20; // 1 MiB
+    static constexpr ui64 DefaultInFlightBytesLimit = 1ull << 20; // 1 MiB
 
-    TFlightControl2(ui64 maxInFlightRequests, ui64 maxInFlightBytes = DefaultMaxInFlightBytes);
+    TFlightControl2(ui64 inFlightRequestsLimit, ui64 inFlightBytesLimit = DefaultInFlightBytesLimit);
 
     void Initialize(const TString& logPrefix);
 

@@ -6,15 +6,17 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TFlightControl
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-TFlightControl::TFlightControl(ui64 bits)
+TFlightControl::TFlightControl(ui64 maxInFlightRequests, ui64 inFlightBytesLimit)
     : BeginIdx(1)
     , MaxInFlightIdx(0)
     , EndIdx(1)
-    , MaxSize(1ull << bits)
-    , Mask(~((~0ull) << bits))
-    , IsCompleteLoop(1ull << bits)
+    , MaxSize(maxInFlightRequests)
+    , Mask(maxInFlightRequests - 1)
+    , IsCompleteLoop(maxInFlightRequests)
 {
-    Y_VERIFY(bits > 0 && bits < 16);
+    Y_UNUSED(inFlightBytesLimit);
+    Y_VERIFY(maxInFlightRequests > 0 && maxInFlightRequests < (1ull << 16));
+    Y_VERIFY((maxInFlightRequests & (maxInFlightRequests - 1)) == 0);
 }
 
 void TFlightControl::Initialize(const TString& logPrefix) {
@@ -24,7 +26,9 @@ void TFlightControl::Initialize(const TString& logPrefix) {
 // Returns 0 in case of scheduling error
 // Operation Idx otherwise
 // May sometimes return 0 when it already can schedule
-ui64 TFlightControl::TrySchedule() {
+ui64 TFlightControl::TrySchedule(ui64 size) {
+    Y_UNUSED(size);
+
     ui64 newMaxInFlightIdx = 0;
     bool isDone = false;
     while (!isDone) {
@@ -43,15 +47,15 @@ ui64 TFlightControl::TrySchedule() {
 }
 
 // Blocking Schedule method
-ui64 TFlightControl::Schedule(double& blockedMs) {
+ui64 TFlightControl::Schedule(double& blockedMs, ui64 size) {
     NHPTimer::STime beginTime = 0;
     while (true) {
-        ui64 idx = TrySchedule();
+        ui64 idx = TrySchedule(size);
         if (idx) {
             return idx;
         } else {
             TGuard<TMutex> guard(ScheduleMutex);
-            idx = TrySchedule();
+            idx = TrySchedule(size);
             if (idx) {
                 return idx;
             }
@@ -69,7 +73,9 @@ void TFlightControl::WakeUp() {
     ScheduleCondVar.Signal();
 }
 
-void TFlightControl::MarkComplete(ui64 idx) {
+void TFlightControl::MarkComplete(ui64 idx, ui64 size) {
+    Y_UNUSED(size);
+
     ui64 beginIdx = AtomicGet(BeginIdx);
     Y_VERIFY_S(idx >= beginIdx, PDiskLogPrefix);
     Y_VERIFY_S(idx < beginIdx + MaxSize, PDiskLogPrefix);

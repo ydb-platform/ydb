@@ -151,7 +151,7 @@ TEXTWRAP_KWARGS = [
 
 
 @pytest.mark.parametrize('kwargs', TEXTWRAP_KWARGS)
-@pytest.mark.parametrize('width', [3, 7, 8, 9, 10, 16, 20, 40])
+@pytest.mark.parametrize('width', [3, 8, 20, 33])
 def test_wrap_matches_stdlib(kwargs, width):
     pgraph = ' Z! a bc defghij klmnopqrstuvw<<>>xyz012345678900 ' * 2
     pgraph_colored = _colorize(pgraph)
@@ -170,7 +170,7 @@ def test_wrap_matches_stdlib(kwargs, width):
 
 
 @pytest.mark.parametrize('kwargs', TEXTWRAP_KWARGS)
-@pytest.mark.parametrize('width', [8, 10, 16, 20, 40])
+@pytest.mark.parametrize('width', [8, 20, 37])
 @pytest.mark.parametrize('tabsize', [4, 5, 8])
 def test_wrap_tabsize_matches_stdlib(kwargs, width, tabsize):
     tabsize = min(tabsize, width)

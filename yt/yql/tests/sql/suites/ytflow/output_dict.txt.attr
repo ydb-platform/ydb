@@ -1,0 +1,51 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "$timestamp";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Uint64"
+                        ]
+                    ];
+                ];
+                [
+                    "$cumulative_data_weight";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+                [
+                    "dict_field";
+                    [
+                        "DictType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "String"
+                            ];
+                        ];
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Int64"
+                            ];
+                        ];
+                    ];
+                ];
+            ]
+        ]
+    };
+    "_yql_dynamic" = %true;
+    "_yql_dynamic_native_read" = %true;
+}

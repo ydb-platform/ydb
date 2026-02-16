@@ -7,6 +7,7 @@
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>

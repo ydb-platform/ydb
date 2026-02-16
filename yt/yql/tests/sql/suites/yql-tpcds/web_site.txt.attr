@@ -1,0 +1,170 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "web_site_sk";
+            "required" = %true;
+            "sort_order" = "ascending";
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "web_site_id";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_rec_start_date";
+            "required" = %false;
+            "type" = "date";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "date";
+            };
+        };
+        {
+            "name" = "web_rec_end_date";
+            "required" = %false;
+            "type" = "date";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "date";
+            };
+        };
+        {
+            "name" = "web_name";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_open_date_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "web_close_date_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "web_class";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_manager";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_mkt_id";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "web_mkt_class";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_mkt_desc";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_market_manager";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_company_id";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "web_company_name";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_street_number";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_street_name";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_street_type";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_suite_number";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_city";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_county";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_state";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_zip";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_country";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "web_gmt_offset";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "web_tax_percentage";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+    ];
+}

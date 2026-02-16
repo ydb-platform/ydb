@@ -124,7 +124,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
 
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
     if (!tableInfoPtr)
-        return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist."};
+        return {NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist."};
 
     const TUserTable& tableInfo = *tableInfoPtr->Get();
 
@@ -248,6 +248,8 @@ TVector<TKeyValidator::TColumnWriteMeta> TValidatedWriteTxOperation::GetColumnWr
 
 void TValidatedWriteTxOperation::SetTxKeys(const TUserTable& tableInfo, ui64 tabletId, TKeyValidator& keyValidator)
 {
+    bool isErase = GetOperationType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE;
+
     auto columnsWrites = GetColumnWrites();
 
     TVector<TCell> keyCells;
@@ -259,7 +261,7 @@ void TValidatedWriteTxOperation::SetTxKeys(const TUserTable& tableInfo, ui64 tab
             << "write point " << DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry));
 
         TTableRange tableRange(keyCells);
-        keyValidator.AddWriteRange(TableId, tableRange, tableInfo.KeyColumnTypes, columnsWrites, false);
+        keyValidator.AddWriteRange(TableId, tableRange, tableInfo.KeyColumnTypes, columnsWrites, isErase);
     }
 }
 

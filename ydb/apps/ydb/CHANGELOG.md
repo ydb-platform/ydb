@@ -1,3 +1,6 @@
+
+## 2.29.0 ##
+
 * Fixed Out Of Memory issue in the `ydb workload query run` command for queries with large result sets.
 * Improved the `ydb init` and `ydb config profile` commands with interactive menus.
 * Added download progress bar to the `ydb update` command.

@@ -2277,7 +2277,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
             AcceptPermissions(resp->Record, rec.GetRequestId(), user, priority, ctx, true);
 
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, rec.GetRequestId(), request.Priority, std::move(copy)), ctx);
+        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, rec.GetRequestId(), priority, std::move(copy)), ctx);
     }
 
     TabletCounters->Percentile()[COUNTER_LATENCY_CHECK_REQUEST].IncrementFor((TInstant::Now() - requestStartTime).MilliSeconds());

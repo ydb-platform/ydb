@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,10 +52,10 @@
 #define LDAP_SBINDIR		"/var/empty/tmp/out/sbin"
 #endif
 #ifndef LDAP_DATADIR
-#define LDAP_DATADIR		"/var/empty/openldap-2.6.10/share/openldap"
+#define LDAP_DATADIR		"/var/empty/openldap-2.6.12/share/openldap"
 #endif
 #ifndef LDAP_SYSCONFDIR
-#define LDAP_SYSCONFDIR		"/var/empty/openldap-2.6.10/etc/openldap"
+#define LDAP_SYSCONFDIR		"/var/empty/openldap-2.6.12/etc/openldap"
 #endif
 #ifndef LDAP_LIBEXECDIR
 #define LDAP_LIBEXECDIR		"/var/empty/tmp/out/libexec"
@@ -64,7 +64,7 @@
 #define LDAP_MODULEDIR		"/var/empty/tmp/out/libexec/openldap"
 #endif
 #ifndef LDAP_RUNDIR
-#define LDAP_RUNDIR			"/var/empty/openldap-2.6.10/var"
+#define LDAP_RUNDIR			"/var/empty/openldap-2.6.12/var"
 #endif
 #ifndef LDAP_LOCALEDIR
 #define LDAP_LOCALEDIR		""

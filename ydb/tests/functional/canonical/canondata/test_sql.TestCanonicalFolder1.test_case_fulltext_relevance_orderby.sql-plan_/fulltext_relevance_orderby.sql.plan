@@ -9,7 +9,7 @@
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
-                        "Node Type": "Top",
+                        "Node Type": "Limit",
                         "Operators": [
                             {
                                 "Inputs": [
@@ -18,19 +18,18 @@
                                     }
                                 ],
                                 "Limit": "10",
-                                "Name": "Top",
-                                "TopBy": "row.__ydb_full_text_relevance"
+                                "Name": "Limit"
                             }
                         ],
                         "PlanNodeId": 4,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
+                                "Node Type": "Merge",
                                 "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Top",
+                                        "Node Type": "TopSort",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -39,8 +38,8 @@
                                                     }
                                                 ],
                                                 "Limit": "10",
-                                                "Name": "Top",
-                                                "TopBy": "row.__ydb_full_text_relevance"
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument.__ydb_full_text_relevance"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -65,6 +64,9 @@
                                             }
                                         ]
                                     }
+                                ],
+                                "SortColumns": [
+                                    "__ydb_full_text_relevance (Desc)"
                                 ]
                             }
                         ]

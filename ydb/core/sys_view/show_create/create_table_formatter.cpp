@@ -1131,7 +1131,7 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         }
     }
 
-    if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan) {
+    if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan || cdcStream.HasScanProgress()) {
         Stream << del << "INITIAL_SCAN = TRUE";
         del = ", ";
     }

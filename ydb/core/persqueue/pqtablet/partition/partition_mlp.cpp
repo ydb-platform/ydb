@@ -90,6 +90,24 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
 
     auto& consumerInfo = it->second;
     consumerInfo.Metrics = std::move(metrics);
+    consumerInfo.UseForReading = ev->Get()->UseForReading;
+}
+
+void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << record.ShortDebugString());
+
+    auto it = MLPConsumers.find(record.GetConsumer());
+    if (it == MLPConsumers.end()) {
+        return;
+    }
+
+    auto& consumerInfo = it->second;
+    consumerInfo.UseForReading = record.GetUseForReading();
+
+    record.SetGeneration(TabletGeneration);
+    record.SetCookie(++PQRBCookie);
+    Forward(ev, TabletActorId);
 }
 
 void TPartition::ProcessMLPPendingEvents() {

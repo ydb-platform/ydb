@@ -1249,6 +1249,12 @@ TCheckFunc IsBackupTable(bool value) {
     };
 }
 
+TCheckFunc IsRestoreTable(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(value, record.GetPathDescription().GetTable().GetIsRestore());
+    };
+}
+
 TCheckFunc ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetTable();

@@ -87,6 +87,7 @@ public:
     ui32 KeyCount = 0;
     bool CleanupPolicyCompact = false;
     std::optional<size_t> ConsumerMaxMemoryUsageBytes;
+    size_t PartitionMaxInflightBytes = 0; // zero means no limit
     std::optional<size_t> ProducerMaxMemoryUsageBytes;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;

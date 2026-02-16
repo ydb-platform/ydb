@@ -275,7 +275,6 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                         .set_key_id(keyId)
                         .set_issuer(serviceAccountId)
                         .set_subject(serviceAccountId)
-                        .set_audience(audience)
                         .set_issued_at(now)
                         .set_expires_at(expiresAt)
                         .sign(algorithm);

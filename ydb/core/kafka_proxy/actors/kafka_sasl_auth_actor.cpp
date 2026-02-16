@@ -56,6 +56,8 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
             StartPlainAuth(ctx);
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             StartScramAuth();
+        } else if (Context->SaslMechanism == "MTLS") {
+            KAFKA_LOG_D("here");
         } else {
             SendResponseAndDie(EKafkaErrors::UNSUPPORTED_SASL_MECHANISM,
                                 "Does not support the requested SASL mechanism.",
@@ -413,6 +415,8 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             // Scram Login/Password authentication
             SendScramLoginRequest(ctx);
+        } else if (Context->SaslMechanism == "MTLS") {
+
         }
     }
 }

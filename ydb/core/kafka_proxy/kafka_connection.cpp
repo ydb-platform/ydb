@@ -71,6 +71,7 @@ public:
     bool MtlsAuthenticationSuccessful = false;
     bool MtslRecievedCert = false;
     std::shared_ptr<TActorContext> SavedCtxForRead = nullptr;
+    TEvPollerReady::TPtr PollerEventSaved = nullptr;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
@@ -116,6 +117,8 @@ public:
             Context->DatabasePath = NKikimr::AppData()->TenantName;
             Context->ResourceDatabasePath = NKikimr::AppData()->TenantName;
         }
+
+        Context->SaslMechanism = "MTLS";
 
         Become(&TKafkaConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
@@ -697,9 +700,11 @@ protected:
         KAFKA_LOG_T("DoRead: Demand=" << Demand.Length << ", Step=" << static_cast<i32>(Step));
         for (;;) {
             while (Demand) {
+                KAFKA_LOG_D("Demand");
                 ssize_t received = 0;
                 ssize_t res = SocketReceive(Demand.Buffer, Demand.GetLength());
                 if (-res == EAGAIN || -res == EWOULDBLOCK) {
+                    KAFKA_LOG_D("Returnning true");
                     return true;
                 } else if (-res == EINTR) {
                     continue;
@@ -775,6 +780,7 @@ protected:
                         break;
 
                     case HEADER_PROCESS:
+                        KAFKA_LOG_D("Header processing");
                         Request->ApiKey = *(TKafkaInt16*)Request->Buffer->Data();
                         Request->ApiVersion = *(TKafkaVersion*)(Request->Buffer->Data() + sizeof(TKafkaInt16));
                         Request->CorrelationId = *(TKafkaInt32*)(Request->Buffer->Data() + sizeof(TKafkaInt16) + sizeof(TKafkaVersion));
@@ -833,7 +839,7 @@ protected:
                         }
 
                         Step = SIZE_READ;
-
+                        KAFKA_LOG_D("Start processing request");
                         if (!ProcessRequest(ctx)) {
                             return false;
                         }
@@ -854,15 +860,15 @@ protected:
         const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
         if (result.Error) {
             KAFKA_LOG_D("Authentication unsuccessful:" << result.Error.Message);
+        } else {
+            KAFKA_LOG_D("Authorization successful");
         }
         if (result.Token == nullptr) {
             KAFKA_LOG_D("Empty token");
         }
-        KAFKA_LOG_D("Authorization successful");
+
         MtlsAuthenticationSuccessful = true;
-        if (!DoRead(*SavedCtxForRead)) {
-            return;
-        }
+        HandleConnected(PollerEventSaved, *SavedCtxForRead);
     }
 
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
@@ -874,11 +880,17 @@ protected:
                     if (cert != nullptr) {
                         TString clientCert = Socket->GetStringClientCert(cert.get());
                         Cout << "Client cert:" << clientCert << Endl;
-                        // SavedCtxForRead.SelfID = ctx.SelfID;
                         MtslRecievedCert = true;
                         SavedCtxForRead =  std::make_shared<TActorContext>(TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ctx.SelfID));
+                        PollerEventSaved = event;
 
-                        Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(clientCert));
+                        EnsureKafkaSaslAuthActor();
+                        TMessagePtr<TSaslAuthenticateRequestData> message = NKafka::TMessagePtr<NKafka::TSaslAuthenticateRequestData>({}, std::make_shared<TSaslAuthenticateRequestData>(TSaslAuthenticateRequestData()));
+
+                        Context->AuthenticationStep = EAuthSteps::WAIT_AUTH;
+                        Send(SaslAuthActorId, new TEvKafka::TEvAuthRequest(1001, message));
+
+                        // Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(clientCert));
                         return;
                     }
                 }

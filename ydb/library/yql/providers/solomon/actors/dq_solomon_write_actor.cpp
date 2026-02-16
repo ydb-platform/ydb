@@ -193,7 +193,7 @@ private:
         explicit TDqSolomonWriteActorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters, const TTxId& txId, ui64 taskId, bool enableStreamingQueriesCounters)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId)) {
 
-            auto subgroup = counters->GetSubgroup("source", "SolomonSink");;
+            auto subgroup = counters->GetSubgroup("sink", "SolomonSink");;
 
             if (enableStreamingQueriesCounters) {
                 subgroup = subgroup->GetSubgroup("tx_id", TxId);

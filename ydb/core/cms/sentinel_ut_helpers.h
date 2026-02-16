@@ -242,9 +242,6 @@ public:
             switch (ev.GetTypeRewrite()) {
             case TEvSentinel::TEvStateUpdated::EventType:
                 stateUpdated = true;
-                // if (GetStatusChangeAttempt() == 3) {
-                //     ev.Get<TEvSentinel::TEvStateUpdated>()->Record.GetPDisks(0).GetInfo().SetStatus(updatedStatus);
-                // }
                 break;
 
             case TEvBlobStorage::TEvControllerConfigRequest::EventType:
@@ -287,10 +284,6 @@ public:
         options.FinalEvents.emplace_back(check);
         UNIT_ASSERT(DispatchEvents(options));
     }
-
-    // void ForceSetPDiskStatus(const TPDiskID& id, EPDiskStatus status) {
-    //     TFakeNodeWhiteboardService::
-    // }
 
     ui32 GetStatusChangeAttempt() {
         auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();

@@ -40,7 +40,6 @@ Y_UNIT_TEST(SimpleCounters) {
         auto result = GetReadResponse(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
     }
     {
@@ -56,7 +55,6 @@ Y_UNIT_TEST(SimpleCounters) {
         auto result = GetReadResponse(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
     }
     {

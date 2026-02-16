@@ -70,7 +70,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(Edge);
             auto& rr = response->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(rr.ResponsesSize(), 8);
-            return rr.GetResponses();
+            auto responses = rr.GetResponses();
+            return responses;
         }
 
         void GreetDDisks() {

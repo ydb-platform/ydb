@@ -397,7 +397,7 @@ message TKqpPhyConnection {
 message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
-        TKqpPhyValue QueryValue = 2;
+        repeated TKqpPhyValue QueryValue = 2;
     }
 
     message TIndexTable {
@@ -424,6 +424,7 @@ message TKqpFullTextSource {
     TKqpPhyValue BFactor = 11;
     TKqpPhyValue DefaultOperator = 12;
     TKqpPhyValue MinimumShouldMatch = 13;
+    TKqpPhyValue Mode = 14;
 }
 
 message TKqpReadRangesSource {

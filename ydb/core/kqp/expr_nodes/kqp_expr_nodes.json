@@ -107,7 +107,7 @@
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Index", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "Query", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Query", "Type": "TExprList"},
                 {"Index": 4, "Name": "QueryColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
@@ -120,7 +120,7 @@
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Index", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "Query", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Query", "Type": "TExprList"},
                 {"Index": 4, "Name": "QueryColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
@@ -133,7 +133,7 @@
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Index", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "Query", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Query", "Type": "TExprList"},
                 {"Index": 4, "Name": "QueryColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]

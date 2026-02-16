@@ -25,6 +25,7 @@ public:
     bool AutoPartitioningByLoad = true;
 
     TString QueryTable;
+    ui64 Limit = 0;
 };
 
 } // namespace NYdbWorkload

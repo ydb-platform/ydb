@@ -36,6 +36,8 @@ void TFulltextWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECom
         opts.AddLongOption("query-table", "Name of the table that contains queries to use for select queries. The table must have a 'query' column.")
             .Required()
             .StoreResult(&QueryTable);
+        opts.AddLongOption("limit", "Limit rows in result set.")
+            .DefaultValue(Limit).StoreResult(&Limit);
         break;
     default:
         break;

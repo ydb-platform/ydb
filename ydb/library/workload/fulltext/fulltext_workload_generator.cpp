@@ -121,11 +121,13 @@ TQueryInfoList TFulltextWorkloadGenerator::Select() {
             DECLARE $query AS Utf8;
             SELECT *
             FROM `{}/{}` VIEW `{}`
-            WHERE FulltextMatch(`text`, $query);
+            WHERE FulltextMatch(`text`, $query)
+            {};
         )sql",
         Params.DbPath.c_str(),
         Params.TableName.c_str(),
-        Params.IndexName.c_str()
+        Params.IndexName.c_str(),
+        (Params.Limit != 0 ? std::format("LIMIT {}", Params.Limit) : "").c_str()
     );
 
     NYdb::TParams params = NYdb::TParamsBuilder()

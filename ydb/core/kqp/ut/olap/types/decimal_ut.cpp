@@ -16,6 +16,7 @@
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <util/generic/serialized_enum.h>
+#include <util/string/hex.h>
 #include <util/string/printf.h>
 
 namespace NKikimr {
@@ -402,6 +403,69 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         
         tester22.CheckQuery("SELECT max(dec) FROM `/Root/Table1`", "[[[\"inf\"]]]", mode);
         tester22.CheckQuery("SELECT min(dec) FROM `/Root/Table1`", "[[[\"-inf\"]]]", mode);
+    }
+
+    Y_UNIT_TEST(TestBulkUpsertDecimalViaArrowKeeps128Bits) {
+        constexpr ui64 ExpectedLow128 = 2379421819125755666ULL;
+        constexpr ui64 ExpectedHigh128 = 67ULL;
+
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::TDecimalType(22, 9)),
+        };
+
+        TTestHelper::TColumnTable table;
+        table.SetName("/Root/DecimalRepro").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
+        helper.CreateTable(table);
+
+        const TString strSchema = HexDecode(
+            "ffffffffe00000001000000000000a000e0006000d0008000a000000000004001000000000010a000c000000080004000a0000000800000008000000"
+            "000000000200000068000000180000000000120018001400130012000c000000080004001200000014000000140000001c00000000000f011c000000"
+            "0000000000000000000006000800040006000000100000000500000076616c756500120018001400000013000c000000080004001200000014000000"
+            "140000001c0000000000000220000000000000000000000008000c00080007000800000000000001200000000200000069640000");
+        const TString strBatch = HexDecode(
+            "ffffffffb800000014000000000000000c0016000e001500100004000c0000002800000000000000000004001000000000030a0018000c0008000400"
+            "0a0000001400000058000000010000000000000000000000040000000000000000000000010000000000000008000000000000000400000000000000"
+            "100000000000000001000000000000001800000000000000100000000000000000000000020000000100000000000000000000000000000001000000"
+            "00000000000000000000000001000000000000003930000000000000010000000000000021056789abcdef120000000000000043");
+
+        auto upsertResult = helper.GetKikimr().GetTableClient()
+            .BulkUpsert("/Root/DecimalRepro", NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema)
+            .GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto scanIt = helper.GetKikimr().GetTableClient().StreamExecuteScanQuery(
+            "SELECT id, value FROM `/Root/DecimalRepro` ORDER BY id").GetValueSync();
+        UNIT_ASSERT_C(scanIt.IsSuccess(), scanIt.GetIssues().ToString());
+
+        bool checkedRow = false;
+        for (;;) {
+            auto streamPart = scanIt.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            if (!streamPart.HasResultSet()) {
+                continue;
+            }
+
+            const auto resultSetProto = NYdb::TProtoAccessor::GetProto(streamPart.ExtractResultSet());
+            if (resultSetProto.rowsSize() == 0) {
+                continue;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(resultSetProto.rows(0).itemsSize(), 2);
+            const auto& decimalFromRead = resultSetProto.rows(0).items(1);
+            UNIT_ASSERT(decimalFromRead.has_low_128());
+            UNIT_ASSERT_VALUES_EQUAL(decimalFromRead.low_128(), ExpectedLow128);
+            UNIT_ASSERT_VALUES_EQUAL(decimalFromRead.high_128(), ExpectedHigh128);
+            checkedRow = true;
+            break;
+        }
+
+        UNIT_ASSERT_C(checkedRow, "No row returned by scan query");
     }
 }
 

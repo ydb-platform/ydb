@@ -42,9 +42,6 @@ message TKqpLocks {
 
     optional uint64 ArbiterColumnShard = 6;
 
-    // All QuerySpanIds of queries that wrote to this shard. Used for lock-breaking attribution
-    // so the DataShard can report all breaker queries, not just one.
-    repeated uint64 AllQuerySpanIds = 8;
 }
 
 message TTableId {

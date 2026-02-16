@@ -832,12 +832,6 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
     }
 
     if (NeedCommitLocks(kqpLocks->GetOp())) {
-        // Set BreakerQuerySpanId from the first SpanId in AllQuerySpanIds for the lock
-        // conflict path (which tracks a single BreakerQuerySpanId per TLocksUpdate).
-        if (kqpLocks->AllQuerySpanIdsSize() > 0) {
-            sysLocks.SetBreakerQuerySpanId(kqpLocks->GetAllQuerySpanIds(0));
-        }
-
         for (const auto& lockProto : kqpLocks->GetLocks()) {
             if (lockProto.GetDataShard() != origin) {
                 continue;

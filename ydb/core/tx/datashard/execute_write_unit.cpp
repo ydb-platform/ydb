@@ -75,7 +75,7 @@ public:
 
             // Resolve BreakerQuerySpanId: prefer the conflict-derived ID (set during CommitLock
             // from the stored conflict data — the actual query that wrote to the conflicting key).
-            // Fall back to AllQuerySpanIds or EvWrite's QuerySpanId when unavailable.
+            // Fall back to EvWrite's QuerySpanId when unavailable.
             ui64 primaryBreakerSpanId = 0;
             if (auto breakerQuerySpanId = sysLocks.GetCurrentBreakerQuerySpanId()) {
                 primaryBreakerSpanId = *breakerQuerySpanId;
@@ -84,12 +84,6 @@ public:
             if (primaryBreakerSpanId != 0) {
                 // Conflict-derived: report only the actual breaker query, not all shard writers.
                 record.MutableTxStats()->AddBreakerQuerySpanIds(primaryBreakerSpanId);
-            } else if (kqpLocks && kqpLocks->AllQuerySpanIdsSize() > 0) {
-                // No conflict-derived ID: report all query SpanIds from the commit message.
-                for (ui64 id : kqpLocks->GetAllQuerySpanIds()) {
-                    record.MutableTxStats()->AddBreakerQuerySpanIds(id);
-                }
-                primaryBreakerSpanId = kqpLocks->GetAllQuerySpanIds(0);
             } else {
                 // Direct write (no commit locks): use EvWrite's QuerySpanId.
                 if (querySpanId != 0) {

@@ -169,7 +169,6 @@ public:
         NWilson::TTraceId TraceId;
         TString UserTraceId;
         ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
-        TVector<ui64> AllQuerySpanIds;  // All QuerySpanIds collected in the current transaction
 
         NTopic::TTopicOperations TopicOperations;
 

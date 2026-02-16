@@ -2411,11 +2411,6 @@ private:
             switch (Request.LocksOp) {
                 case ELocksOp::Commit:
                     locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (TxManager) {
-                        for (ui64 spanId : TxManager->GetShardBreakerQuerySpanIds(shardId)) {
-                            locks->AddAllQuerySpanIds(spanId);
-                        }
-                    }
                     break;
                 case ELocksOp::Rollback:
                     locks->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
@@ -2608,11 +2603,6 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (TxManager) {
-                        for (ui64 spanId : TxManager->GetShardBreakerQuerySpanIds(shardId)) {
-                            shardTx->MutableLocks()->AddAllQuerySpanIds(spanId);
-                        }
-                    }
                     if (!columnShardArbiter) {
                         *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
@@ -2640,11 +2630,6 @@ private:
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (TxManager) {
-                        for (ui64 spanId : TxManager->GetShardBreakerQuerySpanIds(shardId)) {
-                            tx->MutableLocks()->AddAllQuerySpanIds(spanId);
-                        }
-                    }
                     if (!columnShardArbiter) {
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *tx->MutableLocks()->MutableReceivingShards() = receivingShards;

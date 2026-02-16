@@ -66,18 +66,6 @@ namespace {
         }
     }
 
-    // Set all BreakerQuerySpanIds on lock proto for lock-breaking attribution.
-    // Uses only TxManager's per-shard SpanIds (all queries that wrote to this shard).
-    void SetBreakerQuerySpanIdsOnLocks(NKikimrDataEvents::TKqpLocks* protoLocks,
-        ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
-    {
-        auto perShardIds = txManager->GetShardBreakerQuerySpanIds(shardId);
-        for (ui64 id : perShardIds) {
-            protoLocks->AddAllQuerySpanIds(id);
-        }
-    }
-
-
     void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite,
         ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
     {
@@ -129,8 +117,6 @@ namespace {
         for (const auto& lock : locks) {
             *protoLocks->AddLocks() = lock;
         }
-
-        SetBreakerQuerySpanIdsOnLocks(protoLocks, shardId, txManager);
     }
 
     void FillEvWriteRollback(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
@@ -1206,7 +1192,6 @@ public:
                 for (const auto& lock : locks) {
                     *protoLocks->AddLocks() = lock;
                 }
-                SetBreakerQuerySpanIdsOnLocks(protoLocks, shardId, TxManager);
             }
         } else if (isPrepare) {
             YQL_ENSURE(TxId);

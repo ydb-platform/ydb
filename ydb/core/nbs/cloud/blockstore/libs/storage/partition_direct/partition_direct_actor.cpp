@@ -125,10 +125,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
                 .BlockSize = blockSize,
                 .BlocksCount = blockCount,
                 .VhostQueuesCount = 1};
-            // service->VhostServer->StartEndpoint(
-            //     std::move(socketPath),
-            //     fastPathService,
-            //     options);
+            service->VhostServer->StartEndpoint(
+                std::move(socketPath),
+                fastPathService,
+                options);
         }
 
         LOG_INFO(

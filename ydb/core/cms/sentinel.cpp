@@ -1149,8 +1149,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 << ", dry run# " << Config.DryRun);
             LogStatusChange(id, status, requiredStatus, reason);
 
-            if (!Config.DryRun) {
-                SentinelState->ChangeRequests.emplace(id, info);
+            auto [it, inserted] = SentinelState->ChangeRequests.insert_or_assign(id, info);
+            if (inserted && !Config.DryRun) {
                 (*Counters->PDisksPendingChange)++;
             }
         }

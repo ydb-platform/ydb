@@ -68,6 +68,7 @@ class TTestEnv: public TCmsTestEnv {
         UNIT_ASSERT(DispatchEvents(options));
     }
 
+public:
     void SetPDiskStateImpl(const TSet<TPDiskID>& ids, EPDiskState state) {
         for (const auto& id : ids) {
             Y_ABORT_UNLESS(MockNodes.contains(id.NodeId));
@@ -82,7 +83,6 @@ class TTestEnv: public TCmsTestEnv {
         Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateState));
     }
 
-public:
     explicit TTestEnv(ui32 nodeCount, ui32 pdisks, NKikimrCms::TCmsConfig config = {})
         : TCmsTestEnv(nodeCount, pdisks)
     {
@@ -223,7 +223,8 @@ public:
         UNIT_ASSERT(DispatchEvents(options));
     }
 
-    void SetPDiskState(const TSet<TPDiskID>& pdisks, EPDiskState state, EPDiskStatus expectedStatus) {
+    void SetPDiskState(const TSet<TPDiskID>& pdisks, EPDiskState state, EPDiskStatus expectedStatus, EPDiskStatus updatedStatus = EPDiskStatus::ACTIVE) {
+        Y_UNUSED(updatedStatus);
         SetPDiskStateImpl(pdisks, state);
 
         bool stateUpdated = false;
@@ -241,6 +242,9 @@ public:
             switch (ev.GetTypeRewrite()) {
             case TEvSentinel::TEvStateUpdated::EventType:
                 stateUpdated = true;
+                // if (GetStatusChangeAttempt() == 3) {
+                //     ev.Get<TEvSentinel::TEvStateUpdated>()->Record.GetPDisks(0).GetInfo().SetStatus(updatedStatus);
+                // }
                 break;
 
             case TEvBlobStorage::TEvControllerConfigRequest::EventType:
@@ -272,7 +276,6 @@ public:
             default:
                 break;
             }
-
             bool allUpdateStatusRequestedOrIgnored = true;
             for (const auto& [id, info] : pdiskUpdates) {
                 allUpdateStatusRequestedOrIgnored &= (info.UpdateStatusRequested || info.IgnoredUpdateRequests == 6);
@@ -283,6 +286,99 @@ public:
         TDispatchOptions options;
         options.FinalEvents.emplace_back(check);
         UNIT_ASSERT(DispatchEvents(options));
+    }
+
+    // void ForceSetPDiskStatus(const TPDiskID& id, EPDiskStatus status) {
+    //     TFakeNodeWhiteboardService::
+    // }
+
+    ui32 GetStatusChangeAttempt() {
+        auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();
+        TActorId sender = AllocateEdgeActor();
+        Send(new IEventHandle(Sentinel, sender, request.Release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto response = GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(handle);
+
+        const auto& record = response->Record;
+        for (const auto& entry : record.GetPDisks()) {
+            if (entry.GetInfo().GetStatusChangeAttempts() > 0) {
+                return entry.GetInfo().GetStatusChangeAttempts();
+            }
+        }
+        return 0;
+    }
+
+    size_t GetChangeRequestsSize() {
+        auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();
+        TActorId sender = AllocateEdgeActor();
+        Send(new IEventHandle(Sentinel, sender, request.Release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto response = GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(handle);
+
+        size_t count = 0;
+        const auto& record = response->Record;
+        for (const auto& entry : record.GetPDisks()) {
+            if (entry.GetInfo().GetDesiredStatus() != entry.GetInfo().GetStatus()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    bool IsInChangeRequests(const TPDiskID& id) {
+        auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();
+        TActorId sender = AllocateEdgeActor();
+        Send(new IEventHandle(Sentinel, sender, request.Release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto response = GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(handle);
+
+        const auto& record = response->Record;
+        for (const auto& entry : record.GetPDisks()) {
+            if (entry.GetId().GetNodeId() == id.NodeId &&
+                entry.GetId().GetDiskId() == id.DiskId) {
+                return entry.GetInfo().GetDesiredStatus() != entry.GetInfo().GetStatus();
+            }
+        }
+        return false;
+    }
+
+    EPDiskStatus GetChangeRequestStatus(const TPDiskID& id) {
+        auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();
+        TActorId sender = AllocateEdgeActor();
+        Send(new IEventHandle(Sentinel, sender, request.Release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto response = GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(handle);
+
+        const auto& record = response->Record;
+        for (const auto& entry : record.GetPDisks()) {
+            if (entry.GetId().GetNodeId() == id.NodeId &&
+                entry.GetId().GetDiskId() == id.DiskId) {
+                return static_cast<EPDiskStatus>(entry.GetInfo().GetDesiredStatus());
+            }
+        }
+        return EPDiskStatus::UNKNOWN;
+    }
+
+    EPDiskStatus GetActualStatus(const TPDiskID& id) {
+        auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();
+        TActorId sender = AllocateEdgeActor();
+        Send(new IEventHandle(Sentinel, sender, request.Release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto response = GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(handle);
+
+        const auto& record = response->Record;
+        for (const auto& entry : record.GetPDisks()) {
+            if (entry.GetId().GetNodeId() == id.NodeId &&
+                entry.GetId().GetDiskId() == id.DiskId) {
+                return static_cast<EPDiskStatus>(entry.GetInfo().GetStatus());
+            }
+        }
+        return EPDiskStatus::UNKNOWN;
     }
 
 private:

@@ -3,81 +3,19 @@
 
 namespace NKikimr::NPQ {
 
-namespace NDetail {
-
-void TSlidingWindow::StartRecord() {
-    if (RecordingStart != TInstant::Zero()) {
-        return;
-    }
-
-    RecordingStart = TInstant::Now();
+TInFlightController::TInFlightController()
+    : LayoutUnitSize(1)
+    , TotalSize(0)
+    , MaxAllowedSize(MAX_LAYOUT_COUNT)
+    , SlidingWindow(TDuration::Seconds(1), 60)
+{
 }
-
-void TSlidingWindow::RemoveOldRecords(TInstant now) {
-    auto startWindow = now - WindowSize;
-    while (!Records.empty() && Records.front().Start < startWindow) {
-        auto& firstRecord = Records.front();
-        if (firstRecord.Start + firstRecord.Duration > startWindow) {
-            firstRecord.Duration -= startWindow - firstRecord.Start;
-            firstRecord.Start = startWindow;
-            break;
-        }
-        
-        Records.pop_front();
-    }
-}
-
-size_t TSlidingWindow::GetRecordsCount() const {
-    return Records.size();
-}
-
-TDuration TSlidingWindow::GetValueOnWindow() {
-    auto now = TInstant::Now();
-    RemoveOldRecords(now);
-
-    auto carry = TDuration::Zero();
-    if (RecordingStart != TInstant::Zero()) {
-        RecordingStart = Max(RecordingStart, now - WindowSize);
-        carry = now - RecordingStart;
-    }
-
-    return std::accumulate(Records.begin(), Records.end(), TDuration::Zero(), [](TDuration acc, const TSlidingWindowRecord& record) {
-        return acc + record.Duration;
-    }) + carry;
-}
-
-void TSlidingWindow::Reset() {
-    if (RecordingStart == TInstant::Zero()) {
-        return;
-    }
-
-    auto now = TInstant::Now();
-    RemoveOldRecords(now);
-
-    RecordingStart = Max(RecordingStart, now - WindowSize);
-
-    if (!Records.empty()) {
-        auto lastRecordUnitEnd = Records.back().Start + UnitSize;
-        if (RecordingStart < lastRecordUnitEnd) {
-            // check if we need to add sth to last record
-            Records.back().Duration += Min(lastRecordUnitEnd, now) - RecordingStart;
-            RecordingStart = Min(lastRecordUnitEnd, now);
-        }
-    }
-
-    if (RecordingStart < now) {
-        Records.push_back(TSlidingWindowRecord{RecordingStart, now - RecordingStart});
-    }
-
-    RecordingStart = TInstant::Zero();
-}
-
-} // namespace NDetail
 
 TInFlightController::TInFlightController(ui64 MaxAllowedSize)
     : LayoutUnitSize(MaxAllowedSize / MAX_LAYOUT_COUNT)
     , TotalSize(0)
     , MaxAllowedSize(MaxAllowedSize)
+    , SlidingWindow(TDuration::Seconds(1), 60)
 {
     if (MaxAllowedSize > 0 && LayoutUnitSize == 0) {
         LayoutUnitSize = 1;
@@ -113,7 +51,7 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
 
     bool isMemoryLimitReached = IsMemoryLimitReached();
     if (!wasMemoryLimitReached && isMemoryLimitReached) {
-        SlidingWindow.StartRecord();
+        InFlightFullSince = TInstant::Now();
     }
 
     return !isMemoryLimitReached;
@@ -141,7 +79,9 @@ bool TInFlightController::Remove(ui64 Offset) {
 
     auto isMemoryLimitReached = IsMemoryLimitReached();
     if (wasMemoryLimitReached && !isMemoryLimitReached) {
-        SlidingWindow.Reset();
+        auto now = TInstant::Now();
+        SlidingWindow.Update(now - InFlightFullSince, now);
+        InFlightFullSince = TInstant::Zero();
     }
 
     return !isMemoryLimitReached;
@@ -157,7 +97,7 @@ bool TInFlightController::IsMemoryLimitReached() const {
 }
 
 TDuration TInFlightController::GetOverflowDuration() {
-    return SlidingWindow.GetValueOnWindow();
+    return SlidingWindow.GetValue();
 }
 
 } // namespace NKikimr::NPQ

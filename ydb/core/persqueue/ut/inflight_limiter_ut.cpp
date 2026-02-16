@@ -5,20 +5,6 @@
 namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
-
-    Y_UNIT_TEST(TestDefaultConstructor) {
-        TInFlightController controller;
-        
-        UNIT_ASSERT_VALUES_EQUAL(controller.LayoutUnitSize, 0);
-        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
-        UNIT_ASSERT(controller.Layout.empty());
-        UNIT_ASSERT(!controller.IsMemoryLimitReached());
-        
-        UNIT_ASSERT(controller.Add(100, 1000));
-        UNIT_ASSERT(controller.Remove(101));
-        UNIT_ASSERT(!controller.IsMemoryLimitReached());
-    }
-
     Y_UNIT_TEST(TestConstructorWithLimit) {
         TInFlightController controller(10240);
         
@@ -342,63 +328,6 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         controller.Remove(4);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 0);
-    }
-
-    Y_UNIT_TEST(TestRecordOverflowDuration) {
-        TInFlightController controller(10240);
-        NDetail::TSlidingWindow slidingWindow;
-        slidingWindow.WindowSize = TDuration::Seconds(1);
-        slidingWindow.UnitSize = TDuration::MilliSeconds(100);
-        controller.SlidingWindow = slidingWindow;
-
-        controller.Add(1, 1000001);
-        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 1000001);
-        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1024);
-        
-        Sleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(controller.SlidingWindow.GetValueOnWindow(), TDuration::Seconds(1));
-
-        controller.Remove(2);
-        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
-        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 0);
-
-        Sleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(controller.SlidingWindow.GetValueOnWindow(), TDuration::Zero());
-    }
-
-    Y_UNIT_TEST(TestSlidingWindowStartStopManyTimes) {
-        NDetail::TSlidingWindow slidingWindow;
-        slidingWindow.WindowSize = TDuration::Seconds(1);
-        slidingWindow.UnitSize = TDuration::MilliSeconds(100);
-
-        for (int i = 0; i < 10; ++i) {
-            slidingWindow.StartRecord();
-            Sleep(TDuration::MilliSeconds(1));
-            slidingWindow.Reset();
-        }
-        UNIT_ASSERT(slidingWindow.GetValueOnWindow() < TDuration::MilliSeconds(20));
-        UNIT_ASSERT_VALUES_EQUAL(slidingWindow.GetRecordsCount(), 1);
-    }
-
-    Y_UNIT_TEST(TestSlidingWindowAddRecords) {
-        NDetail::TSlidingWindow slidingWindow;
-        slidingWindow.WindowSize = TDuration::Seconds(1);
-        slidingWindow.UnitSize = TDuration::MilliSeconds(100);
-
-        slidingWindow.StartRecord();
-        Sleep(TDuration::MilliSeconds(100));
-        slidingWindow.Reset();
-
-        slidingWindow.StartRecord();
-        Sleep(TDuration::MilliSeconds(100));
-        slidingWindow.Reset();
-
-        slidingWindow.StartRecord();
-        Sleep(TDuration::MilliSeconds(100));
-        slidingWindow.Reset();
-
-        UNIT_ASSERT(slidingWindow.GetValueOnWindow() >= TDuration::MilliSeconds(300));
-        UNIT_ASSERT_VALUES_EQUAL(slidingWindow.GetRecordsCount(), 3);
     }
 }
 

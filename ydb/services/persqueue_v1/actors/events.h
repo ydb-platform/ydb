@@ -90,8 +90,8 @@ struct TEvPQProxy {
         EvReadingFinished,
         EvAlterTopicResponse,
         EvParentCommitedToFinish,
+        EvUpdateReadMetrics,
         EvEnd,
-        EvUpdateReadMetrics
     };
 
 

@@ -130,7 +130,6 @@ struct TEvPQ {
         EvPartitionLabeledCounters,
         EvGetPartitionClientInfo,
         EvUpdateAvailableSize,
-        EvUpdateReadMetrics,
         EvPipeDisconnected,
         EvReserveBytes,
         EvPartitionLabeledCountersDrop,
@@ -227,7 +226,8 @@ struct TEvPQ {
         EvMLPPurgeRequest,
         EvMLPPurgeResponse,
         EvMLPConsumerStatus,
-        EvEnd
+        EvUpdateReadMetrics,
+        EvEnd,
     };
 
     struct TEvHandleWriteResponse : TEventLocal<TEvHandleWriteResponse, EvHandleWriteResponse> {

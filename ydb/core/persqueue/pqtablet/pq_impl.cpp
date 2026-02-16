@@ -2412,7 +2412,7 @@ void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, NWilso
 void TPersQueue::HandleUpdateReadMetricsRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
-    PQ_ENSURE(req.HasCmdUpdateReadMetrics());
+    AFL_VERIFY_DEBUG(req.HasCmdUpdateReadMetrics());
 
     if (!req.GetCmdUpdateReadMetrics().HasInFlightOverflowDurationMs()) {
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "in_flight_full_duration is required");

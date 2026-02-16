@@ -1,6 +1,8 @@
 #include "converter.h"
 #include "switch/switch_type.h"
 
+#include <ydb/core/engine/mkql_proto.h>
+
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -12,6 +14,9 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
+#include <util/system/byteorder.h>
+
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -53,6 +58,74 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
 static arrow::Status ConvertColumn(
     const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field, const bool allowInfDouble) {
     switch (colType.GetTypeId()) {
+    case NScheme::NTypeIds::Decimal: {
+        if (column->type()->id() != arrow::Type::FIXED_SIZE_BINARY) {
+            return arrow::Status::OK();
+        }
+
+        auto fsbType = std::dynamic_pointer_cast<arrow::FixedSizeBinaryType>(column->type());
+        if (!fsbType || fsbType->byte_width() != NScheme::FSB_SIZE) {
+            return arrow::Status::TypeError("Unexpected decimal byte width ", column->type()->ToString());
+        }
+
+        auto fsbArray = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
+        arrow::FixedSizeBinaryBuilder builder(fsbType, arrow::default_memory_pool());
+        auto reserveStatus = builder.Reserve(fsbArray->length());
+        if (!reserveStatus.ok()) {
+            return reserveStatus;
+        }
+
+        const ui8 precision = colType.GetDecimalType().GetPrecision();
+        for (i64 i = 0; i < fsbArray->length(); ++i) {
+            if (fsbArray->IsNull(i)) {
+                auto appendNullStatus = builder.AppendNull();
+                if (!appendNullStatus.ok()) {
+                    return appendNullStatus;
+                }
+
+                continue;
+            }
+
+            auto view = fsbArray->GetView(i);
+            if (view.size() != NScheme::FSB_SIZE) {
+                return arrow::Status::Invalid("Unexpected decimal payload size");
+            }
+
+            ui64 loLe = 0;
+            i64 hiLe = 0;
+            std::memcpy(&loLe, view.data(), sizeof(loLe));
+            std::memcpy(&hiLe, view.data() + sizeof(loLe), sizeof(hiLe));
+            const bool leValid = NMiniKQL::IsValidDecimal(precision, NYql::NDecimal::FromHalfs(loLe, hiLe));
+
+            const ui64 loSwapped = SwapBytes64(loLe);
+            const i64 hiSwapped = static_cast<i64>(SwapBytes64(static_cast<ui64>(hiLe)));
+            const bool swappedValid = NMiniKQL::IsValidDecimal(precision, NYql::NDecimal::FromHalfs(loSwapped, hiSwapped));
+
+            ui64 loOut = loLe;
+            i64 hiOut = hiLe;
+            if (!leValid && swappedValid) {
+                loOut = loSwapped;
+                hiOut = hiSwapped;
+            }
+
+            char out[NScheme::FSB_SIZE];
+            std::memcpy(out, &loOut, sizeof(loOut));
+            std::memcpy(out + sizeof(loOut), &hiOut, sizeof(hiOut));
+            auto appendStatus = builder.Append(out);
+            if (!appendStatus.ok()) {
+                return appendStatus;
+            }
+        }
+
+        std::shared_ptr<arrow::FixedSizeBinaryArray> result;
+        auto finishStatus = builder.Finish(&result);
+        if (!finishStatus.ok()) {
+            return finishStatus;
+        }
+
+        column = result;
+        return arrow::Status::OK();
+    }
     case NScheme::NTypeIds::DyNumber: {
         if (!arrow::is_binary_like(column->type()->id())) {
             return arrow::Status::TypeError("Cannot convert DyNumber to ", column->type()->ToString());

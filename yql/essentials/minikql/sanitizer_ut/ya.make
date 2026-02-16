@@ -1,7 +1,5 @@
 GTEST()
 
-SUBSCRIBER(g:yql)
-
 SIZE(MEDIUM)
 
 PEERDIR(

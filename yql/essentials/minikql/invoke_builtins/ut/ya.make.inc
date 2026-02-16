@@ -9,8 +9,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-SUBSCRIBER(g:yql)
-
 PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy

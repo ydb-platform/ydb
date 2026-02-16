@@ -1,8 +1,3 @@
-SUBSCRIBER(
-    g:yql
-    g:yql_ydb_core
-)
-
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/${MODDIR}
     yql/essentials/minikql/codegen

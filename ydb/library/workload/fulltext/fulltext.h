@@ -6,13 +6,13 @@
 
 namespace NYdb::NConsoleClient {
 
-class TCommandFulltext : public TClientCommandTree {
-public:
-    TCommandFulltext();
-    virtual void Config(TConfig& config) override;
+    class TCommandFulltext: public TClientCommandTree {
+    public:
+        TCommandFulltext();
+        virtual void Config(TConfig& config) override;
 
-private:
-    std::unique_ptr<NYdbWorkload::TFulltextWorkloadParams> Params;
-};
+    private:
+        std::unique_ptr<NYdbWorkload::TFulltextWorkloadParams> Params;
+    };
 
 } // namespace NYdb::NConsoleClient

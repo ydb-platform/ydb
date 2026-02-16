@@ -8,28 +8,28 @@
 
 namespace NYdbWorkload {
 
-enum class EFulltextWorkloadType {
-    Select
-};
+    enum class EFulltextWorkloadType {
+        Select
+    };
 
-class TFulltextWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TFulltextWorkloadParams> {
-public:
-    using TBase = TWorkloadQueryGeneratorBase<TFulltextWorkloadParams>;
-    TFulltextWorkloadGenerator(const TFulltextWorkloadParams* params);
+    class TFulltextWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TFulltextWorkloadParams> {
+    public:
+        using TBase = TWorkloadQueryGeneratorBase<TFulltextWorkloadParams>;
+        TFulltextWorkloadGenerator(const TFulltextWorkloadParams* params);
 
-    void Init() override;
-    std::string GetDDLQueries() const override;
-    TQueryInfoList GetInitialData() override;
-    TVector<std::string> GetCleanPaths() const override;
-    TQueryInfoList GetWorkload(int type) override;
-    TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
+        void Init() override;
+        std::string GetDDLQueries() const override;
+        TQueryInfoList GetInitialData() override;
+        TVector<std::string> GetCleanPaths() const override;
+        TQueryInfoList GetWorkload(int type) override;
+        TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
 
-private:
-    TQueryInfoList Select();
-    void LoadQueries();
+    private:
+        TQueryInfoList Select();
+        void LoadQueries();
 
-    TVector<TString> Queries;
-    size_t CurrentIndex = 0;
-};
+        TVector<TString> Queries;
+        size_t CurrentIndex = 0;
+    };
 
 } // namespace NYdbWorkload

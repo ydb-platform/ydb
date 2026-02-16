@@ -6,17 +6,17 @@
 
 namespace NYdbWorkload {
 
-class TFulltextWorkloadDataInitializer : public TWorkloadDataInitializerBase {
-private:
-    const TFulltextWorkloadParams& Params;
-    TString DataFiles;
+    class TFulltextWorkloadDataInitializer: public TWorkloadDataInitializerBase {
+    private:
+        const TFulltextWorkloadParams& Params;
+        TString DataFiles;
 
-public:
-    TFulltextWorkloadDataInitializer(const TFulltextWorkloadParams& params);
+    public:
+        TFulltextWorkloadDataInitializer(const TFulltextWorkloadParams& params);
 
-    virtual void ConfigureOpts(NLastGetopt::TOpts& opts) override;
-    virtual TBulkDataGeneratorList DoGetBulkInitialData() override;
-    virtual int PostImport() override;
-};
+        virtual void ConfigureOpts(NLastGetopt::TOpts& opts) override;
+        virtual TBulkDataGeneratorList DoGetBulkInitialData() override;
+        virtual int PostImport() override;
+    };
 
 } // namespace NYdbWorkload

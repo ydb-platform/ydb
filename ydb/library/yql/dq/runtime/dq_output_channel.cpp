@@ -75,7 +75,13 @@ public:
         if (Storage) {
             return FirstStoredId < NextStoredId ? (Storage->IsFull() ? HardLimit : SoftLimit) : NoLimit;
         } else {
-            return PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes ? HardLimit : NoLimit;
+            OverLimitSize = GetTotalSize();
+            if (OverLimitSize >= MaxStoredBytes) {
+                OverLimitSize -= MaxStoredBytes;
+                return HardLimit;
+            }
+            OverLimitSize = 0;
+            return NoLimit;
         }
     }
 
@@ -92,6 +98,14 @@ public:
             FillLevel = result;
         }
         return result;
+    }
+
+    size_t GetTotalSize() const override {
+        return PackedDataSize + Packer.PackedSizeEstimate();
+    }
+
+    size_t GetOverLimitSize() const override {
+        return OverLimitSize;
     }
 
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
@@ -492,6 +506,7 @@ private:
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = NoLimit;
+    mutable size_t OverLimitSize = 0;
 };
 
 } // anonymous namespace

@@ -29,7 +29,8 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableActorOptions schedulableOptions, const TActorId& executerId, ui64 txId,
     NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-    TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode)
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode,
+    const TIntrusivePtr<TKqpCounters>& kqpCounters)
     : TBase(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings,
         memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /* taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
@@ -39,6 +40,12 @@ TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableActorOptions 
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
     YQL_ENSURE(!Meta.GetReads().empty());
     YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
+
+    if (kqpCounters && settings.CollectFull()) {
+        auto group = kqpCounters->GetKqpCounters()->GetSubgroup("group", "kqp");
+        OutputTotalSizeCounter = group->GetCounter("Channels/BufferTotalBytes", false);
+        OutputOverLimitSizeCounter = group->GetCounter("Channels/BufferOverLimitBytes", false);
+    }
 }
 
 TKqpScanComputeActor::~TKqpScanComputeActor() {
@@ -280,7 +287,7 @@ void TKqpScanComputeActor::DoBootstrap() {
         };
     }
 
-    auto taskRunner = MakeDqTaskRunner(GetAllocatorPtr(), execCtx, settings, logger);
+    auto taskRunner = MakeDqTaskRunner(GetAllocatorPtr(), execCtx, settings, logger, OutputTotalSizeCounter, OutputOverLimitSizeCounter);
     TBase::SetTaskRunner(taskRunner);
 
     auto selfId = this->SelfId();

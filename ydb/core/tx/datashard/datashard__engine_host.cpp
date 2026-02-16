@@ -312,7 +312,7 @@ public:
             UserDb.GetLockNodeId(),
             UserDb.GetUsesMvccSnapshot(),
             UserDb.GetIsImmediateTx(),
-            UserDb.GetIsWriteTx(), 
+            UserDb.GetIsWriteTx(),
             Scheme
         );
         return GetKeyValidator().IsValidKey(key, options);
@@ -394,7 +394,7 @@ public:
     void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing) override {
         UserDb.IncrementRow(tableId, key, ops, insertMissing);
     }
-    
+
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
@@ -412,7 +412,7 @@ public:
     void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key) override
     {
         UserDb.EraseRow(tableId, key);
-    }    
+    }
 
     // Returns whether row belong this shard.
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
@@ -728,7 +728,7 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTra
         settings.TerminateOnError = false;
         Y_ENSURE(KqpAlloc);
         KqpAlloc->SetLimit(10_MB);
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpAlloc, KqpExecCtx, settings, KqpLogFunc);
+        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpAlloc, KqpExecCtx, settings, KqpLogFunc, {});
     }
 
     return *KqpTasksRunner;

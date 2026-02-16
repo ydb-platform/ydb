@@ -70,7 +70,8 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
 
 TKqpTasksRunner::TKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TDqTask>&& tasks,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-    const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
+    const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings,
+    const TLogFunc& logFunc, const TIntrusivePtr<TKqpCounters>& kqpCounters)
     : LogFunc(logFunc)
     , Alloc(alloc)
 {
@@ -84,8 +85,14 @@ TKqpTasksRunner::TKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TD
     auto guard = execCtx.TypeEnv->BindAllocator();
     try {
         for (auto&& task : tasks) {
+            NMonitoring::TDynamicCounters::TCounterPtr overLimitSizeCounter, totalSizeCounter;
             ui64 taskId = task.GetId();
-            auto runner = MakeDqTaskRunner(alloc, execCtx, settings, logFunc);
+            if (kqpCounters && settings.StatsMode >= NDqProto::DQ_STATS_MODE_FULL) {
+                auto group = kqpCounters->GetKqpCounters()->GetSubgroup("group", "kqp");
+                totalSizeCounter = group->GetCounter("Channels/BufferTotalBytes", false);
+                overLimitSizeCounter = group->GetCounter("Channels/BufferOverLimitBytes", false);
+            }
+            auto runner = MakeDqTaskRunner(alloc, execCtx, settings, logFunc, totalSizeCounter, overLimitSizeCounter);
             if (auto* stats = runner->GetStats()) {
                 Stats.emplace(taskId, stats);
             }
@@ -236,9 +243,10 @@ TGuard<NMiniKQL::TScopedAlloc> TKqpTasksRunner::BindAllocator(TMaybe<ui64> memor
 
 TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TDqTask>&& tasks,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-    const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
+    const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings,
+    const TLogFunc& logFunc, const TIntrusivePtr<TKqpCounters>& kqpCounters)
 {
-    return new TKqpTasksRunner(std::move(tasks), alloc, execCtx, settings, logFunc);
+    return new TKqpTasksRunner(std::move(tasks), alloc, execCtx, settings, logFunc, kqpCounters);
 }
 
 } // namespace NKqp

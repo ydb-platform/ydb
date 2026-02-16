@@ -6,6 +6,10 @@
 
 #include "interconnect_common.h"
 
+#if defined(__linux__)
+#include <net/if.h>
+#endif
+
 namespace NActors {
     TInterconnectListenerTCP::TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket)
         : TActor(&TThis::Initial)
@@ -34,7 +38,7 @@ namespace NActors {
     }
 
     int TInterconnectListenerTCP::Bind() {
-        auto doTry = [&](NInterconnect::TAddress addr) {
+        auto doTry = [&](NInterconnect::TAddress addr, const TString& interface) {
             int error;
             Listener = NInterconnect::TStreamSocket::Make(addr.GetFamily(), &error);
             if (*Listener == -1) {
@@ -44,6 +48,19 @@ namespace NActors {
             if (const auto& buffer = ProxyCommonCtx->Settings.TCPSocketBufferSize) {
                 Listener->SetSendBufferSize(buffer);
             }
+#if defined(__linux__)
+            if (interface) {
+                struct ifreq ifr;
+                memset(&ifr, 0, sizeof(ifr));
+                std::strncpy(ifr.ifr_name, interface.c_str(), sizeof(ifr.ifr_name));
+                if (int err = SetSockOpt(*Listener, SOL_SOCKET, SO_BINDTODEVICE, ifr) != 0) {
+                    LOG_ERROR_IC("ICL02", "Unable to perform SO_BINDTODEVICE, err: %s device: %s", strerror(err), interface.c_str());
+                }
+            }
+#else
+            //TODO: may be map to address???
+            Y_UNUSED(interface);
+#endif
             SetSockOpt(*Listener, SOL_SOCKET, SO_REUSEADDR, 1);
             if (addr.GetFamily() == AF_INET6) {
                 SetSockOpt(*Listener, IPPROTO_IPV6, IPV6_V6ONLY, 0);
@@ -64,11 +81,12 @@ namespace NActors {
                 addr = addr.GetFamily() == AF_INET ? NInterconnect::TAddress::AnyIPv4(Port) :
                     addr.GetFamily() == AF_INET6 ? NInterconnect::TAddress::AnyIPv6(Port) : addr;
             }
-            return doTry(addr);
+            return doTry(addr, ProxyCommonCtx->Settings.BindOnAllAddresses ?
+                ProxyCommonCtx->Settings.InterfaceName : TString());
         } else {
-            int error = doTry(NInterconnect::TAddress::AnyIPv6(Port));
+            int error = doTry(NInterconnect::TAddress::AnyIPv6(Port), ProxyCommonCtx->Settings.InterfaceName);
             if (error == EAFNOSUPPORT || error == EPROTONOSUPPORT) {
-                error = doTry(NInterconnect::TAddress::AnyIPv4(Port));
+                error = doTry(NInterconnect::TAddress::AnyIPv4(Port), ProxyCommonCtx->Settings.InterfaceName);
             }
             return error;
         }

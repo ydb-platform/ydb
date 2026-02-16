@@ -237,7 +237,7 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/healthcheck': {
-        None: 403,
+        None: 401,
         'user@builtin': 403,
         'database@builtin': 403,
         'viewer@builtin': 403,
@@ -510,7 +510,7 @@ def test_with_require_counters_authentication(ydb_cluster_with_require_counters_
 def test_with_require_healthcheck_authentication(ydb_cluster_with_require_healthcheck_auth):
     EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH = {
         '/healthcheck?format=prometheus': {
-            None: 403,  # TODO(yurikiselev): Fix 403 here and below, should be 401 (issue #33354)
+            None: 401,
             'user@builtin': 403,
             'database@builtin': 403,
             'viewer@builtin': 200,
@@ -518,7 +518,7 @@ def test_with_require_healthcheck_authentication(ydb_cluster_with_require_health
             'root@builtin': 200,
         },
         '/healthcheck': {
-            None: 403,
+            None: 401,
             'user@builtin': 403,
             'database@builtin': 403,
             'viewer@builtin': 403,
@@ -526,7 +526,7 @@ def test_with_require_healthcheck_authentication(ydb_cluster_with_require_health
             'root@builtin': 200,
         },
         '/healthcheck?database=%2FRoot': {
-            None: 403,
+            None: 401,
             'user@builtin': 403,
             'database@builtin': 403,
             'viewer@builtin': 403,
@@ -534,7 +534,7 @@ def test_with_require_healthcheck_authentication(ydb_cluster_with_require_health
             'root@builtin': 200,
         },
         '/healthcheck?database=%2FRoot&format=prometheus': {
-            None: 403,
+            None: 401,
             'user@builtin': 403,
             'database@builtin': 403,
             'viewer@builtin': 200,

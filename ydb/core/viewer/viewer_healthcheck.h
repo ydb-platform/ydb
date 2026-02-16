@@ -90,6 +90,9 @@ public:
             Database = Params.Get("tenant");
         }
         if (!CheckAccess()) {
+            if (GetRequest().GetUserTokenObject().empty()) {
+                return TBase::ReplyAndPassAway(GetHTTPUNAUTHORIZED("text/plain", "Unauthorized"));
+            }
             return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
         }
         Cache = FromStringWithDefault<bool>(Params.Get("cache"), Cache);

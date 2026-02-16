@@ -743,9 +743,6 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
         dr.GetBytesSizeEstimate()
     );
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " after publish direct read state " << Partition
-                << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " ReadGuid " << ReadGuid << " with direct read id " << DirectReadId);
-
 
     ++DirectReadId;
 
@@ -755,6 +752,10 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
 
     bool isInFlightMemoryOk = PartitionInFlightMemoryController.Add(dr.GetReadOffset(), dr.GetBytesSizeEstimate());
     ReadOffset = dr.GetLastOffset() + 1;
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " after publish direct read " << Partition
+                << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " ReadGuid " << ReadGuid << " with direct read id " << DirectReadId
+                << " isInFlightMemoryOk " << isInFlightMemoryOk);
 
     AFL_ENSURE(!RequestInfly);
 
@@ -808,6 +809,8 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     }
 
     auto isMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+                        << " isMemoryLimitReached " << isMemoryLimitReached << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset);
     if (EndOffset > ReadOffset && !isMemoryLimitReached) {
         SendPartitionReady(ctx);
     } else if (EndOffset == ReadOffset) {
@@ -1035,10 +1038,10 @@ void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContex
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {
-    auto inFlightFullnessDuration = PartitionInFlightMemoryController.GetOverflowDuration();
+    auto inFlightOverflowDuration = PartitionInFlightMemoryController.GetOverflowDuration();
 
     NKikimrClient::TPersQueueRequest request;
-    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetInFlightOverflowDurationMs(inFlightFullnessDuration.MilliSeconds());
+    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetInFlightOverflowDurationMs(inFlightOverflowDuration.MilliSeconds());
 
     TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
     req->Record.Swap(&request);

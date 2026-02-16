@@ -95,6 +95,27 @@ public:
                 });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
 
+            TString serializedWatermarkExpr;
+            if (const auto maybeWatermark = pqReadTopic.Watermark()) {
+                const auto watermark = maybeWatermark.Cast();
+
+                if (wrSettings.WatermarksMode.GetOrElse("") != "default") {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), R"(Enable watermarks using "PRAGMA dq.WatermarksMode="default";")"));
+                    return {};
+                }
+
+                TStringBuilder err;
+                NYql::NConnector::NApi::TExpression watermarkExprProto;
+                if (!NYql::SerializeWatermarkExpr(watermark, &watermarkExprProto, err)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to proto: " + err));
+                    return {};
+                }
+                if (!watermarkExprProto.SerializeToString(&serializedWatermarkExpr)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to string"));
+                    return {};
+                }
+            }
+
             bool skipJsonErrors = false;
             if (auto settingsList = pqReadTopic.Settings().Maybe<TExprList>()) {
                 for (const TExprNode::TPtr& s : pqReadTopic.Settings().Raw()->Children()) {
@@ -126,7 +147,7 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
-                    .Watermark(pqReadTopic.Watermark())
+                    .Watermark().Value(serializedWatermarkExpr).Build()
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -287,16 +308,10 @@ public:
                     taskSensorLabel->SetValue(value);
                 }
 
-                TString watermarkExprSql;
-                if (const auto maybeWatermark = topicSource.Watermark()) {
-                    const auto watermark = maybeWatermark.Cast();
-
-                    TStringBuilder err;
-                    NYql::NConnector::NApi::TExpression watermarkExprProto;
-                    YQL_ENSURE(NYql::SerializeWatermarkExpr(watermark, &watermarkExprProto, err));
-
-                    watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
-                }
+                NYql::NConnector::NApi::TExpression watermarkExprProto;
+                auto serializedWatermarkExpr = topicSource.Watermark().Ref().Content();
+                YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
+                TString watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
                 srcDesc.SetWatermarkExpr(watermarkExprSql);
 
                 for (auto nodeId : State_->NodeIds) {

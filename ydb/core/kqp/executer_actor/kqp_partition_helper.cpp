@@ -699,6 +699,9 @@ TShardIdToInfoMap PruneEffectPartitionsImpl(const TEffect& effect,
     Y_UNUSED(prunerConfig);
     auto guard = typeEnv.BindAllocator();
     TShardIdToInfoMap shardInfoMap;
+
+    Cerr << "ParamValue? " << effect.HasRowsValue() << " " << (effect.GetRowsValue().GetKindCase() == NKqpProto::TKqpPhyValue::kParamValue) << Endl;
+
     if (effect.HasRowsValue() &&
         effect.GetRowsValue().GetKindCase() == NKqpProto::TKqpPhyValue::kParamValue)
     {
@@ -707,6 +710,7 @@ TShardIdToInfoMap PruneEffectPartitionsImpl(const TEffect& effect,
         auto shardsMap = PartitionParamByKey(value, type, stageInfo.Meta.TableId, stageInfo, *stageInfo.Meta.ShardKey,
              holderFactory, typeEnv);
 
+        Cerr << "shardsMap: " << shardsMap.size() << Endl;
         for (auto& [shardId, shardData] : shardsMap) {
             auto& shardInfo = shardInfoMap[shardId];
 
@@ -732,6 +736,8 @@ TShardIdToInfoMap PruneEffectPartitionsImpl(const TEffect& effect,
     } else {
         FillFullRange(stageInfo, shardInfoMap, /* read */ false);
     }
+
+    Cerr << "Shard map size: " << shardInfoMap.size() << Endl;
 
     return shardInfoMap;
 }

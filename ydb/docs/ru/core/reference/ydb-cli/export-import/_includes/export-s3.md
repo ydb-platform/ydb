@@ -19,9 +19,9 @@
 - [топик](../../../../concepts/datamodel/topic.md) (только схема);
 - [представление (view)](../../../../concepts/datamodel/view.md);
 - [асинхронная репликация](../../../../concepts/async-replication.md);
-- [внешняя таблица](../../../../concepts/datamodel/external_table.md);
+- [трансфер](../../../../concepts/transfer.md);
 - [внешний источник данных](../../../../concepts/datamodel/external_data_source.md);
-- [трансфер](../../../../concepts/transfer.md).
+- [внешняя таблица](../../../../concepts/datamodel/external_table.md).
 
 Для более простого экспорта одиночных строковых и колоночных таблиц в S3-совместимое хранилище данных можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/s3/write_data.md#export-to-s3).
 

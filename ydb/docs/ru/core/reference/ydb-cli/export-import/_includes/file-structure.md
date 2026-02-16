@@ -91,12 +91,12 @@
 - Файл `create_async_replication.sql`, содержащий YQL-запрос создания асинхронной репликации
 - Файл `permissions.pb`, содержащий информацию об ACL репликации и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
-## Внешние таблицы {#external-tables}
+## Трансферы {#transfers}
 
-Каждой внешней таблице в базе данных соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
+Каждому трансферу в базе данных соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
 
-- Файл `create_external_table.sql`, содержащий YQL-запрос создания внешней таблицы
-- Файл `permissions.pb`, содержащий информацию об ACL внешней таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+- Файл `create_transfer.sql`, содержащий YQL-запрос создания трансфера
+- Файл `permissions.pb`, содержащий информацию об ACL трансфера и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
 ## Внешние источники данных {#external-data-sources}
 
@@ -105,12 +105,12 @@
 - Файл `create_external_data_source.sql`, содержащий YQL-запрос создания внешнего источника данных
 - Файл `permissions.pb`, содержащий информацию об ACL внешнего источника данных и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
-## Трансферы {#transfers}
+## Внешние таблицы {#external-tables}
 
-Каждому трансферу в базе данных соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
+Каждой внешней таблице в базе данных соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
 
-- Файл `create_transfer.sql`, содержащий YQL-запрос создания трансфера
-- Файл `permissions.pb`, содержащий информацию об ACL трансфера и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+- Файл `create_external_table.sql`, содержащий YQL-запрос создания внешней таблицы
+- Файл `permissions.pb`, содержащий информацию об ACL внешней таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
 ## Файлы с данными {#datafiles}
 

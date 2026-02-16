@@ -20,15 +20,15 @@ TFastPathService::TFastPathService(
     ui32 blockSize,
     ui64 blocksCount,
     ui32 storageMedia,
-    const NYdb::NBS::NProto::TStorageConfig& storageConfig,
+    const NProto::TStorageConfig& storageConfig,
     const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
     : TraceSamplePeriod(
           TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
     , CountersBase(
           counters ? GetServiceCounters(counters, "nbs_partitions") : nullptr)
 {
-    if (storageMedia == NYdb::NBS::NProto::EStorageMediaKind::STORAGE_MEDIA_MEMORY) {
-        DirectBlockGroup = std::make_unique<NStorage::NPartitionDirect::TInMemoryDirectBlockGroup>(
+    if (storageMedia == NProto::EStorageMediaKind::STORAGE_MEDIA_MEMORY) {
+        DirectBlockGroup = std::make_shared<NStorage::NPartitionDirect::TInMemoryDirectBlockGroup>(
           tabletId,
           generation,
           std::move(ddiskIds),
@@ -36,7 +36,7 @@ TFastPathService::TFastPathService(
           blockSize,
           blocksCount);
     } else {
-        DirectBlockGroup = std::make_unique<NStorage::NPartitionDirect::TDirectBlockGroup>(
+        DirectBlockGroup = std::make_shared<NStorage::NPartitionDirect::TDirectBlockGroup>(
           tabletId,
           generation,
           std::move(ddiskIds),

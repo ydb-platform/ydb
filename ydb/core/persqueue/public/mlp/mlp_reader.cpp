@@ -42,6 +42,11 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     switch(topic.Status) {
         case NDescriber::EStatus::SUCCESS: {
             Info = topic.Info;
+            ConsumerConfig = GetConsumer(Info->Description.GetPQTabletConfig(), Settings.Consumer);
+            if (!ConsumerConfig) {
+                return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                    TStringBuilder() << "Consumer '" << Settings.Consumer << "' does not exist");
+            }
             return DoSelectPartition();
         }
         default: {
@@ -103,14 +108,12 @@ void TReaderActor::DoRead() {
     LOG_D("Start read");
     Become(&TReaderActor::ReadState);
 
-    const auto& consumer = GetConsumer(Info->Description.GetPQTabletConfig(), Settings.Consumer);
-
     auto* request = new TEvPQ::TEvMLPReadRequest(
         Settings.TopicName,
         Settings.Consumer,
         PartitionId,
-        Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::Seconds(consumer->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
-        Settings.ProcessingTimeout ? Settings.ProcessingTimeout.value() : TDuration::Seconds(consumer->GetDefaultProcessingTimeoutSeconds()),
+        Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::Seconds(ConsumerConfig->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
+        Settings.ProcessingTimeout ? Settings.ProcessingTimeout.value() : TDuration::Seconds(ConsumerConfig->GetDefaultProcessingTimeoutSeconds()),
         Settings.MaxNumberOfMessage
     );
     SendToTablet(PQTabletId, request);

@@ -47,6 +47,7 @@ private:
 
     TActorId ChildActorId;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
+    const NKikimrPQ::TPQTabletConfig::TConsumer* ConsumerConfig;
     ui32 PartitionId;
     ui64 PQTabletId;
 

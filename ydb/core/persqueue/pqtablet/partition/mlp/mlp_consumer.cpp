@@ -582,10 +582,7 @@ void TConsumerActor::ProcessEventQueue() {
     std::deque<TEvPQ::TEvMLPReadRequest::TPtr> readRequestsQueue;
     for (auto& ev : ReadRequestsQueue) {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
-        auto visibilityDeadline = ev->Get()->GetVisibilityDeadline();
-        if (visibilityDeadline == TInstant::Zero()) {
-            visibilityDeadline = TDuration::Seconds(Config.GetDefaultProcessingTimeoutSeconds()).ToDeadLine(now);
-        }
+        auto visibilityDeadline = ev->Get()->GetProcessingTimeout().ToDeadLine();
 
         std::deque<ui64> messages;
         for (; count; --count) {
@@ -786,7 +783,7 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         }
 
         TString messageGroupId;
-        size_t delaySeconds = 0;
+        size_t delaySeconds = Config.GetDefaultDelayMessageTimeMs() / 1000;
 
         NKikimrPQClient::TDataChunk proto;
         bool res = proto.ParseFromString(result.GetData());

@@ -21,7 +21,6 @@ public:
     {}
 
     void OnRunQuery() override {
-        Become(&TScanActor::StateFunc);
         RunStreamQuery(Query);
     }
 
@@ -69,7 +68,7 @@ public:
     }
 
 private:
-    STFUNC(StateFunc) {
+    STFUNC(StateFunc) final {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvPoison, Handle);
             default:

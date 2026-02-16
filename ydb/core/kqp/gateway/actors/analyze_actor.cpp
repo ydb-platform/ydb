@@ -233,8 +233,7 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& ent
 void TAnalyzeActor::Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
     ALOG_NOTICE(
         NKikimrServices::KQP_GATEWAY,
-        "got TEvAbortExecution, issues: " << ev->Get()->GetIssues().ToOneLineString();
-    );
+        "got TEvAbortExecution, issues: " << ev->Get()->GetIssues().ToOneLineString());
 
     if (StatisticsAggregatorId) {
         // We already sent the request to StatisticsAggregator, make a best-effort attempt to cancel it.
@@ -253,8 +252,7 @@ void TAnalyzeActor::Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorCont
 void TAnalyzeActor::HandleUnexpectedEvent(ui32 typeRewrite) {
     ALOG_CRIT(
         NKikimrServices::KQP_GATEWAY,
-        "TAnalyzeActor, unexpected event, request type: " << typeRewrite;
-    );
+        "TAnalyzeActor, unexpected event, request type: " << typeRewrite);
 
     Promise.SetValue(
         NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(

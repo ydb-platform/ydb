@@ -611,6 +611,7 @@ public:
     const TString& GetUserSID() const {
         return UserSID;
     }
+
 private:
     void TrackMemory() const;
     void UntrackMemory() const;

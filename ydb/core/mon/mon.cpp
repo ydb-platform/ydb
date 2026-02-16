@@ -38,6 +38,8 @@ namespace {
 using namespace NKikimr;
 using namespace NMonitoring::NPrivate;
 
+const TString EMPTY_SERIALIZED_USER_TOKEN;
+
 bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {
         const TStringBuf header = request->ContentType.Before(';');
@@ -548,7 +550,8 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
+        const TString& userTokenSerialized = result.UserToken ? result.UserToken->GetSerializedToken() : EMPTY_SERIALIZED_USER_TOKEN;
+        if (NKikimr::IsTokenAllowed(NKikimr::AppData(), userTokenSerialized, ActorMonPage->AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1178,7 +1181,8 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
+        const TString& userTokenSerialized = result.UserToken ? result.UserToken->GetSerializedToken() : EMPTY_SERIALIZED_USER_TOKEN;
+        if (NKikimr::IsTokenAllowed(NKikimr::AppData(), userTokenSerialized, Fields.AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1374,7 +1378,8 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
+        const TString& userTokenSerialized = result.UserToken ? result.UserToken->GetSerializedToken() : EMPTY_SERIALIZED_USER_TOKEN;
+        if (NKikimr::IsTokenAllowed(NKikimr::AppData(), userTokenSerialized, AllowedSIDs)) {
             ProcessRequest();
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

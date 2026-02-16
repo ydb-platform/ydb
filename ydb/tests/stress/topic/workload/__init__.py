@@ -65,6 +65,15 @@ class YdbTopicWorkload(WorkloadBase):
         print(f"End at {time.time()}")
 
     def __loop(self):
+        # одна таблетка, но распределённая транзакция
+        self.run_topic_write_with_tx(20, 10, 10)
+        # широкая транзакция 1
+        self.run_topic_write_with_tx(20, 100, 10)
+        # широкая транзакция 2
+        self.run_topic_write_with_tx(20, 100, 1)
+        # immediate-транзакции
+        #self.run_topic_write_with_tx(20, 100, 1, ?)
+
         # init
         self.cmd_run(
             self.get_command_prefix(subcmds=['init', '-c', self.consumers, '-p', self.producers])
@@ -97,6 +106,41 @@ class YdbTopicWorkload(WorkloadBase):
         self.cmd_run(
             self.get_command_prefix(subcmds=['clean'])
         )
+
+    def run_topic_write_with_tx(self, number_of_producers, number_of_partitions_in_the_topic, number_of_partitions_per_tablet):
+        topic_name = f'workload_topic_pr{number_of_producers}_p{number_of_partitions_in_the_topic}_pq{number_of_partitions_per_tablet}'
+
+        self.create_topic(topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet)
+
+        self.cmd_run([
+            *self._get_cli_common_args(),
+            'workload', 'topic', 'run', 'write',
+            '-s', self.duration,
+            '--byte-rate', '100M',
+            '--use-tx', '--tx-commit-interval', '2000',
+            '-t', str(number_of_producers),
+            '--max-memory-usage-per-producer=2M',
+            '--topic', topic_name
+        ])
+
+        self.delete_topic(topic_name)
+
+    def create_topic(self, topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet):
+        self.cmd_run([
+            *self._get_cli_common_args(),
+            'topic', 'create',
+            f'--partitions-count={number_of_partitions_in_the_topic}',
+            f'--partitions-per-tablet={number_of_partitions_per_tablet}',
+            '--retention-period=2s',
+            topic_name,
+        ])
+
+    def delete_topic(self, topic_name):
+        self.cmd_run([
+            *self._get_cli_common_args(),
+            'topic', 'drop',
+            topic_name,
+        ])
 
     def get_workload_thread_funcs(self):
         r = [self.__loop]

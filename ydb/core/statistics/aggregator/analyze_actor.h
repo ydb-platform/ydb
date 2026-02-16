@@ -16,6 +16,8 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TPathId PathId;
     TVector<ui32> RequestedColumnTags;
 
+    TActorId ScanActorId;
+
     void FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus, NYql::TIssue);
 
     // StateNavigate
@@ -89,6 +91,8 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     void HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void HandleStage2(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
 
+    void Handle(TEvents::TEvPoison::TPtr& ev);
+
 public:
     TAnalyzeActor(
         TActorId parent,
@@ -108,6 +112,7 @@ public:
     STFUNC(StateNavigate) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvents::TEvPoison, Handle);
         }
     }
 
@@ -116,6 +121,7 @@ public:
     STFUNC(StateQueryStage1) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvAnalyzeScanResult, HandleStage1);
+            hFunc(TEvents::TEvPoison, Handle);
         }
     }
 
@@ -123,6 +129,7 @@ public:
     STFUNC(StateQueryStage2) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvAnalyzeScanResult, HandleStage2);
+            hFunc(TEvents::TEvPoison, Handle);
         }
     }
 };

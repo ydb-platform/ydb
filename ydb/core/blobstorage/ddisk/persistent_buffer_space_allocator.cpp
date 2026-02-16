@@ -148,8 +148,8 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(it != FreeSectors.end() && it->First <= fromSectorIdx && it->Last >= toSectorIdx);
         ui32 iFirst = it->First;
         ui32 iLast = it->Last;
-        FreeSectors.erase(it);
         FreeSectorsPriorityQueue.erase(*it);
+        FreeSectors.erase(it);
         if (iFirst != fromSectorIdx) {
             auto [it2, inserted] = FreeSectors.insert({iFirst, fromSectorIdx - 1});
             Y_ABORT_UNLESS(inserted);

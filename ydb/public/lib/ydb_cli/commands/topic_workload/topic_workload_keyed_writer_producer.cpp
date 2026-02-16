@@ -48,10 +48,6 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
     const TString data = NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetGeneratedMessage(Params_, MessageId_);
     const std::string key = GetKey();
 
-    // Для внутренних метрик задержки записи нам важно измерять время от фактической
-    // постановки сообщения в клиенскую очередь до прихода ack, а не "идеальное"
-    // время генерации нагрузки. Поэтому для CreateTimestamp и внутренних метрик
-    // используем текущее время, а не ожидаемое время генерации из workload-а.
     const TInstant enqueueTimestamp = Clock_.Now();
     InflightMessagesCreateTs_.Insert(MessageId_, enqueueTimestamp);
     InflightMessagesCount_.fetch_add(1, std::memory_order_relaxed);
@@ -90,23 +86,9 @@ void TTopicWorkloadKeyedWriterProducer::Close()
 
 void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration& timeout)
 {
+    std::unique_lock lk(Lock_);
     auto deadline = Clock_.Now() + timeout;
-    while (!HasContinuationTokens()) {
-        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-            << "WriterId " << Params_.WriterIdx
-            << " keyed producer id " << ProducerId_
-            << ": WaitEvent for timeToNextMessage " << timeout);
-
-        const bool foundEvent = WriteSession_->WaitEvent().Wait(deadline);
-        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-            << "Keyed producer " << ProducerId_
-            << " in writer " << Params_.WriterIdx
-            << ": foundEvent - " << foundEvent);
-
-        if (!foundEvent) {
-            return;
-        }
-    }
+    ContinuationTokenCondition_.wait(lk, [&]() { return !ContinuationTokens_.empty() || Clock_.Now() > deadline; });
 }
 
 void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event)
@@ -140,6 +122,7 @@ void TTopicWorkloadKeyedWriterProducer::HandleReadyToAcceptEvent(NYdb::NTopic::T
 {
     std::lock_guard lk(Lock_);
     ContinuationTokens_.push(std::move(event.ContinuationToken));
+    ContinuationTokenCondition_.notify_all();
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
         << "Producer " << ProducerId_
         << " in writer " << Params_.WriterIdx

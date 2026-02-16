@@ -47,11 +47,11 @@ private:
 
 // new: flat context + common runner (IamToken and AccessServiceType are fixed inside runner)
 struct TFederatedTestContext {
-    NMvp::TJwtInfo_EAuthMethod JwtAuthMethod = NMvp::TJwtInfo::static_creds;
+    NMvp::TJwtInfo_EAuthMethod JwtAuthMethod = NMvp::TJwtInfo::StaticCreds;
     TString ExpectedSaId;
     TString ExpectedJwtToken;
     TString SaId;
-    TString JwtToken;
+    TString FederatedJwtToken;
     bool ExpectAuthHeader = true;
 };
 
@@ -68,7 +68,7 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
     jwt->SetAuthMethod(ctx.JwtAuthMethod);
     jwt->SetName("nebiusJwt");
     jwt->SetAccountId(ctx.SaId);
-    jwt->SetFederatedJwtToken(ctx.JwtToken);
+    jwt->SetFederatedJwtToken(ctx.FederatedJwtToken);
     jwt->SetEndpoint(endpoint);
 
     const TString fixedIamToken = "iam_from_tokenator";
@@ -123,9 +123,9 @@ Y_UNIT_TEST_SUITE(MvpTokenator) {
         TFederatedTestContext ctx;
         ctx.ExpectedSaId = "serviceaccount-expected";
         ctx.ExpectedJwtToken = "short_jwt_token";
-        ctx.JwtAuthMethod = NMvp::TJwtInfo::federated_creds;
+        ctx.JwtAuthMethod = NMvp::TJwtInfo::FederatedCreds;
         ctx.SaId = "serviceaccount-expected";
-        ctx.JwtToken = "short_jwt_token";
+        ctx.FederatedJwtToken = "short_jwt_token";
 
         ctx.ExpectAuthHeader = true;
         RunTokenatorIntegrationTest(ctx);
@@ -135,9 +135,9 @@ Y_UNIT_TEST_SUITE(MvpTokenator) {
         TFederatedTestContext ctx;
         ctx.ExpectedSaId = "serviceaccount-expected";
         ctx.ExpectedJwtToken = "short_jwt_token";
-        ctx.JwtAuthMethod = NMvp::TJwtInfo::federated_creds;
+        ctx.JwtAuthMethod = NMvp::TJwtInfo::FederatedCreds;
         ctx.SaId = "wrong-serviceaccount";
-        ctx.JwtToken = "short_jwt_token";
+        ctx.FederatedJwtToken = "short_jwt_token";
         ctx.ExpectAuthHeader = false;
         RunTokenatorIntegrationTest(ctx);
     }
@@ -146,9 +146,9 @@ Y_UNIT_TEST_SUITE(MvpTokenator) {
         TFederatedTestContext ctx;
         ctx.ExpectedSaId = "serviceaccount-expected";
         ctx.ExpectedJwtToken = "short_jwt_token";
-        ctx.JwtAuthMethod = NMvp::TJwtInfo::federated_creds;
+        ctx.JwtAuthMethod = NMvp::TJwtInfo::FederatedCreds;
         ctx.SaId = "serviceaccount-expected";
-        ctx.JwtToken = "wrong_jwt_token";
+        ctx.FederatedJwtToken = "wrong_jwt_token";
         ctx.ExpectAuthHeader = false;
         RunTokenatorIntegrationTest(ctx);
     }

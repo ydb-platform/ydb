@@ -113,14 +113,14 @@ generic:
         TMvpStartupOptions opts = MakeOpts(argv);
 
         UNIT_ASSERT(opts.FederatedCreds());
-        UNIT_ASSERT_VALUES_EQUAL(opts.JwtToken, "MY_JWT_TOKEN");
-        UNIT_ASSERT(opts.Tokens.jwtinfo_size() > 0);
-        const auto& jwt = opts.Tokens.jwtinfo(0);
-        UNIT_ASSERT_VALUES_EQUAL(jwt.name(), opts.GetFederatedCredsJwtTokenName());
-        UNIT_ASSERT_VALUES_EQUAL(jwt.federatedjwttoken(), "MY_JWT_TOKEN");
-        UNIT_ASSERT_VALUES_EQUAL(jwt.endpoint(), "https://token.endpoint/");
-        UNIT_ASSERT_VALUES_EQUAL(jwt.accountid(), "sa-1");
-        UNIT_ASSERT(jwt.authmethod() == NMvp::TJwtInfo::federated_creds);
+        UNIT_ASSERT_VALUES_EQUAL(opts.FederatedJwtToken, "MY_JWT_TOKEN");
+        UNIT_ASSERT(opts.Tokens.JwtInfoSize() > 0);
+        const auto& jwt = opts.Tokens.GetJwtInfo(0);
+        UNIT_ASSERT_VALUES_EQUAL(jwt.GetName(), opts.GetFederatedCredsJwtTokenName());
+        UNIT_ASSERT_VALUES_EQUAL(jwt.GetFederatedJwtToken(), "MY_JWT_TOKEN");
+        UNIT_ASSERT_VALUES_EQUAL(jwt.GetEndpoint(), "https://token.endpoint/");
+        UNIT_ASSERT_VALUES_EQUAL(jwt.GetAccountId(), "sa-1");
+        UNIT_ASSERT(jwt.GetAuthMethod() == NMvp::TJwtInfo::FederatedCreds);
     }
 
     Y_UNIT_TEST(FederatedCredsMissingTokenPathThrows) {

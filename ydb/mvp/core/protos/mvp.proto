@@ -2,8 +2,8 @@ package NMvp;
 
 message TJwtInfo {
     enum EAuthMethod {
-        static_creds = 0;
-        federated_creds = 1;
+        StaticCreds = 0;
+        FederatedCreds = 1;
     }
 
     optional string Name = 1;
@@ -13,7 +13,7 @@ message TJwtInfo {
     optional string PublicKey = 5;
     optional string PrivateKey = 6;
     optional string Audience = 7 [default = "https://iam.api.cloud.yandex.net/iam/v1/tokens"];
-    optional EAuthMethod AuthMethod = 8 [default = static_creds];
+    optional EAuthMethod AuthMethod = 8 [default = StaticCreds];
     optional string FederatedJwtToken = 9;
 }
 

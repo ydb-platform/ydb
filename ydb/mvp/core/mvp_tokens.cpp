@@ -269,7 +269,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
         case NMvp::nebius_v1: {
             nebius::iam::v1::ExchangeTokenRequest request;
             switch (jwtInfo->authmethod()) {
-                case NMvp::TJwtInfo::static_creds: {
+                case NMvp::TJwtInfo::StaticCreds: {
                     auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
                     auto sToken = jwt::create()
                         .set_key_id(keyId)
@@ -284,7 +284,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                     request.set_subject_token(TString(sToken));
                     break;
                 }
-                case NMvp::TJwtInfo::federated_creds: {
+                case NMvp::TJwtInfo::FederatedCreds: {
                     auto fToken = jwtInfo->federatedjwttoken();
                     request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
                     request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");

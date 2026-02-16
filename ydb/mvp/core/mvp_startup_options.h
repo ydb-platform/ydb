@@ -28,9 +28,9 @@ private:
 public:
     YAML::Node Config;
 
-    TString JwtToken;
-    TString JwtSaId;
-    TString JwtTokenEndpoint;
+    TString FederatedJwtToken;
+    TString FederatedJwtSaId;
+    TString FederatedJwtTokenEndpoint;
 
     bool LogToStderr = false;
     bool Mlock = false;

@@ -29,8 +29,6 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Checksums** | **Changelog** ||
-<<<<<<< HEAD
-=======
 || **v25.2** |  |  |  |  ||
 || v.25.2.1.ent.4 | 12.02.2026 |
 
@@ -100,7 +98,6 @@ Yandex Enterprise Database distributions are available for download via the link
 [For debug symbols](https://binaries.ясубд.рф/release/24.4.4.13/checksums.debug.txt)
 
 | [See list](../changelog-enterprise.md#24-4-4-13) ||
->>>>>>> 3674dffd46c (Publish 25.1.4.ent.8 and 25.2.1.ent.4 (#33750))
 || **v24.3** |  |  |  |  ||
 || v.24.3.13.11 | 06.03.2024 |
 
@@ -158,8 +155,6 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Changelog** ||
-<<<<<<< HEAD
-=======
 || **v25.2** |  |  |  |  ||
 || v.25.2.1.ent.4 | 12.02.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.4` | [See list](../changelog-enterprise.md#25-2-1-ent-4) ||
 || **v25.1** |  |  |  |  ||
@@ -169,7 +164,6 @@ Yandex Enterprise Database distributions are available for download via the link
 || v.24.4.4.20 | 01.11.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:24.4.4.ent.20` | [See list](../changelog-enterprise.md#24-4-4-20) ||
 || v.24.4.4.15 | 19.09.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:24.4.4.ent.15` | [See list](../changelog-enterprise.md#24-4-4-15) ||
 || v.24.4.4.13 | 29.07.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:2025-08-08-73940688fea2aeb2e109f01a7827f2d7` | [See list](../changelog-enterprise.md#24-4-4-13) ||
->>>>>>> 3674dffd46c (Publish 25.1.4.ent.8 and 25.2.1.ent.4 (#33750))
 || **v24.3** |  |  |  |  ||
 || v.24.3.13 | 05.12.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.13` | [See list](../changelog-server.md#24-3) ||
 || **v24.2** |  |  |  |  ||

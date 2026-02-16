@@ -110,7 +110,7 @@ public:
 
 class TOptionalProcessor: public IDataProcessor {
 public:
-    TOptionalProcessor(std::unique_ptr<IDataProcessor>&& inner)
+    explicit TOptionalProcessor(std::unique_ptr<IDataProcessor>&& inner)
         : Inner_(std::move(inner))
     {
     }
@@ -135,7 +135,7 @@ private:
 
 class TListProcessor: public IDataProcessor {
 public:
-    TListProcessor(std::unique_ptr<IDataProcessor>&& inner)
+    explicit TListProcessor(std::unique_ptr<IDataProcessor>&& inner)
         : Inner_(std::move(inner))
     {
     }
@@ -158,7 +158,7 @@ private:
 
 class TTupleProcessor: public IDataProcessor {
 public:
-    TTupleProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
+    explicit TTupleProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
         : Inners_(std::move(inners))
     {
     }
@@ -182,7 +182,7 @@ private:
 
 class TStructProcessor: public IDataProcessor {
 public:
-    TStructProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
+    explicit TStructProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
         : Inners_(std::move(inners))
     {
     }
@@ -237,7 +237,7 @@ private:
 
 class TVariantProcessor: public IDataProcessor {
 public:
-    TVariantProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
+    explicit TVariantProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
         : Inners_(std::move(inners))
     {
     }

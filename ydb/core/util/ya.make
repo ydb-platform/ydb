@@ -38,6 +38,7 @@ SRCS(
     log_priority_mute_checker.h
     memory_tracker.cpp
     memory_tracker.h
+    numerical_maybe.h
     operation_queue.h
     page_map.cpp
     pb.h

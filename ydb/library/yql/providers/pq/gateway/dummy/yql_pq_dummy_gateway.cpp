@@ -15,7 +15,7 @@ using namespace NYdb::NFederatedTopic;
 using namespace NYdb::NTopic;
 
 TDummyPqGateway::TDummyPqGateway(bool skipDatabasePrefix)
-    : SkipDatabasePrefix(skipDatabasePrefix)
+    : AllowSkipDatabasePrefix(skipDatabasePrefix)
 {}
 
 TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
@@ -52,11 +52,12 @@ NThreading::TFuture<void> TDummyPqGateway::CloseSession(const TString& sessionId
 NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
     Y_UNUSED(token);
 
-    const auto& clusterCanonized = CanonizeCluster(cluster, database);
+    const auto& clusterCanonized = SkipDatabasePrefix(cluster, database);
+    const auto& pathCanonized = SkipDatabasePrefix(path, database);
 
     with_lock (Mutex) {
         Y_ENSURE(IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is not opened in pq gateway");
-        const auto key = std::make_pair(clusterCanonized, path);
+        const auto key = std::make_pair(clusterCanonized, pathCanonized);
         if (const auto* topic = Topics.FindPtr(key)) {
             NPq::NConfigurationManager::TTopicDescription desc(path);
             desc.PartitionsCount = topic->PartitionsCount;
@@ -64,18 +65,19 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePa
                 NPq::NConfigurationManager::TDescribePathResult::Make<NPq::NConfigurationManager::TTopicDescription>(desc));
         }
         return NThreading::MakeErrorFuture<NPq::NConfigurationManager::TDescribePathResult>(
-            std::make_exception_ptr(NPq::NConfigurationManager::TException{NPq::NConfigurationManager::EStatus::NOT_FOUND} << "Topic " << path << " is not found on cluster " << clusterCanonized << " in database " << database));
+            std::make_exception_ptr(NPq::NConfigurationManager::TException{NPq::NConfigurationManager::EStatus::NOT_FOUND} << "Topic " << pathCanonized << " is not found on cluster " << clusterCanonized << " in database " << database));
     }
 }
 
 IPqGateway::TAsyncDescribeFederatedTopicResult TDummyPqGateway::DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
     Y_UNUSED(token);
 
-    const auto& clusterCanonized = CanonizeCluster(cluster, database);
+    const auto& clusterCanonized = SkipDatabasePrefix(cluster, database);
+    const auto& pathCanonized = SkipDatabasePrefix(path, database);
 
     with_lock (Mutex) {
         Y_ENSURE(IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is not opened in pq gateway");
-        const auto key = std::make_pair(clusterCanonized, path);
+        const auto key = std::make_pair(clusterCanonized, pathCanonized);
         if (const auto* topic = Topics.FindPtr(key)) {
             IPqGateway::TDescribeFederatedTopicResult result;
             auto& cluster = result.emplace_back();
@@ -83,7 +85,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TDummyPqGateway::DescribeFederate
             return NThreading::MakeFuture<TDescribeFederatedTopicResult>(result);
         }
         return NThreading::MakeErrorFuture<IPqGateway::TDescribeFederatedTopicResult>(
-            std::make_exception_ptr(yexception() << "Topic " << path << " is not found on cluster " << clusterCanonized << " in database " << database));
+            std::make_exception_ptr(yexception() << "Topic " << pathCanonized << " is not found on cluster " << clusterCanonized << " in database " << database));
     }
 }
 
@@ -105,13 +107,17 @@ void TDummyPqGateway::AddCluster(const NYql::TPqClusterConfig& cluster) {
 }
 
 ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) {
-    Y_UNUSED(driver, settings);
-    return CreateFileTopicClient(Topics);
+    return CreateFileTopicClient(Topics, {
+        .Database = settings.Database_.value_or(driver.GetConfig().GetDatabase()),
+        .SkipDatabasePrefix = AllowSkipDatabasePrefix,
+    });
 }
 
 IFederatedTopicClient::TPtr TDummyPqGateway::GetFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings) {
-    Y_UNUSED(driver);
-    return CreateFileFederatedTopicClient(Topics, settings);
+    return CreateFileFederatedTopicClient(Topics, settings, {
+        .Database = settings.Database_.value_or(driver.GetConfig().GetDatabase()),
+        .SkipDatabasePrefix = AllowSkipDatabasePrefix,
+    });
 }
 
 TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() const {
@@ -122,15 +128,8 @@ TFederatedTopicClientSettings TDummyPqGateway::GetFederatedTopicClientSettings()
     return {};
 }
 
-TString TDummyPqGateway::CanonizeCluster(const TString& cluster, const TString& database) const {
-    TStringBuf clusterCanonized(cluster);
-
-    if (SkipDatabasePrefix) {
-        clusterCanonized.SkipPrefix(database);
-        clusterCanonized.SkipPrefix("/");
-    }
-
-    return TString(clusterCanonized);
+TString TDummyPqGateway::SkipDatabasePrefix(const TString& path, const TString& database) const {
+    return AllowSkipDatabasePrefix ? NYql::SkipDatabasePrefix(path, database) : path;
 }
 
 TDummyPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix) {

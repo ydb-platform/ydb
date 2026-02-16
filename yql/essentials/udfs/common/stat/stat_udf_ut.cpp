@@ -233,9 +233,13 @@ Y_UNIT_TEST(SerializedMergedPercentile) {
     UNIT_ASSERT_DOUBLES_EQUAL(value.Get<double>(), 8.95, 0.001);
 }
 
-static double GetParetoRandomNumber(double a) {
+namespace {
+
+double GetParetoRandomNumber(double a) {
     return 1 / pow(RandomNumber<double>(), double(1) / a);
 }
+
+} // namespace
 
 Y_UNIT_TEST(BigPercentile) {
     auto mutableFunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();

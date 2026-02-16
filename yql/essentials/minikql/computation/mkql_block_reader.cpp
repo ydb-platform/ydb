@@ -180,7 +180,7 @@ public:
 template <bool Nullable>
 class TTupleBlockItemConverter: public IBlockItemConverter {
 public:
-    TTupleBlockItemConverter(TVector<std::unique_ptr<IBlockItemConverter>>&& children)
+    explicit TTupleBlockItemConverter(TVector<std::unique_ptr<IBlockItemConverter>>&& children)
         : Children_(std::move(children))
     {
         Items_.resize(Children_.size());
@@ -266,7 +266,7 @@ public:
 
 class TExternalOptionalBlockItemConverter: public IBlockItemConverter {
 public:
-    TExternalOptionalBlockItemConverter(std::unique_ptr<IBlockItemConverter>&& inner)
+    explicit TExternalOptionalBlockItemConverter(std::unique_ptr<IBlockItemConverter>&& inner)
         : Inner_(std::move(inner))
     {
     }

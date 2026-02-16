@@ -80,7 +80,7 @@ public:
 
     class TTypeProxy: public NYql::IAutoParamTypeBuilder {
     public:
-        TTypeProxy(TTestAutoParamBuilder& owner)
+        explicit TTypeProxy(TTestAutoParamBuilder& owner)
             : Owner(owner)
         {
         }
@@ -117,7 +117,7 @@ public:
 
     class TDataProxy: public NYql::IAutoParamDataBuilder {
     public:
-        TDataProxy(TTestAutoParamBuilder& owner)
+        explicit TDataProxy(TTestAutoParamBuilder& owner)
             : Owner(owner)
         {
         }

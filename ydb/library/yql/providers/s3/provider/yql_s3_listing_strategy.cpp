@@ -55,9 +55,6 @@ bool IsRecoverableError(const TListError& error) {
 
 class TCollectingS3ListingStrategy : public IS3ListingStrategy {
 public:
-    using TListerFactoryMethod = std::function<TFuture<IS3Lister::TPtr>(
-        const TListingRequest& listingRequest, TS3ListingOptions options)>;
-
     TCollectingS3ListingStrategy(TListerFactoryMethod&& listerFactoryMethod, TString collectingName)
         : ListerFactoryMethod(std::move(listerFactoryMethod))
         , CollectingName(std::move(collectingName))
@@ -1123,4 +1120,9 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                              allowLocalFiles)}})}));
 }
 
+IS3ListingStrategy::TPtr MakeCollectingS3ListingStrategy(
+    IS3ListingStrategy::TListerFactoryMethod&& listerFactoryMethod,
+    TString collectingName) {
+        return std::make_shared<TCollectingS3ListingStrategy>(std::move(listerFactoryMethod), collectingName);
+}
 } // namespace NYql

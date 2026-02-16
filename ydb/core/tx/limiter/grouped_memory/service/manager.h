@@ -118,6 +118,8 @@ public:
     bool IsEmpty() const {
         return Processes.empty();
     }
+
+    TString DebugString() const;
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

@@ -15,22 +15,16 @@ def kikimr(request):
     def get_ydb_config():
         config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
+            pq_client_service_types=["yandex-query"],
             extra_feature_flags={
                 "enable_external_data_sources": True,
                 "enable_streaming_queries": True,
                 "enable_streaming_queries_counters": True,
+                "enable_topics_sql_io_operations": True,
             },
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
-                "enable_match_recognize": True,
-                "streaming_queries": {
-                    "external_storage": {
-                        "database_connection": {
-                            "endpoint": os.getenv("YDB_ENDPOINT"),
-                            "database": os.getenv("YDB_DATABASE"),
-                        },
-                    },
-                },
+                "enable_match_recognize": True
             },
             table_service_config={
                 "enable_watermarks": enable_watermarks,

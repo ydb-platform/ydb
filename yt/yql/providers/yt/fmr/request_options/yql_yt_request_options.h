@@ -47,9 +47,10 @@ enum class EFmrComponent {
 };
 
 enum class EFmrErrorReason {
-    ReasonUnknown,
-    UserError
-    // TODO - return FallbackQuery or FallbackOperation instead of UserError, pass info to gateway.
+    Unknown,
+    RestartOperation,
+    RestartQuery,
+    UdfTerminate
 };
 
 struct TFmrError {
@@ -62,9 +63,17 @@ struct TFmrError {
     TMaybe<TString> JobId;
 };
 
-struct TError {
-    TString ErrorMessage;
+static constexpr TStringBuf FmrNonRetryableJobExceptionMarker = "[FmrNonRetryableJobException] ";
+
+class TFmrNonRetryableJobException: public yexception {
+public:
+    TFmrNonRetryableJobException() : yexception()
+{
+    *this << ToString(FmrNonRetryableJobExceptionMarker);
+}
 };
+
+EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage);
 
 struct TFmrUserJobSettings {
     ui64 ThreadPoolSize = 3;
@@ -85,7 +94,7 @@ struct TYtTableRef {
     TYtTableRef(const NYT::TRichYPath& richPath, const TMaybe<TString>& filePath = Nothing());
     TYtTableRef(const TString& cluster, const TString& path, const TMaybe<TString>& filePath = Nothing());
 
-    bool operator == (const TYtTableRef&) const = default;
+    bool operator==(const TYtTableRef&) const = default;
 };
 
 struct TYtTableTaskRef {
@@ -95,7 +104,7 @@ struct TYtTableTaskRef {
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TYtTableTaskRef&) const = default;
+    bool operator==(const TYtTableTaskRef&) const = default;
 }; // corresponds to a partition of several yt input tables.
 
 void SaveRichPath(IOutputStream* buffer, const NYT::TRichYPath& path);
@@ -118,14 +127,14 @@ struct TFmrTableId {
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TFmrTableId&) const = default;
+    bool operator==(const TFmrTableId&) const = default;
 };
 
 struct TFmrTableRef {
     TFmrTableId FmrTableId;
     std::vector<TString> Columns = {};
     TString SerializedColumnGroups = TString();
-    bool operator == (const TFmrTableRef&) const = default;
+    bool operator==(const TFmrTableRef&) const = default;
 };
 
 struct TTableRange {
@@ -136,7 +145,7 @@ struct TTableRange {
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TTableRange&) const = default;
+    bool operator==(const TTableRange&) const = default;
 }; // Corresnponds to range [MinChunk, MaxChunk)
 
 struct TFmrTableInputRef {
@@ -145,10 +154,14 @@ struct TFmrTableInputRef {
     std::vector<TString> Columns = {};
     TString SerializedColumnGroups = TString();
 
+    TMaybe<bool> IsFirstRowInclusive;
+    TMaybe<TString> FirstRowKeys; // Binary YSON MAP
+    TMaybe<TString> LastRowKeys;  // Binary YSON MAP
+
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TFmrTableInputRef&) const = default;
+    bool operator==(const TFmrTableInputRef&) const = default;
 }; // Corresponds to part of table with fixed TableId but several PartIds, Empty TablesRanges means that this table is not present in task.
 
 struct TFmrTableOutputRef {
@@ -165,37 +178,38 @@ struct TFmrTableOutputRef {
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TFmrTableOutputRef&) const = default;
+    bool operator==(const TFmrTableOutputRef&) const = default;
 };
 
 struct TTableStats {
     ui64 Chunks = 0;
     ui64 Rows = 0;
     ui64 DataWeight = 0;
-    bool operator == (const TTableStats&) const = default;
+    bool operator==(const TTableStats&) const = default;
 };
 
 struct TSortedChunkStats {
     bool IsSorted = false;
     NYT::TNode FirstRowKeys;
+    NYT::TNode LastRowKeys;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TSortedChunkStats&) const = default;
+    bool operator==(const TSortedChunkStats&) const = default;
 };
 
 struct TChunkStats {
     ui64 Rows = 0;
     ui64 DataWeight = 0;
     TSortedChunkStats SortedChunkStats = TSortedChunkStats();
-    bool operator == (const TChunkStats&) const = default;
+    bool operator==(const TChunkStats&) const = default;
 };
 
 struct TTableChunkStats {
     TString PartId;
     std::vector<TChunkStats> PartIdChunkStats;
-    bool operator == (const TTableChunkStats&) const = default;
+    bool operator==(const TTableChunkStats&) const = default;
 }; // detailed statistics for all chunks in partition
 
 } // namespace NYql::NFmr

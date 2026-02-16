@@ -1059,6 +1059,10 @@ protected:
                     topic.CancelOnFileFinish = it->second.CancelOnFileFinish;
                     TopicsSettings.erase(it);
                 }
+
+                fileGateway->AddDummyTopic(topic);
+
+                topic.Cluster = "db";
                 fileGateway->AddDummyTopic(topic);
             }
             RunnerOptions.YdbSettings.PqGateway = fileGateway;

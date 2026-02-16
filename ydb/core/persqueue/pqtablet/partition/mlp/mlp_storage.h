@@ -88,6 +88,8 @@ public:
         TInstant ProcessingDeadline;
         TInstant WriteTimestamp;
         TInstant LockingTimestamp;
+        std::optional<ui32> MessageGroupIdHash;
+        bool MessageGroupIsLocked;
     };
 
     struct TMessageIterator {
@@ -117,6 +119,7 @@ public:
         size_t AddedMessageCount() const;
         size_t ChangedMessageCount() const;
         size_t DLQMessageCount() const;
+        bool GetPurged() const;
 
     protected:
         void AddNewMessage(ui64 offset);
@@ -124,6 +127,7 @@ public:
         void AddToDLQ(ui64 offset, ui64 seqNo);
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
+        void SetPurged();
 
         void Compacted(size_t count);
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
@@ -138,6 +142,7 @@ public:
         std::vector<ui64> MovedToSlowZone;
         std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;
+        bool Purged = false;
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
@@ -162,7 +167,8 @@ public:
     std::deque<TDLQMessage> GetDLQMessages();
     const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
     void InitMetrics();
-
+    bool HasRetentionExpiredMessages() const;
+    bool GetKeepMessageOrder() const;
 
     struct TPosition {
         std::optional<std::map<ui64, TMessage>::iterator> SlowPosition;
@@ -178,6 +184,7 @@ public:
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(ui64 message, TInstant deadline);
+    bool Purge(ui64 endOffset);
     bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero());
     bool MarkDLQMoved(TDLQMessage message);
     bool WakeUpDLQ();

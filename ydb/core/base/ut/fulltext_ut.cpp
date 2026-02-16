@@ -29,10 +29,6 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         TString error;
 
         UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "layout should be set");
-
-        settings.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
-        UNIT_ASSERT(!ValidateSettings(settings, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "columns should be set");
         
         auto columnSettings = settings.add_columns();
@@ -107,14 +103,6 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(settings.columns().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.columns().at(0).column(), "text");
         
-        UNIT_ASSERT_C(FillSetting(settings, "layout", "flat", error), error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-        UNIT_ASSERT_EQUAL(settings.layout(), Ydb::Table::FulltextIndexSettings::FLAT);
-
-        UNIT_ASSERT_C(FillSetting(settings, "layout", "flat_relevance", error), error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-        UNIT_ASSERT_EQUAL(settings.layout(), Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
-
         UNIT_ASSERT_C(FillSetting(settings, "tokenizer", "standard", error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
         UNIT_ASSERT_EQUAL(settings.columns().at(0).analyzers().tokenizer(), Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -144,6 +132,15 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             TString error;
             UNIT_ASSERT_C(!FillSetting(settings, "asdf", "qwer", error), error);
             UNIT_ASSERT_VALUES_EQUAL(error, "Unknown index setting: asdf");
+        }
+
+        {
+            Ydb::Table::FulltextIndexSettings settings;
+            settings.add_columns()->set_column("text");
+
+            TString error;
+            UNIT_ASSERT_C(!FillSetting(settings, "layout", "flat", error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "Unknown index setting: layout");
         }
 
         {
@@ -309,6 +306,56 @@ Y_UNIT_TEST_SUITE(NFulltext) {
 
         analyzers.clear_language();
         UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
+    }
+
+    Y_UNIT_TEST(BuildNgramsUtf8) {
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("abc023", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"abc", "bc0", "c02", "023"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("◌̧◌̇◌̣", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"◌̧◌", "\u0327◌̇", "◌̇◌", "\u0307◌̣"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("﷽‎؈ۻ", 2, 2, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"﷽‎", "‎؈", "؈ۻ"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("异体字異體字", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"异体字", "体字異", "字異體", "異體字"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("ä̸̱b̴̪͛", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"a\u0338\u0308", "\u0338\u0308\u0331", "\u0308\u0331b", "\u0331b\u0334", "b\u0334\u035B", "\u0334\u035B\u032A"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("😢🐶🐕🐈", 2, 2, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"😢🐶", "🐶🐕", "🐕🐈"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("4️⃣🐕‍🦺🐈‍⬛", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"4️⃣", "\uFE0F\u20E3🐕", "\u20E3🐕\u200D", "🐕‍🦺", "\u200D\U0001F9BA🐈", "\U0001F9BA🐈\u200D", "🐈‍⬛"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("👨‍👩‍👧‍👦🇦🇨", 2, 2, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"👨\u200D", "\u200D👩", "👩\u200D", "\u200D👧", "👧\u200D", "\u200D👦", "👦🇦", "🇦🇨"}));
+        }
     }
 }
 

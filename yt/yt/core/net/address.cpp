@@ -476,7 +476,7 @@ TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOpti
     return result.Flush();
 }
 
-bool operator == (const TNetworkAddress& lhs, const TNetworkAddress& rhs)
+bool operator==(const TNetworkAddress& lhs, const TNetworkAddress& rhs)
 {
     auto lhsAddr = lhs.GetSockAddr();
     auto lhsSize = lhs.GetLength();
@@ -768,7 +768,7 @@ void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStrin
     }
 }
 
-bool operator == (const TIP6Address& lhs, const TIP6Address& rhs)
+bool operator==(const TIP6Address& lhs, const TIP6Address& rhs)
 {
     return ::memcmp(lhs.GetRawBytes(), rhs.GetRawBytes(), TIP6Address::ByteSize) == 0;
 }

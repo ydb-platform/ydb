@@ -2884,7 +2884,7 @@ TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
 template <class T>
 struct THash<NYT::TFuture<T>>
 {
-    size_t operator () (const NYT::TFuture<T>& future) const
+    size_t operator()(const NYT::TFuture<T>& future) const
     {
         return THash<NYT::TIntrusivePtr<NYT::NDetail::TFutureState<T>>>()(future.Impl_);
     }
@@ -2894,7 +2894,7 @@ struct THash<NYT::TFuture<T>>
 template <class T>
 struct THash<NYT::TPromise<T>>
 {
-    size_t operator () (const NYT::TPromise<T>& promise) const
+    size_t operator()(const NYT::TPromise<T>& promise) const
     {
         return THash<NYT::TIntrusivePtr<NYT::NDetail::TPromiseState<T>>>()(promise.Impl_);
     }

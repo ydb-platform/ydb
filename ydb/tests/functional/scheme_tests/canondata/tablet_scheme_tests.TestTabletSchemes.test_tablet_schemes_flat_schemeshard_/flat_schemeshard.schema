@@ -6524,6 +6524,11 @@
                 "ColumnId": 21,
                 "ColumnName": "ParentIndex",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "SysView",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6550,7 +6555,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6796,6 +6802,11 @@
                 "ColumnId": 5,
                 "ColumnName": "StandaloneSharding",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "IsRestore",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6806,7 +6817,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

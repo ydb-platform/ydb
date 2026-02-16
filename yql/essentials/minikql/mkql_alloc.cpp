@@ -11,7 +11,11 @@
 
 namespace NKikimr::NMiniKQL {
 
-static ui8 ZeroSizeObject alignas(ArrowAlignment)[0];
+namespace {
+
+ui8 ZeroSizeObject alignas(ArrowAlignment)[0];
+
+} // namespace
 
 constexpr ui64 ArrowSizeForArena = (TAllocState::POOL_PAGE_SIZE >> 2);
 
@@ -343,6 +347,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
         Y_ENSURE(pool);
         uint8_t* res;
         if (!pool->Allocate(fullSize, &res).ok()) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
         Y_ENSURE(res);

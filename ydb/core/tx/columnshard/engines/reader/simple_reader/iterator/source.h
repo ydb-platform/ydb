@@ -228,8 +228,8 @@ public:
 
     IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
+        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
+        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions, deprecatedPortionId)
     {
     }
 
@@ -591,7 +591,7 @@ public:
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
         : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false)
+              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceIdx())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount())

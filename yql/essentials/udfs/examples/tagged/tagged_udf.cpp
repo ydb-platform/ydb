@@ -32,7 +32,7 @@ public:
         return Name;
     }
 
-    TGenericTag(TStringRef tag)
+    explicit TGenericTag(TStringRef tag)
         : Tag_(tag)
     {
     }

@@ -50,22 +50,20 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey, const NPDisk::TKey &sysLogKey,
-    const NPDisk::TKey &mainKey, TString textMessage, const bool isErasureEncodeUserLog, bool trimEntireDevice,
-    TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization, std::optional<TRcBuf> metadata,
-    bool plainDataChunks)
+    const NPDisk::TKey &mainKey, TString textMessage, const TFormatOptions& options)
 {
     TActorSystemCreator creator;
 
     bool isBlockDevice = false;
     NPDisk::EDeviceType deviceType = NPDisk::DEVICE_TYPE_ROT;
-    if (sectorMap) {
+    if (options.SectorMap) {
         if (diskSizeBytes) {
-            sectorMap->ForceSize(diskSizeBytes);
+            options.SectorMap->ForceSize(diskSizeBytes);
         } else {
-            if (sectorMap->DeviceSize == 0) {
+            if (options.SectorMap->DeviceSize == 0) {
                 ythrow yexception() << "Can't create in-memory fake disk map with 0 size, path# " << path.Quote();
             }
-            diskSizeBytes = sectorMap->DeviceSize;
+            diskSizeBytes = options.SectorMap->DeviceSize;
         }
     } else {
         if (path.StartsWith("PCIe:")) {
@@ -76,29 +74,30 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
                 ->DetectFileParameters(path, diskSizeBytes, isBlockDevice);
         }
     }
-    if (enableSmallDiskOptimization && diskSizeBytes > 0 && diskSizeBytes < NPDisk::SmallDiskSizeBoundary &&
+    if (options.EnableSmallDiskOptimization && diskSizeBytes > 0 && diskSizeBytes < NPDisk::SmallDiskSizeBoundary &&
         userAccessibleChunkSizeBytes > NPDisk::SmallDiskMaximumChunkSize) {
         throw NPDisk::TPDiskFormatBigChunkException() << "diskSizeBytes# " << diskSizeBytes <<
             " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<
-            " bool(sectorMap)# " << bool(sectorMap) <<
-            " sectorMap->DeviceSize# " << (sectorMap ? sectorMap->DeviceSize : 0);
+            " bool(sectorMap)# " << bool(options.SectorMap) <<
+            " sectorMap->DeviceSize# " << (options.SectorMap ? options.SectorMap->DeviceSize : 0);
     }
-    Y_VERIFY_S((enableSmallDiskOptimization && diskSizeBytes < NPDisk::SmallDiskSizeBoundary) || (
+    Y_VERIFY_S((options.EnableSmallDiskOptimization && diskSizeBytes < NPDisk::SmallDiskSizeBoundary) || (
             diskSizeBytes > 0 && diskSizeBytes / userAccessibleChunkSizeBytes > 200),
             " diskSizeBytes# " << diskSizeBytes <<
             " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<
-            " bool(sectorMap)# " << bool(sectorMap) <<
-            " sectorMap->DeviceSize# " << (sectorMap ? sectorMap->DeviceSize : 0)
+            " bool(sectorMap)# " << bool(options.SectorMap) <<
+            " sectorMap->DeviceSize# " << (options.SectorMap ? options.SectorMap->DeviceSize : 0)
         );
 
     TIntrusivePtr<TPDiskConfig> cfg(new TPDiskConfig(path, diskGuid, 0xffffffffull,
                 TPDiskCategory(deviceType, 0).GetRaw()));
-    cfg->SectorMap = sectorMap;
+    cfg->SectorMap = options.SectorMap;
     // Disable encryption for SectorMap
-    cfg->EnableSectorEncryption = !cfg->SectorMap;
-    cfg->PlainDataChunks = plainDataChunks;
+    cfg->EnableSectorEncryption = options.EnableSectorEncryption.value_or(!cfg->SectorMap);
+    cfg->EnableFormatEncryption = options.EnableFormatEncryption;
+    cfg->PlainDataChunks = options.PlainDataChunks;
 
-    if (!isBlockDevice && !cfg->UseSpdkNvmeDriver && !sectorMap) {
+    if (!isBlockDevice && !cfg->UseSpdkNvmeDriver && !options.SectorMap) {
         // path is a regular file
         if (diskSizeBytes == 0) {
             ythrow yexception() << "Can't create file with 0 size, path# " << path;
@@ -120,8 +119,9 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
         ythrow yexception() << "Device with path# " << path << " is not good, info# " << pDisk->BlockDevice->DebugInfo();
     }
     pDisk->WriteDiskFormat(diskSizeBytes, sectorSizeBytes, userAccessibleChunkSizeBytes, diskGuid,
-        chunkKey, logKey, sysLogKey, mainKey, textMessage, isErasureEncodeUserLog, trimEntireDevice,
-        std::move(metadata), cfg->PlainDataChunks);
+        chunkKey, logKey, sysLogKey, mainKey, textMessage, options.IsErasureEncodeUserLog,
+        options.TrimEntireDevice, options.Metadata, cfg->PlainDataChunks,
+        options.ForceRandomizeMagic);
 }
 
 bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, TPDiskInfo &outInfo,
@@ -159,7 +159,9 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
             NPDisk::TReqId(NPDisk::TReqId::ReadFormatInfo, 0), {});
 
     for (auto& key : mainKey.Keys) {
-        NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted
+        // Format record is always encrypted (except some tests, which don't rely on this func).
+        // Or encryption is disabled via macros, so that cypher does nothing.
+        NPDisk::TPDiskStreamCypher cypher(true);
         cypher.SetKey(key);
         bool isOk = false;
         alignas(16) NPDisk::TDiskFormat format;

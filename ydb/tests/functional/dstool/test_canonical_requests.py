@@ -5,6 +5,7 @@ import logging
 import pytest
 import yatest
 import time
+import yaml
 
 from io import StringIO
 from unittest.mock import patch
@@ -18,7 +19,10 @@ from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
 from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
 
 logger = logging.getLogger(__name__)
 C_4GB = 4 * 2**30
@@ -93,6 +97,7 @@ class TestBase:
         assert len(base_config.PDisk) == 2 * NODES_COUNT
         for pdisk in base_config.PDisk:
             assert pdisk.PDiskMetrics.HasField('UpdateTimestamp')
+        return base_config
 
     def check_vdisks_state_ok(self):
         base_config = self.cluster.client.query_base_config().BaseConfig
@@ -212,3 +217,68 @@ class Test(TestBase):
             self._trace('cluster', 'set', '--pdisk-space-color-border', 'UNKNOWN'),
             self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
         ]
+
+    def test_infer_pdisk_slot_count(self):
+        dynconfig_client = DynConfigClient(self.host, self.grpc_port)
+
+        def generate_config():
+            generate_config_response = dynconfig_client.fetch_startup_config()
+            logger.info(f"{generate_config_response=}")
+            assert generate_config_response.operation.status == StatusIds.SUCCESS
+
+            result = dynconfig.FetchStartupConfigResult()
+            generate_config_response.operation.result.Unpack(result)
+
+            return {
+                "metadata": {
+                    "kind": "MainConfig",
+                    "version": 0,
+                    "cluster": "",
+                },
+                "config": yaml.safe_load(result.config)
+            }
+
+        def replace_config(full_config):
+            replace_config_response = dynconfig_client.replace_config(yaml.dump(full_config))
+            logger.info(f"{replace_config_response=}")
+            assert replace_config_response.operation.status == StatusIds.SUCCESS
+
+        full_config = generate_config()
+        full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"] = {
+            "rot": {
+                "prefer_inferred_settings_over_explicit": True,
+                "unit_size": C_4GB,
+                "max_slots": 12,
+            }
+        }
+        replace_config(full_config)
+
+        def check_pdisk_metrics_updated():
+            base_config = self.check_pdisk_metrics_collected()
+            for pdisk in base_config.PDisk:
+                assert pdisk.PDiskMetrics.SlotSizeInUnits > 0
+        retry_assertions(check_pdisk_metrics_updated)
+
+        pdisk_columns = [
+            'NodeId:PDiskId',
+            'Path',
+            'TotalSize',
+            'ExpectedSlotCount',
+            'SlotSizeInUnits',
+        ]
+
+        trace1 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
+
+        del full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"]
+        full_config["metadata"]["version"] = 1
+        replace_config(full_config)
+
+        def check_pdisk_metrics_updated():
+            base_config = self.check_pdisk_metrics_collected()
+            for pdisk in base_config.PDisk:
+                assert pdisk.PDiskMetrics.SlotSizeInUnits == 0
+        retry_assertions(check_pdisk_metrics_updated)
+
+        trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
+
+        return [trace1, trace2]

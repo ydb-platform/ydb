@@ -22,6 +22,9 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override {
         return RecordsCount;
     }
+    virtual ui64 DoGetDeprecatedPortionId() const override {
+        return Portion->GetPortionId();
+    }
 
 public:
     void SetIsStartedByCursor() {

@@ -1,10 +1,48 @@
 #pragma once
 
-#include <util/generic/hash_set.h>
-#include <util/generic/string.h>
+#include "linter.h"
 
-namespace NYql::NFastCheck {
+#include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/ast/yql_errors.h>
+
+#include <google/protobuf/arena.h>
+#include <util/generic/maybe.h>
+
+namespace NYql {
+namespace NFastCheck {
+
+struct TParsedSettingsCache {
+    bool Success;
+    NSQLTranslation::TParsedSettings Settings;
+    TIssues Issues;
+};
 
 THashSet<TString> TranslationFlags();
 
-} // namespace NYql::NFastCheck
+bool BuildSqlTranslationSettings(
+    const TChecksRequest& request,
+    google::protobuf::Arena* arena,
+    NSQLTranslation::TTranslationSettings& settings,
+    TIssues& issues,
+    TMaybe<TParsedSettingsCache>& cache);
+
+void BuildPgTranslationSettings(
+    const TChecksRequest& request,
+    google::protobuf::Arena* arena,
+    NSQLTranslation::TTranslationSettings& settings);
+
+bool BuildSqlParsingSettings(
+    const TChecksRequest& request,
+    google::protobuf::Arena* arena,
+    NSQLTranslation::TTranslationSettings& settings,
+    TIssues& issues,
+    TMaybe<TParsedSettingsCache>& cache);
+
+bool BuildLexerSettings(
+    const TChecksRequest& request,
+    NSQLTranslation::TTranslationSettings& settings,
+    TIssues& issues,
+    TMaybe<TParsedSettingsCache>& cache);
+
+} // namespace NFastCheck
+} // namespace NYql

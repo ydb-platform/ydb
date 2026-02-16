@@ -12,7 +12,7 @@ namespace NAST {
 template <typename TLexer>
 class TLexerTokensCollector4 {
 public:
-    TLexerTokensCollector4(TStringBuf data, const TString& queryName = "query")
+    explicit TLexerTokensCollector4(TStringBuf data, const TString& queryName = "query")
         : QueryName(queryName)
         , InputStream(data)
         , Lexer(&InputStream)

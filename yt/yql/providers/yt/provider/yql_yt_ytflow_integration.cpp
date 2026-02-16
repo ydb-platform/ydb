@@ -212,6 +212,19 @@ public:
         return maybeWriteTable.Cast().Content().Ptr();
     }
 
+    TExprNode::TPtr UpdateWriteContent(
+        const TExprNode::TPtr& write,
+        const TExprNode::TPtr& content,
+        TExprContext& ctx
+    ) override {
+        auto maybeWriteTable = TMaybeNode<TYtWriteTable>(write);
+        YQL_ENSURE(maybeWriteTable);
+        return Build<TYtWriteTable>(ctx, write->Pos())
+            .InitFrom(maybeWriteTable.Cast())
+            .Content(content)
+            .Done().Ptr();
+    }
+
     void FillSourceSettings(
         const TExprNode& source, ::google::protobuf::Any& settings, TExprContext& /*ctx*/
     ) override {

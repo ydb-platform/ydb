@@ -6,6 +6,7 @@
 #include <ydb/core/ydb_convert/external_data_source_description.h>
 #include <ydb/core/ydb_convert/external_table_description.h>
 #include <ydb/core/ydb_convert/replication_description.h>
+#include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
@@ -73,8 +74,6 @@ bool BuildTopicScheme(
 
     Ydb::Topic::CreateTopicRequest request;
     NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
-
-    request.clear_attributes();
 
     return google::protobuf::TextFormat::PrintToString(request, &scheme);
 }
@@ -159,6 +158,7 @@ bool BuildExternalDataSourceScheme(
 bool BuildExternalTableScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,
+    const TString& database,
     TString& error)
 {
     const auto& pathDesc = describeResult.GetPathDescription();
@@ -175,8 +175,27 @@ bool BuildExternalTableScheme(
         return false;
     }
 
-    scheme = NYdb::NDump::BuildCreateExternalTableQuery(externalTableDescResult);
+    scheme = NYdb::NDump::BuildCreateExternalTableQuery(database, database, externalTableDescResult);
 
+    return true;
+}
+
+bool BuildSysViewScheme(
+    const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
+    TString& scheme,
+    TString& error)
+{
+    Ydb::Table::DescribeSystemViewResult describeSysViewResult;
+    Ydb::StatusIds_StatusCode status;
+
+    const auto& pathDescription = describeResult.GetPathDescription();
+    if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
+        return false;
+    }
+
+    describeSysViewResult.clear_self();
+
+    google::protobuf::TextFormat::PrintToString(describeSysViewResult, &scheme);
     return true;
 }
 
@@ -200,7 +219,9 @@ bool BuildScheme(
         case NKikimrSchemeOp::EPathTypeExternalDataSource:
             return BuildExternalDataSourceScheme(describeResult, scheme, databaseRoot, error);
         case NKikimrSchemeOp::EPathTypeExternalTable:
-            return BuildExternalTableScheme(describeResult, scheme, error);
+            return BuildExternalTableScheme(describeResult, scheme, databaseRoot, error);
+        case NKikimrSchemeOp::EPathTypeSysView:
+            return BuildSysViewScheme(describeResult, scheme, error);
         default:
             error = TStringBuilder() << "unsupported path type: " << pathType;
             return false;

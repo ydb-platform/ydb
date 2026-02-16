@@ -181,7 +181,7 @@ def with_attribute(*args: tuple[str, str], **attr_dict) -> ParseAction:
     def pa(s: str, l: int, tokens: ParseResults) -> None:
         for attrName, attrValue in attrs_list:
             if attrName not in tokens:
-                raise ParseException(s, l, "no matching attribute " + attrName)
+                raise ParseException(s, l, f"no matching attribute {attrName!r}")
             if attrValue != with_attribute.ANY_VALUE and tokens[attrName] != attrValue:  # type: ignore [attr-defined]
                 raise ParseException(
                     s,

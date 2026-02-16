@@ -34,7 +34,7 @@ using namespace NKikimr::NMiniKQL;
 
 class TPureDataSinkExecTransformer: public TExecTransformerBase {
 public:
-    TPureDataSinkExecTransformer(const TPureState::TPtr state)
+    explicit TPureDataSinkExecTransformer(const TPureState::TPtr state)
         : State_(state)
     {
         AddHandler({TStringBuf("Result")}, RequireNone(), Hndl(&TPureDataSinkExecTransformer::HandleRes));
@@ -228,7 +228,7 @@ THolder<TExecTransformerBase> CreatePureDataSourceExecTransformer(const TPureSta
 
 class TPureProvider: public TDataProviderBase {
 public:
-    TPureProvider(const TPureState::TPtr& state)
+    explicit TPureProvider(const TPureState::TPtr& state)
         : State_(state)
         , ExecTransformer_([this]() { return CreatePureDataSourceExecTransformer(State_); })
     {

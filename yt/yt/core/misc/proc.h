@@ -38,10 +38,10 @@ public:
     ~TFileDescriptorGuard();
 
     TFileDescriptorGuard(const TFileDescriptorGuard&) = delete;
-    TFileDescriptorGuard& operator = (const TFileDescriptorGuard&) = delete;
+    TFileDescriptorGuard& operator=(const TFileDescriptorGuard&) = delete;
 
     TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept;
-    TFileDescriptorGuard& operator = (TFileDescriptorGuard&& other) noexcept;
+    TFileDescriptorGuard& operator=(TFileDescriptorGuard&& other) noexcept;
 
     TFileDescriptor Get() const noexcept;
 

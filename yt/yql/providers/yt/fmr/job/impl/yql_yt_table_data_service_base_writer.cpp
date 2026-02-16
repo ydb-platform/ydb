@@ -69,7 +69,7 @@ NThreading::TFuture<void> TFmrTableDataServiceBaseWriter::PutYsonByColumnGroups(
         State_->CurInflightChunks += splittedYsonByColumnGroups.size(); // Adding number of keys which we want to put to TableDataService to inflight
     }
 
-    TVector<NThreading::TFuture<void>> result;
+    TVector<NThreading::TFuture<bool>> result;
     result.reserve(splittedYsonByColumnGroups.size());
     for (auto& [groupName, columnGroupYsonContent]: splittedYsonByColumnGroups) {
         auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);

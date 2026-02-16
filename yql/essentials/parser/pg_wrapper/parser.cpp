@@ -188,12 +188,13 @@ static struct TGlobalInit {
     }
 } GlobalInit;
 
-void PGParse(const TString& input, IPGParseEvents& events) {
+void PGParse(const TString& input, TPGParseResult& result) {
     pg_thread_init();
 
     PgQueryInternalParsetreeAndError parsetree_and_error;
 
-    TArenaMemoryContext arena;
+    auto arena = MakeHolder<TArenaMemoryContext>();
+
     auto prevErrorContext = ErrorContext;
     ErrorContext = CurrentMemoryContext;
 
@@ -229,10 +230,49 @@ void PGParse(const TString& input, IPGParseEvents& events) {
             }
         }
 
-        events.OnError(TIssue(position, "ERROR:  " + TString(parsetree_and_error.error->message) + "\n"));
+        result = TPGParseResult(TIssue(position, "ERROR:  " + TString(parsetree_and_error.error->message) + "\n"));
     } else {
-        events.OnResult(parsetree_and_error.tree);
+        arena->Release(); // detach from TLS
+        result = TPGParseResult(parsetree_and_error.tree, std::move(arena));
     }
+}
+
+TPGParseResult::~TPGParseResult()
+{
+    auto astData = std::get_if<TAstData>(&Data_);
+    if (astData && astData->second) {
+        // need to attach TLS before destruction
+        astData->second->Acquire();
+    }
+}
+
+TPGParseResult::TPGParseResult(TIssue&& issue)
+    : Data_(std::move(issue))
+{}
+
+TPGParseResult::TPGParseResult(const List* raw, THolder<TArenaMemoryContext>&& arena)
+    : Data_(TAstData(raw, std::move(arena)))
+{
+}
+
+void TPGParseResult::Visit(IPGParseEvents& events) const {
+    if (auto astData = std::get_if<TAstData>(&Data_)) {
+        Y_ENSURE(astData->second);
+        astData->second->Acquire();
+        Y_DEFER {
+            astData->second->Release();
+        };
+
+        events.OnResult(astData->first);
+    } else {
+        events.OnError(std::get<TIssue>(Data_));
+    }
+}
+
+void PGParse(const TString& input, IPGParseEvents& events) {
+    TPGParseResult result;
+    PGParse(input, result);
+    result.Visit(events);
 }
 
 TString PrintPGTree(const List* raw) {

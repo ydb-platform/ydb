@@ -85,6 +85,13 @@ class TKafkaTestClient {
                                                   ui32 baseSequence = 0,
                                                   const std::optional<TProducerInstanceId>& producerInstanceId = {},
                                                   const std::optional<TString>& transactionalId = {});
+        void ProduceAsync(const TTopicPartition& topicPartition,
+                            const std::vector<std::pair<TString, TString>>& keyValueMessages,
+                            ui32 baseSequence,
+                            const std::optional<TProducerInstanceId>& producerInstanceId,
+                            const std::optional<TString>& transactionalId);
+
+        TMessagePtr<TProduceResponseData> ReadLastResult(i32 customCorrelationId = -1);
 
         TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic);
 
@@ -150,7 +157,7 @@ class TKafkaTestClient {
 
         void ScramAuthenticateToKafka(const TString& userName, const TString& userPassword);
 
-        TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version);
+        TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version,  i32 customCorrelationId = -1);
 
         template <std::derived_from<TApiMessage> T>
         TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent = false);

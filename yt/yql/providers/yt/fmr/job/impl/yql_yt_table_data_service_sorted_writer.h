@@ -19,7 +19,7 @@ namespace NYql::NFmr {
 struct TSortingColumns {
     TVector<TString> Columns;
     TVector<ESortOrder> SortOrders;
-    bool operator == (const TSortingColumns&) const = default;
+    bool operator==(const TSortingColumns&) const = default;
 };
 
 class TFmrTableDataServiceSortedWriter: public TFmrTableDataServiceBaseWriter {

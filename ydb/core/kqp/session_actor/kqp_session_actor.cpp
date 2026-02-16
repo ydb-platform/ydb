@@ -593,6 +593,14 @@ public:
                     return false;
                 }
             }
+
+            for (const auto& offsetInRequest : operations.GetOffsetsInTxn()) {
+                auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), offsetInRequest.GetTopicPath()));
+
+                if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, offsetInRequest.GetPartitionId())) {
+                    return false;
+                }
+            }
         }
 
         return true;
@@ -841,7 +849,7 @@ public:
             }
 
             if (!txs.empty() && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
-                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
+                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {}, nullptr);
                 tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
                 tasksGraph.GetMeta().UserRequestContext = QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId);
                 tasksGraph.GetMeta().SecureParams = std::move(secureParams);
@@ -877,10 +885,8 @@ public:
                             ReplyResolveError(*resolveEv->Get());
                             co_return;
                         }
-                        tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
-                        for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
-                            tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
-                        }
+
+                        tasksGraph.ResolveShards(std::move(resolveEv->Get()->ShardsToNodes));
                     }
                 }
 
@@ -3182,6 +3188,7 @@ public:
             return;
         } else {
             CleanupCtx.reset();
+            ExecuterId = TActorId{};
             bool doNotKeepSession = QueryState && !QueryState->KeepSession;
             QueryState.reset();
             if (doNotKeepSession) {
@@ -3191,7 +3198,6 @@ public:
                 Become(&TKqpSessionActor::ReadyState);
             }
         }
-        ExecuterId = TActorId{};
     }
 
     template<class T>

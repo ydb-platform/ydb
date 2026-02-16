@@ -23,6 +23,8 @@
 #include <util/string/strip.h>
 
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
+#include <yql/essentials/types/binary_json/format.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 
 namespace NKikimr::NKqp {
@@ -261,6 +263,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
     }
 
+#ifdef NDEBUG
     TString scriptUtf8JsonWriting= R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
@@ -298,6 +301,91 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             arrowString.data());
         Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
     }
+
+    TString scriptUncommonUtf8JsonWriting= R"(
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`$$true|false$$`,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0$$`,
+                    `SPARSED_DETECTOR_KFF`=`$$0|10$$`, `MEM_LIMIT_CHUNK`=`$$0|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5|1$$`)
+        ------
+        %s
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(ZeroInJsonKey, scriptUncommonUtf8JsonWriting) {
+        std::string row("{\"ho1111\": 1}");
+        auto res = NBinaryJson::SerializeToBinaryJson(row, false);
+        if (std::holds_alternative<TString>(res)) {
+            UNIT_ASSERT_C(false, arrow::Status::SerializationError("Cannot serialize json (", std::get<TString>(res), "): ", row).message());
+        }
+
+        std::string Col2Val(std::get<NBinaryJson::TBinaryJson>(res).Data(), std::get<NBinaryJson::TBinaryJson>(res).Size());
+        // 0x00 is invalid JSON character;
+        // Change '1' in place where we have ho1111 sequence: 0x68 0x6F 0x31 0x31 0x31 0x31 -> 0x68 0x6F 0x00 0x00 0x00 0x00
+        auto pos = Col2Val.find("ho1111");
+        UNIT_ASSERT(pos != std::string::npos && pos < Col2Val.size() - 6);
+        pos += 2;
+        Col2Val[pos++] = 0x00;
+        Col2Val[pos++] = 0x00;
+        Col2Val[pos++] = 0x00;
+        Col2Val[pos++] = 0x00;
+
+        NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
+            { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
+        updates.AddRow().Add<int64_t>(1).Add(std::string(Col2Val.data(), Col2Val.size()));
+        auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
+        TString injection = Sprintf(R"(
+            BULK_UPSERT:
+                /Root/ColumnTable
+                %s
+                EXPECT_STATUS:BAD_REQUEST
+        )",
+            arrowString.data());
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
+    }
+
+    Y_UNIT_TEST_STRING_VARIATOR(BadUtf8SymbolInJsonKey, scriptUncommonUtf8JsonWriting) {
+        std::string row("{\"ho1111\": 1}");
+        auto res = NBinaryJson::SerializeToBinaryJson(row, false);
+        if (std::holds_alternative<TString>(res)) {
+            UNIT_ASSERT_C(false, arrow::Status::SerializationError("Cannot serialize json (", std::get<TString>(res), "): ", row).message());
+        }
+
+        std::string Col2Val(std::get<NBinaryJson::TBinaryJson>(res).Data(), std::get<NBinaryJson::TBinaryJson>(res).Size());
+        // 0xF0 0x80 0x80 0x80 is invalid UTF8 sequence;
+        // Change '1' in place where we have ho1111 sequence: 0x68 0x6F 0x31 0x31 0x31 0x31 -> 0x68 0x6F 0xF0 0x80 0x80 0x80
+        auto pos = Col2Val.find("ho1111");
+        UNIT_ASSERT(pos != std::string::npos && pos < Col2Val.size() - 6);
+        pos += 2;
+        Col2Val[pos++] = 0xF0;
+        Col2Val[pos++] = 0x80;
+        Col2Val[pos++] = 0x80;
+        Col2Val[pos++] = 0x80;
+
+        NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
+            { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
+        updates.AddRow().Add<int64_t>(1).Add(std::string(Col2Val.data(), Col2Val.size()));
+        auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
+        TString injection = Sprintf(R"(
+            BULK_UPSERT:
+                /Root/ColumnTable
+                %s
+                EXPECT_STATUS:BAD_REQUEST
+        )",
+            arrowString.data());
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
+    }
+#endif
 
 // TODO: fix if top-level arrays are needed
 #if 0
@@ -1076,7 +1164,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
 
-        // ok with first_level_only = false
+        // ok
         {
             auto status = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
@@ -1227,7 +1315,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
 
-        // TODO: fix other symbols
         {
             auto result = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(

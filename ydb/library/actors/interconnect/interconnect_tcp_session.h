@@ -453,6 +453,7 @@ namespace NActors {
 
         void Init();
         void CloseInputSession();
+        bool IsRdmaInUse();
 
         static TEvTerminate* NewEvTerminate(TDisconnectReason reason) {
             return new TEvTerminate(std::move(reason));

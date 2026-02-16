@@ -220,6 +220,10 @@ public:
         return true;
     }
 
+    bool IsEarlyFinished() const override {
+        return false;
+    }
+
     NKikimr::NMiniKQL::TType* GetOutputType() const override {
         return OutputType;
     }

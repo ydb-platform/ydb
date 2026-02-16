@@ -674,6 +674,10 @@ public:
         const TMasterExitReadOnlyOptions& options),
         (options))
 
+    DELEGATE_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (
+        const TResetDynamicallyPropagatedMasterCellsOptions& options),
+        (options))
+
     DELEGATE_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (
         NHydra::TCellId cellId,
         const TDiscombobulateNonvotingPeersOptions& options),

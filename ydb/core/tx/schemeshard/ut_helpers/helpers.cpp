@@ -1970,7 +1970,9 @@ namespace NSchemeShardUT_Private {
                 }
             }
         } break;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+        } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
         } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));

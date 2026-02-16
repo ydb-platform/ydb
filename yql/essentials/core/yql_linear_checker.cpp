@@ -56,7 +56,7 @@ public:
     // length = 1 for Linear, N for Struct/Tuple
     using TUsage = TStackVec<TMaybe<TPositionHandle>, 1>;
 
-    TUsageVisitor(TExprContext& ctx)
+    explicit TUsageVisitor(TExprContext& ctx)
         : Ctx_(ctx)
     {}
 

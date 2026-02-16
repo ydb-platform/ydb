@@ -146,7 +146,8 @@ public:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult, TActorBase::Handle);
-        default: TBase::StateWork(ev);
+        default:
+            TBase::StateWork(ev);
         }
     }
 
@@ -267,7 +268,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             Context->UserToken,
             topic.Name.value(),
             Context->DatabasePath,
-            topic.NumPartitions,
+            topic.NumPartitions == -1 ? NKikimr::AppData(ctx)->KafkaProxyConfig.GetTopicCreationDefaultPartitions() : topic.NumPartitions,
             convertedRetentions.Ms,
             convertedRetentions.Bytes,
             cleanupPolicy,

@@ -1432,7 +1432,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::TInsertCookie(const TKe
 { }
 
 template <class TKey, class TValue, class THash>
-TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::TInsertCookie(TInsertCookie&& other)
+TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::TInsertCookie(TInsertCookie&& other) noexcept
     : Key_(std::move(other.Key_))
     , Cache_(std::move(other.Cache_))
     , ValueFuture_(std::move(other.ValueFuture_))
@@ -1449,7 +1449,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::~TInsertCookie()
 
 template <class TKey, class TValue, class THash>
 typename TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie&
-TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::operator = (TInsertCookie&& other)
+TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::operator=(TInsertCookie&& other)
 {
     if (this != &other) {
         Abort();

@@ -12,7 +12,7 @@ using namespace NNodes;
 
 class TOptimizeTransformerBase::TIgnoreOptimizationContext: public IOptimizationContext {
 public:
-    TIgnoreOptimizationContext(TOptimizeTransformerBase::TGetParents getParents)
+    explicit TIgnoreOptimizationContext(TOptimizeTransformerBase::TGetParents getParents)
         : GetParents_(std::move(getParents))
     {
     }
@@ -30,7 +30,7 @@ private:
 
 class TOptimizeTransformerBase::TRemapOptimizationContext: public IOptimizationContext {
 public:
-    TRemapOptimizationContext(TNodeOnNodeOwnedMap& remaps)
+    explicit TRemapOptimizationContext(TNodeOnNodeOwnedMap& remaps)
         : Remaps_(remaps)
     {
     }

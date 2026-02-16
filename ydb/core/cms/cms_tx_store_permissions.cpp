@@ -8,11 +8,13 @@ namespace NKikimr::NCms {
 class TCms::TTxStorePermissions : public TTransactionBase<TCms> {
 public:
     TTxStorePermissions(TCms *self, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-            const TString &owner, TAutoPtr<TRequestInfo> scheduled, const TMaybe<TString> &maintenanceTaskId)
+            const TString &owner, const TString &requestId, i32 priority, TAutoPtr<TRequestInfo> scheduled, const TMaybe<TString> &maintenanceTaskId)
         : TBase(self)
         , Request(std::move(req))
         , Response(std::move(resp))
         , Owner(owner)
+        , RequestId(requestId)
+        , Priority(priority)
         , Scheduled(scheduled)
         , MaintenanceTaskId(maintenanceTaskId)
         , NextPermissionId(self->State->NextPermissionId)
@@ -66,8 +68,6 @@ public:
 
         for (const auto &permission : rec.GetPermissions()) {
             const auto &id = permission.GetId();
-            const auto &requestId = Scheduled ? Scheduled->RequestId : "";
-            i32 priority = Scheduled ? Scheduled->Priority : 0;
             ui64 deadline = permission.GetDeadline();
             TString actionStr;
             google::protobuf::TextFormat::PrintToString(permission.GetAction(), &actionStr);
@@ -76,8 +76,8 @@ public:
             row.Update(NIceDb::TUpdate<Schema::Permission::Owner>(Owner),
                        NIceDb::TUpdate<Schema::Permission::Action>(actionStr),
                        NIceDb::TUpdate<Schema::Permission::Deadline>(deadline),
-                       NIceDb::TUpdate<Schema::Permission::RequestID>(requestId),
-                       NIceDb::TUpdate<Schema::Permission::Priority>(priority));
+                       NIceDb::TUpdate<Schema::Permission::RequestID>(RequestId),
+                       NIceDb::TUpdate<Schema::Permission::Priority>(Priority));
 
             if (MaintenanceTaskId) {
                 Y_ABORT_UNLESS(Self->State->MaintenanceTasks.contains(*MaintenanceTaskId));
@@ -149,6 +149,8 @@ private:
     THolder<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
     TString Owner;
+    TString RequestId;
+    i32 Priority;
     TAutoPtr<TRequestInfo> Scheduled;
     const TMaybe<TString> MaintenanceTaskId;
     ui64 NextPermissionId;
@@ -157,9 +159,10 @@ private:
 };
 
 ITransaction *TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-        const TString &owner, TAutoPtr<TRequestInfo> scheduled, const TMaybe<TString> &maintenanceTaskId)
+        const TString &owner, const TString &requestId, i32 priority, TAutoPtr<TRequestInfo> scheduled,
+        const TMaybe<TString> &maintenanceTaskId)
 {
-    return new TTxStorePermissions(this, std::move(req), std::move(resp), owner, std::move(scheduled), maintenanceTaskId);
+    return new TTxStorePermissions(this, std::move(req), std::move(resp), owner, requestId, priority, std::move(scheduled), maintenanceTaskId);
 }
 
 } // namespace NKikimr::NCms

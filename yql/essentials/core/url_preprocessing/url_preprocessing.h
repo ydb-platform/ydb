@@ -20,7 +20,7 @@ class TUrlPreprocessing: public IUrlPreprocessing {
 public:
     using TPtr = TIntrusivePtr<TUrlPreprocessing>;
 
-    TUrlPreprocessing(const TGatewaysConfig& cfg) {
+    explicit TUrlPreprocessing(const TGatewaysConfig& cfg) {
         Configure(false, cfg);
     }
     TUrlPreprocessing() = default;

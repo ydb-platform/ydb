@@ -11,7 +11,7 @@ namespace NUdf {
 
 class TProtobufValue: public TBoxedValue {
 public:
-    TProtobufValue(const TProtoInfo& info);
+    explicit TProtobufValue(const TProtoInfo& info);
     ~TProtobufValue() override;
 
     TUnboxedValue Run(
@@ -26,7 +26,7 @@ protected:
 
 class TProtobufSerialize: public TBoxedValue {
 public:
-    TProtobufSerialize(const TProtoInfo& info);
+    explicit TProtobufSerialize(const TProtoInfo& info);
     ~TProtobufSerialize() override;
 
     TUnboxedValue Run(

@@ -1546,7 +1546,7 @@ protected:
     }
 
     struct TExtendOverSameMapGroupLess {
-        bool operator() (const std::pair<bool, TCoLambda>& left, const std::pair<bool, TCoLambda>& right) const {
+        bool operator()(const std::pair<bool, TCoLambda>& left, const std::pair<bool, TCoLambda>& right) const {
             return std::make_pair(left.first, left.second.Ref().UniqueId()) < std::make_pair(right.first, right.second.Ref().UniqueId());
         }
     };

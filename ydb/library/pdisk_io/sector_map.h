@@ -127,11 +127,12 @@ public:
 
         Y_ABORT_UNLESS((ui32)diskMode < DM_COUNT);
         EDeviceType deviceType = DiskModeToDeviceType(diskMode);
-        DiskModeParams.SeekSleepMicroSeconds = (DevicePerformance.at(deviceType).SeekTimeNs + 1000) / 1000 - 1;
-        DiskModeParams.FirstSectorReadRate = DevicePerformance.at(deviceType).FirstSectorReadBytesPerSec;
-        DiskModeParams.LastSectorReadRate = DevicePerformance.at(deviceType).LastSectorReadBytesPerSec;
-        DiskModeParams.FirstSectorWriteRate = DevicePerformance.at(deviceType).FirstSectorWriteBytesPerSec;
-        DiskModeParams.LastSectorWriteRate = DevicePerformance.at(deviceType).LastSectorWriteBytesPerSec;
+        const auto &devicePerformance = TDevicePerformanceParams::Get(deviceType);
+        DiskModeParams.SeekSleepMicroSeconds = (devicePerformance.SeekTimeNs + 1000) / 1000 - 1;
+        DiskModeParams.FirstSectorReadRate = devicePerformance.FirstSectorReadBytesPerSec;
+        DiskModeParams.LastSectorReadRate = devicePerformance.LastSectorReadBytesPerSec;
+        DiskModeParams.FirstSectorWriteRate = devicePerformance.FirstSectorWriteBytesPerSec;
+        DiskModeParams.LastSectorWriteRate = devicePerformance.LastSectorWriteBytesPerSec;
 
         MaxSector = sectors - 1;
         MostRecentlyUsedSector = 0;
@@ -257,7 +258,7 @@ public:
                 Y_VERIFY_S(offset + 4096 <= DeviceSize, "It is not possible to shrink TSectorMap with data");
             }
         }
-        
+
         DeviceSize = size;
 
         InitSectorOperationThrottler();

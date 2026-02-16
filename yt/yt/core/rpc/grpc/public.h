@@ -45,8 +45,6 @@ extern const char* const ResponseCodecKey;
 // After adding a new metadata key, do not forget to add it in GetNativeMetadataKeys.
 const THashSet<TStringBuf>& GetNativeMetadataKeys();
 
-constexpr int GenericErrorStatusCode = 100;
-
 YT_DECLARE_CONFIGURABLE_SINGLETON(TDispatcherConfig);
 
 ////////////////////////////////////////////////////////////////////////////////

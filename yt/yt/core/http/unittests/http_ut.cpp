@@ -715,7 +715,7 @@ TEST_P(THttpServerTest, CertificateValidation)
     Server->Start();
 
     auto clientConfig = New<NHttps::TClientConfig>();
-    EXPECT_FALSE(clientConfig->AllowHTTP);
+    EXPECT_FALSE(clientConfig->AllowHttp);
     clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
     auto client = NHttps::CreateClient(clientConfig, Poller);
 
@@ -740,7 +740,7 @@ TEST_P(THttpServerTest, HttpInHttpsClient)
     Server->Start();
 
     auto clientConfig = New<NHttps::TClientConfig>();
-    clientConfig->AllowHTTP = true;
+    clientConfig->AllowHttp = true;
     auto httpsClient = NHttps::CreateClient(clientConfig, Poller);
 
     auto rsp = WaitFor(httpsClient->Get(TestUrl)).ValueOrThrow();

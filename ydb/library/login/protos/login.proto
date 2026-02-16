@@ -22,6 +22,8 @@ message ESaslAuthMech {
         Unknown = 0;
         Plain = 1;
         Scram = 2;
+        Simple = 3;
+        External = 4;
     }
 }
 

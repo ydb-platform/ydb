@@ -16,6 +16,7 @@ SRCS(
     job_statistics.cpp
     io.cpp
     operation.cpp
+    patchable_field.cpp
     protobuf_format.cpp
     serialize.cpp
     skiff_row.cpp

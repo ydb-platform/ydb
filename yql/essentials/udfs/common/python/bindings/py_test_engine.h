@@ -45,7 +45,7 @@ public:
         , Alloc_(__LOCATION__)
         , Env_(Alloc_)
         , TypeInfoHelper_(new TTypeInfoHelper)
-        , FunctionInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, {})
+        , FunctionInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, NYql::NUdf::TSourcePosition())
     {
         HolderFactory_ = MakeHolder<THolderFactory>(
             Alloc_.Ref(),

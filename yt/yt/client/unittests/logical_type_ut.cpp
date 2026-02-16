@@ -31,8 +31,6 @@ void ValidateComplexLogicalType(TLogicalTypePtr type)
 
 TEST(TLogicalTypeTest, TestCastToV1Type)
 {
-    using namespace NLogicalTypeShortcuts;
-
     EXPECT_EQ(
         CastToV1Type(Int64()),
         std::pair(ESimpleLogicalValueType::Int64, true));
@@ -786,8 +784,6 @@ TEST_P(TCombineLogicalMetatypeTests, TestValidateAny)
 
 TEST_P(TCombineLogicalMetatypeTests, TestTrivialDetag)
 {
-    using namespace NLogicalTypeShortcuts;
-
     const auto& [combineName, combineFunc] = GetParam();
     if (combineName == "tagged") {
         // Skip test for this combiner.
@@ -804,8 +800,6 @@ TEST_P(TCombineLogicalMetatypeTests, TestTrivialDetag)
 
 TEST_P(TCombineLogicalMetatypeTests, TestNonTrivialDetag)
 {
-    using namespace NLogicalTypeShortcuts;
-
     const auto& [combineName, combineFunc] = GetParam();
     if (combineName == "tagged") {
         // Skip test for this combiner.

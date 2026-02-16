@@ -113,22 +113,22 @@ private:
 };
 
 template <>
-TStringRef TSqlExists<EDataSlot::Json, false>::Name() {
+inline TStringRef TSqlExists<EDataSlot::Json, false>::Name() {
     return "SqlExists";
 }
 
 template <>
-TStringRef TSqlExists<EDataSlot::Json, true>::Name() {
+inline TStringRef TSqlExists<EDataSlot::Json, true>::Name() {
     return "SqlTryExists";
 }
 
 template <>
-TStringRef TSqlExists<EDataSlot::JsonDocument, false>::Name() {
+inline TStringRef TSqlExists<EDataSlot::JsonDocument, false>::Name() {
     return "JsonDocumentSqlExists";
 }
 
 template <>
-TStringRef TSqlExists<EDataSlot::JsonDocument, true>::Name() {
+inline TStringRef TSqlExists<EDataSlot::JsonDocument, true>::Name() {
     return "JsonDocumentSqlTryExists";
 }
 } // namespace NJson2Udf

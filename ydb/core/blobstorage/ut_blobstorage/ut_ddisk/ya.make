@@ -6,6 +6,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     SRCS(
         ddisk.cpp
+        persistent_buffer_space_allocator.cpp
     )
 
     PEERDIR(

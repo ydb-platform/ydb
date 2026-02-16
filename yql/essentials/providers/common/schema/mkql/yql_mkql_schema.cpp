@@ -30,7 +30,7 @@ class TRuntimeTypeSaver: public TSaver<TRuntimeTypeSaver<TSaver>> {
         NKikimr::NMiniKQL::TTypeInfoHelper TypeHelper;
         NKikimr::NUdf::TCallableTypeInspector CallableInspector;
 
-        TCallableAdaptor(const NKikimr::NMiniKQL::TCallableType* type)
+        explicit TCallableAdaptor(const NKikimr::NMiniKQL::TCallableType* type)
             : Type(type)
             , TypeHelper()
             , CallableInspector(TypeHelper, Type)
@@ -67,7 +67,7 @@ class TRuntimeTypeSaver: public TSaver<TRuntimeTypeSaver<TSaver>> {
     };
 
 public:
-    TRuntimeTypeSaver(typename TBase::TConsumer& consumer)
+    explicit TRuntimeTypeSaver(typename TBase::TConsumer& consumer)
         : TBase(consumer, false)
     {
     }

@@ -58,7 +58,7 @@ class TInputBuf {
     friend void InputBufSkipManySlowThunk(TInputBuf& in, size_t count);
 
 public:
-    TInputBuf(NKikimr::NMiniKQL::TSamplingStatTimer* readTimer)
+    explicit TInputBuf(NKikimr::NMiniKQL::TSamplingStatTimer* readTimer)
         : ReadTimer_(readTimer)
     {
     }

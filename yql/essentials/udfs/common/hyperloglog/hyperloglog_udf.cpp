@@ -134,7 +134,7 @@ using THyperLogLogResource = TBoxedResource<THybridHyperLogLog, HyperLogLogResou
 
 class THyperLogLogCreate: public TBoxedValue {
 public:
-    THyperLogLogCreate(TSourcePosition pos)
+    explicit THyperLogLogCreate(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -181,7 +181,7 @@ private:
 
 class THyperLogLogAddValue: public TBoxedValue {
 public:
-    THyperLogLogAddValue(TSourcePosition pos)
+    explicit THyperLogLogAddValue(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -230,7 +230,7 @@ private:
 
 class THyperLogLogSerialize: public TBoxedValue {
 public:
-    THyperLogLogSerialize(TSourcePosition pos)
+    explicit THyperLogLogSerialize(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -278,7 +278,7 @@ private:
 
 class THyperLogLogDeserialize: public TBoxedValue {
 public:
-    THyperLogLogDeserialize(TSourcePosition pos)
+    explicit THyperLogLogDeserialize(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -327,7 +327,7 @@ private:
 
 class THyperLogLogMerge: public TBoxedValue {
 public:
-    THyperLogLogMerge(TSourcePosition pos)
+    explicit THyperLogLogMerge(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -376,7 +376,7 @@ private:
 
 class THyperLogLogGetResult: public TBoxedValue {
 public:
-    THyperLogLogGetResult(TSourcePosition pos)
+    explicit THyperLogLogGetResult(TSourcePosition pos)
         : Pos_(pos)
     {
     }

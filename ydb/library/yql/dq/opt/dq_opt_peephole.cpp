@@ -1007,6 +1007,21 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
+    // Wide row layout: [L base][L converted][R base][R converted]
+    const ui32 leftBase = itemTypeLeft->GetSize();
+    const ui32 leftConv = leftConvertedItems.size();
+    const ui32 rightBase = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
+        ? itemTypeRight->GetSize() : 0;
+    const ui32 rightConv = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
+        ? rightConvertedItems.size() : 0;
+    const ui32 totalColumns = leftBase + leftConv + rightBase + rightConv;
+
+    TVector<ui32> keep;
+    keep.reserve(fullColNames.size());
+    for (ui32 i = 0; i < leftBase; ++i) keep.push_back(i);
+    const ui32 rightStart = leftBase + leftConv;
+    for (ui32 i = 0; i < rightBase; ++i) keep.push_back(rightStart + i);
+
     // Structure the result using NarrowMap (complete processing)
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
@@ -1014,14 +1029,14 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
                 .Add(0, std::move(wideResult))
             .Seal()
             .Lambda(1)
-                .Params("output", fullColNames.size())
+                .Params("output", totalColumns)
                 .Callable("AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         ui32 i = 0U;
                         for (const auto& colName : fullColNames) {
                             parent.List(i)
                                 .Atom(0, colName)
-                                .Arg(1, "output", i)
+                                .Arg(1, "output", keep[i])
                             .Seal();
                             i++;
                         }

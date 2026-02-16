@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import (
@@ -45,7 +47,7 @@ class QuerySessionPool:
         self._driver = driver
         self._size = size
         self._should_stop = asyncio.Event()
-        self._queue = asyncio.Queue()
+        self._queue: asyncio.Queue[QuerySession] = asyncio.Queue()
         self._current_size = 0
         self._waiters = 0
         self._loop = asyncio.get_running_loop() if loop is None else loop
@@ -54,7 +56,7 @@ class QuerySessionPool:
     async def _create_new_session(self):
         session = QuerySession(self._driver, settings=self._query_client_settings)
         await session.create()
-        logger.debug(f"New session was created for pool. Session id: {session._state.session_id}")
+        logger.debug(f"New session was created for pool. Session id: {session.session_id}")
         return session
 
     async def acquire(self) -> QuerySession:
@@ -92,12 +94,12 @@ class QuerySessionPool:
             session = queue_get.result()
 
         if session is not None:
-            if session._state.attached:
-                logger.debug(f"Acquired active session from queue: {session._state.session_id}")
+            if session.is_active:
+                logger.debug(f"Acquired active session from queue: {session.session_id}")
                 return session
             else:
                 self._current_size -= 1
-                logger.debug(f"Acquired dead session from queue: {session._state.session_id}")
+                logger.debug(f"Acquired dead session from queue: {session.session_id}")
 
         logger.debug(f"Session pool is not large enough: {self._current_size} < {self._size}, will create new one.")
 
@@ -105,7 +107,8 @@ class QuerySessionPool:
         try:
             session = await self._create_new_session()
         except Exception as e:
-            logger.error("Failed to create new session")
+            # TODO: this exception could be retried via retrier, so no need to log error here. Probably we should retry this right in create_new_session method.
+            logger.warning("Failed to create new session")
             self._current_size -= 1
             raise e
 
@@ -115,7 +118,7 @@ class QuerySessionPool:
         """Release a session back to Session Pool."""
 
         self._queue.put_nowait(session)
-        logger.debug("Session returned to queue: %s", session._state.session_id)
+        logger.debug("Session returned to queue: %s", session.session_id)
 
     def checkout(self) -> "SimpleQuerySessionCheckoutAsync":
         """Return a Session context manager, that acquires session on enter and releases session on exit."""
@@ -251,6 +254,8 @@ class QuerySessionPool:
 
 
 class SimpleQuerySessionCheckoutAsync:
+    _session: Optional[QuerySession]
+
     def __init__(self, pool: QuerySessionPool):
         self._pool = pool
         self._session = None
@@ -259,5 +264,6 @@ class SimpleQuerySessionCheckoutAsync:
         self._session = await self._pool.acquire()
         return self._session
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._pool.release(self._session)
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._session is not None:
+            await self._pool.release(self._session)

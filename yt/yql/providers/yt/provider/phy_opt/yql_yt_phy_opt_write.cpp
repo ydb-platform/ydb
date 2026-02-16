@@ -867,8 +867,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FillToMaterialize(TExpr
         return node;
     }
 
+    const bool keepWorld =
+        State_->Configuration->KeepWorldDepForFillOp.Get().GetOrElse(DEFAULT_KEEP_WORLD_DEP_FOR_FILL_OP);
+
+    auto materializeWorld = keepWorld ? write.World().Ptr() : ctx.NewWorld(write.Pos());
+
     content = Build<TYtMaterialize>(ctx, content.Pos())
-        .World(ctx.NewWorld(write.Pos())/*TODO: write.World()*/)
+        .World(materializeWorld)
         .DataSink(write.DataSink())
         .Input(content)
         .Settings().Build()

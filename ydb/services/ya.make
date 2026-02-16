@@ -18,7 +18,6 @@ RECURSE(
     maintenance
     metadata
     monitoring
-    nbs
     persqueue_cluster_discovery
     persqueue_v1
     rate_limiter
@@ -30,3 +29,9 @@ RECURSE(
     ydb
     ymq
 )
+
+IF (OS_LINUX)
+    RECURSE(
+        nbs
+    )
+ENDIF()

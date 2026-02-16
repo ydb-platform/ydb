@@ -8,7 +8,6 @@ LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/python/frozenlist
-    contrib/python/typing-extensions
 )
 
 NO_LINT()

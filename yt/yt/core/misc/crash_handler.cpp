@@ -452,7 +452,7 @@ void DumpUndumpableBlocksInfo()
 {
     auto cutInfo = CutUndumpableRegionsFromCoredump();
 
-    {
+    if (cutInfo.MarkedSize > 0) {
         TFormatter formatter;
         formatter.AppendString("*** Marked memory regions of total size ");
         formatter.AppendNumber(cutInfo.MarkedSize / 1_MB);

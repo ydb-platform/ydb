@@ -350,6 +350,34 @@ public:
         }
     }
 
+    bool IsFinished() const override {
+        for (auto consumer : Consumers) {
+            if (!consumer->IsFinished()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool IsEarlyFinished() const override {
+        for (auto consumer : Consumers) {
+            if (!consumer->IsEarlyFinished()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << "TDqOutputMultiConsumer [";
+        for (auto consumer : Consumers) {
+            builder << consumer->DebugString();
+        }
+        builder << ']';
+        return builder;
+    }
+
 private:
     TVector<IDqOutputConsumer::TPtr> Consumers;
 };
@@ -387,6 +415,18 @@ public:
         Output->Flush();
     }
 
+    bool IsFinished() const override {
+        return Output->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Output->IsEarlyFinished();
+    }
+
+    TString DebugString() override {
+        return "TDqOutputMapConsumer";
+    }
+
 private:
     IDqOutput::TPtr Output;
 };
@@ -420,15 +460,22 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumer {";
+        builder << "TDqOutputHashPartitionConsumer " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -472,6 +519,14 @@ public:
         for (auto& output : Outputs) {
             output->Flush();
         }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
 private:
@@ -533,15 +588,22 @@ public:
     }
 private:
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs_) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerScalar {";
+        builder << "TDqOutputHashPartitionConsumerScalar " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs_) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -589,6 +651,14 @@ private:
         }
     }
 
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
+    }
+
     size_t GetHashPartitionIndex(const TUnboxedValue* values) {
         HashFunc.Start();
         for (size_t keyId = 0; keyId < KeyColumns_.size(); keyId++) {
@@ -630,7 +700,6 @@ public:
         , HashFunc(std::move(hashFunc))
     {
         TTypeInfoHelper helper;
-        YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
 
         TVector<const NMiniKQL::TType*> blockTypes;
         for (auto& columnType : OutputType_->GetElements()) {
@@ -656,15 +725,22 @@ public:
 
 private:
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs_) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerBlock {";
+        builder << "TDqOutputHashPartitionConsumerBlock " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs_) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -778,6 +854,14 @@ private:
         }
     }
 
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
+    }
+
     size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
         HashFunc.Start();
 
@@ -845,15 +929,22 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputBroadcastConsumer {";
+        builder << "TDqOutputBroadcastConsumer " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -901,6 +992,14 @@ public:
         for (auto& output : Outputs) {
             output->Flush();
         }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
 private:

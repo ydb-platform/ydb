@@ -75,7 +75,7 @@ function ydbd {
 
 function stop_ydbd {
     echo "Stop ydbd"
-    ps aux | grep "$YDBD_BIN server" | grep -v "grep" | awk '{print $2}' | while read line;do kill $line;done
+    ps aux | grep "$YDBD_BIN server" | grep -v "grep" | awk '{print $2}' | while read line;do kill -9 $line;done
 }
 
 function start_ydbd {
@@ -154,6 +154,32 @@ ConfigsConfig {
 
     echo "AllowNamedConfigs"
     ydbd -s grpc://localhost:$GRPC_PORT admin console config set --merge "$ALLOW_NAMED_CONFIGS_REQ"
+
+    echo "Set NBS_PARTITION log level to debug"
+    DDISK_LOG_CONFIG_REQ="
+    ConfigureRequest {
+        Actions {
+            AddConfigItem {
+                ConfigItem {
+                    Kind: 2
+                    Config {
+                        LogConfig {
+                            DefaultLevel: 3
+                            Entry {
+                                Component: \"NBS_PARTITION\"
+                                Level: 7
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    "
+    TEMP_FILE=$(mktemp)
+    echo "$DDISK_LOG_CONFIG_REQ" > "$TEMP_FILE"
+    ydbd -s grpc://localhost:$GRPC_PORT admin console execute --domain=Root --retry=10 "$TEMP_FILE"
+    rm -f "$TEMP_FILE"
 
     printf "\n\nYdbd monitoring is running at $MON_PORT, logs in $PERSISTENT_TMP_DIR/logs/ydbd.log\n"
 }

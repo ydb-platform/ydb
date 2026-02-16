@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(14.2.0)
+VERSION(14.3.1)
 
 LICENSE(MIT)
 
@@ -22,7 +22,6 @@ PY_SRCS(
     TOP_LEVEL
     rich/__init__.py
     rich/__main__.py
-    rich/_cell_widths.py
     rich/_emoji_codes.py
     rich/_emoji_replace.py
     rich/_export_format.py
@@ -38,6 +37,29 @@ PY_SRCS(
     rich/_spinners.py
     rich/_stack.py
     rich/_timer.py
+    rich/_unicode_data/__init__.py
+    rich/_unicode_data/_versions.py
+    rich/_unicode_data/unicode10-0-0.py
+    rich/_unicode_data/unicode11-0-0.py
+    rich/_unicode_data/unicode12-0-0.py
+    rich/_unicode_data/unicode12-1-0.py
+    rich/_unicode_data/unicode13-0-0.py
+    rich/_unicode_data/unicode14-0-0.py
+    rich/_unicode_data/unicode15-0-0.py
+    rich/_unicode_data/unicode15-1-0.py
+    rich/_unicode_data/unicode16-0-0.py
+    rich/_unicode_data/unicode17-0-0.py
+    rich/_unicode_data/unicode4-1-0.py
+    rich/_unicode_data/unicode5-0-0.py
+    rich/_unicode_data/unicode5-1-0.py
+    rich/_unicode_data/unicode5-2-0.py
+    rich/_unicode_data/unicode6-0-0.py
+    rich/_unicode_data/unicode6-1-0.py
+    rich/_unicode_data/unicode6-2-0.py
+    rich/_unicode_data/unicode6-3-0.py
+    rich/_unicode_data/unicode7-0-0.py
+    rich/_unicode_data/unicode8-0-0.py
+    rich/_unicode_data/unicode9-0-0.py
     rich/_win32_console.py
     rich/_windows.py
     rich/_windows_renderer.py

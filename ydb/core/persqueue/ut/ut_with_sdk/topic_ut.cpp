@@ -289,5 +289,105 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
         UNIT_ASSERT_C(false, "Session closed event not received");
     }
+
+    Y_UNIT_TEST(WithPartitionMaxInFlightBytesSetting) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TWriteSessionSettings writeSettings;
+        writeSettings.Path(TEST_TOPIC)
+            .ProducerId("producer-1")
+            .MessageGroupId("producer-1")
+            .Codec(ECodec::RAW);
+        auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+        auto writeMessages = [&](size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                writeSession->Write(TString(1000, 'a'));
+            }
+        };
+
+        writeMessages(10);
+        Sleep(TDuration::Seconds(5));
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0));
+        settings.ConsumerName(TEST_CONSUMER);
+        settings.PartitionMaxInFlightBytes(10000);
+        auto session = client.CreateReadSession(settings);
+
+        using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;
+        using TStartPartitionEvent = NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent;
+        using TStopPartitionEvent = NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent;
+        using TMessage = TDataEvent::TMessage;
+
+        TVector<TMessage> first10;
+        first10.reserve(10);
+
+        // 1) Read first 10 messages, without committing them
+        while (first10.size() < 10) {
+            UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(30)), TStringBuilder() << "No event received at iteration, first10 size: " << first10.size());
+            auto eventOpt = session->GetEvent(false);
+            auto& event = *eventOpt;
+
+            if (auto* start = std::get_if<TStartPartitionEvent>(&event)) {
+                start->Confirm();
+                continue;
+            }
+            if (auto* stop = std::get_if<TStopPartitionEvent>(&event)) {
+                stop->Confirm();
+                continue;
+            }
+
+            if (auto* data = std::get_if<TDataEvent>(&event)) {
+                for (auto& msg : data->GetMessages()) {
+                    if (first10.size() >= 10) {
+                        break;
+                    }
+                    first10.push_back(msg);
+                }
+            }
+        }
+
+        writeMessages(10);
+        Sleep(TDuration::Seconds(5));
+
+        // 2) Check that no new events appear due to the inflight bytes limit
+        {
+            auto future = session->WaitEvent();
+            UNIT_ASSERT(!future.Wait(TDuration::Seconds(3)));
+        }
+
+        // 3) Commit these 10 messages
+        for (auto& msg : first10) {
+            msg.Commit();
+        }
+
+        first10.clear();
+
+        // 4) Check that after commit new events start appearing again
+        while (first10.size() < 10) {
+            UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(30)), TStringBuilder() << "No event received at iteration, first10 size: " << first10.size());
+            auto eventOpt = session->GetEvent(false);
+            auto& event = *eventOpt;
+
+            if (auto* stop = std::get_if<TStopPartitionEvent>(&event)) {
+                stop->Confirm();
+                break;
+            }
+
+            if (auto* data = std::get_if<TDataEvent>(&event)) {
+                for (auto& msg : data->GetMessages()) {
+                    first10.push_back(msg);
+                }
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(10, first10.size());
+        UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
+    }
 }
 } // namespace NKikimr

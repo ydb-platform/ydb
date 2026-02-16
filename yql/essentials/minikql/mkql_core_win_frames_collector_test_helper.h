@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/minikql/mkql_core_win_frames_collector.h>
+#include <yql/essentials/minikql/mkql_core_window_frames_collector_params_deserializer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -36,10 +37,10 @@ template <typename TElement, ESortOrder SortOrder, typename TRangeElement = TEle
 struct TTestCase {
     // Input interval bounds. Requires two: left and right.
     TVector<TInputRowWindowFrame> RowIntervals;
-    TVector<TInputRangeWindowFrame<TRangeElement>> RangeIntervals;
+    TVector<TInputRangeWindowFrame<TRangeVariant>> RangeIntervals;
 
     // Incremental bounds - for tracking only right boundary.
-    TVector<TInputRange<TRangeElement>> RangeIncrementals;
+    TVector<TInputRange<TRangeVariant>> RangeIncrementals;
     TVector<TInputRow> RowIncrementals;
 
     // Element getter function - by default returns element as-is (identity) wrapped in TMaybe.
@@ -91,20 +92,23 @@ TString FormatQueueContent(const TSafeCircularBuffer<TElement>& queue) {
 // Helper function to run a single test case.
 template <typename TElement, ESortOrder SortOrder, typename TRangeElement = TElement>
 void RunTestCase(const TTestCase<TElement, SortOrder, TRangeElement>& testCase) {
-    // Setup bounds.
-    TCoreWinFrameCollectorBounds<TRangeElement> bounds(/*dedup=*/false);
+    // Setup variant bounds first.
+    TVariantBounds variantBounds;
     for (const auto& interval : testCase.RowIntervals) {
-        bounds.AddRow(interval);
+        variantBounds.AddRow(interval);
     }
     for (const auto& interval : testCase.RangeIntervals) {
-        bounds.AddRange(interval);
+        variantBounds.AddRange(interval);
     }
     for (const auto& incremental : testCase.RangeIncrementals) {
-        bounds.AddRangeIncremental(incremental);
+        variantBounds.AddRangeIncremental(incremental);
     }
     for (const auto& incremental : testCase.RowIncrementals) {
-        bounds.AddRowIncremental(incremental);
+        variantBounds.AddRowIncremental(incremental);
     }
+
+    // Convert variant bounds to comparator bounds.
+    auto comparatorBounds = ConvertBoundsToComparators<TRangeElement>(variantBounds, SortOrder);
 
     // Create queue and stream (unbounded buffer).
     TSafeCircularBuffer<TElement> outputQueue(TMaybe<size_t>(), TElement{});
@@ -126,8 +130,8 @@ void RunTestCase(const TTestCase<TElement, SortOrder, TRangeElement>& testCase) 
     TFrameBoundsIndices currentWindows;
 
     // Create aggregator using factory method.
-    auto factory = TCoreWinFramesCollector<TElement, decltype(testCase.ElementGetter), SortOrder>::CreateFactory(
-        bounds, testCase.ElementGetter);
+    auto factory = TCoreWinFramesCollector<TElement, decltype(testCase.ElementGetter), TRangeComparator<TRangeElement>, SortOrder>::CreateFactory(
+        comparatorBounds, testCase.ElementGetter);
     auto aggregator = factory(outputQueue, stream, currentWindows);
 
     // Process elements and check states

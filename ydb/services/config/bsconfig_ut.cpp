@@ -23,6 +23,7 @@
 #include <grpcpp/create_channel.h>
 
 #include <util/string/builder.h>
+#include <util/string/printf.h>
 #include <util/system/thread.h>
 
 #include <functional>
@@ -263,7 +264,8 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
 
     Y_UNIT_TEST(ReplaceConfig) {
         TKikimrWithGrpcAndRootSchema server;
-        TString yamlConfig = R"(
+        TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
+        TString yamlConfig = Sprintf(R"(
 metadata:
   kind: MainConfig
   cluster: ""
@@ -291,14 +293,13 @@ config:
       expected_slot_count: 9
   - host_config_id: 2
     drive:
-    - path: SectorMap:3:64
+    - path: %s
       type: SSD
-      expected_slot_count: 9
   hosts:
   - host: ::1
     port: 12001
     host_config_id: 2
-)";
+)", pdiskPath.c_str());
         ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
@@ -312,7 +313,8 @@ config:
 
     Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {
         TKikimrWithGrpcAndRootSchema server;
-        TString yamlConfig = R"(
+        TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
+        TString yamlConfig = Sprintf(R"(
 metadata:
   kind: MainConfig
   cluster: ""
@@ -321,17 +323,15 @@ config:
   host_configs:
   - host_config_id: 1
     drive:
-    - path: SectorMap:1:64
+    - path: %s
       type: SSD
-      expected_slot_count: 9
-    - path: SectorMap:1:64
+    - path: %s
       type: SSD
-      expected_slot_count: 9
   hosts:
   - host: ::1
     port: 12001
     host_config_id: 1
-)";
+)", pdiskPath.c_str(), pdiskPath.c_str());
         ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::INTERNAL_ERROR);
@@ -339,6 +339,7 @@ config:
                 UNIT_ASSERT_C(opDebugString.Contains("duplicate path"), opDebugString);
             });
     }
+
     Y_UNIT_TEST(FetchConfig) {
         TKikimrWithGrpcAndRootSchema server;
         std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
@@ -351,7 +352,8 @@ config:
         NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
 
         TKikimrWithGrpcAndRootSchema server;
-        TString yamlConfig = R"(
+        TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
+        TString yamlConfig = Sprintf(R"(
 metadata:
   kind: MainConfig
   cluster: ""
@@ -367,7 +369,7 @@ config:
       type: SSD
   - host_config_id: 2
     drive:
-    - path: SectorMap:3:64
+    - path: %s
       type: SSD
   hosts:
   - host: ::1
@@ -375,7 +377,7 @@ config:
     host_config_id: 2
   feature_flags:
     switch_to_config_v2: true
-)";
+)", pdiskPath.c_str());
         ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);

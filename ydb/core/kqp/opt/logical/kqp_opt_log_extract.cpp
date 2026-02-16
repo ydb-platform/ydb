@@ -80,7 +80,7 @@ TExprBase KqpApplyExtractMembersToReadTable(TExprBase node, TExprContext& ctx, c
     }
 
     auto slt = node.Maybe<TKqlStreamLookupTable>();
-    if (slt && TKqpStreamLookupSettings::HasVectorTopDistinct(slt.Cast())) {
+    if (slt && TKqpStreamLookupSettings::HasVectorTopColumn(slt.Cast())) {
         return node;
     }
 

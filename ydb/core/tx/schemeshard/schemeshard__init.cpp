@@ -4143,7 +4143,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     continue;
                 }
 
-                TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
 
                 if (statusesByTxId.contains(txId)) {
                     for (auto& recByTxId: statusesByTxId.at(txId)) {
@@ -4157,16 +4156,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                switch (kind) {
-                case TTableInfo::TBackupRestoreResult::EKind::Backup:
-                    tableInfo->BackupHistory[txId] = std::move(info);
-                    break;
-                case TTableInfo::TBackupRestoreResult::EKind::Restore:
-                    tableInfo->RestoreHistory[txId] = std::move(info);
-                    if (tableInfo->IsRestore) {
-                        RestoreTablesToUnmark.push_back(pathId);
+                auto fillBackupInfo = [&](auto& tableInfo) {
+                    switch (kind) {
+                    case TTableInfo::TBackupRestoreResult::EKind::Backup:
+                        tableInfo->BackupHistory[txId] = std::move(info);
+                        break;
+                    case TTableInfo::TBackupRestoreResult::EKind::Restore:
+                        tableInfo->RestoreHistory[txId] = std::move(info);
+                        if (tableInfo->IsRestore) {
+                            RestoreTablesToUnmark.push_back(pathId);
+                        }
+                        break;
                     }
-                    break;
+                };
+
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    fillBackupInfo(it->second);
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    fillBackupInfo(tableInfo);
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -4294,9 +4302,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             if (!path->IsRoot()) {
-                const bool isBackupTable = Self->IsBackupTable(item.first);
+                bool isBackupTable = Self->IsBackupTable(item.first);
+                EPathCategory pathCategory;
+                if (isBackupTable) {
+                    pathCategory = EPathCategory::Backup;
+                } else if (path->IsSystemDirectory() || path->IsSysView()) {
+                    pathCategory = EPathCategory::System;
+                } else {
+                    pathCategory = EPathCategory::Regular;
+                }
+
                 parent->IncAliveChildrenPrivate(isBackupTable);
-                inclusiveDomainInfo->IncPathsInside(Self, 1, isBackupTable);
+                inclusiveDomainInfo->IncPathsInside(Self, 1, pathCategory);
             }
 
             Self->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(path->UserAttrs->Size());
@@ -4644,6 +4661,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Ydb::Topic::CreateTopicRequest topic;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(topic, rowset.GetValue<Schema::ImportItems::Topic>()));
                         item.Topic = topic;
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::SysView>()) {
+                        Ydb::Table::DescribeSystemViewResult sysView;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(sysView, rowset.GetValue<Schema::ImportItems::SysView>()));
+                        item.SysView = sysView;
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
@@ -5107,6 +5130,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             itStore->second->ColumnTablesUnderOperation.insert(pathId);
                         }
                     }
+                }
+
+                if (rowset.HaveValue<Schema::ColumnTables::IsRestore>()) {
+                    tableInfo->IsRestore = rowset.GetValue<Schema::ColumnTables::IsRestore>();
                 }
 
                 if (!rowset.Next()) {

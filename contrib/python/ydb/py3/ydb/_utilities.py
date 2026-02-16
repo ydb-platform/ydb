@@ -9,6 +9,9 @@ import collections
 import urllib.parse
 from . import ydb_version
 
+import typing
+
+interceptor: typing.Any
 try:
     from . import interceptor
 except ImportError:

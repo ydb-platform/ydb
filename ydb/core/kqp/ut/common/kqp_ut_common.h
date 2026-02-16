@@ -59,6 +59,7 @@ private:
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
+        FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);
 
@@ -97,6 +98,7 @@ public:
     bool UseLocalCheckpointsInStreamingQueries = false;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     std::optional<TTestLogSettings> LogSettings;
+    bool Verbose = false;
 
     TKikimrSettings() {
         InitDefaultConfig();
@@ -139,6 +141,7 @@ public:
     TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
     TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
     TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
+    TKikimrSettings& SetVerbose(bool value) { Verbose = value; return *this; };
 };
 
 class TKikimrRunner {
@@ -276,7 +279,8 @@ enum class EIndexTypeSql {
     GlobalSync,
     GlobalAsync,
     GlobalVectorKMeansTree,
-    GlobalFulltext
+    GlobalFulltextPlain,
+    GlobalFulltextRelevance
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -288,7 +292,8 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
     case EIndexTypeSql::GlobalAsync:
         return "GLOBAL ASYNC";
     case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-    case NKqp::EIndexTypeSql::GlobalFulltext:
+    case NKqp::EIndexTypeSql::GlobalFulltextPlain:
+    case NKqp::EIndexTypeSql::GlobalFulltextRelevance:
         return "GLOBAL";
     }
 }
@@ -302,8 +307,10 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalAsync;
     case EIndexTypeSql::GlobalVectorKMeansTree:
         return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
-    case EIndexTypeSql::GlobalFulltext:
-        Y_ABORT("Fulltext index isn't supported by sdk");
+    case EIndexTypeSql::GlobalFulltextPlain:
+        return NYdb::NTable::EIndexType::GlobalFulltextPlain;
+    case EIndexTypeSql::GlobalFulltextRelevance:
+        return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
     }
 }
 
@@ -352,7 +359,7 @@ inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSess
     return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson);
 }
 
-NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query);
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query, NYdb::NQuery::TTxControl txControl = NYdb::NQuery::TTxControl::NoTx());
 
 class TStreamReadError : public yexception {
 public:

@@ -533,9 +533,14 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
             break;
         }
-        case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
-            Stream << " GLOBAL USING fulltext ON ";
-            fulltextIndexSettings = index.global_fulltext_index().fulltext_settings();
+        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+            Stream << " GLOBAL USING fulltext_plain ON ";
+            fulltextIndexSettings = index.global_fulltext_plain_index().fulltext_settings();
+            break;
+        }
+        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+            Stream << " GLOBAL USING fulltext_relevance ON ";
+            fulltextIndexSettings = index.global_fulltext_relevance_index().fulltext_settings();
             break;
         }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
@@ -642,20 +647,10 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     if (fulltextIndexSettings) {
         Stream << " WITH (";
 
-        Y_ENSURE(fulltextIndexSettings->has_layout());
-        Stream << "layout=";
-        switch (fulltextIndexSettings->layout()) {
-            case Ydb::Table::FulltextIndexSettings_Layout_FLAT:
-                Stream << "flat";
-                break;
-            default:
-                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Layout");
-        }
-
         Y_ENSURE(fulltextIndexSettings->columns().size() == 1);
         auto analyzers = fulltextIndexSettings->columns().at(0).analyzers();
         Y_ENSURE(analyzers.has_tokenizer());
-        Stream << ", tokenizer=";
+        Stream << "tokenizer=";
         switch (analyzers.tokenizer()) {
             case Ydb::Table::FulltextIndexSettings_Tokenizer_WHITESPACE:
                 Stream << "whitespace";
@@ -1397,7 +1392,7 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
                         break;
                     case NKikimrSchemeOp::ColumnCodecZSTD:
                         Stream << "zstd";
-                        break;            
+                        break;
                 }
             }
             if (compression.GetArrowCompression().HasLevel()) {

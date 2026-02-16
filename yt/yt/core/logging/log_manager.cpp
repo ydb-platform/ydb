@@ -90,7 +90,7 @@ static const TStringBuf StderrSystemWriterName("stderr");
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TLogWriterCacheKey& lhs, const TLogWriterCacheKey& rhs)
+bool operator==(const TLogWriterCacheKey& lhs, const TLogWriterCacheKey& rhs)
 {
     return lhs.Category == rhs.Category && lhs.LogLevel == rhs.LogLevel && lhs.Family == rhs.Family;
 }
@@ -1085,7 +1085,7 @@ private:
                 }
             }
 
-            bool operator < (const THeapItem& other) const
+            bool operator<(const THeapItem& other) const
             {
                 return GetInstant() < other.GetInstant();
             }
@@ -1591,7 +1591,7 @@ TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag)
     SetThreadMessageTag(std::move(messageTag));
 }
 
-TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other)
+TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept
     : OldMessageTag_(std::move(other.OldMessageTag_))
     , Active_(other.Active_)
 {

@@ -273,6 +273,10 @@ public:
         const TMasterExitReadOnlyOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (
+        const TResetDynamicallyPropagatedMasterCellsOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (
         NHydra::TCellId cellId,
         const TDiscombobulateNonvotingPeersOptions& options),

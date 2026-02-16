@@ -17,9 +17,9 @@ Y_UNIT_TEST(RowAndRangeIntervals_Combined) {
             )
         },
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Preceding},
-                TInputRange<ui64>{5, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Preceding},
+                TInputRange<TRangeVariant>{5, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(15), ui64(20), ui64(30), ui64(40)},
@@ -70,9 +70,9 @@ Y_UNIT_TEST(RowAndRangeIntervals_RowCompletelyLeft) {
             )
         },
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Preceding},
-                TInputRange<ui64>{5, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Preceding},
+                TInputRange<TRangeVariant>{5, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(15), ui64(20), ui64(25), ui64(30), ui64(35)},
@@ -128,9 +128,9 @@ Y_UNIT_TEST(RowAndRangeIntervals_RowCompletelyRight) {
             )
         },
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Preceding},
-                TInputRange<ui64>{5, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Preceding},
+                TInputRange<TRangeVariant>{5, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(15), ui64(20), ui64(25), ui64(30), ui64(35)},
@@ -186,9 +186,9 @@ Y_UNIT_TEST(RowAndRangeIntervals_RowPartiallyLeft) {
             )
         },
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{3, EDirection::Preceding},
-                TInputRange<ui64>{7, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{3, EDirection::Preceding},
+                TInputRange<TRangeVariant>{7, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(15), ui64(20), ui64(25), ui64(30)},
@@ -238,9 +238,9 @@ Y_UNIT_TEST(RowAndRangeIntervals_RowPartiallyRight) {
             )
         },
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{7, EDirection::Preceding},
-                TInputRange<ui64>{3, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{7, EDirection::Preceding},
+                TInputRange<TRangeVariant>{3, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(15), ui64(20), ui64(25), ui64(30)},
@@ -310,9 +310,9 @@ Y_UNIT_TEST(RowInterval_Uint64MaxValuesRow) {
 Y_UNIT_TEST(RowInterval_Uint64MaxValuesRange) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>(
-                TInputRange<ui64>(std::numeric_limits<ui64>::max(), EDirection::Preceding),
-                TInputRange<ui64>(std::numeric_limits<ui64>::max(), EDirection::Following)
+            TInputRangeWindowFrame<TRangeVariant>(
+                TInputRange<TRangeVariant>(std::numeric_limits<ui64>::max(), EDirection::Preceding),
+                TInputRange<TRangeVariant>(std::numeric_limits<ui64>::max(), EDirection::Following)
             )
         },
         .InputElements = {ui64(0), std::numeric_limits<ui64>::max()},
@@ -341,9 +341,9 @@ Y_UNIT_TEST(RangeInterval_FloatExtremeValues) {
 
     TTestCase<float, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<float>{
-                TInputRange<float>{100, EDirection::Preceding},
-                TInputRange<float>{100, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{100, EDirection::Preceding},
+                TInputRange<TRangeVariant>{100, EDirection::Following}
             }
         },
         .InputElements = {negMax, posMax, nan1, nan2},
@@ -378,13 +378,13 @@ Y_UNIT_TEST(RangeInterval_FloatExtremeValues) {
 Y_UNIT_TEST(TwoRangeEmptyIntervals_BothDirections_Asc) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Following},
-                TInputRange<ui64>{6, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Following},
+                TInputRange<TRangeVariant>{6, EDirection::Following}
             },
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{6, EDirection::Preceding},
-                TInputRange<ui64>{5, EDirection::Preceding}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{6, EDirection::Preceding},
+                TInputRange<TRangeVariant>{5, EDirection::Preceding}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40)},
@@ -431,13 +431,13 @@ Y_UNIT_TEST(TwoRangeEmptyIntervals_BothDirections_Asc) {
 Y_UNIT_TEST(TwoRangeEmptyIntervals_LargeOffsets_Asc) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{14, EDirection::Following},
-                TInputRange<ui64>{15, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{14, EDirection::Following},
+                TInputRange<TRangeVariant>{15, EDirection::Following}
             },
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{15, EDirection::Preceding},
-                TInputRange<ui64>{14, EDirection::Preceding}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{15, EDirection::Preceding},
+                TInputRange<TRangeVariant>{14, EDirection::Preceding}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40)},
@@ -484,9 +484,9 @@ Y_UNIT_TEST(TwoRangeEmptyIntervals_LargeOffsets_Asc) {
 Y_UNIT_TEST(RangeInterval_InvalidMinMaxOrder_Asc) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{10, EDirection::Following},
-                TInputRange<ui64>{10, EDirection::Preceding}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{10, EDirection::Following},
+                TInputRange<TRangeVariant>{10, EDirection::Preceding}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30)},
@@ -522,9 +522,9 @@ Y_UNIT_TEST(RangeInterval_InvalidMinMaxOrder_Asc) {
 Y_UNIT_TEST(RangeInterval_InvalidMinMaxOrderLarge_Asc) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{25, EDirection::Following},
-                TInputRange<ui64>{25, EDirection::Preceding}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{25, EDirection::Following},
+                TInputRange<TRangeVariant>{25, EDirection::Preceding}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30)},
@@ -600,9 +600,9 @@ Y_UNIT_TEST(BasicRowInterval_Desc) {
 Y_UNIT_TEST(BasicRangeInterval_Desc) {
     TTestCase<ui64, ESortOrder::Desc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Preceding},
-                TInputRange<ui64>{5, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Preceding},
+                TInputRange<TRangeVariant>{5, EDirection::Following}
             }
         },
         .InputElements = {ui64(30), ui64(25), TYield(), ui64(20), ui64(15), TYield(), ui64(10)},
@@ -647,9 +647,9 @@ Y_UNIT_TEST(RowAndRangeIntervals_Desc) {
             )
         },
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Preceding},
-                TInputRange<ui64>{5, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Preceding},
+                TInputRange<TRangeVariant>{5, EDirection::Following}
             }
         },
         .InputElements = {ui64(40), ui64(30), ui64(20), ui64(15), ui64(10)},
@@ -693,9 +693,9 @@ Y_UNIT_TEST(RowAndRangeIntervals_Desc) {
 Y_UNIT_TEST(RangeInterval_StringLength) {
     TTestCase<TString, ESortOrder::Asc, size_t> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<size_t>{
-                TInputRange<size_t>{1, EDirection::Preceding},
-                TInputRange<size_t>{0, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{1, EDirection::Preceding},
+                TInputRange<TRangeVariant>{0, EDirection::Following}
             }
         },
         .ElementGetter = [](const TString& str) -> TMaybe<size_t> { return TMaybe<size_t>(str.size()); },
@@ -730,9 +730,9 @@ Y_UNIT_TEST(RangeInterval_StringLength) {
 Y_UNIT_TEST(RangeInterval_WithOptionals_Asc) {
     TTestCase<TMaybe<ui64>, ESortOrder::Asc, ui64> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{0, EDirection::Following},
-                TInputRange<ui64>{1, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{0, EDirection::Following},
+                TInputRange<TRangeVariant>{1, EDirection::Following}
             }
         },
         .ElementGetter = [](const TMaybe<ui64>& elem) -> TMaybe<ui64> {
@@ -775,9 +775,9 @@ Y_UNIT_TEST(RangeInterval_WithOptionals_Asc) {
 Y_UNIT_TEST(RangeInterval_WithOptionals_Desc) {
     TTestCase<TMaybe<ui8>, ESortOrder::Desc, ui8> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui8>{
-                TInputRange<ui8>{2, EDirection::Following},
-                TInputRange<ui8>{10, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{2, EDirection::Following},
+                TInputRange<TRangeVariant>{10, EDirection::Following}
             }
         },
         .ElementGetter = [](const TMaybe<ui8>& elem) -> TMaybe<ui8> {
@@ -819,9 +819,9 @@ Y_UNIT_TEST(RangeInterval_WithOptionals_Desc) {
 Y_UNIT_TEST(RangeInterval_RepeatedElements) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{10, EDirection::Preceding},
-                TInputRange<ui64>{0, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{10, EDirection::Preceding},
+                TInputRange<TRangeVariant>{0, EDirection::Following}
             }
         },
         .InputElements = {ui64(1), ui64(2), ui64(2), ui64(4)},
@@ -855,9 +855,9 @@ Y_UNIT_TEST(RangeInterval_RepeatedElements) {
 Y_UNIT_TEST(RangeInterval_WithOptionals_Desc_EmptyInterval) {
     TTestCase<TMaybe<ui8>, ESortOrder::Desc, ui8> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui8>{
-                TInputRange<ui8>{10, EDirection::Following},
-                TInputRange<ui8>{2, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{10, EDirection::Following},
+                TInputRange<TRangeVariant>{2, EDirection::Following}
             }
         },
         .ElementGetter = [](const TMaybe<ui8>& elem) -> TMaybe<ui8> {

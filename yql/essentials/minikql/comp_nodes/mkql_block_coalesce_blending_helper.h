@@ -43,7 +43,7 @@ TType* GetScalar(const arrow::Datum& datum) {
 template <typename TType>
 class TDatumStorageView {
 public:
-    TDatumStorageView(const arrow::Datum& datum)
+    explicit TDatumStorageView(const arrow::Datum& datum)
         : Datum_(datum)
     {
     }

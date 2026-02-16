@@ -143,7 +143,7 @@ enum ETypeKind {
 ENUM_TO_STRING(ETypeKind, UDF_TYPE_KIND_MAP)
 
 struct TSourcePosition {
-    TSourcePosition(ui32 row = 0, ui32 column = 0, TStringRef file = {})
+    explicit TSourcePosition(ui32 row = 0, ui32 column = 0, TStringRef file = {})
         : Row(row)
         , Column(column)
         , File(file)
@@ -190,7 +190,7 @@ UDF_ASSERT_TYPE_SIZE(ICallablePayload, 8);
 //////////////////////////////////////////////////////////////////////////////
 class ITypeVisitor1 {
 protected:
-    ITypeVisitor1(ui16 compatibilityVersion)
+    explicit ITypeVisitor1(ui16 compatibilityVersion)
         : AbiCompatibility_(compatibilityVersion)
     {
     }
@@ -281,13 +281,13 @@ public:
 class ITypeVisitor: public ITypeVisitor7 {
 protected:
     using TBase = ITypeVisitor7;
-    ITypeVisitor(ui16 compatibilityVersion);
+    explicit ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 class ITypeVisitor: public ITypeVisitor6 {
 protected:
     using TBase = ITypeVisitor6;
-    ITypeVisitor(ui16 compatibilityVersion);
+    explicit ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 class ITypeVisitor: public ITypeVisitor5 {

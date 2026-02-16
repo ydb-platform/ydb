@@ -24,7 +24,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TStructAdaptor {
         const TStructExprType* Type;
 
-        TStructAdaptor(const TStructExprType* type)
+        explicit TStructAdaptor(const TStructExprType* type)
             : Type(type)
         {
         }
@@ -84,7 +84,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TTupleAdaptor {
         const TTupleExprType* Type;
 
-        TTupleAdaptor(const TTupleExprType* type)
+        explicit TTupleAdaptor(const TTupleExprType* type)
             : Type(type)
         {
         }
@@ -101,7 +101,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TCallableAdaptor {
         const TCallableExprType* Type;
 
-        TCallableAdaptor(const TCallableExprType* type)
+        explicit TCallableAdaptor(const TCallableExprType* type)
             : Type(type)
         {
         }
@@ -290,7 +290,7 @@ struct TExprTypeLoader {
     TExprContext& Ctx;
     TPosition Pos;
 
-    TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
+    explicit TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
         : Ctx(ctx)
         , Pos(pos)
     {

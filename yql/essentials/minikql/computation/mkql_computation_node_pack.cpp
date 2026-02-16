@@ -82,7 +82,7 @@ public:
         StoreOffsetsForEachChildData = 1 << 1,
     };
 
-    TBlockTransportFlags(ui64 data)
+    explicit TBlockTransportFlags(ui64 data)
         : Data_(data)
     {
     }

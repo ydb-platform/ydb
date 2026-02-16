@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "argument._yql_full_text_relevance"
+                                                "TopSortBy": "argument.__ydb_full_text_relevance"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -48,13 +48,14 @@
                                                 "Node Type": "ReadFullTextIndex",
                                                 "Operators": [
                                                     {
-                                                        "Columns": "Data, Key, Text, _yql_full_text_relevance",
+                                                        "Columns": "Data, Key, Text, __ydb_full_text_relevance",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats\"",
                                                         "QueryColumns": "Text",
                                                         "RelevanceQuery": "True",
+                                                        "SearchTerms": "cats",
                                                         "Table": "/local/base_fulltext_relevance_covered_sql_plan/FullTextTable"
                                                     }
                                                 ],
@@ -64,7 +65,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "_yql_full_text_relevance (Desc)"
+                                    "__ydb_full_text_relevance (Desc)"
                                 ]
                             }
                         ]

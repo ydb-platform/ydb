@@ -97,6 +97,16 @@ std::vector<TConstArrayRef<TCell>> GetRows(
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
 
+std::vector<ui32> BuildDefaultMap(
+    const THashSet<TStringBuf>& defaultColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns);
+
+ui32 CountLocalDefaults(
+    const THashSet<TStringBuf>& defaultColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns);
+
 class TUniqueSecondaryKeyCollector {
 public:
     TUniqueSecondaryKeyCollector(
@@ -147,6 +157,7 @@ public:
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
+        const ui32 defaultColumnsCount,
         const i64 priority) = 0;
     virtual void Write(
         const TWriteToken token,

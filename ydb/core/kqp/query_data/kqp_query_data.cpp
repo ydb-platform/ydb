@@ -255,16 +255,13 @@ void TQueryData::ValidateParameter(const TString& name, const NKikimrMiniKQL::TT
     }
 
     auto pType = ImportTypeFromProto(type, txTypeEnv);
-    if (pType == nullptr || !parameterType->IsSameType(*pType)) {
-        // Allow EmptyList for List<?> parameters
-        // pType is the expected type from the query declaration (List<?>)
-        // parameterType is the actual type from the parameter value (EmptyList)
-        if (pType != nullptr && pType->IsList() && parameterType->IsEmptyList()) {
-            // EmptyList is compatible with List, this is allowed
-            return;
-        }
+    if (pType == nullptr) {
+        ythrow yexception() << "Parameter " << name << " type is empty";
+    }
+
+    if (!parameterType->IsSameType(*pType)) {
         ythrow yexception() << "Parameter " << name
-            << " type mismatch, expected: " << type << ", actual: " << *parameterType;
+            << " type mismatch, expected: " << *pType << ", actual: " << *parameterType;
     }
 }
 

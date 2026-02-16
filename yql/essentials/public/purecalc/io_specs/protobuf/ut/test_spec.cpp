@@ -90,7 +90,7 @@ public:
 
 class TSimpleMessageStreamImpl: public NYql::NPureCalc::IStream<NPureCalcProto::TSimpleMessage*> {
 public:
-    TSimpleMessageStreamImpl(i32 value)
+    explicit TSimpleMessageStreamImpl(i32 value)
     {
         Message_.SetX(value);
     }
@@ -168,7 +168,7 @@ private:
     TVector<int>* Buf_;
 
 public:
-    TSimpleMessageConsumerImpl(TVector<int>* buf)
+    explicit TSimpleMessageConsumerImpl(TVector<int>* buf)
         : Buf_(buf)
     {
     }

@@ -263,6 +263,7 @@ namespace NActors {
                 return Cq && Qp;
             }
         } Rdma;
+        bool RunDelayedRdmaHandshake = false;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -390,6 +391,10 @@ namespace NActors {
                                         "RDMA memory read failed, disable rdma on the initiator");
                                     Rdma.HandShakeMemRegion.Reset();
                                     Rdma.Clear();
+                                    // During outgoing handshake we got rdma qp
+                                    // but unable to got rdma read confirmation - run pending rdma handshake to try to reestablish
+                                    // session with rdma in a future
+                                    RunDelayedRdmaHandshake = true;
                                 } else {
                                     Params.UseRdma = true;
                                 }
@@ -416,9 +421,12 @@ namespace NActors {
                 MainChannel.ResetPollerToken();
                 ExternalDataChannel.ResetPollerToken();
                 Y_ABORT_UNLESS(!ExternalDataChannel == !Params.UseExternalDataChannel);
+                TEvHandshakeDone::TRdmaResult rdmaResult = (Rdma.Qp && Rdma.Cq)
+                    ? TEvHandshakeDone::TRdmaResult(std::move(Rdma.Qp), std::move(Rdma.Cq))
+                    : TEvHandshakeDone::TRdmaResult(TEvHandshakeDone::TRdmaResult::TDisabled(RunDelayedRdmaHandshake));
                 SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
                     *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef()),
-                    std::move(Rdma.Qp), std::move(Rdma.Cq)));
+                    rdmaResult));
             }
 
             Rdma.Clear();
@@ -725,6 +733,7 @@ namespace NActors {
             if (!region) {
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     "Unable to allocate memory region to perform rdma handshake");
+                RunDelayedRdmaHandshake = true;
                 return nullptr;
             }
 
@@ -1270,13 +1279,15 @@ namespace NActors {
                         TryRdmaQpExchange(rdmaIncommingHandshake.value(), success);
                         if (Rdma && rdmaIncommingHandshake->HasRead()) {
                             rdma = rdmaIncommingHandshake->GetRead();
-                        }
-                        if (rdmaIncommingHandshake->HasRdmaChecksum() && rdmaIncommingHandshake->GetRdmaChecksum() == true) {
-                            Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
-                            success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
+                            if (rdmaIncommingHandshake->HasRdmaChecksum() && rdmaIncommingHandshake->GetRdmaChecksum() == true) {
+                                Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
+                                success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
+                            } else {
+                                Params.ChecksumRdmaEvent = false;
+                                success.MutableQpPrepared()->SetRdmaChecksum(false);
+                            }
                         } else {
-                            Params.ChecksumRdmaEvent = false;
-                            success.MutableQpPrepared()->SetRdmaChecksum(false);
+                            success.SetRdmaErr("Unable to perform qp exchange on the incomming side");
                         }
                     } else {
                         success.SetRdmaErr("Rdma is not ready on the incomming side");
@@ -1405,11 +1416,13 @@ namespace NActors {
                     if (err) {
                         LOG_ERROR_IC("ICRDMA", "Unable to initialize QP, no more attempt to use RDMA on this session");
                         Rdma.Qp.reset();
+                        RunDelayedRdmaHandshake = true;
                     } else {
                         Rdma.Cq = cqPtr;
                     }
-                 } else {
+                } else {
                     LOG_ERROR_IC("ICRDMA", "Unable to get CQ handle, no more attempt to use RDMA on this session");
+                    RunDelayedRdmaHandshake = true;
                 }
             }
         }

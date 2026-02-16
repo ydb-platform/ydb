@@ -29,7 +29,7 @@ using namespace NReservoirSampling;
 class TReservoirWrapper: public TReservoir<TUnboxedValue> {
 public:
     template <typename... Args>
-    TReservoirWrapper(Args&&... args)
+    explicit TReservoirWrapper(Args&&... args)
         : TReservoir<TUnboxedValue>(std::forward<Args>(args)...)
     {
     }
@@ -76,7 +76,7 @@ using TReservoirSamplingResource = TBoxedDynamicResource<TReservoirWrapper>;
 
 class TThreadSafeRandomProviderWrapper: public IRandomProvider {
 public:
-    TThreadSafeRandomProviderWrapper(TIntrusivePtr<IRandomProvider>&& underlying)
+    explicit TThreadSafeRandomProviderWrapper(TIntrusivePtr<IRandomProvider>&& underlying)
         : Underlying_(std::move(underlying))
     {
     }
@@ -107,7 +107,7 @@ TIntrusivePtr<IRandomProvider> WrapRandomProviderThreadSafe(TIntrusivePtr<IRando
 
 class TReservoirSamplingBase {
 public:
-    TReservoirSamplingBase(TString&& tag)
+    explicit TReservoirSamplingBase(TString&& tag)
         : RandomPovider_(GetEnv("YQL_DETERMINISTIC_MODE") ? WrapRandomProviderThreadSafe(CreateDeterministicRandomProvider(1)) : CreateDefaultRandomProvider())
         , ResourceTag_(std::move(tag))
     {
@@ -140,7 +140,7 @@ private:
 template <typename Derived>
 class TReservoirSamplingImpl final: public TBoxedValue {
 public:
-    TReservoirSamplingImpl(TString tag)
+    explicit TReservoirSamplingImpl(TString tag)
         : Implementation_(std::move(tag))
     {
     }
@@ -156,7 +156,7 @@ private:
     class T##Name: TReservoirSamplingBase {                                                  \
     public:                                                                                  \
         template <typename... Args>                                                          \
-        T##Name(Args&&... args)                                                              \
+        explicit T##Name(Args&&... args)                                                     \
             : TReservoirSamplingBase(std::forward<Args>(args)...)                            \
         {                                                                                    \
         }                                                                                    \

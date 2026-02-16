@@ -3,6 +3,7 @@
 #include "yql_graph_transformer.h"
 #include "yql_type_annotation.h"
 
+#include <expected>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/sql_types/block.h>
@@ -318,6 +319,7 @@ EDataSlot WithTzDate(EDataSlot dataSlot);
 EDataSlot WithoutTzDate(EDataSlot dataSlot);
 EDataSlot MakeSigned(EDataSlot dataSlot);
 EDataSlot MakeUnsigned(EDataSlot dataSlot);
+std::expected<std::pair<const TDataExprType*, bool>, TString> IsAddAllowedYqlTypes(const TTypeAnnotationNode* left, const TTypeAnnotationNode* right, TExprContext& ctx);
 bool IsDataTypeDecimal(EDataSlot dataSlot);
 bool IsDataTypeDateOrTzDateOrInterval(EDataSlot dataSlot);
 bool IsDataTypeDateOrTzDate(EDataSlot dataSlot);

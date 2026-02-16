@@ -6,7 +6,7 @@ namespace NYql {
 
 class TFileStorageDecorator: public IFileStorage {
 public:
-    TFileStorageDecorator(TFileStoragePtr fs);
+    explicit TFileStorageDecorator(TFileStoragePtr fs);
     ~TFileStorageDecorator() override = default;
 
     TFileLinkPtr PutFile(const TString& file, const TString& outFileName) override;

@@ -595,53 +595,51 @@ bool IsDdlPrepareAllowed(TKikimrSessionContext& sessionCtx) {
     return true;
 }
 
-struct TConnectionInfo {
+struct TConnectionData {
     std::string Endpoint = "";
     std::string Database = "";
     bool EnableSsl = false;
 };
 
-TConnectionInfo ParseConnectionString(const std::string& connectionString) {
-    if (connectionString.length() == 0) {
+TConnectionData GetDataFromConnectionString(const std::string& connectionString) {
+    if (connectionString.empty()) {
         throw yexception() << "Empty connection string";
     }
 
-    const std::string databaseFlag = "/?database=";
-    const std::string grpcProtocol = "grpc://";
-    const std::string grpcsProtocol = "grpcs://";
-    const std::string localhostDomain = "localhost:";
+    constexpr std::string_view databaseFlag = "/?database=";
+    constexpr std::string_view grpcProtocol = "grpc://";
+    constexpr std::string_view grpcsProtocol = "grpcs://";
+    constexpr std::string_view localhostDomain = "localhost:";
 
-    TConnectionInfo connectionInfo;
+    TConnectionData connectionData;
     std::string endpoint;
 
     size_t pathIndex = connectionString.find(databaseFlag);
     if (pathIndex == std::string::npos){
-        pathIndex = connectionString.length();
+        pathIndex = connectionString.size();
     }
-    if (pathIndex != connectionString.length()) {
-        connectionInfo.Database = connectionString.substr(pathIndex + databaseFlag.length());
+    if (pathIndex != connectionString.size()) {
+        connectionData.Database = connectionString.substr(pathIndex + databaseFlag.size());
         endpoint = connectionString.substr(0, pathIndex);
     } else {
         endpoint = connectionString;
     }
 
-    if (!std::string_view{endpoint}.starts_with(grpcProtocol) && !std::string_view{endpoint}.starts_with(grpcsProtocol) &&
-        !std::string_view{endpoint}.starts_with(localhostDomain))
-    {
-        connectionInfo.Endpoint = endpoint;
-        connectionInfo.EnableSsl = true;
-    } else if (std::string_view{endpoint}.starts_with(grpcProtocol)) {
-        connectionInfo.Endpoint = endpoint.substr(grpcProtocol.length());
-        connectionInfo.EnableSsl = false;
-    } else if (std::string_view{endpoint}.starts_with(grpcsProtocol)) {
-        connectionInfo.Endpoint = endpoint.substr(grpcsProtocol.length());
-        connectionInfo.EnableSsl = true;
+    if (!endpoint.starts_with(grpcProtocol) && !endpoint.starts_with(grpcsProtocol) && !endpoint.starts_with(localhostDomain)) {
+        connectionData.Endpoint = endpoint;
+        connectionData.EnableSsl = true;
+    } else if (endpoint.starts_with(grpcProtocol)) {
+        connectionData.Endpoint = endpoint.substr(grpcProtocol.size());
+        connectionData.EnableSsl = false;
+    } else if (endpoint.starts_with(grpcsProtocol)) {
+        connectionData.Endpoint = endpoint.substr(grpcsProtocol.size());
+        connectionData.EnableSsl = true;
     } else {
-        connectionInfo.Endpoint = endpoint;
-        connectionInfo.EnableSsl = false;
+        connectionData.Endpoint = endpoint;
+        connectionData.EnableSsl = false;
     }
 
-    return connectionInfo;
+    return connectionData;
 }
 
 #define FORWARD_ENSURE_NO_PREPARE(name, ...) \
@@ -920,7 +918,8 @@ public:
                             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                                 *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
-                            case TIndexDescription::EType::GlobalFulltext:
+                            case TIndexDescription::EType::GlobalFulltextPlain:
+                            case TIndexDescription::EType::GlobalFulltextRelevance:
                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                         }
@@ -2665,7 +2664,7 @@ public:
             auto& config = *op.MutableConfig();
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
-                const auto parseResult = ParseConnectionString(*connectionString);
+                const auto parseResult = GetDataFromConnectionString(*connectionString);
                 params.SetEndpoint(TString{parseResult.Endpoint});
                 params.SetDatabase(TString{parseResult.Database});
                 params.SetEnableSsl(parseResult.EnableSsl);
@@ -2770,7 +2769,7 @@ public:
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
-                    const auto parseResult = ParseConnectionString(*connectionString);
+                    const auto parseResult = GetDataFromConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
@@ -2886,7 +2885,7 @@ public:
             auto& config = *op.MutableConfig();
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
-                const auto parseResult = ParseConnectionString(*connectionString);
+                const auto parseResult = GetDataFromConnectionString(*connectionString);
                 params.SetEndpoint(TString{parseResult.Endpoint});
                 params.SetDatabase(TString{parseResult.Database});
                 params.SetEnableSsl(parseResult.EnableSsl);
@@ -3013,7 +3012,7 @@ public:
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
-                    const auto parseResult = ParseConnectionString(*connectionString);
+                    const auto parseResult = GetDataFromConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);

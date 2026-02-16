@@ -151,6 +151,7 @@ struct TAsyncBufferStats {
     TAsyncStats Push;
     TAsyncStats Pop;
     TAsyncStats Egress;
+    std::vector<ui64> LocalBytes;
 
     void Resize(ui32 taskCount);
     static TMetricInfo EstimateMem() {
@@ -158,16 +159,6 @@ struct TAsyncBufferStats {
     }
     void SetHistorySampleCount(ui32 historySampleCount);
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
-};
-
-struct TIngressStats : public TAsyncBufferStats {
-
-    TIngressStats() = default;
-    TIngressStats(ui32 taskCount) {
-        Resize(taskCount);
-    }
-
-    void Resize(ui32 taskCount);
 };
 
 struct TTableStats {
@@ -278,7 +269,6 @@ struct TStageExecutionStats {
         return (info.ScalarCount * TaskCount + info.TimeSeriesCount * HistorySampleCount * 2) * sizeof(ui64);
     }
     void SetHistorySampleCount(ui32 historySampleCount);
-    void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats);
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 maxMemoryUsage, ui64 durationUs);
     bool IsDeadlocked(ui64 deadline);
@@ -347,11 +337,6 @@ private:
     std::unordered_map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
-    void AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats);
-    void AdjustAsyncAggr(NYql::NDqProto::TDqAsyncStatsAggr& stats);
-    void AdjustAsyncBufferAggr(NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
-    void AdjustDqStatsAggr(NYql::NDqProto::TDqStatsAggr& stats);
-    void AdjustBaseTime(NYql::NDqProto::TDqStageStats* stageStats);
 public:
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
     const TKqpTasksGraph* const TasksGraph = nullptr;
@@ -465,6 +450,40 @@ public:
 private:
     TEntry Total;
     TEntry Cur;
+};
+
+struct TBatchOperationTableStats {
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+    ui64 WriteRows = 0;
+    ui64 WriteBytes = 0;
+    ui64 EraseRows = 0;
+    ui64 EraseBytes = 0;
+};
+
+struct TBatchOperationExecutionStats {
+public:
+    explicit TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
+
+    void TakeExecStats(NYql::NDqProto::TDqExecutionStats&& stats);
+
+    void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) const;
+
+public:
+    const Ydb::Table::QueryStatsCollection::Mode StatsMode;
+
+    // Local stats
+    TInstant StartTs = TInstant::Max();
+    TInstant FinishTs = TInstant::Max();
+    std::unordered_set<ui64> AffectedPartitions;
+
+    // Per-table accumulated stats from child executers
+    std::unordered_map<std::string, TBatchOperationTableStats> TableStats;
+
+    // Common accumulated stats from child executers
+    ui64 CpuTimeUs = 0;
+    ui64 DurationUs = 0;
+    ui64 ExecutersCpuTimeUs = 0;
 };
 
 } // namespace NKqp

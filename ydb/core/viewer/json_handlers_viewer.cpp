@@ -191,7 +191,7 @@ void InitViewerCommitOffsetJsonHandler(TJsonHandlers& jsonHandlers) {
 }
 
 void InitViewerHotkeysJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/hotkeys", new TJsonHandler<TJsonHotkeys>(TJsonHotkeys::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/hotkeys", new TJsonHandler<TJsonHotkeys>(TJsonHotkeys::GetSwagger()), 2);
 }
 
 void InitViewerHiveInfoJsonHandler(TJsonHandlers& handlers) {

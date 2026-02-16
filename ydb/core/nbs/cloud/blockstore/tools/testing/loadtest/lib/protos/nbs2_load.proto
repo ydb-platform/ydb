@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+option cc_enable_arenas = true;
+
+package NYdb.NBS.NProto;
+// option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos";
+
+// Load type
+
+enum ELoadType
+{
+    LOAD_TYPE_SEQUENTIAL = 0;
+    LOAD_TYPE_RANDOM = 1;
+    LOAD_TYPE_ZIPF_RANDOM = 2;
+}
+
+// TRangeProbability type
+
+message TRangeProbability
+{
+    double Probability = 1;
+    uint32 Length = 2;
+}
+
+// TRequestSizeProbability type
+
+message TRequestSizeProbability
+{
+    double Probability = 1;
+    uint32 MinSize = 2;
+    uint32 MaxSize = 3;
+}
+////////////////////////////////////////////////////////////////////////////////
+// Range under test
+
+message TRangeTest
+{
+    // Start block index.
+    uint64 Start = 1;
+
+    // End block index.
+    uint64 End = 2;
+
+    // Type of load, sequential or random.
+    ELoadType LoadType = 3;
+
+    // Number of concurrent requests.
+    uint32 IoDepth = 4;
+
+    // Percentage of write requests.
+    uint32 WriteRate = 5;
+
+    // Percentage of read requests.
+    uint32 ReadRate = 6;
+
+    // Percentage of zero requests.
+    uint32 ZeroRate = 7;
+
+    // Number of requests to be issued.
+    uint64 RequestsCount = 8;
+
+    // Minimum number of blocks in request.
+    uint32 MinRequestSize = 9;
+
+    // Maximum number of blocks in request.
+    uint32 MaxRequestSize = 10;
+
+    // Probabilities for sub-ranges
+    repeated TRangeProbability SubRanges = 11;
+
+    // Probabilities for concrete request sizes
+    // Uniform[MinRequestSize, MaxRequestSize] distribution is used with
+    // probability 1 - sum(RequestSizes::Probability)
+    repeated TRequestSizeProbability RequestSizes = 12;
+
+    // Allow intersecting requests.
+    bool AllowIntersectingRanges = 13;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Test status
+
+enum ETestStatus
+{
+    TEST_STATUS_OK = 0;
+    TEST_STATUS_FAILURE = 1;
+    TEST_STATUS_EXPECTED_ERROR = 2;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Calculated test latency
+
+message TLatency
+{
+    uint64 P50 = 1;
+    uint64 P95 = 2;
+    uint64 P90 = 3;
+    uint64 P99 = 4;
+    uint64 P999 = 5;
+    uint64 Min = 6;
+    uint64 Max = 7;
+    double Mean = 8;
+    double StdDeviation = 9;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Test results
+
+message TTestResults
+{
+    // Test name.
+    string Name = 1;
+
+    // Test result.
+    ETestStatus Result = 2;
+
+    // Test execution time in microseconds.
+    uint64 StartTime = 3;
+    uint64 EndTime = 4;
+
+    // Number of blocks processed.
+    uint64 BlocksRead = 5;
+    uint64 BlocksWritten = 6;
+    uint64 BlocksZeroed = 7;
+
+    // Request latency.
+    TLatency ReadLatency = 8;
+    TLatency WriteLatency = 9;
+    TLatency ZeroLatency = 10;
+
+    // Number of requests completed
+    uint64 RequestsCompleted = 11;
+}

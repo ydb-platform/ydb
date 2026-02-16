@@ -14,6 +14,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <ydb/public/lib/fq/scope.h>
+
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " << stream)
@@ -79,9 +81,13 @@ public:
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
         const auto& request = *ev.Get()->Get();
+        const TString folderId = NYdb::NFq::TScope(request.Scope).ParseFolder();
         auto forwardRequest = std::make_unique<TEvPrivate::TEvCreateDatabaseRequest>();
         forwardRequest->Request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
         forwardRequest->Request.mutable_serverless_resources()->set_shared_database_path(request.BasePath);
+        if (!folderId.empty()) {
+            forwardRequest->Request.mutable_attributes()->emplace("folder_id", folderId);
+        }
         forwardRequest->Request.set_path(request.Path);
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvCreateDatabaseRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvCreateDatabaseRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);

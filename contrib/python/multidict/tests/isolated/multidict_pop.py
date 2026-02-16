@@ -5,8 +5,9 @@
 # of memory leaks can be prevented in the future.
 
 import gc
-import psutil
 import os
+
+import psutil
 from multidict import MultiDict
 
 
@@ -20,7 +21,7 @@ process = psutil.Process(os.getpid())
 
 def get_memory_usage() -> int:
     memory_info = process.memory_info()
-    return memory_info.rss / (1024 * 1024)  # type: ignore[no-any-return]
+    return memory_info.rss // (1024 * 1024)
 
 
 initial_memory_usage = get_memory_usage()
@@ -62,6 +63,16 @@ def _test_popone() -> None:
         check_for_leak()
 
 
+# SEE: https://github.com/aio-libs/multidict/issues/1273
+def _test_pop_with_default() -> None:
+    # XXX: mypy wants an annotation so the only
+    # thing we can do here is pass the headers along.
+    result = MultiDict(headers)
+    for i in range(1_000_000):
+        result.pop(f"missing_key_{i}", None)
+    check_for_leak()
+
+
 def _test_del() -> None:
     for _ in range(10):
         for _ in range(100):
@@ -75,6 +86,7 @@ def _run_isolated_case() -> None:
     _test_pop()
     _test_popall()
     _test_popone()
+    _test_pop_with_default()
     _test_del()
 
 

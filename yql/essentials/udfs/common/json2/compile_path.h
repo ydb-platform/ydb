@@ -12,7 +12,7 @@ using namespace NYql;
 
 class TCompilePath: public TBoxedValue {
 public:
-    TCompilePath(TSourcePosition pos)
+    explicit TCompilePath(TSourcePosition pos)
         : Pos_(pos)
     {
     }

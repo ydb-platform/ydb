@@ -53,7 +53,7 @@ public:
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
         AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
         AddHandler(0, &TCoTopSort::Match, HNDL(RewriteFlatMapOverFullTextRelevance));
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextContains));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
 
         AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
@@ -90,6 +90,7 @@ public:
         AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
         AddHandler(4, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
         AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(5, TOptimizeTransformerBase::Any(), HNDL(InspectErroneousIndexAccess));
 
 #undef HNDL
 
@@ -128,6 +129,23 @@ protected:
         return output;
     }
 
+    TMaybeNode<TExprBase> InspectErroneousIndexAccess(TExprBase node, TExprContext& ctx) {
+        if (IsIn({"FulltextScore", "FulltextMatch"}, node.Ref().Content())) {
+            auto message = TStringBuilder{} << "Failed to rewrite " << node.Ref().Content() << " callable";
+            TIssue baseIssue{ctx.GetPosition(node.Pos()), message};
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, baseIssue);
+
+            TIssue subIssue{ctx.GetPosition(node.Pos()), "Fulltext index is not specified or unsupported predicate is used to access index"};
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, subIssue);
+            baseIssue.AddSubIssue(MakeIntrusive<TIssue>(std::move(subIssue)));
+            ctx.AddError(baseIssue);
+            return {};
+        }
+
+        DumpAppliedRule("InspectErroneousIndexAccess", node.Ptr(), node.Ptr(), ctx);
+        return node;
+    }
+
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
@@ -143,9 +161,7 @@ protected:
                 input.Cast(),
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                KqpCtx.Config->GetEnableWatermarks(),
-                false
-            );
+                KqpCtx.Config->GetEnableWatermarks());
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());
@@ -232,14 +248,22 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteFlatMapOverFullTextRelevance(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpRewriteFlatMapOverFullTextRelevance(node, ctx, KqpCtx, *getParents());
-        DumpAppliedRule("RewriteFlatMapOverFullTextRelevance", node.Ptr(), output.Ptr(), ctx);
+        auto output = KqpRewriteFlatMapOverFullTextRelevance(node, ctx, KqpCtx, *getParents());
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("RewriteFlatMapOverFullTextRelevance", node.Ptr(), output.Cast().Ptr(), ctx);
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextContains(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpRewriteFlatMapOverFullTextContains(node, ctx, KqpCtx, *getParents());
-        DumpAppliedRule("RewriteFlatMapOverFullTextContains", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextMatch(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx, *getParents());
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("RewriteFlatMapOverFullTextMatch", node.Ptr(), output.Cast().Ptr(), ctx);
         return output;
     }
 

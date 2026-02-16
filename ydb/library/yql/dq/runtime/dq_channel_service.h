@@ -86,6 +86,7 @@ public:
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
     virtual void Push(TDataChunk&& data) = 0;
     virtual bool IsFinished() = 0;
+    virtual bool IsEarlyFinished() = 0;
     virtual void UpdatePopStats() {}
 
     virtual bool IsEmpty() = 0;

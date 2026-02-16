@@ -38,13 +38,48 @@ namespace NYql::NFmr {
 namespace {
 
 TIssue ToIssue(const TFmrError& error, const TPosition& pos){
-    return TIssue(pos, error.ErrorMessage);
+    auto issue = TIssue(pos, error.ErrorMessage);
+    if (error.Reason == EFmrErrorReason::RestartQuery) {
+        issue.SetCode(TIssuesIds::FMR_NEED_FALLBACK, TSeverityIds::S_ERROR);
+    } else if (error.Reason == EFmrErrorReason::UdfTerminate) {
+        issue.SetCode(TIssuesIds::FMR_UDF_TERMINATE, TSeverityIds::S_ERROR);
+    } else {
+        issue.SetCode(TIssuesIds::FMR_UNKNOWN_ERROR, TSeverityIds::S_ERROR);
+    }
+    return issue;
 };
+
+TVector<TIssue> GetIssuesFromFmrErrors(const std::vector<TFmrError>& fmrOperationErrors, const TPosition& pos) {
+    TVector<TIssue> issues;
+    for (const auto& error : fmrOperationErrors) {
+        issues.emplace_back(ToIssue(error, pos));
+    }
+    return issues;
+}
 
 struct TFmrOperationResult: public NCommon::TOperationResult {
     std::vector<TFmrError> Errors = {};
     std::vector<TTableStats> TablesStats = {};
 };
+
+TFmrOperationResult MergeSeveralFmrOperationResults(const std::vector<TFmrOperationResult>& fmrOperationResults) {
+    TFmrOperationResult operationResult;
+    for (auto& fmrResult: fmrOperationResults) {
+        if (fmrResult.Repeat()) {
+            operationResult.SetRepeat(true);
+        }
+        for (auto& error: fmrResult.Errors) {
+            operationResult.Errors.emplace_back(error);
+            if (error.Reason == EFmrErrorReason::RestartQuery) {
+                YQL_CLOG(ERROR, FastMapReduce) << " Fmr query finished with error message " << error.ErrorMessage << " - should restart whole query without fmr gateway";
+                return TFmrOperationResult{.Errors = {error}};
+            } else if (error.Reason == EFmrErrorReason::RestartOperation) {
+                operationResult.SetRepeat(true);
+            }
+        }
+    }
+    return operationResult;
+}
 
 class TFmrYtGateway final: public TYtForwardingGatewayBase {
 public:
@@ -237,12 +272,7 @@ public:
             try {
                 auto fmrOperationResult = f.GetValue(); // rethrow error if any
                 TRunResult result;
-                auto operationErrors = fmrOperationResult.Errors;
-                TVector<TIssue> issues;
-                for (const auto& error : operationErrors) {
-                    issues.emplace_back(ToIssue(error, pos));
-                }
-                result.AddIssues(issues);
+                result.AddIssues(GetIssuesFromFmrErrors(fmrOperationResult.Errors, pos));
                 if (fmrOperationResult.Success()) {
                     result.SetSuccess();
                     auto outputTables = execCtx->OutTables_;
@@ -296,13 +326,28 @@ public:
             outputExecCtx->OutTables_ = outputTables;
             outputExecCtxs.emplace_back(outputExecCtx);
         }
-        return DumpFmrTablesToYt(outputExecCtxs).Apply([outputFmrTabesByCluster = std::move(outputFmrTabesByCluster), pos = std::move(pos), sessionId, config] (const TFuture<bool>& f) mutable {
+        return DumpFmrTablesToYt(outputExecCtxs).Apply([outputFmrTabesByCluster = std::move(outputFmrTabesByCluster), pos = std::move(pos), sessionId, config] (const auto& f) mutable {
             try {
-                bool shouldRepeat = f.GetValue();
+                TFmrOperationResult dumpFmrTablesOpResult = f.GetValue();
                 TOperationResult result;
-                // Setting repeat if we loaded at least one fmr table to yt, so that after loading fmr tables to yt provider will execute the same operation again with underlying gateway.
-                result.SetRepeat(shouldRepeat);
-                result.SetSuccess();
+                std::vector<TFmrError> fmrErrors;
+
+                if (dumpFmrTablesOpResult.Repeat()) {
+                    // Setting repeat if we loaded at least one fmr table to yt successfully, so that after loading fmr tables to yt provider will execute the same operation again with underlying gateway.
+                    result.SetRepeat(true);
+                }
+
+                for (auto& fmrError: dumpFmrTablesOpResult.Errors) {
+                    if (fmrError.Reason == EFmrErrorReason::RestartOperation) {
+                        result.SetRepeat(true);
+                    } else {
+                        fmrErrors.emplace_back(fmrError);
+                    }
+                }
+                if (fmrErrors.empty()) {
+                    result.SetSuccess();
+                }
+                result.AddIssues(GetIssuesFromFmrErrors(fmrErrors, pos));
 
                 if constexpr (std::is_same_v<TOperationResult, TRunResult>) {
                     for (auto& [outputCluster, outputTables]: outputFmrTabesByCluster) {
@@ -413,10 +458,13 @@ public:
             TFmrTableRef outputTable = GetFmrTableRef(fmrOutputTableId, sessionId);
 
             auto future = ExecMerge(inputTablesInfo, outputTable, cluster, sessionId, config);
-            return future.Apply([this, sessionId, fmrOutputTableId] (const auto& f) {
-                f.GetValue();
+            return future.Apply([this, sessionId, fmrOutputTableId, pos = nodePos] (const auto& f) {
+                TFmrOperationResult anonTablesMergeResult = f.GetValue();
                 TPublishResult publishResult;
-                publishResult.SetSuccess();
+                publishResult.AddIssues(GetIssuesFromFmrErrors(anonTablesMergeResult.Errors, pos));
+                if (anonTablesMergeResult.Success()) {
+                    publishResult.SetSuccess();
+                }
 
                 TYtTableMetaInfo meta;
                 meta.DoesExist = true;
@@ -669,11 +717,6 @@ public:
         futures.emplace_back(Coordinator_->ClearSession({.SessionId = sessionId}));
         futures.emplace_back(Slave_->CloseSession(std::move(options)));
         return NThreading::WaitExceptionOrAll(futures);
-
-        return Coordinator_->ClearSession({.SessionId = sessionId}).Apply([this, options = std::move(options)] (const auto& f) mutable {
-            f.GetValue();
-            return Slave_->CloseSession(std::move(options));
-        });
     }
 
 private:
@@ -1103,7 +1146,7 @@ private:
     }
 
     template<class TExecCtx>
-    TFuture<bool> DumpFmrTablesToYt(const std::vector<TExecCtx>& execCtxs) {
+    TFuture<TFmrOperationResult> DumpFmrTablesToYt(const std::vector<TExecCtx>& execCtxs) {
         std::vector<TFuture<TFmrOperationResult>> uploadFmrTableToYtFutures;
         for (auto& ctx: execCtxs) {
             for (ui64 tableIndex = 0; tableIndex < ctx->OutTables_.size(); ++tableIndex) {
@@ -1118,12 +1161,11 @@ private:
         }
         return WaitExceptionOrAll(uploadFmrTableToYtFutures).Apply([uploadFmrTableToYtFutures = std::move(uploadFmrTableToYtFutures)] (const auto& f) {
             f.GetValue();
+            std::vector<TFmrOperationResult> uploadFmrToYtOperationResults;
             for (auto& uploadTableFuture: uploadFmrTableToYtFutures) {
-                if (uploadTableFuture.GetValue().Repeat()) {
-                    return MakeFuture<bool>(true);
-                }
+                uploadFmrToYtOperationResults.emplace_back(uploadTableFuture.GetValue());
             }
-            return MakeFuture<bool>(false);
+            return MakeFuture<TFmrOperationResult>(MergeSeveralFmrOperationResults(uploadFmrToYtOperationResults));
         });
     }
 

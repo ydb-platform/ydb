@@ -1008,11 +1008,8 @@ message TNodeWardenServiceSet {
         optional bool ReadOnly = 14;
         optional bool Stop = 15;
 
-        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset) by the formula
-        // ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize
-        // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= InferPDiskSlotCountMax
-        optional uint64 InferPDiskSlotCountFromUnitSize = 16;
-        optional uint32 InferPDiskSlotCountMax = 17;
+        reserved 16; // optional uint64 InferPDiskSlotCountFromUnitSize, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
+        reserved 17; // optional uint32 InferPDiskSlotCountMax, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
     }
 
     message TVDisk {
@@ -1605,8 +1602,8 @@ message TEvControllerAllocateDDiskBlockGroup {
 message TEvControllerAllocateDDiskBlockGroupResult {
     message TResponse {
         message TNode {
-            optional NKikimrBlobStorage.TDDiskId DDiskId = 1; // DDisk to store data
-            optional NKikimrBlobStorage.TDDiskId PersistentBufferDDiskId = 2; // DDisk containing persistent buffer
+            optional NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1; // DDisk to store data
+            optional NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2; // DDisk containing persistent buffer
         }
 
         optional uint64 DirectBlockGroupId = 1;

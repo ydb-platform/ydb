@@ -19,6 +19,7 @@ namespace NKikimr::NSasl {
 
         struct TEvComputedHashes : public TEventLocal<TEvComputedHashes, EvComputedHashes> {
             std::string Error;
+            std::string PreparedUsername;
             std::string Hashes;
             std::string ArgonHash;
         };

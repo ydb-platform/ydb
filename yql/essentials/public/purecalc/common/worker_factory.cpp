@@ -57,6 +57,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UseSystemColumns_(options.UseSystemColumns)
     , UseWorkerPool_(options.UseWorkerPool)
     , LangVer_(options.LangVer)
+    , IssueReportTarget_(options.IssueReportTarget)
 {
     HandleInternalSettings(options.InternalSettings);
 
@@ -71,13 +72,13 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     const auto inputsCount = inputSchemas.size();
 
     for (ui32 i = 0; i < inputsCount; ++i) {
-        const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_);
+        const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_, IssueReportTarget_);
         if (!ValidateInputSchema(originalInputType, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid schema for #" << i << " input";
         }
 
         const auto* originalStructType = originalInputType->template Cast<TStructExprType>();
-        const auto* structType = ExtendStructType(originalStructType, allVirtualColumns[i], ExprContext_);
+        const auto* structType = ExtendStructType(originalStructType, allVirtualColumns[i], ExprContext_, IssueReportTarget_);
 
         InputTypes_.push_back(structType);
         OriginalInputTypes_.push_back(originalStructType);
@@ -99,7 +100,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 
     auto outputSchema = options.OutputSpec.GetSchema();
     if (!outputSchema.IsNull()) {
-        OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_);
+        OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_, IssueReportTarget_);
         if (!ValidateOutputSchema(OutputType_, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid output schema";
         }
@@ -517,7 +518,7 @@ const THashSet<TString>& TWorkerFactory<TBase>::GetUsedColumns() const {
 template <typename TBase>
 TIssues TWorkerFactory<TBase>::GetIssues() const {
     auto issues = ExprContext_.IssueManager.GetCompletedIssues();
-    CheckFatalIssues(issues);
+    CheckFatalIssues(issues, IssueReportTarget_);
     return issues;
 }
 

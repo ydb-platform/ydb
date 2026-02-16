@@ -1,6 +1,7 @@
 #include "change_message_visibility.h"
 #include "actor.h"
 #include "error.h"
+#include "limits.h"
 #include "receipt.h"
 #include "request.h"
 #include "utils.h"
@@ -43,9 +44,6 @@ using namespace NKikimrClient;
 namespace NKikimr::NSqsTopic::V1 {
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
-
-    static constexpr TDuration MAX_VISIBILITY_TIMEOUT = TDuration::Hours(12);
-    static constexpr TDuration MIN_VISIBILITY_TIMEOUT = TDuration::Seconds(0);
 
     struct TMessageIdLess {
         bool operator()(const NPQ::NMLP::TMessageId& lhs, const NPQ::NMLP::TMessageId& rhs) const {

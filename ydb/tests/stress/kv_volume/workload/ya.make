@@ -2,11 +2,9 @@ PY3_LIBRARY()
 
 PY_SRCS(
     __init__.py
+    kikimr_keyvalue_client.py
 )
 
-BUNDLE(
-    ydb/apps/ydb NAME ydb_cli
-)
 PEERDIR(
     ydb/tests/stress/common
     ydb/tests/stress/kv_volume/protos

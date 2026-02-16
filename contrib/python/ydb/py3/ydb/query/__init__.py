@@ -20,6 +20,7 @@ __all__ = [
 ]
 
 import logging
+from typing import Optional, TYPE_CHECKING
 
 from .base import (
     QueryClientSettings,
@@ -32,7 +33,6 @@ from .base import (
 from .session import QuerySession
 from .transaction import QueryTxContext
 
-from .._grpc.grpcwrapper import common_utils
 from .._grpc.grpcwrapper.ydb_query_public_types import (
     BaseQueryTxMode,
     QueryOnlineReadOnly,
@@ -48,11 +48,16 @@ from .._grpc.grpcwrapper.ydb_query_public_types import (
 
 from .pool import QuerySessionPool
 
+if TYPE_CHECKING:
+    from ..driver import Driver as SyncDriver
+
 logger = logging.getLogger(__name__)
 
 
 class QueryClientSync:
-    def __init__(self, driver: common_utils.SupportedDriverType, query_client_settings: QueryClientSettings = None):
+    _driver: "SyncDriver"
+
+    def __init__(self, driver: "SyncDriver", query_client_settings: Optional[QueryClientSettings] = None):
         self._driver = driver
         self._settings = query_client_settings
 

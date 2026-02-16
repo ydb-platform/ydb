@@ -19,7 +19,7 @@ extern const char TopFreqResourceNameGeneric[] = "TopFreq.TopFreqResource.Generi
 class TTopFreqResource: public TBoxedResource<TTopFreqGeneric, TopFreqResourceNameGeneric> {
 public:
     template <typename... Args>
-    inline TTopFreqResource(Args&&... args)
+    inline explicit TTopFreqResource(Args&&... args)
         : TBoxedResource(std::forward<Args>(args)...)
     {
     }
@@ -178,7 +178,7 @@ private:
     class TTopFreqResourceData<EDataSlot::slot>: public TBoxedResource<TTopFreqData<EDataSlot::slot>, TopFreqResourceName##slot> { \
     public:                                                                                                                        \
         template <typename... Args>                                                                                                \
-        inline TTopFreqResourceData(Args&&... args)                                                                                \
+        inline explicit TTopFreqResourceData(Args&&... args)                                                                       \
             : TBoxedResource(std::forward<Args>(args)...)                                                                          \
         {                                                                                                                          \
         }                                                                                                                          \

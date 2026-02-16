@@ -51,7 +51,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         .Table(del.Table())
         .Input(lookupKeys)
         .ReturningColumns(del.ReturningColumns())
-        .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+        .IsBatch(del.IsBatch())
         .Done();
 
     TVector<TExprBase> effects;
@@ -100,7 +100,8 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                     indexTableColumns, deleteIndexKeys, false, del.Pos(), ctx);
                 break;
             }
-            case TIndexDescription::EType::GlobalFulltext: {
+            case TIndexDescription::EType::GlobalFulltextPlain:
+            case TIndexDescription::EType::GlobalFulltextRelevance: {
                 // For fulltext indexes, we need to tokenize the text and create deleted rows
                 const auto deletePrecompute = ReadInputToPrecompute(deleteIndexKeys, del.Pos(), ctx);
                 deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deletePrecompute, indexTableColumnsSet, indexTableColumns,

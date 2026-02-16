@@ -25,7 +25,8 @@ code workspace/workspace.code-workspace
     ```
     tmux
     cd ../../tests/tools/local_cluster
-    ./start.sh --binary-path ../../../apps/ydbd/ydbd
+    ya make
+    YDB_DEFAULT_LOG_LEVEL=DEBUG ./local_cluster --binary-path ~/ydb_bg/ydb/apps/ydbd/ydbd
     ```
 3) Forward the monitoring ports via SSH.
 
@@ -55,3 +56,31 @@ code workspace/workspace.code-workspace
     ssh -L 8765:localhost:8765 cloud
     ```
     Alternatively, you can forward ports directly through VS Code.
+
+## IO
+1) Setup ddisks:
+    ```
+    ./ydbd admin bs config invoke --proto 'Command { DefineDDiskPool { BoxId: 1 Name: "ddp1" Geometry { NumFailRealms: 1 NumFailDomainsPerFailRealm: 5 NumVDisksPerFailDomain: 1 RealmLevelBegin: 10 RealmLevelEnd: 10 DomainLevelBegin: 10 DomainLevelEnd: 40 } PDiskFilter { Property { Type: ROT } } NumDDiskGroups: 10 } }'
+    ```
+
+2) Create partition:
+    ```
+    cd ydb_bg/ydb/apps/dstool/
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 1000 --pool ddp1
+    ```
+
+3) Write some data:
+    ```
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition io --start_index 0 --type write --data "vnfjkdnsfvjdfknsjknsdkjnvnjk" --id "[1:7599782149963481987:2733]"
+    ```
+
+4) Read some data:
+    ```
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition io --type read --blocks_count 1 --start_index 0 --id "[1:7600018021929343002:2699]"
+    ```
+
+3) Grep logs:
+    ```
+    cd /home/barkovbg/ydb_bg/ydb/tests/tools/local_cluster/.ydbd_working_dir/local_cluster
+    cat node_*/logfile_* | grep "NBS_PARTITION" | sort
+    ```

@@ -62,7 +62,6 @@ public:
     FEATURE_FLAG_SETTER(EnableBackupService)
     FEATURE_FLAG_SETTER(EnableGranularTimecast)
     FEATURE_FLAG_SETTER(EnablePgSyntax)
-    FEATURE_FLAG_SETTER(EnableAntlr4Parser)
     FEATURE_FLAG_SETTER(EnableTieringInColumnShard)
     FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
     FEATURE_FLAG_SETTER(EnableOlapCompression)
@@ -88,6 +87,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
     FEATURE_FLAG_SETTER(EnableAccessToIndexImplTables)
     FEATURE_FLAG_SETTER(EnableIndexMaterialization)
+    FEATURE_FLAG_SETTER(EnableTopicsSqlIoOperations)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -2252,10 +2252,15 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
 
         {
+waitForNavCache:
             auto result = client.GetShardIterator(
                     streamName, "shard-000000",
                     YDS_V1::ShardIteratorType::TRIM_HORIZON
                 ).ExtractValueSync();
+            if (result.GetStatus() == EStatus::SCHEME_ERROR) { // permissions were cached
+                Sleep(TDuration::MilliSeconds(10));
+                goto waitForNavCache;
+            }
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();

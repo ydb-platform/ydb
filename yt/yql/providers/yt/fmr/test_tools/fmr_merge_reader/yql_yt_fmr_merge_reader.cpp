@@ -35,6 +35,7 @@ IBlockIterator::TPtr MakeTdsIterator(
         ranges,
         tds,
         keyColumns,
+        TVector<ESortOrder>(keyColumns.size(), ESortOrder::Ascending),
         neededColumns,
         TString()
     );

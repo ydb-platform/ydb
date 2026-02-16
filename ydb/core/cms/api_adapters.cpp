@@ -26,6 +26,8 @@ namespace {
             return NKikimrCms::MODE_KEEP_AVAILABLE;
         case Ydb::Maintenance::AVAILABILITY_MODE_FORCE:
             return NKikimrCms::MODE_FORCE_RESTART;
+        case Ydb::Maintenance::AVAILABILITY_MODE_SMART:
+            return NKikimrCms::MODE_SMART_AVAILABILITY;
         default:
             Y_ABORT("unreachable");
         }
@@ -39,6 +41,8 @@ namespace {
             return Ydb::Maintenance::AVAILABILITY_MODE_WEAK;
         case NKikimrCms::MODE_FORCE_RESTART:
             return Ydb::Maintenance::AVAILABILITY_MODE_FORCE;
+        case NKikimrCms::MODE_SMART_AVAILABILITY:
+            return Ydb::Maintenance::AVAILABILITY_MODE_SMART;
         default:
             Y_ABORT("unreachable");
         }
@@ -519,6 +523,7 @@ class TCreateMaintenanceTask
         case Ydb::Maintenance::AVAILABILITY_MODE_STRONG:
         case Ydb::Maintenance::AVAILABILITY_MODE_WEAK:
         case Ydb::Maintenance::AVAILABILITY_MODE_FORCE:
+        case Ydb::Maintenance::AVAILABILITY_MODE_SMART:
             break;
         default:
             Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown availability mode");
@@ -597,12 +602,14 @@ class TCreateMaintenanceTask
 
     static void ConvertAction(const Ydb::Maintenance::DrainAction& action, NKikimrCms::TAction& cmsAction) {
         cmsAction.SetType(NKikimrCms::TAction::DRAIN_NODE);
+        cmsAction.SetDuration(TDuration::Max().GetValue());
 
         ConvertScope(action.scope(), cmsAction);
     }
 
     static void ConvertAction(const Ydb::Maintenance::CordonAction& action, NKikimrCms::TAction& cmsAction) {
         cmsAction.SetType(NKikimrCms::TAction::CORDON_NODE);
+        cmsAction.SetDuration(TDuration::Max().GetValue());
 
         ConvertScope(action.scope(), cmsAction);
     }

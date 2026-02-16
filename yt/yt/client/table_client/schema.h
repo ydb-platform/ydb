@@ -50,7 +50,7 @@ public:
     TLegacyLockBitmap GetBitmap() const;
 
     TLegacyLockMask(const TLegacyLockMask& other) = default;
-    TLegacyLockMask& operator= (const TLegacyLockMask& other) = default;
+    TLegacyLockMask& operator=(const TLegacyLockMask& other) = default;
 
     static constexpr int BitsPerType = 2;
     static constexpr TLegacyLockBitmap TypeMask = (1 << BitsPerType) - 1;
@@ -104,7 +104,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TLockMask& lhs, const TLockMask& rhs);
+bool operator==(const TLockMask& lhs, const TLockMask& rhs);
 
 TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 
@@ -503,11 +503,11 @@ TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormat
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TColumnSchema& lhs, const TColumnSchema& rhs);
+bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs);
 
-bool operator == (const TDeletedColumn& lhs, const TDeletedColumn& rhs);
+bool operator==(const TDeletedColumn& lhs, const TDeletedColumn& rhs);
 
-bool operator == (const TTableSchema& lhs, const TTableSchema& rhs);
+bool operator==(const TTableSchema& lhs, const TTableSchema& rhs);
 
 // Compat function for https://st.yandex-team.ru/YT-10668 workaround.
 bool IsEqualIgnoringRequiredness(const TTableSchema& lhs, const TTableSchema& rhs);
@@ -607,24 +607,24 @@ void FromProto(NTableClient::TColumnFilter* columnFilter, const TColumnFilter& p
 ////////////////////////////////////////////////////////////////////////////////
 
 // Incompatible < RequireValidation < FullyCompatible
-constexpr bool operator < (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
-constexpr bool operator <= (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
-constexpr bool operator > (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
-constexpr bool operator >= (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator<(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator<=(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator>(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator>=(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTableSchemaHash
 {
-    size_t operator() (const TTableSchema& schema) const;
-    size_t operator() (const TTableSchemaPtr& schema) const;
+    size_t operator()(const TTableSchema& schema) const;
+    size_t operator()(const TTableSchemaPtr& schema) const;
 };
 
 struct TTableSchemaEquals
 {
-    bool operator() (const TTableSchema& lhs, const TTableSchema& rhs) const;
-    bool operator() (const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const;
-    bool operator() (const TTableSchemaPtr& lhs, const TTableSchema& rhs) const;
+    bool operator()(const TTableSchema& lhs, const TTableSchema& rhs) const;
+    bool operator()(const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const;
+    bool operator()(const TTableSchemaPtr& lhs, const TTableSchema& rhs) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

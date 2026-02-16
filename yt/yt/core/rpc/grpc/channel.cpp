@@ -218,7 +218,7 @@ public:
 
     int GetInflightRequestCount() override
     {
-        YT_UNIMPLEMENTED();
+        return ConcurrentCalls_.load(std::memory_order::relaxed);
     }
 
     const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
@@ -244,6 +244,7 @@ private:
     TGrpcLibraryLockPtr LibraryLock_ = TDispatcher::Get()->GetLibraryLock();
     TGrpcChannelPtr Channel_;
     TGrpcChannelCredentialsPtr Credentials_;
+    std::atomic<int> ConcurrentCalls_;
 
 
     class TCallHandler
@@ -262,7 +263,14 @@ private:
             , Request_(std::move(request))
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
-        { }
+        {
+            Owner_->ConcurrentCalls_.fetch_add(1, std::memory_order::relaxed);
+        }
+
+        ~TCallHandler()
+        {
+            Owner_->ConcurrentCalls_.fetch_sub(1, std::memory_order::relaxed);
+        }
 
         void Initialize()
         {

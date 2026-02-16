@@ -65,7 +65,7 @@ inline TSourcePosition GetSourcePosition(IFunctionTypeInfoBuilder& builder) {
     return builder.GetSourcePosition();
 #else
     Y_UNUSED(builder);
-    return {};
+    return TSourcePosition();
 #endif
 }
 

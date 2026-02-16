@@ -346,16 +346,6 @@
                 "ColumnId": 20,
                 "ColumnName": "MaintenanceStatus",
                 "ColumnType": "Byte"
-            },
-            {
-                "ColumnId": 21,
-                "ColumnName": "InferPDiskSlotCountFromUnitSize",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 22,
-                "ColumnName": "InferPDiskSlotCountMax",
-                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -379,9 +369,7 @@
                     17,
                     18,
                     19,
-                    20,
-                    21,
-                    22
+                    20
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1920,6 +1908,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "PDiskConfig",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "HostConfigId",
                 "ColumnType": "Uint64"
@@ -1948,36 +1941,19 @@
                 "ColumnId": 6,
                 "ColumnName": "Kind",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "PDiskConfig",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 8,
-                "ColumnName": "InferPDiskSlotCountFromUnitSize",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 9,
-                "ColumnName": "InferPDiskSlotCountMax",
-                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6,
-                    7,
-                    8,
-                    9
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

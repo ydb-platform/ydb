@@ -153,6 +153,8 @@ void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
     Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable = false);
+bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
+    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 
 // out
@@ -164,5 +166,9 @@ bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
 bool FillSequenceDescription(
     NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in,
     Ydb::StatusIds::StatusCode& status, TString& error);
+
+// out
+bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TPathDescription& in,
+    Ydb::StatusIds_StatusCode& status, TString& error);
 
 } // namespace NKikimr

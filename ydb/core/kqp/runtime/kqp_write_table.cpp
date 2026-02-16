@@ -1108,6 +1108,46 @@ std::vector<TConstArrayRef<TCell>> CutColumns(
     return result;
 }
 
+std::vector<ui32> BuildDefaultMap(
+        const THashSet<TStringBuf>& defaultColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns) {
+    std::vector<ui32> result(inputColumns.size(), 0);
+
+    THashMap<TStringBuf, ui32> lookupColumnIdToIndex;
+    for (size_t index = 0; index < lookupColumns.size(); ++index) {
+        lookupColumnIdToIndex[lookupColumns[index].GetName()] = index;
+    }
+
+    for (size_t index = 0; index < inputColumns.size(); ++index) {
+        const auto& inputColumn = inputColumns[index];
+        if (defaultColumns.contains(inputColumn.GetName()) && lookupColumnIdToIndex.contains(inputColumn.GetName())) {
+            result[index] = inputColumns.size() + lookupColumnIdToIndex.at(inputColumn.GetName());
+        }
+    }
+
+    return result;
+}
+
+ui32 CountLocalDefaults(
+        const THashSet<TStringBuf>& defaultColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns) {
+    THashSet<TStringBuf> lookupColumnsSet;
+    for (const auto& column : lookupColumns) {
+        lookupColumnsSet.insert(column.GetName());
+    }
+
+    ui32 count = 0;
+    for (const auto& column : inputColumns) {
+        if (defaultColumns.contains(column.GetName()) && !lookupColumnsSet.contains(column.GetName())) {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
 TUniqueSecondaryKeyCollector::TUniqueSecondaryKeyCollector(
     const TConstArrayRef<NScheme::TTypeInfo> primaryKeyColumnTypes,
     const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
@@ -1244,6 +1284,7 @@ struct TMetadata {
     const TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumnsMetadata;
     const TVector<NKikimrKqp::TKqpColumnMetadataProto> InputColumnsMetadata;
     const i64 Priority;
+    const ui32 DefaultColumnsCount;
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
 };
 
@@ -1531,8 +1572,11 @@ public:
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
+        const ui32 defaultColumnsCount,
         const i64 priority) override {
         AFL_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
+        AFL_ENSURE(defaultColumnsCount == 0 || operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT);
+
         auto [iter, inserted] = WriteInfos.emplace(
             token,
             TWriteInfo {
@@ -1541,6 +1585,7 @@ public:
                     .KeyColumnsMetadata = std::move(keyColumns),
                     .InputColumnsMetadata = std::move(inputColumns),
                     .Priority = priority, // TODO: manage priority on WriteTask level.
+                    .DefaultColumnsCount = defaultColumnsCount,
                     .OperationType = operationType,
                 },
                 .Serializer = nullptr,
@@ -1688,7 +1733,8 @@ public:
                     writeInfo.Metadata.TableId,
                     writeInfo.Serializer->GetWriteColumnIds(),
                     payloadIndex,
-                    writeInfo.Serializer->GetDataFormat());
+                    writeInfo.Serializer->GetDataFormat(),
+                    writeInfo.Metadata.DefaultColumnsCount);
             } else {
                 AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());   
             }

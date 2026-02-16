@@ -791,6 +791,32 @@ protected:
     TStateType State;
 };
 
+template <typename TState = NUdf::TUnboxedValue>
+class TCodegenStableStatefulIterator : public TComputationValue<TCodegenStableStatefulIterator<TState>> {
+public:
+    using TStateType = TState;
+    using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, TStateType&, TStateType&, NUdf::TUnboxedValuePod&);
+
+    TCodegenStableStatefulIterator(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator, const TStateType& init = TStateType())
+        : TComputationValue<TCodegenStableStatefulIterator>(memInfo)
+        , Ctx(ctx)
+        , NextFunc(next)
+        , Iterator(std::move(iterator))
+        , Init(init)
+    {}
+
+protected:
+    bool Next(NUdf::TUnboxedValue& value) override {
+        return NextFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), Init, State, value);
+    }
+
+    TComputationContext* const Ctx;
+    const TNextPtr NextFunc;
+    const NUdf::TUnboxedValue Iterator;
+    TStateType Init;
+    TStateType State;
+};
+
 class TCustomListCodegenValue : public TCustomListValue {
 public:
     using TIterator = TCodegenIterator;
@@ -875,7 +901,7 @@ private:
 
 class TCodegenIteratorOne : public TComputationValue<TCodegenIteratorOne> {
 public:
-    using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod&);
+    using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod&, NUdf::TUnboxedValuePod&);
 
     TCodegenIteratorOne(TMemoryUsageInfo* memInfo, TNextPtr nextOne, TNextPtr nextTwo, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator)
         : TComputationValue<TCodegenIteratorOne>(memInfo)
@@ -889,9 +915,9 @@ private:
     bool Next(NUdf::TUnboxedValue& value) override {
         if (FirstCall) {
             FirstCall = false;
-            return NextFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), value);
+            return NextFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), State, value);
         } else {
-            return NextFuncTwo(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), value);
+            return NextFuncTwo(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), State, value);
         }
     }
 
@@ -900,6 +926,7 @@ private:
     TComputationContext* const Ctx;
     const NUdf::TUnboxedValue Iterator;
     bool FirstCall = true;
+    NUdf::TUnboxedValue State;
 };
 
 class TListCodegenValueOne : public TComputationValue<TListCodegenValueOne> {

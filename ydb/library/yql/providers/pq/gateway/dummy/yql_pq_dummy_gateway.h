@@ -64,10 +64,10 @@ public:
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const final;
 
 private:
-    TString CanonizeCluster(const TString& cluster, const TString& database) const;
+    TString SkipDatabasePrefix(const TString& path, const TString& database) const;
 
     mutable TMutex Mutex;
-    const bool SkipDatabasePrefix = false;
+    const bool AllowSkipDatabasePrefix = false;
     THashMap<TClusterNPath, TDummyTopic> Topics;
     THashSet<TString> OpenedSessions;
 };

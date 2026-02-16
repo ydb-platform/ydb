@@ -36,9 +36,10 @@ private:
 
         explicit TMultipartUploadSession(const TString& key)
             : Key(key)
-            , File(key, CreateAlways | WrOnly | ForAppend)
+            , File(key, OpenAlways | WrOnly | ForAppend)
         {
             File.Flock(LOCK_EX | LOCK_NB);
+            File.Resize(0);
         }
     };
 
@@ -111,7 +112,7 @@ private:
             FS_LOG_W(operation << ": failed to acquire lock (file is busy)"
                 << ": key# " << key);
             ReplyError<TEvResponse>(sender, key, "File is locked by another process",
-                Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+                Aws::S3::S3Errors::INTERNAL_FAILURE, true /* retryable */);
             return true;
         }
         return false;
@@ -209,7 +210,11 @@ public:
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
-                throw;
+                FS_LOG_E("PutObject failed with system error"
+                    << ": key# " << key
+                    << ", error# " << ex.what()
+                    << ", errno# " << ex.Status());
+                ReplyError<TEvPutObjectResponse>(ev->Sender, key, ex.what());
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("PutObject failed"
@@ -223,16 +228,108 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_W("GetObject: not implemented");
-        ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Not implemented");
+        FS_LOG_D("GetObject"
+            << ": key# " << key);
+
+        try {
+            TFile file(key, RdOnly);
+            const i64 fileSize = file.GetLength();
+
+            if (fileSize == 0) {
+                Aws::S3::Model::GetObjectResult awsResult;
+                awsResult.SetContentLength(0);
+                awsResult.SetETag("\"fs-file\"");
+                Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+
+                auto response = std::make_unique<TEvGetObjectResponse>(key, std::make_pair(0, 0), std::move(outcome), TString());
+                Send(ev->Sender, response.release());
+                return;
+            }
+
+            TString rangeStr(request.GetRange().data(), request.GetRange().size());
+            std::pair<ui64, ui64> range;
+
+            if (!rangeStr.empty()) {
+                if (!TEvGetObjectResponse::TryParseRange(rangeStr, range)) {
+                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range format");
+                    return;
+                }
+            } else {
+                range = std::make_pair(0, fileSize - 1);
+            }
+
+            ui64 start = range.first;
+            ui64 end = range.second;
+            if (start > end) {
+                ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range: start > end");
+                return;
+            }
+            const ui64 length = end - start + 1;
+
+            if ((i64)start >= fileSize) {
+                ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Range out of bounds");
+                return;
+            }
+
+            TString data;
+            data.resize(length);
+            file.Seek(start, sSet);
+            size_t bytesRead = file.Read(data.begin(), length);
+            data.resize(bytesRead);
+
+            FS_LOG_I("GetObject read"
+                << ": bytes# " << bytesRead
+                << ", from# " << key);
+
+            Aws::S3::Model::GetObjectResult awsResult;
+            awsResult.SetContentLength(bytesRead);
+            awsResult.SetETag("\"fs-file\"");
+            Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+
+            auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(data));
+            Send(ev->Sender, response.release());
+
+        } catch (const std::exception& ex) {
+            FS_LOG_E("GetObject error"
+                << ": key# " << key
+                << ", error# " << ex.what());
+            ReplyError<TEvGetObjectResponse>(ev->Sender, key, TString("File read error: ") + ex.what());
+        }
     }
 
     void Handle(TEvHeadObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_W("HeadObject: not implemented");
-        ReplyError<TEvHeadObjectResponse>(ev->Sender, key, "Not implemented");
+        FS_LOG_D("HeadObject"
+            << ": key# " << key);
+
+        try {
+            TFile file(key, RdOnly | Seq);
+            const i64 fileSize = file.GetLength();
+
+            FS_LOG_I("HeadObject"
+                << ": file size# " << fileSize
+                << " for# " << key);
+
+            Aws::S3::Model::HeadObjectResult awsResult;
+            awsResult.SetContentLength(fileSize);
+            awsResult.SetETag("\"fs-file\"");
+
+            Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+            auto response = std::make_unique<TEvHeadObjectResponse>(key, std::move(outcome));
+            Send(ev->Sender, response.release());
+        } catch (const TFileError& ex) {
+            FS_LOG_W("HeadObject"
+                << ": key# " << key
+                << ", error# " << "file not found");
+                ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TStringBuilder() << "File not found: " << ex.what(), Aws::S3::S3Errors::NO_SUCH_KEY);
+        } catch (const std::exception& ex) {
+            FS_LOG_E("HeadObject error"
+                << ": key# " << key
+                << ", error# " << ex.what());
+                ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TStringBuilder() << "File head error: " << ex.what());
+        }
     }
 
     void Handle(TEvDeleteObjectRequest::TPtr& ev) {
@@ -266,12 +363,13 @@ public:
 
     void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        const TString key = GetIncompletePath(request.GetKey().c_str());
+        const TString originalKey = TString(request.GetKey().data(), request.GetKey().size());
 
         FS_LOG_D("CreateMultipartUpload"
-            << ": key# " << key);
+            << ": key# " << originalKey);
 
         try {
+            const TString key = GetIncompletePath(originalKey.c_str());
             const TString uploadId = TStringBuilder() << key << "_" << CreateGuidAsString();
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
@@ -288,42 +386,51 @@ public:
             awsResult.SetUploadId(uploadId.c_str());
 
             Aws::Utils::Outcome<Aws::S3::Model::CreateMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
-            auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
+            auto response = std::make_unique<TEvCreateMultipartUploadResponse>(originalKey, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, key, "CreateMultipartUpload")) {
-                throw;
+            if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, originalKey, "CreateMultipartUpload")) {
+                FS_LOG_E("CreateMultipartUpload failed with system error"
+                    << ": key# " << originalKey
+                    << ", error# " << ex.what()
+                    << ", errno# " << ex.Status());
+                ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, originalKey, ex.what());
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
-                << ": key# " << key
+                << ": key# " << originalKey
                 << ", error# " << ex.what());
-            ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, key, ex.what());
+            ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, originalKey, ex.what());
         }
     }
 
     void Handle(TEvUploadPartRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const auto& body = ev->Get()->Body;
-        const TString key = GetIncompletePath(request.GetKey().c_str());
+        const TString originalKey = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
         FS_LOG_D("UploadPart"
-            << ": key# " << key
+            << ": key# " << originalKey
             << ", uploadId# " << uploadId
             << ", part# " << partNumber
             << ", size# " << body.size());
 
         try {
+            const TString key = GetIncompletePath(originalKey.c_str());
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
                 // If the UploadId is not found in ActiveUploads,
                 // it means that a restart has occurred and all parts have started being written again
                 // so we can simply create a new session.
                 if (partNumber != 1) {
-                    throw yexception() << "Cannot create new upload session for part " << partNumber
+                    const TString errorMsg = TStringBuilder()
+                        << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
+                    FS_LOG_E("UploadPart: " << errorMsg);
+                    ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, errorMsg, Aws::S3::S3Errors::INTERNAL_FAILURE);
+                    return;
                 }
                 it = ActiveUploads.emplace(uploadId, TMultipartUploadSession(key)).first;
             }
@@ -344,25 +451,29 @@ public:
             awsResult.SetETag(etag.c_str());
 
             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
-            auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
+            auto response = std::make_unique<TEvUploadPartResponse>(originalKey, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvUploadPartResponse>(ex, ev->Sender, key, "UploadPart")) {
-                throw;
+            if (!HandleFileLockError<TEvUploadPartResponse>(ex, ev->Sender, originalKey, "UploadPart")) {
+                FS_LOG_E("UploadPart failed with system error"
+                    << ": key# " << originalKey
+                    << ", uploadId# " << uploadId
+                    << ", error# " << ex.what()
+                    << ", errno# " << ex.Status());
+                ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, ex.what());
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"
-                << ": key# " << key
+                << ": key# " << originalKey
                 << ", uploadId# " << uploadId
                 << ", error# " << ex.what());
-            ReplyError<TEvUploadPartResponse>(ev->Sender, key, ex.what());
+            ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, ex.what());
         }
     }
 
     void Handle(TEvCompleteMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        const TString incompleteKey = GetIncompletePath(key.c_str());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
         FS_LOG_D("CompleteMultipartUpload"
@@ -370,6 +481,7 @@ public:
             << ", uploadId# " << uploadId);
 
         try {
+            const TString incompleteKey = GetIncompletePath(key.c_str());
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
                 // Upload session not found - likely due to actor restart
@@ -393,7 +505,7 @@ public:
             NFs::Rename(incompleteKey, key);
             session.File.Close();
 
-            FS_LOG_T("CompleteMultipartUpload"
+            FS_LOG_I("CompleteMultipartUpload"
                 << ": uploadId# " << uploadId
                 << ", total size# " << session.TotalSize
                 << ", file mv from# " << incompleteKey << " to# " << key);

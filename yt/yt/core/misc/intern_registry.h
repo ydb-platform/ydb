@@ -41,14 +41,14 @@ private:
 
     struct THash
     {
-        size_t operator() (const TInternedObjectData<T>* internedData) const;
-        size_t operator() (const T& data) const;
+        size_t operator()(const TInternedObjectData<T>* internedData) const;
+        size_t operator()(const T& data) const;
     };
 
     struct TEqual
     {
-        bool operator() (const TInternedObjectData<T>* lhs, const TInternedObjectData<T>* rhs) const;
-        bool operator() (const TInternedObjectData<T>* lhs, const T& rhs) const;
+        bool operator()(const TInternedObjectData<T>* lhs, const TInternedObjectData<T>* rhs) const;
+        bool operator()(const TInternedObjectData<T>* lhs, const T& rhs) const;
     };
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);

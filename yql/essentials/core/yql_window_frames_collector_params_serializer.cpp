@@ -16,56 +16,47 @@ constexpr TStringBuf KeySortColumnName = "SortColumnName";
 constexpr TStringBuf KeyDirection = "Direction";
 constexpr TStringBuf KeyNumber = "Number";
 
-TExprNode::TPtr BuildNumberVariantType(TPositionHandle pos, TStringBuf dataTypeName, TExprContext& ctx) {
-    return ctx.Builder(pos)
-        .Callable("VariantType")
-            .Callable(0, "StructType")
-                .List(0)
-                    .Atom(0, "Unbounded")
-                    .Callable(1, "VoidType")
-                    .Seal()
-                .Seal()
-                .List(1)
-                    .Atom(0, "Bounded")
-                    .Callable(1, "DataType")
-                        .Atom(0, dataTypeName)
-                    .Seal()
-                .Seal()
-            .Seal()
-        .Seal()
-        .Build();
-}
-
-template <typename T>
-TExprNode::TPtr SerializeNumberAndDirection(
+TNumberAndDirection<TExprNode::TPtr> ConvertToExprNode(
     TPositionHandle pos,
-    const TNumberAndDirection<T>& value,
-    TStringBuf dataTypeName,
-    TStringBuf callableName,
+    const TNumberAndDirection<ui64>& value,
     TExprContext& ctx)
 {
-    auto variantType = BuildNumberVariantType(pos, dataTypeName, ctx);
-
-    TExprNode::TPtr numberVariant;
     if (value.IsInf()) {
-        numberVariant = ctx.Builder(pos)
-            .Callable("Variant")
-                .Callable(0, "Void")
-                .Seal()
-                .Atom(1, "Unbounded")
-                .Add(2, variantType)
-            .Seal()
-            .Build();
+        return TNumberAndDirection<TExprNode::TPtr>::Inf(value.GetDirection());
+    }
+    auto node = ctx.Builder(pos)
+        .Callable("Uint64")
+            .Atom(0, ToString(value.GetUnderlyingValue()))
+        .Seal()
+        .Build();
+    return TNumberAndDirection<TExprNode::TPtr>(node, value.GetDirection());
+}
+
+TWindowFrame<TNumberAndDirection<TExprNode::TPtr>> ConvertToExprNode(
+    TPositionHandle pos,
+    const TWindowFrame<TNumberAndDirection<ui64>>& frame,
+    TExprContext& ctx)
+{
+    return TWindowFrame<TNumberAndDirection<TExprNode::TPtr>>(
+        ConvertToExprNode(pos, frame.Min(), ctx),
+        ConvertToExprNode(pos, frame.Max(), ctx)
+    );
+}
+
+TExprNode::TPtr SerializeNumberAndDirection(
+    TPositionHandle pos,
+    const TNumberAndDirection<TExprNode::TPtr>& value,
+    TExprContext& ctx)
+{
+    TExprNode::TPtr numberAndDirection;
+    if (value.IsInf()) {
+        numberAndDirection = ctx.Builder(pos)
+                                .Callable("Void")
+                                .Seal()
+                             .Build();
     } else {
-        numberVariant = ctx.Builder(pos)
-            .Callable("Variant")
-                .Callable(0, callableName)
-                    .Atom(0, ToString(value.GetUnderlyingValue()))
-                .Seal()
-                .Atom(1, "Bounded")
-                .Add(2, variantType)
-            .Seal()
-            .Build();
+        YQL_ENSURE(!value.IsZero(), "Unexpected zero tag here.");
+        numberAndDirection = value.GetUnderlyingValue();
     }
 
     return ctx.Builder(pos)
@@ -78,78 +69,75 @@ TExprNode::TPtr SerializeNumberAndDirection(
             .Seal()
             .List(1)
                 .Atom(0, KeyNumber)
-                .Add(1, numberVariant)
+                .Add(1, numberAndDirection)
             .Seal()
         .Seal()
         .Build();
 }
 
-template <typename T>
 TExprNode::TPtr SerializeWindowFrame(
     TPositionHandle pos,
-    const TWindowFrame<TNumberAndDirection<T>>& frame,
-    TStringBuf dataTypeName,
-    TStringBuf callableName,
+    const TWindowFrame<TNumberAndDirection<TExprNode::TPtr>>& frame,
     TExprContext& ctx)
 {
     return ctx.Builder(pos)
         .Callable("AsStruct")
             .List(0)
                 .Atom(0, KeyMin)
-                .Add(1, SerializeNumberAndDirection(pos, frame.Min(), dataTypeName, callableName, ctx))
+                .Add(1, SerializeNumberAndDirection(pos, frame.Min(), ctx))
             .Seal()
             .List(1)
                 .Atom(0, KeyMax)
-                .Add(1, SerializeNumberAndDirection(pos, frame.Max(), dataTypeName, callableName, ctx))
+                .Add(1, SerializeNumberAndDirection(pos, frame.Max(), ctx))
             .Seal()
         .Seal()
         .Build();
 }
 
-TExprNode::TPtr SerializeWindowFrameAggregatedBounds(TPositionHandle pos, const TCoreWinFrameCollectorBounds<TString>& bounds, TStringBuf rangeCallableName, TExprContext& ctx) {
+TExprNode::TPtr SerializeWindowFrameAggregatedBounds(TPositionHandle pos, const TCoreWinFrameCollectorBounds<TExprNode::TPtr>& bounds, TExprContext& ctx) {
     TExprNodeList rangeIntervalItems;
     for (const auto& frame : bounds.RangeIntervals()) {
-        rangeIntervalItems.push_back(SerializeWindowFrame(pos, frame, rangeCallableName, rangeCallableName, ctx));
+        rangeIntervalItems.push_back(SerializeWindowFrame(pos, frame, ctx));
     }
 
     TExprNodeList rowIntervalItems;
     for (const auto& frame : bounds.RowIntervals()) {
-        rowIntervalItems.push_back(SerializeWindowFrame(pos, frame, "Uint64", "Uint64", ctx));
+        rowIntervalItems.push_back(SerializeWindowFrame(pos, ConvertToExprNode(pos, frame, ctx), ctx));
     }
 
     TExprNodeList rangeIncrementalItems;
     for (const auto& item : bounds.RangeIncrementals()) {
-        rangeIncrementalItems.push_back(SerializeNumberAndDirection(pos, item, rangeCallableName, rangeCallableName, ctx));
+        rangeIncrementalItems.push_back(SerializeNumberAndDirection(pos, item, ctx));
     }
 
     TExprNodeList rowIncrementalItems;
     for (const auto& item : bounds.RowIncrementals()) {
-        rowIncrementalItems.push_back(SerializeNumberAndDirection(pos, item, "Uint64", "Uint64", ctx));
+        rowIncrementalItems.push_back(SerializeNumberAndDirection(pos, ConvertToExprNode(pos, item, ctx), ctx));
     }
 
     return ctx.Builder(pos)
         .Callable("AsStruct")
             .List(0)
                 .Atom(0, KeyRangeIntervals)
-                .Callable(1, "AsList")
+                .List(1)
                     .Add(std::move(rangeIntervalItems))
                 .Seal()
             .Seal()
             .List(1)
                 .Atom(0, KeyRowIntervals)
-                .Callable(1, "AsList")
+                .List(1)
                     .Add(std::move(rowIntervalItems))
                 .Seal()
             .Seal()
             .List(2)
                 .Atom(0, KeyRangeIncrementals)
-                .Callable(1, "AsList")
+                .List(1)
                     .Add(std::move(rangeIncrementalItems))
                 .Seal()
             .Seal()
             .List(3)
                 .Atom(0, KeyRowIncrementals)
-                .Callable(1, "AsList")
+                .List(1)
                     .Add(std::move(rowIncrementalItems))
                 .Seal()
             .Seal()
@@ -160,9 +148,8 @@ TExprNode::TPtr SerializeWindowFrameAggregatedBounds(TPositionHandle pos, const 
 } // anonymous namespace
 
 TExprNode::TPtr SerializeWindowAggregatorParamsToExpr(
-    const TStringCoreWinFramesCollectorParams& params,
+    const TExprNodeCoreWinFrameCollectorParams& params,
     TPositionHandle pos,
-    TStringBuf rangeCallableName,
     TExprContext& ctx)
 {
     return ctx.Builder(pos)
@@ -175,7 +162,7 @@ TExprNode::TPtr SerializeWindowAggregatorParamsToExpr(
             .Seal()
             .List(1)
                 .Atom(0, KeyBounds)
-                .Add(1, SerializeWindowFrameAggregatedBounds(pos, params.GetBounds(), rangeCallableName, ctx))
+                .Add(1, SerializeWindowFrameAggregatedBounds(pos, params.GetBounds(), ctx))
             .Seal()
             .List(2)
                 .Atom(0, KeySortColumnName)

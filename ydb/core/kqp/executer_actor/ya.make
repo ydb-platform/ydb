@@ -15,6 +15,7 @@ SRCS(
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp
     kqp_partitioned_executer.cpp
+    shard_key_ranges.cpp
 )
 
 PEERDIR(
@@ -45,6 +46,7 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/tasks
     ydb/library/yql/providers/common/http_gateway
+    ydb/library/yql/providers/pq/proto
     ydb/services/metadata/abstract
 )
 

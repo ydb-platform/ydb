@@ -5,7 +5,7 @@ import sys
 
 __all__ = ["warn", "warn_explicit", "showwarning",
            "formatwarning", "filterwarnings", "simplefilter",
-           "resetwarnings", "catch_warnings"]
+           "resetwarnings", "catch_warnings", "deprecated"]
 
 def showwarning(message, category, filename, lineno, file=None, line=None):
     """Hook to write a warning to a file; replace if you like."""
@@ -36,9 +36,7 @@ def _formatwarnmsg_impl(msg):
     category = msg.category.__name__
     s =  f"{msg.filename}:{msg.lineno}: {category}: {msg.message}\n"
 
-    # "sys" is a made up file name when we are not able to get the frame
-    # so do not try to get the source line
-    if msg.line is None and msg.filename != "sys":
+    if msg.line is None:
         try:
             import linecache
             line = linecache.getline(msg.filename, msg.lineno)
@@ -142,14 +140,18 @@ def filterwarnings(action, message="", category=Warning, module="", lineno=0,
     'lineno' -- an integer line number, 0 matches all warnings
     'append' -- if true, append to the list of filters
     """
-    assert action in ("error", "ignore", "always", "default", "module",
-                      "once"), "invalid action: %r" % (action,)
-    assert isinstance(message, str), "message must be a string"
-    assert isinstance(category, type), "category must be a class"
-    assert issubclass(category, Warning), "category must be a Warning subclass"
-    assert isinstance(module, str), "module must be a string"
-    assert isinstance(lineno, int) and lineno >= 0, \
-           "lineno must be an int >= 0"
+    if action not in {"error", "ignore", "always", "default", "module", "once"}:
+        raise ValueError(f"invalid action: {action!r}")
+    if not isinstance(message, str):
+        raise TypeError("message must be a string")
+    if not isinstance(category, type) or not issubclass(category, Warning):
+        raise TypeError("category must be a Warning subclass")
+    if not isinstance(module, str):
+        raise TypeError("module must be a string")
+    if not isinstance(lineno, int):
+        raise TypeError("lineno must be an int")
+    if lineno < 0:
+        raise ValueError("lineno must be an int >= 0")
 
     if message or module:
         import re
@@ -175,10 +177,12 @@ def simplefilter(action, category=Warning, lineno=0, append=False):
     'lineno' -- an integer line number, 0 matches all warnings
     'append' -- if true, append to the list of filters
     """
-    assert action in ("error", "ignore", "always", "default", "module",
-                      "once"), "invalid action: %r" % (action,)
-    assert isinstance(lineno, int) and lineno >= 0, \
-           "lineno must be an int >= 0"
+    if action not in {"error", "ignore", "always", "default", "module", "once"}:
+        raise ValueError(f"invalid action: {action!r}")
+    if not isinstance(lineno, int):
+        raise TypeError("lineno must be an int")
+    if lineno < 0:
+        raise ValueError("lineno must be an int >= 0")
     _add_filter(action, None, category, None, lineno, append=append)
 
 def _add_filter(*item, append):
@@ -328,8 +332,8 @@ def warn(message, category=None, stacklevel=1, source=None,
                     raise ValueError
     except ValueError:
         globals = sys.__dict__
-        filename = "sys"
-        lineno = 1
+        filename = "<sys>"
+        lineno = 0
     else:
         globals = frame.f_globals
         filename = frame.f_code.co_filename
@@ -511,6 +515,139 @@ class catch_warnings(object):
         self._module._showwarnmsg_impl = self._showwarnmsg_impl
 
 
+class deprecated:
+    """Indicate that a class, function or overload is deprecated.
+
+    When this decorator is applied to an object, the type checker
+    will generate a diagnostic on usage of the deprecated object.
+
+    Usage:
+
+        @deprecated("Use B instead")
+        class A:
+            pass
+
+        @deprecated("Use g instead")
+        def f():
+            pass
+
+        @overload
+        @deprecated("int support is deprecated")
+        def g(x: int) -> int: ...
+        @overload
+        def g(x: str) -> int: ...
+
+    The warning specified by *category* will be emitted at runtime
+    on use of deprecated objects. For functions, that happens on calls;
+    for classes, on instantiation and on creation of subclasses.
+    If the *category* is ``None``, no warning is emitted at runtime.
+    The *stacklevel* determines where the
+    warning is emitted. If it is ``1`` (the default), the warning
+    is emitted at the direct caller of the deprecated object; if it
+    is higher, it is emitted further up the stack.
+    Static type checker behavior is not affected by the *category*
+    and *stacklevel* arguments.
+
+    The deprecation message passed to the decorator is saved in the
+    ``__deprecated__`` attribute on the decorated object.
+    If applied to an overload, the decorator
+    must be after the ``@overload`` decorator for the attribute to
+    exist on the overload as returned by ``get_overloads()``.
+
+    See PEP 702 for details.
+
+    """
+    def __init__(
+        self,
+        message: str,
+        /,
+        *,
+        category: type[Warning] | None = DeprecationWarning,
+        stacklevel: int = 1,
+    ) -> None:
+        if not isinstance(message, str):
+            raise TypeError(
+                f"Expected an object of type str for 'message', not {type(message).__name__!r}"
+            )
+        self.message = message
+        self.category = category
+        self.stacklevel = stacklevel
+
+    def __call__(self, arg, /):
+        # Make sure the inner functions created below don't
+        # retain a reference to self.
+        msg = self.message
+        category = self.category
+        stacklevel = self.stacklevel
+        if category is None:
+            arg.__deprecated__ = msg
+            return arg
+        elif isinstance(arg, type):
+            import functools
+            from types import MethodType
+
+            original_new = arg.__new__
+
+            @functools.wraps(original_new)
+            def __new__(cls, /, *args, **kwargs):
+                if cls is arg:
+                    warn(msg, category=category, stacklevel=stacklevel + 1)
+                if original_new is not object.__new__:
+                    return original_new(cls, *args, **kwargs)
+                # Mirrors a similar check in object.__new__.
+                elif cls.__init__ is object.__init__ and (args or kwargs):
+                    raise TypeError(f"{cls.__name__}() takes no arguments")
+                else:
+                    return original_new(cls)
+
+            arg.__new__ = staticmethod(__new__)
+
+            if "__init_subclass__" in arg.__dict__:
+                # __init_subclass__ is directly present on the decorated class.
+                # Synthesize a wrapper that calls this method directly.
+                original_init_subclass = arg.__init_subclass__
+                # We need slightly different behavior if __init_subclass__
+                # is a bound method (likely if it was implemented in Python).
+                # Otherwise, it likely means it's a builtin such as
+                # object's implementation of __init_subclass__.
+                if isinstance(original_init_subclass, MethodType):
+                    original_init_subclass = original_init_subclass.__func__
+
+                @functools.wraps(original_init_subclass)
+                def __init_subclass__(*args, **kwargs):
+                    warn(msg, category=category, stacklevel=stacklevel + 1)
+                    return original_init_subclass(*args, **kwargs)
+            else:
+                def __init_subclass__(cls, *args, **kwargs):
+                    warn(msg, category=category, stacklevel=stacklevel + 1)
+                    return super(arg, cls).__init_subclass__(*args, **kwargs)
+
+            arg.__init_subclass__ = classmethod(__init_subclass__)
+
+            arg.__deprecated__ = __new__.__deprecated__ = msg
+            __init_subclass__.__deprecated__ = msg
+            return arg
+        elif callable(arg):
+            import functools
+            import inspect
+
+            @functools.wraps(arg)
+            def wrapper(*args, **kwargs):
+                warn(msg, category=category, stacklevel=stacklevel + 1)
+                return arg(*args, **kwargs)
+
+            if inspect.iscoroutinefunction(arg):
+                wrapper = inspect.markcoroutinefunction(wrapper)
+
+            arg.__deprecated__ = wrapper.__deprecated__ = msg
+            return wrapper
+        else:
+            raise TypeError(
+                "@deprecated decorator with non-None category must be applied to "
+                f"a class or callable, not {arg!r}"
+            )
+
+
 _DEPRECATED_MSG = "{name!r} is deprecated and slated for removal in Python {remove}"
 
 def _deprecated(name, message=_DEPRECATED_MSG, *, remove, _version=sys.version_info):
@@ -520,7 +657,7 @@ def _deprecated(name, message=_DEPRECATED_MSG, *, remove, _version=sys.version_i
     the current Python version or the same version but past the alpha.
 
     The *message* argument is formatted with *name* and *remove* as a Python
-    version (e.g. "3.11").
+    version tuple (e.g. (3, 11)).
 
     """
     remove_formatted = f"{remove[0]}.{remove[1]}"

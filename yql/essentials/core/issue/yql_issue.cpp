@@ -11,7 +11,7 @@ static_assert(DEFAULT_ERROR == TIssuesIds::DEFAULT_ERROR,
 static_assert(UNEXPECTED_ERROR == TIssuesIds::UNEXPECTED,
               "value of particular and common error mismatched for \"UNEXPECTED_ERROR\"");
 
-void CheckFatalIssues(TIssues& issues) {
+void CheckFatalIssues(TIssues& issues, const TString& reportTarget) {
     bool isFatal = false;
     auto checkIssue = [&](const TIssue& issue) {
         if (issue.GetSeverity() == TSeverityIds::S_FATAL) {
@@ -46,8 +46,8 @@ void CheckFatalIssues(TIssues& issues) {
         TIssue result;
         result.SetMessage(
             TStringBuilder()
-            << "An abnormal situation found, so consider opening a bug report to YQL (st/YQLSUPPORT),"
-            << " because more detailed information is only available in server side logs and/or "
+            << "An abnormal situation found, so consider opening a bug report" << reportTarget
+            << ", because more detailed information is only available in server side logs and/or "
             << "coredumps.");
         result.SetCode(TIssuesIds::UNEXPECTED, TSeverityIds::S_FATAL);
         issues.AddIssue(result);

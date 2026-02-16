@@ -169,9 +169,11 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
         table_html += '<tr>'
         stress_color = '#ccffcc'
         if stress_result.get_successful_runs() == 0:
-            stress_color = "#ffcccc"
+            # stress_color = "#ffcccc"
+            stress_color = "#f3f3f3"
         elif len(list(filter(lambda x: x.is_all_success(), stress_result.node_runs.values()))) < len(unique_hosts):
-            stress_color = "#fff4cc"
+            # stress_color = "#fff4cc"
+            stress_color = "#f3f3f3"
         table_html += f'<td style="background-color: {stress_color};">{stress_name}</td>'
 
         for host in unique_hosts:
@@ -183,9 +185,11 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
                 host_successes = stress_result.node_runs[host].get_successful_runs()
                 host_total = stress_result.node_runs[host].get_total_runs()
                 if host_successes == 0:
-                    color = "#ffcccc"
+                    # color = "#ffcccc"
+                    color = "#f3f3f3"
                 elif host_successes != host_total:
-                    color = "#fff4cc"
+                    # color = "#fff4cc"
+                    color = "#f3f3f3"
                 table_html += f'<td style="background-color: {color};">{host_successes}/{host_total}</td>'
 
         if execution_result.recoverability_result:
@@ -193,10 +197,12 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
             color = '#ccffcc'
             text = 'Recovered'
             if result_for_util.get_successful_runs() == 0:
-                color = "#ffcccc"
+                # color = "#ffcccc"
+                color = "#f3f3f3"
                 text = 'All failed'
             else:
-                color = "#fff4cc"
+                # color = "#fff4cc"
+                color = "#f3f3f3"
                 text = 'Some failed'
             table_html += f'<td style="background-color: {color};">{text}</td>'
 

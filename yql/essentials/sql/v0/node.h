@@ -91,18 +91,25 @@ namespace NSQLTranslationV0 {
             TPtr Expr;
             i32 Pos = -1;
 
+            // Is so heavily used in a legacy code
+            // NOLINTNEXTLINE(google-explicit-constructor)
             TIdPart(const TString& name)
                 : Name(name)
             {
             }
+
+            // Is so heavily used in a legacy code
+            // NOLINTNEXTLINE(google-explicit-constructor)
             TIdPart(TPtr expr)
                 : Expr(expr)
             {
             }
-            TIdPart(i32 pos)
+
+            explicit TIdPart(i32 pos)
                 : Pos(pos)
             {
             }
+
             TIdPart Clone() const {
                 TIdPart res(Name);
                 res.Pos = Pos;
@@ -112,7 +119,7 @@ namespace NSQLTranslationV0 {
         };
 
     public:
-        INode(TPosition pos);
+        explicit INode(TPosition pos);
         virtual ~INode();
 
         TPosition GetPos() const;
@@ -259,7 +266,7 @@ namespace NSQLTranslationV0 {
 
     class TAstDirectNode final: public INode {
     public:
-        TAstDirectNode(TAstNode* node);
+        explicit TAstDirectNode(TAstNode* node);
 
         TAstNode* Translate(TContext& ctx) const override;
 
@@ -272,13 +279,13 @@ namespace NSQLTranslationV0 {
 
     class TAstListNode: public INode {
     public:
-        TAstListNode(TPosition pos);
+        explicit TAstListNode(TPosition pos);
         ~TAstListNode() override;
 
         TAstNode* Translate(TContext& ctx) const override;
 
     protected:
-        explicit TAstListNode(const TAstListNode& node);
+        TAstListNode(const TAstListNode& node);
         explicit TAstListNode(TPosition pos, TVector<TNodePtr>&& nodes);
         TPtr ShallowCopy() const override;
         bool DoInit(TContext& ctx, ISource* src) override;
@@ -295,7 +302,7 @@ namespace NSQLTranslationV0 {
 
     class TAstListNodeImpl final: public TAstListNode {
     public:
-        TAstListNodeImpl(TPosition pos);
+        explicit TAstListNodeImpl(TPosition pos);
         TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes);
 
     protected:
@@ -399,7 +406,7 @@ namespace NSQLTranslationV0 {
             WRITE
         };
 
-        ITableKeys(TPosition pos);
+        explicit ITableKeys(TPosition pos);
         virtual const TString* GetTableName() const;
         virtual TNodePtr BuildKeys(TContext& ctx, EBuildKeysMode mode) = 0;
 
@@ -764,7 +771,7 @@ namespace NSQLTranslationV0 {
         TIntrusivePtr<ISource> CloneSource() const;
 
     protected:
-        ISource(TPosition pos);
+        explicit ISource(TPosition pos);
         TAstNode* Translate(TContext& ctx) const override;
 
         void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
@@ -814,7 +821,7 @@ namespace NSQLTranslationV0 {
         virtual const TSet<TString> GetJoinLabels() const = 0;
 
     protected:
-        IJoin(TPosition pos);
+        explicit IJoin(TPosition pos);
     };
 
     class TListOfNamedNodes final: public INode {

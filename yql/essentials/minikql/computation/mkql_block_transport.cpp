@@ -170,7 +170,7 @@ protected:
 
 class TBlockDeserializerBase: public IBlockDeserializer {
 public:
-    TBlockDeserializerBase(const TBlockSerializerParams& params)
+    explicit TBlockDeserializerBase(const TBlockSerializerParams& params)
         : ShouldLoadOffset_(params.ShouldSerializeOffset())
     {
     }
@@ -305,7 +305,7 @@ class TFixedSizeBlockDeserializer final: public TBlockDeserializerBase {
     using TBase = TBlockDeserializerBase;
 
 public:
-    TFixedSizeBlockDeserializer(const TBlockSerializerParams& params)
+    explicit TFixedSizeBlockDeserializer(const TBlockSerializerParams& params)
         : TBase(params)
     {
     }

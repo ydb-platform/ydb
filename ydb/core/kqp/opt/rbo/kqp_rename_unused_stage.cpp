@@ -91,7 +91,7 @@ void Scopes::ComputeScopes(std::shared_ptr<IOperator> &op) {
     for (auto &[id, sc] : ScopeMap) {
         auto topOp = sc.Operators[0];
         for (auto &p : topOp->Parents) {
-            auto parentScopeId = RevScopeMap.at(p.lock());
+            auto parentScopeId = RevScopeMap.at(p.first.lock());
             sc.ParentScopes.push_back(parentScopeId);
         }
     }
@@ -142,7 +142,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         TVector<TInfoUnit> mapsTo;
         THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapsFrom;
         
-        if (iter.Current->Kind == EOperator::Map && CastOperator<TOpMap>(iter.Current)->Project) {
+        if (iter.Current->Kind == EOperator::Map) {
             auto map = CastOperator<TOpMap>(iter.Current);
             for (const auto& mapElement: map->MapElements) {
                 mapsTo.push_back(mapElement.GetElementName());
@@ -172,6 +172,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
             }
             for (const auto& trait : agg->AggregationTraitsList) {
                 mapsTo.push_back(trait.OriginalColName);
+                mapsTo.push_back(trait.ResultColName);
             }
         }
 
@@ -333,7 +334,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
 
         // If we have anything but the map operator, apply the stop list to the mapping
-        if (it.Current->Kind != EOperator::Map) {
+        if (it.Current->Kind != EOperator::Map && it.Current->Kind != EOperator::Aggregate) {
             for (auto s : scopedStopList) {
                 if (scopedRenameMap.contains(s)) {
                     scopedRenameMap.erase(s);

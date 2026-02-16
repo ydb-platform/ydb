@@ -7,26 +7,6 @@
 
 using namespace NActors;
 
-static TString ExtractPattern(TTestICCluster& testCluster, ui32 me, ui32 peer, TString patternStart, TString patternEnd) {
-    auto httpResp = testCluster.GetSessionDbg(me, peer);
-    const TString& resp = httpResp.GetValueSync();
-    auto pos = resp.find(patternStart);
-    UNIT_ASSERT_C(pos != std::string::npos, "rdma qp status field was not found in http info");
-    pos += patternStart.size();
-    size_t end = resp.find(patternEnd, pos);
-    UNIT_ASSERT(end != std::string::npos);
-    return resp.substr(pos, end - pos);
-
-}
-
-static TString GetRdmaQpStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
-    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaQp</td><td>[", "]<");
-}
-
-static TString GetRdmaChecksumStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
-    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaMode</td><td>", "<");
-}
-
 class TSenderActor : public TActorBootstrapped<TSenderActor> {
     const TActorId Recipient;
     const size_t SendLimit;
@@ -144,7 +124,7 @@ class TRecipientActor : public TActor<TRecipientActor> {
 public:
     TRecipientActor()
         : TActor(&TThis::StateFunc)
-        , Recieved(0)
+        , Received(0)
     {}
 
     void HandlePing(TAutoPtr<IEventHandle>& ev) {
@@ -152,18 +132,18 @@ public:
         const TString& response = MD5::CalcRaw(data);
         TActivationContext::Send(new IEventHandle(TEvents::THelloWorld::Pong, 0, ev->Sender, SelfId(),
             MakeIntrusive<TEventSerializedData>(response, TEventSerializationInfo{}), ev->Cookie));
-        Recieved.fetch_add(1, std::memory_order_relaxed);
+        Received.fetch_add(1, std::memory_order_relaxed);
     }
 
-    size_t GetRecieved() const noexcept {
-        return Recieved.load(std::memory_order_relaxed);
+    size_t GetReceived() const noexcept {
+        return Received.load(std::memory_order_relaxed);
     }
 
     STRICT_STFUNC(StateFunc,
         fFunc(TEvents::THelloWorld::Ping, HandlePing);
     )
 private:
-    std::atomic<size_t> Recieved;
+    std::atomic<size_t> Received;
 };
 
 Y_UNIT_TEST_SUITE(Interconnect) {
@@ -213,12 +193,12 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         }
         TTestICCluster cluster(2);
         const size_t limit = 10;
-        auto recieverPtr = new TRecipientActor;
-        const TActorId recipient = cluster.RegisterActor(recieverPtr, 1);
+        auto receiverPtr = new TRecipientActor;
+        const TActorId recipient = cluster.RegisterActor(receiverPtr, 1);
         auto senderPtr = new TSenderActor(recipient, limit);
         cluster.RegisterActor(senderPtr, 2);
 
-        while (recieverPtr->GetRecieved() < limit) {
+        while (receiverPtr->GetReceived() < limit) {
             Sleep(TDuration::MilliSeconds(100));
         }
 

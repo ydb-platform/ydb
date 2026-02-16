@@ -51,15 +51,37 @@ BELONGS utils/jpgicc/ya.make
     Files with this license:
         utils/jpgicc/LICENSE_iccjpeg [20:21]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 5ee4826b249c6ccf20c7c34d02e9c0c6
-BELONGS utils/jpgicc/ya.make utils/linkicc/ya.make utils/psicc/ya.make utils/tificc/ya.make utils/transicc/ya.make ya.make
+KEEP     COPYRIGHT_SERVICE_LABEL 9855ff798e83714c245975bd9091c84b
+BELONGS utils/jpgicc/ya.make
     License text:
-        //  Copyright (c) 1998-2024 Marti Maria Saguer
+        Copyright property of CompuServe Incorporated
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        utils/jpgicc/LICENSE_iccjpeg [65:67]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa60f9f901d8a70162904fc48f222c49
+BELONGS utils/jpgicc/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utils/jpgicc/LICENSE_iccjpeg [52:55]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc81628067c2dcbbbdd73b21f0ae3c22
+BELONGS utils/jpgicc/ya.make utils/linkicc/ya.make utils/psicc/ya.make utils/tificc/ya.make utils/transicc/ya.make ya.make
+    License text:
+        //  Copyright (c) 1998-2026 Marti Maria Saguer
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/lcms2.h [4:4]
         include/lcms2_plugin.h [4:4]
         src/cmsalpha.c [4:4]
         src/cmscam02.c [4:4]
@@ -94,45 +116,13 @@ BELONGS utils/jpgicc/ya.make utils/linkicc/ya.make utils/psicc/ya.make utils/tif
         utils/jpgicc/jpgicc.c [4:4]
         utils/jpgicc/jpgicc.c [1254:1255]
         utils/linkicc/linkicc.c [4:4]
-        utils/linkicc/linkicc.c [274:275]
+        utils/linkicc/linkicc.c [55:55]
         utils/psicc/psicc.c [4:4]
-        utils/psicc/psicc.c [216:217]
+        utils/psicc/psicc.c [45:45]
         utils/tificc/tificc.c [4:4]
         utils/tificc/tificc.c [1042:1043]
         utils/transicc/transicc.c [4:4]
         utils/transicc/transicc.c [1258:1259]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 64f2d63d2b00328fea99840ca606a3a7
-BELONGS ya.make
-    License text:
-        //  Copyright (c) 1998-2025 Marti Maria Saguer
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/lcms2.h [4:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9855ff798e83714c245975bd9091c84b
-BELONGS utils/jpgicc/ya.make
-    License text:
-        Copyright property of CompuServe Incorporated
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        utils/jpgicc/LICENSE_iccjpeg [65:67]
-
-KEEP     COPYRIGHT_SERVICE_LABEL aa60f9f901d8a70162904fc48f222c49
-BELONGS utils/jpgicc/ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        utils/jpgicc/LICENSE_iccjpeg [52:55]
 
 KEEP     COPYRIGHT_SERVICE_LABEL dc1c978ad126171c001998b8a02b43a8
 BELONGS ya.make

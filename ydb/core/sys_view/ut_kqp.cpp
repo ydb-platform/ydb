@@ -1339,7 +1339,7 @@ R"(CREATE TEMPORARY TABLE `test_show_create` (
                 Text String,
                 Data String,
                 PRIMARY KEY (Key),
-                INDEX fulltext_idx GLOBAL USING fulltext ON (Text) WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_min=3)
+                INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_min=3)
             );
             ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Data);
         )", "test_show_create");

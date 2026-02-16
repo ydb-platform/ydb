@@ -81,7 +81,7 @@ void TTopicSdkTestSetup::Write(const std::string& topic, const std::string& mess
 
 TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer,
     std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler,
-    std::optional<size_t> partition, const TDuration timeout) {
+    std::optional<size_t> partition, const TDuration timeout, bool autoPartitioningSupport) {
     TTopicClient client(MakeDriver());
 
     auto topicSettings = TTopicReadSettings(topic);
@@ -90,7 +90,7 @@ TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topi
     }
 
     auto settings = TReadSessionSettings()
-        .AutoPartitioningSupport(true)
+        .AutoPartitioningSupport(autoPartitioningSupport)
         .AppendTopics(topicSettings)
         .ConsumerName(consumer);
 

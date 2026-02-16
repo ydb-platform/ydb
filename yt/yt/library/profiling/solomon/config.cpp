@@ -49,18 +49,26 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("enable_histogram_compat", &TThis::EnableHistogramCompat)
         .Default(false);
+    registrar.Parameter("split_rate_histogram_into_gauges", &TThis::SplitRateHistogramIntoGauges)
+        .Default(false);
     registrar.Parameter("report_timestamps_for_rate_metrics", &TThis::ReportTimestampsForRateMetrics)
         .Default(true);
 
     registrar.Parameter("export_summary", &TThis::ExportSummary)
         .Default(false);
+    registrar.Parameter("export_summary_as_sum", &TThis::ExportSummaryAsSum)
+        .Default(false);
     registrar.Parameter("export_summary_as_max", &TThis::ExportSummaryAsMax)
         .Default(true);
+    registrar.Parameter("export_summary_as_min", &TThis::ExportSummaryAsMin)
+        .Default(false);
     registrar.Parameter("export_summary_as_avg", &TThis::ExportSummaryAsAvg)
         .Default(false);
 
     registrar.Parameter("mark_aggregates", &TThis::MarkAggregates)
         .Default(true);
+    registrar.Parameter("enable_solomon_aggregates", &TThis::EnableSolomonAggregates)
+        .Default(false);
 
     registrar.Parameter("strip_sensors_name_prefix", &TThis::StripSensorsNamePrefix)
         .Default(false);
@@ -162,8 +170,14 @@ ESummaryPolicy TSolomonExporterConfig::GetSummaryPolicy() const
     if (ExportSummary) {
         policy |= ESummaryPolicy::All;
     }
+    if (ExportSummaryAsSum) {
+        policy |= ESummaryPolicy::Sum;
+    }
     if (ExportSummaryAsMax) {
         policy |= ESummaryPolicy::Max;
+    }
+    if (ExportSummaryAsMin) {
+        policy |= ESummaryPolicy::Min;
     }
     if (ExportSummaryAsAvg) {
         policy |= ESummaryPolicy::Avg;

@@ -18,4 +18,13 @@ service NbsService {
 
     // List NBS partitions
     rpc ListPartitions(Ydb.Nbs.ListPartitionsRequest) returns (Ydb.Nbs.ListPartitionsResponse);
+
+
+    //
+    // Block I/O.
+    //
+
+    rpc ReadBlocks(Ydb.Nbs.ReadBlocksRequest) returns (Ydb.Nbs.ReadBlocksResponse);
+
+    rpc WriteBlocks(Ydb.Nbs.WriteBlocksRequest) returns (Ydb.Nbs.WriteBlocksResponse);
 }

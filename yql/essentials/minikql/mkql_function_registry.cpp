@@ -109,7 +109,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry {
     };
 
 public:
-    TMutableFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins)
+    explicit TMutableFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins)
         : Builtins_(std::move(builtins))
     {
     }
@@ -333,7 +333,7 @@ public:
             TFunctionsMap Functions;
             class TFuncDescriptor: public NUdf::IFunctionDescriptor {
             public:
-                TFuncDescriptor(TFunctionProperties& properties)
+                explicit TFuncDescriptor(TFunctionProperties& properties)
                     : Properties_(properties)
                 {
                 }
@@ -398,7 +398,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 class TBuiltinsWrapper: public IFunctionRegistry {
 public:
-    TBuiltinsWrapper(IBuiltinFunctionRegistry::TPtr&& builtins)
+    explicit TBuiltinsWrapper(IBuiltinFunctionRegistry::TPtr&& builtins)
         : Builtins_(std::move(builtins))
     {
     }

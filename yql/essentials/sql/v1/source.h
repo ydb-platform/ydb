@@ -118,7 +118,7 @@ public:
     TNodePtr BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, bool traits, bool assume);
 
 protected:
-    ISource(TPosition pos);
+    explicit ISource(TPosition pos);
     TAstNode* Translate(TContext& ctx) const override;
 
     void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
@@ -189,7 +189,7 @@ public:
     virtual TVector<TString> GetJoinLabels() const = 0;
 
 protected:
-    IJoin(TPosition pos);
+    explicit IJoin(TPosition pos);
 };
 
 class TSessionWindow final: public INode {
@@ -255,7 +255,12 @@ TNodePtr BuildYqlSubqueryRef(TNodePtr subquery, TString ref);
 bool IsYqlSubqueryRef(const TNodePtr& source);
 
 TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
-TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);
+TNodePtr BuildSourceNode(
+    TPosition pos,
+    TSourcePtr source,
+    bool checkExist = false,
+    bool withTables = false,
+    bool isInlineScalar = false);
 TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
 TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom = false, bool inSubquery = false);
 TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList = false, bool wrapByTableSource = false);

@@ -63,7 +63,7 @@ public:
         i64 AsyncHit;
         i64 Missed;
 
-        TCountersState operator -(const TCountersState& other) const
+        TCountersState operator-(const TCountersState& other) const
         {
             return TCountersState {
                 .SyncHitWeight = SyncHitWeight - other.SyncHitWeight,

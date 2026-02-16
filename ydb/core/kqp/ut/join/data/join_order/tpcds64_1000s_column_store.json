@@ -95,7 +95,7 @@
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Map)",
                                                                     "args":
                                                                       [
                                                                         {
@@ -115,23 +115,23 @@
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Map)",
                                                                     "args":
                                                                       [
                                                                         {
-                                                                          "op_name":"InnerJoin (MapJoin)",
+                                                                          "op_name":"InnerJoin (Map)",
                                                                           "args":
                                                                             [
                                                                               {
-                                                                                "op_name":"InnerJoin (MapJoin)",
+                                                                                "op_name":"InnerJoin (Map)",
                                                                                 "args":
                                                                                   [
                                                                                     {
-                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                      "op_name":"InnerJoin (Map)",
                                                                                       "args":
                                                                                         [
                                                                                           {
-                                                                                            "op_name":"InnerJoin (MapJoin)",
+                                                                                            "op_name":"InnerJoin (Map)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
@@ -173,7 +173,7 @@
                                                                                                                                 "args":
                                                                                                                                   [
                                                                                                                                     {
-                                                                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                                                                      "op_name":"InnerJoin (Map)",
                                                                                                                                       "args":
                                                                                                                                         [
                                                                                                                                           {
@@ -223,7 +223,7 @@
                                                                                                                                                         "args":
                                                                                                                                                           [
                                                                                                                                                             {
-                                                                                                                                                              "op_name":"InnerJoin (MapJoin)",
+                                                                                                                                                              "op_name":"InnerJoin (Map)",
                                                                                                                                                               "args":
                                                                                                                                                                 [
                                                                                                                                                                   {
@@ -399,7 +399,7 @@
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Map)",
                                                                     "args":
                                                                       [
                                                                         {
@@ -419,23 +419,23 @@
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Map)",
                                                                     "args":
                                                                       [
                                                                         {
-                                                                          "op_name":"InnerJoin (MapJoin)",
+                                                                          "op_name":"InnerJoin (Map)",
                                                                           "args":
                                                                             [
                                                                               {
-                                                                                "op_name":"InnerJoin (MapJoin)",
+                                                                                "op_name":"InnerJoin (Map)",
                                                                                 "args":
                                                                                   [
                                                                                     {
-                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                      "op_name":"InnerJoin (Map)",
                                                                                       "args":
                                                                                         [
                                                                                           {
-                                                                                            "op_name":"InnerJoin (MapJoin)",
+                                                                                            "op_name":"InnerJoin (Map)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
@@ -477,7 +477,7 @@
                                                                                                                                 "args":
                                                                                                                                   [
                                                                                                                                     {
-                                                                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                                                                      "op_name":"InnerJoin (Map)",
                                                                                                                                       "args":
                                                                                                                                         [
                                                                                                                                           {
@@ -527,7 +527,7 @@
                                                                                                                                                         "args":
                                                                                                                                                           [
                                                                                                                                                             {
-                                                                                                                                                              "op_name":"InnerJoin (MapJoin)",
+                                                                                                                                                              "op_name":"InnerJoin (Map)",
                                                                                                                                                               "args":
                                                                                                                                                                 [
                                                                                                                                                                   {

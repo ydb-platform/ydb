@@ -4097,5 +4097,73 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto tableState = ReadTable(server, shards, tableId);
         UNIT_ASSERT(tableState.find("key = 1, value = 200") != TString::npos);
     }
+
+    Y_UNIT_TEST(ImmediateWriteVolatileTxIdOnPageFault) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002);
+        )");
+
+        // Start blocking readsets
+        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime);
+
+        // Prepare a distributed upsert
+        Cerr << "... starting a distributed upsert" << Endl;
+        auto distributedUpsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (2, 2001), (12, 2002);
+        )");
+        runtime.WaitFor("blocked readsets", [&]{ return blockedReadSets.size() >= 4; });
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        Cerr << "... compacting shard " << shards.at(0) << Endl;
+        CompactTable(runtime, shards.at(0), tableId, false);
+        Cerr << "... rebooting shard " << shards.at(0) << Endl;
+        RebootTablet(runtime, shards.at(0), sender);
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        Cerr << "... sending an immediate upsert" << Endl;
+        auto immediateUpsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (2, 3001);
+        )");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Check shard open transactions
+        {
+            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            for (ui64 txId : ev->Get()->OpenTxs) {
+                UNIT_ASSERT_C(txId > 1000000, "unexpected open tx " << txId << " at shard " << shards.at(0));
+            }
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

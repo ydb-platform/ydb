@@ -42,13 +42,13 @@ private:
     }
 
 public:
-    TArrowIStreamImpl(THolder<IArrowIStream> stream)
+    explicit TArrowIStreamImpl(THolder<IArrowIStream> stream)
         : TArrowIStreamImpl(stream.Get(), nullptr)
     {
         Owned_ = std::move(stream);
     }
 
-    TArrowIStreamImpl(IArrowIStream* stream)
+    explicit TArrowIStreamImpl(IArrowIStream* stream)
         : TArrowIStreamImpl(stream, nullptr)
     {
     }

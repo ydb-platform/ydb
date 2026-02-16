@@ -19,7 +19,7 @@ def do(args):
     request = nbs.DeletePartitionRequest(TabletId=args.id)
     response = invoke_nbs_request('DeletePartition', request)
 
-    common.print_request_result(args, request, response)
+    common.print_nbs_request_result(args, request, response)
 
 
 def invoke_nbs_request(request_type, request):

@@ -372,7 +372,7 @@ Y_UNIT_TEST(TestSetUi64) {
 }
 
 struct TStressHash {
-    TStressHash(size_t param)
+    explicit TStressHash(size_t param)
         : Param(param)
     {
     }

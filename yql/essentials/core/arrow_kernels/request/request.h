@@ -43,7 +43,7 @@ public:
         Coalesce
     };
 
-    TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, TLangVersion langver = MinLangVersion);
+    explicit TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, TLangVersion langver = MinLangVersion);
     ~TKernelRequestBuilder();
 
     ui32 AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* retType);

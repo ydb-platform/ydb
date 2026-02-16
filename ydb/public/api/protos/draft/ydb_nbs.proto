@@ -66,3 +66,60 @@ message ListPartitionsResponse {
 message ListPartitionsResult {
     repeated string TabletId = 1;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// I/O vector message.
+
+message IOVector {
+    // I/O buffers.
+    repeated bytes Buffers = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks read request/response.
+
+message ReadBlocksRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Label of volume to read from.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Number of blocks to read.
+    uint32 BlocksCount = 4;
+}
+
+message ReadBlocksResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReadBlocksResult
+{
+    // Requested blocks.
+    IOVector Blocks = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks write request/response.
+
+message WriteBlocksRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Label of volume to write to.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Blocks to write.
+    IOVector Blocks = 4;
+}
+
+message WriteBlocksResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message WriteBlocksResult {
+}

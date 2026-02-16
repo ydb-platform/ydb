@@ -10,7 +10,7 @@ import os
 try:
     import jwt
 except ImportError:
-    jwt = None
+    jwt = None  # type: ignore[assignment]
 
 try:
     from yandex.cloud.iam.v1 import iam_token_service_pb2_grpc
@@ -32,7 +32,7 @@ except ImportError:
 try:
     import requests
 except ImportError:
-    requests = None
+    requests = None  # type: ignore
 
 
 DEFAULT_METADATA_URL = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"

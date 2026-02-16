@@ -178,7 +178,7 @@ namespace NKikimr {
                 , DDiskSlotId(ddiskSlotId)
             {}
 
-            TDDiskId(const NKikimrBlobStorage::TDDiskId& pb)
+            TDDiskId(const NKikimrBlobStorage::NDDisk::TDDiskId& pb)
                 : NodeId(pb.GetNodeId())
                 , PDiskId(pb.GetPDiskId())
                 , DDiskSlotId(pb.GetDDiskSlotId())
@@ -194,7 +194,7 @@ namespace NKikimr {
                 return std::tie(NodeId, PDiskId, DDiskSlotId);
             }
 
-            void Serialize(NKikimrBlobStorage::TDDiskId *pb) const {
+            void Serialize(NKikimrBlobStorage::NDDisk::TDDiskId *pb) const {
                 pb->SetNodeId(NodeId);
                 pb->SetPDiskId(PDiskId);
                 pb->SetDDiskSlotId(DDiskSlotId);
@@ -458,6 +458,16 @@ namespace NKikimr {
                 TIterator res = Overlay.emplace_hint(it, baseIt->first, MakeHolder<TValue>(*baseIt->second));
                 baseIt->second->OnClone(res->second);
                 return res;
+            }
+        };
+
+        struct TConfigTxFlags {
+            bool SuppressFailModelChecking = false;
+            bool SuppressDegradedGroupsChecking = false;
+            bool SuppressDisintegratedGroupsChecking = false;
+
+            static TConfigTxFlags SuppressAll() {
+                return {true, true, true};
             }
         };
 

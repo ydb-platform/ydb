@@ -102,6 +102,7 @@ public:
     bool FullExpr = false;
     bool WithTypes = false;
     bool FullStatistics = false;
+    bool PrintDiagnostics = false;
     int Verbosity = TLOG_ERR;
     bool ShowLog = false;
     bool WithFinalIssues = false;
@@ -185,7 +186,7 @@ private:
 
 class TFacadeRunner {
 public:
-    TFacadeRunner(TString name);
+    explicit TFacadeRunner(TString name);
     ~TFacadeRunner();
 
     int Main(int argc, const char* argv[]);

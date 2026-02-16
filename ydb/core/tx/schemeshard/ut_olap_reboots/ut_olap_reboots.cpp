@@ -68,11 +68,9 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::PathExist);
-
             {
                 TInactiveZone inactive(activeZone);
-                // no inactive finalization
+                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::PathExist);
             }
         });
     }

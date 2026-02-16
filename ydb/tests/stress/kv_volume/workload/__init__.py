@@ -13,7 +13,7 @@ import ydb.tests.stress.kv_volume.protos.config_pb2 as config_pb
 
 
 from ydb.tests.stress.common.common import WorkloadBase
-from ydb.tests.library.clients.kikimr_keyvalue_client import KeyValueClient
+from ydb.tests.stress.kv_volume.workload.kikimr_keyvalue_client import KeyValueClient
 
 DEFAULT_YDB_KV_PORT = 2135
 DEFAULT_DATA_PATTERN = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'

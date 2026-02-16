@@ -126,6 +126,8 @@ enum class ERequestType: size_t {
     NBS_CREATEPARTITION,
     NBS_DELETEPARTITION,
     NBS_LISTPARTITIONS,
+    NBS_WRITEBLOCKS,
+    NBS_READBLOCKS,
 
     REQUEST_TYPES_CNT, // Add new types above this line
 };

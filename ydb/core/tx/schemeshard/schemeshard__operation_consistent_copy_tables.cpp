@@ -76,7 +76,8 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
             *operation->MutableVectorIndexKmeansTreeDescription() =
                 std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             *operation->MutableFulltextIndexDescription() =
                 std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
             break;
@@ -294,7 +295,7 @@ bool CreateConsistentCopyTables(
                     indexDescr.SetTargetPathTargetState(descr.GetTargetPathTargetState());
                 }
 
-                indexDescr.SetOmitIndexes(true); 
+                indexDescr.SetOmitIndexes(true);
 
                 auto itCreate = descr.GetIndexImplTableCdcStreams().find(name);
                 if (itCreate != descr.GetIndexImplTableCdcStreams().end()) {

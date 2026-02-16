@@ -83,9 +83,7 @@ namespace NKikimr::NBsController {
             void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
                 if (prev.Mood != cur.Mood ||
                         prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
-                        prev.SlotSizeInUnits != cur.SlotSizeInUnits ||
-                        prev.InferPDiskSlotCountFromUnitSize != cur.InferPDiskSlotCountFromUnitSize ||
-                        prev.InferPDiskSlotCountMax != cur.InferPDiskSlotCountMax) {
+                        prev.SlotSizeInUnits != cur.SlotSizeInUnits) {
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }
@@ -118,8 +116,6 @@ namespace NKikimr::NBsController {
                 pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw());
                 pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
                 pdisk->SetManagementStage(Self->SerialManagementStage);
-                pdisk->SetInferPDiskSlotCountFromUnitSize(pdiskInfo.InferPDiskSlotCountFromUnitSize);
-                pdisk->SetInferPDiskSlotCountMax(pdiskInfo.InferPDiskSlotCountMax);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
                 }
@@ -333,10 +329,9 @@ namespace NKikimr::NBsController {
             }
         };
 
-        bool TBlobStorageController::CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
+        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
                 bool suppressDegradedGroupsChecking, bool suppressDisintegratedGroupsChecking,
-                TTransactionContext& txc, TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
-            NIceDb::TNiceDb db(txc.DB);
+                TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
             // when bridged non-proxy groups get updated, we update parent group too
             THashSet<TGroupId> updates;
@@ -518,6 +513,41 @@ namespace NKikimr::NBsController {
                 state.PDisks.DeleteExistingEntry(pdiskId);
             }
 
+            return true;
+        }
+
+        std::optional<TString> TBlobStorageController::ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
+                TConfigTxFlags flags, TTransactionContext& txc,
+                NKikimrBlobStorage::TConfigResponse *response) {
+            if (!state || !state->Changed()) {
+                return std::nullopt;
+            }
+
+            TString error;
+            const bool suppressFailModelChecking = flags.SuppressFailModelChecking;
+            const bool suppressDegradedGroupsChecking = flags.SuppressDegradedGroupsChecking;
+            const bool suppressDisintegratedGroupsChecking = flags.SuppressDisintegratedGroupsChecking;
+
+            if (!ValidateConfigUpdates(*state, suppressFailModelChecking, suppressDegradedGroupsChecking,
+                    suppressDisintegratedGroupsChecking, &error, response)) {
+                RollbackConfigUpdate(state);
+                return error;
+            }
+
+            CommitConfigUpdates(*state, txc);
+            return std::nullopt;
+        }
+
+        void TBlobStorageController::RollbackConfigUpdate(std::optional<TConfigState>& state) {
+            if (state) {
+                state->Rollback();
+                state.reset();
+            }
+        }
+
+        void TBlobStorageController::CommitConfigUpdates(TConfigState& state, TTransactionContext& txc) {
+            NIceDb::TNiceDb db(txc.DB);
+
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
             }
@@ -640,8 +670,6 @@ namespace NKikimr::NBsController {
 
             ScheduleVSlotReadyUpdate();
             UpdateWaitingGroups(groupIds);
-
-            return true;
         }
 
         void TBlobStorageController::CommitSelfHealUpdates(TConfigState& state) {
@@ -983,8 +1011,6 @@ namespace NKikimr::NBsController {
                 drive.SetSharedWithOs(value.SharedWithOs);
                 drive.SetReadCentric(value.ReadCentric);
                 drive.SetKind(value.Kind);
-                drive.SetInferPDiskSlotCountFromUnitSize(value.InferPDiskSlotCountFromUnitSize);
-                drive.SetInferPDiskSlotCountMax(value.InferPDiskSlotCountMax);
 
                 if (const auto& config = value.PDiskConfig) {
                     NKikimrBlobStorage::TPDiskConfig& pb = *drive.MutablePDiskConfig();
@@ -1123,12 +1149,6 @@ namespace NKikimr::NBsController {
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
             pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);
             pb->SetMaintenanceStatus(pdisk.MaintenanceStatus);
-            if (pdisk.InferPDiskSlotCountFromUnitSize) {
-                pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
-            }
-            if (pdisk.InferPDiskSlotCountMax) {
-                pb->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
-            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {

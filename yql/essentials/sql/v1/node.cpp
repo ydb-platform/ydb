@@ -857,6 +857,10 @@ void TAstListNodeImpl::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVe
     }
 }
 
+const TString* TAstListNodeImpl::GetSourceName() const {
+    return DeriveCommonSourceName(Nodes_);
+}
+
 TNodePtr TAstListNodeImpl::DoClone() const {
     return new TAstListNodeImpl(Pos_, CloneContainer(Nodes_));
 }
@@ -1242,6 +1246,12 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
 
     if (Args_.empty()) {
         for (const auto& spec : orderSpec) {
+            // It relies on a fact that ORDER BY is
+            // already validated at `TSelectCore::InitSelect`.
+            if (!spec->OrderExpr->Init(ctx, src)) {
+                return false;
+            }
+
             Args_.push_back(spec->Clone()->OrderExpr);
         }
 
@@ -1865,9 +1875,12 @@ bool UnescapeQuoted(const TString& str, TPosition& pos, char quoteChar, TString&
     if (unescapeResult != EUnescapeResult::OK) {
         TTextWalker walker(pos, utf8Aware);
         walker.Advance(atom.Trunc(readBytes));
-        error = UnescapeResultToString(unescapeResult);
+        error = TStringBuilder()
+                << UnescapeResultToString(unescapeResult)
+                << " near byte " << readBytes;
         return false;
     }
+
     return true;
 }
 
@@ -2065,7 +2078,7 @@ TString IdContentFromString(TContext& ctx, const TString& str) {
 namespace {
 class TInvalidLiteralNode final: public INode {
 public:
-    TInvalidLiteralNode(TPosition pos)
+    explicit TInvalidLiteralNode(TPosition pos)
         : INode(pos)
     {
     }
@@ -3167,20 +3180,24 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
             } else if (arg->GetLabel() == "ExtraMem") {
                 ExtraMem_ = MakeAtomFromExpression(Pos_, ctx, arg);
             } else if (arg->GetLabel() == "Depends") {
-                if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
-                                                          NYql::MakeLangVersion(2025, 3), ctx.Settings.BackportMode))
+                if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                        Pos_,
+                        "Udf: named argument Depends",
+                        NYql::MakeLangVersion(2025, 3)))
                 {
-                    ctx.Error() << "Udf: named argument Depends is not available before version 2025.03";
                     return false;
                 }
+
                 Depends_.push_back(arg);
             } else if (arg->GetLabel() == "Layers") {
-                if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
-                                                          NYql::MakeLangVersion(2025, 4), ctx.Settings.BackportMode))
+                if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                        Pos_,
+                        "Udf: named argument Layers",
+                        NYql::MakeLangVersion(2025, 4)))
                 {
-                    ctx.Error() << "Udf: named argument Layers is not available before version 2025.04";
                     return false;
                 }
+
                 Layers_ = arg;
             } else {
                 ctx.Error() << "Udf: unexpected named argument: " << arg->GetLabel();
@@ -3632,7 +3649,7 @@ TNodePtr BuildNamedExprReference(TNodePtr parent, const TString& name, TMaybe<si
 
 class TNamedExprNode: public IProxyNode {
 public:
-    TNamedExprNode(TNodePtr parent)
+    explicit TNamedExprNode(TNodePtr parent)
         : IProxyNode(parent->GetPos(), parent)
         , FakeSource_(BuildFakeSource(parent->GetPos()))
         , Referenced_(false)

@@ -54,6 +54,7 @@
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats\"",
                                                         "QueryColumns": "Text",
+                                                        "SearchTerms": "cats",
                                                         "Table": "/local/base_fulltext_contains_orderby_sql_plan/FullTextTable"
                                                     }
                                                 ],

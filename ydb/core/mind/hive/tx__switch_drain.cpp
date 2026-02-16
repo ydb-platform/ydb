@@ -60,8 +60,10 @@ public:
                         }
                     }
                 }
-                Y_DEBUG_ABORT_UNLESS(node->DrainActor == nullptr);
-                node->DrainActor = Self->StartHiveDrain(NodeId, std::move(Settings));
+                if (StartingDrain) {
+                    Y_DEBUG_ABORT_UNLESS(node->DrainActor == nullptr);
+                    node->DrainActor = Self->StartHiveDrain(NodeId, std::move(Settings));
+                }
             }
         } else {
             Status = NKikimrProto::ERROR;

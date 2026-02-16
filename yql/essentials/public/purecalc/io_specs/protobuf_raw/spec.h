@@ -153,7 +153,7 @@ private:
     mutable NYT::TNode SavedSchema_;
 
 public:
-    TProtobufRawMultiOutputSpec(
+    explicit TProtobufRawMultiOutputSpec(
         TVector<const google::protobuf::Descriptor*>,
         TMaybe<TVector<google::protobuf::MessageFactory*>> = {},
         const TProtoSchemaOptions& options = {},

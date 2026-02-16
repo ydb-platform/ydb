@@ -14,4 +14,11 @@ TDummyTopic& TDummyTopic::SetPartitionsCount(size_t count) {
     return *this;
 }
 
+TString SkipDatabasePrefix(const TString& path, const TString& database) {
+    TStringBuf pathCanonized(path);
+    pathCanonized.SkipPrefix(database);
+    pathCanonized.SkipPrefix("/");
+    return TString(pathCanonized);
+}
+
 } // namespace NYql

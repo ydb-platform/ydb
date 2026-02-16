@@ -65,7 +65,7 @@ void TPartitionStreamImpl<UseMigrationProtocol>::Commit(uint64_t startOffset, ui
             Commits.EraseInterval(0, endOffset); // Drop only committed ranges;
         }
         for (auto range: toCommit) {
-            sessionShared->Commit(this, range.first, Min(range.second, endOffset));
+            sessionShared->Commit(this, range.first, Min(range.second, static_cast<ui64>(endOffset)));
         }
     }
 }
@@ -528,6 +528,10 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
     if (IsDirectRead()) {
         init.set_direct_read(true);
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Enable direct read");
+    }
+
+    if (Settings.PartitionMaxInFlightBytes_) {
+        init.set_partition_max_in_flight_bytes(*Settings.PartitionMaxInFlightBytes_);
     }
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {

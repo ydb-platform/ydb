@@ -73,16 +73,18 @@ struct TGuardedInfo : public TAtomicRefCount<TGuardedInfo> {
     {}
 };
 
-struct TFollowerInfo : public TAtomicRefCount<TGuardedInfo> {
+struct TFollowerInfo : public TAtomicRefCount<TFollowerInfo> {
     const ui64 TabletID;
     const TActorId Follower;
     const TActorId Tablet;
+    const ui32 FollowerId;
     const bool IsCandidate;
 
-    TFollowerInfo(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate)
+    TFollowerInfo(ui64 tabletId, ui32 followerId, TActorId follower, TActorId tablet, bool isCandidate)
         : TabletID(tabletId)
         , Follower(follower)
         , Tablet(tablet)
+        , FollowerId(followerId)
         , IsCandidate(isCandidate)
     {}
 };
@@ -181,7 +183,7 @@ protected:
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
             BLOG_D("Guardian TEvNodeWardenNotifyConfigMismatch: ClusterStateGeneration=" << ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" ClusterStateGuid=" << ClusterStateGuid << " msgGuid=" << msgGuid);
-            this->Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), 
+            this->Send(MakeBlobStorageNodeWardenID(selfId.NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }
     }
@@ -233,9 +235,9 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
             // Ignore outdated results
             return;
         }
-        
+
         CheckConfigVersion(SelfId(), ev->Sender, ev->Get());
-        
+
         const auto status = record.GetStatus();
         Signature = record.GetSignature();
         DowntimeFrom = TInstant::Max();
@@ -346,14 +348,14 @@ class TFollowerGuardian : public TBaseGuardian<TFollowerGuardian> {
         ui64 cookie = ++LastCookie;
         Send(
             Replica,
-            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->Follower, Info->Tablet, Info->IsCandidate, ClusterStateGeneration, ClusterStateGuid),
+            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->FollowerId, Info->Follower, Info->Tablet, Info->IsCandidate, ClusterStateGeneration, ClusterStateGuid),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
             cookie);
         Become(&TThis::StateCalm);
     }
 
     void PassAway() override {
-        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->Follower, ClusterStateGeneration, ClusterStateGuid));
+        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->FollowerId, Info->Follower, ClusterStateGeneration, ClusterStateGuid));
         TBaseGuardian::PassAway();
     }
 
@@ -566,13 +568,27 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
                 continue;
 
             TVector<TActorId> reported;
-            reported.reserve(record.FollowerSize() + record.FollowerCandidatesSize());
-            for (const auto &x : record.GetFollower()) {
-                reported.emplace_back(ActorIdFromProto(x));
-            }
 
-            for (const auto &x : record.GetFollowerCandidates()) {
-                reported.emplace_back(ActorIdFromProto(x));
+            // NOTE: The Follower, FollowerTablet and FollowerCandidate fields
+            //       are deprecated and will be removed from the API. The new code
+            //       should use the FollowerInfo field. For compatibility with older nodes,
+            //       the code here tries to use the both the new field and the old fields.
+            if (record.FollowerInfoSize() > 0) {
+                reported.reserve(record.FollowerInfoSize());
+
+                for (const auto& followerInfo : record.GetFollowerInfo()) {
+                    reported.emplace_back(ActorIdFromProto(followerInfo.GetFollower()));
+                }
+            } else {
+                // TODO: Remove the code, which handles the old fields
+                reported.reserve(record.FollowerSize() + record.FollowerCandidatesSize());
+                for (const auto &x : record.GetFollower()) {
+                    reported.emplace_back(ActorIdFromProto(x));
+                }
+
+                for (const auto &x : record.GetFollowerCandidates()) {
+                    reported.emplace_back(ActorIdFromProto(x));
+                }
             }
 
             Sort(reported);
@@ -604,6 +620,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         if (hasChanges) {
             FollowerInfo = new TFollowerInfo(
                 tabletId,
+                FollowerInfo->FollowerId,
                 msg->FollowerActor,
                 msg->TabletActor,
                 msg->IsCandidate
@@ -676,8 +693,8 @@ IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, 
     return new NStateStorageGuardian::TTabletGuardian(info.Get());
 }
 
-IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower) {
-    TIntrusivePtr<NStateStorageGuardian::TFollowerInfo> followerInfo = new NStateStorageGuardian::TFollowerInfo(tabletId, follower, TActorId(), true);
+IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, ui32 followerId, const TActorId &follower) {
+    TIntrusivePtr<NStateStorageGuardian::TFollowerInfo> followerInfo = new NStateStorageGuardian::TFollowerInfo(tabletId, followerId, follower, TActorId(), true);
     return new NStateStorageGuardian::TTabletGuardian(followerInfo.Get());
 }
 

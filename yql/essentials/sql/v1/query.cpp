@@ -140,7 +140,9 @@ TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDefer
     return new TTopicKey(pos, cluster, name);
 }
 
-static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
+namespace {
+
+INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
     switch (type) {
         case TIndexDescription::EType::GlobalSync:
             return node.Q("syncGlobal");
@@ -150,17 +152,23 @@ static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& n
             return node.Q("syncGlobalUnique");
         case TIndexDescription::EType::GlobalVectorKmeansTree:
             return node.Q("globalVectorKmeansTree");
-        case TIndexDescription::EType::GlobalFulltext:
-            return node.Q("globalFulltext");
+        case TIndexDescription::EType::GlobalFulltextPlain:
+            return node.Q("globalFulltextPlain");
+        case TIndexDescription::EType::GlobalFulltextRelevance:
+            return node.Q("globalFulltextRelevance");
     }
 }
+
+} // namespace
 
 enum class ETableSettingsParsingMode {
     Create,
     Alter
 };
 
-static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETableSettingsParsingMode parsingMode, const INode& node) {
+namespace {
+
+INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETableSettingsParsingMode parsingMode, const INode& node) {
     // short aliases for member function calls
     auto Y = [&node](auto&&... args) { return node.Y(std::forward<decltype(args)>(args)...); };
     auto Q = [&node](auto&&... args) { return node.Q(std::forward<decltype(args)>(args)...); };
@@ -289,7 +297,7 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     return settings;
 }
 
-static INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& indexSettings, const INode& node) {
+INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& indexSettings, const INode& node) {
     // short aliases for member function calls
     auto Y = [&node](auto&&... args) { return node.Y(std::forward<decltype(args)>(args)...); };
     auto Q = [&node](auto&&... args) { return node.Q(std::forward<decltype(args)>(args)...); };
@@ -306,7 +314,7 @@ static INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& 
     return settings;
 }
 
-static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsingMode parsingMode, const INode& node) {
+INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsingMode parsingMode, const INode& node) {
     auto indexColumns = node.Y();
     for (const auto& col : index.IndexColumns) {
         indexColumns = node.L(indexColumns, BuildQuotedAtom(col.Pos, col.Name));
@@ -337,7 +345,7 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
     return indexNode;
 }
 
-static INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {
+INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {
     const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
     const auto& tableSettings = node.Y(
         node.Q("tableSettings"),
@@ -347,7 +355,7 @@ static INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode&
         node.Q(tableSettings));
 }
 
-static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
+INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
     auto settings = node.Y();
     if (desc.Settings.Mode) {
         settings = node.L(settings, node.Q(node.Y(node.Q("mode"), desc.Settings.Mode)));
@@ -402,6 +410,8 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
         node.Q(node.Y(node.Q("settings"), node.Q(settings))),
         node.Q(node.Y(node.Q("state"), node.Q(state))));
 }
+
+} // namespace
 
 class TPrepTableKeys: public ITableKeys {
 public:
@@ -820,13 +830,14 @@ public:
             result = L(result, Q(settings));
             return result;
         } else if (func == "partitionlist" || func == "partitionliststrict") {
-            auto requiredLangVer = MakeLangVersion(2025, 4);
-            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
-                auto str = FormatLangVersion(requiredLangVer);
-                YQL_ENSURE(str);
-                ctx.Error(Pos_) << "PARTITION_LIST table function is not available before language version " << *str;
+            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                    Pos_,
+                    "PARTITION_LIST table function",
+                    MakeLangVersion(2025, 4)))
+            {
                 return nullptr;
             }
+
             if (Args_.size() != 1) {
                 ctx.Error(Pos_) << "Single argument required, but got " << Args_.size() << " arguments";
                 return nullptr;
@@ -858,11 +869,11 @@ public:
             }
             return partitionList;
         } else if (func == "partitions" || func == "partitionsstrict") {
-            auto requiredLangVer = MakeLangVersion(2025, 4);
-            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
-                auto str = FormatLangVersion(requiredLangVer);
-                YQL_ENSURE(str);
-                ctx.Error(Pos_) << "PARTITIONS table function is not available before language version " << *str;
+            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                    Pos_,
+                    "PARTITIONS table function",
+                    MakeLangVersion(2025, 4)))
+            {
                 return nullptr;
             }
 
@@ -1787,6 +1798,17 @@ public:
             actions = L(actions, Q(Y(Q("dropChangefeed"), name)));
         }
 
+        if (Params_.Compact) {
+            auto settings = Y();
+            if (Params_.Compact->Cascade) {
+                settings = L(settings, Q(Y(Q("cascade"), Params_.Compact->Cascade)));
+            }
+            if (Params_.Compact->MaxShardsInFlight) {
+                settings = L(settings, Q(Y(Q("maxShardsInFlight"), Params_.Compact->MaxShardsInFlight)));
+            }
+            actions = L(actions, Q(Y(Q("compact"), Q(Y(Q(Y(Q("settings"), Q(settings))))))));
+        }
+
         auto opts = Y();
 
         opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
@@ -1884,39 +1906,57 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETab
     return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
 }
 
-static INode::TPtr CreateConsumerDesc(const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+namespace {
+
+TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+    auto setValue = [&](const TNodePtr& settings, const TNodePtr& value, const auto& setter) {
+        if (value) {
+            return node.L(settings, node.Q(node.Y(node.Q(setter), value)));
+        }
+        return settings;
+    };
+
+    auto setValueWithReset = [&](const TNodePtr& settings, const NYql::TResetableSetting<TNodePtr, void>& value, const auto& setter, const auto& resetter) {
+        if (!value) {
+            return settings;
+        }
+        if (value.IsSet()) {
+            return node.L(settings, node.Q(node.Y(node.Q(setter), value.GetValueSet())));
+        } else {
+            YQL_ENSURE(alter, "Cannot reset on create");
+            return node.L(settings, node.Q(node.Y(node.Q(resetter), node.Q(node.Y()))));
+        }
+    };
+
+    if (alter) {
+        if (desc.Settings.Type) {
+            ctx.Error() << "type alter is not supported";
+            return {nullptr};
+        }
+        if (desc.Settings.KeepMessagesOrder) {
+            ctx.Error() << "keep_messages_order alter is not supported";
+            return {nullptr};
+        }
+    }
+
     auto settings = node.Y();
-    if (desc.Settings.Important) {
-        settings = node.L(settings, node.Q(node.Y(node.Q("important"), desc.Settings.Important)));
-    }
-    if (const auto& availabilityPeriod = desc.Settings.AvailabilityPeriod) {
-        if (availabilityPeriod.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setAvailabilityPeriod"), availabilityPeriod.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetAvailabilityPeriod"), node.Q(node.Y()))));
-        }
-    }
-    if (const auto& readFromTs = desc.Settings.ReadFromTs) {
-        if (readFromTs.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setReadFromTs"), readFromTs.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetReadFromTs"), node.Q(node.Y()))));
-        }
-    }
-    if (const auto& readFromTs = desc.Settings.SupportedCodecs) {
-        if (readFromTs.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setSupportedCodecs"), readFromTs.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetSupportedCodecs"), node.Q(node.Y()))));
-        }
-    }
+    settings = setValue(settings, desc.Settings.Important, "important");
+    settings = setValueWithReset(settings, desc.Settings.AvailabilityPeriod, "setAvailabilityPeriod", "resetAvailabilityPeriod");
+    settings = setValueWithReset(settings, desc.Settings.ReadFromTs, "setReadFromTs", "resetReadFromTs");
+    settings = setValueWithReset(settings, desc.Settings.SupportedCodecs, "setSupportedCodecs", "resetSupportedCodecs");
+    settings = setValue(settings, desc.Settings.Type, "type");
+    settings = setValue(settings, desc.Settings.KeepMessagesOrder, "keep_messages_order");
+    settings = setValue(settings, desc.Settings.DefaultProcessingTimeout, "default_processing_timeout");
+    settings = setValue(settings, desc.Settings.MaxProcessingAttempts, "max_processing_attempts");
+    settings = setValue(settings, desc.Settings.DeadLetterPolicy, "dead_letter_policy");
+    settings = setValue(settings, desc.Settings.DeadLetterQueue, "dead_letter_queue");
+
     return node.Y(
         node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
         node.Q(node.Y(node.Q("settings"), node.Q(settings))));
 }
+
+} // namespace
 
 class TCreateTopicNode final: public TAstListNode {
 public:
@@ -1951,7 +1991,10 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.Consumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            if (!desc) {
+                return false;
+            }
             opts = L(opts, Q(Y(Q("consumer"), Q(desc))));
         }
 
@@ -2062,12 +2105,18 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.AddConsumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            if (!desc) {
+                return false;
+            }
             opts = L(opts, Q(Y(Q("addConsumer"), Q(desc))));
         }
 
         for (const auto& [_, consumer] : Params_.AlterConsumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, true);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, true);
+            if (!desc) {
+                return false;
+            }
             opts = L(opts, Q(Y(Q("alterConsumer"), Q(desc))));
         }
 
@@ -3148,7 +3197,7 @@ TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& t
 
 class TClustersSinkOperationBase: public TAstListNode {
 protected:
-    TClustersSinkOperationBase(TPosition pos)
+    explicit TClustersSinkOperationBase(TPosition pos)
         : TAstListNode(pos)
     {
     }
@@ -3177,7 +3226,7 @@ protected:
 
 class TCommitClustersNode: public TClustersSinkOperationBase {
 public:
-    TCommitClustersNode(TPosition pos)
+    explicit TCommitClustersNode(TPosition pos)
         : TClustersSinkOperationBase(pos)
     {
     }
@@ -3193,7 +3242,7 @@ TNodePtr BuildCommitClusters(TPosition pos) {
 
 class TRollbackClustersNode: public TClustersSinkOperationBase {
 public:
-    TRollbackClustersNode(TPosition pos)
+    explicit TRollbackClustersNode(TPosition pos)
         : TClustersSinkOperationBase(pos)
     {
     }

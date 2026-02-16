@@ -47,7 +47,7 @@ using TDigestGenerator = TResult(const TStringRef&, TMaybe<TResult> init);
 template <EDigestType DigestType, typename TResult, TDigestGenerator<TResult>* Generator>
 class TDigestFunctionUdf: public TBoxedValue {
 public:
-    TDigestFunctionUdf(TSourcePosition pos)
+    explicit TDigestFunctionUdf(TSourcePosition pos)
         : Pos_(pos)
     {
     }

@@ -239,13 +239,13 @@ private:
                 }
             }
 
-            if (stage.Outputs()) {
-                const auto outputs = stage.Outputs().Cast();
-                AFL_ENSURE(outputs.Size() == 1);
-                for (const auto& output : outputs) {
+            if (const auto outputs = stage.Outputs()) {
+                ui64 sinkOutputsCount = 0;
+                for (const auto& output : outputs.Cast()) {
                     if (auto maybeSink = output.Maybe<TDqSink>()) {
                         const auto sink = maybeSink.Cast();
                         if (const auto sinkSettings = sink.Settings().Maybe<TKqpTableSinkSettings>()) {
+                            sinkOutputsCount++;
                             const auto executedAsSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
                                 || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap);
                             if (!executedAsSingleEffect) {
@@ -254,6 +254,8 @@ private:
                         }
                     }
                 }
+
+                AFL_ENSURE(sinkOutputsCount <= 1)("SinkOutputsCount", sinkOutputsCount);
             }
 
             return true;

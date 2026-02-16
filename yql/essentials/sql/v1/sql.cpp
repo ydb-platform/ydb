@@ -50,7 +50,7 @@ void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
-            ctx.Error() << "Error occurred on parse SQL query, but no error is collected" << ", please send this request over bug report into YQL interface or write on yql@ maillist";
+            ctx.Fatal() << "Error occurred on parse SQL query, but no error is collected";
         }
     } else {
         ctx.WarnUnusedHints();
@@ -65,7 +65,7 @@ void SqlASTsToYqlsImpl(NYql::TAstParseResult& res, const std::vector<::NSQLv1Gen
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
-            ctx.Error() << "Error occurred on parse SQL query, but no error is collected" << ", please send this request over bug report into YQL interface or write on yql@ maillist";
+            ctx.Fatal() << "Error occurred on parse SQL query, but no error is collected";
         }
     } else {
         ctx.WarnUnusedHints();
@@ -78,7 +78,6 @@ NYql::TAstParseResult SqlASTToYql(const TLexers& lexers, const TParsers& parsers
                                   const NSQLTranslation::TSQLHints& hints,
                                   const NSQLTranslation::TTranslationSettings& settings)
 {
-    YQL_ENSURE(IsQueryMode(settings.Mode));
     TAstParseResult res;
     TContext ctx(lexers, parsers, settings, hints, res.Issues, query);
     SqlASTToYqlImpl(res, protoAst, ctx);

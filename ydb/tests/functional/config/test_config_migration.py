@@ -70,7 +70,7 @@ def fetch_config(config_client):
 
 
 class TestConfigMigrationToV2(object):
-    erasure = Erasure.BLOCK_4_2
+    erasure = Erasure.MIRROR_3_DC
     separate_node_configs = True
     metadata_section = {
         "kind": "MainConfig",
@@ -80,7 +80,7 @@ class TestConfigMigrationToV2(object):
 
     @classmethod
     def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        nodes_count = 3
         log_configs = {
             'BS_NODE': LogLevels.DEBUG,
             'GRPC_SERVER': LogLevels.DEBUG,

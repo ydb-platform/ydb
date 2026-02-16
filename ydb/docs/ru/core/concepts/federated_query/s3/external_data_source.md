@@ -4,8 +4,8 @@
 
 Бакеты в S3 бывают двух видов: публичные и приватные. Для подключения к публичному бакету необходимо использовать `AUTH_METHOD="NONE"`, а для подключения к приватному — `AUTH_METHOD="AWS"`. Подробное описание `AWS` можно найти [здесь](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html). `AUTH_METHOD="NONE"` означает, что аутентификация не требуется. В случае `AUTH_METHOD="AWS"` необходимо указать несколько дополнительных параметров:
 
-- `AWS_ACCESS_KEY_ID_SECRET_NAME` — ссылка на имя [секрета](../../datamodel/secrets.md), в котором хранится `AWS_ACCESS_KEY_ID`.
-- `AWS_SECRET_ACCESS_KEY_SECRET_NAME` — ссылка на имя [секрета](../../datamodel/secrets.md), в котором хранится `AWS_SECRET_ACCESS_KEY`.
+- `AWS_ACCESS_KEY_ID_SECRET_PATH` — [секрет](../../datamodel/secrets.md), в котором хранится `AWS_ACCESS_KEY_ID`.
+- `AWS_SECRET_ACCESS_KEY_SECRET_PATH` — [секрет](../../datamodel/secrets.md), в котором хранится `AWS_SECRET_ACCESS_KEY`.
 - `AWS_REGION` — регион, из которого будет происходить чтение, например `ru-central-1`.
 
 Для настройки соединения с публичным бакетом достаточно выполнить следующий SQL-запрос. Запрос создаст внешний источник данных с именем `s3_data_source`, который будет указывать на конкретный S3-бакет с именем `bucket`.
@@ -21,19 +21,19 @@ CREATE EXTERNAL DATA SOURCE s3_data_source WITH (
 Для настройки соединения с приватным бакетом необходимо выполнить несколько SQL-запросов. Сначала нужно создать [секреты](../../datamodel/secrets.md), содержащие `AWS_ACCESS_KEY_ID` и `AWS_SECRET_ACCESS_KEY`.
 
 ```yql
-CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=<id>);
-CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=<key>);
+CREATE SECRET aws_access_id WITH (value=<id>);
+CREATE SECRET aws_access_key WITH (value=<key>);
 ```
 
-Следующим шагом создаётся внешний источник данных с именем `s3_data_source`, который будет указывать на конкретный S3-бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого задаются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше.
+Следующим шагом создаётся внешний источник данных с именем `s3_data_source`, который будет указывать на конкретный S3-бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого задаются параметры `AWS_ACCESS_KEY_ID_SECRET_PATH`, `AWS_SECRET_ACCESS_KEY_SECRET_PATH`, `AWS_REGION`. Значения этих параметров описаны выше.
 
 ```yql
 CREATE EXTERNAL DATA SOURCE s3_data_source WITH (
   SOURCE_TYPE="ObjectStorage",
   LOCATION="https://s3_storage_domain/bucket/",
   AUTH_METHOD="AWS",
-  AWS_ACCESS_KEY_ID_SECRET_NAME="aws_access_id",
-  AWS_SECRET_ACCESS_KEY_SECRET_NAME="aws_access_key",
+  AWS_ACCESS_KEY_ID_SECRET_PATH="aws_access_id",
+  AWS_SECRET_ACCESS_KEY_SECRET_PATH="aws_access_key",
   AWS_REGION="ru-central-1"
 );
 ```

@@ -4,14 +4,42 @@ import "ydb/core/protos/base.proto";
 package NKikimrStateStorage;
 option java_package = "ru.yandex.kikimr.proto";
 
-// todo: add followers info
-
 message TEvLookup {
     optional fixed64 TabletID = 1;
     optional uint64 Cookie = 2;
     optional uint64 ClusterStateGeneration = 3;
     optional fixed64 ClusterStateGuid = 4;
 };
+
+/**
+ * The information about a follower for the given tablet.
+ */
+message TFollowerInfo {
+    /**
+     * The actor ID for the follower itself.
+     */
+    optional NActorsProto.TActorId Follower = 1;
+
+    /**
+     * The actor ID for the follower tablet;
+     */
+    optional NActorsProto.TActorId FollowerTablet = 2;
+
+    /**
+     * If set to true, this follower is a candidate.
+     */
+    optional bool IsCandidate = 3;
+
+    /**
+     * The follower ID for this follower.
+     *
+     * @warning In some cases State Storage does not know the follower ID
+     *          for some followers. This can happen, if the given follower
+     *          is running on an older node, which does not support reporting
+     *          follower IDs.
+     */
+    optional uint32 FollowerId = 4;
+}
 
 message TEvInfo {
     optional NKikimrProto.EReplyStatus Status = 1;
@@ -24,12 +52,37 @@ message TEvInfo {
     optional bool Locked = 8;
     optional uint64 LockedFor = 9;
     optional uint64 Signature = 10;
+
+    /**
+     * @warning The Follower, FollowerTablet and FollowerCandidates fields
+     *          are depricated. The FollowerInfo field should be used instead.
+     *
+     * @todo Remove the Follower, FollowerTablet and FollowerCandidates fields
+     *       and update the code to use only the FollowerInfo field.
+     */
     repeated NActorsProto.TActorId Follower = 11;
     repeated NActorsProto.TActorId FollowerTablet = 12;
     repeated NActorsProto.TActorId FollowerCandidates = 13;
+
     optional fixed32 ConfigContentHash = 14;
     optional uint64 ClusterStateGeneration = 15;
     optional fixed64 ClusterStateGuid = 16;
+
+    /**
+     * The list of followers for the given tablet.
+     *
+     * @warning This field supercedes the Follower, FollowerTablet
+     *          and FollowerCandidate fields. For backwards compatibility,
+     *          the now code will continue populating both the FollowerInfo field
+     *          and the Follower, FollowerTablet, FollowerCandidate fields.
+     *          At some point the old fields will be fully deprecated and removed
+     *          from the API. At this point the code will need to be updated to stop
+     *          using the old fields.
+     *
+     * @warning The new code should always use the FollowerInfo field,
+     *          even if the old fields are populated.
+     */
+    repeated TFollowerInfo FollowerInfo = 17;
 };
 
 message TEvReplicaShutdown {
@@ -75,6 +128,7 @@ message TEvRegisterFollower {
     optional bool Candidate = 4;
     optional uint64 ClusterStateGeneration = 5;
     optional fixed64 ClusterStateGuid = 6;
+    optional uint32 FollowerId = 7;
 }
 
 message TEvUnregisterFollower {
@@ -82,6 +136,7 @@ message TEvUnregisterFollower {
     optional NActorsProto.TActorId Follower = 2;
     optional uint64 ClusterStateGeneration = 3;
     optional fixed64 ClusterStateGuid = 4;
+    optional uint32 FollowerId = 5;
 }
 
 message TEvLock {

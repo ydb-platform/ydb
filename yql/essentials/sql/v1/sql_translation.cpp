@@ -700,7 +700,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
         const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name);
-        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT") {
+        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT_PLAIN" || subType == "FULLTEXT_RELEVANCE") {
             if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
                 return false;
@@ -708,8 +708,10 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
             if (subType == "VECTOR_KMEANS_TREE") {
                 indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
-            } else if (subType == "FULLTEXT") {
-                indexes.back().Type = TIndexDescription::EType::GlobalFulltext;
+            } else if (subType == "FULLTEXT_PLAIN") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltextPlain;
+            } else if (subType == "FULLTEXT_RELEVANCE") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltextRelevance;
             } else {
                 Y_ABORT("Unreachable");
             }
@@ -723,7 +725,9 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     if (node.HasBlock10()) {
         // const auto& with = node.GetBlock4();
         auto& index = indexes.back();
-        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree || index.Type == TIndexDescription::EType::GlobalFulltext) {
+        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree ||
+            index.Type == TIndexDescription::EType::GlobalFulltextPlain ||
+            index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
             if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
                 return false;
             }
@@ -813,6 +817,15 @@ TNodePtr ParseDatabaseSettingValue(TContext& ctx, const TRule_database_setting_v
     }
 }
 
+TNodePtr ParseLiteral(const TRule_compact_setting_value& value, TContext& ctx, NSQLTranslation::ESqlMode mode, const TString& expectedType) {
+    TSqlExpression sqlExpr(ctx, mode);
+    auto exprOrId = sqlExpr.LiteralExpr(value.GetRule_literal_value1());
+    if (!exprOrId || !exprOrId->Expr || !exprOrId->Expr->IsLiteral() || exprOrId->Expr->GetLiteralType() != expectedType) {
+        return nullptr;
+    }
+    return exprOrId->Expr;
+}
+
 } // namespace
 
 bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out) {
@@ -882,6 +895,39 @@ bool TSqlTranslation::AddIndexSetting(const TIdentifier& id,
         return false;
     }
 
+    return true;
+}
+
+bool TSqlTranslation::AddCompactSetting(const TIdentifier& id, const TRule_compact_setting_value& value, TCompactEntry& compactEntry) {
+    if (to_lower(id.Name) == "cascade") {
+        if (compactEntry.Cascade) {
+            Ctx_.Error() << "Duplicated " << to_upper(id.Name);
+            return false;
+        }
+        compactEntry.Cascade = ParseLiteral(value, Ctx_, Mode_, "Bool");
+        if (!compactEntry.Cascade) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a boolean";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "max_shards_in_flight") {
+        if (compactEntry.MaxShardsInFlight) {
+            Ctx_.Error() << "Duplicated " << to_upper(id.Name);
+            return false;
+        }
+        compactEntry.MaxShardsInFlight = ParseLiteral(value, Ctx_, Mode_, "Int32");
+        if (!compactEntry.MaxShardsInFlight) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a Int32";
+            return false;
+        }
+        i32 value = FromString<i32>(compactEntry.MaxShardsInFlight->GetLiteralValue());
+        if (value <= 0) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be positive" << value;
+            return false;
+        }
+    } else {
+        Ctx_.Error() << to_upper(id.Name) << ": unknown setting for compact";
+        return false;
+    }
     return true;
 }
 
@@ -2583,7 +2629,9 @@ bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& setti
     return true;
 }
 
-static bool StoreConsumerSettingsEntry(
+namespace {
+
+bool StoreConsumerSettingsEntry(
     const TIdentifier& id, const TRule_topic_consumer_setting_value* value, TSqlExpression& ctx,
     TTopicConsumerSettings& settings,
     bool reset, bool alter) {
@@ -2597,7 +2645,8 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
     }
-    if (to_lower(id.Name) == "important") {
+    auto name = to_lower(id.Name);
+    if (name == "important") {
         if (settings.Important) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
@@ -2611,7 +2660,7 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
         settings.Important = valueExprNode;
-    } else if (to_lower(id.Name) == "availability_period") {
+    } else if (name == "availability_period") {
         if (settings.AvailabilityPeriod) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
@@ -2625,7 +2674,7 @@ static bool StoreConsumerSettingsEntry(
             }
             settings.AvailabilityPeriod.Set(valueExprNode);
         }
-    } else if (to_lower(id.Name) == "read_from") {
+    } else if (name == "read_from") {
         if (settings.ReadFromTs) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
@@ -2633,10 +2682,9 @@ static bool StoreConsumerSettingsEntry(
         if (reset) {
             settings.ReadFromTs.Reset();
         } else {
-            // ToDo: !! validate
             settings.ReadFromTs.Set(valueExprNode);
         }
-    } else if (to_lower(id.Name) == "supported_codecs") {
+    } else if (name == "supported_codecs") {
         if (settings.SupportedCodecs) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
@@ -2650,12 +2698,116 @@ static bool StoreConsumerSettingsEntry(
             }
             settings.SupportedCodecs.Set(valueExprNode);
         }
+    } else if (name == "type") {
+        if (settings.Type) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (alter) {
+            ctx.Error() << to_upper(id.Name) << " alter is not supported";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
+            ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+        TString value = to_upper(valueExprNode->GetLiteralValue());
+        if (value != "STREAMING" && value != "SHARED") {
+            ctx.Error() << to_upper(id.Name) << " value should be 'STREAMING' or 'SHARED', got: " << valueExprNode->GetLiteralValue();
+            return false;
+        }
+        settings.Type = valueExprNode;
+    } else if (name == "keep_messages_order") {
+        if (settings.KeepMessagesOrder) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (alter) {
+            ctx.Error() << to_upper(id.Name) << " alter is not supported";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
+            ctx.Error() << to_upper(id.Name) << " value should be boolean";
+            return false;
+        }
+        settings.KeepMessagesOrder = valueExprNode;
+    } else if (name == "default_processing_timeout") {
+        if (settings.DefaultProcessingTimeout) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (valueExprNode->GetOpName() != "Interval") {
+            ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+            return false;
+        }
+        settings.DefaultProcessingTimeout = valueExprNode;
+    } else if (name == "max_processing_attempts") {
+        if (settings.MaxProcessingAttempts) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsIntegerLiteral()) {
+            ctx.Error() << to_upper(id.Name) << " value should be a integer";
+            return false;
+        }
+        settings.MaxProcessingAttempts = valueExprNode;
+    } else if (name == "dead_letter_policy") {
+        if (settings.DeadLetterPolicy) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
+            ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+        TString value = to_upper(valueExprNode->GetLiteralValue());
+        if (value != "MOVE" && value != "DELETE" && value != "NONE") {
+            ctx.Error() << to_upper(id.Name) << " value should be 'MOVE', 'DELETE' or 'NONE', got: " << valueExprNode->GetLiteralValue();
+            return false;
+        }
+        settings.DeadLetterPolicy = valueExprNode;
+    } else if (name == "dead_letter_queue") {
+        if (settings.DeadLetterQueue) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
+            ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+        settings.DeadLetterQueue = valueExprNode;
     } else {
         ctx.Error() << to_upper(id.Name) << ": unknown option for consumer";
         return false;
     }
     return true;
 }
+
+} // namespace
 
 TIdentifier TSqlTranslation::GetTopicConsumerId(const TRule_topic_consumer_ref& node) {
     return IdEx(node.GetRule_an_id_pure1(), *this);
@@ -2759,7 +2911,9 @@ bool TSqlTranslation::CreateTopicEntry(const TRule_create_topic_entry& node, TCr
     return true;
 }
 
-static bool StoreTopicSettingsEntry(
+namespace {
+
+bool StoreTopicSettingsEntry(
     const TIdentifier& id, const TRule_topic_setting_value* value, TSqlExpression& ctx,
     TTopicSettings& settings, bool reset) {
     YQL_ENSURE(value || reset);
@@ -2908,6 +3062,8 @@ static bool StoreTopicSettingsEntry(
     }
     return true;
 }
+
+} // namespace
 
 bool TSqlTranslation::AlterTopicAction(const TRule_alter_topic_action& node, TAlterTopicParameters& params) {
     // alter_topic_action:
@@ -5084,6 +5240,16 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
 
 TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
+
+    if (!isEvaluate &&
+        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            GetPos(stmt.GetToken2()),
+            "IF without EVALUATE",
+            GetMaxLangVersion()))
+    {
+        return {};
+    }
+
     TSqlExpression expr(Ctx_, Mode_);
     auto exprNode = Unwrap(expr.Build(stmt.GetRule_expr3()));
     if (!exprNode) {
@@ -5109,6 +5275,25 @@ TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
 TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
     bool isParallel = stmt.HasBlock2();
+
+    if (isParallel &&
+        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            GetPos(stmt.GetBlock2().GetToken1()),
+            "PARALLEL FOR",
+            GetMaxLangVersion()))
+    {
+        return {};
+    }
+
+    if (!isEvaluate &&
+        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            GetPos(stmt.GetToken3()),
+            "FOR without EVALUATE",
+            GetMaxLangVersion()))
+    {
+        return {};
+    }
+
     TSqlExpression expr(Ctx_, Mode_);
     TString itemArgName;
     if (!NamedNodeImpl(stmt.GetRule_bind_parameter4(), itemArgName, *this)) {
@@ -5680,7 +5865,7 @@ bool TSqlTranslation::ParseTransferLambda(
 
 class TReturningListColumns: public INode {
 public:
-    TReturningListColumns(TPosition pos)
+    explicit TReturningListColumns(TPosition pos)
         : INode(pos)
     {
     }
@@ -6086,10 +6271,9 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return legacy();
     }
 
-    const NYql::TLangVersion langVer = YqlSelectLangVersion();
-    if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
-        Error() << "YqlSelect is not available before "
-                << FormatLangVersion(langVer);
+    if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            Ctx_.Pos(), "YqlSelect", YqlSelectLangVersion()))
+    {
         return nullptr;
     }
 

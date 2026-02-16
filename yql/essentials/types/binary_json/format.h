@@ -60,7 +60,7 @@ enum class EEntryType {
 struct TEntry {
     TEntry() = default;
 
-    TEntry(EEntryType type, ui32 value = 0)
+    explicit TEntry(EEntryType type, ui32 value = 0)
         : Type(type)
         , Value(value)
     {

@@ -716,6 +716,14 @@ message TEvKqpScanCursor {
 
     message TColumnShardScanPlain {
     }
+    message TDeprecatedColumnShardScanSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
+    message TDeprecatedColumnShardScanNotSortedSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
     message TColumnShardScanSimple {
         optional uint64 SourceIdx = 1;
         optional uint32 StartRecordIndex = 2;
@@ -728,10 +736,11 @@ message TEvKqpScanCursor {
     }
     oneof Implementation {
         TColumnShardScanPlain ColumnShardPlain = 10;
+        TDeprecatedColumnShardScanSimple DeprecatedColumnShardSimple = 11;
+        TDeprecatedColumnShardScanNotSortedSimple DeprecatedColumnShardNotSortedSimple = 12;
         TColumnShardScanSimple ColumnShardSimple = 13;
         TColumnShardScanNotSortedSimple ColumnShardNotSortedSimple = 14;
     }
-    reserved 11, 12; // deprecated
 }
 
 message TEvRemoteScanData {
@@ -833,7 +842,8 @@ message TKqpTableSinkSettings {
     repeated TKqpColumnMetadataProto LookupColumns = 20;
     optional bool IsIndexImplTable = 21;
     optional string Database = 22;
-    repeated TKqpColumnMetadataProto ReturningColumns = 23;
+    repeated uint32 DefaultColumnsIds = 23;
+    repeated TKqpColumnMetadataProto ReturningColumns = 24;
 }
 
 message TReadVectorTopK {
@@ -899,7 +909,7 @@ message TKqpFullTextSourceSettings {
 
     optional double K1Factor = 12;
     optional double BFactor = 13;
-    optional string QueryMode = 14;
+    optional string DefaultOperator = 14;
     optional string MinimumShouldMatch = 15;
 };
 
@@ -966,11 +976,21 @@ message TScriptExecutionRetryState {
         optional uint64 RetryCountLimit = 4;
     }
 
+    message TExponentialDelayPolicy {
+        optional double BackoffMultiplier = 1;
+        optional google.protobuf.Duration InitialBackoff = 2;
+        optional google.protobuf.Duration MaxBackoff = 3;
+        optional google.protobuf.Duration ResetBackoffThreshold = 4;
+        optional google.protobuf.Duration QueryUptimeThreshold = 5;
+        optional double JitterFactor = 6;
+    }
+
     message TMapping {
         repeated Ydb.StatusIds.StatusCode StatusCode = 1;
 
         oneof Policy {
             TBackoffPolicy BackoffPolicy = 2;
+            TExponentialDelayPolicy ExponentialDelayPolicy = 3;
         }
     }
 

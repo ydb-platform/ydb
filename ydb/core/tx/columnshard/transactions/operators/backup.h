@@ -13,6 +13,7 @@ private:
     std::shared_ptr<NOlap::NExport::TExportTask> ExportTask;
     bool TaskExists = false;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask;
+    std::unique_ptr<NTabletFlatExecutor::ITransaction> TxRemove;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;
     THashSet<TActorId> NotifySubscribers;
     using TProposeResult = TTxController::TProposeResult;

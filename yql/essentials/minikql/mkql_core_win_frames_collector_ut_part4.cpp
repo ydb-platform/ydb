@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(TCoreWinFramesCollectorTestPart4) {
 Y_UNIT_TEST(RangeIncremental_BasicIncremental) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<ui64>{5, EDirection::Following}
+            TInputRange<TRangeVariant>{5, EDirection::Following}
         },
         .InputElements = {ui64(10), ui64(15), ui64(20), ui64(25), ui64(30)},
         .ExpectedStates = {
@@ -85,7 +85,7 @@ Y_UNIT_TEST(RowIncremental_BasicIncremental) {
 Y_UNIT_TEST(RangeIncremental_WithGaps) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<ui64>{10, EDirection::Following}
+            TInputRange<TRangeVariant>{10, EDirection::Following}
         },
         .InputElements = {ui64(10), ui64(25), ui64(40), ui64(55)},
         .ExpectedStates = {
@@ -118,7 +118,7 @@ Y_UNIT_TEST(RangeIncremental_WithGaps) {
 Y_UNIT_TEST(RangeIncremental_MultipleNewElements) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<ui64>{15, EDirection::Following}
+            TInputRange<TRangeVariant>{15, EDirection::Following}
         },
         .InputElements = {ui64(10), ui64(12), ui64(14), ui64(16), ui64(18), ui64(20)},
         .ExpectedStates = {
@@ -161,7 +161,7 @@ Y_UNIT_TEST(RangeIncremental_MultipleNewElements) {
 Y_UNIT_TEST(CombinedDelta_RangeAndRow) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<ui64>{10, EDirection::Following}
+            TInputRange<TRangeVariant>{10, EDirection::Following}
         },
         .RowIncrementals = {
             TInputRow{1, EDirection::Following}
@@ -201,7 +201,7 @@ Y_UNIT_TEST(CombinedDelta_RangeAndRow) {
 Y_UNIT_TEST(RangeIncremental_DescendingOrder) {
     TTestCase<ui64, ESortOrder::Desc> testCase = {
         .RangeIncrementals = {
-            TInputRange<ui64>{5, EDirection::Following}
+            TInputRange<TRangeVariant>{5, EDirection::Following}
         },
         .InputElements = {ui64(30), TYield(), TYield(), ui64(25), ui64(20), ui64(15), ui64(10)},
         .ExpectedStates = {
@@ -239,8 +239,8 @@ Y_UNIT_TEST(RangeIncremental_DescendingOrder) {
 Y_UNIT_TEST(TwoRangeIntervalsAndTwoRowIntervalsDeltas_MixedDirections) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<ui64>{3, EDirection::Following},
-            TInputRange<ui64>{5, EDirection::Preceding},
+            TInputRange<TRangeVariant>{3, EDirection::Following},
+            TInputRange<TRangeVariant>{5, EDirection::Preceding},
         },
         .RowIncrementals = {
             TInputRow(1, EDirection::Following),
@@ -348,13 +348,13 @@ Y_UNIT_TEST(RowIntervalAndRowDelta_Desc) {
 Y_UNIT_TEST(RangeIntervalAndRangeDelta_Desc) {
     TTestCase<i64, ESortOrder::Desc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<i64>{
-                TInputRange<i64>{3, EDirection::Preceding},
-                TInputRange<i64>{3, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{3, EDirection::Preceding},
+                TInputRange<TRangeVariant>{3, EDirection::Following}
             }
         },
         .RangeIncrementals = {
-            TInputRange<i64>{3, EDirection::Following}
+            TInputRange<TRangeVariant>{3, EDirection::Following}
         },
         .InputElements = {i64(8), i64(5), TYield(), i64(2), i64(-5)},
         .ExpectedStates = {

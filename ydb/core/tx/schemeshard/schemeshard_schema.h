@@ -1685,6 +1685,7 @@ struct Schema : NIceDb::Schema {
         struct Metadata : Column<12, NScheme::NTypeIds::String> {};
         struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
         struct Topic : Column<20, NScheme::NTypeIds::String> {};
+        struct SysView : Column<22, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1718,7 +1719,8 @@ struct Schema : NIceDb::Schema {
             EncryptionIV,
             SrcPath,
             Topic,
-            ParentIndex
+            ParentIndex,
+            SysView
         >;
     };
 
@@ -1749,9 +1751,10 @@ struct Schema : NIceDb::Schema {
         struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnTableDescription
         struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
         struct StandaloneSharding : Column<5, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
+        struct IsRestore : Column<6, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore>;
     };
 
     struct ColumnTablesAlters : Table<91> {

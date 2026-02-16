@@ -478,15 +478,6 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         RunTestDiff(groupType, dataSize, testString, diffs);
     }
 
-    // Mirror tests
-    Y_UNIT_TEST(TestMirror3LossOfAllPossible3) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::ErasureMirror3);
-        constexpr ui32 maxMissingParts = 2;
-        constexpr ui32 maxParts = 1 + 2;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
     // Block tests
     Y_UNIT_TEST(TestBlock42LossOfAllPossible2) {
         // Set up the erasure

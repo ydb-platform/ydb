@@ -133,6 +133,13 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
             break;
         }
 
+        case TType::EKind::Tagged: {
+            auto taggedType = static_cast<const TTaggedType*>(type);
+            TType* baseType = taggedType->GetBaseType();
+            ValidateParamValue(paramName, baseType, value);
+            break;
+        }
+
         default:
             YQL_ENSURE(false, "Unexpected value type in parameter"
                 << ", parameter: " << paramName
@@ -311,14 +318,7 @@ public:
     }
 
     TString GetOutputDebugString() override {
-        if (AllocatedHolder->Output) {
-            switch (AllocatedHolder->Output->GetFillLevel()) {
-                case NoLimit:   return "";
-                case SoftLimit: return TStringBuilder() << "Output.FillLimit == SoftLimit " << AllocatedHolder->Output->DebugString();
-                case HardLimit: return TStringBuilder() << "Output.FillLimit == HardLimit " << AllocatedHolder->Output->DebugString();
-            }
-        }
-        return "";
+        return AllocatedHolder->Output ? AllocatedHolder->Output->DebugString() : "";
     }
 
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
@@ -632,8 +632,8 @@ public:
                 if (inputDesc.GetSource().GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
                     inputUsesWatermarks = true;
                     if (transform && WatermarksTracker) {
-                        transform->WatermarksTracker.emplace(/*logPrefix=*/"");
-                        transform->WatermarksTracker->RegisterAsyncInput(i/*TODO: , idleTimeout */);
+                        transform->WatermarksTracker.emplace(*WatermarksTracker, true);
+                        transform->WatermarksTracker->TransferInput(*WatermarksTracker, i, false);
                     }
                 }
             } else {
@@ -667,17 +667,16 @@ public:
                     if (inputChannelDesc.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
                         inputUsesWatermarks = true;
                         if (transform && WatermarksTracker) {
-                            WatermarksTracker->UnregisterInputChannel(channelId);
                             if (!transform->WatermarksTracker) {
-                                transform->WatermarksTracker.emplace(/*logPrefix=*/"");
+                                transform->WatermarksTracker.emplace(*WatermarksTracker, true);
                             }
-                            transform->WatermarksTracker->RegisterInputChannel(channelId/*TODO: , idleTimeout */);
+                            transform->WatermarksTracker->TransferInput(*WatermarksTracker, channelId, true);
                         }
                     }
                 }
-                if (inputUsesWatermarks && transform && WatermarksTracker) {
-                    WatermarksTracker->RegisterAsyncInput(i/*TODO: , idleTimeout */);
-                }
+            }
+            if (inputUsesWatermarks && transform && WatermarksTracker) {
+                WatermarksTracker->RegisterAsyncInput(i, transform->WatermarksTracker->GetMaxIdleTimeout());
             }
 
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, false);
@@ -1107,7 +1106,7 @@ private:
         while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;
-            if (!AllocatedHolder->ResultStreamFinished) {
+            if (!AllocatedHolder->ResultStreamFinished && !AllocatedHolder->Output->IsEarlyFinished()) {
                 if (isWide) {
                     fetchStatus = AllocatedHolder->ResultStream.WideFetch(wideBuffer.data(), wideBuffer.size());
                 } else {

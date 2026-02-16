@@ -65,6 +65,12 @@ Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
+ * Copyright (c) 2025 nghttp3 contributors
+ * Copyright (c) 2025 ngtcp2 contributors
+ * Copyright (c) 2023 nghttp2 contributors
+
+
+====================COPYRIGHT====================
 /* Copyright (c) 2008-2010 Bjoern Hoehrmann <bjoern@hoehrmann.de>
  * See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
 

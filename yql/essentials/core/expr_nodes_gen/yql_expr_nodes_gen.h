@@ -89,17 +89,23 @@ private:
 template <>
 class TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node = nullptr)
         : Raw_(node)
     {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : Raw_(node.Get())
         , Node_(node)
     {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprBase& node)
         : Raw_(node.Raw())
         , Node_(node.Ptr())
@@ -164,7 +170,7 @@ public:
         CurIt_ = EndIt_ = {};
     }
 
-    TChildIterator(const TExprBase& node, size_t startIndex = 0)
+    explicit TChildIterator(const TExprBase& node, size_t startIndex = 0)
         : CurIt_(node.Ref().Children().begin() + startIndex)
         , EndIt_(node.Ref().Children().end())
     {
@@ -215,13 +221,13 @@ private:
 template <typename TItem>
 class TListBase: public TExprBase {
 public:
-    TListBase(const TExprNode* node)
+    explicit TListBase(const TExprNode* node)
         : TExprBase(node)
     {
         YQL_ENSURE(Match(node));
     }
 
-    TListBase(const TExprNode::TPtr& node)
+    explicit TListBase(const TExprNode::TPtr& node)
         : TExprBase(node)
     {
         YQL_ENSURE(Match(node.Get()));
@@ -253,10 +259,14 @@ public:
 template <typename TItem>
 class TMaybeNode<TListBase<TItem>>: public TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node)
         : TMaybeNode<TExprBase>(node && TListBase<TItem>::Match(node) ? node : nullptr) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node && TListBase<TItem>::Match(node.Get()) ? node : TExprNode::TPtr()) {
     }
@@ -307,14 +317,20 @@ public:
 template <>
 class TMaybeNode<TCallable>: public TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node = nullptr)
         : TMaybeNode<TExprBase>(node && TCallable::Match(node) ? node : nullptr) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node && TCallable::Match(node.Get()) ? node : TExprNode::TPtr()) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TCallable& node)
         : TMaybeNode(node.Ptr())
     {
@@ -360,10 +376,14 @@ public:
 template <typename TItem>
 class TMaybeNode<TVarArgCallable<TItem>>: public TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node)
         : TMaybeNode<TExprBase>(node && TVarArgCallable<TItem>::Match(node) ? node : nullptr) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node && TVarArgCallable<TItem>::Match(node.Get()) ? node : TExprNode::TPtr()) {
     }
@@ -447,14 +467,20 @@ public:
 template <const size_t FixedArgsCount>
 class TMaybeNode<TFreeArgCallable<FixedArgsCount>>: public TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node)
         : TMaybeNode<TExprBase>(node && TFreeArgCallable<FixedArgsCount>::Match(node) ? node : nullptr) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node && TFreeArgCallable<FixedArgsCount>::Match(node.Get()) ? node : TExprNode::TPtr()) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprBase& node)
         : TMaybeNode(node)
     {

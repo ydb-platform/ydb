@@ -85,6 +85,9 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableAlterDatabase, false);
         OPTION(std::optional<bool>, EnableAccessToIndexImplTables, std::nullopt);
         OPTION(std::optional<bool>, EnableIndexMaterialization, std::nullopt);
+        OPTION(bool, EnableConditionalEraseResponseBatching, false);
+        OPTION(std::optional<ui32>, CondEraseResponseBatchSize, std::nullopt);
+        OPTION(std::optional<ui32>, CondEraseResponseBatchMaxTimeMs, std::nullopt);
 
         #undef OPTION
     };
@@ -222,6 +225,7 @@ namespace NSchemeShardUT_Private {
         void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone);
         void EnableTabletResolverScheduling(ui32 nodeIdx = 0);
         void Finalize();
+
     private:
         virtual TTestEnv* CreateTestEnv();
         // Make sure that user requests are not dropped

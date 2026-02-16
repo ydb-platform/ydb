@@ -1542,10 +1542,15 @@ void TWriteSessionActor<UseMigrationProtocol>::LogSession(const TActorContext& c
             return InitRequest.path();
         }
     }();
+    if (DiscoveryConverter && DiscoveryConverter->IsValid()) {
+        topic_path = DiscoveryConverter->GetPrintableString();
+    }
     LOG_INFO_S(
             ctx, NKikimrServices::PQ_WRITE_PROXY,
-            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie << " userAgent=\"" << UserAgent
-                                      << "\" ip=" << PeerName << " proto=" << ProtoName << " "
+            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie 
+                                      << " userAgent=\"" << UserAgent
+                                      << "\" ip=" << PeerName << " proto=" << ProtoName
+                                      << " user=" << (Token ? Token->GetUserSID() : "-")
                                       << " topic=" << topic_path
                                       << " durationSec=" << (ctx.Now() - StartTime).Seconds()
     );

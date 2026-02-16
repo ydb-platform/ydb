@@ -9,12 +9,12 @@ let
     };
   });
 in rec {
-  version = "8.5.0";
+  version = "8.16.0";
   versionWithUnderscores = "${lib.replaceStrings ["."] ["_"] version}";
 
   src = fetchurl {
     url = "https://github.com/curl/curl/releases/download/curl-${versionWithUnderscores}/curl-${version}.tar.bz2";
-    hash = "sha256-zktqZlVDEUdiSq9YJjKjb+Gt4mLV+rOFxg94lC3Y2Hs=";
+    hash = "sha256-lFkYCrSTOzDQd43dcckf4pEfq3McRuWbP0yDhbFZbJE=";
   };
 
   patches = [];
@@ -35,7 +35,6 @@ in rec {
     "--disable-ldap"
     "--disable-ldaps"
     "--enable-ares"
-    "--enable-websockets"
     "--with-openssl"
     "--with-ca-fallback"
     "--with-zstd=${zstd.dev}"

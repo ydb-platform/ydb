@@ -14,7 +14,7 @@ using namespace NKikimr::NMiniKQL;
 
 class TSimpleArrowResolver: public IArrowResolver {
 public:
-    TSimpleArrowResolver(const IFunctionRegistry& functionRegistry)
+    explicit TSimpleArrowResolver(const IFunctionRegistry& functionRegistry)
         : FunctionRegistry_(functionRegistry)
     {
     }

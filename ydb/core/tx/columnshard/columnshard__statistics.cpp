@@ -52,7 +52,7 @@ private:
             auto* column = respRecord.AddColumns();
             column->SetTag(columnTag);
             auto* statistic = column->AddStatistics();
-            statistic->SetType(NStat::COUNT_MIN_SKETCH);
+            statistic->SetType(static_cast<ui32>(NStat::EStatType::COUNT_MIN_SKETCH));
             statistic->SetData(TString(sketch->AsStringBuf()));
         }
 

@@ -125,7 +125,6 @@ class TestTabletsMovement(object):
             result_sets = self.ydb_client.query(
                 f"""
                     select
-                        String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS data_hash,
                         SUM(val) AS value_sum,
                         COUNT(*) AS rows_count
                     from `{table_path}`

@@ -7,7 +7,7 @@ namespace NYql {
 namespace NBacktrace {
 size_t CollectBacktrace(void** addresses, size_t limit, void* data);
 struct TCollectedFrame {
-    TCollectedFrame(uintptr_t addr);
+    explicit TCollectedFrame(uintptr_t addr);
     TCollectedFrame() = default;
     const char* File;
     size_t Address;

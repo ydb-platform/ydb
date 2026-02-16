@@ -6,6 +6,7 @@ from devtools.yamaker.project import CMakeNinjaNixProject
 EXCEPTION_ONLY_SRCS = ["exception.cc"]
 NOEXCEPT_ONLY_SRCS = ["noexception.cc"]
 
+
 def post_install(self):
     os.unlink(self.dstdir + "/unwind-itanium.h")
     os.unlink(self.dstdir + "/libelftc_dem_gnu3.c")
@@ -58,7 +59,7 @@ libcxxrt = CMakeNinjaNixProject(
         "unwind.h",
     ],
     post_install=post_install,
-    copy_sources=NOEXCEPT_ONLY_SRCS
+    copy_sources=NOEXCEPT_ONLY_SRCS,
 )
 
 libcxxrt.copy_top_sources_except |= {

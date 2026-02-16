@@ -10,7 +10,7 @@ namespace {
 
 class TSharedTransformerProxy : public IGraphTransformer {
 public:
-    TSharedTransformerProxy(const std::shared_ptr<IGraphTransformer>& inner)
+    explicit TSharedTransformerProxy(const std::shared_ptr<IGraphTransformer>& inner)
         : Inner_(inner)
     {}
 

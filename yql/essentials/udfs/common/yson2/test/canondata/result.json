@@ -9,6 +9,21 @@
             "uri": "file://test.test_Access_/results.txt"
         }
     ],
+    "test.test[AsFail]": [
+        {
+            "uri": "file://test.test_AsFail_/extracted"
+        }
+    ],
+    "test.test[As]": [
+        {
+            "uri": "file://test.test_As_/results.txt"
+        }
+    ],
+    "test.test[AttrAs]": [
+        {
+            "uri": "file://test.test_AttrAs_/results.txt"
+        }
+    ],
     "test.test[Attrs]": [
         {
             "uri": "file://test.test_Attrs_/results.txt"
@@ -119,6 +134,26 @@
             "uri": "file://test.test_IsType_/results.txt"
         }
     ],
+    "test.test[IterateAttrs]": [
+        {
+            "uri": "file://test.test_IterateAttrs_/results.txt"
+        }
+    ],
+    "test.test[IterateList]": [
+        {
+            "uri": "file://test.test_IterateList_/results.txt"
+        }
+    ],
+    "test.test[IterateMap]": [
+        {
+            "uri": "file://test.test_IterateMap_/results.txt"
+        }
+    ],
+    "test.test[IterateScalars]": [
+        {
+            "uri": "file://test.test_IterateScalars_/results.txt"
+        }
+    ],
     "test.test[JsonSerializeSkipMapEntity]": [
         {
             "uri": "file://test.test_JsonSerializeSkipMapEntity_/results.txt"
@@ -149,6 +184,51 @@
             "uri": "file://test.test_MapKeyEscape_/results.txt"
         }
     ],
+    "test.test[MutCreateFreezeFail]": [
+        {
+            "uri": "file://test.test_MutCreateFreezeFail_/extracted"
+        }
+    ],
+    "test.test[MutDownUpDict]": [
+        {
+            "uri": "file://test.test_MutDownUpDict_/results.txt"
+        }
+    ],
+    "test.test[MutDownUpList]": [
+        {
+            "uri": "file://test.test_MutDownUpList_/results.txt"
+        }
+    ],
+    "test.test[MutExists]": [
+        {
+            "uri": "file://test.test_MutExists_/results.txt"
+        }
+    ],
+    "test.test[MutInsert]": [
+        {
+            "uri": "file://test.test_MutInsert_/results.txt"
+        }
+    ],
+    "test.test[MutTryDown]": [
+        {
+            "uri": "file://test.test_MutTryDown_/results.txt"
+        }
+    ],
+    "test.test[MutUpdate]": [
+        {
+            "uri": "file://test.test_MutUpdate_/results.txt"
+        }
+    ],
+    "test.test[MutUpsert]": [
+        {
+            "uri": "file://test.test_MutUpsert_/results.txt"
+        }
+    ],
+    "test.test[MutView]": [
+        {
+            "uri": "file://test.test_MutView_/results.txt"
+        }
+    ],
     "test.test[NegativeArrayIndex]": [
         {
             "uri": "file://test.test_NegativeArrayIndex_/results.txt"
@@ -177,6 +257,16 @@
     "test.test[StringStrictError]": [
         {
             "uri": "file://test.test_StringStrictError_/extracted"
+        }
+    ],
+    "test.test[TryAsFail]": [
+        {
+            "uri": "file://test.test_TryAsFail_/results.txt"
+        }
+    ],
+    "test.test[TryAs]": [
+        {
+            "uri": "file://test.test_TryAs_/results.txt"
         }
     ],
     "test.test[WeakYsonRest]": [

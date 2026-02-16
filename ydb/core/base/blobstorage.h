@@ -779,6 +779,8 @@ struct TEvBlobStorage {
         EvFullSyncFinished,
         EvAddFullSyncSsts,
         EvAddFullSyncSstsResult,
+        EvChunkReadRaw,
+        EvChunkWriteRaw,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -836,6 +838,8 @@ struct TEvBlobStorage {
         EvCommitVDiskMetadata,
         EvCommitVDiskMetadataDone,
         EvChangeExpectedSlotCountResult,
+        EvChunkReadRawResult,
+        EvChunkWriteRawResult,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184

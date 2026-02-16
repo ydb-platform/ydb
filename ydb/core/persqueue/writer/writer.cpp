@@ -106,7 +106,7 @@ TString TEvPartitionWriter::TEvWriteResponse::ToString() const {
     return out;
 }
 
-class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TRlHelpers {
+class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPartitionWriterOpts::IGetter, private TRlHelpers {
     using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
     struct TUserWriteRequest {
@@ -974,7 +974,7 @@ public:
     }
 
     // used for tests to validate correct opts
-    const TPartitionWriterOpts GetOpts() {
+    const TPartitionWriterOpts& GetOpts() const override {
         return Opts;
     }
 

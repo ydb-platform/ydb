@@ -93,7 +93,7 @@ ELockType GetStrongestLock(ELockType lhs, ELockType rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TLockMask& lhs, const TLockMask& rhs)
+bool operator==(const TLockMask& lhs, const TLockMask& rhs)
 {
     int lockCount = std::max(lhs.GetSize(), rhs.GetSize());
     for (int index = 0; index < lockCount; ++index) {
@@ -1823,7 +1823,7 @@ std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
         throwError("expected \")\" or \",\" ");
     }
 
-    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description. Expected nested_key or nested_value");
+    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description: expected \"nested_key\" or \"nested_value\"");
 }
 
 EValueType GetNestedColumnElementType(const TLogicalType* logicalType)

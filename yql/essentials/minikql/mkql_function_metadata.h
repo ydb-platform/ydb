@@ -61,7 +61,7 @@ class TKernelFamily {
 public:
     const arrow::compute::FunctionOptions* FunctionOptions;
 
-    TKernelFamily(const arrow::compute::FunctionOptions* functionOptions = nullptr)
+    explicit TKernelFamily(const arrow::compute::FunctionOptions* functionOptions = nullptr)
         : FunctionOptions(functionOptions)
     {
     }
@@ -118,7 +118,7 @@ using TKernelFamilyMap = std::unordered_map<TString, std::unique_ptr<TKernelFami
 
 class TKernelFamilyBase: public TKernelFamily {
 public:
-    TKernelFamilyBase(const arrow::compute::FunctionOptions* functionOptions = nullptr);
+    explicit TKernelFamilyBase(const arrow::compute::FunctionOptions* functionOptions = nullptr);
 
     const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const final;
     TVector<const TKernel*> GetAllKernels() const final;

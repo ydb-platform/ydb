@@ -61,6 +61,43 @@ std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::TImpl::CreateSimpleWr
     return std::move(session);
 }
 
+std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::TImpl::CreateSimpleKeyedWriteSession(const TKeyedWriteSessionSettings& settings) {
+    auto alteredSettings = settings;
+    {
+        std::lock_guard guard(Lock);
+        if (!settings.CompressionExecutor_) {
+            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
+        }
+
+        if (!settings.EventHandlers_.HandlersExecutor_) {
+            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+        }
+    }
+
+    auto session = std::make_shared<TSimpleBlockingKeyedWriteSession>(
+        alteredSettings, shared_from_this(), Connections_, DbDriverState_
+    );
+    return session;
+}
+
+std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession(const TKeyedWriteSessionSettings& settings) {
+    auto alteredSettings = settings;
+    {
+        std::lock_guard guard(Lock);
+        if (!settings.CompressionExecutor_) {
+            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
+        }
+
+        if (!settings.EventHandlers_.HandlersExecutor_) {
+            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+        }
+    }
+
+    return std::make_shared<TKeyedWriteSession>(
+        alteredSettings, shared_from_this(), Connections_, DbDriverState_
+    );
+}
+
 std::shared_ptr<TTopicClient::TImpl::IReadSessionConnectionProcessorFactory> TTopicClient::TImpl::CreateReadSessionConnectionProcessorFactory() {
     using TService = Ydb::Topic::V1::TopicService;
     using TRequest = Ydb::Topic::StreamReadMessage::FromClient;

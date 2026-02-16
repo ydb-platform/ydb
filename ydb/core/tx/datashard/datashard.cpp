@@ -703,7 +703,7 @@ public:
     void OnCommit(ui64) override {
         TString error = Result->GetError();
         if (error) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
                     << " at tablet " << Self->TabletID() << ", error: " << error);
         } else {
@@ -755,7 +755,7 @@ public:
 
     void OnCommit(ui64) override {
         if (WriteResult->IsError()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                 "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID()
                 << " at tablet " << Self->TabletID() << ", error:  " << WriteResult->GetError());
         } else {
@@ -4414,7 +4414,7 @@ void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev,
 {
     const ui32 nodeId = ev->Get()->NodeId;
 
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                  "Shard " << TabletID() << " disconnected from node " << nodeId);
 
     Pipeline.ProcessDisconnected(nodeId);

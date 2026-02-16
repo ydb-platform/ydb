@@ -11,7 +11,7 @@
 
 #include <__config>
 #include <__functional/invoke.h>
-#include <__memory/shared_ptr.h> // __libcpp_acquire_load
+#include <__memory/shared_count.h> // __libcpp_acquire_load
 #include <__tuple/tuple_indices.h>
 #include <__tuple/tuple_size.h>
 #include <__utility/forward.h>
@@ -21,7 +21,7 @@
 #  include <tuple>
 #endif
 
-#if !defined(_LIBCPP_HAS_NO_THREADS) && !defined(_LIBCPP_CXX03_LANG)
+#if _LIBCPP_HAS_THREADS && !defined(_LIBCPP_CXX03_LANG)
 #  include <atomic>
 #endif
 

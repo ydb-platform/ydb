@@ -1045,17 +1045,19 @@ void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TAct
                         << " inFlightOverflowDuration " << inFlightOverflowDuration.MilliSeconds());
 
     NKikimrClient::TPersQueueRequest request;
+    auto req = request.MutablePartitionRequest();
+    req->SetPartition(Partition.Partition);
     request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetInFlightOverflowDurationMs(inFlightOverflowDuration.MilliSeconds());
 
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-    req->Record.Swap(&request);
+
+    TAutoPtr<TEvPersQueue::TEvRequest> persqueueRequest(new TEvPersQueue::TEvRequest);
+    persqueueRequest->Record.Swap(&request);
 
     ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
-    if (!PipeClient) {
+    if (!PipeClient) 
         return;
-    }
 
-    NTabletPipe::SendData(ctx, PipeClient, req.Release());
+    NTabletPipe::SendData(ctx, PipeClient, persqueueRequest.Release());
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {

@@ -8,7 +8,6 @@
 #include "blobstorage_pdisk_util_countedqueuemanyone.h"
 #include "blobstorage_pdisk_util_countedqueueoneone.h"
 #include "blobstorage_pdisk_util_flightcontrol.h"
-#include "blobstorage_pdisk_util_flightcontrol2.h"
 #include "blobstorage_pdisk_util_idlecounter.h"
 
 #include <ydb/core/base/appdata.h>
@@ -37,21 +36,6 @@ namespace NPDisk {
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 constexpr ui64 MaxWaitingNoops = 256;
-
-template <bool UseNewFlightControl>
-class TFlightControlSelector;
-
-template <>
-class TFlightControlSelector<false> : public TFlightControl {
-public:
-    using TFlightControl::TFlightControl;
-};
-
-template <>
-class TFlightControlSelector<true> : public TFlightControl2 {
-public:
-    using TFlightControl2::TFlightControl2;
-};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TRealBlockDevice
@@ -328,7 +312,7 @@ class TRealBlockDevice : public IBlockDevice {
             Device.IncrementMonInFlight(op->GetType(), opSize);
 
             double blockedMs = 0;
-            action->OperationIdx = Device.FlightControl.Schedule(blockedMs, opSize);
+            action->OperationIdx = Device.FlightControl.FlightControlSchedule(blockedMs, opSize);
 
             *Device.Mon.DeviceWaitTimeMs += blockedMs;
 
@@ -483,7 +467,7 @@ class TRealBlockDevice : public IBlockDevice {
             const ui64 opSize = op->GetSize();
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
-            Device.FlightControl.MarkComplete(completionAction->OperationIdx, opSize);
+            Device.FlightControl.FlightControlMarkComplete(completionAction->OperationIdx, opSize);
 
             NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
             NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
@@ -536,7 +520,7 @@ class TRealBlockDevice : public IBlockDevice {
             }
 
             Device.IoContext->DestroyAsyncIoOperation(op);
-            ui64 firstIncompleteIdx = Device.FlightControl.FirstIncompleteIdx();
+            ui64 firstIncompleteIdx = Device.FlightControl.FlightControlFirstIncompleteIdx();
             while (NextPossibleNoop < firstIncompleteIdx) {
                 ui64 i = NextPossibleNoop % MaxWaitingNoops;
                 if (WaitingNoops[i] && WaitingNoops[i]->OperationIdx == NextPossibleNoop) {
@@ -627,7 +611,7 @@ class TRealBlockDevice : public IBlockDevice {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
             const ui64 opSize = op->GetSize();
 
-            action->OperationIdx = Device.FlightControl.TrySchedule(opSize);
+            action->OperationIdx = Device.FlightControl.FlightControlTrySchedule(opSize);
             if (action->OperationIdx == 0) {
                 if (OpScheduleFailedTime == 0) {
                     // If failed to schedule, remember the time to use it when scheduling succeeds.
@@ -849,11 +833,9 @@ private:
 
     static constexpr int WaitTimeoutMs = 1;
     static constexpr int MaxEvents = 32;
-    static constexpr bool UseNewFlightControl = true;
-    using TSelectedFlightControl = TFlightControlSelector<UseNewFlightControl>;
 
     ui64 DeviceInFlight;
-    TSelectedFlightControl FlightControl;
+    TFlightControlFace FlightControl;
     TAtomicBlockCounter QuitCounter;
     TString LastWarning;
     bool ReadOnly;
@@ -865,7 +847,7 @@ private:
 public:
     TRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, bool readOnly, bool useBytesFlightControl)
         : Mon(mon)
         , Path(path)
         , CompletionThreads(nullptr)
@@ -884,7 +866,7 @@ public:
         , Flags(flags)
         , SectorMap(sectorMap)
         , DeviceInFlight(FastClp2(deviceInFlight))
-        , FlightControl(DeviceInFlight, TFlightControl2::DefaultInFlightBytesLimit)
+        , FlightControl(DeviceInFlight, useBytesFlightControl, TBytesFlightControl::DefaultInFlightBytesLimit)
         , LastWarning(IsPowerOf2(deviceInFlight) ? "" : "Device inflight must be a power of 2")
         , ReadOnly(readOnly)
     {
@@ -901,7 +883,7 @@ protected:
     void Initialize(std::shared_ptr<TPDiskCtx> pCtx) override {
         PCtx = std::move(pCtx);
         Y_VERIFY(PCtx);
-        FlightControl.Initialize(PCtx->PDiskLogPrefix);
+        FlightControl.InitializeFlightControl(PCtx->PDiskLogPrefix);
 
         TString errStr = TDeviceMode::Validate(Flags);
         if (errStr) {
@@ -1385,9 +1367,10 @@ class TCachedBlockDevice : public TRealBlockDevice {
 public:
     TCachedBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly,
+            bool useBytesFlightControl)
         : TRealBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-                maxQueuedCompletionActions, completionThreadsCount, sectorMap, readOnly)
+                maxQueuedCompletionActions, completionThreadsCount, sectorMap, readOnly, useBytesFlightControl)
         , ReadsInFly(0)
         , PDisk(pdisk)
     {}
@@ -1523,14 +1506,17 @@ public:
 
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly) {
+        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly,
+        bool useBytesFlightControl) {
     return new TCachedBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk, readOnly);
+            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk, readOnly, useBytesFlightControl);
 }
 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk, bool readOnly) {
-    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk, readOnly);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk, bool readOnly,
+        bool useBytesFlightControl) {
+    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk, readOnly,
+            useBytesFlightControl);
     device->Initialize(std::make_shared<TPDiskCtx>(actorSystem));
     return device;
 }

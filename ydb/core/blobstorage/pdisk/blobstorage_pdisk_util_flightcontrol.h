@@ -4,8 +4,11 @@
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 
+#include <util/generic/queue.h>
 #include <util/generic/vector.h>
 #include <util/system/condvar.h>
+#include <functional>
+#include <variant>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -41,6 +44,105 @@ public:
 
     void MarkComplete(ui64 idx, ui64 size);
     ui64 FirstIncompleteIdx();
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TBytesFlightControl
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class TBytesFlightControl {
+    const ui64 InFlightRequestsLimit;
+    const ui64 InFlightBytesLimit;
+
+    TAtomic CachedFirstIncompleteIdx;
+    ui64 NextScheduleIdx;
+    ui64 InFlightRequests;
+    ui64 InFlightBytes;
+    ui64 FirstIncompleteIdxValue;
+    TPriorityQueue<ui64, TVector<ui64>, std::greater<ui64>> CompletedIdx;
+
+    TMutex ScheduleMutex;
+    TCondVar ScheduleCondVar;
+    TString PDiskLogPrefix;
+
+    ui64 TryScheduleLocked(ui64 size);
+
+public:
+    static constexpr ui64 DefaultInFlightBytesLimit = 1ull << 20; // 1 MiB
+
+    TBytesFlightControl(ui64 inFlightRequestsLimit, ui64 inFlightBytesLimit = DefaultInFlightBytesLimit);
+
+    void Initialize(const TString& logPrefix);
+
+    // Returns 0 in case of scheduling error
+    // Operation Idx otherwise
+    // May sometimes return 0 when it already can schedule
+    ui64 TrySchedule(ui64 size);
+
+    // Blocking version of TrySchedule
+    ui64 Schedule(double& blockedMs, ui64 size);
+
+    void MarkComplete(ui64 idx, ui64 size);
+    ui64 FirstIncompleteIdx();
+};
+
+using TFlightControlVariant = std::variant<TFlightControl, TBytesFlightControl>;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TFlightControlFace
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class TFlightControlFace {
+    TFlightControlVariant FlightControl;
+
+public:
+    TFlightControlFace(ui64 inFlightRequestsLimit, bool useBytesFlightControl,
+            ui64 inFlightBytesLimit = TBytesFlightControl::DefaultInFlightBytesLimit)
+        : FlightControl(useBytesFlightControl
+                    ? TFlightControlVariant(std::in_place_type<TBytesFlightControl>, inFlightRequestsLimit,
+                            inFlightBytesLimit)
+                    : TFlightControlVariant(std::in_place_type<TFlightControl>, inFlightRequestsLimit,
+                            inFlightBytesLimit))
+    {
+    }
+
+    void InitializeFlightControl(const TString& logPrefix) {
+        std::visit(
+                [&](auto& control) {
+                    control.Initialize(logPrefix);
+                },
+                FlightControl);
+    }
+
+    ui64 FlightControlTrySchedule(ui64 size) {
+        return std::visit(
+                [&](auto& control) -> ui64 {
+                    return control.TrySchedule(size);
+                },
+                FlightControl);
+    }
+
+    ui64 FlightControlSchedule(double& blockedMs, ui64 size) {
+        return std::visit(
+                [&](auto& control) -> ui64 {
+                    return control.Schedule(blockedMs, size);
+                },
+                FlightControl);
+    }
+
+    void FlightControlMarkComplete(ui64 idx, ui64 size) {
+        std::visit(
+                [&](auto& control) {
+                    control.MarkComplete(idx, size);
+                },
+                FlightControl);
+    }
+
+    ui64 FlightControlFirstIncompleteIdx() {
+        return std::visit(
+                [&](auto& control) -> ui64 {
+                    return control.FirstIncompleteIdx();
+                },
+                FlightControl);
+    }
 };
 
 } // NPDisk

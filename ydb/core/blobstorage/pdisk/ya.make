@@ -66,7 +66,6 @@ SRCS(
     blobstorage_pdisk_tools.cpp
     blobstorage_pdisk_util_atomicblockcounter.cpp
     blobstorage_pdisk_util_flightcontrol.cpp
-    blobstorage_pdisk_util_bytesflightcontrol.cpp
     blobstorage_pdisk_util_signal_event.cpp
     blobstorage_pdisk_writer.cpp
     drivedata_serializer.cpp

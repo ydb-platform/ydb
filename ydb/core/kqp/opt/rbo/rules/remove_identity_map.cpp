@@ -8,7 +8,7 @@ namespace NKqp {
 // Identity map that projects maybe a projection operator and can be removed if it doesn't do any extra
 // projections
 
-std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 

@@ -28,7 +28,7 @@ class IRule {
     IRule(TString name) : RuleName(name) {}
     IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
 
-    virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
 
@@ -46,9 +46,9 @@ class ISimplifiedRule : public IRule {
     ISimplifiedRule(TString name) : IRule(name) {}
     ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
 
-    virtual std::shared_ptr<IOperator> SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
-    virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
 /**

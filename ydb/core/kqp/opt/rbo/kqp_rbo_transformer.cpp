@@ -184,11 +184,11 @@ NThreading::TFuture<void> TKqpNewRBOTransformer::DoGetAsyncFuture(const TExprNod
     return ColumnStatisticsReadiness;
 }
 
-bool TKqpNewRBOTransformer::IsSuitableToCollectStatistics(const std::shared_ptr<IOperator>& op) const {
+bool TKqpNewRBOTransformer::IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const {
     return op->Props.Metadata.has_value();
 }
 
-void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const std::shared_ptr<IOperator>& op) {
+void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op) {
     if (MatchOperator<TOpFilter>(op)) {
         CollectTablesAndColumnsNames(CastOperator<TOpFilter>(op)->FilterExpr, op->Props);
     }

@@ -6,7 +6,7 @@ namespace NKqp {
 /**
  * Convert unoptimized CBOTrees back into normal operators
  */
-std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+TIntrusivePtr<IOperator> TInlineCBOTreeRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 

@@ -73,9 +73,10 @@ class TPDisk;
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon,
         ui64 reorderingCycles, ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags,
         ui32 maxQueuedCompletionActions, ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap,
-        TPDisk * const pdisk = nullptr, bool readOnly = false);
+        TPDisk * const pdisk = nullptr, bool readOnly = false, bool useBytesFlightControl = false);
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr, bool readOnly = false);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr,
+        bool readOnly = false, bool useBytesFlightControl = false);
 
 } // NPDisk
 } // NKikimr

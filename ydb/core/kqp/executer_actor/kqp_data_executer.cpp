@@ -2025,6 +2025,7 @@ private:
 
         if (!graphRestored) {
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
+            Cerr << TasksGraph.DumpToString() << Endl;
         }
 
         TIssue validateIssue;

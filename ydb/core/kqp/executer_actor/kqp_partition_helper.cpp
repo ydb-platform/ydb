@@ -848,14 +848,17 @@ TPartitionPruner::TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory
 }
 
 TShardIdToInfoMap TPartitionPruner::Prune(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo, bool& isFullScan) {
+    Cerr << "Prune: " << stageInfo.Id << Endl;
     return PrunePartitions(operation, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
 }
 
 TShardIdToInfoMap TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) {
+    Cerr << "Prune: " << stageInfo.Id << Endl;
     return PrunePartitions(source, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
 }
 
 TShardIdToInfoMap TPartitionPruner::PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo) {
+    Cerr << "Prune Effect: " << stageInfo.Id << Endl;
     return PruneEffectPartitions(operation, stageInfo, *HolderFactory, *TypeEnv, Config);
 }
 

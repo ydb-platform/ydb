@@ -14,7 +14,7 @@ Two main approaches are available:
 
 ## Export and import via federated queries to {{ objstorage-name }} {#objstorage}
 
-[Federated queries](../concepts/query_execution/federated_query/index.md) let {{ ydb-short-name }} read and write data directly in Parquet or CSV files. This method is convenient for running export and import operations using SQL only, without external tools.
+[Federated queries](../concepts/federated_query/index.md) let {{ ydb-short-name }} read and write data directly in Parquet or CSV files. This method is convenient for running export and import operations using SQL only, without external tools.
 
 ### Prerequisites
 

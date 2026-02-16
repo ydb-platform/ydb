@@ -1,5 +1,6 @@
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_completion_impl.h"
+#include <util/random/fast.h>
 
 namespace NKikimr::NPDisk {
 

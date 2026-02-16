@@ -1476,6 +1476,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
         }
     }
 
+    if (const auto& infoAggregator = GetMeta().DqInfoAggregator) {
+        NActorsProto::TActorId actorIdProto;
+        ActorIdToProto(infoAggregator, &actorIdProto);
+        (*result->MutableTaskParams())["dq_info_aggregator"] = actorIdProto.SerializeAsString();
+    }
+
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);

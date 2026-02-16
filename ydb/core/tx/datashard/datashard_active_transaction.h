@@ -312,7 +312,7 @@ private:
     bool Cancelled;
     const TInstant ReceivedAt_; // For local timeout tracking
     TInstant Deadline_;
-    
+
     void ComputeTxSize();
     void ComputeDeadline();
 };
@@ -611,6 +611,7 @@ public:
     const TString& GetUserSID() const {
         return UserSID;
     }
+
 private:
     void TrackMemory() const;
     void UntrackMemory() const;

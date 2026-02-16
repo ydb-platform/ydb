@@ -154,11 +154,23 @@ class HealthCheckState:
         return "\n".join(out)
 
 
+def _invalid_thresholds(*, r: float, c: float) -> tuple[int, int]:
+    base = math.ceil(math.log(1 - c) / math.log(1 - r)) - 1
+    per_p = math.ceil(1 / r)
+    return base, per_p
+
+
+# stop once we're 99% confident the true valid rate is below 1%. See
+# https://github.com/HypothesisWorks/hypothesis/issues/4623#issuecomment-3814681997
+# for how we derived this formula.
+INVALID_THRESHOLD_BASE, INVALID_PER_VALID = _invalid_thresholds(r=0.01, c=0.99)
+
+
 class ExitReason(Enum):
     max_examples = "settings.max_examples={s.max_examples}"
     max_iterations = (
         "settings.max_examples={s.max_examples}, "
-        "but < 10% of examples satisfied assumptions"
+        "but < 1% of examples satisfied assumptions"
     )
     max_shrinks = f"shrunk example {MAX_SHRINKS} times"
     finished = "nothing left to do"
@@ -724,11 +736,8 @@ class ConjectureRunner:
             #  while in the other case below we just want to move on to shrinking.)
             if self.valid_examples >= self.settings.max_examples:
                 self.exit_with(ExitReason.max_examples)
-            if self.call_count >= max(
-                self.settings.max_examples * 10,
-                # We have a high-ish default max iterations, so that tests
-                # don't become flaky when max_examples is too low.
-                1000,
+            if (self.invalid_examples + self.overrun_examples) > (
+                INVALID_THRESHOLD_BASE + INVALID_PER_VALID * self.valid_examples
             ):
                 self.exit_with(ExitReason.max_iterations)
 
@@ -1088,8 +1097,12 @@ class ConjectureRunner:
         # but with the important distinction that this clause will move on to
         # the shrinking phase having found one or more bugs, while the other
         # will exit having found zero bugs.
-        if self.valid_examples >= self.settings.max_examples or self.call_count >= max(
-            self.settings.max_examples * 10, 1000
+        invalid_threshold = (
+            INVALID_THRESHOLD_BASE + INVALID_PER_VALID * self.valid_examples
+        )
+        if (
+            self.valid_examples >= self.settings.max_examples
+            or (self.invalid_examples + self.overrun_examples) > invalid_threshold
         ):  # pragma: no cover
             return False
 

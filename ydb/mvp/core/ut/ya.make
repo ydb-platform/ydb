@@ -7,6 +7,7 @@ SRCS(
     mvp_tokens.cpp
     mvp_test_runtime.cpp
     mvp_security_printer_ut.cpp
+    mvp_startup_options_ut.cpp
 )
 
 PEERDIR(

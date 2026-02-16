@@ -1,8 +1,8 @@
 diff --git a/include/__configuration/abi.h b/include/__configuration/abi.h
-index c6ef6fd..f41bce7 100644
+index 5e40e30..c81ccee 100644
 --- a/include/__configuration/abi.h
 +++ b/include/__configuration/abi.h
-@@ -66,7 +66,12 @@
+@@ -64,7 +64,12 @@
  // Previously libc++ used "unsigned int" exclusively.
  #  define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
  // Unstable attempt to provide a more optimized std::function
@@ -49,7 +49,7 @@ index 23c1c28..9037313 100644
  #  define _LIBCPP_FILESYSTEM_USE_SENDFILE
  #elif defined(__APPLE__) || __has_include(<copyfile.h>)
 diff --git a/src/new.cpp b/src/new.cpp
-index b14b522..5956851 100644
+index e010fe4..eb1471a 100644
 --- a/src/new.cpp
 +++ b/src/new.cpp
 @@ -18,7 +18,13 @@

@@ -894,8 +894,11 @@ private:
         const ui64 txFlags = 0;
 
         TXLOG_D("Sending CreateVolatileSnapshot tx to shard " << state.ShardId);
-        auto ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SNAPSHOT, ctx.SelfID, TxId, txBody, txFlags);
-        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(ev, state.ShardId, true));
+        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
+                new TEvDataShard::TEvProposeTransaction(
+                    NKikimrTxDataShard::TX_KIND_SNAPSHOT,
+                    ctx.SelfID, TxId, txBody, txFlags),
+                state.ShardId, true));
 
         state.AffectedFlags |= AffectedRead;
         state.State = EShardState::SnapshotProposeSent;

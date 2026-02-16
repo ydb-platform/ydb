@@ -978,7 +978,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     TChannelFullInfo info(record.GetChannelId(),
         NActors::ActorIdFromProto(record.GetSrcActorId()),
-        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0);
+        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
     auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
     if (!descriptor) {
@@ -1401,7 +1401,7 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     TChannelFullInfo info(record.GetChannelId(),
         NActors::ActorIdFromProto(record.GetSrcActorId()),
-        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0);
+        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
     auto descriptor = GetOrCreateOutputDescriptor(info, false, popBytes == 0);
     if (!descriptor) {
@@ -1676,7 +1676,7 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     TChannelFullInfo info(record.GetChannelId(),
         NActors::ActorIdFromProto(record.GetSrcActorId()),
-        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0);
+        NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
     auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
     if (!descriptor) {
@@ -1851,16 +1851,12 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
 // unbinded channels
 
 IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelSettings& settings) {
-    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId));
-    buffer->PushStats.Level = settings.Level;
-    buffer->PopStats.Level = settings.Level;
+    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqOutputChannel(Self, settings, buffer, false);
 }
 
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSettings& settings) {
-    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId));
-    buffer->PushStats.Level = settings.Level;
-    buffer->PopStats.Level = settings.Level;
+    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqInputChannel(Self, settings, buffer);
 }
 
@@ -1921,8 +1917,6 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
     if (Aggregator) {
         buffer->SetFillAggregator(Aggregator);
     }
-    buffer->PushStats.Level = Serializer->Buffer->PushStats.Level;
-    buffer->PopStats.Level = Serializer->Buffer->PopStats.Level;
     Serializer->Buffer = buffer;
     Service.reset();
 }
@@ -1935,8 +1929,6 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
     Buffer->Info.OutputActorId = outputActorId;
     Buffer->Info.InputActorId = inputActorId;
     auto buffer = service->GetInputBuffer(Buffer->Info);
-    buffer->PushStats.Level = Buffer->PushStats.Level;
-    buffer->PopStats.Level = Buffer->PopStats.Level;
     Buffer = buffer;
     Service.reset();
 }

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(25.3)
+VERSION(26.0)
 
 LICENSE(MIT)
 
@@ -86,7 +86,7 @@ PY_SRCS(
     pip/_internal/models/index.py
     pip/_internal/models/installation_report.py
     pip/_internal/models/link.py
-    pip/_internal/models/pylock.py
+    pip/_internal/models/release_control.py
     pip/_internal/models/scheme.py
     pip/_internal/models/search_scope.py
     pip/_internal/models/selection_prefs.py
@@ -115,6 +115,7 @@ PY_SRCS(
     pip/_internal/pyproject.py
     pip/_internal/req/__init__.py
     pip/_internal/req/constructors.py
+    pip/_internal/req/pep723.py
     pip/_internal/req/req_dependency_group.py
     pip/_internal/req/req_file.py
     pip/_internal/req/req_install.py
@@ -152,6 +153,7 @@ PY_SRCS(
     pip/_internal/utils/logging.py
     pip/_internal/utils/misc.py
     pip/_internal/utils/packaging.py
+    pip/_internal/utils/pylock.py
     pip/_internal/utils/retry.py
     pip/_internal/utils/subprocess.py
     pip/_internal/utils/temp_dir.py
@@ -219,6 +221,7 @@ PY_SRCS(
     pip/_vendor/packaging/licenses/_spdx.py
     pip/_vendor/packaging/markers.py
     pip/_vendor/packaging/metadata.py
+    pip/_vendor/packaging/pylock.py
     pip/_vendor/packaging/requirements.py
     pip/_vendor/packaging/specifiers.py
     pip/_vendor/packaging/tags.py

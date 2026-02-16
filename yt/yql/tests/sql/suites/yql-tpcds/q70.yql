@@ -1,0 +1,67 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: Window and aggregation functions are not allowed in this context */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    Sum(ss_net_profit) AS total_sum,
+    s_state,
+    s_county,
+    Grouping(s_state) + Grouping(s_county) AS lochierarchy,
+    Rank() OVER (
+        PARTITION BY
+            Grouping(s_state) + Grouping(s_county),
+            CASE
+                WHEN Grouping(s_county) == 0 THEN s_state
+            END
+        ORDER BY
+            Sum(ss_net_profit) DESC
+    ) AS rank_within_parent
+FROM
+    plato.store_sales
+,
+    plato.date_dim AS d1
+,
+    plato.store
+WHERE
+    d1.d_month_seq BETWEEN 1212 AND 1212 + 11
+    AND d1.d_date_sk == ss_sold_date_sk
+    AND s_store_sk == ss_store_sk
+    AND s_state IN (
+        SELECT
+            s_state
+        FROM (
+            SELECT
+                s_state AS s_state,
+                Rank() OVER (
+                    PARTITION BY
+                        s_state
+                    ORDER BY
+                        Sum(ss_net_profit) DESC
+                ) AS ranking
+            FROM
+                plato.store_sales
+            ,
+                plato.store
+            ,
+                plato.date_dim
+            WHERE
+                d_month_seq BETWEEN 1212 AND 1212 + 11
+                AND d_date_sk == ss_sold_date_sk
+                AND s_store_sk == ss_store_sk
+            GROUP BY
+                s_state
+        ) AS tmp1
+        WHERE
+            ranking <= 5
+    )
+GROUP BY
+    ROLLUP (s_state, s_county)
+ORDER BY
+    lochierarchy DESC,
+    CASE
+        WHEN lochierarchy == 0 THEN s_state
+    END,
+    rank_within_parent
+LIMIT 100;

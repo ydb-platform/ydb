@@ -69,7 +69,7 @@ public:
         const auto& rotationPolicy = Config_->RotationPolicy;
         auto now = TInstant::Now();
         if ((!rotationPolicy->RotationPeriod || LastRotationTimestamp_ + *rotationPolicy->RotationPeriod > now) &&
-            ((!rotationPolicy->MaxSegmentSize || File_->GetLength() < *rotationPolicy->MaxSegmentSize)))
+            ((!rotationPolicy->MaxSegmentSize || !File_ || File_->GetLength() < *rotationPolicy->MaxSegmentSize)))
         {
             return;
         }

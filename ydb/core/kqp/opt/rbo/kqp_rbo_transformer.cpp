@@ -278,8 +278,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
 
 bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
     // Currently just checking for a flag.
-    // return KqpCtx.Config->FeatureFlags.GetEnableColumnStatistics();
-    return true;
+    return KqpCtx.Config->FeatureFlags.GetEnableColumnStatistics();
 }
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -293,7 +292,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TKqpOpRoot::Match(node.Get())) {
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
-                return RBO.Optimize(OpRoot, rboCtx);
+                return RBO.Optimize(*OpRoot, rboCtx);
             } else {
                 return node;
             }

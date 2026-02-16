@@ -9,8 +9,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-SUBSCRIBER(g:yql)
-
 SRCDIR(yql/essentials/minikql/computation)
 
 SRCS(

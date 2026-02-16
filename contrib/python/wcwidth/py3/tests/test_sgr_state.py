@@ -9,6 +9,7 @@ from wcwidth import clip, wrap
 from wcwidth.sgr_state import (_SGR_STATE_DEFAULT,
                                _SGRState,
                                propagate_sgr,
+                               _parse_sgr_params,
                                _sgr_state_update,
                                _sgr_state_is_active,
                                _sgr_state_to_sequence)
@@ -236,3 +237,20 @@ def test_sgr_malformed_sequences():
     # invalid mode (not 2 or 5) for extended color
     assert _sgr_state_update(_SGR_STATE_DEFAULT, '\x1b[38;3;128m').foreground is None
     assert _sgr_state_update(_SGR_STATE_DEFAULT, '\x1b[48;3;128m').background is None
+
+
+def test_parse_sgr_params_invalid():
+    """_parse_sgr_params returns empty list for invalid sequences."""
+    assert not _parse_sgr_params('invalid')
+
+
+def test_extended_color_mixed_format_edge_cases():
+    """Extended color parsing handles mixed semicolon/colon format edge cases."""
+    # 38=FG_EXTENDED, colon tuple (48, 2, 255, 0, 0) consumed as mode - returns None
+    assert _sgr_state_update(_SGR_STATE_DEFAULT, '\x1b[38;48:2:255:0:0m').foreground is None
+    # 38=FG_EXTENDED, 5=256-color mode, colon tuple consumed as index - returns None
+    assert _sgr_state_update(_SGR_STATE_DEFAULT, '\x1b[38;5;48:5:99m').foreground is None
+    # 38=FG_EXTENDED, 2=RGB mode, r=255, g=128, colon tuple consumed as b - returns None
+    assert _sgr_state_update(_SGR_STATE_DEFAULT, '\x1b[38;2;255;128;48:2:0:0:0m').foreground is None
+    # colon tuple with invalid base (99) is ignored
+    assert _sgr_state_update(_SGR_STATE_DEFAULT, '\x1b[99:2:255:0:0m') == _SGR_STATE_DEFAULT

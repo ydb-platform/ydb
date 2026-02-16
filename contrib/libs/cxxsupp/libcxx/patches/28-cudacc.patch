@@ -101,10 +101,10 @@ index df18159..cef958a 100644
  } // namespace literals
  #  endif
 diff --git a/include/tuple b/include/tuple
-index 0c96786..5cc0435 100644
+index 5d968bf..dbd27da 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -308,7 +308,7 @@ class __tuple_leaf {
+@@ -309,7 +309,7 @@ class __tuple_leaf {
  
    template <class _Tp>
    static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
@@ -113,7 +113,7 @@ index 0c96786..5cc0435 100644
      return !__reference_binds_to_temporary(_Hp, _Tp);
  #    else
      return true;
-@@ -616,8 +616,16 @@ public:
+@@ -617,8 +617,16 @@ public:
                is_constructible<_Tp, _Up>... > {};
  
    template <class... _Up,

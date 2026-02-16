@@ -458,6 +458,13 @@ void TMirrorer::HandleWakeup(const TActorContext& ctx) {
 }
 
 void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorContext& ctx) {
+    if (CredentialsRequestInFlight) {
+        // защита от гонки между TEvInitCredentials, TEvCredentialsCreated и TEvCreateConsumer
+        // когда придёт TEvCredentialsCreated актор ещё раз отправит себе TEvCreateConsumer
+        LOG_W("wait for credentials response.");
+        return;
+    }
+
     LastInitStageTimestamp = ctx.Now();
     LOG_N("creating new read session");
 

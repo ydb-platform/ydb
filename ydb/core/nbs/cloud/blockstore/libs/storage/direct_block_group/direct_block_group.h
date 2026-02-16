@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ydb/core/blobstorage/ddisk/ddisk.h>
-#include <ydb/core/mind/bscontroller/types.h>
-
 #include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/storage_transport/storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/request.h>
+
+#include <ydb/core/blobstorage/ddisk/ddisk.h>
+#include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -28,9 +28,13 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId) = 0;
 
-    virtual void SetWriteBlocksReplyCallback(std::function<void(bool)> callback) = 0;
-    virtual void SetReadBlocksReplyCallback(std::function<void(bool)> callback) = 0;
+    virtual void SetWriteBlocksReplyCallback(
+        std::function<void(bool)> callback) = 0;
+    virtual void SetReadBlocksReplyCallback(
+        std::function<void(bool)> callback) = 0;
 };
+
+using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,19 +43,25 @@ constexpr size_t BlocksCount = 128 * 1024 * 1024 / 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDirectBlockGroup : public IDirectBlockGroup
+class TDirectBlockGroup
+    : public IDirectBlockGroup
+    , public std::enable_shared_from_this<TDirectBlockGroup>
 {
 private:
-    struct TBlockMeta {
+    struct TBlockMeta
+    {
         TVector<ui64> LsnByPersistentBufferIndex;
         TVector<bool> IsFlushedToDDiskByPersistentBufferIndex;
 
         explicit TBlockMeta(size_t persistentBufferCount)
             : LsnByPersistentBufferIndex(persistentBufferCount, 0)
-            , IsFlushedToDDiskByPersistentBufferIndex(persistentBufferCount, false)
+            , IsFlushedToDDiskByPersistentBufferIndex(
+                  persistentBufferCount,
+                  false)
         {}
 
-        void OnWriteCompleted(const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta)
+        void OnWriteCompleted(
+            const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta)
         {
             LsnByPersistentBufferIndex[writeMeta.Index] = writeMeta.Lsn;
             IsFlushedToDDiskByPersistentBufferIndex[writeMeta.Index] = false;
@@ -61,7 +71,8 @@ private:
         {
             if (LsnByPersistentBufferIndex[persistentBufferIndex] == lsn) {
                 LsnByPersistentBufferIndex[persistentBufferIndex] = 0;
-                IsFlushedToDDiskByPersistentBufferIndex[persistentBufferIndex] = true;
+                IsFlushedToDDiskByPersistentBufferIndex[persistentBufferIndex] =
+                    true;
             }
         }
 
@@ -81,16 +92,19 @@ private:
         NKikimr::NBsController::TDDiskId DDiskId;
         NKikimr::NDDisk::TQueryCredentials Credentials;
 
-        TDDiskConnection(const NKikimr::NBsController::TDDiskId& ddiskId,
-                            const NKikimr::NDDisk::TQueryCredentials& credentials)
+        TDDiskConnection(
+            const NKikimr::NBsController::TDDiskId& ddiskId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials)
             : DDiskId(ddiskId)
             , Credentials(credentials)
         {}
 
         [[nodiscard]] NActors::TActorId GetServiceId() const
         {
-            return NKikimr::MakeBlobStorageDDiskId(DDiskId.NodeId, DDiskId.PDiskId,
-                                            DDiskId.DDiskSlotId);
+            return NKikimr::MakeBlobStorageDDiskId(
+                DDiskId.NodeId,
+                DDiskId.PDiskId,
+                DDiskId.DDiskSlotId);
         }
     };
 
@@ -102,9 +116,9 @@ private:
     ui64 TabletId;
     ui32 Generation;
     ui32 BlockSize;
-    ui64 BlocksCount; // Currently unused, uses hardcoded BlocksCount
+    ui64 BlocksCount;   // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
-    std::unordered_map<ui64, std::shared_ptr<IRequestHandler>> RequestHandlersByStorageRequestId;
+
     TVector<TBlockMeta> BlocksMeta;
     TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
 
@@ -122,11 +136,14 @@ public:
         ui32 blockSize,
         ui64 blocksCount);
 
-    void SetWriteBlocksReplyCallback(std::function<void(bool)> callback) override {
+    void SetWriteBlocksReplyCallback(
+        std::function<void(bool)> callback) override
+    {
         WriteBlocksReplyCallback = std::move(callback);
     }
 
-    void SetReadBlocksReplyCallback(std::function<void(bool)> callback) override {
+    void SetReadBlocksReplyCallback(std::function<void(bool)> callback) override
+    {
         ReadBlocksReplyCallback = std::move(callback);
     }
 
@@ -143,32 +160,40 @@ public:
         NWilson::TTraceId traceId) override;
 
 private:
-    void HandleConnectResult(
-        ui64 storageRequestId,
+    void HandlePersistentBufferConnected(
+        size_t index,
+        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+    void HandleDDiskBufferConnected(
+        size_t index,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
 
     void HandleWritePersistentBufferResult(
+        std::shared_ptr<TWriteRequestHandler> requestHandler,
         ui64 storageRequestId,
-        const NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult& result);
+        const NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult&
+            result);
 
-    void RequestBlockFlush(TWriteRequestHandler& requestHandler);
+    void RequestBlockFlush(const TWriteRequestHandler& requestHandler);
 
     void ProcessSyncQueue();
 
-    void RequestBlockErase(TSyncRequestHandler& requestHandler);
+    void RequestBlockErase(const TSyncRequestHandler& requestHandler);
 
     void HandleErasePersistentBufferResult(
-        ui64 storageRequestId,
-        const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult& result);
+        std::shared_ptr<TEraseRequestHandler> requestHandler,
+        const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult&
+            result);
 
     template <typename TEvent>
     void HandleReadResult(
+        std::shared_ptr<TReadRequestHandler> requestHandler,
         ui64 storageRequestId,
         const TEvent& result);
 
     void HandleSyncWithPersistentBufferResult(
-        ui64 storageRequestId,
-        const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult& result);
+        std::shared_ptr<TSyncRequestHandler> requestHandler,
+        const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
+            result);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

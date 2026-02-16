@@ -10,7 +10,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 // In-memory implementation of DirectBlockGroup that doesn't use DDisk
 
-class TInMemoryDirectBlockGroup: public IDirectBlockGroup
+class TInMemoryDirectBlockGroup
+    : public IDirectBlockGroup
+    , public std::enable_shared_from_this<TInMemoryDirectBlockGroup>
 {
 private:
     TIntrusivePtr<NKikimr::NPDisk::TSectorMap> SectorMap;

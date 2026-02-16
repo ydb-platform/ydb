@@ -19,7 +19,7 @@ class TFastPathService
 {
 private:
     TMutex Lock;
-    std::unique_ptr<NStorage::NPartitionDirect::IDirectBlockGroup> DirectBlockGroup;
+    NStorage::NPartitionDirect::IDirectBlockGroupPtr DirectBlockGroup;
 
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system

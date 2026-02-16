@@ -593,6 +593,80 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
 
     }
 
+    Y_UNIT_TEST(NoCompactionRequestsUntilPreviousFinishes) {
+        TTestEnvCompDefragIndependent env(0.01);
+        ui32 N = 50000;
+        ui32 batchSize = 1000;
+
+        env.WriteData(N, batchSize);
+        env.RunFullCompaction();
+        ui32 totalHugeChunks = env.GetMetrics().HugeUsedChunks;
+
+        // disable compaction to test defrag without compaction
+        TVector<IEventHandle*> compactions;
+        auto oldCompFilter = env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            compactions.push_back(ev.release());
+            return false; // skip compaction events
+        });
+
+        DeleteHugeBlobsOfTablet(env, N, 1);
+        // wait for defrag to free all chunks it could free
+        env.Env.Sim(TDuration::Minutes(30)); // defrag scheduler runs every 5-5.5 minutes
+        UNIT_ASSERT_VALUES_EQUAL(env.GetMetrics().HugeUsedChunks, totalHugeChunks);
+
+        // check that defrag terminating without compaction
+        env.ChunksFreedByDefragPerNode.clear();
+        env.Env.Sim(TDuration::Minutes(10));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetMetrics().HugeUsedChunks, totalHugeChunks);
+        UNIT_ASSERT_VALUES_EQUAL(env.ChunksFreedByDefragPerNode.size(), 0);
+
+        env.CompactionsPerNode.clear();
+
+        THashMap<ui32, ui32> newCompRequests;
+        THashMap<ui32, ui32> compResults;
+        auto newCompFilter = env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, [&](ui32 nodeId, std::unique_ptr<IEventHandle>&) {
+            if (auto it = newCompRequests.find(nodeId); it != newCompRequests.end()) {
+                newCompRequests[nodeId]++;
+            } else {
+                newCompRequests[nodeId] = 1;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(newCompRequests[nodeId], compResults[nodeId] + 1);
+            return true;
+        });
+
+        ui32 totalCompactions = 0;
+        auto oldCompResultFilter = env.SetFilterFunction(TEvBlobStorage::EvCompactVDiskResult, [&](ui32 nodeId, std::unique_ptr<IEventHandle>&) {
+            totalCompactions++;
+            if (auto it = compResults.find(nodeId); it != compResults.end()) {
+                compResults[nodeId]++;
+            } else {
+                compResults[nodeId] = 1;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(newCompRequests[nodeId], compResults[nodeId]);
+            return true;
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(compactions.size(), env.GroupInfo->GetTotalVDisksNum());
+        for (auto& ev : compactions) {
+            env.Env.Runtime->Send(ev, ev->Recipient.NodeId());
+        }
+
+        for (ui32 i = 0; i < 60; ++i) {
+            if (totalCompactions == env.GroupInfo->GetTotalVDisksNum() * 2) {
+                break;
+            }
+            env.Env.Sim(TDuration::Minutes(1));
+            if (i == 59) {
+                UNIT_ASSERT_C(false, "Not all compactions finished after 1 hour");
+            }
+        }
+
+        auto metrics = env.PrintMetrics();
+        UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
+        UNIT_ASSERT_LT(env.GetMetrics().HugeUsedChunks, totalHugeChunks);
+
+    }
+
     Y_UNIT_TEST(ZeroThresholdDefragWithCompaction) {
         TTestEnvCompDefragIndependent env(0.0); // Zero threshold - compaction should run immediately
         ui32 N = 50000;

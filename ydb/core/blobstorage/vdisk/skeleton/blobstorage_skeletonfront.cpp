@@ -19,6 +19,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_server.h>
 
+#include <ydb/core/util/max_tracker.h>
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/counters.h>
@@ -179,6 +180,7 @@ namespace NKikimr {
 
         private:
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightCount;
+            TMaxTracker SkeletonFrontMaxInFlightCount;
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightCost;
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightBytes;
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDelayedCount;
@@ -218,7 +220,9 @@ namespace NKikimr {
                 , SkeletonFrontDelayedCount(MakeCounter(skeletonFrontGroup, "DelayedCount", false, true))
                 , SkeletonFrontDelayedBytes(MakeCounter(skeletonFrontGroup, "DelayedBytes", false, true))
                 , SkeletonFrontCostProcessed(MakeCounter(skeletonFrontGroup, "CostProcessed", true, true))
-            {}
+            {
+                SkeletonFrontMaxInFlightCount.Init(MakeCounter(skeletonFrontGroup, "MaxInFlightCount", false, false));
+            }
 
             ::NMonitoring::TDynamicCounters::TCounterPtr MakeCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup, const TString& sensorType, bool derivative, bool reportOnlyIfExtendedSensors) {
                 if (reportOnlyIfExtendedSensors && !NMonGroup::IsExtendedVDiskCounters()) {
@@ -245,6 +249,7 @@ namespace NKikimr {
                     InFlightBytes += recByteSize;
 
                     ++*SkeletonFrontInFlightCount;
+                    SkeletonFrontMaxInFlightCount.Collect(*SkeletonFrontInFlightCount);
                     *SkeletonFrontInFlightCost += cost;
                     *SkeletonFrontInFlightBytes += recByteSize;
 
@@ -305,6 +310,7 @@ namespace NKikimr {
                             InFlightBytes += recByteSize;
 
                             ++*SkeletonFrontInFlightCount;
+                            SkeletonFrontMaxInFlightCount.Collect(*SkeletonFrontInFlightCount);
                             *SkeletonFrontInFlightCost += cost;
                             *SkeletonFrontInFlightBytes += recByteSize;
 
@@ -469,6 +475,11 @@ namespace NKikimr {
                 }
                 str << "\n";
                 return str.Str();
+            }
+
+            // refresh statistics for window-based counters
+            void RefreshStatistics() {
+                SkeletonFrontMaxInFlightCount.Update();
             }
         };
 
@@ -1139,6 +1150,8 @@ namespace NKikimr {
                                IntQueueLowGets.get(), IntQueueLogPuts.get(), IntQueueHugePutsForeground.get(),
                                IntQueueHugePutsBackground.get()}) {
                 light = Max(light, queue->GetCumulativeLight());
+
+                queue->RefreshStatistics();
             }
             // send a message to Whiteboard
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,

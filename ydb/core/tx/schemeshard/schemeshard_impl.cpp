@@ -382,11 +382,10 @@ THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal
         const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const
 {
-    auto result = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+    return MakeHolder<TEvDataShard::TEvProposeTransaction>(
         NKikimrTxDataShard::TX_KIND_SCHEME, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, SelectProcessingParams(pathId)
     );
-    return result;
 }
 
 THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(

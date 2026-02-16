@@ -46,7 +46,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
         }
     }
 
-    if ( RequestCtx != nullptr && RequestCtx->GetInternalToken() != nullptr ) {
+    if (RequestCtx != nullptr && RequestCtx->GetInternalToken() != nullptr) {
         UserSID = RequestCtx->GetInternalToken()->GetUserSID();
     }
 }

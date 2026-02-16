@@ -146,16 +146,6 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     // clang-format on
 }
 
-bool TPhysicalQueryBuilder::CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) const {
-    auto blackList = [&](const TExprNode::TPtr& node) -> bool {
-        if (node->IsCallable(callableNames)) {
-            return true;
-        }
-        return false;
-    };
-    return !FindNode(input, blackList);
-}
-
 TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhyStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args,
                                                        TExprNode::TPtr physicalStageBody, NNodes::TCoNameValueTupleList&& settings, TExprContext& ctx,
                                                        TPositionHandle pos) const {
@@ -418,8 +408,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
     auto lambda = TCoLambda(input);
     auto& ctx = RBOCtx.ExprCtx;
 
-    // Yql has a strange bug in final stage peephole for `WideCombiner` with empty keys.
-    const bool withFinalStageRules = CanApplyPeepHole(lambda.Body().Ptr(), {"WideCombiner"});
+    const bool withFinalStageRules = true;
     // clang-format off
     auto program = Build<TKqpProgram>(ctx, input->Pos())
         .Lambda(ctx.DeepCopyLambda(*input.Get()))

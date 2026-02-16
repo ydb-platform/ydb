@@ -57,11 +57,19 @@ static arrow::Status ConvertColumn(
         if (!arrow::is_binary_like(column->type()->id())) {
             return arrow::Status::TypeError("Cannot convert DyNumber to ", column->type()->ToString());
         }
+
+        if (field->type()->id() == arrow::Type::STRING) {
+            field = std::make_shared<arrow::Field>(field->name(), std::make_shared<arrow::BinaryType>(), field->nullable());
+        }
         break;
     }
     case NScheme::NTypeIds::JsonDocument: {
         if (!arrow::is_binary_like(column->type()->id())) {
             return arrow::Status::TypeError("Cannot convert JsonDocument to ", column->type()->ToString());
+        }
+
+        if (field->type()->id() == arrow::Type::STRING) {
+            field = std::make_shared<arrow::Field>(field->name(), std::make_shared<arrow::BinaryType>(), field->nullable());
         }
         break;
     }
@@ -130,17 +138,6 @@ static arrow::Status ConvertColumn(
     }
 
     column = result;
-    switch (colType.GetTypeId()) {
-        case NScheme::NTypeIds::DyNumber:
-        case NScheme::NTypeIds::JsonDocument:
-            if (field->type()->id() == arrow::Type::STRING) {
-                field = std::make_shared<arrow::Field>(field->name(), std::make_shared<arrow::BinaryType>(), field->nullable());
-            }
-            break;
-        default:
-            break;
-    }
-
     return arrow::Status::OK();
 }
 

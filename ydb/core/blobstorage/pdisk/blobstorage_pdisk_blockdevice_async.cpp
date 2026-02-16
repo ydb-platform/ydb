@@ -8,6 +8,7 @@
 #include "blobstorage_pdisk_util_countedqueuemanyone.h"
 #include "blobstorage_pdisk_util_countedqueueoneone.h"
 #include "blobstorage_pdisk_util_flightcontrol.h"
+#include "blobstorage_pdisk_util_flightcontrol2.h"
 #include "blobstorage_pdisk_util_idlecounter.h"
 
 #include <ydb/core/base/appdata.h>
@@ -36,6 +37,74 @@ namespace NPDisk {
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 constexpr ui64 MaxWaitingNoops = 256;
+
+template <bool UseNewFlightControl>
+class TFlightControlSelector;
+
+template <>
+class TFlightControlSelector<false> {
+    TFlightControl FlightControl;
+
+public:
+    TFlightControlSelector(ui64 maxInFlightRequests, ui64 maxInFlightBytes)
+        : FlightControl(CountTrailingZeroBits(maxInFlightRequests))
+    {
+        Y_UNUSED(maxInFlightBytes);
+    }
+
+    void Initialize(const TString& logPrefix) {
+        FlightControl.Initialize(logPrefix);
+    }
+
+    ui64 TrySchedule(ui64 size) {
+        Y_UNUSED(size);
+        return FlightControl.TrySchedule();
+    }
+
+    ui64 Schedule(double& blockedMs, ui64 size) {
+        Y_UNUSED(size);
+        return FlightControl.Schedule(blockedMs);
+    }
+
+    void MarkComplete(ui64 idx, ui64 size) {
+        Y_UNUSED(size);
+        FlightControl.MarkComplete(idx);
+    }
+
+    ui64 FirstIncompleteIdx() {
+        return FlightControl.FirstIncompleteIdx();
+    }
+};
+
+template <>
+class TFlightControlSelector<true> {
+    TFlightControl2 FlightControl;
+
+public:
+    TFlightControlSelector(ui64 maxInFlightRequests, ui64 maxInFlightBytes)
+        : FlightControl(maxInFlightRequests, maxInFlightBytes)
+    {}
+
+    void Initialize(const TString& logPrefix) {
+        FlightControl.Initialize(logPrefix);
+    }
+
+    ui64 TrySchedule(ui64 size) {
+        return FlightControl.TrySchedule(size);
+    }
+
+    ui64 Schedule(double& blockedMs, ui64 size) {
+        return FlightControl.Schedule(blockedMs, size);
+    }
+
+    void MarkComplete(ui64 idx, ui64 size) {
+        FlightControl.MarkComplete(idx, size);
+    }
+
+    ui64 FirstIncompleteIdx() {
+        return FlightControl.FirstIncompleteIdx();
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TRealBlockDevice
@@ -299,6 +368,7 @@ class TRealBlockDevice : public IBlockDevice {
 
         void Submit(IAsyncIoOperation *op) {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
+            const ui64 opSize = op->GetSize();
 
             if (!Device.QuitCounter.Increment()) {
                 Device.FreeOperation(op);
@@ -308,10 +378,10 @@ class TRealBlockDevice : public IBlockDevice {
             }
             Device.IdleCounter.Increment();
 
-            Device.IncrementMonInFlight(op->GetType(), op->GetSize());
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             double blockedMs = 0;
-            action->OperationIdx = Device.FlightControl.Schedule(blockedMs);
+            action->OperationIdx = Device.FlightControl.Schedule(blockedMs, opSize);
 
             *Device.Mon.DeviceWaitTimeMs += blockedMs;
 
@@ -463,9 +533,10 @@ class TRealBlockDevice : public IBlockDevice {
                 LWTRACK(PDiskDeviceGetFromDevice, completionAction->FlushAction->Orbit);
             }
 
+            const ui64 opSize = op->GetSize();
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
-            Device.FlightControl.MarkComplete(completionAction->OperationIdx);
+            Device.FlightControl.MarkComplete(completionAction->OperationIdx, opSize);
 
             NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
             NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
@@ -474,7 +545,6 @@ class TRealBlockDevice : public IBlockDevice {
 
             bool isSeekExpected = (completionAction->SubmitTime + (NHPTimer::STime)Device.SeekCostNs / 25ll >= PrevEventGotAtCycle);
 
-            const ui64 opSize = op->GetSize();
             Device.DecrementMonInFlight(op->GetType(), opSize);
             if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
@@ -608,8 +678,9 @@ class TRealBlockDevice : public IBlockDevice {
 
         bool Submit(IAsyncIoOperation *op, i64 *inFlight) {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
+            const ui64 opSize = op->GetSize();
 
-            action->OperationIdx = Device.FlightControl.TrySchedule();
+            action->OperationIdx = Device.FlightControl.TrySchedule(opSize);
             if (action->OperationIdx == 0) {
                 if (OpScheduleFailedTime == 0) {
                     // If failed to schedule, remember the time to use it when scheduling succeeds.
@@ -638,7 +709,7 @@ class TRealBlockDevice : public IBlockDevice {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
 
-            if (op->GetSize() == 0) {
+            if (opSize == 0) {
                 TAsyncIoOperationResult result;
                 result.Operation = op;
                 result.Result = EIoResult::Ok;
@@ -647,7 +718,7 @@ class TRealBlockDevice : public IBlockDevice {
                 return true;
             }
 
-            Device.IncrementMonInFlight(op->GetType(), op->GetSize());
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
@@ -831,9 +902,11 @@ private:
 
     static constexpr int WaitTimeoutMs = 1;
     static constexpr int MaxEvents = 32;
+    static constexpr bool UseNewFlightControl = false;
+    using TSelectedFlightControl = TFlightControlSelector<UseNewFlightControl>;
 
     ui64 DeviceInFlight;
-    TFlightControl FlightControl;
+    TSelectedFlightControl FlightControl;
     TAtomicBlockCounter QuitCounter;
     TString LastWarning;
     bool ReadOnly;
@@ -864,7 +937,7 @@ public:
         , Flags(flags)
         , SectorMap(sectorMap)
         , DeviceInFlight(FastClp2(deviceInFlight))
-        , FlightControl(CountTrailingZeroBits(DeviceInFlight))
+        , FlightControl(DeviceInFlight, TFlightControl2::DefaultMaxInFlightBytes)
         , LastWarning(IsPowerOf2(deviceInFlight) ? "" : "Device inflight must be a power of 2")
         , ReadOnly(readOnly)
     {

@@ -1287,6 +1287,7 @@ struct TChangefeedSettings {
     TNodePtr Mode;
     TNodePtr Format;
     TNodePtr InitialScan;
+    TNodePtr UserSIDs;
     TNodePtr VirtualTimestamps;
     TNodePtr BarriersInterval;
     TNodePtr SchemaChanges;

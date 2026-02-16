@@ -272,7 +272,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
             switch (jwtInfo->authmethod()) {
                 case NMvp::TJwtInfo::static_creds: {
                     auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
-                    auto scToken = jwt::create()
+                    auto sToken = jwt::create()
                         .set_key_id(keyId)
                         .set_issuer(serviceAccountId)
                         .set_subject(serviceAccountId)
@@ -283,19 +283,21 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                     request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
                     request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
                     request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
-                    request.set_subject_token(TString(scToken));
+                    request.set_subject_token(TString(sToken));
                     break;
                 }
                 case NMvp::TJwtInfo::federated_creds: {
-                    auto fcToken = jwtInfo->token();
+                    auto fToken = jwtInfo->federated_jwt_token();
                     request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
                     request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
                     request.set_subject_token_type("urn:nebius:params:oauth:token-type:subject_identifier");
                     request.set_subject_token(TString(serviceAccountId));
                     request.set_actor_token_type("urn:ietf:params:oauth:token-type:jwt");
-                    request.set_actor_token(TString(fcToken));
+                    request.set_actor_token(TString(fToken));
                     break;
                 }
+                default:
+                    ythrow yexception() << "Unsupported JWT auth method: " << jwtInfo->authmethod();
             }
 
             RequestCreateToken<nebius::iam::v1::TokenExchangeService,

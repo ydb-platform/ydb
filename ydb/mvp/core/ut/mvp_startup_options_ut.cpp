@@ -117,7 +117,7 @@ generic:
         UNIT_ASSERT(opts.Tokens.jwtinfo_size() > 0);
         const auto& jwt = opts.Tokens.jwtinfo(0);
         UNIT_ASSERT_VALUES_EQUAL(jwt.name(), opts.GetFederatedCredsJwtTokenName());
-        UNIT_ASSERT_VALUES_EQUAL(jwt.token(), "MY_JWT_TOKEN");
+        UNIT_ASSERT_VALUES_EQUAL(jwt.federated_jwt_token(), "MY_JWT_TOKEN");
         UNIT_ASSERT_VALUES_EQUAL(jwt.endpoint(), "https://token.endpoint/");
         UNIT_ASSERT_VALUES_EQUAL(jwt.accountid(), "sa-1");
         UNIT_ASSERT(jwt.authmethod() == NMvp::TJwtInfo::federated_creds);

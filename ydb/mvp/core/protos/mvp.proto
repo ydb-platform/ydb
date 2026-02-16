@@ -13,8 +13,8 @@ message TJwtInfo {
     optional string PublicKey = 5;
     optional string PrivateKey = 6;
     optional string Audience = 7 [default = "https://iam.api.cloud.yandex.net/iam/v1/tokens"];
-    optional string Token = 8;
-    optional EAuthMethod AuthMethod = 9 [default = static_creds];
+    optional EAuthMethod AuthMethod = 8 [default = static_creds];
+    optional string FederatedJwtToken = 9;
 }
 
 message TOAuthInfo {

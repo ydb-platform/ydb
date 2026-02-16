@@ -166,6 +166,8 @@ TString TMvpStartupOptions::AddSchemeToUserToken(const TString& token, const TSt
 }
 
 void TMvpStartupOptions::LoadTokens() {
+    Tokens.SetAccessServiceType(AccessServiceType);
+
     if (YdbTokenFile.empty()) {
         return;
     }
@@ -177,9 +179,6 @@ void TMvpStartupOptions::LoadTokens() {
             UserToken = Tokens.GetStaffApiUserToken();
         }
         UserToken = AddSchemeToUserToken(UserToken, "OAuth");
-        if (!Tokens.HasAccessServiceType()) {
-            Tokens.SetAccessServiceType(AccessServiceType);
-        }
     } else {
         ythrow yexception() << "Invalid ydb token file format";
     }
@@ -190,7 +189,7 @@ void TMvpStartupOptions::AddFederatedCredsJwt() {
         auto* jwtInfo = Tokens.AddJwtInfo();
         jwtInfo->SetAuthMethod(NMvp::TJwtInfo::federated_creds);
         jwtInfo->SetAccountId(JwtSaId);
-        jwtInfo->SetToken(JwtToken);
+        jwtInfo->SetFederatedJwtToken(JwtToken);
         jwtInfo->SetEndpoint(JwtTokenEndpoint);
         jwtInfo->SetName(FEDERATED_CREDS_JWT_TOKEN_NAME);
     }

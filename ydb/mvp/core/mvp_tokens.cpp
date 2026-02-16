@@ -268,7 +268,6 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
         }
         case NMvp::nebius_v1: {
             nebius::iam::v1::ExchangeTokenRequest request;
-            TString encodedToken;
             switch (jwtInfo->authmethod()) {
                 case NMvp::TJwtInfo::static_creds: {
                     auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
@@ -296,8 +295,10 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                     request.set_actor_token(TString(fToken));
                     break;
                 }
-                default:
-                    ythrow yexception() << "Unsupported JWT auth method: " << static_cast<int>(jwtInfo->authmethod());
+                default: {
+                    BLOG_ERROR("Unsupported JWT auth method: " << static_cast<int>(jwtInfo->authmethod()) << " for token " << jwtInfo->name());
+                    break;
+                }
             }
 
             RequestCreateToken<nebius::iam::v1::TokenExchangeService,

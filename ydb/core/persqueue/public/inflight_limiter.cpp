@@ -97,7 +97,12 @@ bool TInFlightController::IsMemoryLimitReached() const {
 }
 
 TDuration TInFlightController::GetOverflowDuration() {
-    return SlidingWindow.GetValue();
+    TDuration carry = TDuration::Zero();
+    if (InFlightFullSince != TInstant::Zero()) {
+        carry = TInstant::Now() - InFlightFullSince;
+    }
+
+    return SlidingWindow.GetValue() + carry;
 }
 
 } // namespace NKikimr::NPQ

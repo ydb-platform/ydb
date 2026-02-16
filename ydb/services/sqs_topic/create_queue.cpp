@@ -71,6 +71,7 @@ namespace NKikimr::NSqsTopic::V1 {
         ~TCreateQueueActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
+            CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
             const Ydb::Ymq::V1::CreateQueueRequest& request = Request();
             if (request.queue_name().empty()) {
@@ -146,18 +147,6 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             return ReplyAndDie(ctx);
-        }
-
-        static std::expected<void, std::string> ValidateQueueName(const TStringBuf name) {
-            if (name.empty()) {
-                return std::unexpected("empty");
-            }
-            for (char c : name) {
-                if (!IsAsciiAlnum(c) && c != '-' && c != '_' && c != '.') {
-                    return std::unexpected("invalid character");
-                }
-            }
-            return {};
         }
 
         void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,

@@ -1512,6 +1512,7 @@ namespace NKikimr::NHttpProxy {
                                                           NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(CreateQueue);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessage);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteQueue);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessage);

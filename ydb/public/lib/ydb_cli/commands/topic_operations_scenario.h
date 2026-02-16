@@ -90,6 +90,9 @@ public:
     std::optional<size_t> ProducerMaxMemoryUsageBytes;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;
+    size_t ConfigConsumerCount = 0;
+    bool NeedDescribeTopic = false;
+    TString DescribeConsumerName;
 
 protected:
     void CreateTopic(const TString& database,
@@ -116,6 +119,10 @@ protected:
                               ui32 partitionCount,
                               ui32 partitionSeed,
                               const std::vector<TString>& generatedMessages,
+                              const TString& database);
+    void StartConfiguratorThread(std::vector<std::future<void>>& threads,
+                                 const TString& database);
+    void StartDescriberThread(std::vector<std::future<void>>& threads,
                               const TString& database);
     void JoinThreads(const std::vector<std::future<void>>& threads);
 

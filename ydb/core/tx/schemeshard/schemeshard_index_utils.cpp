@@ -257,12 +257,20 @@ void FillIndexImplTableColumns(
     }
 }
 
+bool GetIsRestore(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
+    return tableInfo->IsRestore;
+}
+
 const auto& GetPartitionConfig(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
     return tableInfo->PartitionConfig();
 }
 
 const auto& GetColumns(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
     return tableInfo->Columns;
+}
+
+bool GetIsRestore(const NKikimrSchemeOp::TTableDescription& tableDescr) {
+    return tableDescr.GetIsRestore();
 }
 
 const auto& GetPartitionConfig(const NKikimrSchemeOp::TTableDescription& tableDescr) {
@@ -280,6 +288,7 @@ auto CalcImplTableDescImpl(
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
+    implTableDesc.SetIsRestore(GetIsRestore(baseTable));
     SetImplTablePartitionConfig(GetPartitionConfig(baseTable), indexTableDesc, implTableDesc);
     FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns.Keys, implTableColumns.Columns, implTableDesc);
     if (indexTableDesc.HasReplicationConfig()) {

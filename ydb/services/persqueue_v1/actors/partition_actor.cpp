@@ -810,7 +810,8 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
 
     auto isMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " isMemoryLimitReached " << isMemoryLimitReached << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset);
+                        << " isMemoryLimitReached " << isMemoryLimitReached << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset
+                        << " read result size " << res.ResultSize());
     if (EndOffset > ReadOffset && !isMemoryLimitReached) {
         SendPartitionReady(ctx);
     } else if (EndOffset == ReadOffset) {
@@ -1039,6 +1040,9 @@ void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContex
 
 void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {
     auto inFlightOverflowDuration = PartitionInFlightMemoryController.GetOverflowDuration();
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " update read metrics " << Partition
+                        << " inFlightOverflowDuration " << inFlightOverflowDuration.MilliSeconds());
 
     NKikimrClient::TPersQueueRequest request;
     request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetInFlightOverflowDurationMs(inFlightOverflowDuration.MilliSeconds());

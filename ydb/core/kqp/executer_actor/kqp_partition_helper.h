@@ -24,7 +24,7 @@ public:
 
     TShardIdToInfoMap Prune(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo, bool& isFullScan);
 
-    const TShardIdToInfoMap& Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan);
+    TShardIdToInfoMap Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan);
 
     TShardIdToInfoMap PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo);
 
@@ -35,8 +35,6 @@ private:
     const NMiniKQL::THolderFactory* HolderFactory;
     const NMiniKQL::TTypeEnvironment* TypeEnv;
     const TPartitionPrunerConfig Config;
-
-    THashMap<NYql::NDq::TStageId, std::pair<TShardIdToInfoMap, bool /* isFullScan*/ >> SourceScanStageIdToParititions;
 };
 
 TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnTypes,

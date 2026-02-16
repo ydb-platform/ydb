@@ -691,6 +691,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev) {
     const auto& record = ev->Get()->Record;
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC52, "received TEvControllerDistconfRequest", (Operation, record.GetOperation()));
 
     // prepare the response
     auto response = std::make_unique<TEvBlobStorage::TEvControllerDistconfResponse>();

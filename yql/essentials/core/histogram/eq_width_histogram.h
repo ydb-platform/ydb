@@ -162,11 +162,22 @@ public:
     TEqWidthHistogram(const char* str, size_t size);
 
     // Adds the given `val` to a histogram.
+    // Values which exceed the domain min/max are ignored.
     template <typename T>
     void AddElement(T val) {
+        const T domainStart = LoadFrom<T>(GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(GetDomainRange().End);
+        if (CmpLess<T>(val, domainStart) || CmpLess<T>(domainEnd, val)) {
+            return;
+        }
+
         const auto index = FindBucketIndex(val);
         Buckets_[index]++;
     }
+
+    // To prevent large positive value due to e.g. AddElement<ui32>(-5).
+    template <typename T>
+    void AddElement(std::type_identity_t<T> val) = delete;
 
     // Returns an index of the bucket which stores the given `val`.
     // Returned index in range [0, numBuckets - 1].
@@ -197,6 +208,10 @@ public:
         return static_cast<ui32>(bucketIndex);
     }
 
+    // To prevent large positive value due to e.g. FindBucketIndex<ui32>(-5).
+    template <typename T>
+    ui32 FindBucketIndex(std::type_identity_t<T> val) = delete;
+
     // Returns bucket width based on domain range and number of buckets.
     template <typename T>
     THistValue GetBucketWidth() const {
@@ -206,6 +221,7 @@ public:
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             using UT = std::make_unsigned_t<T>;
             const UT rangeLen = static_cast<UT>(end) - static_cast<UT>(start);
+            // width is truncated after division.
             const UT bucketWidth = rangeLen / static_cast<UT>(GetNumBuckets());
             StoreTo<UT>(returnValue.Value, bucketWidth);
             return returnValue;
@@ -216,14 +232,31 @@ public:
         return returnValue;
     }
 
+    // Returns border value of targeted bucket.
+    template <typename T>
+    T GetBorderValue(i64 index) const {
+        Y_ENSURE(CmpLess<i64>(-1, index));
+        Y_ENSURE(CmpLess<i64>(index, GetNumBuckets()));
+
+        const TEqWidthHistogram::THistValue bucketWidth = GetBucketWidth<T>();
+        const T width = LoadFrom<T>(bucketWidth.Value);
+        const T domainStart = LoadFrom<T>(GetDomainRange().Start);
+        const T border = domainStart + static_cast<T>(index) * width;
+        return border;
+    }
+
     // Initializes buckets with a given `range`.
+    // NOTE: buckets can be less than range (i.e. end - start)
     template <typename T>
     void InitializeBuckets(T rangeStart, T rangeEnd) {
+        // class invariant: start < end.
         Y_ENSURE(CmpLess<T>(rangeStart, rangeEnd));
         DomainRange_ = {};
         StoreTo<T>(DomainRange_.Start, rangeStart);
         StoreTo<T>(DomainRange_.End, rangeEnd);
-        const THistValue bucketWidth = GetBucketWidth<T>(); // non-zero positive width of each bucket
+
+        // class invariant: bucket width is non-zero positive.
+        const THistValue bucketWidth = GetBucketWidth<T>();
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             using UT = std::make_unsigned_t<T>;
             Y_ENSURE(CmpLess<UT>(0, LoadFrom<UT>(bucketWidth.Value)), "Domain range is too close");
@@ -231,6 +264,10 @@ public:
             Y_ENSURE(CmpLess<T>(0, LoadFrom<T>(bucketWidth.Value)), "Domain range is too close");
         }
     }
+
+    // To prevent large positive value due to e.g. InitializeBuckets<ui32>(-5, -1).
+    template <typename T>
+    void InitializeBuckets(std::type_identity_t<T> rangeStart, std::type_identity_t<T> rangeEnd) = delete;
 
     // Checks whether two histograms have same parameters.
     template <typename T>
@@ -264,8 +301,9 @@ public:
     }
 
     // Returns a number of elements in a bucket by the given `index`.
-    ui64 GetNumElementsInBucket(ui32 index) const {
-        Y_ENSURE(index < GetNumBuckets());
+    ui64 GetNumElementsInBucket(i64 index) const {
+        Y_ENSURE(CmpLess<i64>(-1, index));
+        Y_ENSURE(CmpLess<i64>(index, GetNumBuckets()));
         return Buckets_[index];
     }
 
@@ -289,25 +327,99 @@ class TEqWidthHistogramEstimator {
 public:
     explicit TEqWidthHistogramEstimator(std::shared_ptr<TEqWidthHistogram> histogram);
 
-    // Methods to estimate values.
+    // all values <= `val`.
     template <typename T>
     ui64 EstimateLessOrEqual(T val) const {
-        return EstimateOrEqual<T>(val, PrefixSum_);
+        // Due to values which exceed the domain min/max.
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        if (CmpLess<T>(val, domainStart)) {
+            return 0;
+        } else if (CmpLess<T>(domainEnd, val)) {
+            return PrefixSum_.back();
+        }
+
+        const auto index = Histogram_->FindBucketIndex(val);
+        if (!index) {
+            return EstimateEqual(val);
+        }
+        return PrefixSum_[index - 1] + EstimateEqual(val);
     }
 
+    // all values >= `val`.
     template <typename T>
     ui64 EstimateGreaterOrEqual(T val) const {
-        return EstimateOrEqual<T>(val, SuffixSum_);
+        // Due to values which exceed the domain min/max.
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        if (CmpLess<T>(domainEnd, val)) {
+            return 0;
+        } else if (CmpLess<T>(val, domainStart)) {
+            return SuffixSum_.front();
+        }
+
+        const auto index = Histogram_->FindBucketIndex(val);
+        const auto numBuckets = Histogram_->GetNumBuckets();
+        if (index + 1 == numBuckets) {
+            return EstimateEqual(val);
+        }
+        return SuffixSum_[index + 1] + EstimateEqual(val);
     }
 
+    // all values < `val`.
     template <typename T>
     ui64 EstimateLess(T val) const {
-        return EstimateNotEqual<T>(val, PrefixSum_);
+        // Due to values which exceed the domain min/max.
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        if (CmpLess<T>(val, domainStart)) {
+            return 0;
+        } else if (CmpLess<T>(domainEnd, val)) {
+            return PrefixSum_.back();
+        }
+
+        const auto index = Histogram_->FindBucketIndex(val);
+        const auto border = Histogram_->GetBorderValue<T>(index);
+        if (val == border) {
+            if (!index) {
+                return 0;
+            }
+            return PrefixSum_[index - 1];
+        }
+
+        if (!index) {
+            return EstimateEqual(val);
+        }
+        return PrefixSum_[index - 1] + EstimateEqual(val);
     }
 
+    // all values > `val`.
     template <typename T>
     ui64 EstimateGreater(T val) const {
-        return EstimateNotEqual<T>(val, SuffixSum_);
+        // Due to values which exceed the domain min/max.
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        if (CmpLess<T>(domainEnd, val)) {
+            return 0;
+        } else if (CmpLess<T>(val, domainStart)) {
+            return SuffixSum_.front();
+        }
+
+        const auto index = Histogram_->FindBucketIndex(val);
+        const auto numBuckets = Histogram_->GetNumBuckets();
+        // TODO: handle the case at the border
+        // const auto border = Histogram_->GetBorderValue<T>(index);
+        // if (val == border) {
+        //     if (index + 1 == numBuckets) {
+        //         return 0;
+        //     }
+        //     return SuffixSum_[index + 1];
+        // }
+
+        if (index + 1 == numBuckets) {
+            return EstimateEqual(val);
+        }
+        return SuffixSum_[index + 1] + EstimateEqual(val);
     }
 
     template <typename T>
@@ -316,12 +428,15 @@ public:
         const auto count = Histogram_->GetNumElementsInBucket(index);
         const TEqWidthHistogram::THistValue bucketWidth = Histogram_->GetBucketWidth<T>();
         // Assuming uniform distribution.
+        // Final estimated values are truncated after division.
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             const ui64 width = LoadFrom<ui64>(bucketWidth.Value);
             return count / width;
         }
-        const T width = LoadFrom<T>(bucketWidth.Value);
-        return static_cast<ui64>(count / width);
+        // TODO: currenty return count due to close-to-zero width thus count / width generates large value
+        // const T width = LoadFrom<T>(bucketWidth.Value);
+        // return static_cast<ui64>(count / width);
+        return count;
     }
 
     // Returns the total number elements in histogram.
@@ -330,23 +445,54 @@ public:
         return PrefixSum_.back();
     }
 
-private:
-    template <typename T>
-    ui64 EstimateOrEqual(T val, const TVector<ui64>& sumArray) const {
-        const auto index = Histogram_->FindBucketIndex(val);
-        return sumArray[index];
+    // Returns the cardinality based on overlapping bucket counts.
+    // NOTE: bucket ranges may differ (e.g. PK-FK) due to different min/max values
+    // thus different bucket widths. Also, max value can be large than the last
+    // bucket border value.
+    TMaybe<ui64> GetOverlappingCardinality(const TEqWidthHistogramEstimator& other) const {
+        Y_ENSURE(Histogram_->GetType() == other.Histogram_->GetType(), "Histogram value types must match");
+        switch (Histogram_->GetType()) {
+#define HIST_TYPE_CHECK(type, layout)                          \
+    case EHistogramValueType::type: {                          \
+        return GetOverlappingCardinalityHelper<layout>(other); \
     }
-
-    template <typename T>
-    ui64 EstimateNotEqual(T val, const TVector<ui64>& sumArray) const {
-        const auto index = Histogram_->FindBucketIndex(val);
-        // Take the previous backet if it's not the first one.
-        if (!index) {
-            return sumArray[index];
+            KNOWN_FIXED_HISTOGRAM_TYPES(HIST_TYPE_CHECK)
+#undef HIST_TYPE_CHECK
+            default:
+                Y_ENSURE(false, "Unsupported histogram data type");
+                return Nothing();
         }
-        return sumArray[index - 1];
     }
 
+    template <typename T>
+    ui64 GetOverlappingCardinalityHelper(const TEqWidthHistogramEstimator& other) const {
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+
+        const T otherDomainStart = LoadFrom<T>(other.Histogram_->GetDomainRange().Start);
+        const T otherDomainEnd = LoadFrom<T>(other.Histogram_->GetDomainRange().End);
+
+        ui32 leftIndex, rightIndex;
+        if (CmpLess<T>(domainStart, otherDomainStart)) {
+            leftIndex = Histogram_->FindBucketIndex(otherDomainStart);
+        } else {
+            leftIndex = other.Histogram_->FindBucketIndex(domainStart);
+        }
+
+        if (CmpLess<T>(domainEnd, otherDomainEnd)) {
+            rightIndex = other.Histogram_->FindBucketIndex(domainEnd);
+        } else {
+            rightIndex = Histogram_->FindBucketIndex(otherDomainEnd);
+        }
+
+        ui64 cardinality = 0;
+        for (size_t i = leftIndex; i < rightIndex + 1; ++i) {
+            cardinality += Histogram_->GetNumElementsInBucket(i) * other.Histogram_->GetNumElementsInBucket(i);
+        }
+        return cardinality;
+    }
+
+private:
     void CreatePrefixSum(ui32 numBuckets);
     void CreateSuffixSum(ui32 numBuckets);
     std::shared_ptr<TEqWidthHistogram> Histogram_;

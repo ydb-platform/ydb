@@ -24,7 +24,7 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 
 * `option` и `value` — параметр топика и его значение.
 
-Параметры топика: {#topic-parameters}
+### Параметры топика: {#topic-parameters}
 
 * `metering_mode` — способ метеринга ресурсов (`RESERVED_CAPACITY` - по выделенным ресурсам или `REQUEST_UNITS` - по фактическому использованию). Актуально для топиков в serverless базах данных. Тип значения - `String`.
 * `min_active_partitions` — минимальное количество активных партиций топика. [Автопартиционирование](../../../../concepts/datamodel/topic#autopartitioning) не будет уменьшать количество активных партиций ниже этого значения. Тип — `integer`, значение по умолчанию — `1`.

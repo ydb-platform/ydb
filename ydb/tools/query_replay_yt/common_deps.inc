@@ -25,6 +25,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/kqp
+    ydb/core/kqp/compile_service/obfuscate
     ydb/core/mind
     ydb/core/mind/address_classification
     ydb/core/mind/bscontroller

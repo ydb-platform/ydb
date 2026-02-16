@@ -583,9 +583,6 @@ void TConsumerActor::ProcessEventQueue() {
     for (auto& ev : ReadRequestsQueue) {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetVisibilityDeadline();
-        if (visibilityDeadline == TInstant::Zero()) {
-            visibilityDeadline = TDuration::Seconds(Config.GetDefaultProcessingTimeoutSeconds()).ToDeadLine(now);
-        }
 
         std::deque<ui64> messages;
         for (; count; --count) {

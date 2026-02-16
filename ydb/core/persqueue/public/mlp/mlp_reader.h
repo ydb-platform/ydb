@@ -46,11 +46,11 @@ private:
     const TReaderSettings Settings;
 
     TActorId ChildActorId;
-    ui64 ReadBalancerTabletId;
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
     ui32 PartitionId;
     ui64 PQTabletId;
 
-    TBackoff Backoff = TBackoff(5); // TODO retries
+    TBackoff Backoff = TBackoff(5);
     ui64 Cookie = 1;
 };
 

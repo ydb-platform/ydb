@@ -110,7 +110,7 @@ void TReaderActor::DoRead() {
         Settings.Consumer,
         PartitionId,
         Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::Seconds(consumer->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
-        Settings.VisibilityTimeout ? Settings.VisibilityTimeout.value() : TDuration::Seconds(consumer->GetDefaultProcessingTimeoutSeconds()),
+        Settings.ProcessingTimeout ? Settings.ProcessingTimeout.value() : TDuration::Seconds(consumer->GetDefaultProcessingTimeoutSeconds()),
         Settings.MaxNumberOfMessage
     );
     SendToTablet(PQTabletId, request);

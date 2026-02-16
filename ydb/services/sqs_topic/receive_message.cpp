@@ -124,7 +124,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 .TopicName = FullTopicPath_,
                 .Consumer = this->QueueUrl_->Consumer,
                 .WaitTime = waitTime,
-                .VisibilityTimeout = visibilityTimeout,
+                .ProcessingTimeout = visibilityTimeout,
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),
                 .UncompressMessages = true,
                 .UserToken = std::move(userToken),

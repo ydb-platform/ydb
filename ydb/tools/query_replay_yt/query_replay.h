@@ -21,7 +21,9 @@ struct TQueryReplayConfig {
     TString QueryFile;
     NActors::NLog::EPriority YqlLogLevel = NActors::NLog::EPriority::PRI_ERROR;
     bool EnableOltpSinkSideBySinkCompare = false;
+    bool EnableObfuscateRows = false;
     bool Antlr4ParserIsAmbiguityError = false;
+    TString DstPath2;
 
     void ParseConfig(int argc, const char** argv);
 };

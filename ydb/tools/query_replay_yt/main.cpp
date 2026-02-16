@@ -1,22 +1,26 @@
 #include "query_replay.h"
 
+#include <ydb/core/kqp/compile_service/obfuscate/obfuscate.h>
+
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/logger/backend.h>
 
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/config.h>
-
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/logger/backend.h>
+
 #include <ydb/library/yql/utils/actor_log/log.h>
 
+#include <util/string/escape.h>
 #include <util/string/split.h>
 #include <util/system/fs.h>
 
@@ -58,6 +62,7 @@ class TQueryReplayMapper
     ui32 ActorSystemThreadsCount = 5;
     NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
     bool EnableOltpSinkSideBySinkCompare;
+    bool EnableObfuscateRows = false;
     bool Antlr4ParserIsAmbiguityError = false;
 
 public:
@@ -97,14 +102,16 @@ public:
 public:
     TQueryReplayMapper() = default;
 
-    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, EnableOltpSinkSideBySinkCompare, YqlLogPriority, Antlr4ParserIsAmbiguityError);
+    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, EnableOltpSinkSideBySinkCompare, EnableObfuscateRows, YqlLogPriority, Antlr4ParserIsAmbiguityError);
 
-    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool enableOltpSinkSideBySinkCompare, bool antlr4ParserIsAmbiguityError,
+    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool enableOltpSinkSideBySinkCompare,
+        bool enableObfuscateRows, bool antlr4ParserIsAmbiguityError,
         NActors::NLog::EPriority yqlLogPriority = NActors::NLog::EPriority::PRI_ERROR)
         : UdfFiles(udfFiles)
         , ActorSystemThreadsCount(actorSystemThreadsCount)
         , YqlLogPriority(yqlLogPriority)
         , EnableOltpSinkSideBySinkCompare(enableOltpSinkSideBySinkCompare)
+        , EnableObfuscateRows(enableObfuscateRows)
         , Antlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError)
     {}
 
@@ -232,7 +239,147 @@ public:
         return compareResult;
     }
 
-    void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
+    struct TObfuscateReplayResult {
+        TString OriginalStatus;
+        TString ObfuscatedStatus;
+        TString ExtraMessage;
+        NJson::TJsonValue ObfuscatedJson;
+        bool SameOutcome = false;
+    };
+
+    TObfuscateReplayResult RunObfuscateReplay(NJson::TJsonValue json) {
+        TObfuscateReplayResult result;
+
+        TString queryType = json["query_type"].GetStringSafe();
+        if (queryType == "QUERY_TYPE_AST_SCAN" || queryType == "QUERY_TYPE_AST_DML") {
+            result.OriginalStatus = "skipped";
+            result.ObfuscatedStatus = "skipped";
+            result.SameOutcome = true;
+            return result;
+        }
+
+        if (queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT") {
+            result.OriginalStatus = "skipped";
+            result.ObfuscatedStatus = "skipped";
+            result.SameOutcome = true;
+            return result;
+        }
+
+        // Compile the original query
+        NJson::TJsonValue originalJson(json);
+        auto originalResponse = RunReplay(std::move(originalJson));
+        if (originalResponse) {
+            result.OriginalStatus = GetFailReason(originalResponse->Status);
+        } else {
+            result.OriginalStatus = "timeout";
+        }
+
+        // Obfuscate the query and metadata
+        TString jsonStr = NJson::WriteJson(json, false);
+        TString obfuscatedJsonStr;
+        NYql::TIssues obfuscateIssues;
+        NKikimr::NKqp::TReplayMessageObfuscator obfuscator;
+        bool obfuscateOk = obfuscator.ObfuscateReplayMessage(jsonStr, obfuscatedJsonStr, obfuscateIssues);
+
+        if (!obfuscateOk) {
+            result.ObfuscatedStatus = "obfuscation_failed";
+            result.ExtraMessage = TStringBuilder()
+                << "Obfuscation failed: " << obfuscateIssues.ToString()
+                << "; original_status: " << result.OriginalStatus;
+            result.SameOutcome = false;
+            return result;
+        }
+
+        // Parse the obfuscated JSON
+        {
+            NJson::TJsonReaderConfig readerConfig;
+            TStringInput in(obfuscatedJsonStr);
+            NJson::ReadJsonTree(&in, &readerConfig, &result.ObfuscatedJson, false);
+        }
+
+        // Compile the obfuscated query
+        NJson::TJsonValue obfuscatedJsonCopy(result.ObfuscatedJson);
+        auto obfuscatedResponse = RunReplay(std::move(obfuscatedJsonCopy));
+        if (obfuscatedResponse) {
+            result.ObfuscatedStatus = GetFailReason(obfuscatedResponse->Status);
+        } else {
+            result.ObfuscatedStatus = "timeout";
+        }
+
+        // Compare outcomes
+        result.SameOutcome = (result.OriginalStatus == result.ObfuscatedStatus);
+        if (!result.SameOutcome) {
+            result.ExtraMessage = TStringBuilder()
+                << "Outcome mismatch: original=" << result.OriginalStatus
+                << ", obfuscated=" << result.ObfuscatedStatus;
+        }
+
+        return result;
+    }
+
+    void DoObfuscateRows(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) {
+        for (; in->IsValid(); in->Next()) {
+            const auto& row = in->GetRow();
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            for (const auto& [key, child]: row.AsMap()) {
+                if (key == "_logfeller_timestamp")
+                    continue;
+                json.InsertValue(key, NJson::TJsonValue(child.AsString()));
+            }
+
+            auto obfResult = RunObfuscateReplay(std::move(json));
+
+            if (obfResult.OriginalStatus == "skipped") {
+                continue;
+            }
+
+            // Build output row with obfuscated data
+            auto& oj = obfResult.ObfuscatedJson;
+            NYT::TNode result;
+            result = result("query_id", row["query_id"].AsString());
+            result = result("created_at", row["created_at"].AsString());
+
+            if (oj.Has("query_cluster")) {
+                result = result("query_cluster", oj["query_cluster"].GetStringSafe());
+            } else {
+                result = result("query_cluster", "");
+            }
+            if (oj.Has("query_database")) {
+                result = result("query_database", oj["query_database"].GetStringSafe());
+            } else {
+                result = result("query_database", "");
+            }
+
+            result = result("query_syntax", row["query_syntax"].AsString());
+
+            if (oj.Has("query_text")) {
+                result = result("query_text", oj["query_text"].GetStringSafe());
+            } else {
+                result = result("query_text", "");
+            }
+
+            result = result("query_type", row["query_type"].AsString());
+
+            if (oj.Has("table_metadata")) {
+                result = result("table_metadata", oj["table_metadata"].GetStringSafe());
+            } else {
+                result = result("table_metadata", "");
+            }
+
+            result = result("version", row["version"].AsString());
+            result = result("original_status", obfResult.OriginalStatus);
+            result = result("obfuscated_status", obfResult.ObfuscatedStatus);
+            result = result("extra_message", obfResult.ExtraMessage);
+
+            if (obfResult.SameOutcome) {
+                out->AddRow(result, 1);
+            } else {
+                out->AddRow(result, 0);
+            }
+        }
+    }
+
+    void DoDefault(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) {
         for (; in->IsValid(); in->Next()) {
             const auto& row = in->GetRow();
             NJson::TJsonValue json(NJson::JSON_MAP);
@@ -277,6 +424,14 @@ public:
         }
     }
 
+    void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
+        if (EnableObfuscateRows) {
+            DoObfuscateRows(in, out);
+        } else {
+            DoDefault(in, out);
+        }
+    }
+
     void Finish(NYT::TTableWriter<NYT::TNode>*) override {
         ActorSystem->Stop();
     }
@@ -303,6 +458,26 @@ static NYT::TTableSchema OutputSchema() {
     return schema;
 }
 
+static NYT::TTableSchema ObfuscateOutputSchema() {
+    NYT::TTableSchema schema;
+    schema.AddColumn(NYT::TColumnSchema().Name("original_status").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("obfuscated_status").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("extra_message").Type(NYT::VT_STRING));
+
+    schema.AddColumn(NYT::TColumnSchema().Name("query_id").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("created_at").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("query_cluster").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("query_database").Type(NYT::VT_STRING));
+
+    schema.AddColumn(NYT::TColumnSchema().Name("query_syntax").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("query_text").Type(NYT::VT_STRING));
+
+    schema.AddColumn(NYT::TColumnSchema().Name("query_type").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("table_metadata").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("version").Type(NYT::VT_STRING));
+    return schema;
+}
+
 REGISTER_NAMED_MAPPER("Query replay mapper", TQueryReplayMapper);
 
 int main(int argc, const char** argv) {
@@ -312,7 +487,9 @@ int main(int argc, const char** argv) {
     TQueryReplayConfig config;
     config.ParseConfig(argc, argv);
     if (config.QueryFile) {
-        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel);
+        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount,
+            config.EnableOltpSinkSideBySinkCompare, config.EnableObfuscateRows,
+            config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel);
         fakeMapper.Start(nullptr);
         Y_DEFER {
             fakeMapper.Finish(nullptr);
@@ -339,12 +516,26 @@ int main(int argc, const char** argv) {
             Cerr << protoDescription.Utf8DebugString() << Endl;
         }
 
-        auto result = fakeMapper.RunReplay(std::move(queryJson));
+        if (config.EnableObfuscateRows) {
+            auto obfResult = fakeMapper.RunObfuscateReplay(std::move(queryJson));
+            Cerr << "--- Obfuscate side-by-side comparison ---" << Endl;
+            Cerr << "Original status:   " << obfResult.OriginalStatus << Endl;
+            Cerr << "Obfuscated status: " << obfResult.ObfuscatedStatus << Endl;
+            Cerr << "Same outcome:      " << (obfResult.SameOutcome ? "YES" : "NO") << Endl;
+            if (!obfResult.ExtraMessage.empty()) {
+                Cerr << "Extra message:     " << obfResult.ExtraMessage << Endl;
+            }
+            if (obfResult.ObfuscatedJson.Has("query_text")) {
+                Cerr << "Obfuscated query:  " << UnescapeC(obfResult.ObfuscatedJson["query_text"].GetStringSafe()) << Endl;
+            }
+        } else {
+            auto result = fakeMapper.RunReplay(std::move(queryJson));
 
-        auto status = result.Get()->Status;
-        TString failReason = TQueryReplayMapper::GetFailReason(status);
-        Cerr << failReason << Endl;
-        Cerr << result.Get()->Message << Endl;
+            auto status = result.Get()->Status;
+            TString failReason = TQueryReplayMapper::GetFailReason(status);
+            Cerr << failReason << Endl;
+            Cerr << result.Get()->Message << Endl;
+        }
         return 0;
     }
 
@@ -353,11 +544,22 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
+    if (config.EnableObfuscateRows && config.DstPath2.empty()) {
+        Cerr << "--obfuscate-rows requires --dst-path2 to be specified for the success output table.";
+        return EXIT_FAILURE;
+    }
+
     auto client = NYT::CreateClient(config.Cluster);
 
     NYT::TMapOperationSpec spec;
     spec.AddInput<NYT::TNode>(config.SrcPath);
-    spec.AddOutput<NYT::TNode>(NYT::TRichYPath(config.DstPath).Schema(OutputSchema()));
+
+    if (config.EnableObfuscateRows) {
+        spec.AddOutput<NYT::TNode>(NYT::TRichYPath(config.DstPath).Schema(ObfuscateOutputSchema()));
+        spec.AddOutput<NYT::TNode>(NYT::TRichYPath(config.DstPath2).Schema(ObfuscateOutputSchema()));
+    } else {
+        spec.AddOutput<NYT::TNode>(NYT::TRichYPath(config.DstPath).Schema(OutputSchema()));
+    }
 
     auto userJobSpec = NYT::TUserJobSpec();
     userJobSpec.MemoryLimit(5_GB);
@@ -372,7 +574,9 @@ int main(int argc, const char** argv) {
     }
     spec.MaxFailedJobCount(10000);
 
-    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel));
+    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount,
+        config.EnableOltpSinkSideBySinkCompare, config.EnableObfuscateRows,
+        config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel));
 
     auto mergeSpec = NYT::TMergeOperationSpec();
     mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));
@@ -381,6 +585,16 @@ int main(int argc, const char** argv) {
     mergeSpec.ForceTransform(true);
 
     client->Merge(mergeSpec);
+
+    if (config.EnableObfuscateRows) {
+        auto mergeSpec2 = NYT::TMergeOperationSpec();
+        mergeSpec2.AddInput(NYT::TRichYPath(config.DstPath2));
+        mergeSpec2.Output(NYT::TRichYPath(config.DstPath2));
+        mergeSpec2.CombineChunks(true);
+        mergeSpec2.ForceTransform(true);
+
+        client->Merge(mergeSpec2);
+    }
 
     return EXIT_SUCCESS;
 }

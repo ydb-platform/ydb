@@ -9,6 +9,10 @@ using namespace NTabletFlatExecutor;
 
 class TDataShard::TTxObjectStorageListing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
+    // This is the same timeout as in RpcObjectStorage's handler.
+    // We don't need to run this Tx for a longer time than Rpc handler waits.
+    static constexpr TDuration MAX_TIMEOUT = TDuration::Minutes(5);
+
     TEvDataShard::TEvObjectStorageListingRequest::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvObjectStorageListingResponse> Result;
 
@@ -19,6 +23,8 @@ private:
     TString LastCommonPath;
     bool LastProcessedKeyErased = false;
     ui32 RestartCount;
+    bool StartTsInitialized = false;
+    TMonotonic StartTs;
 
 public:
     TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev, NWilson::TTraceId &&traceId)
@@ -70,6 +76,17 @@ public:
                 execSpan.EndOk();
             }
         };
+
+        const auto now = AppData(ctx)->MonotonicTimeProvider->Now();
+        if (!StartTsInitialized) {
+            StartTsInitialized = true;
+            StartTs = now;
+        } else if (now - StartTs >= MAX_TIMEOUT) {
+            const TString errorReason = "Request timed out";
+            SetError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, errorReason);
+            fillSpan(errorReason);
+            return true;
+        }
 
         if (!Result) {
             Result = new TEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());

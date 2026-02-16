@@ -758,7 +758,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         }
     }
 
-        Y_UNIT_TEST(ArrowToYdbConverter_Decimal) {
+    Y_UNIT_TEST(ArrowToYdbConverter_Decimal) {
         std::vector<std::pair<TString, TTypeInfo>> ydbSchema = {
             {"decimal_col", TTypeInfo(NScheme::TDecimalType(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE))}
         };

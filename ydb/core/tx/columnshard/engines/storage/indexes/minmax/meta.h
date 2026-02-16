@@ -119,7 +119,6 @@ protected:
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override {
         TKeyPair thisChunkIndex;
-        ASSIGN_OR_RAISE
         AFL_VERIFY(reader.GetColumnsCount() == 1)("got_count", reader.GetColumnsCount());
         {
             TChunkedColumnReader cReader = *reader.begin();

@@ -275,7 +275,6 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         for (const auto& idx : schema.GetIndexes()) {
             NIndexes::TIndexMetaContainer meta;
             AFL_VERIFY(meta.DeserializeFromProto(idx));
-            AFL_VERIFY(false);
             
             // Cerr << "emplace index: " << idx.DebugString() << Indexes.size();
             Indexes.emplace(meta->GetIndexId(), meta);

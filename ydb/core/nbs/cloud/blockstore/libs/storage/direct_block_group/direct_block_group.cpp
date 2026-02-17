@@ -10,13 +10,15 @@ using namespace NThreading;
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
+    NActors::TActorSystem* actorSystem,
     ui64 tabletId,
     ui32 generation,
     TVector<NBsController::TDDiskId> ddisksIds,
     TVector<NBsController::TDDiskId> persistentBufferDDiskIds,
     ui32 blockSize,
     ui64 blocksCount)
-    : TabletId(tabletId)
+    : ActorSystem(actorSystem)
+    , TabletId(tabletId)
     , Generation(generation)
     , BlockSize(blockSize)
     , BlocksCount(blocksCount)
@@ -132,6 +134,7 @@ TDirectBlockGroup::WriteBlocksLocal(
     Y_UNUSED(callContext);
 
     auto requestHandler = std::make_shared<TWriteRequestHandler>(
+        ActorSystem,
         std::move(request),
         std::move(traceId),
         TabletId);
@@ -217,6 +220,7 @@ void TDirectBlockGroup::RequestBlockFlush(
 
     for (size_t i = 0; i < 3; i++) {
         auto syncRequestHandler = std::make_shared<TSyncRequestHandler>(
+            ActorSystem,
             requestHandler.GetStartIndex(),
             i,   // persistentBufferIndex
             blockMeta.LsnByPersistentBufferIndex[i],
@@ -304,6 +308,7 @@ void TDirectBlockGroup::RequestBlockErase(
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>;
 
     auto eraseRequestHandler = std::make_shared<TEraseRequestHandler>(
+        ActorSystem,
         requestHandler.GetStartIndex(),
         requestHandler.GetPersistentBufferIndex(),
         requestHandler.GetLsn(),
@@ -370,6 +375,7 @@ TDirectBlockGroup::ReadBlocksLocal(
     Y_UNUSED(callContext);
 
     auto requestHandler = std::make_shared<TReadRequestHandler>(
+        ActorSystem,
         std::move(request),
         std::move(traceId),
         TabletId);

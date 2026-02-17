@@ -3177,7 +3177,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             //     "StreamResult = " << (StreamResult)
             // );
 
-            LOG_E("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
+            LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
 
             if (buildFromSourceTasks) {
                 switch (stage.GetSources(0).GetTypeCase()) {

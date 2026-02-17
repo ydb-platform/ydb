@@ -453,6 +453,8 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& readRange
 
     auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
+    Cerr << "readPartitions: " << readPartitions.size() << Endl;
+
     TShardIdToInfoMap shardInfoMap;
     for (TPartitionWithRange& partitionWithRange : readPartitions) {
         auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
@@ -466,6 +468,8 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& readRange
             shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
         }
     }
+
+    Cerr << "Shard map size: " << shardInfoMap.size() << Endl;
 
     return shardInfoMap;
 }
@@ -496,6 +500,8 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges& readRang
 
         auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
+        Cerr << "readPartitions: " << readPartitions.size() << Endl;
+
         for (TPartitionWithRange& partitionWithRange : readPartitions) {
             auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
 
@@ -511,6 +517,8 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges& readRang
             shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
         }
     }
+
+    Cerr << "Shard map size: " << shardInfoMap.size() << Endl;
 
     return shardInfoMap;
 }
@@ -620,6 +628,8 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpReadRangesSource& source,
 
         auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
+        Cerr << "readPartitions: " << readPartitions.size() << Endl;
+
         for (TPartitionWithRange& partitionWithRange : readPartitions) {
             auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
 
@@ -635,6 +645,8 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpReadRangesSource& source,
             shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
         }
     }
+
+    Cerr << "Shard map size: " << shardInfoMap.size() << Endl;
 
     return shardInfoMap;
 }

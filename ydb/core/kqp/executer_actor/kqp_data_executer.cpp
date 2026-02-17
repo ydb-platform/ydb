@@ -2024,7 +2024,6 @@ private:
         size_t sourceScanPartitionsCount = 0;
 
         if (!graphRestored) {
-            FormatBackTrace(&Cerr);
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
             Cerr << TasksGraph.DumpToString() << Endl;
         }
@@ -2085,7 +2084,7 @@ private:
             Counters->TxProxyMon->TxResultError->Inc();
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                    << "Affected too many shards: " << datashardTasks.size()));
+                    << "Affected too many shards: " << shards));
             return;
         }
 
@@ -2769,6 +2768,8 @@ private:
                 Planner->CollectTaskChannelsUpdates(task, updates);
         }
         Planner->PropagateChannelsUpdates(updates);
+
+        Cerr << "Execute Tasks!" << Endl;
     }
 
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {

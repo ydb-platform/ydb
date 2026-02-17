@@ -1064,6 +1064,8 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         PQ_LOG_ERROR("Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
     }
+
+    SendDefferedReadSetAcks(ctx);
 }
 
 void TPersQueue::SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters)
@@ -3450,7 +3452,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
         if ((tx->State > NKikimrPQ::TTransaction::EXECUTED) ||
             ((tx->State == NKikimrPQ::TTransaction::EXECUTED) && !tx->WriteInProgress)) {
             if (ack) {
-                PQ_LOG_TX_I("send TEvReadSetAck to " << event.GetTabletProducer() << " tx " << event.GetTxId());
+                PQ_LOG_TX_I("send TEvReadSetAck to " << event.GetTabletProducer() << " for TxId " << event.GetTxId());
                 ctx.Send(ev->Sender, ack.release());
                 return;
             }
@@ -3468,12 +3470,27 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
             TryWriteTxs(ctx);
         }
     } else if (ack) {
-        PQ_LOG_TX_I("send TEvReadSetAck to " << event.GetTabletProducer() << " tx " << event.GetTxId());
-        //
-        // для неизвестных транзакций подтверждение отправляется сразу
-        //
-        ctx.Send(ev->Sender, ack.release());
+        PQ_LOG_TX_I("a TEvReadSetAck message to " << event.GetTabletProducer() <<
+                    " for TxId " << event.GetTxId() <<
+                    " will be sent later");
+
+        TDefferedReadSetAck item;
+        item.Sender = ev->Sender;
+        item.Ack = std::move(ack);
+
+        DefferedReadSetAcks.push_back(std::move(item));
     }
+}
+
+void TPersQueue::SendDefferedReadSetAcks(const TActorContext& ctx)
+{
+    for (auto& e : DefferedReadSetAcks) {
+        PQ_LOG_TX_I("send TEvReadSetAck to " << e.Ack->Record.GetTabletSource() <<
+                    " for TxId " << e.Ack->Record.GetTxId());
+        ctx.Send(e.Sender, e.Ack.release());
+    }
+
+    DefferedReadSetAcks.clear();
 }
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)

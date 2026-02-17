@@ -645,6 +645,14 @@ private:
     bool HasTxPersistSpan = false;
     bool HasTxDeleteSpan = false;
     ui8 WriteTxsSpanVerbosity = 0;
+
+    struct TDefferedReadSetAck {
+        TActorId Sender;
+        std::unique_ptr<TEvTxProcessing::TEvReadSetAck> Ack;
+    };
+    TDeque<TDefferedReadSetAck> DefferedReadSetAcks;
+
+    void SendDefferedReadSetAcks(const TActorContext& ctx);
 };
 
 }// NPQ

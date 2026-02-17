@@ -140,11 +140,6 @@ TDirectBlockGroup::WriteBlocksLocal(
         const auto& ddiskConnection = PersistentBufferConnections[i];
         ++StorageRequestId;
 
-        LOG_DEBUG_S(
-            TActivationContext::AsActorContext(),
-            NKikimrServices::NBS_PARTITION,
-            "WriteBlocksLocal" << " requestId# " << StorageRequestId);
-
         auto future = StorageTransport->WritePersistentBuffer(
             ddiskConnection.GetServiceId(),
             ddiskConnection.Credentials,
@@ -260,11 +255,6 @@ void TDirectBlockGroup::ProcessSyncQueue()
 
     ++StorageRequestId;
 
-    LOG_DEBUG_S(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "ProcessSyncQueue" << " requestId# " << StorageRequestId);
-
     auto future = StorageTransport->SyncWithPersistentBuffer(
         ddiskConnection.GetServiceId(),
         ddiskConnection.Credentials,
@@ -328,11 +318,6 @@ void TDirectBlockGroup::RequestBlockErase(
         TabletId);
 
     ++StorageRequestId;
-
-    LOG_DEBUG_S(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "RequestBlockErase" << " requestId# " << StorageRequestId);
 
     auto future = StorageTransport->ErasePersistentBuffer(
         PersistentBufferConnections[requestHandler.GetPersistentBufferIndex()]
@@ -399,25 +384,28 @@ TDirectBlockGroup::ReadBlocksLocal(
     auto startIndex = requestHandler->GetStartIndex();
 
     // Block is not writed
-    if (!BlocksMeta[startIndex].IsWritten()) {
+    if (!BlocksMeta[startIndex].IsWritten())
+    {
+        auto data = requestHandler->GetData();
+        if (auto guard = data.Acquire()) {
+            const auto& sglist = guard.Get();
+            const auto& block = sglist[0];
+            memset(const_cast<char*>(block.Data()), 0, block.Size());
+        } else {
+            Y_ABORT_UNLESS(false);
+        }
+
+        requestHandler->SetResponse();
+
         requestHandler->Span.EndOk();
         if (ReadBlocksReplyCallback) {
             ReadBlocksReplyCallback(true);
         }
 
-        auto promise = NThreading::NewPromise<TReadBlocksLocalResponse>();
-
-        promise.SetValue(TReadBlocksLocalResponse());
-
-        return promise.GetFuture();
+        return requestHandler->GetFuture();
     }
 
     ++StorageRequestId;
-
-    LOG_DEBUG_S(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "ReadBlocksLocal" << " requestId# " << StorageRequestId);
 
     if (!BlocksMeta[startIndex].IsFlushedToDDisk()) {
         const auto& ddiskConnection = PersistentBufferConnections[0];

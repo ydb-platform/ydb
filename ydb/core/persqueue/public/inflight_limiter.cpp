@@ -50,7 +50,7 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
     Layout.back() = Offset;
 
     bool isMemoryLimitReached = IsMemoryLimitReached();
-    if (!wasMemoryLimitReached && isMemoryLimitReached) {
+    if (!wasMemoryLimitReached && isMemoryLimitReached && InFlightFullSince == TInstant::Zero()) {
         InFlightFullSince = TInstant::Now();
     }
 
@@ -78,7 +78,7 @@ bool TInFlightController::Remove(ui64 Offset) {
     }
 
     auto isMemoryLimitReached = IsMemoryLimitReached();
-    if (wasMemoryLimitReached && !isMemoryLimitReached) {
+    if (wasMemoryLimitReached && !isMemoryLimitReached && InFlightFullSince != TInstant::Zero()) {
         auto now = TInstant::Now();
         SlidingWindow.Update(now - InFlightFullSince, now);
         InFlightFullSince = TInstant::Zero();
@@ -99,10 +99,10 @@ bool TInFlightController::IsMemoryLimitReached() const {
 TDuration TInFlightController::GetLimitReachedDuration() {
     TDuration carry = TDuration::Zero();
     if (InFlightFullSince != TInstant::Zero()) {
-        carry = Min(TInstant::Now() - InFlightFullSince, SLIDING_WINDOW_SIZE);
+        carry = TInstant::Now() - InFlightFullSince;
     }
 
-    return SlidingWindow.GetValue() + carry;
+    return Min(SLIDING_WINDOW_SIZE, SlidingWindow.GetValue() + carry);
 }
 
 } // namespace NKikimr::NPQ

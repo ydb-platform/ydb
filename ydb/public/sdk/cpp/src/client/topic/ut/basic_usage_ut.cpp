@@ -2035,6 +2035,28 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         producer->Flush().GetValueSync();
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)));
     }
+
+    Y_UNIT_TEST(SimpleBlockingProducer_TimeoutException) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("simple_blocking_producer_basic_write");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.MaxMemoryUsage(100_KB);
+
+        auto producer = client.CreateSimpleBlockingProducer(writeSettings);
+        auto msgData = TString(1_MB, 'a');
+
+        UNIT_ASSERT(producer->Write(TWriteMessage(msgData)));
+        UNIT_ASSERT_EXCEPTION(producer->Write(TWriteMessage(msgData), std::nullopt, TDuration::Zero()), TWriteTimeoutException);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)));
+    }
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
 } // namespace

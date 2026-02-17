@@ -361,6 +361,15 @@ private:
     TSessionClosedEvent ClosedEvent;
 };
 
+//! Exception that is thrown when write timeout is reached in ISimpleBlockingProducer::Write().
+struct TWriteTimeoutException : public std::exception {
+    TWriteTimeoutException() {}
+
+    const char* what() const noexcept override {
+        return "write timeout";
+    }
+};
+
 //! Producer is an abstraction that can write messages to the topic.
 class IProducer {
 public:
@@ -414,6 +423,7 @@ class ISimpleBlockingProducer {
 public:
     //! Write single message.
     //! Throws TProducerClosedException if session was closed.
+    //! Throws TWriteTimeoutException if blockTimeout is reached.
     virtual bool Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt, TDuration blockTimeout = TDuration::Max(),
         TTransactionBase* tx = nullptr) = 0;
 

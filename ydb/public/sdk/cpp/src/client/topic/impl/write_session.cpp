@@ -2081,6 +2081,9 @@ bool TSimpleBlockingKeyedWriteSession::Write(TWriteMessage&& message, const std:
         }
 
         auto newNow = TInstant::Now();
+        if (remainingTimeout < newNow - now) {
+            throw TWriteTimeoutException();
+        }
         remainingTimeout -= (newNow - now);
         now = newNow;
     }

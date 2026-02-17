@@ -2,7 +2,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-bool isSupportedIndex(TPathId pathId, const TOperationContext& context) {
+bool IsSupportedIndex(TPathId pathId, const TOperationContext& context) {
     auto indexInfo = context.SS->Indexes.at(pathId);
     return indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
             indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;

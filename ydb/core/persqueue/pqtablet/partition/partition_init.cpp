@@ -21,7 +21,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
-void ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev);
+[[nodiscard]] bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev);
 
 //
 // TInitializer
@@ -175,7 +175,9 @@ void TInitConfigStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& res = ev->Get()->Record;
     PQ_INIT_ENSURE(res.ReadResultSize() == 1);
@@ -246,7 +248,9 @@ void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.GetStatusResultSize());
@@ -284,7 +288,9 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadResultSize() == 2);
@@ -371,7 +377,9 @@ void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -454,7 +462,9 @@ void TInitDataRangeStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -847,7 +857,9 @@ void TDeleteKeysStep::Execute(const TActorContext &ctx) {
 }
 
 void TDeleteKeysStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     Done(ctx);
 }
@@ -869,7 +881,9 @@ void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -935,7 +949,9 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadResultSize());
@@ -1425,20 +1441,22 @@ void TPartition::CreateCompacter() {
 // Functions
 //
 
-void ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev) {
+[[nodiscard]] bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev) {
     auto& response = ev->Get()->Record;
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         step.RestartTablet(TStringBuilder() << "commands for topic are not processed at all. status: " << response.GetStatus());
-        return;
+        return false;
     }
 
     for (ui32 i = 0; i < response.GetStatusResultSize(); ++i) {
         auto& res = response.GetGetStatusResult(i);
         if (res.GetStatus() != NKikimrProto::OK) {
             step.RestartTablet(TStringBuilder() << "got KV error in CmdGetStatus. status: " << res.GetStatus());
-            return;
+            return false;
         }
     }
+
+    return true;
 }
 
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {

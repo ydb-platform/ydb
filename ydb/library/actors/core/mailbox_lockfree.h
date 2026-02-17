@@ -223,6 +223,7 @@ namespace NActors {
 
         // Used to track how much time until activation
         NHPTimer::STime ScheduleMoment{ 0 };
+        i16 PriorityTaskPool = -1;
     };
 
     static_assert(sizeof(TMailbox) <= 64, "TMailbox is too large");

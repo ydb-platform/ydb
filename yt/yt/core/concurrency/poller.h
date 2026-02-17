@@ -78,10 +78,12 @@ struct IPoller
 
     //! Unregisters the previously registered entity.
     /*!
-     *  If the pollable entity was previously armed, one MUST unarm it first
-     *  before unregistering.
+     *  If the pollable entity was previously armed, one should unarm it first
+     *  before unregistering. Not doing so is OK for the poller, however
+     *  in this case #IPollable::OnShutdown and #IPollable::OnEvent could be invoked concurrently.
      *
-     *  It is guaranteed that #IPollable::OnShutdown and #IPollable::OnEvent will
+     *  At the same time, if the poller was properly unarmed before unregistering,
+     *  it is guaranteed that #IPollable::OnShutdown and #IPollable::OnEvent will
      *  not be run concurrently.
      *
      *  The entity gets unregistered asynchronously.

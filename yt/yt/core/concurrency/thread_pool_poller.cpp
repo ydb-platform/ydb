@@ -436,9 +436,10 @@ private:
                 continue;
             }
 
-            // These can trigger if user forgot to unarm the pollable.
-            YT_VERIFY(Pollables_.contains(pollable));
-            YT_VERIFY(pollable->GetRefCount() > 0);
+            if (Y_UNLIKELY(!Pollables_.contains(pollable))) {
+                // A stranded event from an unregistered pollable.
+                continue;
+            }
 
             YT_LOG_TRACE("Got pollable event (Pollable: %v, Control: %v)",
                 pollable->GetLoggingTag(),

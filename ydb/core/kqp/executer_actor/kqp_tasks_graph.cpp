@@ -2074,15 +2074,15 @@ void TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* 
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
     const auto& keyTypes = tableInfo->KeyColumnTypes;
 
-    for (auto& op : stage.GetTableOps()) {
+    for (int i = 0, s = stage.TableOpsSize(); i < s; ++i) {
+        const auto& op = stage.GetTableOps(i);
         Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
         switch (op.GetTypeCase()) {
             case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
             case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
                 YQL_ENSURE(stage.InputsSize() <= 1, "Effect stage with multiple inputs: " << stage.GetProgramAst());
 
-                auto result = PartitionPruner->PruneEffect(op, stageInfo);
-                for (auto& [shardId, shardInfo] : result) {
+                for (auto& [shardId, shardInfo] : stageInfo.Meta.PrunedPartitions.at(i)) {
                     YQL_ENSURE(!shardInfo.KeyReadRanges);
                     YQL_ENSURE(shardInfo.KeyWriteRanges);
 
@@ -2210,23 +2210,21 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
 
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
     const auto& keyTypes = tableInfo->KeyColumnTypes;
-    for (auto& op : stage.GetTableOps()) {
+    for (int i = 0, s = stage.TableOpsSize(); i < s; ++i) {
+        const auto& op = stage.GetTableOps(i);
         Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
         auto columns = BuildKqpColumns(op, tableInfo);
-        bool isFullScan;
-        auto partitions = PartitionPruner->Prune(op, stageInfo, isFullScan);
+        auto& partitions = stageInfo.Meta.PrunedPartitions.at(i);
         const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
         auto readSettings = ExtractReadSettings(op, stageInfo, TxAlloc->HolderFactory, TxAlloc->TypeEnv);
-
-        if (isFullScan && readSettings.ItemsLimit) {
-            Counters->Counters->FullScansExecuted->Inc();
-        }
 
         if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
             stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(), op.GetReadRange().GetSkipNullKeys().end());
             YQL_ENSURE(!readSettings.IsReverse(), "Not supported for scan queries");
         }
+
+        YQL_ENSURE(GetMeta().ShardsResolved);
 
         for (auto&& [shardId, shardInfo]: partitions) {
             const ui64 nodeId = GetMeta().ShardIdToNodeId.at(shardId);
@@ -2937,12 +2935,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         }
     };
 
-    bool isFullScan = false;
-    const auto& partitions = PartitionPruner->Prune(source, stageInfo, isFullScan);
-
-    if (isFullScan && !source.HasItemsLimit()) {
-        Counters->Counters->FullScansExecuted->Inc();
-    }
+    const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
 
     bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
 
@@ -2963,12 +2956,12 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 
         Y_ENSURE(shardInfo.KeyReadRanges); // TODO: redundant check - remove later.
 
-            const TMaybe<ui64> nodeId = singlePartitionedStage ? TMaybe<ui64>{GetMeta().ExecuterId.NodeId()} : Nothing();
-            addPartition(startShard, nodeId, false, shardInfo, inFlightShards, TTaskType::SINGLE_SOURCE_SCAN);
-            fillRangesForTasks();
+        const TMaybe<ui64> nodeId = singlePartitionedStage ? TMaybe<ui64>{GetMeta().ExecuterId.NodeId()} : Nothing();
+        addPartition(startShard, nodeId, false, shardInfo, inFlightShards, TTaskType::SINGLE_SOURCE_SCAN);
+        fillRangesForTasks();
 
-            return singlePartitionedStage ? TMaybe<size_t>(partitions.size()) : Nothing();
-        } else {
+        return singlePartitionedStage ? TMaybe<size_t>(partitions.size()) : Nothing();
+    } else {
         for (const auto& [shardId, shardInfo] : partitions) {
             addPartition(shardId, {}, true, shardInfo, {}, TTaskType::DEFAULT_SOURCE_SCAN);
         }

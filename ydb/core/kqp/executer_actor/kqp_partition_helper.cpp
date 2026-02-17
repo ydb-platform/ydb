@@ -453,8 +453,6 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& readRange
 
     auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
-    // Cerr << "readPartitions: " << readPartitions.size() << Endl;
-
     TShardIdToInfoMap shardInfoMap;
     for (TPartitionWithRange& partitionWithRange : readPartitions) {
         auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
@@ -468,8 +466,6 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& readRange
             shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
         }
     }
-
-    // Cerr << "Shard map size: " << shardInfoMap.size() << Endl;
 
     return shardInfoMap;
 }
@@ -500,8 +496,6 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges& readRang
 
         auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
-        // Cerr << "readPartitions: " << readPartitions.size() << Endl;
-
         for (TPartitionWithRange& partitionWithRange : readPartitions) {
             auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
 
@@ -517,8 +511,6 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges& readRang
             shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
         }
     }
-
-    // Cerr << "Shard map size: " << shardInfoMap.size() << Endl;
 
     return shardInfoMap;
 }
@@ -628,8 +620,6 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpReadRangesSource& source,
 
         auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
-        // Cerr << "readPartitions: " << readPartitions.size() << Endl;
-
         for (TPartitionWithRange& partitionWithRange : readPartitions) {
             auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
 
@@ -645,8 +635,6 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpReadRangesSource& source,
             shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
         }
     }
-
-    // Cerr << "Shard map size: " << shardInfoMap.size() << Endl;
 
     return shardInfoMap;
 }
@@ -712,8 +700,6 @@ TShardIdToInfoMap PruneEffectPartitionsImpl(const TEffect& effect,
     auto guard = typeEnv.BindAllocator();
     TShardIdToInfoMap shardInfoMap;
 
-    // Cerr << "ParamValue? " << effect.HasRowsValue() << " " << (effect.GetRowsValue().GetKindCase() == NKqpProto::TKqpPhyValue::kParamValue) << Endl;
-
     if (effect.HasRowsValue() &&
         effect.GetRowsValue().GetKindCase() == NKqpProto::TKqpPhyValue::kParamValue)
     {
@@ -722,7 +708,6 @@ TShardIdToInfoMap PruneEffectPartitionsImpl(const TEffect& effect,
         auto shardsMap = PartitionParamByKey(value, type, stageInfo.Meta.TableId, stageInfo, *stageInfo.Meta.ShardKey,
              holderFactory, typeEnv);
 
-        // Cerr << "shardsMap: " << shardsMap.size() << Endl;
         for (auto& [shardId, shardData] : shardsMap) {
             auto& shardInfo = shardInfoMap[shardId];
 
@@ -748,8 +733,6 @@ TShardIdToInfoMap PruneEffectPartitionsImpl(const TEffect& effect,
     } else {
         FillFullRange(stageInfo, shardInfoMap, /* read */ false);
     }
-
-    // Cerr << "Shard map size: " << shardInfoMap.size() << Endl;
 
     return shardInfoMap;
 }
@@ -866,17 +849,14 @@ TPartitionPruner::TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory
 }
 
 TShardIdToInfoMap TPartitionPruner::Prune(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo, bool& isFullScan) {
-    Cerr << "Prune: " << stageInfo.Id << Endl;
     return PrunePartitions(operation, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
 }
 
 TShardIdToInfoMap TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) {
-    Cerr << "Prune: " << stageInfo.Id << Endl;
     return PrunePartitions(source, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
 }
 
 TShardIdToInfoMap TPartitionPruner::PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo) {
-    Cerr << "Prune Effect: " << stageInfo.Id << Endl;
     return PruneEffectPartitions(operation, stageInfo, *HolderFactory, *TypeEnv, Config);
 }
 

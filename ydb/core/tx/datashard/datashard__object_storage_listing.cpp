@@ -1,5 +1,6 @@
 #include "datashard_impl.h"
 #include <util/string/vector.h>
+#include <ydb/core/tablet_flat/flat_range_cache.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -8,6 +9,10 @@ using namespace NTabletFlatExecutor;
 
 class TDataShard::TTxObjectStorageListing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
+    // This is the same timeout as in RpcObjectStorage's handler.
+    // We don't need to run this Tx for a longer time than Rpc handler waits.
+    static constexpr TDuration MAX_TIMEOUT = TDuration::Minutes(5);
+
     TEvDataShard::TEvObjectStorageListingRequest::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvObjectStorageListingResponse> Result;
 
@@ -16,7 +21,10 @@ private:
     // consitency within the shard. This in not a big deal because listings are not consistent across shards.
     TString LastPath;
     TString LastCommonPath;
+    bool LastProcessedKeyErased = false;
     ui32 RestartCount;
+    bool StartTsInitialized = false;
+    TMonotonic StartTs;
 
 public:
     TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev, NWilson::TTraceId &&traceId)
@@ -48,11 +56,14 @@ public:
         ui64 filteredOutRows = 0;
         ui64 skipToCount = 0;
         bool skipToFailed = false;
+        ui64 deletedRowSkips = 0;
+        bool advanced = false;
 
         auto fillSpan = [&](const TString& errorReason = "") {
             if (!execSpan) {
                 return;
             }
+            execSpan.Attribute("Shard", std::to_string(this->Self->TabletID()));
             execSpan.Attribute("ScannedRows", std::to_string(scannedRows));
             execSpan.Attribute("LeafRows", std::to_string(leafRows));
             execSpan.Attribute("ErasedRows", std::to_string(erasedRows));
@@ -65,6 +76,17 @@ public:
                 execSpan.EndOk();
             }
         };
+
+        const auto now = AppData(ctx)->MonotonicTimeProvider->Now();
+        if (!StartTsInitialized) {
+            StartTsInitialized = true;
+            StartTs = now;
+        } else if (now - StartTs >= MAX_TIMEOUT) {
+            const TString errorReason = "Request timed out";
+            SetError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, errorReason);
+            fillSpan(errorReason);
+            return true;
+        }
 
         if (!Result) {
             Result = new TEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
@@ -210,7 +232,8 @@ public:
 
         if (LastPath) {
             // Don't include the last key in case of restart
-            keyRange.MinInclusive = false;
+            // Include last key if it was erased to allow erase cache to extend across restarts
+            keyRange.MinInclusive = LastProcessedKeyErased;
         }
 
         bool hasFilter = Ev->Get()->Record.has_filter();
@@ -240,8 +263,13 @@ public:
         TAutoPtr<NTable::TTableIter> iter = txc.DB.IterateRange(localTableId, keyRange, columnsToReturn);
 
         ui64 foundKeys = Result->Record.ContentsRowsSize() + Result->Record.CommonPrefixesRowsSize();
-        while (iter->Next(NTable::ENext::All) == NTable::EReady::Data) {
+        while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
+            if (iter->Stats.DeletedRowSkips != deletedRowSkips) {
+                erasedRows += iter->Stats.DeletedRowSkips - deletedRowSkips;
+                deletedRowSkips = iter->Stats.DeletedRowSkips;
+            }
             ++scannedRows;
+            advanced = true;
             TDbTupleRef currentKey = iter->GetKey();
 
             // Check all columns that prefix columns are in the current key are equal to the specified values
@@ -259,13 +287,7 @@ public:
             TString path = TString((const char*)pathCell.Data(), pathCell.Size());
 
             LastPath = path;
-
-            // Explicitly skip erased rows after saving LastPath. This allows to continue exactly from
-            // this key in case of restart
-            if (iter->Row().GetRowState() == NTable::ERowOp::Erase) {
-                ++erasedRows;
-                continue;
-            }
+            LastProcessedKeyErased = false;
 
             // Check that path begins with the specified prefix
             Y_VERIFY_DEBUG(path.StartsWith(pathPrefix),
@@ -414,6 +436,31 @@ public:
             }
         }
 
+        if (iter->Stats.DeletedRowSkips != deletedRowSkips) {
+            erasedRows += iter->Stats.DeletedRowSkips - deletedRowSkips;
+            deletedRowSkips = iter->Stats.DeletedRowSkips;
+        }
+
+        if (iter->Last() == NTable::EReady::Page) {
+            auto lastKeyCells = iter->GetKey().Cells();
+            if (lastKeyCells && (advanced || iter->Stats.DeletedRowSkips >= 4)) {
+                Y_VERIFY(lastKeyCells.size() > pathColPos);
+                Y_VERIFY(iter->GetKey().Types[pathColPos].GetTypeId() == NScheme::NTypeIds::Utf8);
+                const TCell& pathCell = lastKeyCells[pathColPos];
+                LastPath = TString((const char*)pathCell.Data(), pathCell.Size());
+                LastProcessedKeyErased = (iter->GetKeyState() == NTable::ERowOp::Erase);
+            }
+
+            if (lastKeyCells) {
+                TVector<TRawTypeValue> prechargeMinKey = ToRawTypeValue(lastKeyCells, tableInfo, false);
+                txc.DB.Precharge(localTableId, prechargeMinKey, keyRange.MaxKey,
+                    columnsToReturn, 0, Max<ui64>(), Max<ui64>());
+            } else {
+                txc.DB.Precharge(localTableId, keyRange.MinKey, keyRange.MaxKey,
+                    columnsToReturn, 0, Max<ui64>(), Max<ui64>());
+            }
+        }
+
         fillSpan();
         return iter->Last() != NTable::EReady::Page;
     }
@@ -434,6 +481,25 @@ public:
     }
 
 private:
+    static TVector<TRawTypeValue> ToRawTypeValue(
+        TArrayRef<const TCell> keyCells,
+        const TUserTable& tableInfo,
+        bool addNulls)
+    {
+        TVector<TRawTypeValue> result;
+        result.reserve(keyCells.size());
+
+        for (ui32 i = 0; i < keyCells.size(); ++i) {
+            result.emplace_back(keyCells[i].AsRef(), tableInfo.KeyColumnTypes[i].GetTypeId());
+        }
+
+        if (addNulls) {
+            result.resize(tableInfo.KeyColumnTypes.size());
+        }
+
+        return result;
+    }
+
     void SetError(ui32 status, TString descr) {
         Result = new TEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
 

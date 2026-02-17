@@ -24,6 +24,33 @@
 
 using namespace NActors;
 
+namespace {
+
+constexpr size_t MaxOutputFieldBytes = 1024 * 1024; // 1 MiB per heavy text field
+constexpr TStringBuf TruncatedSuffix = "...[truncated]";
+
+TString TruncateOutputField(TString value, TStringBuf fieldName, TStringBuf queryId) {
+    if (value.size() <= MaxOutputFieldBytes) {
+        return value;
+    }
+
+    Cerr << "Truncating output field '" << fieldName
+        << "' for query_id=" << queryId
+        << " from " << value.size()
+        << " bytes to " << MaxOutputFieldBytes << " bytes" << Endl;
+
+    if (MaxOutputFieldBytes > TruncatedSuffix.size()) {
+        value.resize(MaxOutputFieldBytes - TruncatedSuffix.size());
+        value += TruncatedSuffix;
+    } else {
+        value.resize(MaxOutputFieldBytes);
+    }
+
+    return value;
+}
+
+} // anonymous namespace
+
 TVector<std::pair<TString, TString>> GetJobFiles(TVector<TString> udfs) {
     TVector<std::pair<TString, TString>> result;
 
@@ -237,6 +264,7 @@ public:
     void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
         for (; in->IsValid(); in->Next()) {
             const auto& row = in->GetRow();
+            const TString queryId = row["query_id"].AsString();
             NJson::TJsonValue json(NJson::JSON_MAP);
             for (const auto& [key, child]: row.AsMap()) {
                 if (key == "_logfeller_timestamp")
@@ -256,24 +284,30 @@ public:
                 continue;
             }
 
+            const TString queryPlan = TruncateOutputField(row["query_plan"].AsString(), "query_plan", queryId);
+            const TString queryText = TruncateOutputField(row["query_text"].AsString(), "query_text", queryId);
+            const TString tableMetadata = TruncateOutputField(row["table_metadata"].AsString(), "table_metadata", queryId);
+            const TString extraMessage = TruncateOutputField(response.Get()->Message, "extra_message", queryId);
+            const TString newQueryPlan = TruncateOutputField(response.Get()->Plan, "new_query_plan", queryId);
+
             NYT::TNode result;
-            result = result("query_id", row["query_id"].AsString());
+            result = result("query_id", queryId);
 
             result = result("created_at", row["created_at"].AsString());
             result = result("query_cluster", row["query_cluster"].AsString());
             result = result("query_database", row["query_database"].AsString());
 
-            result = result("query_plan", row["query_plan"].AsString());
+            result = result("query_plan", queryPlan);
             result = result("query_syntax", row["query_syntax"].AsString());
-            result = result("query_text", row["query_text"].AsString());
+            result = result("query_text", queryText);
 
             result = result("query_type", row["query_type"].AsString());
-            result = result("table_metadata", row["table_metadata"].AsString());
+            result = result("table_metadata", tableMetadata);
             result = result("version", row["version"].AsString());
 
             result = result("fail_reason", failReason);
-            result = result("extra_message", response.Get()->Message);
-            result = result("new_query_plan", response.Get()->Plan);
+            result = result("extra_message", extraMessage);
+            result = result("new_query_plan", newQueryPlan);
 
             out->AddRow(result);
         }

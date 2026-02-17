@@ -333,7 +333,7 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
             try:
                 session_pool.execute_with_retries(f"ANALYZE {table_name}")
             except ydb.issues.Error as e:
-                logger.warn(f'ANALYZE {table_name} error: {e}, ignoring')
+                logger.warning(f'ANALYZE {table_name} error: {e}, ignoring')
             else:
                 logger.info(f'ANALYZE {table_name} successful')
 
@@ -343,7 +343,7 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
                     try_analyze(session_pool, table)
 
         # check that ANALYZE was successful at least once
-        expected_count = 90
+        expected_count = len([i for i in range(ROW_COUNT) if int(i / 10) < 10])
         for table in self.tables:
             estimate = self.get_planner_selectivity_estimate(table)
             assert estimate <= expected_count * 1.5

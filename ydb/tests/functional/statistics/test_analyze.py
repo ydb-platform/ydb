@@ -2,10 +2,12 @@
 
 import json
 import logging
-import time
+
+import requests
 
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.common.wait_for import wait_for
 
 
 logger = logging.getLogger(__name__)
@@ -55,8 +57,25 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
             })
         driver.table_client.bulk_upsert(table_path, rows, column_types)
 
-    # wait for base stats propagation from schemeshard
-    time.sleep(60)
+    def base_stats_ready():
+        mon_port = ydb_cluster.slots[1].mon_port
+        try:
+            response = requests.get(
+                f"http://localhost:{mon_port}/actors/statservice",
+                params={
+                    "action": "probe_base_stats",
+                    "path": table_path,
+                    "json": 1,
+                })
+        except requests.exceptions.RequestException:
+            return False
+
+        logger.debug(f"table base stats: {response.json()}")
+        if response.status_code == 200:
+            return response.json()["row_count"] > 0
+        return False
+
+    assert wait_for(base_stats_ready, timeout_seconds=150), "base stats not ready"
 
     with ydb.QuerySessionPool(driver) as session_pool:
         session_pool.execute_with_retries(f'ANALYZE {table_name}')
@@ -78,6 +97,6 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
         selectivity_estimate = get_estimate(explain["Plan"])
         logger.debug(f"planner estimate: {selectivity_estimate}")
 
-    expected_count = 90
+    expected_count = len([i for i in range(batch_size * batch_count) if int(i / 10) < 10])
     assert selectivity_estimate <= expected_count * 1.5
     assert selectivity_estimate >= expected_count * 0.5

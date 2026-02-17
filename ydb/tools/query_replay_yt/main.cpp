@@ -19,6 +19,8 @@
 
 #include <util/string/split.h>
 #include <util/system/fs.h>
+#include <util/datetime/base.h>
+#include <exception>
 
 using namespace NActors;
 
@@ -311,7 +313,19 @@ int main(int argc, const char** argv) {
 
     TQueryReplayConfig config;
     config.ParseConfig(argc, argv);
+    Cerr << "query_replay_yt config: "
+        << "cluster=" << config.Cluster
+        << ", src-path=" << config.SrcPath
+        << ", dst-path=" << config.DstPath
+        << ", core-table-path=" << config.CoreTablePath
+        << ", threads=" << config.ActorSystemThreadsCount
+        << ", udf-files=" << config.UdfFiles.size()
+        << ", side-by-side-compare=" << (config.EnableOltpSinkSideBySinkCompare ? "true" : "false")
+        << ", antlr4-ambiguity-error=" << (config.Antlr4ParserIsAmbiguityError ? "true" : "false")
+        << Endl;
+
     if (config.QueryFile) {
+        Cerr << "Running in local mode for single query file: " << config.QueryFile << Endl;
         auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel);
         fakeMapper.Start(nullptr);
         Y_DEFER {
@@ -353,7 +367,9 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
+    Cerr << "Creating YT client for cluster: " << config.Cluster << Endl;
     auto client = NYT::CreateClient(config.Cluster);
+    Cerr << "YT client created successfully." << Endl;
 
     NYT::TMapOperationSpec spec;
     spec.AddInput<NYT::TNode>(config.SrcPath);
@@ -372,7 +388,19 @@ int main(int argc, const char** argv) {
     }
     spec.MaxFailedJobCount(10000);
 
-    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel));
+    Cerr << "Starting map operation. src-path=" << config.SrcPath
+        << ", dst-path=" << config.DstPath << Endl;
+    const auto mapStart = TInstant::Now();
+    try {
+        client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel));
+    } catch (const std::exception& e) {
+        Cerr << "Map operation failed after " << (TInstant::Now() - mapStart) << ": " << e.what() << Endl;
+        return EXIT_FAILURE;
+    } catch (...) {
+        Cerr << "Map operation failed after " << (TInstant::Now() - mapStart) << ": unknown exception" << Endl;
+        return EXIT_FAILURE;
+    }
+    Cerr << "Map operation finished in " << (TInstant::Now() - mapStart) << Endl;
 
     auto mergeSpec = NYT::TMergeOperationSpec();
     mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));
@@ -380,7 +408,18 @@ int main(int argc, const char** argv) {
     mergeSpec.CombineChunks(true);
     mergeSpec.ForceTransform(true);
 
-    client->Merge(mergeSpec);
+    Cerr << "Starting merge operation for dst-path=" << config.DstPath << Endl;
+    const auto mergeStart = TInstant::Now();
+    try {
+        client->Merge(mergeSpec);
+    } catch (const std::exception& e) {
+        Cerr << "Merge operation failed after " << (TInstant::Now() - mergeStart) << ": " << e.what() << Endl;
+        return EXIT_FAILURE;
+    } catch (...) {
+        Cerr << "Merge operation failed after " << (TInstant::Now() - mergeStart) << ": unknown exception" << Endl;
+        return EXIT_FAILURE;
+    }
+    Cerr << "Merge operation finished in " << (TInstant::Now() - mergeStart) << Endl;
 
     return EXIT_SUCCESS;
 }

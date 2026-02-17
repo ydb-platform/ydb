@@ -1,4 +1,5 @@
 from collections import defaultdict
+import random
 import allure
 import logging
 import os
@@ -204,7 +205,7 @@ class StressUtilDeployer:
                     1, int(
                         len(unique_nodes) * nodes_percentage / 100))
 
-                selected_nodes = unique_nodes[:num_nodes]
+                selected_nodes = random.sample(unique_nodes, num_nodes)
 
                 allure.attach(
                     f"Selected {

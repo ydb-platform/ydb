@@ -179,7 +179,8 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
         for host in unique_hosts:
             color = '#ccffcc'
             if host not in stress_result.node_runs:
-                color = "#ffcccc"
+                # color = "#ffcccc"
+                color = "#f3f3f3"
                 table_html += f'<td style="background-color: {color};">Not deployed</td>'
             else:
                 host_successes = stress_result.node_runs[host].get_successful_runs()

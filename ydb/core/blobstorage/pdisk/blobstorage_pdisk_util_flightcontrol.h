@@ -104,7 +104,7 @@ public:
     {
     }
 
-    void InitializeFlightControl(const TString& logPrefix) {
+    void Initialize(const TString& logPrefix) {
         std::visit(
                 [&](auto& control) {
                     control.Initialize(logPrefix);
@@ -112,7 +112,7 @@ public:
                 FlightControl);
     }
 
-    ui64 FlightControlTrySchedule(ui64 size) {
+    ui64 TrySchedule(ui64 size) {
         return std::visit(
                 [&](auto& control) -> ui64 {
                     return control.TrySchedule(size);
@@ -120,7 +120,7 @@ public:
                 FlightControl);
     }
 
-    ui64 FlightControlSchedule(double& blockedMs, ui64 size) {
+    ui64 Schedule(double& blockedMs, ui64 size) {
         return std::visit(
                 [&](auto& control) -> ui64 {
                     return control.Schedule(blockedMs, size);
@@ -128,7 +128,7 @@ public:
                 FlightControl);
     }
 
-    void FlightControlMarkComplete(ui64 idx, ui64 size) {
+    void MarkComplete(ui64 idx, ui64 size) {
         std::visit(
                 [&](auto& control) {
                     control.MarkComplete(idx, size);
@@ -136,7 +136,7 @@ public:
                 FlightControl);
     }
 
-    ui64 FlightControlFirstIncompleteIdx() {
+    ui64 FirstIncompleteIdx() {
         return std::visit(
                 [&](auto& control) -> ui64 {
                     return control.FirstIncompleteIdx();

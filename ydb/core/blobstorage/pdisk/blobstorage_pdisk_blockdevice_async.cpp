@@ -312,7 +312,7 @@ class TRealBlockDevice : public IBlockDevice {
             Device.IncrementMonInFlight(op->GetType(), opSize);
 
             double blockedMs = 0;
-            action->OperationIdx = Device.FlightControl.FlightControlSchedule(blockedMs, opSize);
+            action->OperationIdx = Device.FlightControl.Schedule(blockedMs, opSize);
 
             *Device.Mon.DeviceWaitTimeMs += blockedMs;
 
@@ -467,7 +467,7 @@ class TRealBlockDevice : public IBlockDevice {
             const ui64 opSize = op->GetSize();
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
-            Device.FlightControl.FlightControlMarkComplete(completionAction->OperationIdx, opSize);
+            Device.FlightControl.MarkComplete(completionAction->OperationIdx, opSize);
 
             NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
             NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
@@ -520,7 +520,7 @@ class TRealBlockDevice : public IBlockDevice {
             }
 
             Device.IoContext->DestroyAsyncIoOperation(op);
-            ui64 firstIncompleteIdx = Device.FlightControl.FlightControlFirstIncompleteIdx();
+            ui64 firstIncompleteIdx = Device.FlightControl.FirstIncompleteIdx();
             while (NextPossibleNoop < firstIncompleteIdx) {
                 ui64 i = NextPossibleNoop % MaxWaitingNoops;
                 if (WaitingNoops[i] && WaitingNoops[i]->OperationIdx == NextPossibleNoop) {
@@ -611,7 +611,7 @@ class TRealBlockDevice : public IBlockDevice {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
             const ui64 opSize = op->GetSize();
 
-            action->OperationIdx = Device.FlightControl.FlightControlTrySchedule(opSize);
+            action->OperationIdx = Device.FlightControl.TrySchedule(opSize);
             if (action->OperationIdx == 0) {
                 if (OpScheduleFailedTime == 0) {
                     // If failed to schedule, remember the time to use it when scheduling succeeds.
@@ -883,7 +883,7 @@ protected:
     void Initialize(std::shared_ptr<TPDiskCtx> pCtx) override {
         PCtx = std::move(pCtx);
         Y_VERIFY(PCtx);
-        FlightControl.InitializeFlightControl(PCtx->PDiskLogPrefix);
+        FlightControl.Initialize(PCtx->PDiskLogPrefix);
 
         TString errStr = TDeviceMode::Validate(Flags);
         if (errStr) {

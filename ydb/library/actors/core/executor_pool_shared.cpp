@@ -580,6 +580,7 @@ namespace NActors {
 
     void TSharedExecutorPool::SetBasicPool(TBasicExecutorPool* pool) {
         Pools[pool->PoolId] = pool;
+        pool->MailboxTable = this->MailboxTable;
     }
 
     void TSharedExecutorPool::FillThreadOwners(std::vector<i16>& threadOwners) const {

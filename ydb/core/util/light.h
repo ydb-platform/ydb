@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ydb/core/mon/mon.h>
 
 #include "hp_timer_helpers.h"

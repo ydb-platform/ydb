@@ -181,11 +181,28 @@ TString LoginUser(TTestEnv& env, const TString& database, const TString& user, c
 
     using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
 
-    auto result = NRpcService::DoLocalRpc<TEvLoginRequest>(
-        std::move(request), database, {}, env.GetTestServer().GetRuntime()->GetActorSystem(0)
-    ).ExtractValueSync();
+    // It is bad but easy way to fix problem with error 'Cannot find user ...'
+    auto retryableDoLocalRpc = [&]() -> auto {
+        size_t retriesCount = 3;
 
-    const auto& operation = result.operation();
+        for (size_t i = 0; i < retriesCount; ++i) {
+            auto requestCopy = request;
+            auto result = NRpcService::DoLocalRpc<TEvLoginRequest>(
+                std::move(requestCopy), database, {}, env.GetTestServer().GetRuntime()->GetActorSystem(0)
+            ).ExtractValueSync();
+
+            auto operation = result.operation();
+
+            if (operation.status() == Ydb::StatusIds::SUCCESS) {
+                return operation;
+            }
+        }
+
+        UNIT_ASSERT(false);
+        Y_UNREACHABLE();
+    };
+
+    auto operation = retryableDoLocalRpc();
     UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, operation.issues(0).message());
     Ydb::Auth::LoginResult loginResult;
     operation.result().UnpackTo(&loginResult);

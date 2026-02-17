@@ -5,22 +5,23 @@ SPLIT_FACTOR(50)
 
 IF (WITH_VALGRIND)
     SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 SRCS(
-    kqp_flowcontrol_ut.cpp
-    kqp_scan_ut.cpp
-    kqp_split_ut.cpp
-    kqp_point_consolidation_ut.cpp
+    kqp_indexes_prefixed_vector_ut.cpp
 )
 
 PEERDIR(
+    library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/library/yql/providers/common/http_gateway
+    ydb/library/yql/udfs/common/knn
     yql/essentials/sql/pg_dummy
+    ydb/public/sdk/cpp/adapters/issue
 )
 
 YQL_LAST_ABI_VERSION()

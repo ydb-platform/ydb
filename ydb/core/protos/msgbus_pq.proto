@@ -40,6 +40,11 @@ message TPersQueuePartitionRequest {
         optional uint64 SizeEstimate = 18;
     }
 
+    message TCmdUpdateReadMetrics {
+        optional string ClientId = 1; // mandatory
+        optional uint64 InFlightLimitReachedDurationMs = 2; // if not set, then treat as 0
+    }
+
     message TCmdPublishDirectRead {
         optional TReadSessionKey SessionKey = 1;
         optional uint64 DirectReadId = 2;
@@ -167,6 +172,7 @@ message TPersQueuePartitionRequest {
     optional TCmdRegisterMessageGroup CmdRegisterMessageGroup = 20;
     optional TCmdDeregisterMessageGroup CmdDeregisterMessageGroup = 21;
     optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
+    optional TCmdUpdateReadMetrics CmdUpdateReadMetrics = 29;
 
     optional NActorsProto.TActorId PipeClient = 15;
 

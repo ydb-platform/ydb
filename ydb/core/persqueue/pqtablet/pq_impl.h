@@ -161,6 +161,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleUpdateWriteTimestampRequest)
     DESCRIBE_HANDLE(HandleRegisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest)
+    DESCRIBE_HANDLE(HandleUpdateReadMetricsRequest)
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
 

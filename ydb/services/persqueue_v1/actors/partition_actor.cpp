@@ -160,6 +160,7 @@ TPartitionActor::~TPartitionActor() = default;
 void TPartitionActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
+    ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
 }
 
 const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const {
@@ -742,9 +743,6 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
         dr.GetBytesSizeEstimate()
     );
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " after publish direct read state " << Partition
-                << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " ReadGuid " << ReadGuid << " with direct read id " << DirectReadId);
-
 
     ++DirectReadId;
 
@@ -754,6 +752,10 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
 
     bool isInFlightMemoryOk = PartitionInFlightMemoryController.Add(dr.GetReadOffset(), dr.GetBytesSizeEstimate());
     ReadOffset = dr.GetLastOffset() + 1;
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " after publish direct read " << Partition
+                << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " ReadGuid " << ReadGuid << " with direct read id " << DirectReadId
+                << " isInFlightMemoryOk " << isInFlightMemoryOk);
 
     AFL_ENSURE(!RequestInfly);
 
@@ -807,6 +809,9 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     }
 
     auto isMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+                        << " isMemoryLimitReached " << isMemoryLimitReached << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset
+                        << " read result size " << res.ResultSize());
     if (EndOffset > ReadOffset && !isMemoryLimitReached) {
         SendPartitionReady(ctx);
     } else if (EndOffset == ReadOffset) {
@@ -1031,6 +1036,28 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const 
 
 void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContext& ctx) {
     ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
+}
+
+void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {
+    auto inFlightLimitReachedDuration = PartitionInFlightMemoryController.GetLimitReachedDuration();
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " update read metrics " << Partition
+                        << " inFlightLimitReachedDuration " << inFlightLimitReachedDuration.MilliSeconds());
+
+    NKikimrClient::TPersQueueRequest request;
+    auto req = request.MutablePartitionRequest();
+    req->SetPartition(Partition.Partition);
+    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetInFlightLimitReachedDurationMs(inFlightLimitReachedDuration.MilliSeconds());
+    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetClientId(ClientId);
+
+    TAutoPtr<TEvPersQueue::TEvRequest> persqueueRequest(new TEvPersQueue::TEvRequest);
+    persqueueRequest->Record.Swap(&request);
+
+    ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
+    if (!PipeClient) 
+        return;
+
+    NTabletPipe::SendData(ctx, PipeClient, persqueueRequest.Release());
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {

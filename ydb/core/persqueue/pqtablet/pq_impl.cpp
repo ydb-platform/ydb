@@ -2409,6 +2409,23 @@ void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, NWilso
     ctx.Send(partActor, new TEvPQ::TEvDeregisterMessageGroup(responseCookie, std::move(body.GetRef())), 0, 0, std::move(traceId));
 }
 
+void TPersQueue::HandleUpdateReadMetricsRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
+    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+{
+    AFL_VERIFY_DEBUG(req.HasCmdUpdateReadMetrics());
+
+    if (!req.GetCmdUpdateReadMetrics().HasClientId()) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "source_id is required");
+    }
+
+    auto clientId = req.GetCmdUpdateReadMetrics().GetClientId();
+    TDuration inFlightLimitReachedDuration = TDuration::Zero();
+    if (req.GetCmdUpdateReadMetrics().HasInFlightLimitReachedDurationMs()) {
+        inFlightLimitReachedDuration = TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().GetInFlightLimitReachedDurationMs());
+    }
+    ctx.Send(partActor, new TEvPQ::TEvUpdateReadMetrics(clientId, inFlightLimitReachedDuration), 0, 0, std::move(traceId));
+}
+
 void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
@@ -2724,7 +2741,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         + req.HasCmdDeregisterMessageGroup()
         + req.HasCmdSplitMessageGroup()
         + req.HasCmdPublishRead()
-        + req.HasCmdForgetRead();
+        + req.HasCmdForgetRead()
+        + req.HasCmdUpdateReadMetrics();
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2768,6 +2786,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         HandleDeregisterMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdSplitMessageGroup()) {
         HandleSplitMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
+    } else if (req.HasCmdUpdateReadMetrics()) {
+        HandleUpdateReadMetricsRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else {
         PQ_LOG_ERROR_AND_DIE("unknown or empty command");
         return;

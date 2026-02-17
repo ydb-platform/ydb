@@ -226,7 +226,8 @@ struct TEvPQ {
         EvMLPPurgeRequest,
         EvMLPPurgeResponse,
         EvMLPConsumerStatus,
-        EvEnd
+        EvUpdateReadMetrics,
+        EvEnd,
     };
 
     struct TEvHandleWriteResponse : TEventLocal<TEvHandleWriteResponse, EvHandleWriteResponse> {
@@ -715,6 +716,16 @@ struct TEvPQ {
         {}
 
         TActorId Sender;
+    };
+
+    struct TEvUpdateReadMetrics : TEventLocal<TEvUpdateReadMetrics, EvUpdateReadMetrics> {
+        TEvUpdateReadMetrics(const TString& clientId, TDuration inFlightLimitReachedDuration)
+            : ClientId(clientId)
+            , InFlightLimitReachedDuration(inFlightLimitReachedDuration)
+        {}
+
+        TString ClientId;
+        TDuration InFlightLimitReachedDuration;
     };
 
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {

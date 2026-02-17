@@ -3,8 +3,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 // keep this enum in sync with simmilar enum from ydb/library/yql/utils/log/proto/logger_config.proto
 enum class EComponent {
@@ -228,5 +227,4 @@ public:
 // TODO(YQL-20086): Migrate YDB to TComponentHelpers
 using EComponentHelpers = TComponentHelpers;
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

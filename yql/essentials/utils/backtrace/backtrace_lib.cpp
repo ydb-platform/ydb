@@ -39,8 +39,7 @@ bool Comp(const TDllInfo& a, const TDllInfo& b) {
 
 } // namespace
 
-namespace NYql {
-namespace NBacktrace {
+namespace NYql::NBacktrace {
 TCollectedFrame::TCollectedFrame(uintptr_t addr) {
     File = GetPersistentExecPath().c_str();
     Address = addr;
@@ -74,5 +73,4 @@ size_t CollectFrames(TCollectedFrame* frames, void** stack, size_t cnt) {
     }
     return cnt;
 }
-} // namespace NBacktrace
-} // namespace NYql
+} // namespace NYql::NBacktrace

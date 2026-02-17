@@ -2,8 +2,7 @@
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/ast/yql_expr.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 struct TComputationContext;
 
@@ -24,5 +23,4 @@ std::shared_ptr<NYql::TExprContext> GetExprContextPtr(TComputationContext& ctx, 
 const NYql::TTypeAnnotationNode* GetYqlType(const NUdf::TUnboxedValue& value);
 NYql::TExprNode::TPtr GetYqlCode(const NUdf::TUnboxedValue& value);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

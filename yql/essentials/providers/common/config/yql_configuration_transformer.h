@@ -9,8 +9,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/strbuf.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 class TProviderConfigurationTransformer: public TSyncTransformerBase {
 public:
@@ -41,5 +40,4 @@ THolder<IGraphTransformer> CreateProviderConfigurationTransformer(
     const TTypeAnnotationContext& types,
     const TString& provider);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

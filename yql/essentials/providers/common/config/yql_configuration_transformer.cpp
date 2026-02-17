@@ -8,8 +8,7 @@
 #include <util/generic/maybe.h>
 #include <util/string/vector.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NNodes;
 
@@ -164,5 +163,4 @@ THolder<IGraphTransformer> CreateProviderConfigurationTransformer(
     return THolder(new TProviderConfigurationTransformer(dispatcher, types, provider));
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

@@ -13,8 +13,7 @@
 
 #include <memory>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 struct TWorkerGraph {
     TWorkerGraph(
         const TExprNode::TPtr& exprRoot,
@@ -183,5 +182,4 @@ public:
 protected:
     void Release() override;
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

@@ -11,8 +11,7 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <utility>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 struct TWorkerFactoryOptions {
     IProgramFactoryPtr Factory;
     const TInputSpecBase& InputSpec;
@@ -178,5 +177,4 @@ public:
 public:
     TWorkerHolder<IPushStreamWorker> MakeWorker() override;
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

@@ -7,8 +7,7 @@
 
 #include <util/system/type_name.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 enum class EDictType {
     Sorted,
@@ -1347,5 +1346,4 @@ private:
     const ui32 Index_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

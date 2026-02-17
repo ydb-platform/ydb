@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <NYql::TExprNode::EType Type>
 struct TMakeCodeArgs;
@@ -188,5 +187,4 @@ template IComputationNode* WrapMakeCode<NYql::TExprNode::Callable>(TCallable& ca
 
 template IComputationNode* WrapMakeCode<NYql::TExprNode::Lambda>(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

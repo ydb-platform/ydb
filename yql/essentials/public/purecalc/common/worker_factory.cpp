@@ -574,12 +574,10 @@ DEFINE_WORKER_MAKER(PullStream)
 DEFINE_WORKER_MAKER(PullList)
 DEFINE_WORKER_MAKER(PushStream)
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 template class TWorkerFactory<IPullStreamWorkerFactory>;
 
 template class TWorkerFactory<IPullListWorkerFactory>;
 
 template class TWorkerFactory<IPushStreamWorkerFactory>;
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

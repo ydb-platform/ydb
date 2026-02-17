@@ -9,8 +9,7 @@
 #include <util/system/yassert.h>  // FAIL, VERIFY_DEBUG
 #include <util/generic/ylimits.h> // Max
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
 // TStubTypeVisitor
@@ -714,5 +713,4 @@ inline void TStubTypeVisitor7::OnLinear(const TType* itemType, bool isDynamic) {
 }
 #endif
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

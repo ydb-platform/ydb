@@ -9,8 +9,7 @@ namespace NYT {
 class TNode;
 } // namespace NYT
 
-namespace NYql {
-namespace NResult {
+namespace NYql::NResult {
 
 void EncodeRestrictedYson(
     TYsonResultWriter& writer,
@@ -28,5 +27,4 @@ TString DecodeRestrictedYson(
     const NYT::TNode& node,
     NYson::EYsonFormat format = NYson::EYsonFormat::Binary);
 
-} // namespace NResult
-} // namespace NYql
+} // namespace NYql::NResult

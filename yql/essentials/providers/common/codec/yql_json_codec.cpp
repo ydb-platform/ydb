@@ -10,9 +10,7 @@
 
 #include <cmath>
 
-namespace NYql {
-namespace NCommon {
-namespace NJsonCodec {
+namespace NYql::NCommon::NJsonCodec {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -522,6 +520,4 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
     return NKikimr::NUdf::TUnboxedValuePod();
 }
 
-} // namespace NJsonCodec
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon::NJsonCodec

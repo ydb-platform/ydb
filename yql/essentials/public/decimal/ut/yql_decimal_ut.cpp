@@ -3,8 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NYql {
-namespace NDecimal {
+namespace NYql::NDecimal {
 Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
 void SimplePositiveTest(TInt128 v, ui8 precision, ui8 scale, const TString& expected) {
     TString result = ToString(v, precision, scale);
@@ -347,5 +346,4 @@ Y_UNIT_TEST(TestWideMul) {
 }
 } // Y_UNIT_TEST_SUITE(TYqlDecimalTest)
 
-} // namespace NDecimal
-} // namespace NYql
+} // namespace NYql::NDecimal

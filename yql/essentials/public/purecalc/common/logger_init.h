@@ -2,9 +2,7 @@
 
 #include "interface.h"
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 void InitLogging(const TLoggingOptions& options);
 void EnsureLoggingInitialized();
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

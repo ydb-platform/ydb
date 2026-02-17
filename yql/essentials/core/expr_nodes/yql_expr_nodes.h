@@ -6,8 +6,7 @@
 #include <util/generic/map.h>
 #include <util/string/cast.h>
 
-namespace NYql {
-namespace NNodes {
+namespace NYql::NNodes {
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.decl.inl.h>
 
@@ -397,5 +396,4 @@ private:
     TMaybeNode<TCoArguments> Args_;
 };
 
-} // namespace NNodes
-} // namespace NYql
+} // namespace NYql::NNodes

@@ -7,8 +7,7 @@
     ::NYql::NLog::YqlLogger(), ::NYql::NLog::EComponent::Perf, level, \
     ::NYql::NLog::TContextPreprocessor, file, line)
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 TProfilingScope::~TProfilingScope() {
     if (Name_ == nullptr) {
@@ -44,5 +43,4 @@ TProfilingScope::~TProfilingScope() {
     }
 }
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

@@ -1,8 +1,7 @@
 #include "yql_user_data.h"
 #include <util/folder/iterator.h>
 
-namespace NYql {
-namespace NUserData {
+namespace NYql::NUserData {
 
 void TUserData::UserDataToLibraries(
     const TVector<TUserData>& userData,
@@ -37,5 +36,4 @@ void TUserData::FillFromFolder(
     }
 }
 
-} // namespace NUserData
-} // namespace NYql
+} // namespace NYql::NUserData

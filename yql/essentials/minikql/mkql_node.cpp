@@ -9,8 +9,7 @@
 #include <util/stream/str.h>
 #include <util/string/join.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 #define MKQL_SWITCH_ENUM_TYPE_TO_STR(name, val) \
     case val:                                   \
@@ -2312,5 +2311,4 @@ TArrayRef<TType* const> GetWideComponents(const TType* type) {
     MKQL_ENSURE(false, "Expect either flow or stream");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

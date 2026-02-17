@@ -5,8 +5,7 @@
 
 #include <library/cpp/resource/resource.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -194,5 +193,4 @@ bool BuildLexerSettings(
     return result.Settings.ApplyTo(settings, issues);
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

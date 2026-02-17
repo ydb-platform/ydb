@@ -27,11 +27,9 @@
 
 #include <functional>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 class IFunctionRegistry;
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 

@@ -17,8 +17,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -132,5 +131,4 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     return true;
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

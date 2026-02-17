@@ -21,8 +21,7 @@ extern "C" void* UdfAllocate(ui64 size);
 extern "C" void UdfFree(const void* mem);
 #endif
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 template <typename Type>
 struct TStdAllocatorForUdf {
@@ -109,5 +108,4 @@ struct TWithUdfAllocator {
 #endif
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

@@ -7,8 +7,7 @@
 
 #include <util/generic/maybe.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * Processing mode for working with raw protobuf message inputs.
  *
@@ -250,5 +249,4 @@ struct TOutputSpecTraits<TProtobufRawMultiOutputSpec> {
     static TPullListReturnType ConvertPullListWorkerToOutputType(const TProtobufRawMultiOutputSpec&, TWorkerHolder<IPullListWorker>);
     static void SetConsumerToWorker(const TProtobufRawMultiOutputSpec&, IPushStreamWorker*, THolder<IConsumer<TOutputItemType>>);
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

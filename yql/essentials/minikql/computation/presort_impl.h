@@ -6,10 +6,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace NDetail {
+namespace NKikimr::NMiniKQL::NDetail {
 
 using NYql::SwapBytes;
 
@@ -243,7 +240,4 @@ Y_FORCE_INLINE TStringBuf DecodeString(TStringBuf& input, TVector<ui8>& value) {
     auto end = (const char*)value.end() - BlockSize + code;
     return TStringBuf(begin, end - begin);
 }
-} // namespace NDetail
-
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL::NDetail

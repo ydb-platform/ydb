@@ -2,8 +2,7 @@
 
 #include "yql/essentials/minikql/mkql_string_util.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 void ThrowNotSupportedImplForClass(const TString& className, const char* func) {
     THROW yexception() << "Unsupported access to '" << func << "' method of: " << className;
@@ -913,5 +912,4 @@ void CleanupCurrentContext() {
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

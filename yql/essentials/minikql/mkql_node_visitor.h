@@ -8,8 +8,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <functional>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class INodeVisitor {
 public:
@@ -201,5 +200,4 @@ typedef std::function<TCallableVisitFunc(const TInternName& name)> TCallableVisi
 TRuntimeNode SinglePassVisitCallables(TRuntimeNode root, TExploringNodeVisitor& explorer,
                                       const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool inPlace, bool& wereChanges);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

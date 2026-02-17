@@ -3,8 +3,8 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 namespace {
 
@@ -733,5 +733,5 @@ bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& 
     return true;
 }
 
-} // namespace NTypeAnnImpl
-}
+} // namespace NYql::NTypeAnnImpl
+

@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TFormatTypeWrapper: public TMutableComputationNode<TFormatTypeWrapper> {
     typedef TMutableComputationNode<TFormatTypeWrapper> TBaseComputation;
@@ -38,5 +37,4 @@ IComputationNode* WrapFormatType(TCallable& callable, const TComputationNodeFact
     return new TFormatTypeWrapper(ctx.Mutables, handle);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -18,8 +18,7 @@
 
 #include <utility>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace NDetails {
 
@@ -167,5 +166,4 @@ public:
 bool IsLegacyStructBlock(const TType* type, ui32& blockLengthIndex, TVector<const TBlockType*>& items);
 bool IsMultiBlock(const TType* type, ui32& blockLengthIndex, TVector<const TBlockType*>& items);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

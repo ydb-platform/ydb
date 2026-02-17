@@ -23,8 +23,7 @@
 #include <util/string/cast.h>
 #include <util/generic/map.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -1446,5 +1445,4 @@ TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikim
     YQL_ENSURE(false, "Unsupported type: " << type->GetKind());
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

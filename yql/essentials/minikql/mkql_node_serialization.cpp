@@ -11,8 +11,7 @@
 #include <util/generic/algorithm.h>
 #include <util/system/unaligned_mem.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
@@ -2290,5 +2289,4 @@ TRuntimeNode DeserializeRuntimeNode(const TStringBuf& buffer, const TTypeEnviron
     return reader.Deserialize();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -11,8 +11,7 @@
 
 #include <optional>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 namespace {
 
 using namespace NProtoBuf;
@@ -522,5 +521,4 @@ bool AvoidOptionalScalars(bool syntaxAware, const FieldDescriptor* fd) {
     return syntaxAware && fd->file()->syntax() == FileDescriptor::SYNTAX_PROTO3;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

@@ -50,13 +50,11 @@ size_t BackTrace(void** p, size_t len, ucontext_t* con) {
 }
 } // namespace
 
-namespace NYql {
-namespace NBacktrace {
+namespace NYql::NBacktrace {
 size_t CollectBacktrace(void** addresses, size_t limit, void* data) {
     if (!data) {
         return BackTrace(addresses, limit);
     }
     return BackTrace(addresses, limit, reinterpret_cast<ucontext_t*>(data));
 }
-} // namespace NBacktrace
-} // namespace NYql
+} // namespace NYql::NBacktrace

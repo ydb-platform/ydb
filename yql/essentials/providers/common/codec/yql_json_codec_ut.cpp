@@ -8,9 +8,7 @@
 
 #include <util/string/cast.h>
 
-namespace NYql {
-namespace NCommon {
-namespace NJsonCodec {
+namespace NYql::NCommon::NJsonCodec {
 
 using namespace NYql::NCommon;
 using namespace NKikimr;
@@ -808,6 +806,4 @@ Y_UNIT_TEST(WrongFormatEx) {
 }
 } // Y_UNIT_TEST_SUITE(DeserializeDateTypes)
 
-} // namespace NJsonCodec
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon::NJsonCodec

@@ -3,9 +3,7 @@
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 
-namespace NKikimr {
-
-namespace NCHash {
+namespace NKikimr::NCHash {
 
 void TListPoolBase::FreeListPage(TListHeader* p) {
     Y_ASSERT(TAlignedPagePool::GetPageStart(p) == p);
@@ -57,6 +55,4 @@ TString TListPoolBase::TUsedPages::DebugInfo() const {
     return out.Str();
 }
 
-} // namespace NCHash
-
-} // namespace NKikimr
+} // namespace NKikimr::NCHash

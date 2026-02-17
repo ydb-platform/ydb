@@ -5,8 +5,7 @@
 #include <util/system/info.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 class TScopedMemoryMapper {
@@ -193,5 +192,4 @@ Y_UNIT_TEST(YellowZoneZeroDivision) {
 
 } // Y_UNIT_TEST_SUITE(TAlignedPagePoolTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -27,8 +27,7 @@
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TType* ExtractDictTypeFromMutDic(const TExprNode& node, TMkqlBuildContext& ctx) {
     auto tag = node.GetTypeAnn()->Cast<TLinearExprType>()->GetItemType()->Cast<TResourceExprType>()->GetTag();
@@ -3163,5 +3162,4 @@ TRuntimeNode MkqlBuildExpr(const TExprNode& node, TMkqlBuildContext& ctx) {
     }
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

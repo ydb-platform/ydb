@@ -23,8 +23,7 @@
 
 #include <regex>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -427,5 +426,4 @@ IUdfResolver::TPtr CreateOutProcUdfResolver(
     return new TOutProcUdfResolver(functionRegistry, fileStorage, resolverPath, user, group, filterSyscalls, udfDependencyStubPath, path2md5);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

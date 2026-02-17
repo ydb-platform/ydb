@@ -2,8 +2,7 @@
 
 #include <yql/essentials/public/purecalc/purecalc.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 class TFakeInputSpec: public TInputSpecBase {
 public:
     TVector<NYT::TNode> Schemas = {NYT::TNode::CreateList()};
@@ -51,5 +50,4 @@ NYT::TNode MakeFakeSchema(bool pg = false);
 TFakeInputSpec FakeIS(ui32 inputsNumber = 1, bool pg = false);
 TFakeOutputSpec FakeOS(bool pg = false);
 TFakeOutputSpec FakeStructOS();
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

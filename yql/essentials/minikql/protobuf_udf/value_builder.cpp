@@ -7,8 +7,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 using namespace NProtoBuf;
 
@@ -345,5 +344,4 @@ TUnboxedValue FillValueFromProto(
     return value;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

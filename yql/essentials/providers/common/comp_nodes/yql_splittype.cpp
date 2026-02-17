@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <NYql::ETypeAnnotationKind Kind>
 class TSplitTypeWrapper: public TMutableComputationNode<TSplitTypeWrapper<Kind>> {
@@ -259,5 +258,4 @@ template IComputationNode* WrapSplitType<NYql::ETypeAnnotationKind::Pg>(TCallabl
 
 template IComputationNode* WrapSplitType<NYql::ETypeAnnotationKind::Linear>(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

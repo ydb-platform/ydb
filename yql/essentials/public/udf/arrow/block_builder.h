@@ -17,8 +17,7 @@
 
 #include <deque>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class IArrayBuilder {
 public:
@@ -1510,5 +1509,4 @@ inline std::unique_ptr<IScalarBuilder> MakeScalarBuilder(const ITypeInfoHelper& 
     return nullptr;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

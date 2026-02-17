@@ -6,8 +6,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 class IMkqlCallableCompiler;
 
@@ -115,5 +114,4 @@ NKikimr::NMiniKQL::TRuntimeNode MkqlBuildExpr(const TExprNode& node, TMkqlBuildC
 NKikimr::NMiniKQL::TRuntimeNode MkqlBuildLambda(const TExprNode& lambda, TMkqlBuildContext& ctx, const NKikimr::NMiniKQL::TRuntimeNode::TList& args);
 NKikimr::NMiniKQL::TRuntimeNode::TList MkqlBuildWideLambda(const TExprNode& lambda, TMkqlBuildContext& ctx, const NKikimr::NMiniKQL::TRuntimeNode::TList& args);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

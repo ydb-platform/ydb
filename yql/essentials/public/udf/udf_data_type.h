@@ -8,8 +8,7 @@
 #include <util/generic/strbuf.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 using TDataTypeId = ui16;
 
@@ -360,5 +359,4 @@ inline IOutputStream& operator<<(IOutputStream& os, EDataSlot slot) {
     return os;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

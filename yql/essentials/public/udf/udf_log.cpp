@@ -4,8 +4,7 @@
 #include <util/generic/maybe.h>
 #include <util/string/join.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 namespace {
 
@@ -200,5 +199,4 @@ TUniquePtr<ILogProvider> MakeLogProvider(TLogProviderFunc func, TMaybe<ELogLevel
     return new TLogProvider(func, filter);
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

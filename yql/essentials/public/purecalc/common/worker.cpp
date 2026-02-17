@@ -643,12 +643,10 @@ void TPushStreamWorker::PrepareCheckState(bool finish) {
     Y_UNUSED(finish);
 }
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 template class TWorker<IPullStreamWorker>;
 
 template class TWorker<IPullListWorker>;
 
 template class TWorker<IPushStreamWorker>;
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

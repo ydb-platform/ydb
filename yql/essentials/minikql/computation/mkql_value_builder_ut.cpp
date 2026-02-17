@@ -12,14 +12,12 @@
 #include <arrow/scalar.h>
 #include <arrow/chunked_array.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
 TString PgValueToNativeBinary(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon
 
 namespace NKikimr {
 

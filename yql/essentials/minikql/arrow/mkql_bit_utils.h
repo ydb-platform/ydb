@@ -2,8 +2,7 @@
 #include <util/system/types.h>
 #include <yql/essentials/public/udf/arrow/bit_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 inline ui64 SaturationSub(ui64 x, ui64 y) {
     // simple code produces cmov (same result as commented one)
@@ -158,5 +157,4 @@ using NYql::NUdf::CompressArray;
 using NYql::NUdf::CompressAsSparseBitmap;
 using NYql::NUdf::DecompressToSparseBitmap;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

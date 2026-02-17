@@ -476,8 +476,7 @@ private:
 
 } // namespace
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
 {
@@ -572,5 +571,4 @@ void FillStaticModules(IMutableFunctionRegistry& registry) {
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

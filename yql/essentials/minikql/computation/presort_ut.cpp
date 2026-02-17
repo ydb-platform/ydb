@@ -11,8 +11,7 @@
 
 using namespace std::literals::string_view_literals;
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -670,5 +669,4 @@ Y_UNIT_TEST(GenericDict) {
 
 } // Y_UNIT_TEST_SUITE(TPresortCodecTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

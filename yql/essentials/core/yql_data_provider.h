@@ -18,11 +18,11 @@
 class IRandomProvider;
 class ITimeProvider;
 
-namespace NKikimr  {
-    namespace NMiniKQL {
-        class IFunctionRegistry;
-    }
+
+namespace NKikimr::NMiniKQL {
+class IFunctionRegistry;
 }
+
 
 namespace NYql {
 

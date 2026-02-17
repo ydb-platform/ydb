@@ -5,8 +5,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
-namespace NYql {
-namespace NNodes {
+namespace NYql::NNodes {
 
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.decl.inl.h>
 
@@ -60,5 +59,4 @@ private:
     BuildFuncType BuildFunc_;
 };
 
-} // namespace NNodes
-} // namespace NYql
+} // namespace NYql::NNodes

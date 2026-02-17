@@ -253,6 +253,7 @@ class TDataShard
     class TTxMediatorStateRestored;
 
     class TTxLockRows;
+    class TLockRowsTxObserver;
 
     void HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev);
     void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev);

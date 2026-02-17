@@ -67,6 +67,44 @@ private:
     std::function<ETxLockRows(TTransactionContext&)> Lambda;
 };
 
+class TDataShard::TLockRowsTxObserver : public NTable::ITransactionObserver {
+public:
+    TRowVersion VolatileVersion = TRowVersion::Min();
+
+    TLockRowsTxObserver(TDataShard& self)
+        : Self(self)
+    {}
+
+    void OnSkipUncommitted(ui64 txId) override {
+        if (auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId)) {
+            if (info->State != EVolatileTxState::Aborting) {
+                VolatileVersion = Max(VolatileVersion, info->Version);
+            }
+        } else {
+            Self.SysLocksTable().AddReadConflict(txId);
+        }
+    }
+
+    void OnSkipCommitted(const TRowVersion&) override {
+        // We don't read from snapshot and should never skip committed deltas
+    }
+
+    void OnSkipCommitted(const TRowVersion&, ui64) override {
+        // We don't read from snapshot and should never skip committed deltas
+    }
+
+    void OnApplyCommitted(const TRowVersion&) override {
+        // We don't conflict with committed rows
+    }
+
+    void OnApplyCommitted(const TRowVersion&, ui64) override {
+        // We don't conflict with committed rows
+    }
+
+private:
+    TDataShard& Self;
+};
+
 void TDataShard::CheckLockRowsRejectAll() {
     bool cancelled = false;
     for (auto it = LockRowsRequests.begin(); it != LockRowsRequests.end(); ++it) {
@@ -350,11 +388,24 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
     TVector<TSysLocks::TLock> takenLocks;
     auto applyLocks = [&]() {
+        bool ok = true;
         auto res = SysLocksTable().ApplyLocks();
         if (!res.first.empty()) {
+            Y_ENSURE(res.first.size() == 1);
+            if (!takenLocks.empty()) {
+                Y_ENSURE(takenLocks.size() == 1);
+                // Perform a a very simplistic lock merge
+                ok = (
+                    takenLocks[0].Generation == res.first[0].Generation ||
+                    takenLocks[0].Counter == res.first[0].Counter);
+            }
             takenLocks = std::move(res.first);
+            if (!ok) {
+                takenLocks[0].Counter = TSysTables::TLocksTable::TLock::ErrorBroken;
+            }
         }
         SubscribeNewLocks();
+        return ok;
     };
 
     TRuntimeLockHolder runtimeLock;
@@ -415,8 +466,12 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 // breaking the lock immediately due to concurrent serializable
                 // transactions.
 
-                // TODO: add transaction observer to gather uncommitted conflicts
-                auto row = txc.DB.SelectRowVersion(localTid, key);
+                // This observer will detect conflicts with uncommitted
+                // changes, including undecided volatile transactions.
+                auto observer = MakeIntrusive<TLockRowsTxObserver>(*this);
+
+                // Probe the key until the first persistently committed version
+                auto row = txc.DB.SelectRowVersion(localTid, key, /* readFlags */ 0, /* tx map */ nullptr, observer);
 
                 // Handle page fault by restarting or rescheduling
                 if (row.Ready == NTable::EReady::Page) {
@@ -431,8 +486,10 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     return ETxLockRows::Restart;
                 }
 
-                // TODO: we may need to wait for undecided changes and use a txmap
-                const bool modified = row.RowVersion > snapshot;
+                // Undecided volatile transactions will have non-zero VolatileVersion
+                // We don't wait until they are decided and return a modified flag
+                // instead. A subsequent re-read will wait for the decision.
+                const bool modified = row.RowVersion > snapshot || observer->VolatileVersion > snapshot;
 
                 // Special case when this lock is already the key owner
                 // We must not add ourselves to the wait queue in that case
@@ -505,6 +562,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     }
                 }
 
+                GetConflictsCache().GetTableCache(localTid).AddUncommittedWrite(key, lockId, txc.DB);
                 txc.DB.LockRowTx(localTid, NTable::ELockMode::Exclusive, typedKey, lockId);
                 SysLocksTable().SetWriteLock(tableId, key);
                 advanced = true;
@@ -522,6 +580,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
             for (const auto& lock : takenLocks) {
                 success->AddLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
                                 lock.SchemeShard, lock.PathId, lock.HasWrites);
+                if (lock.IsError()) {
+                    success->Record.SetStatus(NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
+                }
             }
             state.Result = std::move(success);
             return ETxLockRows::CommitSync;
@@ -552,8 +613,8 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 // Wait until runtime lock becomes the owner
                 co_await WithAsyncContinuation<void>([&](auto continuation) {
                     // TODO: we need to somehow notify the service about new waiting graph edges,
-                    // which must also take into account that requests may be cancelled while
-                    // then wait, and the previous runtime lock in the waiting list might change.
+                    // which must also take into account that earlier requests may be cancelled while
+                    // we wait, and the previous runtime lock in the waiting list might change.
                     resumeCallback.Continuation = std::move(continuation);
                     runtimeLock.AddActivationCallback(resumeCallback);
                     setWaiting(true);

@@ -4758,6 +4758,10 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
         return false;
     }
 
+    if (res.LockTxId != 0) {
+        BreakWriteConflict(res.LockTxId, volatileDependencies);
+    }
+
     return true;
 }
 

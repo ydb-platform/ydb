@@ -13,10 +13,13 @@
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
+#include <util/string/hex.h>
 
 
 namespace NKikimr::NTabletFlatExecutor::NRecovery {
@@ -797,52 +800,34 @@ public:
     TBackupReader(TActorId owner, const TString& backupPath)
         : Owner(owner)
         , BackupPath(backupPath)
+        , SnapshotDirPath(BackupPath.Child("snapshot"))
+        , SchemaFilePath(SnapshotDirPath.Child("schema.json"))
+        , ChangelogFilePath(BackupPath.Child("changelog.json"))
     {}
 
     void Bootstrap() {
-        auto snapshotDir = BackupPath.Child("snapshot");
-        if (!snapshotDir.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << snapshotDir);
+        if (!SnapshotDirPath.Exists()) {
+            return SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
         }
 
-        auto schemaFile = snapshotDir.Child("schema.json");
-        if (!schemaFile.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << schemaFile);
+        if (!ValidateManifest(SnapshotDirPath)) {
+            return;
         }
 
-        auto changelogFile = BackupPath.Child("changelog.json");
-        if (!changelogFile.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Changelog file doesn't exist: " << changelogFile);
+        if (!SchemaFilePath.Exists()) {
+            return SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << SchemaFilePath);
         }
 
-        // Calculate total size and collect snapshot files
+        if (!ChangelogFilePath.Exists()) {
+            return SendResultAndDie(false, TStringBuilder() << "Changelog file doesn't exist: " << ChangelogFilePath);
+        }
+
         ui64 totalBytes = 0;
-
         try {
-            TFileStat stat(changelogFile);
-            totalBytes += stat.Size;
+            totalBytes = CalculateTotalSize();
         } catch (const TIoException& e) {
-            return SendResultAndDie(false, TStringBuilder() << "Cannot get size of " << changelogFile << ": " << e.what());
+            return SendResultAndDie(false, TStringBuilder() << "Cannot calculate total size: " << e.what());
         }
-
-        TVector<TFsPath> snapshotFiles;
-        snapshotDir.List(snapshotFiles);
-
-        for (const auto& file : snapshotFiles) {
-            if (file.Basename() != "schema.json") {
-                SnapshotFiles.push_back(file);
-            }
-
-            try {
-                TFileStat stat(file);
-                totalBytes += stat.Size;
-            } catch (const TIoException& e) {
-                return SendResultAndDie(false, TStringBuilder() << "Cannot get size of " << file << ": " << e.what());
-            }
-        }
-
-        SchemaFilePath = schemaFile;
-        ChangelogFilePath = changelogFile;
 
         Send(Owner, new TEvBackupInfo(totalBytes));
         Become(&TThis::StateWork);
@@ -938,6 +923,118 @@ public:
         }
     }
 
+    bool ValidateManifest(const TFsPath& snapshotDir) {
+        auto manifestFile = snapshotDir.Child("manifest.json");
+        if (!manifestFile.Exists()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest file doesn't exist: " << manifestFile);
+            return false;
+        }
+
+        TString manifestStr;
+        try {
+            manifestStr = TFileInput(manifestFile).ReadAll();
+        } catch (const TIoException& e) {
+            SendResultAndDie(false, TStringBuilder() << "Failed to read manifest" << manifestFile << ": " << e.what());
+            return false;
+        }
+
+        auto manifestChecksumFile = snapshotDir.Child("manifest.json.sha256");
+        if (!manifestChecksumFile.Exists()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest checksum file doesn't exist: " << manifestChecksumFile);
+            return false;
+        }
+
+        TString expectedManifestChecksum;
+        try {
+            expectedManifestChecksum = TFileInput(manifestChecksumFile).ReadAll();
+        } catch (const TIoException& e) {
+            SendResultAndDie(false, TStringBuilder() << "Failed to read manifest checksum: " << manifestChecksumFile << ": " << e.what());
+            return false;
+        }
+
+        auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
+        TString actualManifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+        if (actualManifestChecksum != expectedManifestChecksum) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest checksum mismatch: "
+                                                     << "expected " << expectedManifestChecksum
+                                                     << ", got " << actualManifestChecksum);
+            return false;
+        }
+
+        NJson::TJsonValue manifest;
+        try {
+            NJson::ReadJsonTree(manifestStr, &manifest, true);
+        } catch (const std::exception& e) {
+            SendResultAndDie(false, TStringBuilder() << "Failed to parse manifest: " << manifestFile << ": " << e.what());
+            return false;
+        }
+
+        for (const auto& fileEntry : manifest["files"].GetArray()) {
+            if (!fileEntry.Has("name") || !fileEntry["name"].IsString()) {
+                SendResultAndDie(false, TStringBuilder() << "Manifest file entry is missing 'name' field: " << fileEntry);
+                return false;
+            }
+
+            if (!fileEntry.Has("sha256") || !fileEntry["sha256"].IsString()) {
+                SendResultAndDie(false, TStringBuilder() << "Manifest file entry is missing 'sha256' field: " << fileEntry);
+                return false;
+            }
+
+            TString name = fileEntry["name"].GetString();
+            TString expectedFileSha256 = fileEntry["sha256"].GetString();
+
+            auto filePath = snapshotDir.Child(name);
+            if (!filePath.Exists()) {
+                SendResultAndDie(false, TStringBuilder() << "File listed in manifest not found: " << filePath);
+                return false;
+            }
+
+            TString basename = filePath.Basename();
+            if (basename != "schema.json") {
+                SnapshotFiles.push_back(filePath);
+            }
+
+            NOpenSsl::NSha256::TCalcer calcer;
+            try {
+                TFileInput input(filePath, 1_MB);
+                char buf[64_KB];
+                size_t bytesRead;
+                while ((bytesRead = input.Read(buf, sizeof(buf))) > 0) {
+                    calcer.Update(buf, bytesRead);
+                }
+            } catch (const TIoException& e) {
+                SendResultAndDie(false, TStringBuilder() << "Failed to read file " << filePath << " for checksum validation: " << e.what());
+                return false;
+            }
+
+            auto fileDigest = calcer.Final();
+            TString actualFileSha256 = to_lower(HexEncode(fileDigest.data(), fileDigest.size()));
+            if (actualFileSha256 != expectedFileSha256) {
+                SendResultAndDie(false, TStringBuilder() << "Checksum mismatch for " << filePath
+                                         << ": expected " << expectedFileSha256
+                                         << ", got " << actualFileSha256);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    ui64 CalculateTotalSize() const {
+        ui64 totalBytes = 0;
+        totalBytes += GetFileSize(ChangelogFilePath);
+        totalBytes += GetFileSize(SchemaFilePath);
+        for (const auto& file : SnapshotFiles) {
+            totalBytes += GetFileSize(file);
+        }
+        return totalBytes;
+    }
+
+    ui64 GetFileSize(const TFsPath& path) const {
+        TFileStat stat(path);
+        return stat.Size;
+    }
+
     void SendResultAndDie(bool success, const TString& error = "") {
         Send(Owner, new TEvBackupReaderResult(success, error));
         PassAway();
@@ -947,8 +1044,10 @@ private:
     const TActorId Owner;
     const TFsPath BackupPath;
 
-    TFsPath SchemaFilePath;
-    TFsPath ChangelogFilePath;
+    const TFsPath SnapshotDirPath;
+    const TFsPath SchemaFilePath;
+    const TFsPath ChangelogFilePath;
+
     TDeque<TFsPath> SnapshotFiles;
 
     TFsPath CurrentFilePath;

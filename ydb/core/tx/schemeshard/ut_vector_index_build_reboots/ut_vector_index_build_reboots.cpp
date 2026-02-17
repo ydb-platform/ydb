@@ -105,19 +105,19 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
     // Without killOnCommit, the schemeshard doesn't get rebooted on TEvDataShard::Ev***KMeansResponse's,
     // and thus the vector index build process is never interrupted at all because there are no other
     // events to reboot on.
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCase, 1 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, true /*killOnCommit*/) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCase, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, true /*killOnCommit*/) {
         DoTestIndexBuild(t, false, false);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Prefixed, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, true /*killOnCommit*/) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Prefixed, 4 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, true /*killOnCommit*/) {
         DoTestIndexBuild(t, true, false);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Overlap, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, true /*killOnCommit*/) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Overlap, 4 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, true /*killOnCommit*/) {
         DoTestIndexBuild(t, false, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(PrefixedOverlap, 4 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, true /*killOnCommit*/) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(PrefixedOverlap, 8 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, true /*killOnCommit*/) {
         DoTestIndexBuild(t, true, true);
     }
 }

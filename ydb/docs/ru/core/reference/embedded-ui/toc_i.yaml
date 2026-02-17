@@ -1,21 +1,17 @@
 items:
-- name: Обзор
-  href: overview.md
-  hidden: true
-- name: Viewer
-  href: viewer.md
-  when: false
 - name: YDB Monitoring
-  href: ydb-monitoring.md
+  href: ydb-monitoring/index.md
   items:
+  - name: Главная страница
+    href: ydb-monitoring/monitoring_main.md
   - name: Страница Databases
-    href: database.md
+    href: ydb-monitoring/database.md
   - name: Страница Nodes
-    href: nodes.md
+    href: ydb-monitoring/nodes.md
   - name: Страница Storage
-    href: storage.md
+    href: ydb-monitoring/storage.md
   - name: Страница Tablets
-    href: tablets.md
+    href: ydb-monitoring/tablets.md
 - name: Hive web-viewer
   href: hive.md
 - name: Обзор соединений

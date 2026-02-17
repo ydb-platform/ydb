@@ -1,13 +1,13 @@
-# Страница Storage
+# Страница Storage {#storage_page}
 
-Страница открывается при переходе по **Group ID** с вкладки [Storage](ydb-monitoring.md#storage_list).
+Страница открывается при переходе по **Group ID** с вкладки [Storage](monitoring_main.md#storage_list).
 
 На странице отображаются контекст и детальные атрибуты выбранной группы:
 
-![Storage-page-top](_assets/storage_page_top.png)
+![Storage-page-top](../_assets/storage_page_top.png)
 
-* **Pool Name** — имя [пула хранения](../../concepts/glossary.md#storage-pool);
-* **Storage Group** — идентификатор [группы хранения](../../concepts/glossary.md#storage-group);
+* **Pool Name** — имя [пула хранения](../../../concepts/glossary.md#storage-pool);
+* **Storage Group** — идентификатор [группы хранения](../../../concepts/glossary.md#storage-group);
 * **Group Generation** — поколение конфигурации группы;
 * **Erasure Species** — используемая схема отказоустойчивости;
 * **Media Type** — тип носителя;
@@ -25,14 +25,14 @@
 * **Read Throughput** — пропускная способность чтения;
 * **Write Throughput** — пропускная способность записи.
 
-Страница также содержит таблицу в том же формате, что и на вкладке [Storage](ydb-monitoring.md#storage_list) главной страницы — сводная информация о группах хранения, в данном случае по выбранной группе.
+Страница также содержит таблицу в том же формате, что и на вкладке [Storage](monitoring_main.md#storage_list) главной страницы — сводная информация о группах хранения, в данном случае по выбранной группе.
 
-![Storage-page-bottom](_assets/storage_page_bottom.png)
+![Storage-page-bottom](../_assets/storage_page_bottom.png)
 
 В таблице отображаются:
 
-* **Group ID** — идентификатор [группы хранения](../../concepts/glossary.md#storage-group);
-* **Pool Name** — имя [пула хранения](../../concepts/glossary.md#storage-pool);
+* **Group ID** — идентификатор [группы хранения](../../../concepts/glossary.md#storage-group);
+* **Pool Name** — имя [пула хранения](../../../concepts/glossary.md#storage-pool);
 * **Erasure** — схема отказоустойчивости;
 * **Used** — объём занятого дискового пространства и доля использования;
-* **VDisks** — состояние [виртуальных дисков](../../concepts/glossary.md#vdisk), входящих в группу.
+* **VDisks** — состояние [виртуальных дисков](../../../concepts/glossary.md#vdisk), входящих в группу.

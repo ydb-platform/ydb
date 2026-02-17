@@ -2294,6 +2294,8 @@ public:
                                 }
 
                                 add_index->mutable_global_fulltext_relevance_index();
+                            } else if (type == "globalJson") {
+                                add_index->mutable_global_json_index();
                             } else if (type == "localBloomFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2437,6 +2439,7 @@ public:
                         case Ydb::Table::TableIndex::kGlobalIndex:
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                        case Ydb::Table::TableIndex::kGlobalJsonIndex:
                             // no settings validation
                             break;
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {

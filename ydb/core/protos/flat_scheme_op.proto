@@ -1190,6 +1190,7 @@ enum EIndexType {
     EIndexTypeGlobalVectorKmeansTree = 4;
     EIndexTypeGlobalFulltextPlain = 5;
     EIndexTypeGlobalFulltextRelevance = 6;
+    EIndexTypeGlobalJson = 7;
 }
 
 enum EIndexState {
@@ -2045,6 +2046,7 @@ enum EPathSubType {
     EPathSubTypeStreamImpl = 3;
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
     EPathSubTypeFulltextIndexImplTable = 5;
+    EPathSubTypeJsonIndexImplTable = 6;
 }
 
 enum EPathState {

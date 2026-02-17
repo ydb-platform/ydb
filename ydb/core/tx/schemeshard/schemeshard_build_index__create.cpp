@@ -315,6 +315,11 @@ private:
             buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
             break;
         }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalJsonIndex: {
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
+            break;
+        }
         case Ydb::Table::TableIndex::TypeCase::kLocalBloomFilterIndex:
         case Ydb::Table::TableIndex::TypeCase::kLocalBloomNgramFilterIndex:
             explain = "Local bloom indexes are not supported by index build operation";

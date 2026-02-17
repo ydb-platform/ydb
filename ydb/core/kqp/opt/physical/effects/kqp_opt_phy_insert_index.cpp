@@ -204,6 +204,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
         std::optional<TExprBase> upsertIndexRows;
         switch (indexDesc->Type) {
+            case TIndexDescription::EType::GlobalJson:
             case TIndexDescription::EType::GlobalAsync:
                 AFL_ENSURE(false);
             case TIndexDescription::EType::GlobalSync:

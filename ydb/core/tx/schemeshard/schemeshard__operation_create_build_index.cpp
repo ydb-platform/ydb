@@ -78,6 +78,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalJson: {
+            break;
+        }
         default:
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
@@ -217,6 +220,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
             NKikimrSchemeOp::TTableDescription indexTableDesc;
             if (indexDesc.IndexImplTableDescriptionsSize() == 1) {

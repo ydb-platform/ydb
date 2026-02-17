@@ -1,6 +1,6 @@
 # Страница Databases
 
-Страница открывается при переходе по ссылке из колонки **Database** на вкладке [Databases](tab-databases.md#database_list).
+Страница открывается при переходе по ссылке из колонки **Database** на вкладке [Databases](tab-databases.md#database_list) [главной страницы](monitoring_main.md).
 
 Пример интерфейса:
 
@@ -46,11 +46,13 @@
 * **Info** — базовая информация;
 * **Queries** — данные по запросам;
 * **Top shards** — наиболее загруженные шарды;
-* **Nodes** — узлы, связанные с объектом;
-* **Tablets** — обслуживающие таблетки;
-* **Storage** — данные по хранилищу;
+* **Nodes** — узлы, связанные с объектом; см. [вкладку Nodes](tab-nodes.md) и [страницу Nodes](nodes.md);
+* **Tablets** — обслуживающие таблетки; см. [вкладку Tablets](tab-tablets.md) и [страницу Tablets](tablets.md);
+* **Storage** — данные по хранилищу; см. [вкладку Storage](tab-storage.md) и [страницу Storage](storage.md);
 * **Network** — параметры сетевого взаимодействия;
 * **Describe** — описание объекта;
 * **Configs** — конфигурационные параметры;
 * **Access** — информация о правах доступа;
 * **Operations** — текущие и завершенные операции.
+
+См. также: [страница Nodes](nodes.md), [страница Storage](storage.md), [страница Tablets](tablets.md).

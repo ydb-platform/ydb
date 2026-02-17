@@ -6,7 +6,7 @@
 http://<ендпоинт>:8765/monitoring/node/<node-id>/
 ```
 
-Страница открывается при переходе по ссылке из колонки **Host** на вкладке [Nodes](tab-nodes.md#nodes_list).
+Страница открывается при переходе по ссылке из колонки **Host** на вкладке [Nodes](tab-nodes.md#nodes_list) [главной страницы](monitoring_main.md).
 
 Пример страницы узла:
 
@@ -61,6 +61,8 @@ http://<ендпоинт>:8765/monitoring/node/<node-id>/
 
 На странице также доступны вкладки с данными по выбранному узлу:
 
-* **Storage** — группы хранения, связанные с узлом;
-* **Tablets** — таблетки, работающие на узле, с группировкой по типам;
+* **Storage** — группы хранения, связанные с узлом; см. [вкладку Storage](tab-storage.md) и [страницу Storage](storage.md);
+* **Tablets** — таблетки, работающие на узле, с группировкой по типам; см. [вкладку Tablets](tab-tablets.md) и [страницу Tablets](tablets.md);
 * **Threads** — использование потоков и CPU по пулам.
+
+См. также: [страница Databases](database.md), [страница Storage](storage.md), [страница Tablets](tablets.md).

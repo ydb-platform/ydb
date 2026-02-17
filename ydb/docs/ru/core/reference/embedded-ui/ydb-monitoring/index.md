@@ -18,7 +18,5 @@
 ## Страницы мониторинга
 
 * [Главная страница](monitoring_main.md) — обзор кластера и вкладки Databases, Nodes, Storage, Tablets, Versions;
-* [Страница Databases](database.md) — интерфейс базы данных (Query, Diagnostics);
-* [Страница Nodes](nodes.md) — детальная информация об узле;
-* [Страница Storage](storage.md) — детальная информация о группе хранения;
-* [Страница Tablets](tablets.md) — детальная информация о таблетке.
+* Вкладки главной страницы: [Databases](tab-databases.md), [Nodes](tab-nodes.md), [Storage](tab-storage.md), [Tablets](tab-tablets.md), [Versions](tab-versions.md);
+* Страницы с детальной информацией: [Databases](database.md), [Nodes](nodes.md), [Storage](storage.md), [Tablets](tablets.md).

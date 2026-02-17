@@ -4778,7 +4778,9 @@ public:
             return true;
         }
         if (CurrentStateFunc() == &TThis::StatePrepare) {
-            if (--PendingPrepareShards == 0) {
+            // PendingPrepareShards was already decremented by
+            // HandleDeferredLocksBrokenOnPrepare (called before HandleError).
+            if (PendingPrepareShards == 0) {
                 FlushPendingLocksBrokenError();
             }
             return true;
@@ -4787,12 +4789,18 @@ public:
         return false;
     }
 
-    // Handle a deferred LOCKS_BROKEN error during prepare phase.
-    // Optionally collects stats from a shard response record.
+    // Account for a prepare-phase shard response and, when a deferred
+    // LOCKS_BROKEN error exists, check whether all shards have responded.
+    // The decrement is unconditional so that PREPARED responses arriving
+    // before the first LOCKS_BROKEN are counted correctly (otherwise the
+    // counter would never reach 0 and the actor would hang).
     bool HandleDeferredLocksBrokenOnPrepare(const NKikimrDataEvents::TEvWriteResult* record = nullptr) {
+        if (PendingPrepareShards > 0) {
+            --PendingPrepareShards;
+        }
         if (!PendingLocksBrokenError) return false;
         if (record) CollectTliStats(*record);
-        if (--PendingPrepareShards == 0) {
+        if (PendingPrepareShards == 0) {
             FlushPendingLocksBrokenError();
         }
         return true;

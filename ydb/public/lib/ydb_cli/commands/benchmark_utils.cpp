@@ -32,6 +32,34 @@ namespace NYdb::NConsoleClient::BenchmarkUtils {
 
 using namespace NYdb;
 
+NQuery::TTxControl GetTxControl(ETxMode txMode) {
+    if (txMode == ETxMode::NoTx) {
+        return NQuery::TTxControl::NoTx();
+    }
+
+    NQuery::TTxSettings txSettings;
+    switch (txMode) {
+    case ETxMode::SerializableRW:
+        txSettings = NQuery::TTxSettings::SerializableRW();
+        break;
+    case ETxMode::OnlineRO:
+        txSettings = NQuery::TTxSettings::OnlineRO();
+        break;
+    case ETxMode::StaleRO:
+        txSettings = NQuery::TTxSettings::StaleRO();
+        break;
+    case ETxMode::SnapshotRO:
+        txSettings = NQuery::TTxSettings::SnapshotRO();
+        break;
+    case ETxMode::SnapshotRW:
+        txSettings = NQuery::TTxSettings::SnapshotRW();
+        break;
+    default:
+        Y_UNREACHABLE();
+    }
+    return NQuery::TTxControl::BeginTx(txSettings).CommitTx();
+}
+
 TTestInfo::TTestInfo(std::vector<TTiming>&& timings)
     : Timings(std::move(timings))
 {
@@ -318,10 +346,12 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, TStringBuf expected, NQu
         return *error;
     }
     THolder<TQueryResultScanner> composite;
-    const auto resStatus = client.RetryQuerySync([&composite, &benchmarkSettings, &query, &settings](NQuery::TQueryClient& qc) -> TStatus {
+    const auto txMode = benchmarkSettings.TxMode;
+    const auto resStatus = client.RetryQuerySync([&composite, &benchmarkSettings, &query, &settings, txMode](NQuery::TQueryClient& qc) -> TStatus {
+        auto txControl = GetTxControl(txMode);
         auto it = qc.StreamExecuteQuery(
             query,
-            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            txControl,
             settings).GetValueSync();
         if (!it.IsSuccess()) {
             return it;

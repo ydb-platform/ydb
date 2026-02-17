@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tx_mode.h"
 #include "ydb_workload.h"
 
 namespace NYdb::NConsoleClient {
@@ -29,6 +30,7 @@ private:
 private:
     class TIterationExecution;
     TString OutFilePath;
+    ETxMode TxMode = ETxMode::SerializableRW;
     ui32 IterationsCount;
     TString JsonReportFileName;
     TString CsvReportFileName;

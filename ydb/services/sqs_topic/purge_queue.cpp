@@ -56,7 +56,6 @@ namespace NKikimr::NSqsTopic::V1 {
         ~TPurgeQueueActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
-            CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
 
             if (this->Request().queue_url().empty()) {

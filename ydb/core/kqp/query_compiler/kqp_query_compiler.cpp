@@ -1685,7 +1685,7 @@ private:
             THashSet<TStringBuf> localDefaultColumns; // for shards DefaultColumnsCount feature
             if (Config->GetEnableIndexStreamWrite()) {
                 for (const auto& columnNameAtom : settings.DefaultColumns()) {
-                    const auto& columnName = columnNameAtom.StringValue();
+                    const auto columnName = TStringBuf(columnNameAtom);
                     const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                     YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 

@@ -301,6 +301,10 @@ protected:
                             break; // skip here - there will be an error when we will build tasks.
                     }
                 }
+            } else {
+                // TODO: make sure we don't miss any shards
+                // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
+                // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
             }
         }
 

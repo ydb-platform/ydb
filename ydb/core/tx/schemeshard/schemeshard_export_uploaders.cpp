@@ -52,13 +52,13 @@ protected:
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
+        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
             return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
-        } else if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+        } else if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>) {
             return NKikimrServices::TActivity::EXPORT_FS_UPLOADER_ACTOR;
-        } else {
-            Y_ABORT("Unsupported storage type in backup task");
         }
+
+        Y_ABORT("Unsupported storage type in backup task");
     }
 
     // Adds a file to queue.

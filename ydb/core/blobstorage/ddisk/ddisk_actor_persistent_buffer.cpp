@@ -137,6 +137,7 @@ namespace NKikimr::NDDisk {
         ui64 lsn, ui32 offsetInBytes, ui32 sizeInBytes, TRope&& payload, const std::vector<TPersistentBufferSectorInfo>& sectors) {
         auto headerData = TRcBuf::Uninitialized(SectorSize);
         TPersistentBufferHeader *header = (TPersistentBufferHeader*)headerData.GetDataMut();
+        memset(header, 0, SectorSize);
         memcpy(header->Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
         header->TabletId = tabletId;
         header->VChunkIndex = vchunkIndex;

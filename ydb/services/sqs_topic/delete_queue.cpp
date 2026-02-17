@@ -149,11 +149,12 @@ namespace NKikimr::NSqsTopic::V1 {
                 auto* pqDescr = modifyScheme.MutableAlterPersQueueGroup();
                 pqDescr->SetName(name);
                 pqDescr->MutablePQTabletConfig()->CopyFrom(PQGroup.GetPQTabletConfig());
-                pqDescr->MutablePQTabletConfig()->ClearPartitionKeySchema();
                 auto removeConsumerPred = [this](const auto& consumer) {
                     return consumer.GetName() == QueueUrl_->Consumer;
                 };
                 EraseIf(*pqDescr->MutablePQTabletConfig()->MutableConsumers(), removeConsumerPred);
+                pqDescr->MutablePQTabletConfig()->ClearPartitionKeySchema();
+                pqDescr->ClearTotalGroupCount();
                 TString error;
                 Ydb::StatusIds::StatusCode code = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(topicRequest, *pqDescr, AppData(ctx), error, false);
                 if (code != Ydb::StatusIds::SUCCESS) {

@@ -191,8 +191,9 @@ namespace NKikimr::NSqsTopic::V1 {
                 auto* pqDescr = modifyScheme.MutableAlterPersQueueGroup();
                 pqDescr->SetName(name);
                 pqDescr->MutablePQTabletConfig()->CopyFrom(PQGroup.GetPQTabletConfig());
-                pqDescr->MutablePQTabletConfig()->ClearPartitionKeySchema();
                 pqDescr->MutablePQTabletConfig()->AddConsumers()->CopyFrom(ConsumerConfig.Consumer);
+                pqDescr->MutablePQTabletConfig()->ClearPartitionKeySchema();
+                pqDescr->ClearTotalGroupCount();
                 TString error;
                 Ydb::StatusIds::StatusCode code = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(topicRequest, *pqDescr, AppData(ctx), error, false);
                 if (code != Ydb::StatusIds::SUCCESS) {

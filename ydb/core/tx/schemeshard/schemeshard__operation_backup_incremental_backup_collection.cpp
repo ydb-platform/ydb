@@ -260,7 +260,6 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 // Get index implementation table (single child of index)
                 auto indexPath = TPath::Init(childPathId, context.SS);
                 for (const auto& [implTableName, implTablePathId]: indexPath.Base()->GetChildren()) {
-
                     // Build relative path to index impl table (relative to working dir)
                     const TString indexImplTableRelPath = JoinPath({relativeItemPath, childName, implTableName});
 

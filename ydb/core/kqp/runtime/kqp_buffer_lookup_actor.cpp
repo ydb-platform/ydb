@@ -419,7 +419,11 @@ public:
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
             Settings.TxManager->SetError(shardId);
-            SetVictimQuerySpanIdFromBrokenLocks(record.GetBrokenTxLocks(), Settings.TxManager);
+            if (record.HasDeferredVictimQuerySpanId()) {
+                Settings.TxManager->SetVictimQuerySpanId(record.GetDeferredVictimQuerySpanId());
+            } else {
+                SetVictimQuerySpanIdFromBrokenLocks(shardId, record.GetBrokenTxLocks(), Settings.TxManager);
+            }
             RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                 MakeLockInvalidatedMessage(Settings.TxManager, lookupState.Worker->GetTablePath()));
@@ -427,11 +431,8 @@ public:
         }
 
         for (const auto& lock : record.GetTxLocks()) {
-            if (!Settings.TxManager->AddLock(shardId, lock)) {
+            if (!Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId)) {
                 YQL_ENSURE(Settings.TxManager->BrokenLocks());
-                if (Settings.QuerySpanId != 0) {
-                    Settings.TxManager->SetVictimQuerySpanId(Settings.QuerySpanId);
-                }
                 RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                     MakeLockInvalidatedMessage(Settings.TxManager, lookupState.Worker->GetTablePath()));

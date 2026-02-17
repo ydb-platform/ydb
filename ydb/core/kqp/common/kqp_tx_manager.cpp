@@ -89,7 +89,7 @@ public:
         }
     }
 
-    bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto) override {
+    bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto, ui64 querySpanId, ui64 deferredVictimQuerySpanId) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         TKqpLock lock(lockProto);
         bool isError = (lock.Proto.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
@@ -97,6 +97,12 @@ public:
                             || (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
         bool isLocksAcquireFailure = isError && !isInvalidated;
         bool broken = false;
+
+        // For broken locks from the shard (error counter), prefer deferredVictimQuerySpanId
+        // which the shard computed based on whether the lock was already broken or deferred.
+        // For non-error locks, use querySpanId (the current query that set the lock).
+        ui64 effectiveVictimSpanId = (isError && deferredVictimQuerySpanId != 0)
+            ? deferredVictimQuerySpanId : querySpanId;
 
         auto& shardInfo = ShardsInfo.at(shardId);
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
@@ -110,6 +116,14 @@ public:
                 lockPtr->Invalidated |= isInvalidated;
             }
             broken = lockPtr->Invalidated || lockPtr->LocksAcquireFailure;
+
+            if (broken && isInvalidated) {
+                // For broken locks from shard: use effectiveVictimSpanId (from shard's determination).
+                // For comparison-based invalidation: use the original lock setter's SpanId.
+                ui64 victimSpanId = (isError && effectiveVictimSpanId != 0)
+                    ? effectiveVictimSpanId : lockPtr->VictimQuerySpanId;
+                SetVictimQuerySpanId(victimSpanId);
+            }
         } else {
             shardInfo.Locks.emplace(
                 lock.GetKey(),
@@ -117,8 +131,13 @@ public:
                     .Lock = std::move(lock),
                     .Invalidated = isInvalidated,
                     .LocksAcquireFailure = isLocksAcquireFailure,
+                    .VictimQuerySpanId = effectiveVictimSpanId,
                 });
             broken = isInvalidated || isLocksAcquireFailure;
+
+            if (broken && isInvalidated) {
+                SetVictimQuerySpanId(effectiveVictimSpanId);
+            }
         }
 
         if (broken && !LocksIssue && State != ETransactionState::ERROR) {
@@ -352,6 +371,20 @@ public:
         return VictimQuerySpanId_;
     }
 
+    std::optional<ui64> LookupVictimQuerySpanId(ui64 shardId, const NKikimrDataEvents::TLock& lockProto) const override {
+        auto shardIt = ShardsInfo.find(shardId);
+        if (shardIt == ShardsInfo.end()) {
+            return std::nullopt;
+        }
+        TKqpLock lock(lockProto);
+        auto lockIt = shardIt->second.Locks.find(lock.GetKey());
+        if (lockIt == shardIt->second.Locks.end()) {
+            return std::nullopt;
+        }
+        ui64 spanId = lockIt->second.VictimQuerySpanId;
+        return spanId != 0 ? std::make_optional(spanId) : std::nullopt;
+    }
+
     void SetShardBreakerQuerySpanId(ui64 shardId, ui64 querySpanId) override {
         if (querySpanId == 0) {
             return;
@@ -581,7 +614,7 @@ private:
             TKqpLock Lock;
             bool Invalidated = false;
             bool LocksAcquireFailure = false;
-            ui64 BreakerQuerySpanId = 0;  // QuerySpanId of the query that modified this lock
+            ui64 VictimQuerySpanId = 0;
         };
 
         THashMap<TKqpLock::TKey, TLockInfo> Locks;

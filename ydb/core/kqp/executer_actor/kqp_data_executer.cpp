@@ -3071,8 +3071,12 @@ private:
         ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
             brokenLock.GetSchemeShard(),
             brokenLock.GetPathId());
-        if (brokenLock.HasQuerySpanId()) {
-            ResponseEv->BrokenLockQuerySpanId = brokenLock.GetQuerySpanId();
+        if (TxManager) {
+            auto victimSpanId = TxManager->LookupVictimQuerySpanId(brokenLock.GetDataShard(), brokenLock);
+            if (victimSpanId) {
+                TxManager->SetVictimQuerySpanId(*victimSpanId);
+                ResponseEv->BrokenLockQuerySpanId = *victimSpanId;
+            }
         }
     }
 
@@ -3082,6 +3086,8 @@ private:
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
+                ui64 deferredVictimSpanId = info.HasDeferredVictimQuerySpanId()
+                    ? info.GetDeferredVictimQuerySpanId() : 0;
                 for (auto& lock : info.GetLocks()) {
                     if (!TxManager) {
                         Locks.push_back(lock);
@@ -3094,11 +3100,7 @@ private:
                     if (TxManager) {
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
-                        if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
-                            if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
-                                TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
-                            }
-                        }
+                        TxManager->AddLock(lock.GetDataShard(), lock, Request.QuerySpanId, deferredVictimSpanId);
                     }
                 }
 
@@ -3142,14 +3144,8 @@ private:
                         }
 
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        // Pass the lock's QuerySpanId to track which query wrote to this shard
-                        ui64 querySpanId = lock.HasQuerySpanId() ? lock.GetQuerySpanId() : 0;
-                        TxManager->AddAction(lock.GetDataShard(), flags, querySpanId);
-                        if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
-                            if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
-                                TxManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
-                            }
-                        }
+                        TxManager->AddAction(lock.GetDataShard(), flags, Request.QuerySpanId);
+                        TxManager->AddLock(lock.GetDataShard(), lock, Request.QuerySpanId);
                     }
                 }
             }

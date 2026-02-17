@@ -2605,21 +2605,6 @@ private:
         ValidationInfo.SetLoaded();
     }
 
-    // Set QuerySpanId on a lock proto for broken locks only (VictimQuerySpanId).
-    // For successful locks, KQP already knows the QuerySpanId from the request.
-    static void SetLockQuerySpanId(NKikimrDataEvents::TLock* addLock, const TSysTables::TLocksTable::TLock& lock,
-                                    TSysLocks& sysLocks)
-    {
-        if (lock.IsError()) {
-            if (auto rawLock = sysLocks.GetRawLock(lock.LockId)) {
-                ui64 id = rawLock->GetVictimQuerySpanId();
-                if (id != 0) {
-                    addLock->SetQuerySpanId(id);
-                }
-            }
-        }
-    }
-
     // Handle deferred lock break detection: determine victim, log TLI events, and
     // pass breaker info to SessionActor via the result proto.
     void HandleDeferredLockBreak(TReadIteratorState& state, TSysLocks& sysLocks, const TActorContext& ctx) {
@@ -2659,6 +2644,8 @@ private:
 
         // In deferred lock scenarios, emit breaker logs and pass info to SessionActor
         if (victimQuerySpanId) {
+            Result->Record.SetDeferredVictimQuerySpanId(*victimQuerySpanId);
+
             auto breakerInfos = Self->FindBreakerInfoForTli(state.ReadVersion);
             TVector<ui64> victimIds = {*victimQuerySpanId};
             for (const auto& info : breakerInfos) {
@@ -2736,8 +2723,6 @@ private:
             if (lock.HasWrites) {
                 addLock->SetHasWrites(true);
             }
-
-            SetLockQuerySpanId(addLock, lock, sysLocks);
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
                 << " Acquired lock# " << lock.LockId << ", counter# " << lock.Counter

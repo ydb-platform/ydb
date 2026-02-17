@@ -1075,6 +1075,10 @@ public:
             }
         }
 
+        if (record.HasDeferredVictimQuerySpanId() && DeferredVictimQuerySpanId == 0) {
+            DeferredVictimQuerySpanId = record.GetDeferredVictimQuerySpanId();
+        }
+
         if (UseFollowers) {
             YQL_ENSURE(Locks.empty());
         }
@@ -1531,6 +1535,9 @@ public:
             resultInfo.AddDeferredBreakerQuerySpanIds(breaker.QuerySpanId);
             resultInfo.AddDeferredBreakerNodeIds(breaker.NodeId);
         }
+        if (DeferredVictimQuerySpanId) {
+            resultInfo.SetDeferredVictimQuerySpanId(DeferredVictimQuerySpanId);
+        }
         if (Settings->GetIsBatch() && !BatchOperationMaxRow.GetCells().empty()) {
             std::vector<TCell> keyRow;
             auto cells = BatchOperationMaxRow.GetCells();
@@ -1608,6 +1615,7 @@ private:
         ui32 NodeId = 0;
     };
     TVector<TDeferredBreakerInfo> DeferredBreakers;
+    ui64 DeferredVictimQuerySpanId = 0;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 

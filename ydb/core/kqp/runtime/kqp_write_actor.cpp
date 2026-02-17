@@ -985,7 +985,7 @@ public:
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
 
-            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record, TxManager);
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager);
             RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
@@ -1051,16 +1051,10 @@ public:
         // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
+                if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock, CurrentQuerySpanId)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
-                    // STATUS_COMPLETED response TxStats don't include LocksBrokenAsVictim,
-                    // but the lock invalidation detected by AddLock means this is a victim.
                     Stats.LocksBrokenAsVictim += 1;
                     YQL_ENSURE(TxManager->BrokenLocks());
-                    // Use actor's current QuerySpanId (KQP knows which request placed the lock)
-                    if (CurrentQuerySpanId != 0) {
-                        TxManager->SetVictimQuerySpanId(CurrentQuerySpanId);
-                    }
                     RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
                     return;
                 }
@@ -4545,7 +4539,7 @@ public:
             CollectTliStats(ev->Get()->Record);
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
-            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record, TxManager);
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager);
             if (TryDeferLocksBrokenError(ev->Get()->Record.GetOrigin(), MakeLockIssues(TxManager, getIssues()))) {
                 return;
             }

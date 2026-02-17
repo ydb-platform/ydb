@@ -6,26 +6,18 @@
 namespace NKikimr {
 namespace NKqp {
 
-// Helper: extract VictimQuerySpanId from the first broken lock in a WriteResult record.
-inline void SetVictimQuerySpanIdFromBrokenLocks(const NKikimrDataEvents::TEvWriteResult& record,
-    const IKqpTransactionManagerPtr& txManager)
-{
-    for (const auto& lock : record.GetTxLocks()) {
-        if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
-            txManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
-            return;
-        }
-    }
-}
-
-// Helper: extract VictimQuerySpanId from the first broken lock in a ReadResult response.
+// Helper: look up VictimQuerySpanId from broken locks stored in TxManager and set it.
+// Used when STATUS_LOCKS_BROKEN is received and we need to find
+// the victim's QuerySpanId from TxManager's stored lock entries.
+template <typename TLockCollection>
 inline void SetVictimQuerySpanIdFromBrokenLocks(
-    const google::protobuf::RepeatedPtrField<NKikimrDataEvents::TLock>& brokenLocks,
+    ui64 shardId,
+    const TLockCollection& locks,
     const IKqpTransactionManagerPtr& txManager)
 {
-    for (const auto& lock : brokenLocks) {
-        if (lock.HasQuerySpanId() && lock.GetQuerySpanId() != 0) {
-            txManager->SetVictimQuerySpanId(lock.GetQuerySpanId());
+    for (const auto& lock : locks) {
+        if (auto victimSpanId = txManager->LookupVictimQuerySpanId(shardId, lock)) {
+            txManager->SetVictimQuerySpanId(*victimSpanId);
             return;
         }
     }

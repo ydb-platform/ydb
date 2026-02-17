@@ -6,7 +6,7 @@
 http://<ендпоинт>:8765/monitoring/node/<node-id>/
 ```
 
-Страница открывается при переходе по ссылке из колонки **Host** на вкладке [Nodes](monitoring_main.md#nodes_list).
+Страница открывается при переходе по ссылке из колонки **Host** на вкладке [Nodes](tab-nodes.md#nodes_list).
 
 Пример страницы узла:
 

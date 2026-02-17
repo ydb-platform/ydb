@@ -4,13 +4,24 @@ items:
   items:
   - name: Главная страница
     href: ydb-monitoring/monitoring_main.md
-  - name: Страница Databases
+    items:
+    - name: Вкладка Databases
+      href: ydb-monitoring/tab-databases.md
+    - name: Вкладка Nodes
+      href: ydb-monitoring/tab-nodes.md
+    - name: Вкладка Storage
+      href: ydb-monitoring/tab-storage.md
+    - name: Вкладка Tablets
+      href: ydb-monitoring/tab-tablets.md
+    - name: Вкладка Versions
+      href: ydb-monitoring/tab-versions.md
+  - name: Databases
     href: ydb-monitoring/database.md
-  - name: Страница Nodes
+  - name: Nodes
     href: ydb-monitoring/nodes.md
-  - name: Страница Storage
+  - name: Storage
     href: ydb-monitoring/storage.md
-  - name: Страница Tablets
+  - name: Tablets
     href: ydb-monitoring/tablets.md
 - name: Hive web-viewer
   href: hive.md

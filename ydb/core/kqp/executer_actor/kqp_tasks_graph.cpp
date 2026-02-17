@@ -3178,16 +3178,16 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
             };
 
             if (stage.SinksSize() > 0) {
-                YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
                 AFL_ENSURE(stage.OutputTransformsSize() == 0);
-                const auto& sink = stage.GetSinks(0);
 
-                if (!sink.HasInternalSink()) {
-                    continue;
+                for (const auto& sink : stage.GetSinks()) {
+                    if (!sink.HasInternalSink()) {
+                        continue;
+                    }
+
+                    const auto& intSink = sink.GetInternalSink();
+                    addSink(intSink);
                 }
-
-                const auto& intSink = sink.GetInternalSink();
-                addSink(intSink);
             }
             if (stage.OutputTransformsSize() > 0) {
                 AFL_ENSURE(stage.OutputTransformsSize() == 1);

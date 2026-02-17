@@ -5,6 +5,7 @@
 #include <aws/sqs/SQSClient.h>
 
 namespace NYdb::NConsoleClient {
+    using namespace Aws::SQS::Model;
 
     class TSQSJsonClient: public Aws::SQS::SQSClient {
     public:
@@ -13,13 +14,16 @@ namespace NYdb::NConsoleClient {
             const Aws::Client::ClientConfiguration& clientConfiguration);
         ~TSQSJsonClient() = default;
 
-        Aws::SQS::Model::SendMessageBatchOutcome SendMessageBatch(
-            const Aws::SQS::Model::SendMessageBatchRequest& request) const override;
-        Aws::SQS::Model::ReceiveMessageOutcome ReceiveMessage(
-            const Aws::SQS::Model::ReceiveMessageRequest& request) const override;
-        Aws::SQS::Model::DeleteMessageBatchOutcome DeleteMessageBatch(
-            const Aws::SQS::Model::DeleteMessageBatchRequest& request)
+        SendMessageBatchOutcome SendMessageBatch(
+            const SendMessageBatchRequest& request) const override;
+        ReceiveMessageOutcome ReceiveMessage(
+            const ReceiveMessageRequest& request) const override;
+        DeleteMessageBatchOutcome DeleteMessageBatch(
+            const DeleteMessageBatchRequest& request)
             const override;
+        GetQueueUrlOutcome GetQueueUrl(
+            const GetQueueUrlRequest& request) const override;
+
 
     private:
         std::shared_ptr<Aws::Http::HttpClient> HttpClient;

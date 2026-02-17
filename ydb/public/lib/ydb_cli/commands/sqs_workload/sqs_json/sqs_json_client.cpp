@@ -7,6 +7,7 @@
 #include <aws/core/utils/HashingUtils.h>
 #include <aws/core/utils/memory/stl/SimpleStringStream.h>
 #include <aws/sqs/model/DeleteMessageBatchRequest.h>
+#include <aws/sqs/model/GetQueueUrlRequest.h>
 #include <aws/sqs/model/MessageSystemAttributeNameForSends.h>
 #include <aws/sqs/model/ReceiveMessageRequest.h>
 #include <aws/sqs/model/SendMessageBatchRequest.h>
@@ -179,8 +180,8 @@ namespace NYdb::NConsoleClient {
         return request;
     }
 
-    Aws::SQS::Model::SendMessageBatchOutcome TSQSJsonClient::SendMessageBatch(
-        const Aws::SQS::Model::SendMessageBatchRequest& sendMessageBatchRequest)
+    SendMessageBatchOutcome TSQSJsonClient::SendMessageBatch(
+        const SendMessageBatchRequest& sendMessageBatchRequest)
         const {
         const auto& queueUrl = sendMessageBatchRequest.GetQueueUrl();
         auto request = CreateBaseRequest(queueUrl);
@@ -288,8 +289,8 @@ namespace NYdb::NConsoleClient {
         return outcome;
     }
 
-    Aws::SQS::Model::ReceiveMessageOutcome TSQSJsonClient::ReceiveMessage(
-        const Aws::SQS::Model::ReceiveMessageRequest& receiveMessageRequest) const {
+    ReceiveMessageOutcome TSQSJsonClient::ReceiveMessage(
+        const ReceiveMessageRequest& receiveMessageRequest) const {
         const auto& queueUrl = receiveMessageRequest.GetQueueUrl();
         auto request = CreateBaseRequest(queueUrl);
         AddHeaders(receiveMessageRequest.GetAdditionalCustomHeaders(), request);
@@ -432,8 +433,8 @@ namespace NYdb::NConsoleClient {
         return Aws::SQS::Model::ReceiveMessageOutcome(result);
     }
 
-    Aws::SQS::Model::DeleteMessageBatchOutcome TSQSJsonClient::DeleteMessageBatch(
-        const Aws::SQS::Model::DeleteMessageBatchRequest& deleteMessageBatchRequest)
+    DeleteMessageBatchOutcome TSQSJsonClient::DeleteMessageBatch(
+        const DeleteMessageBatchRequest& deleteMessageBatchRequest)
         const {
         const auto& queueUrl = deleteMessageBatchRequest.GetQueueUrl();
         auto request = CreateBaseRequest(queueUrl);
@@ -506,6 +507,58 @@ namespace NYdb::NConsoleClient {
         }
 
         return Aws::SQS::Model::DeleteMessageBatchOutcome(result);
+    }
+
+    GetQueueUrlOutcome TSQSJsonClient::GetQueueUrl(
+        const GetQueueUrlRequest& getQueueUrlRequest) const {
+        const Aws::String endpoint = EndpointOverride.empty()
+            ? Aws::String("https://sqs.ru-central1.amazonaws.com/")
+            : EndpointOverride;
+        auto request = CreateBaseRequest(endpoint);
+        AddHeaders(getQueueUrlRequest.GetAdditionalCustomHeaders(), request);
+
+        Aws::Utils::Json::JsonValue jsonRequest;
+        jsonRequest.WithString("QueueName", getQueueUrlRequest.GetQueueName());
+        if (getQueueUrlRequest.QueueOwnerAWSAccountIdHasBeenSet()) {
+            jsonRequest.WithString("QueueOwnerAWSAccountId",
+                                  getQueueUrlRequest.GetQueueOwnerAWSAccountId());
+        }
+
+        auto jsonBody = jsonRequest.View().WriteCompact();
+        auto bodyStream =
+            Aws::MakeShared<Aws::SimpleStringStream>("json-body", jsonBody);
+        request->SetContentLength(
+            Aws::Utils::StringUtils::to_string(jsonBody.size()));
+        request->AddContentBody(bodyStream);
+
+        request->SetHeaderValue("x-amz-target", "AmazonSQS.GetQueueUrl");
+
+        Signer->SignRequest(*request);
+
+        auto response = HttpClient->MakeRequest(request);
+        if (response->GetResponseCode() != Aws::Http::HttpResponseCode::OK) {
+            Aws::SQS::SQSError error;
+            error.SetResponseHeaders(response->GetHeaders());
+            error.SetResponseCode(response->GetResponseCode());
+            return Aws::SQS::Model::GetQueueUrlOutcome(error);
+        }
+
+        auto responseJson = ReadResponseBody(*response);
+        if (!responseJson.WasParseSuccessful()) {
+            Aws::SQS::SQSError error;
+            error.SetResponseHeaders(response->GetHeaders());
+            error.SetResponseCode(response->GetResponseCode());
+            error.SetMessage(responseJson.GetErrorMessage());
+            return Aws::SQS::Model::GetQueueUrlOutcome(error);
+        }
+
+        Aws::SQS::Model::GetQueueUrlResult result;
+        const auto& view = responseJson.View();
+        if (view.KeyExists("QueueUrl")) {
+            result.SetQueueUrl(view.GetString("QueueUrl"));
+        }
+
+        return Aws::SQS::Model::GetQueueUrlOutcome(result);
     }
 
 } // namespace NYdb::NConsoleClient

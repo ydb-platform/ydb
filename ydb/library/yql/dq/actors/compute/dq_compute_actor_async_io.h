@@ -253,13 +253,6 @@ struct IDqAsyncLookupSource {
         {
             if (fullscanLimit > 0) {
                 Y_DEBUG_ABORT_UNLESS(resultRows <= fullscanLimit);
-                Y_DEBUG_ABORT_UNLESS(([result, resultRows]() {
-                    auto locked = result.lock();
-                    if (!locked) {
-                        return true;
-                    }
-                    return locked->size() <= resultRows;
-                }()));
             }
         }
         std::weak_ptr<TUnboxedValueMap> Result;

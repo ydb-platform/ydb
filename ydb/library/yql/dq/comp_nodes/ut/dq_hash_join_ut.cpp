@@ -53,6 +53,7 @@ struct TJoinTestData {
     std::optional<ui64> JoinMemoryConstraint = std::nullopt;
     int BlockSize = 128;
     bool SliceBlocks = false;
+    bool LeftIsBuild = false;
 };
 
 void FilterRenamesForSemiAndOnlyJoins(TJoinTestData& td) {
@@ -250,6 +251,18 @@ TJoinTestData EmptyRightInnerTestData() {
     return td;
 }
 
+[[maybe_unused]] TJoinTestData LeftJoinTestDataLeftIsBuild() {
+    auto td = LeftJoinTestData();
+    td.LeftIsBuild = true;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinWithMatchesTestDataLeftIsBuild() {
+    auto td = LeftJoinWithMatchesTestData();
+    td.LeftIsBuild = true;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData LeftJoinSpillingTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -362,6 +375,24 @@ TJoinTestData EmptyRightInnerTestData() {
     return td;
 }
 
+[[maybe_unused]] TJoinTestData LeftJoinSpillingTestDataLeftIsBuild() {
+    auto td = LeftJoinSpillingTestData();
+    td.LeftIsBuild = true;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinSpillingTwoKeysTestDataLeftIsBuild() {
+    auto td = LeftJoinSpillingTwoKeysTestData();
+    td.LeftIsBuild = true;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftJoinSpillingMultiKeyTestDataLeftIsBuild() {
+    auto td = LeftJoinSpillingMultiKeyTestData();
+    td.LeftIsBuild = true;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData LargeBothSidesInnerSpillingTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -470,6 +501,12 @@ TJoinTestData EmptyRightInnerTestData() {
     return td;
 }
 
+[[maybe_unused]] TJoinTestData LargeBothSidesLeftSpillingTestDataLeftIsBuild() {
+    auto td = LargeBothSidesLeftSpillingTestData();
+    td.LeftIsBuild = true;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData SlicedBlocksInnerSpillingTestData() {
     auto td = LargeBothSidesInnerSpillingTestData();
     td.SliceBlocks = true;
@@ -479,6 +516,13 @@ TJoinTestData EmptyRightInnerTestData() {
 [[maybe_unused]] TJoinTestData SlicedBlocksLeftSpillingTestData() {
     auto td = LargeBothSidesLeftSpillingTestData();
     td.SliceBlocks = true;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData SlicedBlocksLeftSpillingTestDataLeftIsBuild() {
+    auto td = LargeBothSidesLeftSpillingTestData();
+    td.SliceBlocks = true;
+    td.LeftIsBuild = true;
     return td;
 }
 
@@ -803,7 +847,8 @@ void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
         descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
     }
     THolder<IComputationGraph> got = ConstructJoinGraphStream(
-        testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, withSpiller);
+        testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, withSpiller,
+        testData.LeftIsBuild);
     if (testData.JoinMemoryConstraint) {
         testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 3000_MB +
                                                  testData.Setup->Alloc.GetUsed());
@@ -861,6 +906,34 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestLeftJoinSpillingMultiKey) {
         Test(LeftJoinSpillingMultiKeyTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftKindLeftIsBuild) {
+        Test(LeftJoinTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinWithMatchesLeftIsBuild) {
+        Test(LeftJoinWithMatchesTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinSpillingLeftIsBuild) {
+        Test(LeftJoinSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinSpillingTwoKeysLeftIsBuild) {
+        Test(LeftJoinSpillingTwoKeysTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinSpillingMultiKeyLeftIsBuild) {
+        Test(LeftJoinSpillingMultiKeyTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLargeBothSidesLeftSpillingLeftIsBuild) {
+        Test(LargeBothSidesLeftSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestSlicedBlocksLeftSpillingLeftIsBuild) {
+        Test(SlicedBlocksLeftSpillingTestDataLeftIsBuild(), true);
     }
 
     Y_UNIT_TEST(TestLargeBothSidesInnerSpilling) {

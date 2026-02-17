@@ -87,8 +87,10 @@ class TStdJoinTable {
 class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
   public:
 
-    TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout)
+    TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout, bool trackUsed = false)
         : Table_(layout)
+        , Layout_(layout)
+        , TrackUsed_(trackUsed)
     {
         MKQL_ENSURE(Empty(), "table should be empty by default");
     }
@@ -96,6 +98,9 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
     void BuildWith(IBlockLayoutConverter::TPackResult data) {
         BuildData_ = std::move(data);
         Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(), BuildData_.NTuples);
+        if (TrackUsed_ && BuildData_.NTuples > 0) {
+            Used_.resize(BuildData_.NTuples, 0);
+        }
     }
 
 
@@ -116,9 +121,40 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         });
     }
 
+    void LookupAndTrack(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
+        if (Empty()) {
+            return;
+        }
+        Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
+            if (TrackUsed_) {
+                size_t rowWidth = Layout_->TotalRowSize;
+                size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / rowWidth;
+                MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
+                Used_[index] = 1;
+            }
+            consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
+        });
+    }
+
+    void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {
+        MKQL_ENSURE(TrackUsed_, "ForEachUnused called but not tracking used tuples");
+        size_t rowWidth = Layout_->TotalRowSize;
+        for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
+            if (!Used_[i]) {
+                consume(TSingleTuple{
+                    BuildData_.PackedTuples.data() + i * rowWidth,
+                    BuildData_.Overflow.data()
+                });
+            }
+        }
+    }
+
   private:
     IBlockLayoutConverter::TPackResult BuildData_;
     NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
+    const NPackedTuple::TTupleLayout* Layout_;
+    bool TrackUsed_ = false;
+    TMKQLVector<ui8> Used_;
 };
 
 } // namespace NKikimr::NMiniKQL::NJoinTable

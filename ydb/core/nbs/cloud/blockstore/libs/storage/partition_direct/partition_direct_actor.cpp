@@ -91,6 +91,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
 
         auto fastPathService =
             std::make_shared<NYdb::NBS::NBlockStore::TFastPathService>(
+                TActivationContext::ActorSystem(),
                 SelfId().Hash(),   // tabletId
                 1,                 // generation
                 std::move(ddiskIds),

@@ -20,6 +20,7 @@ class TFastPathService
 {
 private:
     TMutex Lock;
+    NActors::TActorSystem* const ActorSystem = nullptr;
     NStorage::NPartitionDirect::IDirectBlockGroupPtr DirectBlockGroup;
 
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
@@ -30,6 +31,7 @@ private:
 
 public:
     TFastPathService(
+        NActors::TActorSystem* actorSystem,
         ui64 tabletId,
         ui32 generation,
         TVector<NKikimr::NBsController::TDDiskId> ddiskIds,

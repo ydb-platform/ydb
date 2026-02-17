@@ -104,7 +104,7 @@ private:
     };
 
     TMutex Lock;
-
+    NActors::TActorSystem* const ActorSystem = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PersistentBufferConnections;
 
@@ -121,6 +121,7 @@ private:
 
 public:
     TDirectBlockGroup(
+        NActors::TActorSystem* actorSystem,
         ui64 tabletId,
         ui32 generation,
         TVector<NKikimr::NBsController::TDDiskId> ddisksIds,

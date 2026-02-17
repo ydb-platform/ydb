@@ -37,6 +37,7 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
 ////////////////////////////////////////////////////////////////////////////////
 
 TFastPathService::TFastPathService(
+    NActors::TActorSystem* actorSystem,
     ui64 tabletId,
     ui32 generation,
     TVector<NBsController::TDDiskId> ddiskIds,
@@ -46,7 +47,8 @@ TFastPathService::TFastPathService(
     ui32 storageMedia,
     const NProto::TStorageConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
-    : TraceSamplePeriod(
+    : ActorSystem(actorSystem)
+    , TraceSamplePeriod(
           TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
     , Counters(MakeCountersChain(
           std::move(counters),
@@ -65,6 +67,7 @@ TFastPathService::TFastPathService(
     } else {
         DirectBlockGroup =
             std::make_shared<NStorage::NPartitionDirect::TDirectBlockGroup>(
+                ActorSystem,
                 tabletId,
                 generation,
                 std::move(ddiskIds),

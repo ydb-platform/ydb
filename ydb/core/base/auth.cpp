@@ -40,13 +40,13 @@ NACLib::TUserToken ParseUserToken(const TString& userTokenSerialized) {
 }
 
 template <class Iterable>
-bool IsTokenAllowedImpl(const TAppData* appData, const TString& userTokenSerialized, const Iterable& allowedSIDs) {
+bool IsTokenAllowedImpl(const TAppData* appData, const NACLib::TUserToken* userToken, const Iterable& allowedSIDs) {
     if (appData && !appData->EnforceUserTokenRequirement) {
-        if (!appData->EnforceUserTokenCheckRequirement || userTokenSerialized.empty()) {
+        if (!appData->EnforceUserTokenCheckRequirement || !userToken || userToken->GetSerializedToken().empty()) {
             return true;
         }
     }
-    return IsTokenAllowed(userTokenSerialized, allowedSIDs);
+    return IsTokenAllowed(userToken, allowedSIDs);
 }
 
 }
@@ -69,12 +69,12 @@ bool IsTokenAllowed(const TString& userTokenSerialized, const NProtoBuf::Repeate
     return IsTokenAllowed(&userToken, allowedSIDs);
 }
 
-bool IsTokenAllowed(const TAppData* appData, const TString& userTokenSerialized, const TVector<TString>& allowedSIDs) {
-    return IsTokenAllowedImpl(appData, userTokenSerialized, allowedSIDs);
+bool IsTokenAllowed(const TAppData* appData, const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs) {
+    return IsTokenAllowedImpl(appData, userToken, allowedSIDs);
 }
 
-bool IsTokenAllowed(const TAppData* appData, const TString& userTokenSerialized, const NProtoBuf::RepeatedPtrField<TString>& allowedSIDs) {
-    return IsTokenAllowedImpl(appData, userTokenSerialized, allowedSIDs);
+bool IsTokenAllowed(const TAppData* appData, const NACLib::TUserToken* userToken, const NProtoBuf::RepeatedPtrField<TString>& allowedSIDs) {
+    return IsTokenAllowedImpl(appData, userToken, allowedSIDs);
 }
 
 bool IsAdministrator(const TAppData* appData, const TString& userTokenSerialized) {

@@ -38,8 +38,6 @@ namespace {
 using namespace NKikimr;
 using namespace NMonitoring::NPrivate;
 
-const TString EMPTY_SERIALIZED_USER_TOKEN;
-
 bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {
         const TStringBuf header = request->ContentType.Before(';');
@@ -550,8 +548,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        const TString& userTokenSerialized = result.UserToken ? result.UserToken->GetSerializedToken() : EMPTY_SERIALIZED_USER_TOKEN;
-        if (NKikimr::IsTokenAllowed(NKikimr::AppData(), userTokenSerialized, ActorMonPage->AllowedSIDs)) {
+        if (IsTokenAllowed(AppData(), result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1181,8 +1178,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        const TString& userTokenSerialized = result.UserToken ? result.UserToken->GetSerializedToken() : EMPTY_SERIALIZED_USER_TOKEN;
-        if (NKikimr::IsTokenAllowed(NKikimr::AppData(), userTokenSerialized, Fields.AllowedSIDs)) {
+        if (IsTokenAllowed(AppData(), result.UserToken.Get(), Fields.AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1378,8 +1374,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        const TString& userTokenSerialized = result.UserToken ? result.UserToken->GetSerializedToken() : EMPTY_SERIALIZED_USER_TOKEN;
-        if (NKikimr::IsTokenAllowed(NKikimr::AppData(), userTokenSerialized, AllowedSIDs)) {
+        if (IsTokenAllowed(AppData(), result.UserToken.Get(), AllowedSIDs)) {
             ProcessRequest();
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

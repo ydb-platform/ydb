@@ -178,7 +178,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                         indexStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
                         NCdc::DoCreateStreamImpl(result, indexCdcStreamOp, opId, indexTablePath, false, false);
-                        TString key = childName + "/" + implTableName;
+                        const TString key = TStringBuilder() << childName << '/' << implTableName;
                         (*desc.MutableIndexImplTableCdcStreams())[key].CopyFrom(indexCdcStreamOp);
 
                         if (!oldIndexStreamName.empty()) {

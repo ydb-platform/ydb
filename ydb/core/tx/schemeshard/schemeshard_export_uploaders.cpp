@@ -97,7 +97,7 @@ protected:
     void UploadFiles() {
         if (!StorageOperator) {
             StorageOperator = this->RegisterWithSameMailbox(
-                NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
+                NWrappers::CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator())
             );
         }
 

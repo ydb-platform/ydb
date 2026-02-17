@@ -179,7 +179,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         auto storageOperator = ExternalStorageConfig->ConstructStorageOperator();
-        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(std::move(storageOperator)));
+        Client = this->RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
 
         if (!MetadataUploaded) {
             UploadMetadata();

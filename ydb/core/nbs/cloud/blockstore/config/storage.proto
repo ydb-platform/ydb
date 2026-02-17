@@ -4,16 +4,6 @@ package NYdb.NBS.NProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TStorageConfig
-{
-    string DDiskPoolName = 1;
-
-    string PersistentBufferDDiskPoolName = 2;
-
-    // Period (in milliseconds) for sampling traces.
-    uint32 TraceSamplePeriod = 3;
-}
-
 message TStorageServiceConfig
 {
     // Schemeshard directory for volumes.

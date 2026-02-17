@@ -101,6 +101,10 @@ void SetVolumeExplicitChannelProfiles(
                        volumeConfig);
     SetupVolumeChannel(poolKinds.Log, 1, 1_MB, EChannelDataKind::Log,
                        volumeConfig);
+    // Now schemeshard expects 3 channels for volume:
+    // https://github.com/ydb-platform/ydb/blob/main/ydb/core/tx/schemeshard/schemeshard_info_types.h#L2503
+    SetupVolumeChannel(poolKinds.Index, 2, 1_MB, EChannelDataKind::Index,
+                       volumeConfig);
 }
 
 }   // namespace

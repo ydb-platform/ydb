@@ -29,14 +29,15 @@ NVhost::TServerConfig CreateDefaultVhostServerConfig()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TNbsService::TNbsService()
+TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
+    : Config(config)
 {
     TLogSettings logSettings;
     logSettings.FiltrationLevel = static_cast<ELogPriority>(DefaultLogLevel);
     Logging = CreateLoggingService("console", logSettings);
     Log = Logging->CreateLog("NBS2_SERVICE");
 
-    STORAGE_INFO("TNbsService create");
+    STORAGE_INFO("TNbsService create with config");
 
     NVhost::InitVhostLog(Logging);
     VhostQueueFactory = NVhost::CreateVhostQueueFactory();
@@ -60,11 +61,16 @@ void TNbsService::Stop()
     VhostServer->Stop();
 }
 
+const NKikimrConfig::TNbsConfig& TNbsService::GetConfig() const
+{
+    return Config;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
-void CreateNbsService()
+void CreateNbsService(const NKikimrConfig::TNbsConfig& config)
 {
-    NbsService = std::make_shared<TNbsService>();
+    NbsService = std::make_shared<TNbsService>(config);
 }
 
 void StartNbsService()

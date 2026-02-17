@@ -33,6 +33,9 @@ message CreatePartitionRequest {
 
     // Storage media type
     StorageMediaKind StorageMedia = 5;
+
+    // Disk id.
+    string DiskId = 6;
 }
 
 message CreatePartitionResponse {

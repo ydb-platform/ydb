@@ -6,6 +6,8 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/startable.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/public.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 #include <library/cpp/logger/log.h>
 
 namespace NYdb::NBS::NBlockStore {
@@ -20,11 +22,14 @@ struct TNbsService: public IStartable
     NVhost::IServerPtr VhostServer;
     TVHostStatsSimplePtr VHostStats;
     NVhost::TVhostCallbacks VhostCallbacks;
+    NKikimrConfig::TNbsConfig Config;
 
-    TNbsService();
+    explicit TNbsService(const NKikimrConfig::TNbsConfig& config);
 
     void Start() override;
     void Stop() override;
+    
+    const NKikimrConfig::TNbsConfig& GetConfig() const;
 };
 
 using TNbsServicePtr = std::shared_ptr<TNbsService>;

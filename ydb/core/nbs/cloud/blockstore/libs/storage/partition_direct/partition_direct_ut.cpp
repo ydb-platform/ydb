@@ -46,9 +46,9 @@
 //     StartNbsService();
 // }
 
-// NYdb::NBS::NProto::TStorageConfig CreateStorageConfig()
+// NYdb::NBS::NProto::TStorageServiceConfig CreateStorageConfig()
 // {
-//     NYdb::NBS::NProto::TStorageConfig storageConfig;
+//     NYdb::NBS::NProto::TStorageServiceConfig storageConfig;
 //     storageConfig.SetDDiskPoolName(DDiskPoolName);
 //     storageConfig.SetPersistentBufferDDiskPoolName(
 //         PersistentBufferDDiskPoolName);

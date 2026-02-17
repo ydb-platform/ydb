@@ -1,10 +1,10 @@
-# Страница Databases
+# Страница Databases {#databases_page}
 
-Страница открывается при переходе по ссылке из колонки **Database** на вкладке [Databases](ydb-monitoring.md#database_list).
+Страница открывается при переходе по ссылке из колонки **Database** на вкладке [Databases](monitoring_main.md#database_list).
 
 Пример интерфейса:
 
-![Database_page](_assets/database-page-query.png)
+![Database_page](../_assets/database-page-query.png)
 
 Основные разделы страницы:
 
@@ -25,21 +25,21 @@
 
 * **Editor** — редактор для выполнения запросов;
 
-![Editor](_assets/database-page-editor.png)
+![Editor](../_assets/database-page-editor.png)
 
 * **History** — история выполненных запросов;
 
-![History](_assets/database-page-history.png)
+![History](../_assets/database-page-history.png)
 
 * **Saved** — сохраненные запросы.
 
-![Saved](_assets/database-page-saved.png)
+![Saved](../_assets/database-page-saved.png)
 
 ## Diagnostics
 
 Вкладка **Diagnostics** отображает диагностическую информацию по выбранному объекту и его окружению.
 
-![Database_diagnostic](_assets/database-page-diagnostics.png)
+![Database_diagnostic](../_assets/database-page-diagnostics.png)
 
 Данные сгруппированы по тематическим разделам, например:
 

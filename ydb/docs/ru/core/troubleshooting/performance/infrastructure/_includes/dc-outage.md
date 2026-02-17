@@ -2,7 +2,7 @@
 
 1. Откройте [Встроенный UI](../../../../reference/embedded-ui/index.md).
 
-1. На вкладке **Nodes** проанализируйте [индикаторы состояния](../../../../reference/embedded-ui/ydb-monitoring.md#colored_indicator) в колонках **Host** и **DC**.
+1. На вкладке **Nodes** проанализируйте [индикаторы состояния](../../../../reference/embedded-ui/ydb-monitoring/index.md#colored_indicator) в колонках **Host** и **DC**.
 
     ![](../_assets/cluster-nodes.png)
 

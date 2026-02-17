@@ -1,12 +1,12 @@
-# Страница Tablets
+# Страница Tablets {#tablets_page}
 
-Многие компоненты {{ ydb-short-name }} реализованы в виде [таблеток](../../concepts/glossary.md#tablet). Система может перемещать таблетки между узлами, поэтому на каждом узле выполняется свой набор таблеток.
+Многие компоненты {{ ydb-short-name }} реализованы в виде [таблеток](../../../concepts/glossary.md#tablet). Система может перемещать таблетки между узлами, поэтому на каждом узле выполняется свой набор таблеток.
 
-Страница открывается при переходе по **TabletID** с вкладок [Tablets](ydb-monitoring.md#tablets_list) или [Nodes](ydb-monitoring.md#nodes_list).
+Страница открывается при переходе по **TabletID** с вкладок [Tablets](monitoring_main.md#tablets_list) или [Nodes](monitoring_main.md#nodes_list).
 
 Пример страницы таблетки:
 
-![Tablet_page](_assets/tablet_page.png)
+![Tablet_page](../_assets/tablet_page.png)
 
 На странице отображаются идентификатор таблетки и кнопка **Restart** для инициирования перезапуска.
 
@@ -26,7 +26,7 @@
 
 Дополнительно на странице отображается таблица с детализированными записями о состоянии таблетки:
 
-* **Generation** — [поколение](../../concepts/glossary.md#tablet-generation) таблетки;
+* **Generation** — [поколение](../../../concepts/glossary.md#tablet-generation) таблетки;
 * **Change time** — время изменения состояния;
 * **State** — текущее состояние;
 * **Tablet** — идентификатор таблетки;

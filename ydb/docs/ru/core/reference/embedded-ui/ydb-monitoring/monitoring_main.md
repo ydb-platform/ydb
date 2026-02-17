@@ -1,8 +1,4 @@
-# {{ ydb-short-name }} Monitoring
-
-{{ ydb-short-name }} Monitoring — это набор веб-страниц для мониторинга состояния [кластера](../../concepts/glossary.md#cluster). На страницах отображаются компоненты системы и их текущие параметры. Для многих компонентов перед названием показывается [цветовой индикатор](#colored_indicator) состояния.
-
-## Главная страница {#main_page}
+# Главная страница {#main_page}
 
 Главная страница доступна по адресу:
 
@@ -12,11 +8,11 @@ http://<ендпоинт>:8765/monitoring/cluster/tenants
 
 Пример главной страницы:
 
-![Monitoring_main_page](_assets/web-ui-home.png)
+![Monitoring_main_page](../_assets/web-ui-home.png)
 
 На странице отображается сводная информация о кластере.
 
-На вкладке **Overview** показаны [индикаторы состояния](#colored_indicator) по ключевым ресурсам:
+На вкладке **Overview** показаны [индикаторы состояния](index.md#colored_indicator) по ключевым ресурсам:
 
 * **CPU** — загрузка процессора;
 * **Storage** — использование дисковой подсистемы;
@@ -25,17 +21,17 @@ http://<ендпоинт>:8765/monitoring/cluster/tenants
 
 Далее представлен набор вкладок:
 
-* **[Databases](#database_list)** — список [баз данных](../../concepts/glossary.md#database), развернутых в кластере;
-* **[Nodes](#nodes_list)** — список [узлов кластера](../../concepts/glossary.md#node);
-* **[Storage](#storage_list)** — список [групп хранения](../../concepts/glossary.md#storage-group) и использование ими дискового пространства;
-* **[Tablets](#tablets_list)** — список запущенных [таблеток](../../concepts/glossary.md#tablet);
+* **[Databases](#database_list)** — список [баз данных](../../../concepts/glossary.md#database), развернутых в кластере;
+* **[Nodes](#nodes_list)** — список [узлов кластера](../../../concepts/glossary.md#node);
+* **[Storage](#storage_list)** — список [групп хранения](../../../concepts/glossary.md#storage-group) и использование ими дискового пространства;
+* **[Tablets](#tablets_list)** — список запущенных [таблеток](../../../concepts/glossary.md#tablet);
 * **[Versions](#versions_list)** — версии {{ ydb-short-name }}, запущенные на узлах кластера.
 
 ### Databases {#database_list}
 
 На вкладке отображается список баз данных и их ключевые метрики.
 
-![Databases_list](_assets/databases_list.png)
+![Databases_list](../_assets/databases_list.png)
 
 Над таблицей располагаются поиск по имени базы данных, переключатель режимов (**All** / **With problems**) и счетчик баз данных.
 
@@ -51,7 +47,7 @@ http://<ендпоинт>:8765/monitoring/cluster/tenants
 * **Network** — использование сетевых ресурсов;
 * **Nodes** — состояние узлов базы данных;
 * **Groups** — состояние групп хранения;
-* **Pools** — состояние [пулов хранения](../../concepts/glossary.md#storage-pool).
+* **Pools** — состояние [пулов хранения](../../../concepts/glossary.md#storage-pool).
 
 {% note info %}
 
@@ -63,7 +59,7 @@ http://<ендпоинт>:8765/monitoring/cluster/tenants
 
 На вкладке отображаются узлы кластера и их состояние.
 
-![Nodes_list](_assets/nodes_list_1.png)
+![Nodes_list](../_assets/nodes_list_1.png)
 
 На странице доступны поиск по имени хоста и элементы группировки списка.
 
@@ -79,9 +75,9 @@ http://<ендпоинт>:8765/monitoring/cluster/tenants
 
 ### Storage {#storage_list}
 
-На вкладке отображается список [групп хранения](../../concepts/glossary.md#storage-group) и их текущее состояние.
+На вкладке отображается список [групп хранения](../../../concepts/glossary.md#storage-group) и их текущее состояние.
 
-![Storage-list](./_assets/storage_list.png)
+![Storage-list](../_assets/storage_list.png)
 
 На странице доступны:
 
@@ -95,16 +91,16 @@ http://<ендпоинт>:8765/monitoring/cluster/tenants
 В таблице отображаются:
 
 * **Group ID** — идентификатор группы хранения. По ссылке можно перейти на [страницу Storage](storage.md);
-* **Pool Name** — имя [пула хранения](../../concepts/glossary.md#storage-pool);
+* **Pool Name** — имя [пула хранения](../../../concepts/glossary.md#storage-pool);
 * **Erasure** — схема отказоустойчивости группы;
 * **Used** — объем занятого дискового пространства и доля использования;
-* **VDisks** — состояние [виртуальных дисков](../../concepts/glossary.md#vdisk), входящих в группу.
+* **VDisks** — состояние [виртуальных дисков](../../../concepts/glossary.md#vdisk), входящих в группу.
 
 ### Tablets {#tablets_list}
 
 На вкладке отображается список таблеток, работающих в кластере.
 
-![Tablets_list](_assets/tablets_list.png)
+![Tablets_list](../_assets/tablets_list.png)
 
 На странице доступны поиск по **TabletID** и счетчик таблеток.
 
@@ -115,17 +111,17 @@ http://<ендпоинт>:8765/monitoring/cluster/tenants
 * **State** — состояние таблетки;
 * **NodeID** — идентификатор узла, на котором работает таблетка;
 * **NodeFQDN** — полное доменное имя узла;
-* **Generation** — [поколение](../../concepts/glossary.md#tablet-generation) таблетки;
+* **Generation** — [поколение](../../../concepts/glossary.md#tablet-generation) таблетки;
 * **Uptime** — время работы таблетки.
 
 ### Versions {#versions_list}
 
 Вкладка **Versions** показывает, какие версии {{ ydb-short-name }} запущены на узлах кластера и как они распределены.
 
-![Versions_list](_assets/versions_list.png)
+![Versions_list](../_assets/versions_list.png)
 
 * **Overall** — перечень версий в кластере;
-* **Storage nodes** — версии на узлах [распределенного хранилища](../../concepts/glossary.md#distributed-storage).
+* **Storage nodes** — версии на узлах [распределенного хранилища](../../../concepts/glossary.md#distributed-storage).
 
 Для выбранной версии отображается таблица узлов:
 
@@ -142,16 +138,3 @@ http://<ендпоинт>:8765/monitoring/cluster/tenants
 * [Страница Nodes](nodes.md);
 * [Страница Storage](storage.md);
 * [Страница Tablets](tablets.md).
-
-## Индикаторы состояний {#colored_indicator}
-
-Слева от названия компонента может отображаться цветовой индикатор состояния.
-
-Цвета индикаторов имеют следующее значение:
-
-* **Зеленый** — проблем нет, компонент работает в штатном режиме;
-* **Синий** — выполняется репликация данных, других проблем нет;
-* **Желтый** — возможны проблемы, компонент продолжает работать;
-* **Красный** — есть критические проблемы; компонент не работает или работает с ограничениями.
-
-Если компонент включает другие компоненты и не имеет собственных проблем, его состояние вычисляется как агрегированное состояние вложенных компонентов.

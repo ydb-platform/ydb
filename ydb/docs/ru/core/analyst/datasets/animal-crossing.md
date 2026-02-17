@@ -30,7 +30,7 @@ sed -i '1s/ /_/g' accessories.csv
 
 - Embedded UI
 
-  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring/index.md).
 
   ```sql
   CREATE TABLE `accessories` (

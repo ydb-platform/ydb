@@ -45,6 +45,7 @@ public:
     }
 
     TTestServer(TTestServer&&) = default;
+    TTestServer& operator=(TTestServer&&) = default;
 
     ~TTestServer() {
         ShutdownGRpc();

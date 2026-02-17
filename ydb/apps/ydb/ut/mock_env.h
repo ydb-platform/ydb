@@ -20,7 +20,10 @@
 
 #include <fmt/format.h>
 
+#include <memory>
 #include <thread>
+#include <typeinfo>
+#include <unordered_map>
 
 using namespace fmt::literals;
 using namespace yandex::cloud::iam::v1;
@@ -33,11 +36,13 @@ public:
         Failures.push_back(TStringBuilder() << err); \
     }
 
+    virtual ~TChecker() = default;
+
     void AddFailure(const TString& failure) {
         Failures.push_back(failure);
     }
 
-    void CheckExpectations() {
+    virtual void CheckExpectations() {
         if (Failures.empty()) {
             return;
         }
@@ -49,14 +54,29 @@ public:
         UNIT_FAIL(msg);
     }
 
-    void ClearFailures() {
+    virtual void ClearFailures() {
         Failures.clear();
+    }
+
+    virtual void ClearExpectations() {
     }
 
     std::vector<TString> Failures;
 };
 
-class TDiscoveryImpl : public Ydb::Discovery::V1::DiscoveryService::Service {
+class TMockGrpcService : public TChecker {
+public:
+    virtual grpc::Service* Service() = 0;
+};
+
+template <class TServiceImpl>
+class TMockGrpcServiceBase : public TServiceImpl, public TMockGrpcService {
+    grpc::Service* Service() override {
+        return static_cast<TServiceImpl*>(this);
+    }
+};
+
+class TDiscoveryImpl : public TMockGrpcServiceBase<Ydb::Discovery::V1::DiscoveryService::Service> {
 public:
     TDiscoveryImpl(const TString& address, ui16 port)
         : Address(address)
@@ -83,7 +103,7 @@ private:
     ui16 Port;
 };
 
-class TSchemeImpl : public Ydb::Scheme::V1::SchemeService::Service, public TChecker {
+class TSchemeImpl : public TMockGrpcServiceBase<Ydb::Scheme::V1::SchemeService::Service> {
 public:
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
         Y_UNUSED(request);
@@ -146,7 +166,7 @@ public:
     TString ExpectedClientCert;
 };
 
-class TAuthImpl : public Ydb::Auth::V1::AuthService::Service, public TChecker {
+class TAuthImpl : public TMockGrpcServiceBase<Ydb::Auth::V1::AuthService::Service> {
 public:
     grpc::Status Login(grpc::ServerContext* context, const Ydb::Auth::LoginRequest* request, Ydb::Auth::LoginResponse* response) {
         Y_UNUSED(context);
@@ -179,7 +199,7 @@ public:
     TString Token;
 };
 
-class TIamTokenServiceImpl : public IamTokenService::Service, public TChecker {
+class TIamTokenServiceImpl : public TMockGrpcServiceBase<IamTokenService::Service> {
 public:
     grpc::Status Create(grpc::ServerContext* context, const CreateIamTokenRequest* request, CreateIamTokenResponse* response) override {
         Y_UNUSED(context);
@@ -199,12 +219,12 @@ public:
         ++ExpectedCalls;
     }
 
-    void CheckExpectations() {
+    void CheckExpectations() override {
         CHECK_EXP(Calls == ExpectedCalls, "Expected " << ExpectedCalls << " calls, but got " << Calls);
         TChecker::CheckExpectations();
     }
 
-    void ClearExpectations() {
+    void ClearExpectations() override {
         Calls = ExpectedCalls = 0;
     }
 
@@ -217,11 +237,10 @@ class TCliTestFixture : public NUnitTest::TBaseFixture {
 public:
     TCliTestFixture()
         : Port(PortManager.GetPort())
-        , Discovery(Address, Port)
     {
     }
 
-    ~TCliTestFixture() {
+    virtual ~TCliTestFixture() {
         Shutdown();
     }
 
@@ -305,6 +324,13 @@ public:
         ServerCredentials = grpc::SslServerCredentials(sslOps);
     }
 
+    virtual void AddServices() {
+        AddService<TDiscoveryImpl>(Address, Port);
+        AddService<TSchemeImpl>();
+        AddService<TAuthImpl>();
+        AddService<TIamTokenServiceImpl>();
+    }
+
     void Start() {
         TStringBuilder address;
         address << "0.0.0.0:" << Port;
@@ -313,10 +339,10 @@ public:
             ServerCredentials = grpc::InsecureServerCredentials();
         }
         builder.AddListeningPort(address, ServerCredentials);
-        builder.RegisterService(&Discovery);
-        builder.RegisterService(&Scheme);
-        builder.RegisterService(&Auth);
-        builder.RegisterService(&IamTokenService);
+        AddServices();
+        for (auto&& [t, srv] : Services) {
+            builder.RegisterService(srv->Service());
+        }
         Server = builder.BuildAndStart();
         ServerThread = std::thread([this]{
             Server->Wait();
@@ -347,18 +373,18 @@ public:
     }
 
     void ExpectToken(const TString& token) {
-        Scheme.ExpectToken(token);
+        Service<TSchemeImpl>().ExpectToken(token);
     }
 
     void ExpectClientCert() {
-        Scheme.ExpectClientCert(GetClientCert());
+        Service<TSchemeImpl>().ExpectClientCert(GetClientCert());
     }
 
     void ExpectUserAndPassword(const TString& user, const TString& password) {
-        Auth.ExpectUserAndPassword(user, password);
+        Service<TAuthImpl>().ExpectUserAndPassword(user, password);
         const TString token = password + "-token";
-        Auth.SetToken(token);
-        Scheme.ExpectToken(token);
+        Service<TAuthImpl>().SetToken(token);
+        Service<TSchemeImpl>().ExpectToken(token);
     }
 
     void ExpectFail(int code = 1) {
@@ -366,15 +392,26 @@ public:
     }
 
     void CheckExpectations() {
-        Auth.CheckExpectations();
-        Scheme.CheckExpectations();
-        IamTokenService.CheckExpectations();
+        for (auto&& [t, srv] : Services) {
+            srv->CheckExpectations();
+        }
+    }
+
+    void ClearFailures() {
+        for (auto&& [t, srv] : Services) {
+            srv->ClearFailures();
+        }
+    }
+
+    void ClearExpectations() {
+        ExpectedExitCode = 0;
+        for (auto&& [t, srv] : Services) {
+            srv->ClearExpectations();
+        }
     }
 
     TString RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
-        Auth.ClearFailures();
-        Scheme.ClearFailures();
-        IamTokenService.ClearFailures();
+        ClearFailures();
 
         if (profileFileContent) {
             TString profileFile = EnvFile(profileFileContent, "profile.yaml");
@@ -391,17 +428,12 @@ public:
         );
         CheckExpectations();
         // reset
-        ExpectedExitCode = 0;
-        Scheme.ClearExpectations();
-        Auth.ClearExpectations();
-        IamTokenService.ClearExpectations();
+        ClearExpectations();
         return output;
     }
 
     TString RunCliWithInput(TList<TString> args, const TString& input, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
-        Auth.ClearFailures();
-        Scheme.ClearFailures();
-        IamTokenService.ClearFailures();
+        ClearFailures();
 
         if (profileFileContent) {
             TString profileFile = EnvFile(profileFileContent, "profile.yaml");
@@ -419,15 +451,31 @@ public:
         );
         CheckExpectations();
         // reset
-        ExpectedExitCode = 0;
-        Scheme.ClearExpectations();
-        Auth.ClearExpectations();
-        IamTokenService.ClearExpectations();
+        ClearExpectations();
         return output;
     }
 
-    TIamTokenServiceImpl& GetIamTokenService() {
-        return IamTokenService;
+    //
+    // Services
+    //
+
+    // Add service: must be called from inside RegisterServices
+    // TService must be derived from TMockGrpcService
+    template <class TService, class... TArgs>
+    std::shared_ptr<TService> AddService(TArgs&&... args) {
+        std::shared_ptr<TService> service = std::make_shared<TService>(std::forward<TArgs>(args)...);
+        auto [iter, insertedNew] = Services.emplace(std::type_index(typeid(TService)), service);
+        UNIT_ASSERT_C(insertedNew, "Duplicate service: " << typeid(TService).name());
+        return service;
+    }
+
+    // Get service ref by its type
+    // Is used to setup expectations
+    template <class TService>
+    TService& Service() {
+        auto serviceIter = Services.find(std::type_index(typeid(TService)));
+        UNIT_ASSERT_C(serviceIter != Services.end(), "Service not found: " << typeid(TService).name());
+        return static_cast<TService&>(*serviceIter->second);
     }
 
 private:
@@ -435,10 +483,7 @@ private:
     TString ConnectSchema = "grpc";
     TString Address = "localhost";
     ui16 Port = 0;
-    TDiscoveryImpl Discovery;
-    TAuthImpl Auth;
-    TSchemeImpl Scheme;
-    TIamTokenServiceImpl IamTokenService;
+    std::unordered_map<std::type_index, std::shared_ptr<TMockGrpcService>> Services;
     std::unique_ptr<grpc::Server> Server;
     std::thread ServerThread;
     int ExpectedExitCode = 0;

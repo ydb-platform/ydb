@@ -1254,8 +1254,8 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
 
         const TString saKeyFile = EnvFile(saKeyContent, "sa_key.json");
 
-        GetIamTokenService().SetToken("test-iam-token");
-        GetIamTokenService().ExpectCall();
+        Service<TIamTokenServiceImpl>().SetToken("test-iam-token");
+        Service<TIamTokenServiceImpl>().ExpectCall();
         ExpectToken("test-iam-token");
         RunCli(
             {
@@ -1270,8 +1270,8 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {}
         );
 
-        GetIamTokenService().SetToken("test-iam-token-2");
-        GetIamTokenService().ExpectCall();
+        Service<TIamTokenServiceImpl>().SetToken("test-iam-token-2");
+        Service<TIamTokenServiceImpl>().ExpectCall();
         ExpectToken("test-iam-token-2");
         RunCli(
             {
@@ -1308,8 +1308,8 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         "iam_endpoint"_a = GetIamEndpoint()
         );
 
-        GetIamTokenService().SetToken("test-iam-token-3");
-        GetIamTokenService().ExpectCall();
+        Service<TIamTokenServiceImpl>().SetToken("test-iam-token-3");
+        Service<TIamTokenServiceImpl>().ExpectCall();
         ExpectToken("test-iam-token-3");
         RunCli(
             {

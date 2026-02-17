@@ -77,10 +77,6 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 Подробнее о партиционировании колоночных таблиц читайте в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning).
 
-### COMPRESSION(...)
-
-Настройки сжатия кололнок для **колоночных** таблиц. Подробнее в разделе [{#T}](compression.md).
-
 ### FAMILY <column_family> (настройка группы колонок)
 
 Определение группы колонок с заданными параметрами. Подробнее в разделе [{#T}](family.md).

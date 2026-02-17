@@ -1345,10 +1345,6 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &NStat::CreateStatisticsAggregator, DataGroupErasure);
                 } else if (type == TTabletTypes::GraphShard) {
                     bootstrapperActorId = Boot(ctx, type, &NGraph::CreateGraphShard, DataGroupErasure);
-                } else if (type == TTabletTypes::BlockStoreVolumeDirect || type == TTabletTypes::BlockStorePartitionDirect) {
-                    // BlockStoreVolumeDirect and BlockStorePartitionDirect are not fully implemented in FakeHive yet
-                    // Just accept the tablet creation without actually booting it
-                    LOG_INFO_S(ctx, NKikimrServices::HIVE, logPrefix << "accepting tablet creation without boot (external-like)");
                 } else {
                     status = NKikimrProto::ERROR;
                 }

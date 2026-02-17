@@ -229,22 +229,17 @@ Y_UNIT_TEST_SUITE(TBSV) {
         // Test that schema operation is accepted and recognizes TabletVersion=3
         AsyncCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         
-        // Wait for the operation to be accepted
-        TAutoPtr<IEventHandle> handle;
-        auto createEvent = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
-        UNIT_ASSERT(createEvent);
-        UNIT_ASSERT_VALUES_EQUAL(createEvent->Record.GetStatus(), NKikimrScheme::StatusAccepted);
+        // Wait for the operation to complete
+        env.TestWaitNotification(runtime, txId);
         
         // Verify that the schemeshard created shards for the volume
         // With TabletVersion=3 and 1 partition, we should have 2 shards:
         // - 1 BlockStorePartitionDirect shard
         // - 1 BlockStoreVolumeDirect shard
-        // Note: We don't wait for completion because FakeHive doesn't fully support
-        // BlockStoreVolumeDirect tablets yet, but we can verify the shards were registered
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect"),
-                           {NLs::PathExist});
+                           {NLs::PathExist, NLs::Finished});
         
-        // Also verify the partition exists
+        // Also verify the partition exists and shard count
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect", true, true, true),
                            {NLs::PathExist, NLs::ShardsInsideDomain(2)});
 

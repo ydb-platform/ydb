@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     };
 
     template <typename SK = ui32>
-    void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords) {       
+    void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords) {
         const auto pathParts = SplitPath(path);
         UNIT_ASSERT(pathParts.size() > 1);
 
@@ -1144,8 +1144,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             "ALTER TABLE `/Root/path` ADD COLUMN `extra` Uint64",
         }, {
             {"with_schema_changes", {
-                TStructRecordBase<ui32>(TChangeRecord::EKind::CdcDataChange, "", NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}, {}, {}),
-                TStructRecordBase<ui32>(TChangeRecord::EKind::CdcSchemaChange, "", NTable::ERowOp::Absent, {}, {}, {}, {}),
+                TStructRecordBase<ui32>(TChangeRecord::EKind::CdcDataChange, NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}, {}, {}),
+                TStructRecordBase<ui32>(TChangeRecord::EKind::CdcSchemaChange, NTable::ERowOp::Absent, {}, {}, {}, {}),
             }},
         });
     }

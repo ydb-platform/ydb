@@ -20,7 +20,7 @@ public:
     std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator);
     TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
     void SetTxKeys(const TUserTable& tableInfo, ui64 tabletId, TKeyValidator& keyValidator);
-    
+
     ui64 ComputeTxSize() const;
 private:
     YDB_READONLY_DEF(NKikimrDataEvents::TEvWrite::TOperation::EOperationType, OperationType);
@@ -38,8 +38,8 @@ public:
             bool mvccSnapshotRead);
     ~TValidatedWriteTx();
 
-    EType GetType() const override { 
-        return EType::WriteTx; 
+    EType GetType() const override {
+        return EType::WriteTx;
     };
 
     static constexpr ui64 MaxReorderTxKeys() {
@@ -254,16 +254,16 @@ public:
         return ++PageFaultCount;
     }
 
-    const TValidatedWriteTx::TPtr& GetWriteTx() const { 
-        return WriteTx; 
+    const TValidatedWriteTx::TPtr& GetWriteTx() const {
+        return WriteTx;
     }
     TValidatedWriteTx::TPtr& GetWriteTx() {
         return WriteTx;
     }
     bool BuildWriteTx(TDataShard* self);
 
-    void ClearWriteTx() { 
-        WriteTx = nullptr; 
+    void ClearWriteTx() {
+        WriteTx = nullptr;
     }
 
     const std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& GetWriteResult() const {
@@ -301,7 +301,7 @@ private:
     YDB_ACCESSOR_DEF(ui64, SchemeShardId);
     YDB_ACCESSOR_DEF(ui64, SubDomainPathId);
     YDB_ACCESSOR_DEF(NKikimrSubDomains::TProcessingParams, ProcessingParams);
-    
+
     ui64 PageFaultCount = 0;
 };
 

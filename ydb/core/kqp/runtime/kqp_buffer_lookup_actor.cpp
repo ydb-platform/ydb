@@ -1,6 +1,7 @@
 #include "kqp_buffer_lookup_actor.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_worker.h>
@@ -318,6 +319,9 @@ public:
         record.SetLockMode(!isUniqueCheck
             ? Settings.LockMode
             : NKikimrDataEvents::OPTIMISTIC);
+        if (Settings.QuerySpanId) {
+            record.SetQuerySpanId(Settings.QuerySpanId);
+        }
 
         AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
 
@@ -415,25 +419,23 @@ public:
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
             Settings.TxManager->SetError(shardId);
-            RuntimeError(
-                NYql::NDqProto::StatusIds::ABORTED,
+            if (record.HasDeferredVictimQuerySpanId()) {
+                Settings.TxManager->SetVictimQuerySpanId(record.GetDeferredVictimQuerySpanId());
+            } else {
+                SetVictimQuerySpanIdFromBrokenLocks(shardId, record.GetBrokenTxLocks(), Settings.TxManager);
+            }
+            RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Table: `"
-                    << lookupState.Worker->GetTablePath() << "`.");
+                MakeLockInvalidatedMessage(Settings.TxManager, lookupState.Worker->GetTablePath()));
             return;
         }
 
         for (const auto& lock : record.GetTxLocks()) {
-            if (!Settings.TxManager->AddLock(shardId, lock)) {
+            if (!Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId)) {
                 YQL_ENSURE(Settings.TxManager->BrokenLocks());
-                NYql::TIssues issues;
-                issues.AddIssue(*Settings.TxManager->GetLockIssue());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::ABORTED,
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                    TStringBuilder() << "Transaction locks invalidated. Table: `"
-                        << lookupState.Worker->GetTablePath() << "`.",
-                    std::move(issues));
+                    MakeLockInvalidatedMessage(Settings.TxManager, lookupState.Worker->GetTablePath()));
                 return;
             }
         }

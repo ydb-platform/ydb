@@ -1425,6 +1425,10 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                         : NKikimrDataEvents::OPTIMISTIC);
             }
 
+            if (GetMeta().QuerySpanId && !isTableImmutable) {
+                input.Meta.StreamLookupSettings->SetQuerySpanId(GetMeta().QuerySpanId);
+            }
+
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
         } else if (input.Meta.SequencerSettings) {
             transformProto->MutableSettings()->PackFrom(*input.Meta.SequencerSettings);
@@ -1443,6 +1447,10 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
 
             if (GetMeta().LockMode) {
                 input.Meta.VectorResolveSettings->SetLockMode(*GetMeta().LockMode);
+            }
+
+            if (GetMeta().QuerySpanId) {
+                input.Meta.VectorResolveSettings->SetQuerySpanId(GetMeta().QuerySpanId);
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.VectorResolveSettings);
@@ -2550,6 +2558,9 @@ void TKqpTasksGraph::FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSour
         settings.SetLockTxId(*lockTxId);
         settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
     }
+    if (GetMeta().QuerySpanId) {
+        settings.SetQuerySpanId(GetMeta().QuerySpanId);
+    }
 }
 
 TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats) {
@@ -2867,6 +2878,12 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
     if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
         settings.SetLockMode(*GetMeta().LockMode);
     }
+        // Use per-transaction QuerySpanId if available (for deferred effects),
+        // otherwise fall back to global QuerySpanId
+        ui64 querySpanId = GetMeta().GetTxQuerySpanId(task.StageId.TxId);
+        if (querySpanId) {
+            settings.SetQuerySpanId(querySpanId);
+        }
 
     auto sinkPosition = std::lower_bound(
         internalSinksOrder.begin(),
@@ -3121,6 +3138,13 @@ TKqpTasksGraph::TKqpTasksGraph(
 
     if (Transactions.empty()) {
         return;
+    }
+
+    // Store per-transaction QuerySpanIds for deferred effects
+    for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
+        if (Transactions[txIdx].QuerySpanId != 0) {
+            GetMeta().SetTxQuerySpanId(txIdx, Transactions[txIdx].QuerySpanId);
+        }
     }
 
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;

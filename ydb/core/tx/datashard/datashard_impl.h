@@ -20,6 +20,8 @@
 #include "datashard_user_table.h"
 #include "datashard_write.h"
 #include "incr_restore_scan.h"
+#include "datashard_integrity_trails.h"
+#include "datashard_tli.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
 #include "reject_reason.h"
@@ -1681,6 +1683,21 @@ public:
     }
 
     void RemoveUserTable(const TPathId& tableId, ILocksDb* locksDb) {
+        // Collect lock IDs before removal for TLI logging
+        TVector<ui64> locksToInvalidate;
+        const auto& allLocks = SysLocks.GetLocks();
+        for (const auto& [lockId, lockInfo] : allLocks) {
+            if (lockInfo->GetReadTables().contains(tableId) || lockInfo->GetWriteTables().contains(tableId)) {
+                locksToInvalidate.push_back(lockId);
+            }
+        }
+        if (!locksToInvalidate.empty()) {
+            auto victimQuerySpanIds = SysLocks.ExtractVictimQuerySpanIds(locksToInvalidate);
+            NKikimr::NDataIntegrity::LogLocksBroken(TlsActivationContext->AsActorContext(), TabletID(),
+                "Schema change: table removed invalidated locks",
+                locksToInvalidate, Nothing(), victimQuerySpanIds);
+        }
+
         SysLocks.RemoveSchema(tableId, locksDb);
         Pipeline.GetDepTracker().RemoveSchema(tableId);
         TableInfos.erase(tableId.LocalPathId);
@@ -3077,7 +3094,50 @@ private:
 
     ui64 CurrentVacuumGeneration = 0;
 
+    // Cache for tracking recent writes for TLI breaker linkage in deferred lock creation scenarios
+    // Maps (MvccVersion) -> QuerySpanId for writes that may have broken locks
+    // Used when InvisibleRowSkips are detected to identify the breaker
+    static constexpr size_t MaxRecentWritesForTli = 1000;
+    struct TRecentWriteForTli {
+        TRowVersion WriteVersion;
+        ui64 QuerySpanId;
+        ui32 SenderNodeId;  // Node where the breaker's SessionActor ran (where TNodeQueryTextCache is populated)
+    };
+    TDeque<TRecentWriteForTli> RecentWritesForTli;
+
 public:
+    struct TBreakerInfo {
+        ui64 QuerySpanId;
+        ui32 SenderNodeId;
+    };
+
+    // Add a recent write entry for TLI breaker tracking
+    void AddRecentWriteForTli(const TRowVersion& writeVersion, ui64 querySpanId, ui32 senderNodeId) {
+        if (querySpanId == 0) {
+            return; // Don't track writes without QuerySpanId
+        }
+        // Keep the cache bounded
+        while (RecentWritesForTli.size() >= MaxRecentWritesForTli) {
+            RecentWritesForTli.pop_front();
+        }
+        RecentWritesForTli.push_back({writeVersion, querySpanId, senderNodeId});
+    }
+
+    // Find breaker info (QuerySpanId + SenderNodeId) for writes that happened after a given read version
+    TVector<TBreakerInfo> FindBreakerInfoForTli(const TRowVersion& readVersion) const {
+        TVector<TBreakerInfo> result;
+        // Iterate from newest to oldest for efficiency
+        for (auto it = RecentWritesForTli.rbegin(); it != RecentWritesForTli.rend(); ++it) {
+            if (it->WriteVersion > readVersion) {
+                result.push_back({it->QuerySpanId, it->SenderNodeId});
+            } else {
+                // Since writes are added in order, older writes won't match
+                break;
+            }
+        }
+        return result;
+    }
+
     auto& GetLockChangeRecords() {
         return LockChangeRecords;
     }

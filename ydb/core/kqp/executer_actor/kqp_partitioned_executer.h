@@ -32,6 +32,7 @@ struct TKqpPartitionedExecuterSettings {
     const TShardIdToTableInfoPtr& ShardIdToTableInfo;
     ui64 WriteBufferInitialMemoryLimit;
     ui64 WriteBufferMemoryLimit;
+    ui64 QuerySpanId = 0;
 };
 
 NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService);

@@ -233,6 +233,33 @@ struct TGraphMeta {
     void SetLockMode(NKikimrDataEvents::ELockMode lockMode) {
         LockMode = lockMode;
     }
+
+    void SetQuerySpanId(ui64 querySpanId) {
+        QuerySpanId = querySpanId;
+    }
+
+    // Set per-transaction QuerySpanId (used for deferred effects)
+    void SetTxQuerySpanId(ui32 txIndex, ui64 querySpanId) {
+        if (querySpanId != 0) {
+            TxQuerySpanIds[txIndex] = querySpanId;
+        }
+    }
+
+    // Get QuerySpanId for a specific transaction index
+    // Fast path: if no per-transaction IDs are stored, return global QuerySpanId directly
+    ui64 GetTxQuerySpanId(ui32 txIndex) const {
+        if (TxQuerySpanIds.empty()) {
+            return QuerySpanId;
+        }
+        auto it = TxQuerySpanIds.find(txIndex);
+        if (it != TxQuerySpanIds.end()) {
+            return it->second;
+        }
+        return QuerySpanId;  // Fall back to global QuerySpanId
+    }
+
+    ui64 QuerySpanId = 0;
+    THashMap<ui32, ui64> TxQuerySpanIds;  // Per-transaction QuerySpanIds (for deferred effects)
 };
 
 struct TTaskInputMeta {

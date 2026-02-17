@@ -770,7 +770,10 @@ public:
     }
 
     void OnAbort(ui64 txId) override {
+        // Preserve TxStats (including BreakerQuerySpanIds)
+        auto txStats = std::move(*WriteResult->Record.MutableTxStats());
         WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, "Distributed transaction aborted due to commit failure");
+        *WriteResult->Record.MutableTxStats() = std::move(txStats);
         OnCommit(txId);
     }
 

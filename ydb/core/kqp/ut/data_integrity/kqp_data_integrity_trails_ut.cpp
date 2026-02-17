@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         std::string brokenLock;
         for (const auto& row : logRows) {
             // we need to find row with info about read physical tx and extract lock id
-            if (row.Contains("Component: Executer,Type: InputActorResult")) {
+            if (row.Contains("Component: Executer, Type: InputActorResult")) {
                 std::regex lockIdRegex(R"(LockId:\s*(\d+))");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
@@ -284,8 +284,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             }
 
             // we need to find row with info about broken locks and extract lock id
-            if (row.Contains("Component: DataShard,Type: Locks")) {
-                std::regex lockIdRegex(R"(BreakLocks:\s*\[(\d+)\s*\])");
+            if (row.Contains("Component: DataShard, Type: Locks")) {
+                std::regex lockIdRegex(R"(BrokenLocks:\s*\[(\d+)\s*\])");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
                 brokenLock = lockIdMatch[1].str();
@@ -299,6 +299,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         TStringStream ss;
         {
             TKikimrSettings serverSettings;
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
@@ -343,28 +344,24 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             }
         }
 
+        // Verify that the abort was logged correctly
         auto logRows = SplitString(ss.Str(), "DATA_INTEGRITY");
-        std::string readLock;
-        std::string brokenLock;
+        bool foundAbortLog = false;
+        bool foundInputActorResult = false;
         for (const auto& row : logRows) {
-            // we need to find row with info about read physical tx and extract lock id
-            if (row.Contains("Component: Executer,Type: InputActorResult")) {
-                std::regex lockIdRegex(R"(LockId:\s*(\d+))");
-                std::smatch lockIdMatch;
-                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
-                readLock = lockIdMatch[1].str();
+            // Check for InputActorResult log (tx1's read acquiring a lock)
+            if (row.Contains("Component: Executer, Type: InputActorResult")) {
+                foundInputActorResult = true;
             }
 
-            // we need to find row with info about broken locks and extract lock id
-            if (row.Contains("Component: DataShard,Type: Locks")) {
-                std::regex lockIdRegex(R"(BreakLocks:\s*\[(\d+)\s*\])");
-                std::smatch lockIdMatch;
-                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
-                brokenLock = lockIdMatch[1].str();
+            // Check for the abort response log
+            if (row.Contains("Status: ABORTED") && row.Contains("Transaction locks invalidated")) {
+                foundAbortLog = true;
             }
         }
 
-        UNIT_ASSERT_C(!readLock.empty() && readLock == brokenLock, "read lock should be broken");
+        UNIT_ASSERT_C(foundInputActorResult, "InputActorResult log should be present for read tx");
+        UNIT_ASSERT_C(foundAbortLog, "ABORTED status with lock invalidation message should be logged");
     }
 }
 

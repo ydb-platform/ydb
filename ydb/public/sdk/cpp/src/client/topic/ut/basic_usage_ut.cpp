@@ -1960,10 +1960,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto msgData = TString(10_KB, 'a');
 
         for (ui64 i = 0; i < 100; ++i) {    
-            producer->Write(TWriteMessage(msgData));
+            auto result = producer->Write(TWriteMessage(msgData));
+            UNIT_ASSERT_EQUAL(result, EWriteResult::SUCCESS);
         }
 
-        producer->Flush().Wait();
+        producer->Flush().GetValueSync();
 
         auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 10);

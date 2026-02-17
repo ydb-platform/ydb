@@ -447,8 +447,6 @@ TKeyedWriteSession::TEventsWorker::TEventsWorker(TKeyedWriteSession* session)
 {
     EventsPromise = NThreading::NewPromise();
     EventsFuture = EventsPromise.GetFuture();
-
-    AddReadyToAcceptEvent();
 }
 
 void TKeyedWriteSession::TEventsWorker::HandleAcksEvent(std::uint64_t partition, TWriteSessionEvent::TAcksEvent&& event) {
@@ -687,9 +685,10 @@ std::optional<TContinuationToken> TKeyedWriteSession::TEventsWorker::GetContinua
     auto iter = ContinuationTokensIndex.front();
     auto event = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*iter);
     Y_ABORT_UNLESS(event, "Expected ReadyToAcceptEvent only in ContinuationTokensIndex");
+    auto continuationToken = std::move(event->ContinuationToken);
     EventsOutputQueue.erase(iter);
     ContinuationTokensIndex.pop_front();
-    return std::move(event->ContinuationToken);
+    return continuationToken;
 }
 
 std::list<TWriteSessionEvent::TEvent>::iterator TKeyedWriteSession::TEventsWorker::AckQueueBegin(std::uint32_t partition) {
@@ -1412,6 +1411,8 @@ TKeyedWriteSession::TKeyedWriteSession(
     MessagesWorker = std::make_shared<TMessagesWorker>(this);
     EventsWorker = std::make_shared<TEventsWorker>(this);
     RetryPolicy = std::make_shared<TKeyedWriteSessionRetryPolicy>(this);
+
+    EventsWorker->AddReadyToAcceptEvent();
 
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
     Settings.EventHandlers_.HandlersExecutor_->Start();

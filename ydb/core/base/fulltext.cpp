@@ -353,12 +353,11 @@ TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::Fullte
         for (const auto& term : StringSplitter(pattern).SplitBySet("%_")) {
             const TString token(term.Token());
             const i64 tokenLength = GetLengthUTF8(token);
-            if (tokenLength == 0 || analyzersForQuery.filter_ngram_min_length() > tokenLength) {
-                continue;
-            }
 
-            const size_t upper = std::min(static_cast<i64>(analyzersForQuery.filter_ngram_max_length()), tokenLength);
-            BuildNgrams(token, upper, upper, edge, searchTerms);
+            if (tokenLength != 0 && analyzersForQuery.filter_ngram_min_length() <= tokenLength) {
+                const size_t upper = std::min(static_cast<i64>(analyzersForQuery.filter_ngram_max_length()), tokenLength);
+                BuildNgrams(token, upper, upper, edge, searchTerms);
+            }
 
             if (edge) {
                 break;

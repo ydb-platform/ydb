@@ -70,6 +70,8 @@ namespace NActors {
     {
         if (useTaskPools) {
             TaskPoolsCount = (threads + ThreadsForTaskPool - 1) / ThreadsForTaskPool;
+        } else {
+            TaskPoolsCount = 1;
         }
         TaskPoolsHolder = std::make_unique<TTaskPool[]>(TaskPoolsCount);
         TaskPools = TaskPoolsHolder.get(); 

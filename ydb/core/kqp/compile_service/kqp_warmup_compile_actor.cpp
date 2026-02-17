@@ -430,10 +430,6 @@ private:
             Complete(true, "No queries to warm up");
             return;
         }
-        LOG_I("Reach block loop");
-        while (true) {
-        }
-        LOG_I("Break block loop");
         Become(&TThis::StateCompiling);
         StartCompilations();
     }

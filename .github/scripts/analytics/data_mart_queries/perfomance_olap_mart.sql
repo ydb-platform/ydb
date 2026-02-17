@@ -100,6 +100,7 @@ SELECT
     CASE
         WHEN Db LIKE '%sas%' THEN 'sas'
         WHEN Db LIKE '%vla%' THEN 'vla'
+        WHEN Db LIKE '%klg%' THEN 'klg'
         WHEN Db LIKE '%etn0vb1kg3p016q1tp3t%' THEN 'cloud'
         ELSE 'other'
     END AS DbDc,

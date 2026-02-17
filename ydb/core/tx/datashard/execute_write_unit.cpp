@@ -541,13 +541,15 @@ public:
             KqpCommitLocks(tabletId, kqpLocks, sysLocks, userDb);
 
             if (writeTx->HasOperations()) {
-                const auto& protoOperations = writeOp->WriteRequest->Record.GetOperations();
                 for (validatedOperationIndex = 0; validatedOperationIndex < writeTx->GetOperations().size(); ++validatedOperationIndex) {
                     const TValidatedWriteTxOperation& validatedOperation = writeTx->GetOperations()[validatedOperationIndex];
-                    if (validatedOperationIndex < static_cast<size_t>(protoOperations.size())) {
-                        const auto& protoOp = protoOperations.Get(validatedOperationIndex);
-                        if (protoOp.HasQuerySpanId() && protoOp.GetQuerySpanId() != 0) {
-                            guardLocks.QuerySpanId = protoOp.GetQuerySpanId();
+                    if (writeOp->WriteRequest) {
+                        const auto& protoOperations = writeOp->WriteRequest->Record.GetOperations();
+                        if (validatedOperationIndex < static_cast<size_t>(protoOperations.size())) {
+                            const auto& protoOp = protoOperations.Get(validatedOperationIndex);
+                            if (protoOp.HasQuerySpanId() && protoOp.GetQuerySpanId() != 0) {
+                                guardLocks.QuerySpanId = protoOp.GetQuerySpanId();
+                            }
                         }
                     }
                     DoUpdateToUserDb(userDb, validatedOperation, txc);

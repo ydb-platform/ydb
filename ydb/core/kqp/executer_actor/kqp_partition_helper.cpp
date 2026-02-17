@@ -699,7 +699,6 @@ TShardIdToInfoMap PruneEffectPartitionsImpl(const TEffect& effect,
     Y_UNUSED(prunerConfig);
     auto guard = typeEnv.BindAllocator();
     TShardIdToInfoMap shardInfoMap;
-
     if (effect.HasRowsValue() &&
         effect.GetRowsValue().GetKindCase() == NKqpProto::TKqpPhyValue::kParamValue)
     {

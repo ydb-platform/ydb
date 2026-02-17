@@ -2025,7 +2025,6 @@ private:
 
         if (!graphRestored) {
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
-            Cerr << TasksGraph.DumpToString() << Endl;
         }
 
         TIssue validateIssue;
@@ -2707,14 +2706,10 @@ private:
                 Y_ENSURE(task.Outputs.size() >= 1);
             }
 
-            Cerr << "Executing tx: " << shardTx->DebugString() << Endl;
-
             ExecuteDatashardTransaction(shardId, *shardTx);
         }
 
         for (const auto& [shardId, shardTx] : EvWriteTxs) {
-            Cerr << "Executing write tx: " << shardTx->DebugString() << Endl;
-
             ExecuteEvWriteTransaction(shardId, *shardTx);
         }
 
@@ -2745,8 +2740,6 @@ private:
                 Planner->CollectTaskChannelsUpdates(task, updates);
         }
         Planner->PropagateChannelsUpdates(updates);
-
-        Cerr << "Execute Tasks!" << Endl;
     }
 
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {

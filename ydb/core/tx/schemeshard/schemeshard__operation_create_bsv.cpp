@@ -84,15 +84,15 @@ void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volum
 
     if (volume->VolumeConfig.GetTabletVersion() == 3) {
         const auto shardIdx = context.SS->RegisterShardInfo(
-        TShardInfo::BlockStoreVolumeDirectInfo(txId, pathId)
-            .WithBindedChannels(volumeChannels));
+            TShardInfo::BlockStoreVolumeDirectInfo(txId, pathId)
+                .WithBindedChannels(volumeChannels));
         context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT].Add(1);
         txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolumeDirect, TTxState::CreateParts);
         volume->VolumeShardIdx = shardIdx;
     } else {
         const auto shardIdx = context.SS->RegisterShardInfo(
-        TShardInfo::BlockStoreVolumeInfo(txId, pathId)
-            .WithBindedChannels(volumeChannels));
+            TShardInfo::BlockStoreVolumeInfo(txId, pathId)
+                .WithBindedChannels(volumeChannels));
         context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT].Add(1);
         txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolume, TTxState::CreateParts);
         volume->VolumeShardIdx = shardIdx;

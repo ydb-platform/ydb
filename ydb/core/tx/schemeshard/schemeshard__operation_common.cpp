@@ -84,8 +84,8 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
     if (shard.TabletType == ETabletType::BlockStorePartition   ||
         shard.TabletType == ETabletType::BlockStorePartition2 ||
         shard.TabletType == ETabletType::RTMRPartition) {
-        // Partitions should never be booted by local
-        // Except for BlockStorePartitionDirect
+        // These partitions should never be booted by local.
+        // BlockStorePartitionDirect is intentionally omitted and may be booted local for now.
         ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
     }
 

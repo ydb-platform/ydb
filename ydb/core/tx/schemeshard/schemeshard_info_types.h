@@ -943,18 +943,13 @@ public:
         InFlightCondErase.erase(shardIdx);
     }
 
-    void ScheduleNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
-        Y_ENSURE(InFlightCondErase.contains(shardIdx));
-
+    void UpdateNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
         auto it = FindPartition(shardIdx);
         Y_ENSURE(it != Partitions.end());
 
         it->LastCondErase = now;
         it->NextCondErase = now + next;
         it->LastCondEraseLag = TDuration::Zero();
-
-        CondEraseSchedule.push(it);
-        InFlightCondErase.erase(shardIdx);
     }
 
     bool IsUsingSequence(const TString& name) {

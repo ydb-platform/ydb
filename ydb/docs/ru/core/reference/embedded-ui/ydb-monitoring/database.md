@@ -1,4 +1,4 @@
-# Страница Databases {#databases_page}
+# Страница Databases
 
 Страница открывается при переходе по ссылке из колонки **Database** на вкладке [Databases](monitoring_main.md#database_list).
 

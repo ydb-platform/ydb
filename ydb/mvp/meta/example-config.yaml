@@ -13,6 +13,15 @@ generic:
   auth:
     token_file: path/to/tokenator_config
 
+    # Optional for federated credentials flow.
+    # Requires: access_service_type: "nebius_v1"
+    federated_creds:
+      k8s_token_path: /var/run/secrets/tokens/k8s-jwt
+      token_service_endpoint: "grpcs://token-service.private-api.nebius.cloud:443"
+      service_account_id: "ajep..."
+
+  access_service_type: "nebius_v1"
+
 meta:
   meta_api_endpoint: grpc://lb.ydb-ui.ydb.nemax.nebiuscloud.net:2135
   meta_database: /nemax_global/ydb-ui

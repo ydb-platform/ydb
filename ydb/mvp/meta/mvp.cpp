@@ -197,6 +197,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
         MetaDatabase = defaultMetaDatabase;
     }
 
+    if (StartupOptions.FederatedCreds() && MetaDatabaseTokenName.empty()) {
+        MetaDatabaseTokenName = StartupOptions.GetFederatedCredsJwtTokenName();
+    }
+
     if (StartupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);
     }

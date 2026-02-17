@@ -2024,6 +2024,7 @@ private:
         size_t sourceScanPartitionsCount = 0;
 
         if (!graphRestored) {
+            FormatBackTrace(&Cerr);
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
             Cerr << TasksGraph.DumpToString() << Endl;
         }

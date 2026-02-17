@@ -300,6 +300,7 @@ void TQueryData::ParseParameters(const google::protobuf::Map<TBasicString<char>,
 bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValue& value) {
     auto g = TypeEnv().BindAllocator();
     auto [_, success] = UnboxedData.emplace(name, std::make_pair(type, value));
+    Cerr << "add param: " << name << " " << value << Endl;
     return success;
 }
 

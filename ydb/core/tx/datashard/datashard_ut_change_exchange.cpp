@@ -1,7 +1,8 @@
 #include "defs.h"
 #include "datashard_distributed_erase.h"
-#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
+
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>

@@ -142,5 +142,4 @@ void TAffinityGuard::Release()
     Impl->Release();
 }
 
-
 }   // namespace NYdb::NBS

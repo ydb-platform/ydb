@@ -2477,8 +2477,9 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             auto it = session.ReadTable(indexPath, settings).GetValueSync();
             UNIT_ASSERT(it.IsSuccess());
 
-            int shard = 0;
             size_t rowsRead = 0;
+            ui32 nextLow = 1;
+            ui32 nextHigh = 1 + (1u << 31);
             for (;;) {
                 auto tablePart = it.ReadNext().GetValueSync();
                 if (tablePart.EOS()) {
@@ -2490,26 +2491,22 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
                 auto rsParser = TResultSetParser(resultSet);
 
-                ui32 startVal = 1;
                 while (rsParser.TryNextRow()) {
                     auto val = rsParser.GetValue(0);
                     TValueParser vp(val);
                     vp.OpenOptional();
                     if (!vp.IsNull()) {
                         rowsRead++;
-                        switch (shard) {
-                            case 0:
-                                UNIT_ASSERT_VALUES_EQUAL(vp.GetUint32(), startVal++);
-                                break;
-                            case 1:
-                                UNIT_ASSERT_VALUES_EQUAL(vp.GetUint32(), (startVal++) + (1u << 31));
-                                break;
-                            default:
-                                Y_ABORT("unexpected shard id");
+                        ui32 v = vp.GetUint32();
+                        if (v < (1u << 31)) {
+                            UNIT_ASSERT_VALUES_EQUAL(v, nextLow);
+                            nextLow++;
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(v, nextHigh);
+                            nextHigh++;
                         }
                     }
                 }
-                shard++;
             }
             UNIT_ASSERT_VALUES_EQUAL(rowsInserted, rowsRead);
         }

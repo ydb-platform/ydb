@@ -545,6 +545,10 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             fulltextIndexSettings = index.global_fulltext_relevance_index().fulltext_settings();
             break;
         }
+        case Ydb::Table::TableIndex::kGlobalJsonIndex: {
+            Stream << " GLOBAL USING json ON ";
+            break;
+        }
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
             Stream << " LOCAL USING bloom_filter ON ";
             isLocalBloomFilter = true;

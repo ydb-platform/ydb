@@ -24,6 +24,7 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
             res.SequenceCount = (prefixVectorIndex ? 1 : 0);
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
             res.IndexTableCount = 1;
             break;

@@ -83,6 +83,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         auto deleteIndexKeys = project(indexTableColumns);
 
         switch (indexDesc->Type) {
+            case TIndexDescription::EType::GlobalJson:
             case TIndexDescription::EType::GlobalAsync:
                 AFL_ENSURE(false);
             case TIndexDescription::EType::GlobalSync:

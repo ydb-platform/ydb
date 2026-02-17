@@ -161,6 +161,9 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalJson: {
+                break;
+            }
             default:
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDescription.GetType()))};
         }
@@ -354,6 +357,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
                 NKikimrSchemeOp::TTableDescription userIndexDesc;
                 if (indexDescription.IndexImplTableDescriptionsSize() == 1) {

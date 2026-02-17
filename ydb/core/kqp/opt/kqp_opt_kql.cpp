@@ -152,6 +152,8 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
             return "global sync fulltext_plain";
         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
             return "global sync fulltext_relevance";
+        case NYql::TIndexDescription::EType::GlobalJson:
+            return "global sync json";
         case NYql::TIndexDescription::EType::LocalBloomFilter:
             return "local bloom_filter";
         case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
@@ -415,7 +417,8 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
         const auto onlyStreamIndexes = std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
             return index.second->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree
                 && index.second->Type != TIndexDescription::EType::GlobalFulltextPlain
-                && index.second->Type != TIndexDescription::EType::GlobalFulltextRelevance;
+                && index.second->Type != TIndexDescription::EType::GlobalFulltextRelevance
+                && index.second->Type != TIndexDescription::EType::GlobalJson;
         });
 
         if (onlyStreamIndexes) {
@@ -784,6 +787,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
             case TIndexDescription::EType::GlobalFulltextPlain:
             case TIndexDescription::EType::GlobalFulltextRelevance:
+            case TIndexDescription::EType::GlobalJson:
             case TIndexDescription::EType::LocalBloomFilter:
             case TIndexDescription::EType::LocalBloomNgramFilter:
                 return true;

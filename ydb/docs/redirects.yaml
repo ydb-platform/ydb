@@ -318,9 +318,9 @@ common:
 
 # Redirects for Embedded UI
   - from: /maintenance/embedded_monitoring/ydb_monitoring.md
-    to: /reference/embedded-ui/ydb-monitoring.md
+    to: /reference/embedded-ui/ydb-monitoring/
   - from: /maintenance/embedded_monitoring/overview.md
-    to: /reference/embedded-ui/overview.md
+    to: /reference/embedded-ui/index.md
   - from: /maintenance/embedded_monitoring/hive.md
     to: /reference/embedded-ui/hive.md
   - from: /maintenance/embedded_monitoring/logs.md

@@ -1085,7 +1085,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 ![ydb-storage-gr-check](../../../_assets/ydb-storage-gr-check.png)
 
-Индикаторы `VDisks` должны быть зелёными, а статус `state` (находится в подсказке при наведении на индикатор Vdisk) должен быть `Ok`. Больше об индикаторах состояния кластера и мониторинге можно прочитать в статье [{#T}](../../../reference/embedded-ui/ydb-monitoring.md).
+Индикаторы `VDisks` должны быть зелёными, а статус `state` (находится в подсказке при наведении на индикатор Vdisk) должен быть `Ok`. Больше об индикаторах состояния кластера и мониторинге можно прочитать в статье [{#T}](../../../reference/embedded-ui/ydb-monitoring/index.md).
 
 ### Тестирование кластера {#testing}
 

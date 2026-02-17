@@ -12,7 +12,7 @@
 2. Обновление и рестарт [узлов баз данных](../../../concepts/glossary.md#database-node).
 
 Процесс остановки и запуска описан на странице [Безопасные рестарт и выключение узлов](../../../maintenance/manual/node_restarting.md).
-Узлы {{ ydb-short-name }} следует обновлять последовательно по одному, после каждого шага контролировать состояние кластера через [{{ ydb-short-name }} Monitoring](../../../reference/embedded-ui/ydb-monitoring.md) - на вкладке `Storage` не должно быть пулов в состоянии `Degraded` (как на примере ниже). В противном случае обновление необходимо остановить.
+Узлы {{ ydb-short-name }} следует обновлять последовательно по одному, после каждого шага контролировать состояние кластера через [{{ ydb-short-name }} Monitoring](../../../reference/embedded-ui/ydb-monitoring/index.md) - на вкладке `Storage` не должно быть пулов в состоянии `Degraded` (как на примере ниже). В противном случае обновление необходимо остановить.
 
 ![Monitoring_storage_state](../../../reference/embedded-ui/_assets/monitoring_storage_state.png)
 

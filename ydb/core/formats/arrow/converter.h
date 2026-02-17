@@ -60,6 +60,7 @@ private:
 
 public:
     static bool NeedDataConversion(const NScheme::TTypeInfo& colType);
+    static bool NeedBatchConversion(const NScheme::TTypeInfo& colType);
     
     bool NeedDataConversionWithSettings(const NScheme::TTypeInfo& colType);
 

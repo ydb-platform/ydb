@@ -14,13 +14,69 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
-#include <util/system/byteorder.h>
-
 #include <cstring>
 #include <memory>
 #include <vector>
 
 namespace NKikimr::NArrow {
+
+namespace {
+
+void ReverseDecimalHalves(const TStringBuf src, char* dst) {
+    constexpr size_t DecimalSize = 16;
+    constexpr size_t HalfSize = 8;
+    Y_ABORT_UNLESS(src.size() == DecimalSize);
+    for (size_t i = 0; i < HalfSize; ++i) {
+        dst[i] = src[HalfSize - i - 1];
+        dst[HalfSize + i] = src[DecimalSize - i - 1];
+    }
+}
+
+arrow::Status ConvertDecimalColumn(std::shared_ptr<arrow::Array>& column) {
+    if (column->type()->id() != arrow::Type::FIXED_SIZE_BINARY) {
+        return arrow::Status::TypeError("Cannot convert Decimal to ", column->type()->ToString());
+    }
+
+    const auto& fixedType = static_cast<const arrow::FixedSizeBinaryType&>(*column->type());
+    if (fixedType.byte_width() != 16) {
+        return arrow::Status::TypeError("Cannot convert Decimal from fixed_size_binary[", fixedType.byte_width(), "]");
+    }
+
+    auto& fixedArray = static_cast<arrow::FixedSizeBinaryArray&>(*column);
+    arrow::FixedSizeBinaryBuilder builder(std::make_shared<arrow::FixedSizeBinaryType>(16));
+    builder.Reserve(fixedArray.length()).ok();
+
+    for (i32 i = 0; i < fixedArray.length(); ++i) {
+        if (fixedArray.IsNull(i)) {
+            auto appendNullResult = builder.AppendNull();
+            if (!appendNullResult.ok()) {
+                return appendNullResult;
+            }
+
+            continue;
+        }
+
+        const auto value = fixedArray.GetView(i);
+        char converted[16];
+        ReverseDecimalHalves(TStringBuf(value.data(), value.size()), converted);
+
+        auto appendResult = builder.Append(converted);
+        if (!appendResult.ok()) {
+            return appendResult;
+        }
+    }
+
+    std::shared_ptr<arrow::Array> result;
+    auto finishResult = builder.Finish(&result);
+    if (!finishResult.ok()) {
+        return finishResult;
+    }
+
+    column = result;
+    return arrow::Status::OK();
+}
+
+} // namespace
 
 static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage, const bool allowInfDouble) {
     if (!cell.AsBuf()) {
@@ -57,75 +113,11 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
 
 static arrow::Status ConvertColumn(
     const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field, const bool allowInfDouble) {
-    switch (colType.GetTypeId()) {
-    case NScheme::NTypeIds::Decimal: {
-        if (column->type()->id() != arrow::Type::FIXED_SIZE_BINARY) {
-            return arrow::Status::OK();
-        }
-
-        auto fsbType = std::dynamic_pointer_cast<arrow::FixedSizeBinaryType>(column->type());
-        if (!fsbType || fsbType->byte_width() != NScheme::FSB_SIZE) {
-            return arrow::Status::TypeError("Unexpected decimal byte width ", column->type()->ToString());
-        }
-
-        auto fsbArray = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
-        arrow::FixedSizeBinaryBuilder builder(fsbType, arrow::default_memory_pool());
-        auto reserveStatus = builder.Reserve(fsbArray->length());
-        if (!reserveStatus.ok()) {
-            return reserveStatus;
-        }
-
-        const ui8 precision = colType.GetDecimalType().GetPrecision();
-        for (i64 i = 0; i < fsbArray->length(); ++i) {
-            if (fsbArray->IsNull(i)) {
-                auto appendNullStatus = builder.AppendNull();
-                if (!appendNullStatus.ok()) {
-                    return appendNullStatus;
-                }
-
-                continue;
-            }
-
-            auto view = fsbArray->GetView(i);
-            if (view.size() != NScheme::FSB_SIZE) {
-                return arrow::Status::Invalid("Unexpected decimal payload size");
-            }
-
-            ui64 loLe = 0;
-            i64 hiLe = 0;
-            std::memcpy(&loLe, view.data(), sizeof(loLe));
-            std::memcpy(&hiLe, view.data() + sizeof(loLe), sizeof(hiLe));
-            const bool leValid = NMiniKQL::IsValidDecimal(precision, NYql::NDecimal::FromHalfs(loLe, hiLe));
-
-            const ui64 loSwapped = SwapBytes64(loLe);
-            const i64 hiSwapped = static_cast<i64>(SwapBytes64(static_cast<ui64>(hiLe)));
-            const bool swappedValid = NMiniKQL::IsValidDecimal(precision, NYql::NDecimal::FromHalfs(loSwapped, hiSwapped));
-
-            ui64 loOut = loLe;
-            i64 hiOut = hiLe;
-            if (!leValid && swappedValid) {
-                loOut = loSwapped;
-                hiOut = hiSwapped;
-            }
-
-            char out[NScheme::FSB_SIZE];
-            std::memcpy(out, &loOut, sizeof(loOut));
-            std::memcpy(out + sizeof(loOut), &hiOut, sizeof(hiOut));
-            auto appendStatus = builder.Append(out);
-            if (!appendStatus.ok()) {
-                return appendStatus;
-            }
-        }
-
-        std::shared_ptr<arrow::FixedSizeBinaryArray> result;
-        auto finishStatus = builder.Finish(&result);
-        if (!finishStatus.ok()) {
-            return finishStatus;
-        }
-
-        column = result;
-        return arrow::Status::OK();
+    if (colType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+        return ConvertDecimalColumn(column);
     }
+
+    switch (colType.GetTypeId()) {
     case NScheme::NTypeIds::DyNumber: {
         if (!arrow::is_binary_like(column->type()->id())) {
             return arrow::Status::TypeError("Cannot convert DyNumber to ", column->type()->ToString());
@@ -319,6 +311,10 @@ bool TArrowToYdbConverter::NeedDataConversion(const NScheme::TTypeInfo& colType)
             break;
     }
     return false;
+}
+
+bool TArrowToYdbConverter::NeedBatchConversion(const NScheme::TTypeInfo& colType) {
+    return NeedDataConversion(colType) || colType.GetTypeId() == NScheme::NTypeIds::Decimal;
 }
 
 bool TArrowToYdbConverter::NeedDataConversionWithSettings(const NScheme::TTypeInfo& colType) {

@@ -581,7 +581,8 @@ private:
                 if (HasInternalConversion.contains(colName)) {
                     continue;
                 }
-                if (NArrow::TArrowToYdbConverter::NeedDataConversion(colType)) {
+
+                if (NArrow::TArrowToYdbConverter::NeedBatchConversion(colType)) {
                     ColumnsToConvert[colName] = colType;
                 }
             }

@@ -251,7 +251,7 @@ struct TKqpTableWriterStatistics {
             WriteRows += tableAccessStats.GetUpdateRow().GetRows();
             WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
             EraseRows += tableAccessStats.GetEraseRow().GetRows();
-            EraseBytes += tableAccessStats.GetEraseRow().GetRows();
+            EraseBytes += tableAccessStats.GetEraseRow().GetBytes();
         }
 
         for (const auto& perShardStats : txStats.GetPerShardStats()) {

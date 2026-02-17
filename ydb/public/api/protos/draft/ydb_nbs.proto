@@ -62,6 +62,24 @@ message DeletePartitionResult {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Get load actor adapter actor id request/response.
+
+message GetLoadActorAdapterActorIdRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Partition tablet id (actor id string).
+    string TabletId = 2;
+}
+
+message GetLoadActorAdapterActorIdResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetLoadActorAdapterActorIdResult {
+    // Load actor adapter actor id string.
+    string ActorId = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Partition list request/response.
 
 message ListPartitionsRequest {

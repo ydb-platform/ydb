@@ -22,42 +22,6 @@ private:
     // Throttle trace ID creation to avoid overwhelming the tracing system
     TDuration TraceSamplePeriod;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> CountersBase;
-    std::vector<std::pair<TString, TString>> CountersChain;
-
-    struct
-    {
-        struct
-        {
-            NMonitoring::TDynamicCounters::TCounterPtr Requests;
-            NMonitoring::TDynamicCounters::TCounterPtr ReplyOk;
-            NMonitoring::TDynamicCounters::TCounterPtr ReplyErr;
-            NMonitoring::TDynamicCounters::TCounterPtr Bytes;
-
-            void Request(ui32 bytes = 0)
-            {
-                if (Requests) {
-                    ++*Requests;
-                }
-                if (bytes && Bytes) {
-                    *Bytes += bytes;
-                }
-            }
-
-            void Reply(bool ok)
-            {
-                if (ok && ReplyOk) {
-                    ++*ReplyOk;
-                } else if (!ok && ReplyErr) {
-                    ++*ReplyErr;
-                }
-            }
-        } WriteBlocks, ReadBlocks;
-    } Counters;
-
-    std::function<void(bool)> WriteBlocksReplyCallback;
-    std::function<void(bool)> ReadBlocksReplyCallback;
-
 public:
     TInMemoryDirectBlockGroup(
         ui64 tabletId,
@@ -80,17 +44,6 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId) override;
-
-    void SetWriteBlocksReplyCallback(
-        std::function<void(bool)> callback) override
-    {
-        WriteBlocksReplyCallback = std::move(callback);
-    }
-
-    void SetReadBlocksReplyCallback(std::function<void(bool)> callback) override
-    {
-        ReadBlocksReplyCallback = std::move(callback);
-    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

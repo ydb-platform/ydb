@@ -35,7 +35,6 @@ TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
 void TInMemoryDirectBlockGroup::EstablishConnections()
 {}
 
-////////////////////////////////////////////////////////////////////////////////
 
 NThreading::TFuture<TWriteBlocksLocalResponse>
 TInMemoryDirectBlockGroup::WriteBlocksLocal(
@@ -101,10 +100,6 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
     TWriteBlocksLocalResponse response;
     if (!writeSuccess) {
         response.Error = MakeError(E_IO, "Failed to write to sector map");
-    }
-
-    if (WriteBlocksReplyCallback) {
-        WriteBlocksReplyCallback(true);
     }
 
     promise.SetValue(std::move(response));
@@ -179,10 +174,6 @@ TInMemoryDirectBlockGroup::ReadBlocksLocal(
 
     // Copy data from buffer to sglist
     SgListCopy(TBlockDataRef::Create(buffer), sglist);
-
-    if (ReadBlocksReplyCallback) {
-        ReadBlocksReplyCallback(true);
-    }
 
     promise.SetValue(std::move(response));
     return promise.GetFuture();

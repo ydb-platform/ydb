@@ -56,6 +56,7 @@ CLUSTER_CONFIG = dict(
     extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes'],
     datashard_config={
         'keep_snapshot_timeout': 5000,
+        'stats_report_interval_seconds': 1,
     },
     column_shard_config={
         'disabled_on_scheme_shard': False,
@@ -455,7 +456,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         for start in range(0, 1000, 100):
             IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=100))
 
-        for _ in range(30):
+        for _ in range(60):
             time.sleep(1)
             described = ydb_cluster.client.describe(database, '')
             logger.debug('database state after write_keys: %s', described)
@@ -474,7 +475,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         for start in range(0, 1000, 100):
             IOLoop.current().run_sync(lambda: async_erase_keys(path, start=start, cnt=100))
 
-        for _ in range(30):
+        for _ in range(60):
             time.sleep(1)
             described = ydb_cluster.client.describe(database, '')
             logger.debug('database state after erase_keys: %s', described)

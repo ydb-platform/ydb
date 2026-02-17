@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
@@ -25,34 +26,7 @@ private:
     // Throttle trace ID creation to avoid overwhelming the tracing system
     TDuration TraceSamplePeriod;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> CountersBase;
-    std::vector<std::pair<TString, TString>> CountersChain;
-
-    struct {
-        struct {
-            NMonitoring::TDynamicCounters::TCounterPtr Requests;
-            NMonitoring::TDynamicCounters::TCounterPtr ReplyOk;
-            NMonitoring::TDynamicCounters::TCounterPtr ReplyErr;
-            NMonitoring::TDynamicCounters::TCounterPtr Bytes;
-
-            void Request(ui32 bytes = 0) {
-                if (Requests) {
-                    ++*Requests;
-                }
-                if (bytes && Bytes) {
-                    *Bytes += bytes;
-                }
-            }
-
-            void Reply(bool ok) {
-                if (ok && ReplyOk) {
-                    ++*ReplyOk;
-                } else if (!ok && ReplyErr) {
-                    ++*ReplyErr;
-                }
-            }
-        } WriteBlocks, ReadBlocks;
-    } Counters;
+    TVolumeCounters Counters;
 
 public:
     TFastPathService(
@@ -64,7 +38,7 @@ public:
         ui64 blocksCount,
         ui32 storageMedia,
         const NYdb::NBS::NProto::TStorageConfig& storageConfig,
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters = nullptr);
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 
     ~TFastPathService() override = default;
 

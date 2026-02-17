@@ -9,7 +9,9 @@ PEERDIR(
     ydb/core/protos
     ydb/library/services
 
+    ydb/core/nbs/cloud/blockstore/bootstrap
     ydb/core/nbs/cloud/blockstore/config
+    ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/load_actor_adapter
 )
 

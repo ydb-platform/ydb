@@ -254,6 +254,7 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .CommitPeriodMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion,
                 .CommitMessages = CommitMessages,
                 .MaxMemoryUsageBytes = ConsumerMaxMemoryUsageBytes,
+                .PartitionMaxInflightBytes = PartitionMaxInflightBytes,
             };
 
             threads.push_back(std::async([readerParams = std::move(readerParams)]() { TTopicWorkloadReader::RetryableReaderLoop(readerParams); }));

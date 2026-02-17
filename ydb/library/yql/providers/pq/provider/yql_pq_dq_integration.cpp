@@ -102,6 +102,22 @@ public:
                 return {};
             }
 
+            TString serializedWatermarkExpr;
+            if (const auto maybeWatermark = pqReadTopic.Watermark()) {
+                const auto watermark = maybeWatermark.Cast();
+
+                TStringBuilder err;
+                NYql::NConnector::NApi::TExpression watermarkExprProto;
+                if (!NYql::SerializeWatermarkExpr(ctx, watermark, &watermarkExprProto, err)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to proto: " + err));
+                    return {};
+                }
+                if (!watermarkExprProto.SerializeToString(&serializedWatermarkExpr)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to string"));
+                    return {};
+                }
+            }
+
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
@@ -113,7 +129,7 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
-                    .Watermark(pqReadTopic.Watermark())
+                    .Watermark().Value(serializedWatermarkExpr).Build()
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -330,16 +346,10 @@ public:
                     srcDesc.AddNodeIds(nodeId);
                 }
 
-                TString watermarkExprSql;
-                if (const auto maybeWatermark = topicSource.Watermark()) {
-                    const auto watermark = maybeWatermark.Cast();
-
-                    TStringBuilder err;
-                    NYql::NConnector::NApi::TExpression watermarkExprProto;
-                    YQL_ENSURE(NYql::SerializeWatermarkExpr(ctx, watermark, &watermarkExprProto, err));
-
-                    watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
-                }
+                NYql::NConnector::NApi::TExpression watermarkExprProto;
+                auto serializedWatermarkExpr = topicSource.Watermark().Ref().Content();
+                YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
+                TString watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
                 srcDesc.SetWatermarkExpr(watermarkExprSql);
 
                 protoSettings.PackFrom(srcDesc);

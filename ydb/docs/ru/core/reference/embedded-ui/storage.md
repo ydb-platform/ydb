@@ -1,4 +1,4 @@
-# Страница Storage {#storage_page}
+# Страница Storage
 
 Страница открывается при переходе по **Group ID** с вкладки [Storage](ydb-monitoring.md#storage_list).
 

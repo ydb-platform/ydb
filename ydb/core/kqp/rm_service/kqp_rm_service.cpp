@@ -921,12 +921,6 @@ private:
     }
 
     void PublishResourceUsage(TStringBuf reason) {
-        if (WarmupInProgress) {
-            LOG_D("Skipping resource publishing: warmup in progress, reason: " << reason);
-            ResourceManager->PublishScheduled.clear();
-            return;
-        }
-
         const TDuration publishInterval = TDuration::Seconds(Config.GetPublishStatisticsIntervalSec());
         if (PublishResourcesScheduledAt) {
             return;
@@ -960,19 +954,33 @@ private:
             LOG_D("Don't set KqpProxySharedResources");
         }
         ActorIdToProto(MakeKqpResourceManagerServiceID(SelfId().NodeId()), payload.MutableResourceManagerActorId()); // legacy
-        with_lock (ResourceManager->Lock) {
-            payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.load()); // legacy
-            payload.SetTotalMemory(ResourceManager->TotalMemoryResource->GetLimit()); // legacy
-            payload.SetUsedMemory(ResourceManager->TotalMemoryResource->GetLimit() - ResourceManager->TotalMemoryResource->Available()); // legacy
 
-            payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
+        if (WarmupInProgress) {
+            // Publish with zero compute resources during warmup to prevent other nodes
+            // from assigning compute tasks, while keeping discovery and gossip working
+            payload.SetAvailableComputeActors(0);
+            payload.SetTotalMemory(0);
+            payload.SetUsedMemory(0);
+            payload.SetExecutionUnits(0);
             auto* pool = payload.MutableMemory()->Add();
             pool->SetPool(EKqpMemoryPool::ScanQuery);
-            pool->SetAvailable(ResourceManager->TotalMemoryResource->Available());
+            pool->SetAvailable(0);
+        } else {
+            with_lock (ResourceManager->Lock) {
+                payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.load()); // legacy
+                payload.SetTotalMemory(ResourceManager->TotalMemoryResource->GetLimit()); // legacy
+                payload.SetUsedMemory(ResourceManager->TotalMemoryResource->GetLimit() - ResourceManager->TotalMemoryResource->Available()); // legacy
+
+                payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
+                auto* pool = payload.MutableMemory()->Add();
+                pool->SetPool(EKqpMemoryPool::ScanQuery);
+                pool->SetAvailable(ResourceManager->TotalMemoryResource->Available());
+            }
         }
 
         LOG_I("Send to publish resource usage for "
             << "reason: " << reason
+            << (WarmupInProgress ? " (warmup: zero resources)" : "")
             << ", payload: " << payload.ShortDebugString());
         WbState.LastPublishTime = now;
         if (ResourceManager->ResourceInfoExchanger) {

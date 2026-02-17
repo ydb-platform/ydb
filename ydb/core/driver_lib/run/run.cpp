@@ -751,8 +751,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
 
-    if (runConfig.AppConfig.GetTableServiceConfig().HasCompileCacheWarmupConfig() &&
-        runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
+    if (runConfig.AppConfig.GetTableServiceConfig().HasCompileCacheWarmupConfig()) {
         auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
             runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
         GRpcServersWrapper->WarmupTimeout = warmupConfig.HardDeadline;

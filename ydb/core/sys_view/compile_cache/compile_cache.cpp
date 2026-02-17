@@ -2,6 +2,7 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/auth/auth_scan_base.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -83,8 +84,10 @@ public:
 
     TCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
         const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
+        , UserToken(std::move(userToken))
     {
         const auto& cellsFrom = TableRange.From.GetCells();
         if (cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
@@ -142,6 +145,14 @@ public:
 private:
     void ProceedToScan() override {
         Become(&TCompileCacheQueriesScan::StateScan);
+
+        if (UserToken) {
+            bool isClusterAdmin = IsAdministrator(AppData(), UserToken.Get());
+            bool isDatabaseAdmin = AppData()->FeatureFlags.GetEnableDatabaseAdmin()
+                && IsDatabaseAdministrator(UserToken.Get(), DatabaseOwner);
+            IsAdmin = isClusterAdmin || isDatabaseAdmin;
+        }
+
         if (!MissingSchemaColumns.empty()) {
             TStringBuilder message;
             message << "Missing schema column tags: ";
@@ -278,14 +289,33 @@ private:
         ProcessRows();
     }
 
+    bool CanAccessEntry(const TCompileCacheQuery& entry) const {
+        if (!UserToken || IsAdmin) {
+            return true;
+        }
+
+        // Filter by database: user can only see queries from their own database
+        if (entry.HasDatabase() && entry.GetDatabase() != DatabaseName) {
+            return false;
+        }
+
+        // Filter by user SID: non-admin user can only see their own queries
+        return entry.GetUserSID() == UserToken->GetUserSID();
+    }
+
     void ProcessRows() {
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
 
         for(int idx = 0; idx < LastResponse.GetCacheCacheQueries().size(); ++idx) {
+            const auto& entry = LastResponse.GetCacheCacheQueries(idx);
+            if (!CanAccessEntry(entry)) {
+                continue;
+            }
+
             TVector<TCell> cells;
             for (auto extractor : ColumnsExtractors) {
-                cells.push_back(extractor(LastResponse.GetCacheCacheQueries(idx), nodeId));
+                cells.push_back(extractor(entry, nodeId));
             }
 
             TArrayRef<const TCell> ref(cells);
@@ -341,12 +371,16 @@ private:
     std::vector<TExtractor> ColumnsExtractors;
     std::vector<ui32> ColumnsToRead;
     NKikimrKqp::TEvListCompileCacheQueriesResponse LastResponse;
+
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    bool IsAdmin = false;
     };
 THolder<NActors::IActor> CreateCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TCompileCacheQueriesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
+    return MakeHolder<TCompileCacheQueriesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 } // NKikimr::NSysView

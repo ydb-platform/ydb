@@ -35,6 +35,7 @@ void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std:
         }
 
         to->SetUserSID(Query->UserSid);
+        to->SetDatabase(Query->Database);
     }
 
 }

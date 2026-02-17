@@ -403,7 +403,6 @@ namespace {
             }
 
             TKqpWarmupConfig warmupActorConfig;
-            warmupActorConfig.Enabled = true;
 
             ui32 const nodeId = 0;
             auto warmupEdge = runtime.AllocateEdgeActor(nodeId);

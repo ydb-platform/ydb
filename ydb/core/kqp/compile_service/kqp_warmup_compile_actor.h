@@ -33,22 +33,20 @@ struct TEvStartWarmup : public NActors::TEventLocal<TEvStartWarmup, TKqpEvents::
 };
 
 struct TKqpWarmupConfig {
-    bool Enabled = false;
-    TDuration Deadline = TDuration::Seconds(10);        // Soft deadline: time for compilation after discovery ready
+    TDuration Deadline = TDuration::Seconds(10);        // Soft deadline: time for discovery + compilation after warmup actor start
     TDuration HardDeadline = TDuration::Seconds(20);    // Hard deadline: max time from actor start (must be >= Deadline)
     ui32 MaxConcurrentCompilations = 5;
     ui32 MaxQueriesToLoad = 1000;
-    ui32 MaxNodesToQuery = 5;                           // Max nodes to query for warmup (0 = all nodes)
+    ui32 MaxNodesToRequest = 5;                           // Max nodes to query for warmup (0 = all nodes)
 };
 
 inline TKqpWarmupConfig ImportWarmupConfigFromProto(const NKikimrConfig::TTableServiceConfig::TCompileCacheWarmupConfig& proto) {
     TKqpWarmupConfig config;
-    config.Enabled = proto.GetEnabled();
-    config.Deadline = TDuration::Seconds(proto.GetDeadlineSeconds());
+    config.Deadline = TDuration::Seconds(proto.GetSoftDeadlineSeconds());
     config.HardDeadline = TDuration::Seconds(proto.GetHardDeadlineSeconds());
     config.MaxConcurrentCompilations = proto.GetMaxConcurrentCompilations();
     config.MaxQueriesToLoad = proto.GetMaxQueriesToLoad();
-    config.MaxNodesToQuery = proto.GetMaxNodesToQuery();
+    config.MaxNodesToRequest = proto.GetMaxNodesToRequest();
     return config;
 }
 

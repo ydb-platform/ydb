@@ -49,6 +49,7 @@
 #include <ydb/core/cms/http.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
+
 #include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 #include <ydb/core/driver_lib/version/version.h>
 
@@ -2269,11 +2270,10 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
         TDuration warmupDeadline;
-        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig()
-            && Config.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
+        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig()) {
             auto warmupProto = Config.GetTableServiceConfig().GetCompileCacheWarmupConfig();
             warmupDeadline = TDuration::Seconds(std::max(
-                warmupProto.GetHardDeadlineSeconds(), warmupProto.GetDeadlineSeconds()));
+                warmupProto.GetHardDeadlineSeconds(), warmupProto.GetSoftDeadlineSeconds()));
         }
 
         // Create resource manager
@@ -2311,16 +2311,15 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
             TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig() && 
-            Config.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
+        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig()) {
             auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
 
             TString database = appData->TenantName;
             TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
 
             TVector<NActors::TActorId> notifyActorIds = {
-                MakeGRpcServersManagerId(NodeId),
                 NKqp::MakeKqpRmServiceID(NodeId),
+                MakeGRpcServersManagerId(NodeId),
             };
             auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, std::move(notifyActorIds));
             setup->LocalServices.push_back(std::make_pair(

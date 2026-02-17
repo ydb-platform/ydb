@@ -77,7 +77,7 @@ public:
         , MaxQueriesToLoad(maxQueriesToLoad)
         , MaxCompilationDurationMs(maxCompilationDurationMs)
         , NodeIds(nodeIds)
-        , MaxNodesToQuery(maxNodesToQuery)
+        , MaxNodesToRequest(maxNodesToQuery)
     {}
 
     void OnRunQuery() override {
@@ -91,7 +91,7 @@ public:
 
         if (!NodeIds.empty()) {
             sql << "  AND NodeId IN (";
-            for (size_t i = 0; i < MaxNodesToQuery; ++i) {
+            for (size_t i = 0; i < MaxNodesToRequest; ++i) {
                 if (i > 0) sql << ", ";
                 sql << NodeIds[i];
             }
@@ -141,7 +141,7 @@ private:
     ui32 MaxQueriesToLoad;
     ui64 MaxCompilationDurationMs;
     TVector<ui32> NodeIds;
-    ui32 MaxNodesToQuery;
+    ui32 MaxNodesToRequest;
     std::unique_ptr<TEvPrivate::TEvFetchCacheResult> Result = std::make_unique<TEvPrivate::TEvFetchCacheResult>(false);
 };
 
@@ -154,7 +154,7 @@ public:
     TFetchTruncatedCountActor(const TString& database, const TVector<ui32>& nodeIds, ui32 maxNodesToQuery)
         : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , NodeIds(nodeIds)
-        , MaxNodesToQuery(maxNodesToQuery)
+        , MaxNodesToRequest(maxNodesToQuery)
     {}
 
     void OnRunQuery() override {
@@ -164,7 +164,7 @@ public:
             << " WHERE IsTruncated = true AND AccessCount > 0";
 
         if (!NodeIds.empty()) {
-            ui32 nodesToQuery = std::min<ui32>(MaxNodesToQuery, NodeIds.size());
+            ui32 nodesToQuery = std::min<ui32>(MaxNodesToRequest, NodeIds.size());
             sql << " AND NodeId IN (";
             for (ui32 i = 0; i < nodesToQuery; ++i) {
                 if (i > 0) sql << ", ";
@@ -194,7 +194,7 @@ public:
 
 private:
     TVector<ui32> NodeIds;
-    ui32 MaxNodesToQuery;
+    ui32 MaxNodesToRequest;
     ui64 TruncatedCount = 0;
 };
 
@@ -252,8 +252,18 @@ void FillYdbParametersFromMetadata(
     Compile warmup actor runs before the node is registered and ready to serve queries.
     The main goal is to compile popular queries before node starts to avoid execution time drops
     during the first moments of node work.
-    Has a hard deadline at the end of execution and a soft deadline from fetch start.
-    Both are set in WarmupConfig.
+
+    Timer logic:
+    1. HardDeadline (from Bootstrap): absolute maximum time for actor lifetime across all states.
+       Triggered in any state to forcefully terminate warmup (success=false).
+    2. SoftDeadline has two roles:
+       - (from Bootstrap): timeout for waiting TEvStartWarmup from KqpProxy.
+         If peer nodes are not discovered within this time, warmup completes early (success=false).
+       - (from HandleStartWarmup): timeout for fetching and compiling queries.
+         When reached, stops submitting new compilations but waits for in-flight ones to finish.
+         HardDeadline acts as a safety net if in-flight compilations hang.
+
+    Both SoftDeadline and HardDeadline are configured in WarmupConfig.
 */
 class TKqpCompileCacheWarmupActor : public NActors::TActorBootstrapped<TKqpCompileCacheWarmupActor> {
 public:
@@ -284,6 +294,7 @@ public:
               << ", waiting for TEvStartWarmup from KqpProxy");
 
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
+        Schedule(softDeadline, new TEvPrivate::TEvSoftDeadline());
 
         if (Database.empty()) {
             LOG_I("Database is empty, skipping warmup");
@@ -319,6 +330,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStartWarmup, HandleStartWarmup);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
+            cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadlineInWaitingStart);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
             LOG_W("StateWaitingStart: unexpected event " << ev->GetTypeRewrite());
@@ -380,14 +392,14 @@ private:
 
         LOG_I("Received TEvStartWarmup, discovered nodes: " << discoveredNodes
               << ", nodeIds count: " << NodeIds.size()
-              << ", maxNodesToQuery: " << Config.MaxNodesToQuery
+              << ", maxNodesToQuery: " << Config.MaxNodesToRequest
               << ", scheduling soft deadline: " << Config.Deadline);
         Schedule(Config.Deadline, new TEvPrivate::TEvSoftDeadline());
         StartFetch();
     }
 
     void StartFetch() {
-        ui32 maxNodesToQuery = Config.MaxNodesToQuery;
+        ui32 maxNodesToQuery = Config.MaxNodesToRequest;
         if (maxNodesToQuery == 0) {
             maxNodesToQuery = NodeIds.size(); // 0 means query all nodes
         }
@@ -418,7 +430,10 @@ private:
             Complete(true, "No queries to warm up");
             return;
         }
-
+        LOG_I("Reach block loop");
+        while (true) {
+        }
+        LOG_I("Break block loop");
         Become(&TThis::StateCompiling);
         StartCompilations();
     }
@@ -521,7 +536,7 @@ private:
     }
 
     void StartCompilations() {
-        while (PendingCompilations < MaxConcurrentCompilations && !QueriesToCompile.empty()) {
+        while (!SoftDeadlineReached && PendingCompilations < MaxConcurrentCompilations && !QueriesToCompile.empty()) {
             auto query = std::move(QueriesToCompile.front());
             QueriesToCompile.pop_front();
 
@@ -532,7 +547,9 @@ private:
         if (PendingCompilations == 0 && QueriesToCompile.empty()) {
             LOG_I("All compilations finished, loaded: " << EntriesLoaded 
                   << ", failed: " << EntriesFailed);
-            Complete(true, TStringBuilder() << "Compiled " << EntriesLoaded << " queries");
+            TString msg = TStringBuilder() << "Compiled " << EntriesLoaded << " queries"
+                << (SoftDeadlineReached ? " (soft deadline)" : "");
+            Complete(true, msg);
         }
     }
 
@@ -544,10 +561,23 @@ private:
     }
 
     void HandleSoftDeadline() {
+        SoftDeadlineReached = true;
+        QueriesToCompile.clear();
+
         LOG_I("Soft deadline reached, compiled: " << EntriesLoaded
               << ", failed: " << EntriesFailed
               << ", pending: " << PendingCompilations);
-        Complete(false, "Warmup deadline exceeded");
+
+        if (PendingCompilations == 0) {
+            Complete(true, TStringBuilder() << "Soft deadline: compiled " << EntriesLoaded << " queries");
+        } else {
+            LOG_I("Waiting for " << PendingCompilations << " in-flight compilations to finish");
+        }
+    }
+
+    void HandleSoftDeadlineInWaitingStart() {
+        LOG_I("Soft deadline reached while waiting for warmup start signal - no peer nodes discovered, skipping warmup");
+        Complete(false, "Warmup incomplete: no peer nodes discovered within soft deadline");
     }
 
     void HandlePoison() {
@@ -588,6 +618,7 @@ private:
     ui32 EntriesFailed = 0;
     ui32 MaxConcurrentCompilations = 1;
     bool Completed = false;
+    bool SoftDeadlineReached = false;
     TString SkipReason;
     TVector<ui32> NodeIds;
 };

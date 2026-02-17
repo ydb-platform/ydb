@@ -168,21 +168,24 @@ class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
 class TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration(KiKiMRDistConfNodeStatusTest):
     erasure = Erasure.MIRROR_3_DC
     nodes_count = 12
+    pileup_replicas = True
 
     def do_test(self, configName):
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        self.kill_nodes(lambda hosts, i: i == 1 or i == 2)
-        time.sleep(25)
+        self.cluster.nodes[3].stop()
+        time.sleep(30)
         rg = self.do_request_config()[f"{configName}Config"]["Ring"]
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
         assert_eq(rg["RingGroupActorIdOffset"], 1)
-        self.kill_nodes(lambda hosts, i: i == 6)
-        time.sleep(25)
+        self.cluster.nodes[3].start() # DC is disconnected if 2/3 nodes unavailable. So we start node to stop other
+        time.sleep(30)
+        self.cluster.nodes[6].stop()
+        time.sleep(30)
         rg = self.do_request_config()[f"{configName}Config"]["Ring"]
-        self.validate_not_contains_nodes(rg, [7])
+        self.validate_not_contains_nodes(rg, [6])
         assert_eq(rg["RingGroupActorIdOffset"], 1)  # reassign node api used
 
 

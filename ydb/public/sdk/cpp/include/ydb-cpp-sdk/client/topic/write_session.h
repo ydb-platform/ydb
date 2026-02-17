@@ -144,20 +144,20 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
 };
 
-struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
-    using TSelf = TKeyedWriteSessionSettings;
+struct TProducerSettings : public TWriteSessionSettings {
+    using TSelf = TProducerSettings;
 
     enum class EPartitionChooserStrategy {
         Bound,
         Hash,
     };
 
-    TKeyedWriteSessionSettings() = default;
-    TKeyedWriteSessionSettings(const TKeyedWriteSessionSettings&) = default;
-    TKeyedWriteSessionSettings(TKeyedWriteSessionSettings&&) = default;
+    TProducerSettings() = default;
+    TProducerSettings(const TProducerSettings&) = default;
+    TProducerSettings(TProducerSettings&&) = default;
 
-    TKeyedWriteSessionSettings& operator=(const TKeyedWriteSessionSettings&) = default;
-    TKeyedWriteSessionSettings& operator=(TKeyedWriteSessionSettings&&) = default;
+    TProducerSettings& operator=(const TProducerSettings&) = default;
+    TProducerSettings& operator=(TProducerSettings&&) = default;
 
     //! Session lifetime.
     FLUENT_SETTING_DEFAULT(TDuration, SubSessionIdleTimeout, TDuration::Seconds(30));

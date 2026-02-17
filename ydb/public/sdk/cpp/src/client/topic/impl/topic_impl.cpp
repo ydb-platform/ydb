@@ -61,7 +61,7 @@ std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::TImpl::CreateSimpleWr
     return std::move(session);
 }
 
-std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::TImpl::CreateSimpleKeyedWriteSession(const TKeyedWriteSessionSettings& settings) {
+std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::TImpl::CreateSimpleKeyedWriteSession(const TProducerSettings& settings) {
     auto alteredSettings = settings;
     {
         std::lock_guard guard(Lock);
@@ -80,7 +80,7 @@ std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::TImpl::CreateSim
     return session;
 }
 
-std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession(const TKeyedWriteSessionSettings& settings) {
+std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession(const TProducerSettings& settings) {
     auto alteredSettings = settings;
     {
         std::lock_guard guard(Lock);
@@ -98,7 +98,7 @@ std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession
     );
 }
 
-std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TKeyedWriteSessionSettings& settings) {
+std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TProducerSettings& settings) {
     auto alteredSettings = settings;
     {
         std::lock_guard guard(Lock);
@@ -120,7 +120,7 @@ std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TKeyedWrite
     );
 }
 
-std::shared_ptr<ISimpleBlockingProducer> TTopicClient::TImpl::CreateSimpleBlockingProducer(const TKeyedWriteSessionSettings& settings) {
+std::shared_ptr<ISimpleBlockingProducer> TTopicClient::TImpl::CreateSimpleBlockingProducer(const TProducerSettings& settings) {
     auto alteredSettings = settings;
     {
         std::lock_guard guard(Lock);

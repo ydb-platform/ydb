@@ -99,9 +99,9 @@ TWriteSession::~TWriteSession() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TKeyedWriteSession
 
-// TKeyedWriteSessionSettings
+// TProducerSettings
 
-std::string TKeyedWriteSessionSettings::DefaultPartitioningKeyHasher(const std::string_view key) {
+std::string TProducerSettings::DefaultPartitioningKeyHasher(const std::string_view key) {
     const std::uint64_t lo = MurmurHash<std::uint64_t>(key.data(), key.size(), std::uint64_t{0});
     const std::uint64_t hi = MurmurHash<std::uint64_t>(key.data(), key.size(), std::uint64_t{0x9E3779B97F4A7C15ull}); // fixed seed
 
@@ -1307,7 +1307,7 @@ void TKeyedWriteSession::TMetrics::PrintMetrics() {
 // TKeyedWriteSession
 
 TKeyedWriteSession::TKeyedWriteSession(
-    const TKeyedWriteSessionSettings& settings,
+    const TProducerSettings& settings,
     std::shared_ptr<TTopicClient::TImpl> client,
     std::shared_ptr<TGRpcConnectionsImpl> connections,
     TDbDriverStatePtr dbDriverState)
@@ -1380,7 +1380,7 @@ TKeyedWriteSession::TKeyedWriteSession(
     }
 
     switch (PartitionChooserStrategy) {
-        case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound:
+        case TProducerSettings::EPartitionChooserStrategy::Bound:
             PartitioningKeyHasher = settings.PartitioningKeyHasher_;
             PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
             for (size_t i = 0; i < Partitions.size(); ++i) {
@@ -1395,7 +1395,7 @@ TKeyedWriteSession::TKeyedWriteSession(
                 PartitionsIndex[Partitions[i].FromBound_] = Partitions[i].PartitionId_;
             }
             break;
-        case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash:
+        case TProducerSettings::EPartitionChooserStrategy::Hash:
             if (autoPartitioningEnabled) {
                 ythrow TContractViolation("Hash partition chooser strategy is not supported for topic with auto partitioning");
             }
@@ -1471,7 +1471,7 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
 
         std::uint32_t partition;
         if (key.empty()) {
-            if (PartitionChooserStrategy == TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound) {
+            if (PartitionChooserStrategy == TProducerSettings::EPartitionChooserStrategy::Bound) {
                 ythrow TContractViolation("Key is required for Bound partition chooser strategy");
             }
             partition = ChooseRandomPartition();
@@ -1940,7 +1940,7 @@ bool TSimpleBlockingWriteSession::Close(TDuration closeTimeout) {
 // TSimpleBlockingKeyedWriteSession
 
 TSimpleBlockingKeyedWriteSession::TSimpleBlockingKeyedWriteSession(
-    const TKeyedWriteSessionSettings& settings,
+    const TProducerSettings& settings,
     std::shared_ptr<TTopicClient::TImpl> client,
     std::shared_ptr<TGRpcConnectionsImpl> connections,
     TDbDriverStatePtr dbDriverState)

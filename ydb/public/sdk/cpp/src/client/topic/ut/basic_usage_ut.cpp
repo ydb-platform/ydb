@@ -982,12 +982,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto client = setup.MakeClient();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         std::atomic<size_t> readyCount{0};
@@ -1064,11 +1064,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         UNIT_ASSERT_EXCEPTION(setup.MakeClient().CreateKeyedWriteSession(writeSettings), TContractViolation);
@@ -1079,12 +1079,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
         auto publicClient = setup.MakeClient();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         auto session = publicClient.CreateKeyedWriteSession(writeSettings);
@@ -1123,12 +1123,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const ui64 partitionId0 = beforePartitions[0].GetPartitionId();
         const ui64 partitionId1 = beforePartitions[1].GetPartitionId();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         auto session = publicClient.CreateKeyedWriteSession(writeSettings);
@@ -1205,12 +1205,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const auto& beforePartitions = before.GetTopicDescription().GetPartitions();
         UNIT_ASSERT_VALUES_EQUAL(beforePartitions.size(), 5);
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
             return std::string{key};
@@ -1269,13 +1269,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto client = setup.MakeClient();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
         TKeyedWriteSessionEventLoop eventLoop(session);
@@ -1302,13 +1302,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto client = setup.MakeClient();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
 
@@ -1348,13 +1348,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto client = setup.MakeClient();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(5));
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
 
@@ -1397,13 +1397,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto client = setup.MakeClient();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
         writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
             return std::string{key};
         });
@@ -1445,13 +1445,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto client = setup.MakeClient();
         
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
         
         auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
 
@@ -1485,13 +1485,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto client = setup.MakeClient();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
 
         auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
 
@@ -1513,13 +1513,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto client = setup.MakeClient();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
 
         auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
 
@@ -1544,12 +1544,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto client = setup.MakeClient();
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
@@ -1615,15 +1615,15 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 2);
 
-        TKeyedWriteSessionSettings writeSettings1;
+        TProducerSettings writeSettings1;
         writeSettings1
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings1.ProducerIdPrefix("autopartitioning_keyed_1");
-        writeSettings1.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+        writeSettings1.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
         writeSettings1.SubSessionIdleTimeout(TDuration::Seconds(30));
 
-        TKeyedWriteSessionSettings writeSettings2 = writeSettings1;
+        TProducerSettings writeSettings2 = writeSettings1;
         writeSettings2.ProducerIdPrefix("autopartitioning_keyed_2");
 
         auto session1 = client.CreateKeyedWriteSession(writeSettings1);
@@ -1741,7 +1741,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             }
         }
 
-        TKeyedWriteSessionSettings writeSettings3 = writeSettings1;
+        TProducerSettings writeSettings3 = writeSettings1;
         writeSettings3.ProducerIdPrefix("autopartitioning_keyed_3");
         auto session3 = client.CreateKeyedWriteSession(writeSettings3);
 
@@ -1795,15 +1795,15 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 2);
 
-        TKeyedWriteSessionSettings writeSettings1;
+        TProducerSettings writeSettings1;
         writeSettings1
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings1.ProducerIdPrefix("autopartitioning_keyed_small_1");
-        writeSettings1.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+        writeSettings1.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
         writeSettings1.SubSessionIdleTimeout(TDuration::Seconds(30));
 
-        TKeyedWriteSessionSettings writeSettings2 = writeSettings1;
+        TProducerSettings writeSettings2 = writeSettings1;
         writeSettings2.ProducerIdPrefix("autopartitioning_keyed_small_2");
 
         auto session1 = client.CreateKeyedWriteSession(writeSettings1);
@@ -1919,11 +1919,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicClient client = setup.MakeClient();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
 
         auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(10_KB, 'a');
@@ -1957,13 +1957,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         CreateTopicWithAutoPartitioning(client);
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
 
-        TKeyedWriteSessionSettings writeSettings2 = writeSettings;
+        TProducerSettings writeSettings2 = writeSettings;
         writeSettings2.ProducerIdPrefix("producer_basic_write_2");
 
         auto producer1 = client.CreateProducer(writeSettings);
@@ -2019,11 +2019,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicClient client = setup.MakeClient();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
 
-        TKeyedWriteSessionSettings writeSettings;
+        TProducerSettings writeSettings;
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("simple_blocking_producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
 
         auto producer = client.CreateSimpleBlockingProducer(writeSettings);
         auto msgData = TString(10_KB, 'a');

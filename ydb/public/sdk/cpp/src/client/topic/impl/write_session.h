@@ -407,7 +407,7 @@ private:
     std::uint32_t ChooseRandomPartition();
 
 public:
-    TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
+    TKeyedWriteSession(const TProducerSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);
@@ -450,9 +450,9 @@ private:
     std::unordered_map<std::uint32_t, TPartitionInfo> Partitions;
     std::map<std::string, std::uint32_t> PartitionsIndex;
 
-    TKeyedWriteSessionSettings Settings;
+    TProducerSettings Settings;
     ESeqNoStrategy SeqNoStrategy = ESeqNoStrategy::NotInitialized;
-    TKeyedWriteSessionSettings::EPartitionChooserStrategy PartitionChooserStrategy = TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash;
+    TProducerSettings::EPartitionChooserStrategy PartitionChooserStrategy = TProducerSettings::EPartitionChooserStrategy::Hash;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
@@ -540,7 +540,7 @@ private:
 
 public:
     TSimpleBlockingKeyedWriteSession(
-            const TKeyedWriteSessionSettings& settings,
+            const TProducerSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);

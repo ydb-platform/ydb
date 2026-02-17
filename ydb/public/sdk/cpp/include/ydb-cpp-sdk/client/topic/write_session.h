@@ -371,6 +371,7 @@ struct TWriteTimeoutException : public std::exception {
 };
 
 //! Producer is an abstraction that can write messages to the topic.
+//! It does not block on Write calls, it returns write result immediately.
 class IProducer {
 public:
     //! Write single message.

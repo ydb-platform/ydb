@@ -66,14 +66,19 @@ class YdbTopicWorkload(WorkloadBase):
 
     def __loop(self):
         # одна таблетка, но распределённая транзакция
-        self.run_topic_write_with_tx(20, 10, 10)
+        self.run_topic_write_with_tx(20, 10, 10, "100M")
+        # две таблетки, распределённая транзакция
+        self.run_topic_write_with_tx(20, 5, 10, "100M")
         # широкая транзакция 1
-        self.run_topic_write_with_tx(20, 100, 10)
+        self.run_topic_write_with_tx(20, 100, 10, "100M")
         # широкая транзакция 2
-        self.run_topic_write_with_tx(20, 100, 1)
+        self.run_topic_write_with_tx(20, 100, 1, "100M")
         # immediate-транзакции
-        #self.run_topic_write_with_tx(20, 100, 1, ?)
+        self.run_topic_write_with_tx(20, 1, 1, "10M")
 
+        self.run_full()
+
+    def run_full(self):
         # init
         self.cmd_run(
             self.get_command_prefix(subcmds=['init', '-c', self.consumers, '-p', self.producers])
@@ -107,7 +112,7 @@ class YdbTopicWorkload(WorkloadBase):
             self.get_command_prefix(subcmds=['clean'])
         )
 
-    def run_topic_write_with_tx(self, number_of_producers, number_of_partitions_in_the_topic, number_of_partitions_per_tablet):
+    def run_topic_write_with_tx(self, number_of_producers, number_of_partitions_in_the_topic, number_of_partitions_per_tablet, byte_rate):
         topic_name = f'workload_topic_pr{number_of_producers}_p{number_of_partitions_in_the_topic}_pq{number_of_partitions_per_tablet}'
 
         self.create_topic(topic_name, number_of_partitions_in_the_topic, number_of_partitions_per_tablet)
@@ -116,7 +121,7 @@ class YdbTopicWorkload(WorkloadBase):
             *self._get_cli_common_args(),
             'workload', 'topic', 'run', 'write',
             '-s', self.duration,
-            '--byte-rate', '100M',
+            '--byte-rate', byte_rate,
             '--use-tx', '--tx-commit-interval', '2000',
             '-t', str(number_of_producers),
             '--max-memory-usage-per-producer=2M',

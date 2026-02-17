@@ -648,14 +648,17 @@ void Deserialize(google::protobuf::RepeatedField<T>& value, INodePtr node)
 template <class T>
 void Deserialize(TErrorOr<T>& error, NYTree::INodePtr node)
 {
-    TError& justError = error;
+    TError justError = error;
     Deserialize(justError, node);
-    if (error.IsOK()) {
+    if (justError.IsOK()) {
+        error = TErrorOr(T());
         auto mapNode = node->AsMap();
         auto valueNode = mapNode->FindChild("value");
         if (valueNode) {
             Deserialize(error.Value(), std::move(valueNode));
         }
+    } else {
+        error = std::move(justError);
     }
 }
 

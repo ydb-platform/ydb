@@ -74,7 +74,7 @@ public:
 
     [[nodiscard]] TGuardedSgList GetData();
 
-    void SetResponse();
+    void SetResponse(NProto::TError error);
 
 private:
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
@@ -167,7 +167,7 @@ public:
 
     [[nodiscard]] TGuardedSgList GetData();
 
-    void SetResponse();
+    void SetResponse(NProto::TError error);
 
 private:
     std::shared_ptr<TReadBlocksLocalRequest> Request;

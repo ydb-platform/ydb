@@ -845,6 +845,7 @@ message TKqpTableSinkSettings {
     repeated uint32 DefaultColumnsIds = 23;
     optional string UserSID = 24;
     optional string UserTraceId = 25;
+    repeated TKqpColumnMetadataProto ReturningColumns = 26;
 }
 
 message TReadVectorTopK {

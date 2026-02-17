@@ -152,6 +152,9 @@ private:
     void Handle(TEvPrivate::TEvSendAnalyze::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeliveryProblem::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev);
+
+    void PassAway() final;
 
     void InitializeStatisticsTable();
     void Navigate();
@@ -220,6 +223,7 @@ private:
             hFunc(TEvPrivate::TEvSendAnalyze, Handle);
             hFunc(TEvPrivate::TEvAnalyzeDeliveryProblem, Handle);
             hFunc(TEvPrivate::TEvAnalyzeDeadline, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeCancel, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -361,6 +365,7 @@ private: // stored in local db
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
+    TActorId AnalyzeActorId;
 
     size_t GlobalTraversalRound = 1;
 
@@ -407,6 +412,7 @@ private: // stored in local db
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
+        bool RequestingActorReattached = false; // True if the requesting actor reached this tablet instance
         TInstant CreatedAt;
     };
     std::list<TForceTraversalOperation> ForceTraversals;

@@ -114,9 +114,11 @@ TGuardedSgList TWriteRequestHandler::GetData()
     return Request->Sglist;
 }
 
-void TWriteRequestHandler::SetResponse()
+void TWriteRequestHandler::SetResponse(NProto::TError error)
 {
-    Future.SetValue(TWriteBlocksLocalResponse());
+    TWriteBlocksLocalResponse response;
+    response.Error = std::move(error);
+    Future.SetValue(std::move(response));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -298,9 +300,11 @@ TGuardedSgList TReadRequestHandler::GetData()
     return Request->Sglist;
 }
 
-void TReadRequestHandler::SetResponse()
+void TReadRequestHandler::SetResponse(NProto::TError error)
 {
-    Future.SetValue(TReadBlocksLocalResponse());
+    TReadBlocksLocalResponse response;
+    response.Error = std::move(error);
+    Future.SetValue(std::move(response));
 }
 
 }// namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

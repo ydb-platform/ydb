@@ -251,7 +251,7 @@ struct TKqpTableWriterStatistics {
             WriteRows += tableAccessStats.GetUpdateRow().GetRows();
             WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
             EraseRows += tableAccessStats.GetEraseRow().GetRows();
-            EraseBytes += tableAccessStats.GetEraseRow().GetRows();
+            EraseBytes += tableAccessStats.GetEraseRow().GetBytes();
         }
 
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
@@ -1540,6 +1540,19 @@ public:
         IKqpBufferTableLookup* Lookup = nullptr;
     };
 
+    class IKqpReturningConsumer {
+    public:
+        virtual ~IKqpReturningConsumer() = default;
+
+        virtual void Consume(IDataBatchPtr data) = 0;
+    };
+
+    struct TReturningInfo {
+        std::vector<ui32> ColumnsIndexes;
+
+        IKqpReturningConsumer* Consumer = nullptr;
+    };
+
 private:
     enum class EState {
         BLOCKED,
@@ -1560,6 +1573,7 @@ public:
             const NKikimrKqp::TKqpTableSinkSettings::EType operationType,
             std::vector<TPathWriteInfo> writes,
             std::vector<TPathLookupInfo> lookups,
+            std::optional<TReturningInfo> returning,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
             std::vector<ui32> defaultMap,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
@@ -1598,11 +1612,15 @@ public:
                 AFL_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
             }
         }
+
+        ReturningInfo = returning;
     }
 
     void Write(IDataBatchPtr data) {
         AFL_ENSURE(!Closed);
         AFL_ENSURE(!IsError());
+
+        AFL_ENSURE(BufferedBatches.empty()); // At current time fwd<->buffer inflight = 1
         if (!data->IsEmpty()) {
             Memory += data->GetMemory();
             BufferedBatches.push_back(std::move(data));
@@ -1660,6 +1678,10 @@ public:
 
     bool IsBlocked() const {
         return State == EState::BLOCKED;
+    }
+
+    bool HasReturning() const {
+        return ReturningInfo.has_value();
     }
 
     i64 GetPriority() const {
@@ -1862,8 +1884,9 @@ private:
 
                 rowsBatcher->AddRow();
                 existsMask.push_back(true);
-            } else if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
-                // Skip updates for non-existing rows.
+            } else if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                    || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                // Skip updates and deletes for non-existing rows.
                 Memory -= EstimateSize(processCells);
             } else {
                 // For UPDATE WHERE all rows must exist.
@@ -2099,6 +2122,22 @@ private:
             }
         }
 
+        if (ReturningInfo) {
+            for (auto& write : Writes) {
+                const auto& batch = write.Batch;
+
+                auto projection = CreateDataBatchProjection(
+                    ReturningInfo->ColumnsIndexes,
+                    Alloc);
+                for (const auto& row : GetRows(batch)) {
+                    projection->AddRow(row);
+                }
+                auto returningBatch = projection->Flush();
+
+                ReturningInfo->Consumer->Consume(std::move(returningBatch));
+            }
+        }
+
         for (auto& write : Writes) {
             auto& batch = write.Batch;
             Memory -= batch->GetMemory();
@@ -2148,6 +2187,7 @@ private:
 
     THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
     THashMap<TPathId, TPathLookupInfo> PathLookupInfo;
+    std::optional<TReturningInfo> ReturningInfo;
 
     bool Closed = false;
     i64 Memory = 0;
@@ -2687,6 +2727,7 @@ struct TWriteSettings {
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
+    TVector<NKikimrKqp::TKqpColumnMetadataProto> ReturningColumns;
     TTransactionSettings TransactionSettings;
     i64 Priority;
     bool IsOlap;
@@ -2724,6 +2765,7 @@ struct TEvBufferWrite : public TEventLocal<TEvBufferWrite, TKqpEvents::EvBufferW
 
 struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvents::EvBufferWriteResult> {
     TWriteToken Token;
+    std::vector<IDataBatchPtr> Data;
 };
 
 }
@@ -3281,6 +3323,17 @@ public:
                 .NeedWriteProjection = !settings.LookupColumns.empty(),
             });
 
+            std::optional<TKqpWriteTask::TReturningInfo> returningInfo;
+            if (!settings.ReturningColumns.empty()) {
+                returningInfo.emplace();
+                returningInfo->Consumer = &ReturningConsumers[token.Cookie];
+                returningInfo->ColumnsIndexes = GetIndexes(
+                    settings.Columns,
+                    settings.LookupColumns,
+                    settings.ReturningColumns,
+                    /* preferAdditionalInputColumns */ false);
+            }
+
             auto [taskIter, _] = WriteTasks.emplace(
                 token.Cookie,
                 TKqpWriteTask{
@@ -3291,6 +3344,7 @@ public:
                     settings.OperationType,
                     std::move(writes),
                     std::move(lookups),
+                    returningInfo,
                     settings.KeyColumns,
                     (settings.LookupColumns.empty() || settings.DefaultColumns.empty())
                         ? std::vector<ui32>{}
@@ -3376,12 +3430,22 @@ public:
                     writeTask.Close();
                 }
 
-                // TODO: For stream write must send AckMessage only for working tasks.
-                AckQueue.push(TAckMessage{
-                    .ForwardActorId = message.From,
-                    .Token = message.Token,
-                    .DataSize = 0,
-                });
+                if (!writeTask.HasReturning()) {
+                    // TODO: For stream write must send AckMessage only for working tasks.
+                    AckQueue.push(TAckMessage{
+                        .ForwardActorId = message.From,
+                        .Token = message.Token,
+                        .InputDataSize = 0,
+                        .OutputData = {},
+                    });
+                } else {
+                    ReturningConsumers.at(message.Token.Cookie).PushDelayedAck(TAckMessage{
+                        .ForwardActorId = message.From,
+                        .Token = message.Token,
+                        .InputDataSize = 0,
+                        .OutputData = {},
+                    });
+                }
 
                 queue.pop();
             }
@@ -3407,8 +3471,26 @@ public:
                 }
             }
 
+            for (auto& [cookie, returningConsumer] : ReturningConsumers) {
+                if (!returningConsumer.IsEmpty()) {
+                    for (auto& ack : returningConsumer.FlushDelayedAcks()) {
+                        AckQueue.push(std::move(ack));
+                    }
+                }
+            }
+
             for (const auto& cookie : finishedCookies) {
                 WriteTasks.erase(cookie);
+                if (const auto iterReturningConsumers = ReturningConsumers.find(cookie);
+                        iterReturningConsumers != ReturningConsumers.end()) {
+                    AFL_ENSURE(iterReturningConsumers->second.IsEmpty());
+                    if (!iterReturningConsumers->second.IsDelayedAcksEmpty()) {
+                        for (auto& ack : iterReturningConsumers->second.FlushDelayedAcks()) {
+                            AckQueue.push(std::move(ack));
+                        }
+                    }
+                    ReturningConsumers.erase(iterReturningConsumers);
+                }
             }
         } while (TasksPlanner.StartUnblockedTasks());
 
@@ -3418,9 +3500,10 @@ public:
     void ProcessAckQueue() {
         while (!AckQueue.empty()) {
             const auto& item = AckQueue.front();
-            if (GetTotalFreeSpace() >= item.DataSize) {
+            if (GetTotalFreeSpace() >= item.InputDataSize) {
                 auto result = std::make_unique<TEvBufferWriteResult>();
                 result->Token = AckQueue.front().Token;
+                result->Data = std::move(item.OutputData);
                 Send(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
             } else {
@@ -4814,6 +4897,15 @@ private:
     NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
     std::shared_ptr<NMiniKQL::THolderFactory> HolderFactory;
 
+    struct TAckMessage {
+        TActorId ForwardActorId;
+        TWriteToken Token;
+        i64 InputDataSize;
+        std::vector<IDataBatchPtr> OutputData;
+    };
+
+    std::queue<TAckMessage> AckQueue;
+
     struct TWriteInfo {
         struct TActorInfo {
             TKqpTableWriteActor* WriteActor = nullptr;
@@ -4832,20 +4924,55 @@ private:
         THashMap<TPathId, TActorInfo> Actors;
     };
 
+    class TReturningConsumer : public TKqpWriteTask::IKqpReturningConsumer  {
+    public:
+        void Consume(IDataBatchPtr data) override {
+            Data.emplace_back(std::move(data));
+        }
+
+        void PushDelayedAck(TAckMessage message) {
+            AFL_ENSURE(Acks.empty()); // At current time fwd<->buffer inflight = 1
+            Acks.push_back(std::move(message));
+        }
+
+        std::vector<TAckMessage> FlushDelayedAcks() {
+            AFL_ENSURE(!Acks.empty());
+
+            for (auto& data : Acks.back().OutputData) {
+                if (data) {
+                    data->DetachAlloc();
+                }
+            }
+
+            std::swap(Acks.back().OutputData, Data);
+            std::vector<TAckMessage> result;
+            std::swap(result, Acks);
+
+            AFL_ENSURE(IsEmpty());
+            return result;
+        }
+
+        bool IsEmpty() const {
+            return Data.empty();
+        }
+
+        bool IsDelayedAcksEmpty() const {
+            return Acks.empty();
+        }
+
+    private:
+        std::vector<IDataBatchPtr> Data;
+        std::vector<TAckMessage> Acks;
+    };
+
     THashMap<TPathId, TWriteInfo> WriteInfos;
     THashMap<TPathId, TLookupInfo> LookupInfos;
+    THashMap<ui64, TReturningConsumer> ReturningConsumers;
     THashMap<ui64, TKqpWriteTask> WriteTasks;
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
     THashMap<TPathId, std::queue<TBufferWriteMessage>> RequestQueues;
     TWriteTasksPlanner TasksPlanner;
-
-    struct TAckMessage {
-        TActorId ForwardActorId;
-        TWriteToken Token;
-        i64 DataSize;
-    };
-    std::queue<TAckMessage> AckQueue;
 
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
@@ -4871,15 +4998,17 @@ class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, 
     using TBase = TActorBootstrapped<TKqpForwardWriteActor>;
 
 public:
+    template<typename TArgs>
     TKqpForwardWriteActor(
         NKikimrKqp::TKqpTableSinkSettings&& settings,
-        NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args,
+        TArgs&& args,
         TIntrusivePtr<TKqpCounters> counters,
         const NACLib::TUserContext::TPtr& userCtx)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
         , Alloc(args.Alloc)
+        , HolderFactory(args.HolderFactory)
         , OutputIndex(args.OutputIndex)
         , Callbacks(args.Callback)
         , Counters(counters)
@@ -4892,6 +5021,7 @@ public:
         , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor",
                 NWilson::EFlags::AUTO_END)
         // , UserCtx(userCtx)
+        , TransformOutput(ExtractTransformOutput(args))
     {
         Y_UNUSED(userCtx);
         EgressStats.Level = args.StatsLevel;
@@ -4902,11 +5032,23 @@ public:
         std::vector<ui32> writeIndex(
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
+
         TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
             Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
+        }
+
+        if (TransformOutput) {
+            AFL_ENSURE(!Settings.GetReturningColumns().empty());
+            ReturningColumnsTypes.reserve(Settings.GetReturningColumns().size());
+            for (const auto& column : Settings.GetReturningColumns()) {
+                ReturningColumnsTypes.push_back(NScheme::TypeInfoFromProto(
+                    column.GetTypeId(), column.GetTypeInfo()));
+            }
+        } else {
+            AFL_ENSURE(Settings.GetReturningColumns().empty());
         }
 
         Counters->ForwardActorsCount->Inc();
@@ -4939,6 +5081,26 @@ private:
         CA_LOG_D("TKqpForwardWriteActor receive EvBufferWriteResult from " << BufferActorId);
 
         WriteToken = result->Get()->Token;
+
+        if (TransformOutput) {
+            AFL_ENSURE(Alloc);
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            for (const auto& batch : result->Get()->Data) {
+                for (const auto& row : GetRows(batch)) {
+                    AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
+                    NUdf::TUnboxedValue* outputRowItems = nullptr;
+                    auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
+
+                    for (size_t index = 0; index < ReturningColumnsTypes.size(); ++index) {
+                        outputRowItems[index] = NMiniKQL::GetCellValue(row[index], ReturningColumnsTypes[index]);
+                    }
+
+                    AFL_ENSURE(TransformOutput->GetFillLevel() == NYql::NDq::EDqFillLevel::NoLimit);
+                    TransformOutput->Consume(std::move(outputRow));
+                }
+            }
+        }
+
         OnFlushed();
     }
 
@@ -4954,6 +5116,9 @@ private:
         DataSize = 0;
 
         if (Closed) {
+            if (TransformOutput) {
+                TransformOutput->Finish();
+            }
             CA_LOG_D("Finished");
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
         } else {
@@ -5008,6 +5173,9 @@ private:
                 .KeyColumns = std::move(keyColumnsMetadata),
                 .Columns = std::move(columnsMetadata),
                 .LookupColumns = std::move(lookupColumnsMetadata),
+                .ReturningColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
+                    Settings.GetReturningColumns().begin(),
+                    Settings.GetReturningColumns().end()),
                 .TransactionSettings = TTransactionSettings{
                     .TxId = TxId,
                     .LockTxId = Settings.GetLockTxId(),
@@ -5103,6 +5271,13 @@ private:
 
     void PassAway() override {
         Counters->ForwardActorsCount->Dec();
+
+        if (TransformOutput) {
+            AFL_ENSURE(Alloc);
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            TransformOutput.Reset();
+        }
+
         TActorBootstrapped<TKqpForwardWriteActor>::PassAway();
     }
 
@@ -5110,6 +5285,7 @@ private:
     const NKikimrKqp::TKqpTableSinkSettings Settings;
     TWriteActorSettings MessageSettings;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    const NMiniKQL::THolderFactory& HolderFactory;
     const ui64 OutputIndex;
     NYql::NDq::TDqAsyncStats EgressStats;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;
@@ -5124,10 +5300,21 @@ private:
 
     const ui64 TxId;
     const TTableId TableId;
+    std::vector<NScheme::TTypeInfo> ReturningColumnsTypes;
 
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;
     // NACLib::TUserContext::TPtr UserCtx;
+    NYql::NDq::IDqOutputConsumer::TPtr TransformOutput;
+
+private:
+    template<typename TArgs>
+    NYql::NDq::IDqOutputConsumer::TPtr ExtractTransformOutput(TArgs&& args) {
+        if constexpr (std::is_same_v<std::decay_t<TArgs>, NYql::NDq::IDqAsyncIoFactory::TOutputTransformArguments>) {
+            return args.TransformOutput;
+        }
+        return nullptr;
+    }
 };
 
 NActors::IActor* CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings) {
@@ -5147,6 +5334,14 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
                 auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters, userCtx);
                 return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
             }
+        });
+
+    factory.RegisterOutputTransform<NKikimrKqp::TKqpTableSinkSettings>(
+        TString(NYql::KqpTableSinkName),
+        [counters] (NKikimrKqp::TKqpTableSinkSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TOutputTransformArguments&& args) {
+            AFL_ENSURE(ActorIdFromProto(settings.GetBufferActorId()));
+            auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters, settings.GetUserSID());
+            return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
         });
 }
 

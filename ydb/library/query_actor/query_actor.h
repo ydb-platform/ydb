@@ -157,7 +157,7 @@ protected:
 
     TString LogPrefix() const;
 
-    STFUNC(StateFunc);
+    virtual STFUNC(StateFunc);
 
 private:
     // Methods for implementing in derived classes.

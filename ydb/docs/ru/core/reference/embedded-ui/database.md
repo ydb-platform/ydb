@@ -1,4 +1,4 @@
-# Страница Databases {#databases_page}
+# Страница Databases
 
 Страница открывается при переходе по ссылке из колонки **Database** на вкладке [Databases](ydb-monitoring.md#database_list).
 
@@ -8,7 +8,7 @@
 
 Основные разделы страницы:
 
-### Navigation
+## Navigation
 
 В блоке **Navigation** отображается текущий путь в иерархии объектов базы данных и элементы навигации.
 
@@ -19,7 +19,7 @@
 * **Version** — версия объекта;
 * **Created** — дата и время создания.
 
-### Query
+## Query
 
 Вкладка **Query** содержит три секции:
 
@@ -35,7 +35,7 @@
 
 ![Saved](_assets/database-page-saved.png)
 
-### Diagnostics
+## Diagnostics
 
 Вкладка **Diagnostics** отображает диагностическую информацию по выбранному объекту и его окружению.
 

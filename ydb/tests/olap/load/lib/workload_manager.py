@@ -9,6 +9,7 @@ import traceback
 import yatest.common
 import ydb
 import ydb.tests.olap.lib.remote_execution as re
+import random
 
 from . import tpch
 from .conftest import LoadSuiteBase
@@ -435,6 +436,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     tpcc_warehouses: int = 4500
     tpcc_threads: int = 4
     __static_nodes: list[YdbCluster.Node] = []
+    __rndstr: str = str(random.randint(0, 100000))
 
     @classmethod
     def get_remote_tmpdir(cls):
@@ -443,7 +445,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             if re.is_localhost(node.host):
                 tmpdir = os.getenv('TMP') or os.getenv('TMPDIR') or yatest.common.work_path()
                 break
-        return os.path.join(tmpdir, 'scripts', 'tpcc')
+        return os.path.join(tmpdir, cls.__rndstr, 'scripts', 'tpcc')
 
     @classmethod
     def do_setup_class(cls) -> None:

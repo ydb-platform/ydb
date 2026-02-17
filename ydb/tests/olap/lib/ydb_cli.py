@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import logging
+import random
 import ydb.tests.olap.lib.remote_execution as remote_execution
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
@@ -426,11 +427,13 @@ class YdbCliHelper:
         results_by_q = [r.result() for r in results]
         return {q: YdbCliHelper.WorkloadRunResult().merge(*[r.get(q) for r in results_by_q]) for q in extended_query_names}
 
+    __rndstr: str = str(random.randint(0, 100000))
+
     @classmethod
     def get_remote_cli_path(cls, host: str = ''):
         if not host:
             host = YdbCluster.get_client_host()
-        return remote_execution.get_remote_tmp_path(host, 'ydb_cli', os.path.basename(cls.get_cli_path()))
+        return remote_execution.get_remote_tmp_path(host, 'ydb_cli', cls.__rndstr, os.path.basename(cls.get_cli_path()))
 
     @classmethod
     @allure.step

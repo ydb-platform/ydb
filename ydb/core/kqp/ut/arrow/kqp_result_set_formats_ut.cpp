@@ -2031,13 +2031,6 @@ R"(column0:   -- is_valid: all not null
     }
 
     Y_UNIT_TEST_TWIN(ArrowFormat_BulkUpsert, IsOlap) {
-
-        // FIXME: Uncaught exception for types: Uuid, Decimal(22, 0) -> FixedSizeBinary(16)
-        // https://github.com/ydb-platform/ydb/issues/34156
-        if (!IsOlap) {
-            return;
-        }
-
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto queryClient = kikimr.GetQueryClient();
         auto tableClient = kikimr.GetTableClient();

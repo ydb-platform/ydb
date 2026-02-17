@@ -2556,9 +2556,11 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
         futures[index].Subscribe(BIND_NO_PROPAGATE([promise] (const TErrorOr<T>& value) {
             promise.TrySet(value);
         }));
-        promise.OnCanceled(BIND_NO_PROPAGATE([future = futures[index]] (const TError& error) {
-            future.Cancel(error);
-        }));
+        if (options.PropagateCancelationToInput) {
+            promise.OnCanceled(BIND_NO_PROPAGATE([future = futures[index]] (const TError& error) {
+                future.Cancel(error);
+            }));
+        }
         promises[index] = promise;
     }
 
@@ -2570,11 +2572,13 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
     auto combinedFuture = AllSet(wrappedFutures, options);
 
     auto cookie = NConcurrency::TDelayedExecutor::Submit(
-        BIND_NO_PROPAGATE([promises, futures] {
+        BIND_NO_PROPAGATE([promises, futures, cancelFuture = options.CancelInputOnShortcut] {
             for (int index = 0; index < std::ssize(futures); ++index) {
                 auto error = TError(NYT::EErrorCode::Timeout, "Operation timed out");
                 promises[index].TrySet(error);
-                futures[index].Cancel(error);
+                if (cancelFuture) {
+                    futures[index].Cancel(error);
+                }
             }
         }),
         timeout,

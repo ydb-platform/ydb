@@ -1301,8 +1301,13 @@ TEST_F(TFutureTest, AllCombinerDontPropagateCancelation)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TFutureTest, AllSetWithTimeoutWorks)
+TEST_PI(TFutureTest, AllSetWithTimeoutWorks, testing::Bool())
 {
+    bool cancelInputOnShortcut = GetParam();
+    TFutureCombinerOptions combinerOptions{
+        .CancelInputOnShortcut = cancelInputOnShortcut,
+    };
+
     auto p1 = NewPromise<void>();
     auto p2 = NewPromise<void>();
     auto p3 = NewPromise<void>();
@@ -1311,7 +1316,7 @@ TEST_F(TFutureTest, AllSetWithTimeoutWorks)
         p2.ToFuture(),
         p3.ToFuture()
     };
-    auto f = AllSetWithTimeout(futures, TDuration::MilliSeconds(100));
+    auto f = AllSetWithTimeout(futures, TDuration::MilliSeconds(100), combinerOptions);
 
     p1.Set();
     EXPECT_FALSE(f.IsSet());
@@ -1327,7 +1332,7 @@ TEST_F(TFutureTest, AllSetWithTimeoutWorks)
     EXPECT_TRUE(p1.IsSet());
     EXPECT_TRUE(resultOrError.Value()[0].IsOK());
 
-    EXPECT_TRUE(p2.IsSet());
+    EXPECT_EQ(p2.IsSet(), cancelInputOnShortcut);
     EXPECT_EQ(resultOrError.Value()[1].GetCode(), NYT::EErrorCode::Timeout);
 
     EXPECT_TRUE(p3.IsSet());
@@ -1365,8 +1370,13 @@ TEST_F(TFutureTest, AllSetWithTimeoutFuturesAreReleased)
     EXPECT_TRUE(wip2.IsExpired());
 }
 
-TEST_F(TFutureTest, AllSetWithTimeoutCancellation)
+TEST_PI(TFutureTest, AllSetWithTimeoutCancellation, testing::Bool())
 {
+    bool propagateCancelation = GetParam();
+    TFutureCombinerOptions combinerOptions{
+        .PropagateCancelationToInput = propagateCancelation,
+    };
+
     auto p1 = NewPromise<void>();
     auto p2 = NewPromise<void>();
     auto p3 = NewPromise<void>();
@@ -1375,7 +1385,7 @@ TEST_F(TFutureTest, AllSetWithTimeoutCancellation)
         p2.ToFuture(),
         p3.ToFuture()
     };
-    auto f = AllSetWithTimeout(futures, TDuration::MilliSeconds(100));
+    auto f = AllSetWithTimeout(futures, TDuration::MilliSeconds(100), combinerOptions);
 
     Sleep(TDuration::MilliSeconds(20));
     p3.Set();
@@ -1383,8 +1393,8 @@ TEST_F(TFutureTest, AllSetWithTimeoutCancellation)
     Sleep(TDuration::MilliSeconds(20));
     f.Cancel(TError("oops"));
 
-    EXPECT_TRUE(p1.IsCanceled());
-    EXPECT_TRUE(p2.IsCanceled());
+    EXPECT_EQ(propagateCancelation, p1.IsCanceled());
+    EXPECT_EQ(propagateCancelation, p2.IsCanceled());
     EXPECT_TRUE(p3.IsSet());
 }
 

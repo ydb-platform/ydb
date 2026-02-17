@@ -96,7 +96,7 @@ bool TInFlightController::IsMemoryLimitReached() const {
     return TotalSize >= MaxAllowedSize;
 }
 
-TDuration TInFlightController::GetOverflowDuration() {
+TDuration TInFlightController::GetLimitReachedDuration() {
     TDuration carry = TDuration::Zero();
     if (InFlightFullSince != TInstant::Zero()) {
         carry = Min(TInstant::Now() - InFlightFullSince, SLIDING_WINDOW_SIZE);

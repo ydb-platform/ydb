@@ -2414,12 +2414,16 @@ void TPersQueue::HandleUpdateReadMetricsRequest(ui64 responseCookie, NWilson::TT
 {
     AFL_VERIFY_DEBUG(req.HasCmdUpdateReadMetrics());
 
-    if (!req.GetCmdUpdateReadMetrics().HasInFlightOverflowDurationMs()) {
-        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "in_flight_full_duration is required");
+    if (!req.GetCmdUpdateReadMetrics().HasClientId()) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "source_id is required");
     }
 
-    auto inFlightOverflowDuration = TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().GetInFlightOverflowDurationMs());
-    ctx.Send(partActor, new TEvPQ::TEvUpdateReadMetrics(inFlightOverflowDuration), 0, 0, std::move(traceId));
+    auto clientId = req.GetCmdUpdateReadMetrics().GetClientId();
+    TDuration inFlightLimitReachedDuration = TDuration::Zero();
+    if (req.GetCmdUpdateReadMetrics().HasInFlightLimitReachedDurationMs()) {
+        inFlightLimitReachedDuration = TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().GetInFlightLimitReachedDurationMs());
+    }
+    ctx.Send(partActor, new TEvPQ::TEvUpdateReadMetrics(clientId, inFlightLimitReachedDuration), 0, 0, std::move(traceId));
 }
 
 void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,

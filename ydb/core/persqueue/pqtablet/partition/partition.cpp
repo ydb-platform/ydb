@@ -769,7 +769,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         PartitionCountersLabeled->GetCounters()[METRIC_LIFE_TIME] = CreationTime.MilliSeconds();
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS] = 1;
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS_TOTAL] = Config.PartitionsSize();
-        PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Set(0);
         ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
     UpdateUserInfoEndOffset(ctx.Now());
@@ -1837,12 +1836,18 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
 }
 
 void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx) {
-    auto inFlightOverflowDuration = ev->Get()->InFlightOverflowDuration;
-    if (PartitionCountersLabeled) {
-        PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Set(inFlightOverflowDuration.MilliSeconds());
+    if (!UsersInfoStorage) {
+        return;
+    }
+    
+    auto userInfo = UsersInfoStorage.Get()->GetIfExists(ev->Get()->ClientId);
+    if (!userInfo || !userInfo->LabeledCounters) {
+        return;
     }
 
-    LastReadMetricsUpdateTime = ctx.Now();
+    auto inFlightLimitReachedDuration = ev->Get()->InFlightLimitReachedDuration;
+    userInfo->LabeledCounters->GetCounters()[METRIC_IN_FLIGHT_LIMIT_REACHED_DURATION_MS].Set(inFlightLimitReachedDuration.MilliSeconds());
+    UsersInfoStorage->SetLastReadMetricsUpdateTime(ctx.Now());
 }
 
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
@@ -1978,6 +1983,12 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             SET_METRIC(userInfo.LabeledCounters, METRIC_TOTAL_COMMIT_MESSAGE_LAG, lag);
         }
 
+        if (ctx.Now() - UsersInfoStorage->GetLastReadMetricsUpdateTime() > READ_METRICS_RESET_DELAY && userInfo.LabeledCounters->GetCounters()[METRIC_IN_FLIGHT_LIMIT_REACHED_DURATION_MS].Get() != 0) {
+            haveChanges = true;
+            userInfo.LabeledCounters->GetCounters()[METRIC_IN_FLIGHT_LIMIT_REACHED_DURATION_MS].Set(0);
+            UsersInfoStorage->SetLastReadMetricsUpdateTime(ctx.Now());
+        }
+
         ui64 readMessageLag = GetEndOffset() - snapshot.ReadOffset;
         for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
             perPartitionCounters.MessageLagByLastReadPerPartition->Set(readMessageLag);
@@ -2049,12 +2060,6 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_GAPS_COUNT, gapsCount, METRIC_MAX_GAPS_COUNT);
 
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
-
-    if (ctx.Now() - LastReadMetricsUpdateTime > READ_METRICS_RESET_DELAY && PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Get() != 0) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Set(0);
-        LastReadMetricsUpdateTime = ctx.Now();
-    }
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {

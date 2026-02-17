@@ -248,6 +248,9 @@ public:
 
     void SetImportant(TUserInfo& userInfo, bool important, TDuration availabilityPeriod);
 
+    TInstant GetLastReadMetricsUpdateTime() const;
+    void SetLastReadMetricsUpdateTime(TInstant time);
+
 private:
 
     TIntrusivePtr<TUserInfo> CreateUserInfo(const TActorContext& ctx,
@@ -291,6 +294,8 @@ private:
     bool IsServerless;
     TString FolderId;
     mutable ui64 CurReadRuleGeneration;
+
+    TInstant LastReadMetricsUpdateTime;
 };
 
 

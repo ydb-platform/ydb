@@ -41,7 +41,7 @@ struct TInFlightController {
     bool Remove(ui64 Offset);
     bool IsMemoryLimitReached() const;
 
-    TDuration GetOverflowDuration();
+    TDuration GetLimitReachedDuration();
 };
 
 } // namespace NKikimr::NPQ

@@ -1089,7 +1089,6 @@ private:
     THolder<TMirrorerInfo> Mirrorer;
 
     TInstant LastUsedStorageMeterTimestamp;
-    TInstant LastReadMetricsUpdateTime;
 
     ui64 CompacterCookie = 0;
     THolder<TPartitionCompaction> Compacter;

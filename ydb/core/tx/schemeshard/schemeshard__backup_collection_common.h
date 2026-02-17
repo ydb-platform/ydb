@@ -8,8 +8,8 @@
 #include <optional>
 
 namespace NKikimr::NSchemeShard {
-    bool isSupportedIndex(TPathId pathId, const TOperationContext& context);
-    bool isSupportedIndex(TPathId pathId, const TSchemeShard* ss);
+    bool IsSupportedIndex(TPathId pathId, const TOperationContext& context);
+    bool IsSupportedIndex(TPathId pathId, const TSchemeShard* ss);
 }
 
 namespace NKikimr::NSchemeShard::NBackup {

@@ -121,6 +121,7 @@ namespace NKikimr::NPQ {
 static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
 static const TDuration UPDATE_AVAIL_SIZE_INTERVAL = TDuration::MilliSeconds(100);
 static const TDuration MIN_UPDATE_COUNTERS_DELAY = TDuration::MilliSeconds(300);
+static const TDuration READ_METRICS_RESET_DELAY = TDuration::Seconds(60);
 static const ui32 MAX_USERS = 1000;
 static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
@@ -1835,11 +1836,13 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     OnReadComplete(info, userInfo, ev->Get(), ctx);
 }
 
-void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext&) {
+void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx) {
     auto inFlightOverflowDuration = ev->Get()->InFlightOverflowDuration;
     if (PartitionCountersLabeled) {
         PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Set(inFlightOverflowDuration.MilliSeconds());
     }
+
+    LastReadMetricsUpdateTime = ctx.Now();
 }
 
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
@@ -2046,6 +2049,12 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_GAPS_COUNT, gapsCount, METRIC_MAX_GAPS_COUNT);
 
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
+
+    if (ctx.Now() - LastReadMetricsUpdateTime > READ_METRICS_RESET_DELAY && PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Get() != 0) {
+        haveChanges = true;
+        PartitionCountersLabeled->GetCounters()[METRIC_IN_FLIGHT_OVERFLOW_DURATION_MS].Set(0);
+        LastReadMetricsUpdateTime = ctx.Now();
+    }
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {

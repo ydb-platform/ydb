@@ -1,6 +1,6 @@
-# Вкладка Nodes {#nodes_list}
+# Вкладка Nodesы
 
-На вкладке отображаются узлы кластера и их состояние.
+На вкладке отображаются узлы кластера и их состояние. Вкладка входит в набор вкладок [главной страницы](monitoring_main.md) вместе с [Databases](tab-databases.md), [Storage](tab-storage.md), [Tablets](tab-tablets.md) и [Versions](tab-versions.md).
 
 ![Nodes_list](../_assets/nodes_list_1.png)
 

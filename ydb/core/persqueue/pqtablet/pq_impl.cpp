@@ -1065,7 +1065,10 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
     }
 
-    SendDefferedReadSetAcks(ctx);
+    // Завершилась операция с CmdWrite. Можно отправлять отложенные TEvReadSetAck
+    if (resp.GetCookie() != READ_TXS_COOKIE) {
+        SendDefferedReadSetAcks(ctx);
+    }
 }
 
 void TPersQueue::SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters)

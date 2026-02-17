@@ -179,16 +179,47 @@ DEFINE_REFCOUNTED_TYPE(TTableMountInfo)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TSmoothMovementRedirectionHint
+    : public NYTree::TYsonStructLite
+{
+    NHydra::TRevision OldMountRevision;
+
+    NHydra::TRevision NewMountRevision;
+    TTabletCellId CellId;
+    NYTree::INodePtr CellDescriptor;
+
+    REGISTER_YSON_STRUCT_LITE(TSmoothMovementRedirectionHint);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReshardRedirectionHint
+    : public NYTree::TYsonStruct
+{
+    std::vector<NTabletClient::TTabletId> OldTabletIds;
+    std::vector<NHydra::TRevision> OldTabletMountRevisions;
+    std::vector<NTabletClient::TTabletId> NewTabletIds;
+    std::vector<NTableClient::TLegacyOwningKey> NewTabletPivotKeys;
+    NHydra::TRevision NewTabletsMountRevision;
+
+    REGISTER_YSON_STRUCT(TReshardRedirectionHint);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TReshardRedirectionHint)
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Describes the new location of a tablet that is not available at the old
 //! location. May be located in the error attributes.
 struct TTabletRedirectionHint
     : public NYTree::TYsonStructLite
 {
-    NHydra::TRevision PreviousMountRevision;
-
-    NHydra::TRevision MountRevision;
-    TTabletCellId CellId;
-    NYTree::INodePtr CellDescriptor;
+    TSmoothMovementRedirectionHint SmoothMovementRedirectionHint;
+    TReshardRedirectionHintPtr ReshardRedirectionHint;
 
     REGISTER_YSON_STRUCT_LITE(TTabletRedirectionHint);
 

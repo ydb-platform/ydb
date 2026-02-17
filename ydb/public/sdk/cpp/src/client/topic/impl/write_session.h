@@ -207,6 +207,7 @@ private:
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
+        void SetCloseException(std::exception_ptr exception);
 
     private:
         using MessageIter = std::list<TMessageInfo>::iterator;

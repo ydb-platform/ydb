@@ -1076,6 +1076,14 @@ bool TKeyedWriteSession::TMessagesWorker::HasInFlightMessages() const {
     return !InFlightMessages.empty();
 }
 
+void TKeyedWriteSession::TMessagesWorker::SetCloseException(std::exception_ptr exception) {
+    for (auto& inFlightMessage : InFlightMessages) {
+        if (inFlightMessage.FlushPromise.Initialized()) {
+            inFlightMessage.FlushPromise.TrySetException(exception);
+        }
+    }
+}
+
 void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(std::uint32_t partition, std::uint64_t afterSeqNo) {
     auto it = InFlightMessagesIndex.find(partition);
     if (it == InFlightMessagesIndex.end()) {
@@ -1763,6 +1771,9 @@ void TKeyedWriteSession::RunMainWorker() {
         if (isClosed && (Done.load() || MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
             ShutdownPromise.TrySetValue();
             EventsWorker->EventsPromise.TrySetValue();
+            MessagesWorker->SetCloseException(std::make_exception_ptr(TProducerClosedException(
+                EventsWorker->GetSessionClosedEvent().value_or(TSessionClosedEvent(EStatus::INTERNAL_ERROR, {})))
+            ));
             ClosePromise.TrySetValue();
             MainWorkerState.store(Idle, std::memory_order_release);
             return;
@@ -2064,8 +2075,9 @@ bool TSimpleBlockingKeyedWriteSession::Write(TWriteMessage&& message, const std:
             case EWriteResult::OVERLOADED:
                 Sleep(Min(timeout, remainingTimeout));
                 timeout *= 2;
+                break;
             case EWriteResult::CLOSED:
-                return false;
+                throw TProducerClosedException(Writer->ExplainClosed().value_or(TSessionClosedEvent(EStatus::INTERNAL_ERROR, {})));
         }
 
         auto newNow = TInstant::Now();

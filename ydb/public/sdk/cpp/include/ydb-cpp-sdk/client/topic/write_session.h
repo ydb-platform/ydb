@@ -340,10 +340,25 @@ public:
     virtual ~IKeyedWriteSession() = default;
 };
 
+//! Write result.
+//! If write was successfully added ti buffer, returns QUEUED.
+//! If write was not successful due to overloaded buffer, returns OVERLOADED.
+//! If write was not successful because of closed session, returns CLOSED.
 enum class EWriteResult : uint8_t {
     QUEUED = 0,
     OVERLOADED = 1,
     CLOSED = 2,
+};
+
+//! Exception that is thrown when session is closed.
+struct TProducerClosedException : public std::exception {
+    TProducerClosedException(const TSessionClosedEvent& closedEvent) : ClosedEvent(closedEvent) {}
+
+    const char* what() const noexcept override {
+        return "session closed";
+    }
+private:
+    TSessionClosedEvent ClosedEvent;
 };
 
 //! Producer is an abstraction that can write messages to the topic.
@@ -365,6 +380,7 @@ public:
 
     //! Flush all messages to the server.
     //! Returns future that is set when flush is complete.
+    //! Future will contains TProducerClosedException if session is closed.
     virtual NThreading::TFuture<void> Flush() = 0;
 
     //! Close the producer.
@@ -397,11 +413,13 @@ public:
 class ISimpleBlockingProducer {
 public:
     //! Write single message.
+    //! Throws TProducerClosedException if session was closed.
     virtual bool Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt, TDuration blockTimeout = TDuration::Max(),
         TTransactionBase* tx = nullptr) = 0;
 
     //! Flush all messages to the server.
     //! Returns future that is set when flush is complete.
+    //! Future will contains TProducerClosedException if session is closed.
     virtual NThreading::TFuture<void> Flush() = 0;
 
     //! Close the producer.

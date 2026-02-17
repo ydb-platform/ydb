@@ -175,6 +175,7 @@ private:
     void Reconnect();
     void SignalWaiters();
     void StartSessions();
+    void DestroyDecompressionInfos();
 
 private:
     // Read.
@@ -235,6 +236,8 @@ public:
         i64 serverBytesSize = 0 // to increment read request bytes size
     );
     ~TDataDecompressionInfo();
+
+    void Cleanup();
 
     i64 StartDecompressionTasks(const typename IExecutor::TPtr& executor,
                                 i64 availableMemory,
@@ -302,12 +305,6 @@ public:
         return MessagesMeta[batchIndex][messageIndex];
     }
 
-    bool HasMoreData() const {
-        return CurrentReadingMessage.first < static_cast<size_t>(GetServerMessage().batches_size());
-    }
-
-    bool HasReadyUnreadData() const;
-
     void PutDecompressionError(std::exception_ptr error, size_t batch, size_t message);
     std::exception_ptr GetDecompressionError(size_t batch, size_t message);
 
@@ -320,6 +317,7 @@ private:
         size_t Batch = 0; // Last ready batch with message index.
         size_t Message = 0; // Last ready message index.
         std::atomic<bool> Ready = false;
+        std::atomic<bool> Abandoned = false; // Marked by true either when decompression is completed or message is not needed anymore
     };
 
     struct TDecompressionTask {
@@ -371,7 +369,6 @@ private:
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)
     std::deque<TReadyMessageThreshold> ReadyThresholds;
-    std::pair<size_t, size_t> CurrentReadingMessage = {0, 0}; // (Batch, Message)
 
     // Decompression exceptions.
     // Optimization for rare using.
@@ -389,16 +386,26 @@ private:
 template <bool UseMigrationProtocol>
 class TDataDecompressionEvent {
 public:
-    TDataDecompressionEvent(size_t batch, size_t message, TDataDecompressionInfoPtr<UseMigrationProtocol> parent, std::atomic<bool>& ready) :
+    TDataDecompressionEvent(size_t batch, size_t message, TDataDecompressionInfoPtr<UseMigrationProtocol> parent, std::atomic<bool>& ready, std::atomic<bool>& abandoned) :
         Batch{batch},
         Message{message},
         Parent{std::move(parent)},
-        Ready{ready}
+        Ready{ready},
+        Abandoned{abandoned}
     {
     }
 
     bool IsReady() const {
         return Ready;
+    }
+
+    bool SetAbandoned() {
+        if (bool expected = false; Abandoned.compare_exchange_strong(expected, true)) {
+            return true;
+        }
+
+        Y_ASSERT(Ready);
+        return false;
     }
 
     void TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
@@ -416,6 +423,7 @@ private:
     size_t Message;
     TDataDecompressionInfoPtr<UseMigrationProtocol> Parent;
     std::atomic<bool>& Ready;
+    std::atomic<bool>& Abandoned;
 };
 
 template <bool UseMigrationProtocol>
@@ -480,12 +488,14 @@ struct TRawPartitionStreamEvent {
     TRawPartitionStreamEvent(size_t batch,
                              size_t message,
                              TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                             std::atomic<bool> &ready)
+                             std::atomic<bool> &ready,
+                             std::atomic<bool>& abandoned)
         : Event(std::in_place_type_t<TDataDecompressionEvent<UseMigrationProtocol>>(),
                 batch,
                 message,
                 std::move(parent),
-                ready)
+                ready,
+                abandoned)
     {
     }
 
@@ -497,6 +507,11 @@ struct TRawPartitionStreamEvent {
 
     bool IsDataEvent() const {
         return std::holds_alternative<TDataDecompressionEvent<UseMigrationProtocol>>(Event);
+    }
+
+    TDataDecompressionEvent<UseMigrationProtocol>& GetDataEvent() {
+        Y_ASSERT(IsDataEvent());
+        return std::get<TDataDecompressionEvent<UseMigrationProtocol>>(Event);
     }
 
     const TDataDecompressionEvent<UseMigrationProtocol>& GetDataEvent() const {
@@ -717,9 +732,10 @@ public:
     void InsertDataEvent(size_t batch,
                          size_t message,
                          TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                         std::atomic<bool> &ready)
+                         std::atomic<bool>& ready,
+                         std::atomic<bool>& abandoned)
     {
-        EventsQueue.emplace_back(batch, message, std::move(parent), ready);
+        EventsQueue.emplace_back(batch, message, std::move(parent), ready, abandoned);
     }
 
     bool HasEvents() const {
@@ -920,7 +936,8 @@ public:
                        size_t batch,
                        size_t message,
                        TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                       std::atomic<bool> &ready);
+                       std::atomic<bool>& ready,
+                       std::atomic<bool>& abandoned);
 
     void SignalEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                          TDeferredActions<UseMigrationProtocol>& deferred,

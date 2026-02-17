@@ -211,7 +211,15 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> ready;
 
     auto i = NotReady.begin();
-    for (; (i != NotReady.end()) && i->IsReady(); ++i) {
+    for (; i != NotReady.end(); ++i) {
+        if (!i->IsReady()) {
+            // Cancel inflight decompression tasks if any
+            if (!i->IsDataEvent() || i->GetDataEvent().SetAbandoned()) {
+                break;
+            }
+            // Message was decompressed and become ready
+        }
+
         ready.push_back(std::move(*i));
     }
 
@@ -1749,6 +1757,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTask
                                                                            deferred);
         DecompressedDataSize += sentToDecompress;
         if (current.BatchInfo->AllDecompressionTasksStarted()) {
+            deferred.DeferDestroyDecompressionInfos({current.BatchInfo});
             DecompressionQueue.pop_front();
         } else {
             break;
@@ -1829,7 +1838,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
     CompressedDataSize -= sourceSize;
     DecompressedDataSize += decompressedSize - estimatedDecompressedSize;
     constexpr double weight = 0.6;
-    if (sourceSize > 0) {
+    if (sourceSize > 0 && decompressedSize > 0) {
         AverageCompressionRatio = weight * static_cast<double>(decompressedSize) / static_cast<double>(sourceSize) + (1 - weight) * AverageCompressionRatio;
     }
     if (Aborting) {
@@ -2384,14 +2393,15 @@ bool TReadSessionEventsQueue<UseMigrationProtocol>::PushDataEvent(TIntrusivePtr<
                                                                   size_t batch,
                                                                   size_t message,
                                                                   TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                                                                  std::atomic<bool>& ready)
+                                                                  std::atomic<bool>& ready,
+                                                                  std::atomic<bool>& abandoned)
 {
 
     std::lock_guard<std::mutex> guard(TParent::Mutex);
     if (this->Closed) {
         return false;
     }
-    partitionStream->InsertDataEvent(batch, message, parent, ready);
+    partitionStream->InsertDataEvent(batch, message, parent, ready, abandoned);
     return true;
 }
 
@@ -2733,6 +2743,28 @@ TDataDecompressionInfo<UseMigrationProtocol>::~TDataDecompressionInfo()
 }
 
 template<bool UseMigrationProtocol>
+void TDataDecompressionInfo<UseMigrationProtocol>::Cleanup() {
+    auto session = CbContext->LockShared();
+    Y_ASSERT(session);
+
+    // Cancel all not started decompression tasks
+
+    while (!Tasks.empty()) {
+        auto& task = Tasks.front();
+
+        // Free compressed data size
+        session->OnCreateNewDecompressionTask();
+        OnDataDecompressed(task.AddedDataSize(), 0, 0, task.AddedMessagesCount());
+        SourceDataNotProcessed -= task.AddedDataSize();
+
+        // Free messages inflight
+        OnUserRetrievedEvent(0, task.AddedMessagesCount());
+
+        Tasks.pop_front();
+    }
+}
+
+template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::BuildBatchesMeta() {
     BatchesMeta.reserve(ServerMessage.batches_size());
     if constexpr (!UseMigrationProtocol) {
@@ -2849,7 +2881,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
                                                      CurrentDecompressingMessage.first,
                                                      CurrentDecompressingMessage.second,
                                                      TDataDecompressionInfo::shared_from_this(),
-                                                     ReadyThresholds.back().Ready);
+                                                     ReadyThresholds.back().Ready,
+                                                     ReadyThresholds.back().Abandoned);
             if (!pushRes) {
                 session->AbortImpl();
                 return;
@@ -2978,15 +3011,6 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
 }
 
 template<bool UseMigrationProtocol>
-bool TDataDecompressionInfo<UseMigrationProtocol>::HasReadyUnreadData() const {
-    std::optional<std::pair<size_t, size_t>> threshold = GetReadyThreshold();
-    if (!threshold) {
-        return false;
-    }
-    return CurrentReadingMessage <= *threshold;
-}
-
-template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount)
 {
     CompressedDataSize -= sourceSize;
@@ -3109,6 +3133,11 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     if (auto session = parent->CbContext->LockShared()) {
         session->GetEventsQueue()->SignalReadyEvents(PartitionStream);
     }
+
+    if (bool expected = false; !Ready->Abandoned.compare_exchange_strong(expected, true)) {
+        // Message is dropped due to partition stream cancellation, we should release decompressed memory
+        parent->OnUserRetrievedEvent(DecompressedSize, messagesProcessed);
+    }
 }
 
 template<bool UseMigrationProtocol>
@@ -3230,7 +3259,7 @@ void TDeferredActions<UseMigrationProtocol>::DeferSignalWaiter(TWaiter&& waiter)
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos)
 {
-    DecompressionInfos = std::move(infos);
+    DecompressionInfos.insert(DecompressionInfos.end(), infos.begin(), infos.end());
 }
 
 template<bool UseMigrationProtocol>
@@ -3244,6 +3273,7 @@ void TDeferredActions<UseMigrationProtocol>::DoActions() {
     Reconnect();
     SignalWaiters();
     StartSessions();
+    DestroyDecompressionInfos();
 }
 
 template<bool UseMigrationProtocol>
@@ -3326,6 +3356,13 @@ template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::SignalWaiters() {
     for (auto& w : Waiters) {
         w.Signal();
+    }
+}
+
+template<bool UseMigrationProtocol>
+void TDeferredActions<UseMigrationProtocol>::DestroyDecompressionInfos() {
+    for (const auto& info : DecompressionInfos) {
+        info->Cleanup();
     }
 }
 

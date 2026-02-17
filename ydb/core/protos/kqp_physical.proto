@@ -495,6 +495,17 @@ message TKqpSink {
     }
 }
 
+message TKqpOutputTransform {
+    uint32 OutputIndex = 1;
+
+    bytes InputType = 2;
+    bytes OutputType = 3;
+
+    oneof Type {
+        TKqpInternalSink InternalSink = 4;
+    }
+}
+
 message TKqpPhyStage {
     NYql.NDqProto.TProgram Program = 1;
     repeated string ProgramParameters = 2;
@@ -512,6 +523,7 @@ message TKqpPhyStage {
     uint32 TaskCount = 14;
     double StageCost = 15;
     bool IsShuffleEliminated = 16;
+    repeated TKqpOutputTransform OutputTransforms = 17;
 }
 
 message TKqpPhyResult {

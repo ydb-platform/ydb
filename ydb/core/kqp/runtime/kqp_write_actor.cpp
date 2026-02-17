@@ -1731,7 +1731,7 @@ private:
         // TODO: remove !PathLookupInfo.empty() after full error support
         if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !PathLookupInfo.empty()) {
             THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> primaryKeysSet;
-            for (const auto& batch : ProcessBatches) {
+            for (const auto& batch : BufferedBatches) {
                 for (const auto& row : GetRows(batch)) {
                     const auto& key = row.first(KeyColumnTypes.size());
                     if (!primaryKeysSet.insert(key).second) {

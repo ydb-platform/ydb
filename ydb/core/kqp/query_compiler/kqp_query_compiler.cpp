@@ -1660,7 +1660,7 @@ private:
                 };
 
                 THashSet<ui32> defaultColumnsIds;
-                THashSet<TStringBuf> localDefaultColumns; // for shards DefaultColumnsCount feature
+                THashSet<TString> localDefaultColumns; // for shards DefaultColumnsCount feature
                 if (Config->GetEnableIndexStreamWrite()) {
                     for (const auto& columnNameAtom : settings.DefaultColumns().Cast()) {
                         const auto& columnName = columnNameAtom.StringValue();

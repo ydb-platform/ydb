@@ -67,13 +67,28 @@ ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_nam
 
 Удалить параметр колонки
 
-### Пример
+{% include [column_option_list.md](../_includes/column_option_list.md) %}
+
+### Примеры
 
 Приведённый ниже код запретит пустые значения в колонке `title` из таблицы `episodes` .
 
 ```yql
 ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
 ```
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
+
+{% endif %}
+
+Сброс настроек сжатия колонки
+
+```yql
+ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
+```
+После сброса колонка будет вести себя аналогично колонке, где сжатие не было задано.
 
 
 ## DROP COLUMN

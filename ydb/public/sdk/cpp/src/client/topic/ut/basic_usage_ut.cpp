@@ -31,7 +31,6 @@
 #include <util/digest/murmur.h>
 #include <util/stream/zlib.h>
 
-#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <thread>
@@ -53,6 +52,12 @@ TString SerializeDataChunk(ui64 seqNo, const TString& payload) {
     TString result;
     Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&result);
     return result;
+}
+
+TWriteMessage CreateMessage(std::string_view payload, ui64 seqNo) {
+    TWriteMessage msg(payload);
+    msg.SeqNo(seqNo);
+    return msg;
 }
 
 // Write a message with binary (non-UTF8) producer ID using direct tablet communication
@@ -1605,25 +1610,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         std::unordered_set<ui64> ackedSeqNos;
         bool closed = false;
 
-        auto createMessage = [](std::string_view payload, ui64 seqNo) -> TWriteMessage {
-            TWriteMessage msg(payload);
-            msg.SeqNo(seqNo);
-            return msg;
-        };
-
-        TCreateTopicSettings createSettings;
-        createSettings
-            .BeginConfigurePartitioningSettings()
-            .MinActivePartitions(2)
-            .MaxActivePartitions(100)
-                .BeginConfigureAutoPartitioningSettings()
-                .UpUtilizationPercent(2)
-                .DownUtilizationPercent(1)
-                .StabilizationWindow(TDuration::Seconds(2))
-                .Strategy(EAutoPartitioningStrategy::ScaleUp)
-                .EndConfigureAutoPartitioningSettings()
-            .EndConfigurePartitioningSettings();
-        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+        CreateTopicWithAutoPartitioning(client);
 
         auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 2);
@@ -1704,7 +1691,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             if (key.empty()) {
                 key = "lalala";
             }
-            s->Write(std::move(*token), key, createMessage(payload, seqNo));
+            s->Write(std::move(*token), key, CreateMessage(payload, seqNo));
         };
 
         {
@@ -1803,25 +1790,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         std::unordered_set<ui64> ackedSeqNos;
         bool closed = false;
 
-        auto createMessage = [](std::string_view payload, ui64 seqNo) -> TWriteMessage {
-            TWriteMessage msg(payload);
-            msg.SeqNo(seqNo);
-            return msg;
-        };
-
-        TCreateTopicSettings createSettings;
-        createSettings
-            .BeginConfigurePartitioningSettings()
-            .MinActivePartitions(2)
-            .MaxActivePartitions(100)
-                .BeginConfigureAutoPartitioningSettings()
-                .UpUtilizationPercent(2)
-                .DownUtilizationPercent(1)
-                .StabilizationWindow(TDuration::Seconds(2))
-                .Strategy(EAutoPartitioningStrategy::ScaleUp)
-                .EndConfigureAutoPartitioningSettings()
-            .EndConfigurePartitioningSettings();
-        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+        CreateTopicWithAutoPartitioning(client);
 
         auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 2);
@@ -1893,7 +1862,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT(token);
             auto key = keys[seqNo % keys.size()];
             if (key.empty()) key = "a";
-            s->Write(std::move(*token), key, createMessage(payload, seqNo));
+            s->Write(std::move(*token), key, CreateMessage(payload, seqNo));
         };
 
         {
@@ -1961,7 +1930,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         for (ui64 i = 0; i < 100; ++i) {    
             auto result = producer->Write(TWriteMessage(msgData));
-            UNIT_ASSERT_EQUAL(result, EWriteResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(result, EWriteResult::QUEUED);
         }
 
         producer->Flush().GetValueSync();
@@ -1977,6 +1946,93 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
     
         UNIT_ASSERT_EQUAL(messagesWritten, 100);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)));
+    }
+
+    Y_UNIT_TEST(Producer_AutoPartitioning) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+
+        CreateTopicWithAutoPartitioning(client);
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("producer_basic_write");
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+
+        TKeyedWriteSessionSettings writeSettings2 = writeSettings;
+        writeSettings2.ProducerIdPrefix("producer_basic_write_2");
+
+        auto producer1 = client.CreateProducer(writeSettings);
+        auto producer2 = client.CreateProducer(writeSettings2);
+        auto msgData = TString(1_MB, 'a');
+
+        {
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 1), "key1"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 2), "key2"), EWriteResult::QUEUED);
+            producer1->Flush().GetValueSync();
+            producer2->Flush().GetValueSync();
+            auto d = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            auto partitionsCount = d.GetTopicDescription().GetPartitions().size();
+            UNIT_ASSERT_C(partitionsCount >= 2,
+                TStringBuilder() << "Partitions count: " << partitionsCount << ", expected at least 2");
+        }
+
+        {
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 3), "key3"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 4), "key4"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 5), "key5"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 6), "key6"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 7), "key7"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 8), "key8"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 9), "key9"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 10), "key10"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 11), "key11"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 12), "key12"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 13), "key13"), EWriteResult::QUEUED);
+            producer1->Flush().GetValueSync();
+            producer2->Flush().GetValueSync();
+            auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            auto partitionsCount = describeResult.GetTopicDescription().GetPartitions().size();
+            UNIT_ASSERT_C(partitionsCount >= 4,
+                TStringBuilder() << "Partitions count: " << partitionsCount << ", expected at least 4");
+        }
+
+        {
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 14), "key14"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 15), "key15"), EWriteResult::QUEUED);
+            producer1->Flush().GetValueSync();
+            producer2->Flush().GetValueSync();
+        }
+
+        UNIT_ASSERT(producer1->Close(TDuration::Seconds(1)));
+        UNIT_ASSERT(producer2->Close(TDuration::Seconds(1)));
+    }
+
+    Y_UNIT_TEST(SimpleBlockingProducer_BasicWrite) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("simple_blocking_producer_basic_write");
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+
+        auto producer = client.CreateSimpleBlockingProducer(writeSettings);
+        auto msgData = TString(10_KB, 'a');
+
+        for (ui64 i = 0; i < 100; ++i) {    
+            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)));
+        }
+
+        producer->Flush().GetValueSync();
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)));
     }
 } // Y_UNIT_TEST_SUITE(BasicUsage)

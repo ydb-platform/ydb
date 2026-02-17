@@ -109,9 +109,31 @@ std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TKeyedWrite
         if (!settings.EventHandlers_.HandlersExecutor_) {
             alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
         }
+
+        if (!settings.EventHandlers_.AcksHandler_) {
+            alteredSettings.EventHandlers_.AcksHandler([&](TWriteSessionEvent::TAcksEvent&) {});
+        }
     }
 
     return std::make_shared<TKeyedWriteSession>(
+        alteredSettings, shared_from_this(), Connections_, DbDriverState_
+    );
+}
+
+std::shared_ptr<ISimpleBlockingProducer> TTopicClient::TImpl::CreateSimpleBlockingProducer(const TKeyedWriteSessionSettings& settings) {
+    auto alteredSettings = settings;
+    {
+        std::lock_guard guard(Lock);
+        if (!settings.CompressionExecutor_) {
+            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
+        }
+
+        if (!settings.EventHandlers_.HandlersExecutor_) {
+            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+        }
+    }
+
+    return std::make_shared<TSimpleBlockingKeyedWriteSession>(
         alteredSettings, shared_from_this(), Connections_, DbDriverState_
     );
 }

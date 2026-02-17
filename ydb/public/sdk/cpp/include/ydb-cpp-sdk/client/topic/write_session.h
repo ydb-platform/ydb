@@ -341,7 +341,7 @@ public:
 };
 
 enum class EWriteResult : uint8_t {
-    SUCCESS = 0,
+    QUEUED = 0,
     OVERLOADED = 1,
     CLOSED = 2,
 };
@@ -352,23 +352,16 @@ public:
     //! Write single message.
     //! key - message key.
     //! Returns write result.
-    //! If write was successful, returns SUCCESS.
+    //! If write was successful, returns QUEUED.
     //! If write was not successful due to overloaded buffer, returns OVERLOADED.
     //! If write was not successful because of closed session, returns CLOSED.
-    virtual EWriteResult Write(TWriteMessage&& message, const std::string& key = "",
+    virtual EWriteResult Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt,
         TTransactionBase* tx = nullptr) = 0;
 
-    //! Future that is set when next event is available.
-    virtual NThreading::TFuture<void> WaitEvent() = 0;
-
-    //! Wait and return next event. Use WaitEvent() for non-blocking wait.
-    virtual std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false) = 0;
-
-    //! Get several events in one call.
-    //! If blocking = false, instantly returns up to maxEventsCount available events.
-    //! If blocking = true, blocks till maxEventsCount events are available.
-    //! If maxEventsCount is unset, write session decides the count to return itself.
-    virtual std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt) = 0;
+    //! Explain why session was closed.
+    //! Returns session closed event if session was closed.
+    //! Returns std::nullopt if session is not closed.
+    virtual std::optional<TSessionClosedEvent> ExplainClosed() = 0;
 
     //! Flush all messages to the server.
     //! Returns future that is set when flush is complete.
@@ -396,6 +389,24 @@ public:
 
     //! Close() with timeout = 0 and destroy everything instantly.
     virtual ~ISimpleBlockingKeyedWriteSession() = default;
+};
+
+//! Simple blocking producer.
+//! This producer uses exponential backoff to handle overloaded buffer.
+// Experimental SDK. DO NOT USE IN PRODUCTION.
+class ISimpleBlockingProducer {
+public:
+    //! Write single message.
+    virtual bool Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt, TDuration blockTimeout = TDuration::Max(),
+        TTransactionBase* tx = nullptr) = 0;
+
+    //! Flush all messages to the server.
+    //! Returns future that is set when flush is complete.
+    virtual NThreading::TFuture<void> Flush() = 0;
+
+    //! Close the producer.
+    virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
+    virtual ~ISimpleBlockingProducer() = default;
 };
 
 } // namespace NYdb::NTopic

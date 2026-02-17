@@ -559,6 +559,14 @@ void TKeyedWriteSession::TEventsWorker::SubscribeToPartition(std::uint32_t parti
     Session->Partitions[partition].Future(newFuture);
 }
 
+std::optional<TSessionClosedEvent> TKeyedWriteSession::TEventsWorker::GetSessionClosedEvent() {
+    std::unique_lock lock(Lock);
+    if (CloseEvent.has_value()) {
+        return CloseEvent;
+    }
+    return std::nullopt;
+}
+
 std::optional<NThreading::TPromise<void>> TKeyedWriteSession::TEventsWorker::HandleNewMessage() {
     std::lock_guard lock(Lock);
     if (Session->MessagesWorker->IsMemoryUsageOK()) {
@@ -1786,7 +1794,7 @@ void TKeyedWriteSession::RunMainWorker() {
     }
 }
 
-EWriteResult TKeyedWriteSession::Write(TWriteMessage&& message, const std::string& key,
+EWriteResult TKeyedWriteSession::Write(TWriteMessage&& message, const std::optional<std::string>& key,
                TTransactionBase* tx) {
     if (Closed.load()) {
         return EWriteResult::CLOSED;
@@ -1797,8 +1805,12 @@ EWriteResult TKeyedWriteSession::Write(TWriteMessage&& message, const std::strin
         return EWriteResult::OVERLOADED;
     }
 
-    Write(std::move(*continuationToken), key, std::move(message), tx);
-    return EWriteResult::SUCCESS;
+    Write(std::move(*continuationToken), key.value_or(""), std::move(message), tx);
+    return EWriteResult::QUEUED;
+}
+
+std::optional<TSessionClosedEvent> TKeyedWriteSession::ExplainClosed() {
+    return EventsWorker->GetSessionClosedEvent();
 }
 
 NThreading::TFuture<void> TKeyedWriteSession::Flush() {
@@ -2037,6 +2049,33 @@ bool TSimpleBlockingKeyedWriteSession::Write(const std::string& key, TWriteMessa
     auto seqNo = message.SeqNo_;
     Writer->Write(std::move(*continuationToken), std::move(key), std::move(message), tx);
     return WaitForAck(seqNo, blockTimeout);
+}
+
+bool TSimpleBlockingKeyedWriteSession::Write(TWriteMessage&& message, const std::optional<std::string>& key, TDuration blockTimeout, TTransactionBase* tx) {
+    TDuration timeout = DEFAULT_START_BLOCK_TIMEOUT;
+    TDuration remainingTimeout = blockTimeout;
+    TInstant now = TInstant::Now();
+
+    while (true) {
+        auto result = Writer->Write(std::move(message), key, tx);
+        switch (result) {
+            case EWriteResult::QUEUED:
+                return true;
+            case EWriteResult::OVERLOADED:
+                Sleep(Min(timeout, remainingTimeout));
+                timeout *= 2;
+            case EWriteResult::CLOSED:
+                return false;
+        }
+
+        auto newNow = TInstant::Now();
+        remainingTimeout -= (newNow - now);
+        now = newNow;
+    }
+}
+
+NThreading::TFuture<void> TSimpleBlockingKeyedWriteSession::Flush() {
+    return Writer->Flush();
 }
 
 bool TSimpleBlockingKeyedWriteSession::Close(TDuration closeTimeout) {

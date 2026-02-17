@@ -288,6 +288,7 @@ private:
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueBegin(std::uint32_t partition);
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueEnd(std::uint32_t partition);
         std::optional<TContinuationToken> GetContinuationToken();
+        std::optional<TSessionClosedEvent> GetSessionClosedEvent();
 
     private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, std::uint32_t partition);
@@ -414,8 +415,10 @@ public:
     void Write(TContinuationToken&& continuationToken, const std::string& key, TWriteMessage&& message,
                TTransactionBase* tx = nullptr) override;
 
-    EWriteResult Write(TWriteMessage&& message, const std::string& key = "",
+    EWriteResult Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt,
                TTransactionBase* tx = nullptr) override;
+
+    std::optional<TSessionClosedEvent> ExplainClosed() override;
 
     NThreading::TFuture<void> Flush() override;
 
@@ -522,7 +525,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TSimpleBlockingKeyedWriteSession
 
-class TSimpleBlockingKeyedWriteSession : public ISimpleBlockingKeyedWriteSession {
+class TSimpleBlockingKeyedWriteSession : public ISimpleBlockingKeyedWriteSession, public ISimpleBlockingProducer {
 private:
     std::optional<TContinuationToken> GetContinuationToken(TDuration timeout);
 
@@ -546,6 +549,11 @@ public:
     bool Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx = nullptr,
         TDuration blockTimeout = TDuration::Max()) override;
 
+    bool Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt, TDuration blockTimeout = TDuration::Max(),
+        TTransactionBase* tx = nullptr) override;
+
+    NThreading::TFuture<void> Flush() override;
+
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
 
     TWriterCounters::TPtr GetCounters() override;
@@ -560,6 +568,8 @@ protected:
 
     std::mutex Lock;
     std::atomic_bool Closed = false;
+
+    static constexpr TDuration DEFAULT_START_BLOCK_TIMEOUT = TDuration::MilliSeconds(1);
 };
 
 } // namespace NYdb::NTopic

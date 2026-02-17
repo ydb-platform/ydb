@@ -605,6 +605,10 @@ std::shared_ptr<IProducer> TTopicClient::CreateProducer(const TKeyedWriteSession
     return Impl_->CreateProducer(settings);
 }
 
+std::shared_ptr<ISimpleBlockingProducer> TTopicClient::CreateSimpleBlockingProducer(const TKeyedWriteSessionSettings& settings) {
+    return Impl_->CreateSimpleBlockingProducer(settings);
+}
+
 std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSessionSettings& settings) {
     return Impl_->CreateWriteSession(settings);
 }

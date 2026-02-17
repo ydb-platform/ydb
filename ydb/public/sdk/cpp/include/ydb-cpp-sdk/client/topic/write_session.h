@@ -350,7 +350,7 @@ enum class EWriteResult : uint8_t {
     CLOSED = 2,
 };
 
-//! Exception that is thrown when session is closed.
+//! Exception that is thrown when producer is closed.
 struct TProducerClosedException : public std::exception {
     TProducerClosedException(const TSessionClosedEvent& closedEvent) : ClosedEvent(closedEvent) {}
 

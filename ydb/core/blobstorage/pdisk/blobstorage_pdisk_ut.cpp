@@ -2336,6 +2336,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         auto cfg = testCtx.GetPDiskConfig();
         cfg->SeparateHugePriorities = true;
+        cfg->UseBytesFlightControl = true;
         testCtx.UpdateConfigRecreatePDisk(cfg);
 
         TVDiskMock compVDisk(&testCtx);

@@ -72,7 +72,9 @@ public:
     }
 
     void ShutdownGRpc() {
-        CleverServer->ShutdownGRpc();
+        if (CleverServer) {
+            CleverServer->ShutdownGRpc();
+        }
     }
 
     void EnableGRpc() {

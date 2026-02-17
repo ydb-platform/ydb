@@ -556,9 +556,9 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         ui32 totalHugeChunks = env.GetMetrics().HugeUsedChunks;
 
         // disable compaction to test defrag without compaction
-        TVector<std::unique_ptr<IEventHandle>> compactions;
+        TVector<IEventHandle*> compactions;
         auto oldCompFilter = env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            compactions.push_back(std::move(ev));
+            compactions.push_back(ev.release());
             return false; // skip compaction events
         });
 
@@ -576,9 +576,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         env.CompactionsPerNode.clear();
         env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, std::move(oldCompFilter));
         for (auto& ev : compactions) {
-            env.Env.Runtime->WrapInActorContext(env.Sender, [&] {
-                TlsActivationContext->Send(ev.release());
-            });
+            env.Env.Runtime->Send(ev, ev->Recipient.NodeId());
         }
         env.Env.Sim(TDuration::Minutes(10));
 
@@ -625,24 +623,15 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         THashMap<ui32, ui32> newCompRequests;
         THashMap<ui32, ui32> compResults;
         auto newCompFilter = env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, [&](ui32 nodeId, std::unique_ptr<IEventHandle>&) {
-            if (auto it = newCompRequests.find(nodeId); it != newCompRequests.end()) {
-                newCompRequests[nodeId]++;
-            } else {
-                newCompRequests[nodeId] = 1;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(newCompRequests[nodeId], compResults[nodeId] + 1);
+            newCompRequests[nodeId]++;
+            UNIT_ASSERT(newCompRequests[nodeId] <= 1);
             return true;
         });
 
         ui32 totalCompactions = 0;
         auto oldCompResultFilter = env.SetFilterFunction(TEvBlobStorage::EvCompactVDiskResult, [&](ui32 nodeId, std::unique_ptr<IEventHandle>&) {
             totalCompactions++;
-            if (auto it = compResults.find(nodeId); it != compResults.end()) {
-                compResults[nodeId]++;
-            } else {
-                compResults[nodeId] = 1;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(newCompRequests[nodeId], compResults[nodeId]);
+            compResults[nodeId]++;
             return true;
         });
 
@@ -652,7 +641,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         }
 
         for (ui32 i = 0; i < 60; ++i) {
-            if (totalCompactions == env.GroupInfo->GetTotalVDisksNum() * 2) {
+            if (totalCompactions == env.GroupInfo->GetTotalVDisksNum()) {
                 break;
             }
             env.Env.Sim(TDuration::Minutes(1));

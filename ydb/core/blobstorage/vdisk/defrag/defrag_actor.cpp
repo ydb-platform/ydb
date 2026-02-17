@@ -120,7 +120,6 @@ namespace NKikimr {
         class TDefragCompactionManager : public TActorBootstrapped<TDefragCompactionManager> {
             std::shared_ptr<TDefragCtx> DCtx;
             bool CompInProgress = false;
-            bool CompRequested = false;
             ui64 LastSpaceCouldBeFreedViaCompaction = 0;
             ui64 LastGarbageThresholdToRunCompaction = 0;
 
@@ -140,20 +139,14 @@ namespace NKikimr {
                         (SpaceCouldBeFreedViaCompaction, LastSpaceCouldBeFreedViaCompaction),
                         (GarbageThresholdToRunCompaction, LastGarbageThresholdToRunCompaction));
                 CompInProgress = true;
-                CompRequested = false;
                 Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FULL, false));
             }
 
             void Handle(TEvCompactVDiskResult::TPtr&) {
                 CompInProgress = false;
-                if (!CompRequested) {
-                    return;
-                }
-                StartFullCompaction();
             }
 
             void Handle(TEvStartDefragCompaction::TPtr& ev) {
-                CompRequested = true;
                 LastSpaceCouldBeFreedViaCompaction = ev->Get()->SpaceCouldBeFreedViaCompaction;
                 LastGarbageThresholdToRunCompaction = ev->Get()->GarbageThresholdToRunCompaction;
                 StartFullCompaction();

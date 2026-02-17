@@ -2726,7 +2726,7 @@ private:
         // then start data tasks with known actor ids of compute tasks
         for (auto& [shardId, shardTx] : DatashardTxs) {
             shardTx->SetType(NKikimrTxDataShard::KQP_TX_TYPE_DATA);
-            for (auto& protoTask : *shardTx->MutableTasks()) {
+            for (const auto& protoTask : shardTx->GetTasks()) {
                 ui64 taskId = protoTask.GetId();
                 const auto& task = TasksGraph.GetTask(taskId);
                 const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
@@ -2734,10 +2734,14 @@ private:
                 Y_ENSURE(task.Outputs.size() >= 1);
             }
 
+            Cerr << "Executing tx: " << shardTx->DebugString() << Endl;
+
             ExecuteDatashardTransaction(shardId, *shardTx);
         }
 
         for (const auto& [shardId, shardTx] : EvWriteTxs) {
+            Cerr << "Executing write tx: " << shardTx->DebugString() << Endl;
+
             ExecuteEvWriteTransaction(shardId, *shardTx);
         }
 

@@ -33,6 +33,7 @@ namespace NActors {
         bool HasSharedThread = false;
         bool UseRingQueue = true;
         bool AllThreadsAreShared = false;
+        bool UseTaskPools = false;
         ui16 MinLocalQueueSize = 0;
         ui16 MaxLocalQueueSize = 0;
 

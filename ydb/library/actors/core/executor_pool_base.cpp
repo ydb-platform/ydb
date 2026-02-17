@@ -51,7 +51,10 @@ namespace NActors {
     }
 #endif
 
-    TTaskPool::TTaskPool(ui64 threads, bool useRingQueue) {
+    TTaskPool::TTaskPool() {
+    }
+
+    void TTaskPool::Init(ui32 threads, bool useRingQueue) {
         if (useRingQueue) {
             Activations.emplace<TRingActivationQueueV4>(threads);
         } else {
@@ -65,17 +68,21 @@ namespace NActors {
         , UseRingQueueValue(useRingQueue)
         , ThreadsAffinity(affinity)
     {
-        do {
-            TaskPools.emplace_back(PoolThreads, useRingQueue);
-            threads -= ThreadsForTaskPool;
-        } while (threads > 0 && useTaskPools);
+        if (useTaskPools) {
+            TaskPoolsCount = (threads + ThreadsForTaskPool - 1) / ThreadsForTaskPool;
+        }
+        TaskPoolsHolder = std::make_unique<TTaskPool[]>(TaskPoolsCount);
+        TaskPools = TaskPoolsHolder.get(); 
+        for (i16 i = 0; i < TaskPoolsCount; ++i) {
+            TaskPoolsHolder[i].Init((useTaskPools ? ThreadsForTaskPool : threads), useRingQueue);
+        }
     }
 
     TExecutorPoolBase::~TExecutorPoolBase() {
-        for (auto &taskPool : TaskPools) {
-            while (std::visit([](auto &x){return x.Pop(0);}, taskPool.Activations))
+        for (i16 i = 0; i < TaskPoolsCount; ++i) {
+            while (std::visit([](auto &x){return x.Pop(0);}, TaskPools[i].Activations))
                 ;
-        }}
+        }
     }
 
     TMailbox* TExecutorPoolBaseMailboxed::ResolveMailbox(ui32 hint) {
@@ -142,7 +149,8 @@ namespace NActors {
         if (UseRingQueue()) {
             ScheduleActivationEx(mailbox, 0);
         } else {
-            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
+            auto &taskPool = TaskPools[mailbox->PriorityTaskPool];
+            ScheduleActivationEx(mailbox, ++taskPool.ActivationsRevolvingCounter);
         }
     }
 
@@ -167,7 +175,8 @@ namespace NActors {
         if (UseRingQueueValue) {
             ScheduleActivationEx(mailbox, 0);
         } else {
-            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
+            auto &taskPool = TaskPools[mailbox->PriorityTaskPool];
+            ScheduleActivationEx(mailbox, ++taskPool.ActivationsRevolvingCounter);
         }
     }
 

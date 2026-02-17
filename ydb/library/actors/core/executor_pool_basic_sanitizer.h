@@ -16,9 +16,11 @@ public:
     {}
 
     void CheckSemaphore() const {
-        auto x = AtomicGet(Pool->Semaphore);
-        auto semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(x);
-        Y_ABORT_UNLESS(semaphore.OldSemaphore <= 0 || semaphore.CurrentThreadCount != semaphore.CurrentSleepThreadCount || Pool->StopFlag.load());
+        if (!Pool->UseTaskPools) {
+            auto x = Pool->TaskPools[0].Semaphore.load();
+            auto semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(x);
+            Y_ABORT_UNLESS(semaphore.OldSemaphore <= 0 || semaphore.CurrentThreadCount != semaphore.CurrentSleepThreadCount || Pool->StopFlag.load());
+        }
     }
 
     void* ThreadProc() override {

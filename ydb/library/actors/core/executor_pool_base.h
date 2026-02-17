@@ -53,10 +53,12 @@ namespace NActors {
         using TUnorderedCacheActivationQueue = TUnorderedCache<ui32, 512, 4>;
 
         alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV4> Activations;
-        alignas(64) std::atomic<ui64> Semaphore = 0;
+        alignas(64) std::atomic<i64> Semaphore = 0;
         alignas(64) std::atomic<ui64> ActivationsRevolvingCounter = 0;
 
-        TTaskPool(ui64 threads, bool useRingQueue);
+        TTaskPool();
+
+        void Init(ui32 threads, bool useRingQueue);
     };
 
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
@@ -64,10 +66,13 @@ namespace NActors {
         static constexpr ui64 ThreadsForTaskPool = 4;
 
         const i16 PoolThreads;
+        i16 TaskPoolsCount;
         const bool UseRingQueueValue;
+        std::unique_ptr<TTaskPool[]> TaskPoolsHolder;
+        TTaskPool* TaskPools;
         alignas(64) TIntrusivePtr<TAffinity> ThreadsAffinity;
-        alignas(64) TStackVec<TTaskPool, 4> TaskPools;
         alignas(64) std::atomic_bool StopFlag = false;
+
     public:
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue, bool useTaskPools=false);
         ~TExecutorPoolBase();

@@ -206,6 +206,7 @@ namespace NActors {
         ui32 Hint = 0;
 
         EActorPack ActorPack = EActorPack::Empty;
+        i16 PriorityTaskPool = 0;
 
         static constexpr TMailboxType::EType Type = TMailboxType::LockFreeIntrusive;
 
@@ -223,7 +224,6 @@ namespace NActors {
 
         // Used to track how much time until activation
         NHPTimer::STime ScheduleMoment{ 0 };
-        i16 PriorityTaskPool = -1;
     };
 
     static_assert(sizeof(TMailbox) <= 64, "TMailbox is too large");

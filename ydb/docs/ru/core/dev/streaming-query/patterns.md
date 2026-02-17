@@ -83,7 +83,7 @@ DO BEGIN
 -- ydb_source — external data source для работы с топиками
 INSERT INTO ydb_source.output_topic
 SELECT
-    CAST(Name AS Utf8)
+    Name
 FROM
     ydb_source.input_topic
 WITH (

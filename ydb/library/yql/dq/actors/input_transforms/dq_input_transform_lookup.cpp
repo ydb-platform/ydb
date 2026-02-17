@@ -134,6 +134,7 @@ private: //IDqComputeActorAsyncInput
         auto guard = BindAllocator();
         //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
         KeysForLookup.reset();
+        FullscanRequest.reset();
         InputFlow.Clear();
         KeyTypeHelper.reset();
         decltype(ReadyQueue){}.swap(ReadyQueue);
@@ -291,7 +292,7 @@ protected:
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> FullscanRequest;
     std::chrono::time_point<std::chrono::steady_clock> FullscanExpireTime;
-    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> FullscanResults;
+    bool FullscanReady = false;
     bool FullscanRequested = false;
     i64 LastLruSize;
 
@@ -413,7 +414,7 @@ private:
             if (!resultIncomplete) {
                 // TODO: LruCache->Clear(); // Erase useless LRU cache
                 Y_DEBUG_ABORT_UNLESS(lookupResult);
-                FullscanResults = std::move(lookupResult);
+                FullscanReady = true;
                 KeysForLookup->clear();
             }
             FullscanRequested = false;
@@ -447,12 +448,9 @@ private:
             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto now = std::chrono::steady_clock::now();
             if (now >= FullscanExpireTime) {
-                FullscanResults.reset();
+                FullscanReady = false;
             }
             LruCache->Prune(now);
-            if (now >= FullscanExpireTime) {
-                FullscanResults.reset();
-            }
             size_t rowLimit = std::numeric_limits<size_t>::max();
             size_t row = 0;
             while (
@@ -477,9 +475,9 @@ private:
                     AddReadyQueue(key, other, nullptr);
                 } else if (auto lookupPayload = LruCache->Get(key, now)) {
                     AddReadyQueue(key, other, &*lookupPayload);
-                } else if (FullscanResults) {
-                    auto it = FullscanResults->find(key);
-                    AddReadyQueue(key, other, it != FullscanResults->end() ? &it->second : nullptr);
+                } else if (FullscanReady) {
+                    auto it = FullscanRequest->find(key);
+                    AddReadyQueue(key, other, it != FullscanRequest->end() ? &it->second : nullptr);
                 } else {
                     if (!FullscanRequested && now >= FullscanExpireTime) {
                         Y_DEBUG_ABORT_UNLESS(MaxFullscanRows > 0);

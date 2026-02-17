@@ -76,6 +76,8 @@ void TOnePDisk::FormatDisk(bool force) {
         const NPDisk::TKey chunkKey = RandomNumber<ui64>();
         const NPDisk::TKey logKey = RandomNumber<ui64>();
         const NPDisk::TKey sysLogKey = RandomNumber<ui64>();
+        TFormatOptions options;
+        options.EnableSmallDiskOptimization = false;
         FormatPDisk(Filename,       // path
                     DiskSize,       // diskSizeBytes                // 0 for device
                     4 << 10,        // sectorSizeBytes
@@ -86,11 +88,7 @@ void TOnePDisk::FormatDisk(bool force) {
                     sysLogKey,      // sysLogKey
                     NPDisk::YdbDefaultPDiskSequence,          // mainKey
                     "",             // textMessage
-                    false,          // isErasureEncode
-                    false,          // trimEntireDevice
-                    nullptr,        // sectorMap
-                    false           // enableSmallDiskOptimization
-                    );
+                    options);
     }
 }
 

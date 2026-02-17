@@ -85,6 +85,7 @@ union TBasicKikimrServicesMask {
         bool EnableGeneralCacheColumnData: 1;
         bool EnableOverloadManager : 1;
         bool EnableCountersInfoProvider : 1;
+        bool EnableNBSService : 1;
     };
 
     struct {

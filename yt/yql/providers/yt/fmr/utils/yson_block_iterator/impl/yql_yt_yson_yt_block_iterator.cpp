@@ -7,17 +7,81 @@
 namespace NYql::NFmr {
 
 TYtBlockIterator::TYtBlockIterator(
-    TVector<NYT::TRawTableReaderPtr> partReaders,
-    TVector<TString> keyColumns,
-    TYtBlockIteratorSettings settings = {}
+    std::vector<NYT::TRawTableReaderPtr> partReaders,
+    std::vector<TString> keyColumns,
+    TYtBlockIteratorSettings settings,
+    std::vector<ESortOrder> sortOrders,
+    TMaybe<bool> isFirstRowKeysInclusive,
+    TMaybe<TString> firstRowKeys,
+    TMaybe<TString> lastRowKeys
 )
     : PartReaders_(std::move(partReaders))
     , KeyColumns_(std::move(keyColumns))
     , Settings_(std::move(settings))
 {
+    if (sortOrders.empty()) {
+        sortOrders.assign(KeyColumns_.size(), ESortOrder::Ascending);
+    }
+    if (sortOrders.size() != KeyColumns_.size()) {
+        sortOrders.assign(KeyColumns_.size(), ESortOrder::Ascending);
+    }
+    SortOrders_ = std::move(sortOrders);
+
+    if (firstRowKeys) {
+        FirstBound_ = TFmrTableKeysBoundary(*firstRowKeys, KeyColumns_, SortOrders_);
+        Y_ENSURE(isFirstRowKeysInclusive.Defined(), "isFirstRowKeysInclusive must be defined for First Bound");
+        IsFirstBoundInclusive_ = *isFirstRowKeysInclusive;
+    }
+    if (lastRowKeys) {
+        LastBound_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
+    }
 }
 
 TYtBlockIterator::~TYtBlockIterator() = default;
+
+bool TYtBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const {
+    if (FirstBound_) {
+        int c = CompareKeyRowsAcrossYsonBlocks(
+            blob,
+            row,
+            FirstBound_->Row,
+            FirstBound_->Markup,
+            SortOrders_
+        );
+        if (c < 0) { // if row < first bound
+            return false;
+        } else if (!IsFirstBoundInclusive_ && c == 0) { // if row == first bound
+            return false;
+        }
+    }
+    if (LastBound_) {
+        int c = CompareKeyRowsAcrossYsonBlocks(
+            blob,
+            row,
+            LastBound_->Row,
+            LastBound_->Markup,
+            SortOrders_
+        );
+        if (c > 0) { // if row > last bound
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<TRowIndexMarkup> TYtBlockIterator::FilterRowsInKeyBounds(const TString& blob, const std::vector<TRowIndexMarkup>& rows) const {
+    if (!(FirstBound_ || LastBound_)) {
+        return rows;
+    }
+    std::vector<TRowIndexMarkup> filtered;
+    filtered.reserve(rows.size());
+    for (const auto& r : rows) {
+        if (RowInKeyBounds(blob, r)) {
+            filtered.push_back(r);
+        }
+    }
+    return filtered;
+}
 
 bool TYtBlockIterator::NextBlock(TIndexedBlock& out) {
     out = {};
@@ -48,13 +112,15 @@ bool TYtBlockIterator::NextBlock(TIndexedBlock& out) {
                 TParserFragmentListIndex parser(blockData, KeyColumns_);
                 parser.Parse();
                 out.Data = std::move(blockData);
-                out.Rows = parser.GetRows();
+                const auto& rows = parser.GetRows();
+                out.Rows = FilterRowsInKeyBounds(out.Data, rows);
                 return true;
             }
             continue;
         }
 
         rowBytes.clear();
+
         NYql::NCommon::CopyYson(cmd, *InputBuf_, rowBytes);
 
         bool needBreak = false;
@@ -77,7 +143,8 @@ bool TYtBlockIterator::NextBlock(TIndexedBlock& out) {
             TParserFragmentListIndex parser(blockData, KeyColumns_);
             parser.Parse();
             out.Data = std::move(blockData);
-            out.Rows = parser.GetRows();
+            const auto& rows = parser.GetRows();
+            out.Rows = FilterRowsInKeyBounds(out.Data, rows);
             return true;
         }
     }

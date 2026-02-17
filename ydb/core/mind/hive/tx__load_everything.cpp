@@ -354,10 +354,7 @@ public:
                 if (node.BecomeUpOnRestart) {
                     // If a node must become up on restart, it must have been down
                     // That was not persisted to avoid issues with downgrades
-                    node.Down = true;
-                }
-                if (node.Down) {
-                    Self->UpdateCounterNodesDown(+1);
+                    node.SetDown(true);
                 }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();

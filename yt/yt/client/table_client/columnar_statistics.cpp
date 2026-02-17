@@ -72,10 +72,12 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
 void UpdateLargeColumnarStatistics(TLargeColumnarStatistics* statistics, TUnversionedValue value)
 {
     if (value.Type != EValueType::Null) {
-        auto valueNoFlags = value;
-        valueNoFlags.Flags = EValueFlags::None;
-        auto fingerprint = TBitwiseUnversionedValueHash()(valueNoFlags);
-        statistics->ColumnHyperLogLogDigests[value.Id].Add(fingerprint);
+        ui16 originalId = value.Id;
+        // The value for HLL shouldn't depend on the column ID, as the ID may vary between chunks.
+        value.Id = 0;
+        value.Flags = EValueFlags::None;
+        auto fingerprint = TBitwiseUnversionedValueHash()(value);
+        statistics->ColumnHyperLogLogDigests[originalId].Add(fingerprint);
     }
 }
 

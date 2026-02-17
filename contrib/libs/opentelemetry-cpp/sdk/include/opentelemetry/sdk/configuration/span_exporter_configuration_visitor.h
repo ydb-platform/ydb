@@ -15,7 +15,6 @@ class OtlpHttpSpanExporterConfiguration;
 class OtlpGrpcSpanExporterConfiguration;
 class OtlpFileSpanExporterConfiguration;
 class ConsoleSpanExporterConfiguration;
-class ZipkinSpanExporterConfiguration;
 class ExtensionSpanExporterConfiguration;
 
 class SpanExporterConfigurationVisitor
@@ -33,7 +32,6 @@ public:
   virtual void VisitOtlpGrpc(const OtlpGrpcSpanExporterConfiguration *model)   = 0;
   virtual void VisitOtlpFile(const OtlpFileSpanExporterConfiguration *model)   = 0;
   virtual void VisitConsole(const ConsoleSpanExporterConfiguration *model)     = 0;
-  virtual void VisitZipkin(const ZipkinSpanExporterConfiguration *model)       = 0;
   virtual void VisitExtension(const ExtensionSpanExporterConfiguration *model) = 0;
 };
 

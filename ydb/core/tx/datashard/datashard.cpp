@@ -1148,7 +1148,9 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     CheckChangesQueueNoOverflow();
 }
 
-void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie, bool afterMove) {
+void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& inRecords, ui64 cookie, bool afterMove) {
+    auto records = std::move(inRecords);
+
     if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
         Y_ENSURE(!afterMove);
 
@@ -1696,6 +1698,7 @@ void TDataShard::PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui6
     if (tableInfo.Stats.LastFullCompaction) {
         PersistUserTableFullCompactionTs(db, tableId, tableInfo.Stats.LastFullCompaction.Seconds());
     }
+
 }
 
 void TDataShard::PersistUnprotectedReadsEnabled(NIceDb::TNiceDb& db) {

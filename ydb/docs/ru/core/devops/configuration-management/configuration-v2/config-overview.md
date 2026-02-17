@@ -71,7 +71,7 @@ $ ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.ya
 
 - [{#T}](../../deployment-options/ansible/initial-deployment/index.md);
 - [{#T}](../../deployment-options/kubernetes/initial-deployment.md);
-- [{#T}](../../deployment-options/manual/initial-deployment.md).
+- [{#T}](../../deployment-options/manual/initial-deployment/index.md).
 
 ### Обновление конфигурации {#update-config}
 

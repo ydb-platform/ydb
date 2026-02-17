@@ -149,6 +149,7 @@ class TTracer
 public:
     void Enqueue(NTracing::TTraceContextPtr trace) override
     {
+        auto guard = Guard(Spinlock_);
         TracesBySpanName_.emplace(trace->GetSpanName(), std::move(trace));
     }
 
@@ -157,6 +158,7 @@ public:
 
     std::optional<std::string> FindTraceTag(const std::string& spanName, const std::string& tagName) const
     {
+        auto guard = Guard(Spinlock_);
         auto traceIt = TracesBySpanName_.find(spanName);
         if (traceIt != TracesBySpanName_.end()) {
             for (const auto& [key, value] : traceIt->second->GetTags()) {
@@ -169,6 +171,7 @@ public:
     }
 
 private:
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Spinlock_);
     THashMap<std::string, NTracing::TTraceContextPtr> TracesBySpanName_;
 };
 

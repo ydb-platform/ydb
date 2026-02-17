@@ -28,7 +28,7 @@ message TFeatureFlags {
     optional bool EnableChunkGraceForPDisk = 7 [default = true];
     optional bool AllowConsistentOperationsForSchemeShard = 8 [default = true];
     optional bool EnableSchemeBoard = 9 [default = true]; // deprecated: always true
-    optional bool AllowYdbRequestsWithoutDatabase = 10 [default = true, (RequireRestart) = true];
+    optional bool AllowYdbRequestsWithoutDatabase = 10 [default = false, (RequireRestart) = true];
     optional bool EnableExternalSubdomains = 11 [default = true];
     optional bool AllowRecursiveMkDir = 12 [default = true]; // deprecated: always true
     optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request
@@ -116,7 +116,7 @@ message TFeatureFlags {
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     reserved 91; // EnablePQConfigTransactionsAtSchemeShard
     optional bool EnableScriptExecutionOperations = 92 [default = true];
-    optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
+    reserved 93; // EnableImplicitQueryParameterTypes
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = true];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
@@ -213,7 +213,7 @@ message TFeatureFlags {
     optional bool EnableAccessToIndexImplTables = 186 [default = true];
     optional bool EnableAddUniqueIndex = 187 [default = false];
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
-    optional bool RequireDbPrefixInSecretName = 189 [default = false];
+    reserved 189; // RequireDbPrefixInSecretName
     optional bool EnableSystemNamesProtection = 190 [default = false];
     optional bool EnableRealSystemViewPaths = 191 [default = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];
@@ -235,7 +235,7 @@ message TFeatureFlags {
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = false];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
-    optional bool EnableColumnshardBool = 211 [default = false];
+    optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
     optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
@@ -251,4 +251,7 @@ message TFeatureFlags {
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
     optional bool EnableTruncateTable = 225 [default = false];
     optional bool EnableTopicsSqlIoOperations = 226 [default = false];
+    optional bool EnableSysViewPermissionsExport = 227 [default = false];
+    optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
+    optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
 }

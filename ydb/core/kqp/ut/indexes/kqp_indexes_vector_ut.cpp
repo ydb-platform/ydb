@@ -463,6 +463,44 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
     }
 
+    Y_UNIT_TEST_QUAD(OrderByCosineOnlyVectorCovered, Nullable, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, (Nullable ? F_NULLABLE : 0));
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb) COVER (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2%s);
+                )", (Overlap ? ", overlap_clusters=2" : ""))));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), std::vector<std::string>{"emb"});
+        }
+
+        // Check without F_COVERING here because data column is not covered and query still accesses the main table
+        DoPositiveQueriesVectorIndexOrderByCosine(session, 0);
+    }
+
     Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {
         DoTestOrderByCosine(3, 0);
     }
@@ -1226,7 +1264,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    TVector<std::pair<TActorId, TActorId>> ResolveFollowers(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
+    TVector<TEvStateStorage::TEvInfo::TFollowerInfo> ResolveFollowers(TTestActorRuntime & runtime, ui64 tabletId, ui32 nodeIndex) {
         auto sender = runtime.AllocateEdgeActor(nodeIndex);
         runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender,
             new TEvStateStorage::TEvLookup(tabletId, 0)),
@@ -1277,8 +1315,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 actorTypes[actorId] = type;
                 if (Followers) {
                     auto followers = ResolveFollowers(*runtime, shardId, 0);
-                    for (auto& [_, followerId]: followers) {
-                        actorTypes[followerId] = type | followerTypeFlag;
+                    for (const auto& followerInfo: followers) {
+                        actorTypes[followerInfo.FollowerTablet] = type | followerTypeFlag;
                     }
                 }
             }

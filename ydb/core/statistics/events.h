@@ -32,7 +32,8 @@ struct TStatEqWidthHistogram {
     std::shared_ptr<TEqWidthHistogram> Data;
 };
 
-enum EStatType {
+// NB: enum values are serialized into the .metadata/_statistics table.
+enum class EStatType {
     SIMPLE = 0,
     SIMPLE_COLUMN = 1,
     COUNT_MIN_SKETCH = 2,
@@ -112,6 +113,8 @@ struct TEvStatistics {
         EvAggregateKeepAliveAck,
 
         EvFinishTraversal,
+
+        EvAnalyzeCancel,
 
         EvEnd
     };
@@ -273,6 +276,12 @@ struct TEvStatistics {
         TEvAnalyzeStatusResponse,
         NKikimrStat::TEvAnalyzeStatusResponse,
         EvAnalyzeStatusResponse>
+    {};
+
+    struct TEvAnalyzeCancel : public TEventPB<
+        TEvAnalyzeCancel,
+        NKikimrStat::TEvAnalyzeCancel,
+        EvAnalyzeCancel>
     {};
 
     struct TEvAnalyzeShard : public TEventPB<

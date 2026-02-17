@@ -15,14 +15,13 @@
 */
 
 /* MD5 objects */
+
 #ifndef Py_BUILD_CORE_BUILTIN
 #  define Py_BUILD_CORE_MODULE 1
 #endif
 
 #include "Python.h"
 #include "hashlib.h"
-#include "pycore_strhex.h"        // _Py_strhex()
-#include "pycore_typeobject.h"    // _PyType_GetModuleState()
 
 /*[clinic input]
 module _md5
@@ -41,8 +40,8 @@ class MD5Type "MD5object *" "&PyType_Type"
 typedef struct {
     PyObject_HEAD
     // Prevents undefined behavior via multiple threads entering the C API.
-    // The lock will be NULL before threaded access has been enabled.
-    PyThread_type_lock lock;
+    bool use_mutex;
+    PyMutex mutex;
     Hacl_Hash_MD5_state_t *hash_state;
 } MD5object;
 
@@ -65,7 +64,11 @@ static MD5object *
 newMD5object(MD5State * st)
 {
     MD5object *md5 = (MD5object *)PyObject_GC_New(MD5object, st->md5_type);
-    md5->lock = NULL;
+    if (!md5) {
+        return NULL;
+    }
+    HASHLIB_INIT_MUTEX(md5);
+
     PyObject_GC_Track(md5);
     return md5;
 }
@@ -82,9 +85,6 @@ static void
 MD5_dealloc(MD5object *ptr)
 {
     Hacl_Hash_MD5_free(ptr->hash_state);
-    if (ptr->lock != NULL) {
-        PyThread_free_lock(ptr->lock);
-    }
     PyTypeObject *tp = Py_TYPE((PyObject*)ptr);
     PyObject_GC_UnTrack(ptr);
     PyObject_GC_Del(ptr);
@@ -106,7 +106,7 @@ static PyObject *
 MD5Type_copy_impl(MD5object *self, PyTypeObject *cls)
 /*[clinic end generated code: output=bf055e08244bf5ee input=d89087dcfb2a8620]*/
 {
-    MD5State *st = _PyType_GetModuleState(cls);
+    MD5State *st = PyType_GetModuleState(cls);
 
     MD5object *newobj;
     if ((newobj = newMD5object(st))==NULL)
@@ -149,7 +149,16 @@ MD5Type_hexdigest_impl(MD5object *self)
     ENTER_HASHLIB(self);
     Hacl_Hash_MD5_digest(self->hash_state, digest);
     LEAVE_HASHLIB(self);
-    return _Py_strhex((const char*)digest, MD5_DIGESTSIZE);
+
+    const char *hexdigits = "0123456789abcdef";
+    char digest_hex[MD5_DIGESTSIZE * 2];
+    char *str = digest_hex;
+    for (size_t i=0; i < MD5_DIGESTSIZE; i++) {
+        unsigned char byte = digest[i];
+        *str++ = hexdigits[byte >> 4];
+        *str++ = hexdigits[byte & 0x0f];
+    }
+    return PyUnicode_FromStringAndSize(digest_hex, sizeof(digest_hex));
 }
 
 static void update(Hacl_Hash_MD5_state_t *state, uint8_t *buf, Py_ssize_t len) {
@@ -180,14 +189,14 @@ MD5Type_update(MD5object *self, PyObject *obj)
 
     GET_BUFFER_VIEW_OR_ERROUT(obj, &buf);
 
-    if (self->lock == NULL && buf.len >= HASHLIB_GIL_MINSIZE) {
-        self->lock = PyThread_allocate_lock();
+    if (!self->use_mutex && buf.len >= HASHLIB_GIL_MINSIZE) {
+        self->use_mutex = true;
     }
-    if (self->lock != NULL) {
+    if (self->use_mutex) {
         Py_BEGIN_ALLOW_THREADS
-        PyThread_acquire_lock(self->lock, 1);
+        PyMutex_Lock(&self->mutex);
         update(self->hash_state, buf.buf, buf.len);
-        PyThread_release_lock(self->lock);
+        PyMutex_Unlock(&self->mutex);
         Py_END_ALLOW_THREADS
     } else {
         update(self->hash_state, buf.buf, buf.len);
@@ -260,17 +269,24 @@ static PyType_Spec md5_type_spec = {
 /*[clinic input]
 _md5.md5
 
-    string: object(c_default="NULL") = b''
+    data: object(c_default="NULL") = b''
     *
     usedforsecurity: bool = True
+    string as string_obj: object(c_default="NULL") = None
 
 Return a new MD5 hash object; optionally initialized with a string.
 [clinic start generated code]*/
 
 static PyObject *
-_md5_md5_impl(PyObject *module, PyObject *string, int usedforsecurity)
-/*[clinic end generated code: output=587071f76254a4ac input=7a144a1905636985]*/
+_md5_md5_impl(PyObject *module, PyObject *data, int usedforsecurity,
+              PyObject *string_obj)
+/*[clinic end generated code: output=d45e187d3d16f3a8 input=7ea5c5366dbb44bf]*/
 {
+    PyObject *string;
+    if (_Py_hashlib_data_argument(&string, data, string_obj) < 0) {
+        return NULL;
+    }
+
     MD5object *new;
     Py_buffer buf;
 
@@ -347,13 +363,7 @@ md5_exec(PyObject *m)
     st->md5_type = (PyTypeObject *)PyType_FromModuleAndSpec(
         m, &md5_type_spec, NULL);
 
-    if (st->md5_type == NULL) {
-        return -1;
-    }
-
-    Py_INCREF((PyObject *)st->md5_type);
-    if (PyModule_AddObject(m, "MD5Type", (PyObject *)st->md5_type) < 0) {
-         Py_DECREF(st->md5_type);
+    if (PyModule_AddObjectRef(m, "MD5Type", (PyObject *)st->md5_type) < 0) {
         return -1;
     }
 
@@ -363,6 +373,7 @@ md5_exec(PyObject *m)
 static PyModuleDef_Slot _md5_slots[] = {
     {Py_mod_exec, md5_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

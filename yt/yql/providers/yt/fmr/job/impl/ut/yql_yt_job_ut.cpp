@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
 
         auto res = job->Download(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}}, cancelFlag);
 
-        auto err = std::get_if<TError>(&res);
+        auto err = std::get_if<TFmrError>(&res);
         auto statistics = std::get_if<TStatistics>(&res);
 
         UNIT_ASSERT_C(!err, err->ErrorMessage);
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
 
         auto res = job->Upload(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}}, cancelFlag);
 
-        auto err = std::get_if<TError>(&res);
+        auto err = std::get_if<TFmrError>(&res);
 
         UNIT_ASSERT_C(!err,err->ErrorMessage);
         const TString resultFileContent = TFileInput(ytOutputFile.Name()).ReadAll();
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         tableDataServiceClient->Put(group_3, chunkId, GetBinaryYson(TableContent_3));
 
         auto res = job->Merge(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}}, cancelFlag);
-        auto err = std::get_if<TError>(&res);
+        auto err = std::get_if<TFmrError>(&res);
 
         UNIT_ASSERT_C(!err, err->ErrorMessage);
         auto resultTableContentMaybe = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, chunkId).GetValueSync();
@@ -246,12 +246,11 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
 
-        // No tables in tableDataService
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag),
-            yexception,
-            "Error reading chunk: test_table_id_test_part_id:0"
-        );
+        TJobResult jobResult = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag);
+        UNIT_ASSERT(jobResult.Error.Defined());
+        auto error = *jobResult.Error;
+        UNIT_ASSERT_EQUAL(error.Reason, EFmrErrorReason::RestartQuery);
+        UNIT_ASSERT(error.ErrorMessage.Contains("Error reading chunk: test_table_id_test_part_id:0"));
     }
 
     Y_UNIT_TEST(RunMergeTask) {

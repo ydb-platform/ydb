@@ -1,11 +1,24 @@
 # -*- coding: utf-8 -*-
 import logging
 import copy
-import typing
 from concurrent import futures
 import uuid
 import threading
 import collections
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+)
+
+if TYPE_CHECKING:
+    from .settings import BaseRequestSettings
+    from .driver import DriverConfig
 
 from google.protobuf import text_format
 import grpc
@@ -29,7 +42,7 @@ _DEFAULT_MAX_GRPC_MESSAGE_SIZE = 64 * 10**6
 _DEFAULT_KEEPALIVE_TIMEOUT = 10000
 
 
-def _message_to_string(message):
+def _message_to_string(message: Any) -> str:
     """
     Constructs a string representation of provided message or generator
     :param message: A protocol buffer or generator instance
@@ -41,7 +54,7 @@ def _message_to_string(message):
         return str(message)
 
 
-def _log_response(rpc_state, response):
+def _log_response(rpc_state: "_RpcState", response: Any) -> None:
     """
     Writes a message with response into debug logs
     :param rpc_state: A state of rpc
@@ -52,7 +65,7 @@ def _log_response(rpc_state, response):
         logger.debug("%s: response = { %s }", rpc_state, _message_to_string(response))
 
 
-def _log_request(rpc_state, request):
+def _log_request(rpc_state: "_RpcState", request: Any) -> None:
     """
     Writes a message with request into debug logs
     :param rpc_state: An id of request
@@ -64,11 +77,11 @@ def _log_request(rpc_state, request):
 
 
 def _rpc_error_handler(
-    rpc_state,
-    rpc_error: typing.Union[grpc.RpcError, grpc.aio.AioRpcError, grpc.Call, grpc.aio.Call],
-    on_disconnected: typing.Callable[[], None] = None,
+    rpc_state: Union["_RpcState", str],
+    rpc_error: Union[grpc.RpcError, grpc.aio.AioRpcError, grpc.Call, grpc.aio.Call],
+    on_disconnected: Optional[Callable[[], None]] = None,
     use_unavailable: bool = False,
-):
+) -> issues.Error:
     """
     RPC call error handler, that translates gRPC error into YDB issue
     :param rpc_state: A state of rpc
@@ -230,7 +243,7 @@ def _construct_channel_options(driver_config, endpoint_options=None):
     return channel_options
 
 
-class _RpcState(object):
+class _RpcState:
     __slots__ = (
         "rpc",
         "request_id",
@@ -242,7 +255,16 @@ class _RpcState(object):
         "endpoint_key",
     )
 
-    def __init__(self, stub_instance, rpc_name, endpoint, endpoint_key):
+    rpc: Any
+    request_id: "uuid.UUID"
+    result_future: "futures.Future[Any]"
+    rpc_name: str
+    endpoint: str
+    rendezvous: Any
+    metadata_kv: Optional[Dict[str, set]]
+    endpoint_key: "EndpointKey"
+
+    def __init__(self, stub_instance: Any, rpc_name: str, endpoint: str, endpoint_key: "EndpointKey") -> None:
         """Stores all RPC related data"""
         self.rpc_name = rpc_name
         self.rpc = getattr(stub_instance, rpc_name)
@@ -252,10 +274,10 @@ class _RpcState(object):
         self.metadata_kv = None
         self.endpoint_key = endpoint_key
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "RpcState(%s, %s, %s)" % (self.rpc_name, self.request_id, self.endpoint)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Execute a RPC."""
         try:
             response, rendezvous = self.rpc.with_call(*args, **kwargs)
@@ -264,21 +286,20 @@ class _RpcState(object):
         except AttributeError:
             return self.rpc(*args, **kwargs)
 
-    def trailing_metadata(self):
+    def trailing_metadata(self) -> Dict[str, set]:
         """Trailing metadata of the call."""
         if self.metadata_kv is None:
-
             self.metadata_kv = collections.defaultdict(set)
             for metadatum in self.rendezvous.trailing_metadata():
                 self.metadata_kv[metadatum.key].add(metadatum.value)
 
         return self.metadata_kv
 
-    def future(self, *args, **kwargs):
+    def future(self, *args: Any, **kwargs: Any) -> Tuple[Any, "futures.Future[Any]"]:
         self.rendezvous = self.rpc.future(*args, **kwargs)
         self.result_future = futures.Future()
 
-        def _cancel_callback(f):
+        def _cancel_callback(f: Any) -> None:
             """forwards cancel to gPRC future"""
             if f.cancelled():
                 self.rendezvous.cancel()
@@ -383,7 +404,12 @@ class Connection(object):
         "node_id",
     )
 
-    def __init__(self, endpoint, driver_config=None, endpoint_options=None):
+    def __init__(
+        self,
+        endpoint: str,
+        driver_config: Optional["DriverConfig"] = None,
+        endpoint_options: Optional[EndpointOptions] = None,
+    ) -> None:
         """
         Object that wraps gRPC channel and encapsulates gRPC request execution logic
         :param endpoint: endpoint to connect (in pattern host:port), constructed by user or
@@ -396,9 +422,9 @@ class Connection(object):
         self.endpoint_key = EndpointKey(endpoint, getattr(endpoint_options, "node_id", None))
         self._channel = channel_factory(self.endpoint, driver_config, endpoint_options=endpoint_options)
         self._driver_config = driver_config
-        self._call_states = {}
-        self._stub_instances = {}
-        self._cleanup_callbacks = []
+        self._call_states: Dict[Any, "_RpcState"] = {}
+        self._stub_instances: Dict[Any, Any] = {}
+        self._cleanup_callbacks: List[Callable[["Connection"], None]] = []
         # pre-initialize stubs
         for stub in _stubs_list:
             self._stub_instances[stub] = stub(self._channel)
@@ -439,14 +465,14 @@ class Connection(object):
 
     def future(
         self,
-        request,
-        stub,
-        rpc_name,
-        wrap_result=None,
-        settings=None,
-        wrap_args=(),
-        on_disconnected=None,
-    ):
+        request: Any,
+        stub: Any,
+        rpc_name: str,
+        wrap_result: Optional[Callable[..., Any]] = None,
+        settings: Optional["BaseRequestSettings"] = None,
+        wrap_args: Tuple[Any, ...] = (),
+        on_disconnected: Optional[Callable[[], None]] = None,
+    ) -> "futures.Future[Any]":
         """
         Sends request constructed by client
         :param request: A request constructed by client
@@ -479,14 +505,14 @@ class Connection(object):
 
     def __call__(
         self,
-        request,
-        stub,
-        rpc_name,
-        wrap_result=None,
-        settings=None,
-        wrap_args=(),
-        on_disconnected=None,
-    ):
+        request: Any,
+        stub: Any,
+        rpc_name: str,
+        wrap_result: Optional[Callable[..., Any]] = None,
+        settings: Optional["BaseRequestSettings"] = None,
+        wrap_args: Tuple[Any, ...] = (),
+        on_disconnected: Optional[Callable[[], None]] = None,
+    ) -> Any:
         """
         Synchronously sends request constructed by client library
         :param request: A request constructed by client

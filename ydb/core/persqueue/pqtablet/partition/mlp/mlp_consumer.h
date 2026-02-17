@@ -20,6 +20,7 @@ using namespace NActors;
 class TConsumerActor : public TBaseTabletActor<TConsumerActor>
                      , public TConstantLogPrefix {
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
+    static constexpr TDuration NoMessagesTimeout = TDuration::Seconds(1);
 
 public:
     TConsumerActor(const TString& database, ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
@@ -37,11 +38,13 @@ private:
     void Queue(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Queue(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Queue(TEvPQ::TEvMLPPurgeRequest::TPtr&);
 
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPPurgeRequest::TPtr&);
 
     void Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr&);
     void HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr&);
@@ -87,6 +90,9 @@ private:
 
     void UpdateMetrics();
 
+    bool UseForReading() const;
+    void NotifyPQRB(bool force = false);
+
 private:
     const TString Database;
     const ui32 PartitionId;
@@ -108,11 +114,13 @@ private:
     std::deque<TEvPQ::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
     std::deque<TEvPQ::TEvMLPUnlockRequest::TPtr> UnlockRequestsQueue;
     std::deque<TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
+    std::deque<TEvPQ::TEvMLPPurgeRequest::TPtr> PurgeRequestsQueue;
 
     std::deque<TReadResult> PendingReadQueue;
     std::deque<TResult> PendingCommitQueue;
     std::deque<TResult> PendingUnlockQueue;
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
+    std::deque<TResult> PendingPurgeQueue;
 
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;
@@ -122,6 +130,9 @@ private:
     ui64 CPUUsageMetric = 0;
     NMonitoring::TDynamicCounterPtr DetailedMetricsRoot;
     std::unique_ptr<TDetailedMetrics> DetailedMetrics;
+
+    TInstant LastTimeWithMessages;
+    bool LastUseForReading = false;
 };
 
 class TDetailedMetrics {

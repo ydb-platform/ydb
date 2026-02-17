@@ -29,10 +29,12 @@ public:
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     TSolomonConfiguration::TPtr Configuration = MakeIntrusive<TSolomonConfiguration>();
     THolder<IDqIntegration> DqIntegration;
+    THolder<IYtflowIntegration> YtflowIntegration;
+    THolder<IYtflowOptimization> YtflowOptimization;
     ui32 ExecutorPoolId = 0;
 };
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool supportRtmrMode = true);
+TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool supportRtmrMode = true, bool useYtflowEngine = false);
 
 TIntrusivePtr<IDataProvider> CreateSolomonDataSource(TSolomonState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateSolomonDataSink(TSolomonState::TPtr state);

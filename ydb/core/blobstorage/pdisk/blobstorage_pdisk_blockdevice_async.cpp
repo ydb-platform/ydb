@@ -805,8 +805,6 @@ protected:
     TPDiskMon &Mon;
     TString Path;
 
-    TPDiskConfig cfg{0, 0, 0};
-
 private:
     THolder<TCompletionThreads> CompletionThreads;
     THolder<TTrimThread> TrimThread;
@@ -970,10 +968,12 @@ protected:
             case IAsyncIoOperation::EType::PWrite:
                 (*Mon.DeviceInFlightBytesWrite) += size;
                 Mon.DeviceInFlightWrites->Inc();
+                Mon.MaxDeviceInFlightWrites.Collect(*Mon.DeviceInFlightWrites);
                 break;
             case IAsyncIoOperation::EType::PRead:
                 (*Mon.DeviceInFlightBytesRead) += size;
                 Mon.DeviceInFlightReads->Inc();
+                Mon.MaxDeviceInFlightReads.Collect(*Mon.DeviceInFlightReads);
                 break;
             default:
                 break;
@@ -1169,6 +1169,14 @@ protected:
 
     ui32 GetPDiskId() override {
         return PCtx->PDiskId;
+    }
+
+    TFileHandle DuplicateFd() override {
+        TFileHandle *handle = IoContext->GetFileHandle();
+        if (!handle) {
+            return {};
+        }
+        return TFileHandle(handle->Duplicate());
     }
 
     virtual ~TRealBlockDevice() {

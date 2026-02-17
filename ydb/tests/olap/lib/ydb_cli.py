@@ -1,17 +1,20 @@
 from __future__ import annotations
 from typing import Any, Optional
+import allure
 import yatest.common
 import json
 import os
 import re
 import subprocess
 import logging
+import ydb.tests.olap.lib.remote_execution as remote_execution
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import ExitStack
 from enum import StrEnum, Enum
 from types import TracebackType
-from time import time
+from time import time, sleep
 from hashlib import md5
 
 
@@ -20,6 +23,11 @@ class WorkloadType(StrEnum):
     TPC_H = 'tpch'
     TPC_DS = 'tpcds'
     EXTERNAL = 'query'
+
+
+class TxMode(StrEnum):
+    SerializableRW = 'serializable-rw'
+    SnapshotRW = 'snapshot-rw'
 
 
 class CheckCanonicalPolicy(Enum):
@@ -39,9 +47,11 @@ class YdbCliHelper:
         return cli
 
     @staticmethod
-    def get_cli_command() -> list[str]:
+    def get_cli_command(cli_path: str = '') -> list[str]:
+        if not cli_path:
+            cli_path = YdbCliHelper.get_cli_path()
         result = [
-            YdbCliHelper.get_cli_path(),
+            cli_path,
             '-e', YdbCluster.ydb_endpoint,
             '-d', f'/{YdbCluster.ydb_database}'
         ]
@@ -415,3 +425,90 @@ class YdbCliHelper:
             results = as_completed([executor.submit(__get_result, r) for r in runners])
         results_by_q = [r.result() for r in results]
         return {q: YdbCliHelper.WorkloadRunResult().merge(*[r.get(q) for r in results_by_q]) for q in extended_query_names}
+
+    @classmethod
+    def get_remote_cli_path(cls, host: str = ''):
+        if not host:
+            host = YdbCluster.get_client_host()
+        return remote_execution.get_remote_tmp_path(host, 'ydb_cli', os.path.basename(cls.get_cli_path()))
+
+    @classmethod
+    @allure.step
+    def deploy_remote_cli(cls, host: str = ''):
+        if not host:
+            host = YdbCluster.get_client_host()
+        result = remote_execution.deploy_binary(cls.get_cli_path(), host, os.path.dirname(cls.get_remote_cli_path()))
+        assert result.get('success', False), f"host: {host}, bin: {cls.get_cli_path()}, path: {result.get('path')}, error: {result.get('error')}"
+
+    @classmethod
+    @allure.step
+    def clear_tpcc(cls, path: str):
+        yatest.common.process.execute(cls.get_cli_command() + ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(path), 'clean'])
+
+    @classmethod
+    @allure.step
+    def init_tpcc(cls, path: str, warehouses: int):
+        yatest.common.process.execute(cls.get_cli_command() + ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(path), 'init', '--warehouses', str(warehouses)])
+
+    @classmethod
+    @allure.step
+    def import_data_tpcc(cls, path: str, warehouses: int):
+        cmd = cls.get_cli_command(cls.get_remote_cli_path()) + ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(path), 'import', '--no-tui', '--warehouses', str(warehouses)]
+        with remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd) as exec:
+            while exec.is_running():
+                sleep(10)
+            assert exec.return_code == 0, f'import fails with code {exec.return_code}\nerrors: {exec.stderr}\noutput: {exec.stdout}'
+
+    @classmethod
+    @allure.step
+    def run_tpcc(cls, path: str, bench_time: float, warehouses: int = 10, threads: int = 0, warmup: float = 0.,
+                 tx_mode: TxMode = TxMode.SerializableRW, users=['']) -> dict[str, YdbCliHelper.WorkloadRunResult]:
+        executions = []
+        for user in users:
+            cmd = cls.get_cli_command(cls.get_remote_cli_path())
+            if user:
+                cmd += ['--user', user, '--no-password']
+            cmd += ['workload', 'tpcc', '--path', YdbCluster.get_tables_path(path), 'run', '--no-tui', '--format', 'Json', '--tx-mode', str(tx_mode), '--highres-histogram']
+            if warmup > 0:
+                cmd += ['--warmup', f'{warmup}s']
+            cmd += ['--time', f'{bench_time}s', '--warehouses', str(warehouses)]
+            if threads:
+                cmd += ['--threads', str(threads)]
+
+            executions.append((user, remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd)))
+
+        start_time = time()
+        with ExitStack() as stack:
+            for _, exec in executions:
+                stack.enter_context(exec)
+            while any([exec.is_running() for _, exec in executions]):
+                sleep(10)
+
+        results = {}
+        for user, exec in executions:
+            res = YdbCliHelper.WorkloadRunResult()
+            res.start_time = start_time
+            try:
+                res.stdout = exec.stdout
+                res.stderr = exec.stderr
+                if exec.return_code != 0:
+                    res.add_error(f'ydb cli failed with code {exec.return_code}.')
+                    ans = {}
+                else:
+                    ans = json.loads(res.stdout)
+                summary = ans.get('summary', {})
+                res.add_stat('test', 'tpcc_json', ans)
+                res.add_stat('test', 'tpcc_tpmc', summary.get('tpmc', 0))
+                res.add_stat('test', 'tpcc_warehouses', summary.get('warehouses', 0))
+                res.add_stat('test', 'tpcc_efficiency', summary.get('efficiency', 0))
+                res.add_stat('test', 'tpcc_time_seconds', summary.get('time_seconds', 0))
+                for tr, stats in ans.get('transactions', {}).items():
+                    res.add_stat('test', f'tpcc_{tr}_ok_count', stats.get('ok_count', 0))
+                    res.add_stat('test', f'tpcc_{tr}_failed_count', stats.get('failed_count', 0))
+                    for p, t in stats.get('percentiles', {}).items():
+                        res.add_stat('test', f'tpcc_{tr}_perc_{p.replace(".", "_")}', t)
+            except BaseException as e:
+                res.add_error(str(e))
+            results[user] = res
+
+        return results

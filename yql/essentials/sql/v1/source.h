@@ -255,7 +255,12 @@ TNodePtr BuildYqlSubqueryRef(TNodePtr subquery, TString ref);
 bool IsYqlSubqueryRef(const TNodePtr& source);
 
 TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
-TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);
+TNodePtr BuildSourceNode(
+    TPosition pos,
+    TSourcePtr source,
+    bool checkExist = false,
+    bool withTables = false,
+    bool isInlineScalar = false);
 TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
 TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom = false, bool inSubquery = false);
 TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList = false, bool wrapByTableSource = false);

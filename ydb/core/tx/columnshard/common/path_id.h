@@ -1,7 +1,10 @@
 #pragma once
+
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
 #include <util/system/types.h>
+
+#include <set>
 
 namespace NKikimr::NColumnShard {
 class TInternalPathId {
@@ -187,21 +190,21 @@ using TInternalPathId = NColumnShard::TInternalPathId;
 class IPathIdTranslator {
 public:
     virtual ~IPathIdTranslator() = default;
-    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(
+    virtual std::optional<std::set<NColumnShard::TSchemeShardLocalPathId>> ResolveSchemeShardLocalPathIdsOptional(
         const TInternalPathId internalPathId) const = 0;
     virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
         const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const = 0;
-    std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const {
-        return ResolveSchemeShardLocalPathIdOptional(internalPathId);
+    std::optional<std::set<NColumnShard::TSchemeShardLocalPathId>> ResolveSchemeShardLocalPathIds(const TInternalPathId internalPathId) const {
+        return ResolveSchemeShardLocalPathIdsOptional(internalPathId);
     }
     std::optional<TInternalPathId> ResolveInternalPathId(
         const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const {
         return ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
     }
-    NColumnShard::TSchemeShardLocalPathId ResolveSchemeShardLocalPathIdVerified(const TInternalPathId internalPathId) const;
+    std::set<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdsVerified(const TInternalPathId internalPathId) const;
     TInternalPathId ResolveInternalPathIdVerified(
         const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const;
-    NColumnShard::TUnifiedPathId GetUnifiedByInternalVerified(const TInternalPathId internalPathId) const;
+    std::set<NColumnShard::TUnifiedPathId> GetUnifiedPathIdsByInternalVerified(const TInternalPathId internalPathId) const;
 };
 
 }   //namespace NKikimr::NOlap

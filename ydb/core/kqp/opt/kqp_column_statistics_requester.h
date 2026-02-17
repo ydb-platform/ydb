@@ -1,4 +1,5 @@
 #pragma once
+#include "kqp_column_statistics_utils.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -68,9 +69,6 @@ private:
 
     //////////////////////////////////////////////////////////////
     /* for waiting response with column statistics */
-    struct TColumnStatisticsResponse : public NYql::IKikimrGateway::TGenericResult {
-        THashMap<TString, TOptimizerStatistics::TColumnStatMap> ColumnStatisticsByTableName;
-    };
     std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
     NThreading::TFuture<void> AsyncReadiness;
 

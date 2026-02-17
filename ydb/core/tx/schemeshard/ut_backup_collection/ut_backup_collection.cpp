@@ -3108,4 +3108,51 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             NLs::CheckColumns("ProtectedTable", {"key", "value", "new_column"}, {}, {"key"})
         });
     }
+
+    Y_UNIT_TEST(InitCopyTableSourceDroppedSurvives) {
+        // Init must not set PathState=EPathStateCopying on a dropped CopyTable source.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Block datashard propose results to keep CopyTable in TxInFlightV2 across reboot.
+        TBlockEvents<TEvDataShard::TEvProposeTransactionResult> block(runtime);
+
+        AsyncCopyTable(runtime, ++txId, "/MyRoot", "Table1Copy", "/MyRoot/Table1");
+        TestModificationResult(runtime, txId);
+
+        if (block.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&block](IEventHandle&) { return !block.empty(); });
+            runtime.DispatchEvents(opts);
+        }
+
+        auto tablePathId = DescribePath(runtime, "/MyRoot/Table1")
+            .GetPathDescription().GetSelf().GetPathId();
+
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('Id (Uint64 '%lu))))
+                (let update '('('StepDropped (Uint64 '1000000))))
+                (return (AsList (UpdateRow 'Paths key update)))
+            )
+        )", tablePathId));
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Triggers Dropped() on Table1 which checks PathState consistency.
+        // Without fix: init sets PathState=EPathStateCopying on dropped source -> crash.
+        DescribePath(runtime, "/MyRoot/Table1");
+    }
 } // TBackupCollectionTests

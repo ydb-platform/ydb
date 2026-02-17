@@ -1680,6 +1680,7 @@ public:
                         Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Invalid operation state, status should be specified for lease state " << static_cast<i32>(leaseInfo->State));
                         return;
                     }
+                    Response->WaitFinalizationOrRetry = true;
                     break;
             }
 
@@ -3044,9 +3045,10 @@ public:
         RunScriptActor = ev->Get()->RunScriptActorId;
         HasRetryPolicy = ev->Get()->HasRetryPolicy;
         const auto& operationStatus = ev->Get()->OperationStatus;
-        KQP_PROXY_LOG_D("Check lease " << ev->Sender << " success, operation status: " << (operationStatus ? Ydb::StatusIds::StatusCode_Name(*operationStatus) : "<null>") << ", has retries: " << HasRetryPolicy);
+        const auto finalizationOrRetryInProgress = ev->Get()->WaitFinalizationOrRetry;
+        KQP_PROXY_LOG_D("Check lease " << ev->Sender << " success, operation status: " << (operationStatus ? Ydb::StatusIds::StatusCode_Name(*operationStatus) : "<null>") << ", finalization or retry in progress: " << finalizationOrRetryInProgress << ", has retries: " << HasRetryPolicy);
 
-        if (!operationStatus) {
+        if (!operationStatus && !finalizationOrRetryInProgress) {
             // Cancel running query first, to prevent TLI on retry policy reset
             State = EState::CancelScriptExecution;
         } else if (HasRetryPolicy) {

@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardCountersTest) {
             NLs::PathsInsideDomain(initPathsCount)
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(schemeshard->TabletCounters->Simple()[COUNTER_PATHS].Get(), initPathsCount);
+        UNIT_ASSERT_VALUES_EQUAL(schemeshard->TabletCounters->Simple()[COUNTER_PATHS].Get(), 0);
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Dir/Table"
             Columns { Name: "key"   Type: "Uint64"}
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardCountersTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::PathsInsideDomain(initPathsCount)
         });
-        UNIT_ASSERT_VALUES_EQUAL(schemeshard->TabletCounters->Simple()[COUNTER_PATHS].Get(), initPathsCount);
+        UNIT_ASSERT_VALUES_EQUAL(schemeshard->TabletCounters->Simple()[COUNTER_PATHS].Get(), 0);
     }
 
 }

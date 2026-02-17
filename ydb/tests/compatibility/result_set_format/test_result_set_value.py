@@ -38,16 +38,14 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
         if min(self.versions) < (25, 3, 2):
             pytest.skip("Result set formats are not supported in <= 25.3.1")
 
-        if min(self.versions) < (26, 2):
-            types_not_supported_yet_in_columnshard.add("Bool")
-
         supported_pk_types = pk_types if store_type == "ROW" else {k: v for k, v in pk_types.items() if k not in types_not_supported_yet_in_columnshard}
         supported_non_pk_types = non_pk_types if store_type == "ROW" else {k: v for k, v in non_pk_types.items() if k not in types_not_supported_yet_in_columnshard}
         self.all_types = {**supported_pk_types, **supported_non_pk_types}
 
         yield from self.setup_cluster(
             extra_feature_flags={
-                "enable_arrow_result_set_format": True
+                "enable_arrow_result_set_format": True,
+                "enable_columnshard_bool": True,
             },
             table_service_config={
                 "resource_manager": {

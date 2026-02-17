@@ -107,6 +107,9 @@ class PackageJson(object):
         first_dep = next(self.dependencies_iter(), None)
         return first_dep is not None
 
+    def get_files(self) -> list[str]:
+        return self.data.get("files", [])
+
     def bins_iter(self):
         bins = self.data.get("bin")
         if isinstance(bins, str):

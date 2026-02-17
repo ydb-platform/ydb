@@ -32,11 +32,13 @@ from functools import wraps
 from threading import RLock
 from pathlib import Path
 
+from .warnings import PyparsingDeprecationWarning, PyparsingDiagnosticWarning
 from .util import (
     _FifoCache,
     _UnboundedCache,
     __config_flags,
     _collapse_string_to_ranges,
+    _convert_escaped_numerics_to_char,
     _escape_regex_range_chars,
     _flatten,
     LRUMemo as _LRUMemo,
@@ -230,13 +232,17 @@ DebugSuccessAction = Callable[
 DebugExceptionAction = Callable[[str, int, "ParserElement", Exception, bool], None]
 
 
-alphas: str = string.ascii_uppercase + string.ascii_lowercase
+alphas: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 identchars: str = pyparsing_unicode.Latin1.identchars
 identbodychars: str = pyparsing_unicode.Latin1.identbodychars
 nums: str = "0123456789"
-hexnums: str = nums + "ABCDEFabcdef"
-alphanums: str = alphas + nums
-printables: str = "".join([c for c in string.printable if c not in string.whitespace])
+hexnums: str = "0123456789ABCDEFabcdef"
+alphanums: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+printables: str = (
+    '!"'
+    "#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+)
 
 
 class _ParseActionIndexError(Exception):
@@ -2205,7 +2211,7 @@ class ParserElement(ABC):
         """
         warnings.warn(
             "ParserElement.validate() is deprecated, and should not be used to check for left recursion",
-            DeprecationWarning,
+            PyparsingDeprecationWarning,
             stacklevel=2,
         )
         self._checkRecursion([])
@@ -3366,7 +3372,7 @@ class Word(Token):
             raise ParseException(instring, loc, self.errmsg, self)
 
         loc = result.end()
-        return loc, result.group()
+        return loc, result[0]
 
 
 class Char(Word):
@@ -3550,7 +3556,7 @@ class Regex(Token):
             raise ParseException(instring, loc, self.errmsg, self)
 
         loc = result.end()
-        ret = ParseResults(result.group())
+        ret = ParseResults(result[0])
         d = result.groupdict()
 
         for k, v in d.items():
@@ -3813,17 +3819,7 @@ class QuotedString(Token):
 
         # get ending loc and matched string from regex matching result
         loc = result.end()
-        ret = result.group()
-
-        def convert_escaped_numerics(s: str) -> str:
-            if s == "0":
-                return "\0"
-            if s.isdigit() and len(s) == 3:
-                return chr(int(s, base=8))
-            elif s.startswith(("u", "x")):
-                return chr(int(s[1:], base=16))
-            else:
-                return s
+        ret = result[0]
 
         if self.unquote_results:
             # strip off quotes
@@ -3837,22 +3833,22 @@ class QuotedString(Token):
                     # regex matches (only 1 group will match at any given time)
                     ret = "".join(
                         # match group 1 matches \t, \n, etc.
-                        self.ws_map[match.group(1)] if match.group(1)
+                        self.ws_map[g] if (g := match[1])
                         # match group 2 matches escaped octal, null, hex, and Unicode
                         # sequences
-                        else convert_escaped_numerics(match.group(2)[1:]) if match.group(2)
+                        else _convert_escaped_numerics_to_char(g[1:]) if (g := match[2])
                         # match group 3 matches escaped characters
-                        else match.group(3)[-1] if match.group(3)
+                        else g[-1] if (g := match[3])
                         # match group 4 matches any character
-                        else match.group(4)
+                        else match[4]
                         for match in self.unquote_scan_re.finditer(ret)
                     )
                 else:
                     ret = "".join(
                         # match group 1 matches escaped characters
-                        match.group(1)[-1] if match.group(1)
+                        g[-1] if (g := match[1])
                         # match group 2 matches any character
-                        else match.group(2)
+                        else match[2]
                         for match in self.unquote_scan_re.finditer(ret)
                     )
                 # fmt: on
@@ -4415,7 +4411,7 @@ class ParseExpression(ParserElement):
     def validate(self, validateTrace=None) -> None:
         warnings.warn(
             "ParserElement.validate() is deprecated, and should not be used to check for left recursion",
-            DeprecationWarning,
+            PyparsingDeprecationWarning,
             stacklevel=2,
         )
         tmp = (validateTrace if validateTrace is not None else [])[:] + [self]
@@ -4456,7 +4452,7 @@ class ParseExpression(ParserElement):
                     f" setting results name {name!r} on {type(self).__name__} expression"
                     f" collides with {e.resultsName!r} on contained expression"
                 )
-                warnings.warn(warning, stacklevel=3)
+                warnings.warn(warning, PyparsingDiagnosticWarning, stacklevel=3)
                 break
 
         return super()._setResultsName(name, list_all_matches)
@@ -4814,7 +4810,7 @@ class Or(ParseExpression):
                     " in prior versions only the first token was returned; enclose"
                     " contained argument in Group"
                 )
-                warnings.warn(warning, stacklevel=3)
+                warnings.warn(warning, PyparsingDiagnosticWarning, stacklevel=3)
 
         return super()._setResultsName(name, list_all_matches)
 
@@ -4926,7 +4922,7 @@ class MatchFirst(ParseExpression):
                     " in prior versions only the first token was returned; enclose"
                     " contained argument in Group"
                 )
-                warnings.warn(warning, stacklevel=3)
+                warnings.warn(warning, PyparsingDiagnosticWarning, stacklevel=3)
 
         return super()._setResultsName(name, list_all_matches)
 
@@ -5219,7 +5215,7 @@ class ParseElementEnhance(ParserElement):
     def validate(self, validateTrace=None) -> None:
         warnings.warn(
             "ParserElement.validate() is deprecated, and should not be used to check for left recursion",
-            DeprecationWarning,
+            PyparsingDeprecationWarning,
             stacklevel=2,
         )
         if validateTrace is None:
@@ -5713,7 +5709,7 @@ class _MultipleMatch(ParseElementEnhance):
                         f" setting results name {name!r} on {type(self).__name__} expression"
                         f" collides with {e.resultsName!r} on contained expression"
                     )
-                    warnings.warn(warning, stacklevel=3)
+                    warnings.warn(warning, PyparsingDiagnosticWarning, stacklevel=3)
                     break
 
         return super()._setResultsName(name, list_all_matches)
@@ -6210,6 +6206,7 @@ class Forward(ParseElementEnhance):
             warnings.warn(
                 "warn_on_match_first_with_lshift_operator:"
                 " using '<<' operator with '|' is probably an error, use '<<='",
+                PyparsingDiagnosticWarning,
                 stacklevel=2,
             )
         ret = super().__or__(other)
@@ -6254,6 +6251,7 @@ class Forward(ParseElementEnhance):
             warnings.warn(
                 "warn_on_parse_using_empty_Forward:"
                 " Forward expression was never assigned a value, will not parse any input",
+                PyparsingDiagnosticWarning,
                 stacklevel=stacklevel,
             )
         if not ParserElement._left_recursion_enabled:
@@ -6349,7 +6347,7 @@ class Forward(ParseElementEnhance):
     def validate(self, validateTrace=None) -> None:
         warnings.warn(
             "ParserElement.validate() is deprecated, and should not be used to check for left recursion",
-            DeprecationWarning,
+            PyparsingDeprecationWarning,
             stacklevel=2,
         )
         if validateTrace is None:
@@ -6403,7 +6401,7 @@ class Forward(ParseElementEnhance):
                 f" setting results name {name!r} on {type(self).__name__} expression"
                 " that has no contained expression"
             )
-            warnings.warn(warning, stacklevel=3)
+            warnings.warn(warning, PyparsingDiagnosticWarning, stacklevel=3)
         # fmt: on
 
         return super()._setResultsName(name, list_all_matches)

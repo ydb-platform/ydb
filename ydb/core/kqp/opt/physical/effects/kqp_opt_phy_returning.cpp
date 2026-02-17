@@ -250,7 +250,7 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
                 .Build()
             .Table(upsert.Table())
             .Columns(upsert.Columns())
-            .IsBatch(upsert.IsBatch())
+            .IsBatch(ctx.NewAtom(upsert.Pos(), "false"))
             .DefaultColumns(upsert.DefaultColumns())
             .Settings(upsert.Settings())
             .ReturningColumns(upsert.ReturningColumns())
@@ -273,7 +273,7 @@ TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKq
                 .Input(del.Input())
                 .Build()
             .Table(del.Table())
-            .IsBatch(del.IsBatch())
+            .IsBatch(ctx.NewAtom(del.Pos(), "false"))
             .ReturningColumns(del.ReturningColumns())
             .Done();
 }

@@ -11,6 +11,26 @@
 namespace NYql {
 namespace NCommon {
 
+namespace {
+TStringBuf GetTzPayloadWireType(NUdf::EDataSlot slot) {
+    switch (slot) {
+        case NUdf::EDataSlot::TzDate:
+            return "uint16";
+        case NUdf::EDataSlot::TzDatetime:
+            return "uint32";
+        case NUdf::EDataSlot::TzTimestamp:
+            return "uint64";
+        case NUdf::EDataSlot::TzDate32:
+            return "int32";
+        case NUdf::EDataSlot::TzDatetime64:
+        case NUdf::EDataSlot::TzTimestamp64:
+            return "int64";
+        default:
+            ythrow yexception() << "Expecting Tz* type";
+    }
+}
+} // namespace
+
 struct TSkiffTypeLoader {
     typedef NYT::TNode TType;
 
@@ -49,6 +69,7 @@ struct TSkiffTypeLoader {
             ythrow yexception() << "Unsupported data type: " << dataType;
         }
 
+        bool smallTz = false;
         switch (*slot) {
             case NUdf::EDataSlot::Bool:
                 return NYT::TNode()("wire_type", "boolean");
@@ -85,9 +106,17 @@ struct TSkiffTypeLoader {
             case NUdf::EDataSlot::TzDate:
             case NUdf::EDataSlot::TzDatetime:
             case NUdf::EDataSlot::TzTimestamp:
+                smallTz = true;
+                [[fallthrough]];
             case NUdf::EDataSlot::TzDate32:
             case NUdf::EDataSlot::TzDatetime64:
             case NUdf::EDataSlot::TzTimestamp64:
+                if ((smallTz && (NativeYTTypesFlags & NTCF_TZDATE)) || (!smallTz && (NativeYTTypesFlags & NTCF_BIGTZDATE))) {
+                    auto children = NYT::TNode::CreateList();
+                    children.Add(NYT::TNode()("wire_type", GetTzPayloadWireType(*slot)));
+                    children.Add(NYT::TNode()("wire_type", "uint16"));
+                    return NYT::TNode()("wire_type", "tuple")("children", std::move(children));
+                }
                 return NYT::TNode()("wire_type", "string32");
             case NUdf::EDataSlot::Decimal:
                 ythrow yexception() << "Decimal type without parameters.";

@@ -1,4 +1,4 @@
-../../../ya ide vscode --cpp --allow-project-inside-arc -P=workspace \
+../../../ya ide vscode --cpp --allow-project-inside-arc --use-arcadia-root --no-tool-clangd -P=workspace \
 ../../../library/cpp        \
 ../../../util               \
 ../../apps                  \

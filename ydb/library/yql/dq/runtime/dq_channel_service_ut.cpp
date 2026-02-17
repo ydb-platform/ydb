@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
         auto service = serviceReply->Service;
 
-        TChannelFullInfo info(1, sender, receiver, 1, 2);
+        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
         auto senderBuffer = service->GetLocalBuffer(info, false, nullptr);
         auto receiverBuffer = service->GetLocalBuffer(info, true, nullptr);
 
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
         auto service = serviceReply->Service;
 
-        TChannelFullInfo info(1, sender, receiver, 1, 2);
+        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
         auto senderBuffer = service->GetLocalBuffer(info, false, nullptr);
         auto receiverBuffer = service->GetLocalBuffer(info, true, nullptr);
 
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
         auto service = serviceReply->Service;
 
-        TChannelFullInfo info(1, sender, receiver, 1, 2);
+        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
         auto senderBuffer = service->GetLocalBuffer(info, false, nullptr);
         auto receiverBuffer = service->GetLocalBuffer(info, true, nullptr);
 
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
         std::shared_ptr<IChannelBuffer> senderBuffer;
         std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2);
+        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
 
         {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
@@ -320,8 +320,8 @@ Y_UNIT_TEST_SUITE(Channels20) {
             service1 = serviceReply->Service;
         }
 
-        TChannelFullInfo info1(1, sender, receiver, 1, 2);
-        TChannelFullInfo info2(2, sender, receiver, 3, 4);
+        TChannelFullInfo info1(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
+        TChannelFullInfo info2(2, sender, receiver, 3, 4, TCollectStatsLevel::None);
 
         std::shared_ptr<IChannelBuffer> senderBuffer1 = service0->GetRemoteOutputBuffer(info1, nullptr);
         std::shared_ptr<IChannelBuffer> senderBuffer2 = service0->GetRemoteOutputBuffer(info2, nullptr);
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
         std::shared_ptr<IChannelBuffer> senderBuffer;
         std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2);
+        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
 
         {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
         std::shared_ptr<IChannelBuffer> senderBuffer;
         std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2);
+        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
 
         {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
@@ -440,7 +440,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
         std::shared_ptr<IChannelBuffer> senderBuffer;
         std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2);
+        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
 
         {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         std::shared_ptr<IChannelBuffer> senderBuffer;
         std::shared_ptr<TDebugNodeState> senderState;
         std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2);
+        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
         std::shared_ptr<TDqChannelService> service0;
         std::shared_ptr<TDqChannelService> service1;
 
@@ -578,7 +578,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
             auto service = serviceReply->Service;
             for (ui32 i = 0; i < SENDER_COUNT; i++) {
-                receiverBuffers[i] = service->GetRemoteInputBuffer(TChannelFullInfo(i + 1, senders[i], receiver, 1, 2));
+                receiverBuffers[i] = service->GetRemoteInputBuffer(TChannelFullInfo(i + 1, senders[i], receiver, 1, 2, TCollectStatsLevel::None));
             }
         }
 
@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(senders[0])->Release();
             auto service = serviceReply->Service;
             for (ui32 i = 0; i < SENDER_COUNT; i++) {
-                senderBuffers[i] = service->GetRemoteOutputBuffer(TChannelFullInfo(i + 1, senders[i], receiver, 1, 2), nullptr);
+                senderBuffers[i] = service->GetRemoteOutputBuffer(TChannelFullInfo(i + 1, senders[i], receiver, 1, 2, TCollectStatsLevel::None), nullptr);
             }
         }
 

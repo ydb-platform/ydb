@@ -2,12 +2,17 @@
 import grpc
 import logging
 import os
-from typing import Any  # noqa
+from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
 from . import credentials as credentials_impl, table, scheme, pool
 from . import tracing
 from . import iam
 from . import _utilities
+
+if TYPE_CHECKING:
+    from .credentials import Credentials
+    from .table import TableClientSettings
+    from .query.base import QueryClientSettings
 
 
 logger = logging.getLogger(__name__)
@@ -21,7 +26,10 @@ class RPCCompression:
     Gzip = grpc.Compression.Gzip
 
 
-def default_credentials(credentials=None, tracer=None):
+def default_credentials(
+    credentials: Optional["Credentials"] = None,
+    tracer: Optional[tracing.Tracer] = None,
+) -> "Credentials":
     tracer = tracer if tracer is not None else tracing.Tracer(None)
     with tracer.trace("Driver.default_credentials") as ctx:
         if credentials is None:
@@ -32,7 +40,7 @@ def default_credentials(credentials=None, tracer=None):
             return credentials
 
 
-def credentials_from_env_variables(tracer=None):
+def credentials_from_env_variables(tracer: Optional[tracing.Tracer] = None) -> "Credentials":
     tracer = tracer if tracer is not None else tracing.Tracer(None)
     with tracer.trace("Driver.credentials_from_env_variables") as ctx:
         service_account_key_file = os.getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
@@ -101,28 +109,28 @@ class DriverConfig(object):
 
     def __init__(
         self,
-        endpoint,
-        database=None,
-        ca_cert=None,
-        auth_token=None,
-        channel_options=None,
-        credentials=None,
-        use_all_nodes=True,
-        root_certificates=None,
-        certificate_chain=None,
-        private_key=None,
-        grpc_keep_alive_timeout=None,
-        table_client_settings=None,
-        topic_client_settings=None,
-        query_client_settings=None,
-        endpoints=None,
-        primary_user_agent="python-library",
-        tracer=None,
-        grpc_lb_policy_name="round_robin",
-        discovery_request_timeout=10,
-        compression=None,
-        disable_discovery=False,
-    ):
+        endpoint: str,
+        database: Optional[str] = None,
+        ca_cert: Optional[str] = None,
+        auth_token: Optional[str] = None,
+        channel_options: Optional[List[Tuple[str, Any]]] = None,
+        credentials: Optional["Credentials"] = None,
+        use_all_nodes: bool = True,
+        root_certificates: Optional[bytes] = None,
+        certificate_chain: Optional[bytes] = None,
+        private_key: Optional[bytes] = None,
+        grpc_keep_alive_timeout: Optional[int] = None,
+        table_client_settings: Optional["TableClientSettings"] = None,
+        topic_client_settings: Optional[Any] = None,
+        query_client_settings: Optional["QueryClientSettings"] = None,
+        endpoints: Optional[List[str]] = None,
+        primary_user_agent: str = "python-library",
+        tracer: Optional[tracing.Tracer] = None,
+        grpc_lb_policy_name: str = "round_robin",
+        discovery_request_timeout: int = 10,
+        compression: Optional[grpc.Compression] = None,
+        disable_discovery: bool = False,
+    ) -> None:
         """
         A driver config to initialize a driver instance
 
@@ -172,12 +180,19 @@ class DriverConfig(object):
         self.compression = compression
         self.disable_discovery = disable_discovery
 
-    def set_database(self, database):
+    def set_database(self, database: str) -> "DriverConfig":
         self.database = database
         return self
 
     @classmethod
-    def default_from_endpoint_and_database(cls, endpoint, database, root_certificates=None, credentials=None, **kwargs):
+    def default_from_endpoint_and_database(
+        cls,
+        endpoint: str,
+        database: Optional[str] = None,
+        root_certificates: Optional[bytes] = None,
+        credentials: Optional["Credentials"] = None,
+        **kwargs: Any,
+    ) -> "DriverConfig":
         return cls(
             endpoint,
             database,
@@ -187,7 +202,13 @@ class DriverConfig(object):
         )
 
     @classmethod
-    def default_from_connection_string(cls, connection_string, root_certificates=None, credentials=None, **kwargs):
+    def default_from_connection_string(
+        cls,
+        connection_string: str,
+        root_certificates: Optional[bytes] = None,
+        credentials: Optional["Credentials"] = None,
+        **kwargs: Any,
+    ) -> "DriverConfig":
         endpoint, database = _utilities.parse_connection_string(connection_string)
         return cls(
             endpoint,
@@ -197,11 +218,11 @@ class DriverConfig(object):
             **kwargs,
         )
 
-    def set_grpc_keep_alive_timeout(self, timeout):
+    def set_grpc_keep_alive_timeout(self, timeout: int) -> "DriverConfig":
         self.grpc_keep_alive_timeout = timeout
         return self
 
-    def _update_attrs_by_kwargs(self, **kwargs):
+    def _update_attrs_by_kwargs(self, **kwargs: Any) -> None:
         for key, value in kwargs.items():
             if value is not None:
                 if getattr(self, key) is not None:
@@ -215,15 +236,15 @@ ConnectionParams = DriverConfig
 
 
 def get_config(
-    driver_config=None,
-    connection_string=None,
-    endpoint=None,
-    database=None,
-    root_certificates=None,
-    credentials=None,
-    config_class=DriverConfig,
-    **kwargs,
-):
+    driver_config: Optional[DriverConfig] = None,
+    connection_string: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    database: Optional[str] = None,
+    root_certificates: Optional[bytes] = None,
+    credentials: Optional["Credentials"] = None,
+    config_class: Type[DriverConfig] = DriverConfig,
+    **kwargs: Any,
+) -> DriverConfig:
     if driver_config is None:
         if connection_string is not None:
             driver_config = config_class.default_from_connection_string(
@@ -231,7 +252,11 @@ def get_config(
             )
         else:
             driver_config = config_class.default_from_endpoint_and_database(
-                endpoint, database, root_certificates, credentials, **kwargs
+                endpoint,  # type: ignore[arg-type]
+                database,
+                root_certificates,
+                credentials,
+                **kwargs,
             )
     else:
         kwargs["endpoint"] = endpoint
@@ -252,14 +277,14 @@ class Driver(pool.ConnectionPool):
 
     def __init__(
         self,
-        driver_config=None,
-        connection_string=None,
-        endpoint=None,
-        database=None,
-        root_certificates=None,
-        credentials=None,
-        **kwargs,
-    ):
+        driver_config: Optional[DriverConfig] = None,
+        connection_string: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        database: Optional[str] = None,
+        root_certificates: Optional[bytes] = None,
+        credentials: Optional["Credentials"] = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Constructs a driver instance to be used in table and scheme clients.
         It encapsulates endpoints discovery mechanism and provides ability to execute RPCs
@@ -292,7 +317,7 @@ class Driver(pool.ConnectionPool):
         self.topic_client = topic.TopicClient(self, driver_config.topic_client_settings)
         self.coordination_client = coordination.CoordinationClient(self)
 
-    def stop(self, timeout=10):
+    def stop(self, timeout: int = 10) -> None:
         self.table_client._stop_pool_if_needed(timeout=timeout)
         self.topic_client.close()
         super().stop(timeout=timeout)

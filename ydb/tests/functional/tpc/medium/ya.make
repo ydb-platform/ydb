@@ -12,6 +12,7 @@ TEST_SRCS(
     test_import_csv.py
     test_default_path.py
     test_workload_manager.py
+    test_tpcc.py
 )
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)

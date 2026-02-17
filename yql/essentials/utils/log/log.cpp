@@ -22,10 +22,10 @@
 #include <stdio.h>
 #include <time.h>
 
-static TMutex g_InitLoggerMutex;
-static int g_LoggerInitialized = 0;
-
 namespace {
+
+TMutex g_InitLoggerMutex;
+int g_LoggerInitialized = 0;
 
 class TLimitedLogBackend final: public TLogBackend {
 public:

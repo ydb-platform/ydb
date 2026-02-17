@@ -103,7 +103,7 @@ class unicode_set:
         plus the digits 0-9, and · (Unicode MIDDLE DOT)
         """
         identifier_chars = set(
-            c for c in cls._chars_for_ranges if ("_" + c).isidentifier()
+            c for c in cls._chars_for_ranges if f"_{c}".isidentifier()
         )
         return "".join(
             sorted(identifier_chars | set(cls.identchars) | set("0123456789·"))

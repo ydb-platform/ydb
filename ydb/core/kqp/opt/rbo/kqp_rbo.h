@@ -84,36 +84,18 @@ class TRuleBasedStage : public IRBOStage {
  */
 class TRuleBasedOptimizer {
 public:
-    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                        TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry,
-                        TVector<std::shared_ptr<IRBOStage>> stages)
-        : KqpCtx(*kqpCtx)
-        , TypeCtx(typeCtx)
-        , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
-        , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
-        , FuncRegistry(funcRegistry)
-        , Stages(stages) {
-    }
+    TRuleBasedOptimizer() = default;
+    ~TRuleBasedOptimizer() = default;
 
-    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                        TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry)
-        : KqpCtx(*kqpCtx)
-        , TypeCtx(typeCtx)
-        , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
-        , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
-        , FuncRegistry(funcRegistry) {
-    }
+    // This function applies RBO optimizations, translates given `root` to physical yql `callables`, applies lightweight (stage based) physical optimizations
+    // and returns a root of the physical program.
+    TExprNode::TPtr Optimize(TOpRoot& root, TRBOContext& rboCtx);
 
-    TExprNode::TPtr Optimize(TOpRoot& root, TExprContext& ctx);
+    // Adds a RBO stage to the RBO pipeline.
     void AddStage(std::shared_ptr<IRBOStage>&& stage) {
         Stages.push_back(std::move(stage));
     }
 
-    TKqpOptimizeContext& KqpCtx;
-    TTypeAnnotationContext& TypeCtx;
-    TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> PeepholeTypeAnnTransformer;
-    const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TVector<std::shared_ptr<IRBOStage>> Stages;
 };
 

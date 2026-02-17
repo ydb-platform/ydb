@@ -3010,8 +3010,11 @@ private:
     void RunChangeExchangeHandshakeTx();
     void ChangeExchangeHandshakeExecuted();
 
-    // compactionId, actorId
-    using TCompactionWaiter = std::tuple<ui64, TActorId>;
+    struct TCompactionWaiter {
+        ui64 CompactionId;
+        TActorId ActorId;
+        ui64 Cookie;
+    };
     using TCompactionWaiterList = TList<TCompactionWaiter>;
 
     // tableLocalTid -> waiters, note that compactionId is monotonically
@@ -3308,6 +3311,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
             hFuncTraced(TEvDataShard::TEvReadScanStarted, Handle);
             hFuncTraced(TEvDataShard::TEvReadScanFinished, Handle);
+            hFunc(TEvDataShard::TEvGetInfoRequest, Handle);
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);

@@ -14,7 +14,6 @@ SRCS(
     context_ut.cpp
     guarded_sglist_ut.cpp
     sglist_iter_ut.cpp
-    sglist_test.cpp
     sglist_ut.cpp
 )
 

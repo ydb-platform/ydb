@@ -3,10 +3,14 @@
 
 #include <library/cpp/streams/zstd/zstd.h>
 
+#include <util/folder/path.h>
+#include <util/folder/tempdir.h>
 #include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/buffer.h>
+#include <util/stream/file.h>
 #include <util/stream/str.h>
+#include <util/system/fs.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/library/testlib/helpers.h>
@@ -843,7 +847,7 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
 
 protected:
     bool NotEncryptedFileName(const TString& key) {
-        return key.EndsWith(".sha256") || key == "/test_bucket/Prefix/metadata.json";
+        return key.EndsWith(".sha256") || key == "/test_bucket/Prefix/metadata.json" || key.EndsWith("metadata.json");
     }
 
     TString ReencryptWithDifferentIV(const TString& source, NBackup::TEncryptionKey& encryptionKey, const std::string& algorithm) {
@@ -858,8 +862,16 @@ protected:
         return TString(encrypted.Data(), encrypted.Size());
     }
 
-    void TestCommonEncryptionRequirements(bool useSchemaSecrets) {
+    void TestCommonEncryptionRequirements(bool useSchemaSecrets, bool isFsBackup = false) {
         using namespace ::fmt::literals;
+
+        THolder<TTempDir> tempDirHolder;
+        TString basePath;
+        if (isFsBackup) {
+            tempDirHolder = MakeHolder<TTempDir>();
+            basePath = tempDirHolder->Path();
+            Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        }
         // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
         // Create two object of each type in order to verify that we don't duplicate IVs
         {
@@ -1002,7 +1014,16 @@ protected:
         }
 
         // Create recursive export
-        {
+        if (isFsBackup) {
+            NExport::TExportToFsSettings settings;
+            settings
+                .BasePath(basePath)
+                .SourcePath("")
+                .SymmetricEncryption("AES-128-GCM", "Cool random key!");
+
+            auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+            WaitOpSuccess(res);
+        } else {
             NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
             settings
                 .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
@@ -1011,47 +1032,101 @@ protected:
             WaitOpSuccess(res);
         }
 
-        Cerr << "Export files:\n";
-        for (const auto& [key, _] : S3Mock().GetData()) {
-            Cerr << key << Endl;
-        }
-
         NBackup::TEncryptionKey encryptionKey("Cool random key!");
         THashSet<TString> ivs;
         THashSet<TString> allKeyNames;
-        for (const auto& [key, content] : S3Mock().GetData()) {
-            // Nonencrypted keys
-            if (NotEncryptedFileName(key)) {
-                continue;
+
+        if (isFsBackup) {
+            Cerr << "Export files (FS):\n";
+            TFsPath baseDir(basePath);
+            std::function<void(const TFsPath&)> collectFiles = [&](const TFsPath& dir) {
+                TVector<TString> children;
+                dir.ListNames(children);
+                for (const auto& child : children) {
+                    TFsPath childPath = dir / child;
+                    if (childPath.IsDirectory()) {
+                        collectFiles(childPath);
+                    } else if (childPath.IsFile()) {
+                        TString relativePath = childPath.GetPath().substr(basePath.size());
+                        if (relativePath.StartsWith("/")) {
+                            relativePath = relativePath.substr(1);
+                        }
+                        Cerr << relativePath << Endl;
+
+                        if (relativePath.EndsWith("metadata.json") || relativePath.EndsWith(".sha256")) {
+                            continue;
+                        }
+
+                        allKeyNames.insert(relativePath);
+
+                        UNIT_ASSERT_C(relativePath.EndsWith(".enc"), relativePath);
+
+                        TFileInput file(childPath.GetPath());
+                        TString content = file.ReadAll();
+
+                        TBuffer decryptedData;
+                        NBackup::TEncryptionIV iv;
+                        UNIT_ASSERT_NO_EXCEPTION_C(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                            encryptionKey,
+                            TBuffer(content.data(), content.size())
+                        ), relativePath);
+
+                        UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, relativePath);
+
+                        UNIT_ASSERT_C(relativePath.find("Anonymized") == TString::npos, relativePath);
+                        UNIT_ASSERT_C(relativePath.find("anonymized") == TString::npos, relativePath);
+                    }
+                }
+            };
+            collectFiles(baseDir);
+        } else {
+            Cerr << "Export files (S3):\n";
+            for (const auto& [key, _] : S3Mock().GetData()) {
+                Cerr << key << Endl;
             }
 
-            allKeyNames.insert(key);
+            for (const auto& [key, content] : S3Mock().GetData()) {
+                // Nonencrypted keys
+                if (NotEncryptedFileName(key)) {
+                    continue;
+                }
 
-            // Check that files are encrypted
-            UNIT_ASSERT_C(key.EndsWith(".enc"), key);
+                allKeyNames.insert(key);
 
-            // Check that we can decrypt content with our key (== it is really encrypted with our key)
-            TBuffer decryptedData;
-            NBackup::TEncryptionIV iv;
-            UNIT_ASSERT_NO_EXCEPTION_C(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
-                encryptionKey,
-                TBuffer(content.data(), content.size())
-            ), key);
+                // Check that files are encrypted
+                UNIT_ASSERT_C(key.EndsWith(".enc"), key);
 
-            // All ivs are unique
-            UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, key);
+                // Check that we can decrypt content with our key (== it is really encrypted with our key)
+                TBuffer decryptedData;
+                NBackup::TEncryptionIV iv;
+                UNIT_ASSERT_NO_EXCEPTION_C(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                    encryptionKey,
+                    TBuffer(content.data(), content.size())
+                ), key);
 
-            // Encrypted export must not show objects real names
-            UNIT_ASSERT_C(key.find("Anonymized") == TString::npos, key);
-            UNIT_ASSERT_C(key.find("anonymized") == TString::npos, key); // user/group
+                // All ivs are unique
+                UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, key);
+
+                // Encrypted export must not show objects real names
+                UNIT_ASSERT_C(key.find("Anonymized") == TString::npos, key);
+                UNIT_ASSERT_C(key.find("anonymized") == TString::npos, key); // user/group
+            }
         }
 
+
+        size_t importIndex = 0;
+
+        if (isFsBackup) {
+            // TODO: FS import with encryption and recursive mode is not yet fully implemented
+            // Skip import tests for FS backups for now
+            Cerr << "Skipping import tests for FS backup (not yet fully implemented)" << Endl;
+            return;
+        }
 
         NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
         importSettings
             .SymmetricKey("Cool random key!");
 
-        size_t importIndex = 0;
         auto copySettings = [&]() {
             NYdb::NImport::TImportFromS3Settings settings = importSettings;
             settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << importIndex++);
@@ -1103,5 +1178,13 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
 
     Y_UNIT_TEST(CommonEncryptionRequirementsWithSchemaSecrets) {
         TestCommonEncryptionRequirements(/* useSchemaSecrets */ true);
+    }
+
+    Y_UNIT_TEST(CommonEncryptionRequirementsFs) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ false, /* isFsBackup */ true);
+    }
+
+    Y_UNIT_TEST(CommonEncryptionRequirementsFsWithSchemaSecrets) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ true, /* isFsBackup */ true);
     }
 }

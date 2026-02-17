@@ -31,7 +31,6 @@ namespace NKikimr::NSchemeShard {
 template <class TDerived, class TSettings>
 class TExportFilesUploader: public TActorBootstrapped<TDerived> {
 protected:
-    using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
     using TPutObjectResult = Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>;
 

@@ -5,15 +5,19 @@
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
+#include <util/generic/yexception.h>
+
 namespace NKikimr::NBackup::NFieldsWrappers {
 
 template <>
 const NKikimrSchemeOp::TS3Settings& GetSettings(const NKikimrSchemeOp::TBackupTask& task) {
+    Y_ENSURE(task.HasS3Settings());
     return task.GetS3Settings();
 }
 
 template <>
 const NKikimrSchemeOp::TFSSettings& GetSettings(const NKikimrSchemeOp::TBackupTask& task) {
+    Y_ENSURE(task.HasFSSettings());
     return task.GetFSSettings();
 }
 
@@ -28,12 +32,12 @@ const TString& GetCommonDestination(const Ydb::Export::ExportToFsSettings& setti
 }
 
 template <>
-TString& GetMutableItemDestination(Ydb::Export::ExportToS3Settings::Item& item) {
+TString& MutableItemDestination(Ydb::Export::ExportToS3Settings::Item& item) {
     return *item.mutable_destination_prefix();
 }
 
 template <>
-TString& GetMutableItemDestination(Ydb::Export::ExportToFsSettings::Item& item) {
+TString& MutableItemDestination(Ydb::Export::ExportToFsSettings::Item& item) {
     return *item.mutable_destination_path();
 }
 

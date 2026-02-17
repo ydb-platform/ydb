@@ -466,7 +466,7 @@ private:
         Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
     }
 
-    template <typename Func, typename... Args>
+    template <typename Func>
     auto DispatchByExportKind(Func&& func, TExportInfo& exportInfo) {
         switch (exportInfo.Kind) {
         case TExportInfo::EKind::S3:
@@ -538,7 +538,7 @@ private:
         TSettings exportSettings;
         Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
-        const auto destination = GetCommonDestination(exportSettings);
+        const TString& destination = GetCommonDestination(exportSettings);
         if (destination.empty()) { // No place to save backup metadata
             return true;
         }
@@ -577,7 +577,7 @@ private:
 
             TString destinationPrefix;
             if (!GetItemDestination(exportItem).empty()) {
-                TString& itemPrefix = GetMutableItemDestination(exportItem);
+                TString& itemPrefix = MutableItemDestination(exportItem);
                 destinationPrefix = itemPrefix = NBackup::NormalizeItemPrefix(itemPrefix);
             } else {
                 std::stringstream itemPrefix;
@@ -590,7 +590,11 @@ private:
                 destinationPrefix = itemPrefix.str();
             }
             schemaMappingItem.SetDestinationPrefix(destinationPrefix);
-            GetMutableItemDestination(exportItem) = TStringBuilder() << commonDestinationPrefix << '/' << destinationPrefix;
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+                MutableItemDestination(exportItem) = destinationPrefix;
+            } else {
+                MutableItemDestination(exportItem) = TStringBuilder() << commonDestinationPrefix << '/' << destinationPrefix;
+            }
 
             if (iv) {
                 schemaMappingItem.SetIV(NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());

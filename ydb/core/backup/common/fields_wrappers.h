@@ -15,7 +15,7 @@ template <typename TSettings>
 const TString& GetCommonDestination(const TSettings&);
 
 template <typename TItem>
-TString& GetMutableItemDestination(TItem&);
+TString& MutableItemDestination(TItem&);
 
 template <typename TItem>
 const TString& GetItemDestination(const TItem&);

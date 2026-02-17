@@ -262,7 +262,7 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 for (const auto& [implTableName, implTablePathId]: indexPath.Base()->GetChildren()) {
 
                     // Build relative path to index impl table (relative to working dir)
-                    TString indexImplTableRelPath = JoinPath({relativeItemPath, childName, implTableName});
+                    const TString indexImplTableRelPath = JoinPath({relativeItemPath, childName, implTableName});
 
                     // Create AlterContinuousBackup for index impl table
                     NKikimrSchemeOp::TModifyScheme modifyScheme;

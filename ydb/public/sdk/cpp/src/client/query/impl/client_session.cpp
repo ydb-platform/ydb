@@ -63,7 +63,7 @@ public:
         uint32_t cur = 0;
         uint32_t newVal = 1;
         while (!Semaphore.compare_exchange_weak(cur, newVal,
-            std::memory_order_release, std::memory_order_relaxed)) {
+            std::memory_order_acquire, std::memory_order_relaxed)) {
                 std::this_thread::yield();
                 cur = 0;
         }

@@ -206,7 +206,9 @@ namespace {
         }
 
         auto buildResult = extractor->BuildComputeNode(keyList, ctx, typesCtx);
-        Y_ENSURE(buildResult.ComputeNode);
+        if(!buildResult.ComputeNode) {
+            return;
+        }
 
         auto evaluateRes = Evaluate(buildResult.ComputeNode, ctx, typesCtx, funcRegistry);
         auto finalExpr = Evaluate(evaluateRes, ctx, typesCtx, funcRegistry);

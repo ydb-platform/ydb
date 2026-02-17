@@ -244,7 +244,7 @@ default_access:
 
 Списки разрешений — это слои дополнительных разрешений:
 
-- Субъект, не состоящий ни в одном списке разрешений, имеет возможность просмотра публично доступной информации в системе (например, может видеть [список баз на кластере](../embedded-ui/ydb-monitoring/monitoring_main.md#database_list) или [список узлов кластера](../embedded-ui/ydb-monitoring/monitoring_main.md#nodes_list)).
+- Субъект, не состоящий ни в одном списке разрешений, имеет возможность просмотра публично доступной информации в системе (например, может видеть [список баз на кластере](../embedded-ui/ydb-monitoring/tab-databases.md#database_list) или [список узлов кластера](../embedded-ui/ydb-monitoring/tab-nodes.md#nodes_list)).
 - Списки `viewer_allowed_sids`, `monitoring_allowed_sids`, `administration_allowed_sids` последовательно наращивают возможности субъекта. Максимальные возможности требуют включения во все три списка.
 - Присутствие в списке `monitoring_allowed_sids` или `administration_allowed_sids` без присутствия во `viewer_allowed_sids` не имеет смысла.
 

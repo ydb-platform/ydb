@@ -2,7 +2,7 @@
 
 Многие компоненты {{ ydb-short-name }} реализованы в виде [таблеток](../../../concepts/glossary.md#tablet). Система может перемещать таблетки между узлами, поэтому на каждом узле выполняется свой набор таблеток.
 
-Страница открывается при переходе по **TabletID** с вкладок [Tablets](monitoring_main.md#tablets_list) или [Nodes](monitoring_main.md#nodes_list).
+Страница открывается при переходе по **TabletID** с вкладок [Tablets](tab-tablets.md#tablets_list) или [Nodes](tab-nodes.md#nodes_list).
 
 Пример страницы таблетки:
 

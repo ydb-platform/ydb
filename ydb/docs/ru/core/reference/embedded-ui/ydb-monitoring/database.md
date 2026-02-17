@@ -1,6 +1,6 @@
 # Страница Databases
 
-Страница открывается при переходе по ссылке из колонки **Database** на вкладке [Databases](monitoring_main.md#database_list).
+Страница открывается при переходе по ссылке из колонки **Database** на вкладке [Databases](tab-databases.md#database_list).
 
 Пример интерфейса:
 

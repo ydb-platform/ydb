@@ -134,6 +134,10 @@ namespace NKikimr::NBsController {
             ui32 RealmScatter = 0;
             ui32 DomainScatter = 0;
 
+            TScore IgnoreRealmScatter() const {
+                return TScore{ RealmInterlace, DomainInterlace, DeviceInterlace, RealmGroupScatter, 0, 0 };
+            }
+
             auto AsTuple() const {
                 return std::make_tuple(RealmInterlace, DomainInterlace, DeviceInterlace, RealmGroupScatter, RealmScatter, DomainScatter);
             }

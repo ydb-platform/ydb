@@ -8,7 +8,7 @@ bool IsSupportedIndex(TPathId pathId, const TOperationContext& context) {
         || indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
 }
 
-bool isSupportedIndex(TPathId pathId, const TSchemeShard* ss) {
+bool IsSupportedIndex(TPathId pathId, const TSchemeShard* ss) {
     auto indexInfo = ss->Indexes.at(pathId);
     return indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
             indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;

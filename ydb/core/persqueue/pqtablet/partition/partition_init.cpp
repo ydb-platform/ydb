@@ -106,6 +106,11 @@ void TInitializerStep::Done(const TActorContext& ctx) {
     Initializer->Next(ctx);
 }
 
+void TInitializerStep::RestartTablet(const std::string_view message) const {
+    PQ_INIT_LOG_E("Restarting tablet " << Partition()->TabletId << ": " << message);
+    Partition()->RestartTablet();
+}
+
 bool TInitializerStep::Handle(STFUNC_SIG) {
     Y_UNUSED(ev);
 
@@ -1422,17 +1427,17 @@ void TPartition::CreateCompacter() {
 
 void ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev) {
     auto& response = ev->Get()->Record;
-    AFL_ENSURE(response.GetStatus() == NMsgBusProxy::MSTATUS_OK)
-        ("d", "commands for topic are not processed at all")
-        ("topic", step.TopicName())
-        ("status", response.GetStatus());
+    if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+        step.RestartTablet(TStringBuilder() << "commands for topic are not processed at all. status: " << response.GetStatus());
+        return;
+    }
 
     for (ui32 i = 0; i < response.GetStatusResultSize(); ++i) {
         auto& res = response.GetGetStatusResult(i);
-        AFL_ENSURE(res.GetStatus() == NKikimrProto::OK)
-            ("d", "got KV error in CmdGetStatus")
-            ("topic", step.TopicName())
-            ("status", res.GetStatus());
+        if (res.GetStatus() != NKikimrProto::OK) {
+            step.RestartTablet(TStringBuilder() << "got KV error in CmdGetStatus. status: " << res.GetStatus());
+            return;
+        }
     }
 }
 

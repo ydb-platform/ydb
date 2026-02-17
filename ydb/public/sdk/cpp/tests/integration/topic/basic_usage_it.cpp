@@ -946,12 +946,12 @@ TEST_F(BasicUsage, TEST_NAME(TKeyedWriteSessionBasicWrite_NoAutoPartitioning)) {
 
     auto describeTopicSettings = TDescribeTopicSettings().IncludeStats(true);
 
-    TKeyedWriteSessionSettings writeSettings;
+    TProducerSettings writeSettings;
     writeSettings
         .Path(GetTopicPath(TOPIC_NAME))
         .Codec(ECodec::RAW);
     writeSettings.ProducerIdPrefix(CreateGuidAsString());
-    writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+    writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
     writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
     writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
         return std::string{key};

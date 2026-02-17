@@ -887,12 +887,15 @@ protected:
                         EnsureKafkaSaslAuthActor();
                         TMessagePtr<TSaslAuthenticateRequestData> message = NKafka::TMessagePtr<NKafka::TSaslAuthenticateRequestData>({}, std::make_shared<TSaslAuthenticateRequestData>(TSaslAuthenticateRequestData()));
 
-                        Context->AuthenticationStep = EAuthSteps::WAIT_AUTH;
-                        Send(SaslAuthActorId, new TEvKafka::TEvAuthRequest(1001, message));
+                        // Context->AuthenticationStep = EAuthSteps::WAIT_AUTH;
+                        // Send(SaslAuthActorId, new TEvKafka::TEvAuthRequest(1001, message));
 
-                        // Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(clientCert));
+                        Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(clientCert));
                         return;
-                    }
+                    } else {
+                    // тут RequestPoller
+                    // return;
+                }
                 }
 
 

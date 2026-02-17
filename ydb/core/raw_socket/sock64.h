@@ -319,7 +319,31 @@ public:
         Cout << "SSL handshake result: " << ret << Endl;
         if (ret != 1) {
             int ssl_err = SSL_get_error(Ssl.get(), ret);
-            Cout << "Error: " << ssl_err << Endl;
+            switch(ssl_err) {
+                case SSL_ERROR_NONE:
+                    Cout << "Error: SSL_ERROR_NONE " << ssl_err << Endl;
+                    break;
+                case SSL_ERROR_ZERO_RETURN:
+                    Cout << "Error: SSL_ERROR_ZERO_RETURN " << ssl_err << Endl;
+                    break;
+                case SSL_ERROR_WANT_READ:
+                    Cout << "Error: SSL_ERROR_WANT_READ " << ssl_err << Endl;
+                    break;
+                case SSL_ERROR_WANT_WRITE:
+                    Cout << "Error: SSL_ERROR_WANT_WRITE " << ssl_err << Endl;
+                    break;
+                case SSL_ERROR_WANT_CONNECT:
+                    Cout << "Error: SSL_ERROR_WANT_CONNECT " << ssl_err << Endl;
+                    break;
+                case SSL_ERROR_WANT_ACCEPT:
+                    Cout << "Error: SSL_ERROR_WANT_ACCEPT " << ssl_err << Endl;
+                    break;
+                default:
+                    Cout << "Error: " << ssl_err << Endl;
+            }
+            if (ssl_err == SSL_ERROR_NONE) {
+
+            }
         }
         return TSslHolder<X509>(SSL_get_peer_certificate(Ssl.get()));
     }

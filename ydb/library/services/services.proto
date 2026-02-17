@@ -1145,5 +1145,6 @@ message TActivity {
         BS_SYNC_SST_WRITER = 676;
         BS_ASYNC_SYNC_SST_COMMITTER = 677;
         NBS2_TEST_WORKLOAD = 678;
+        EXPORT_FS_UPLOADER_ACTOR = 394;
     };
 };

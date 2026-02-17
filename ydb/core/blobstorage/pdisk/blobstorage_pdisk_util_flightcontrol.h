@@ -67,9 +67,7 @@ class TBytesFlightControl {
     ui64 TryScheduleLocked(ui64 size);
 
 public:
-    static constexpr ui64 DefaultInFlightBytesLimit = 1ull << 20; // 1 MiB
-
-    TBytesFlightControl(ui64 inFlightRequestsLimit, ui64 inFlightBytesLimit = DefaultInFlightBytesLimit);
+    TBytesFlightControl(ui64 inFlightRequestsLimit, ui64 inFlightBytesLimit);
 
     void Initialize(const TString& logPrefix);
 
@@ -95,12 +93,12 @@ class TFlightControlFace {
 
 public:
     TFlightControlFace(ui64 inFlightRequestsLimit, bool useBytesFlightControl,
-            ui64 inFlightBytesLimit = TBytesFlightControl::DefaultInFlightBytesLimit)
+            ui64 maxBytesInFlightLimit)
         : FlightControl(useBytesFlightControl
                     ? TFlightControlVariant(std::in_place_type<TBytesFlightControl>, inFlightRequestsLimit,
-                            inFlightBytesLimit)
+                            maxBytesInFlightLimit)
                     : TFlightControlVariant(std::in_place_type<TFlightControl>, inFlightRequestsLimit,
-                            inFlightBytesLimit))
+                            maxBytesInFlightLimit))
     {
     }
 

@@ -12,7 +12,6 @@ namespace NYql::NFmr {
 
 struct TSortedPartitionSettings {
     TFmrPartitionerSettings FmrPartitionSettings;
-    TSortingColumns KeyColumns;
 };
 
 struct TSortedPartitionerFilterBoundary {
@@ -25,6 +24,7 @@ public:
     TSortedPartitioner(
         const std::unordered_map<TFmrTableId, std::vector<TString>>& partIdsForTables,
         const std::unordered_map<TString, std::vector<TChunkStats>>& partIdStats,
+        TSortingColumns KeyColumns,
         const TSortedPartitionSettings& settings
     );
 
@@ -58,13 +58,13 @@ private:
         TFmrTableKeysRange KeysRange_;
     };
 
-    class TFMRTablesChunkPool {
+    class TFmrTablesChunkPool {
     public:
-        TFMRTablesChunkPool(
+        TFmrTablesChunkPool(
             const std::vector<TFmrTableRef>& inputTables,
             const std::unordered_map<TFmrTableId, std::vector<TString>>& partIdsForTables,
             const std::unordered_map<TString, std::vector<TChunkStats>>& partIdStats,
-            const TSortedPartitionSettings& settings
+            const TSortingColumns& KeyColumns
         );
 
         void PutBack(TChunkUnit chunk);
@@ -86,7 +86,7 @@ private:
         std::unordered_map<TString, TSortedPartitionerFilterBoundary> FilterBoundaries_;
         const std::unordered_map<TFmrTableId, std::vector<TString>>& PartIdsForTables_;
         const std::unordered_map<TString, std::vector<TChunkStats>>& PartIdStats_;
-        const TSortedPartitionSettings& Settings_;
+        const TSortingColumns& KeyColumns_;
     };
 
     std::vector<TTaskTableInputRef> PartitionFmrTables(
@@ -100,11 +100,11 @@ private:
         ui64 Weight = 0;
     };
 
-    TMaybe<TSlice> ReadSlice(TFMRTablesChunkPool& chunkPool);
+    TMaybe<TSlice> ReadSlice(TFmrTablesChunkPool& chunkPool);
     TTaskTableInputRef CreateTaskInputFromSlices(const std::vector<TSlice>& slices, const std::vector<TFmrTableRef>& inputTables) const;
 
     std::unordered_map<TString, std::vector<TTableRange>> ProcessChunkForSlice(
-        TFMRTablesChunkPool& chunkPool,
+        TFmrTablesChunkPool& chunkPool,
         const TChunkContainer& container,
         const TFmrTableKeysRange& taskRange
     );
@@ -116,6 +116,7 @@ private:
 private:
     const std::unordered_map<TFmrTableId, std::vector<TString>> PartIdsForTables_;
     const std::unordered_map<TString, std::vector<TChunkStats>> PartIdStats_;
+    const TSortingColumns KeyColumns_;
     const TSortedPartitionSettings Settings_;
 };
 

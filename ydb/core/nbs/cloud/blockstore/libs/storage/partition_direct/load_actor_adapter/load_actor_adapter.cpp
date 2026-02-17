@@ -19,7 +19,7 @@ using NBlockStore::TCallContext;
 ////////////////////////////////////////////////////////////////////////////////
 
 TLoadActorAdapter::TLoadActorAdapter(
-    std::unique_ptr<TFastPathService> fastPathService)
+    std::shared_ptr<TFastPathService> fastPathService)
     : FastPathService(std::move(fastPathService))
 {}
 
@@ -54,15 +54,15 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
 
     Y_ABORT_UNLESS(totalSize == 4096);
 
-    TString data = TString::Uninitialized(totalSize);
-    char* ptr = data.Detach();
+    auto data = std::make_shared<TString>(TString::Uninitialized(totalSize));
+    char* ptr = data->Detach();
     for (const auto& buffer: blocks.GetBuffers()) {
         memcpy(ptr, buffer.data(), buffer.size());
         ptr += buffer.size();
     }
-    memset(ptr, 0, data.end() - ptr);
+    memset(ptr, 0, data->end() - ptr);
 
-    TSgList sglist = {TBlockDataRef(data.data(), data.size())};
+    TSgList sglist = {TBlockDataRef(data->data(), data->size())};
 
     auto request = std::make_shared<TWriteBlocksLocalRequest>(
         TRequestHeaders{},
@@ -77,8 +77,8 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
         [actorSystem = TActivationContext::ActorSystem(),
          sender = ev->Sender,
          selfId = ctx.SelfID,
-         cookie = ev->Cookie](
-            const NThreading::TFuture<TWriteBlocksLocalResponse>& f)
+         cookie = ev->Cookie,
+         data](const NThreading::TFuture<TWriteBlocksLocalResponse>& f)
         {
             auto response =
                 std::make_unique<TEvService::TEvWriteBlocksResponse>(
@@ -101,8 +101,8 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
 
     Y_ABORT_UNLESS(msg->Record.GetBlocksCount() == 1);
 
-    auto data = TString::Uninitialized(4096);
-    TSgList sglist = {TBlockDataRef(data.data(), data.size())};
+    auto data = std::make_shared<TString>(TString::Uninitialized(4096));
+    TSgList sglist = {TBlockDataRef(data->data(), data->size())};
 
     auto request = std::make_shared<TReadBlocksLocalRequest>(
         TRequestHeaders{},
@@ -120,7 +120,8 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
          sender = ev->Sender,
          selfId = ctx.SelfID,
          cookie = ev->Cookie,
-         request](const NThreading::TFuture<TReadBlocksLocalResponse>& f)
+         request,
+         data](const NThreading::TFuture<TReadBlocksLocalResponse>& f)
         {
             auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(
                 f.GetValue().Error);
@@ -173,7 +174,7 @@ STFUNC(TLoadActorAdapter::StateWork)
 
 TActorId CreateLoadActorAdapter(
     const NActors::TActorId& owner,
-    std::unique_ptr<TFastPathService> fastPathService)
+    std::shared_ptr<TFastPathService> fastPathService)
 {
     auto actor = std::make_unique<TLoadActorAdapter>(
         std::move(fastPathService));

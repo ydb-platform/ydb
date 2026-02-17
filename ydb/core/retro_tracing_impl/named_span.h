@@ -10,6 +10,7 @@ class TNamedSpan final : public NRetroTracing::TTypedRetroSpan<TNamedSpan, Named
 public:
     void SetName(const char* name);
     TString GetName() const override;
+    std::unique_ptr<NWilson::TSpan> MakeWilsonSpan() override;
 
 public:
     constexpr static size_t MaxNameSize = 64 - sizeof(ui32);

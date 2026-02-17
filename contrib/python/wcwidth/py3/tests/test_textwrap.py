@@ -11,7 +11,22 @@ import pytest
 from wcwidth import iter_sequences
 from wcwidth.textwrap import SequenceTextWrapper, wrap
 
+
+@pytest.fixture(autouse=True)
+def mock_hyperlink_ids(monkeypatch):
+    """Mock secrets.token_hex to return predictable IDs for testing."""
+    counter = 0
+
+    def fake_token_hex(n):
+        nonlocal counter
+        counter += 1
+        return f'{counter:0{n * 2}x}'
+
+    monkeypatch.setattr('secrets.token_hex', fake_token_hex)
+
+
 SGR_RED = '\x1b[31m'
+SGR_BLUE = '\x1b[34m'
 SGR_BOLD = '\x1b[1m'
 SGR_RESET = '\x1b[0m'
 ATTRS = ('\x1b[31m', '\x1b[34m', '\x1b[4m', '\x1b[7m', '\x1b[41m', '\x1b[37m', '\x1b[107m')
@@ -102,6 +117,12 @@ HYPHEN_LONG_WORD_CASES = [
     ('a-b-c-d', 3, False, ['a-b', '-c-', 'd']),
     ('---', 2, True, ['--', '-']),
     ('a---b', 2, True, ['a-', '--', 'b']),
+    # With propagate_sgr=True, SGR continues to next line
+    ('a-\x1b[31mb', 2, True, ['a-\x1b[31m\x1b[0m', '\x1b[31mb\x1b[0m']),
+]
+
+HYPHEN_LONG_WORD_CASES_NO_PROPAGATE = [
+    # With propagate_sgr=False, SGR stays where it is
     ('a-\x1b[31mb', 2, True, ['a-\x1b[31m', 'b']),
 ]
 
@@ -109,6 +130,11 @@ HYPHEN_LONG_WORD_CASES = [
 @pytest.mark.parametrize('text,w,break_hyphens,expected', HYPHEN_LONG_WORD_CASES)
 def test_wrap_hyphen_long_words(text, w, break_hyphens, expected):
     assert wrap(text, w, break_on_hyphens=break_hyphens) == expected
+
+
+@pytest.mark.parametrize('text,w,break_hyphens,expected', HYPHEN_LONG_WORD_CASES_NO_PROPAGATE)
+def test_wrap_hyphen_long_words_no_propagate(text, w, break_hyphens, expected):
+    assert wrap(text, w, break_on_hyphens=break_hyphens, propagate_sgr=False) == expected
 
 
 # Comprehensive stdlib compatibility
@@ -125,7 +151,7 @@ TEXTWRAP_KWARGS = [
 
 
 @pytest.mark.parametrize('kwargs', TEXTWRAP_KWARGS)
-@pytest.mark.parametrize('width', [3, 7, 8, 9, 10, 16, 20, 40])
+@pytest.mark.parametrize('width', [3, 8, 20, 33])
 def test_wrap_matches_stdlib(kwargs, width):
     pgraph = ' Z! a bc defghij klmnopqrstuvw<<>>xyz012345678900 ' * 2
     pgraph_colored = _colorize(pgraph)
@@ -144,7 +170,7 @@ def test_wrap_matches_stdlib(kwargs, width):
 
 
 @pytest.mark.parametrize('kwargs', TEXTWRAP_KWARGS)
-@pytest.mark.parametrize('width', [8, 10, 16, 20, 40])
+@pytest.mark.parametrize('width', [8, 20, 37])
 @pytest.mark.parametrize('tabsize', [4, 5, 8])
 def test_wrap_tabsize_matches_stdlib(kwargs, width, tabsize):
     tabsize = min(tabsize, width)
@@ -195,24 +221,37 @@ def test_wrap_unicode(benchmark, text, w, expected):
     assert result == expected
 
 
-# Escape sequence preservation
+# Escape sequence preservation (with propagate_sgr=True default)
 SEQUENCE_CASES = [
-    # SGR sequences preserved at word boundaries
+    # SGR sequences propagated across lines
     (f'{SGR_RED}red{SGR_RESET} blue', 4, [f'{SGR_RED}red{SGR_RESET}', 'blue']),
-    (f'hello{SGR_RED} world', 6, [f'hello{SGR_RED}', 'world']),
-    # Empty/adjacent sequences
+    # SGR at end of line propagates to next line
+    (f'hello{SGR_RED} world', 6, [f'hello{SGR_RED}{SGR_RESET}', f'{SGR_RED}world{SGR_RESET}']),
+    # Empty/adjacent sequences - sequences kept (no visible content)
     (f'{SGR_RED}{SGR_RESET}', 10, [f'{SGR_RED}{SGR_RESET}']),
+    # Reset clears style, sequences kept with second line
     (f'hello {SGR_RED}{SGR_RESET}world', 6, ['hello', f'{SGR_RED}{SGR_RESET}world']),
-    # OSC hyperlinks
+    # OSC hyperlinks (with space separator) - not SGR, so preserved as-is
     (f'{OSC_HYPERLINK} text', 5, [OSC_HYPERLINK, 'text']),
-    # CSI cursor sequences
+    # CSI cursor sequences - not SGR, so preserved as-is
     (f'{CSI_CURSOR}text here', 10, [f'{CSI_CURSOR}text', 'here']),
     # Control characters
     (f'{CTRL_BEL}alert text', 6, [f'{CTRL_BEL}alert', 'text']),
-    # Sequences in long word breaking
-    ('x\x1b[31mabcdefghij\x1b[0m', 3, ['xab', 'cde', 'fgh', 'ij']),
-    # Lone ESC
-    ('abc\x1bdefghij', 3, ['abc', 'def', 'ghi', 'j']),
+    # Sequences in long word breaking - red starts after 'x', continues across lines
+    ('x\x1b[31mabcdefghij\x1b[0m', 3,
+     ['x\x1b[31mab\x1b[0m', '\x1b[31mcde\x1b[0m', '\x1b[31mfgh\x1b[0m', '\x1b[31mij\x1b[0m']),
+    # Lone ESC - not a valid SGR sequence, stays with preceding text
+    ('abc\x1bdefghij', 3, ['abc\x1b', 'def', 'ghi', 'j']),
+]
+
+# Old behavior tests (propagate_sgr=False)
+SEQUENCE_CASES_NO_PROPAGATE = [
+    (f'{SGR_RED}red{SGR_RESET} blue', 4, [f'{SGR_RED}red{SGR_RESET}', 'blue']),
+    (f'hello{SGR_RED} world', 6, [f'hello{SGR_RED}', 'world']),
+    (f'{SGR_RED}{SGR_RESET}', 10, [f'{SGR_RED}{SGR_RESET}']),
+    (f'hello {SGR_RED}{SGR_RESET}world', 6, ['hello', f'{SGR_RED}{SGR_RESET}world']),
+    # Sequences preserved where they are, not propagated
+    ('x\x1b[31mabcdefghij\x1b[0m', 3, ['x\x1b[31mab', 'cde', 'fgh', 'ij\x1b[0m']),
 ]
 
 
@@ -222,7 +261,13 @@ def test_wrap_sequences(benchmark, text, w, expected):
     if any('\x1b' in e or '\x00' <= e[0] < '\x20' for e in expected if e):
         assert result == expected
     else:
-        assert [_strip(line) for line in result] == expected
+        assert result == expected
+
+
+@pytest.mark.parametrize('text,w,expected', SEQUENCE_CASES_NO_PROPAGATE)
+def test_wrap_sequences_no_propagate(text, w, expected):
+    result = wrap(text, w, propagate_sgr=False)
+    assert result == expected
 
 
 # Mixed: sequences + unicode
@@ -262,3 +307,141 @@ TABSIZE_WIDE_CASES = [
 def test_wrap_tabsize_wide_chars(text, w, tabsize, expected):
     """Verify tabsize respects wide character column positions."""
     assert wrap(text, w, tabsize=tabsize) == expected
+
+
+OSC_START_ST = '\x1b]8;;http://example.com\x1b\\'
+OSC_END_ST = '\x1b]8;;\x1b\\'
+OSC_START_BEL = '\x1b]8;;http://example.com\x07'
+OSC_END_BEL = '\x1b]8;;\x07'
+
+HYPERLINK_WORD_BOUNDARY_CASES = [
+    (   # standard, ST-variant,
+        f'{OSC_START_ST}link{OSC_END_ST}more',
+        5,
+        [f'{OSC_START_ST}link{OSC_END_ST}', 'more'],
+    ),
+    (   # BEL-variant,
+        f'{OSC_START_BEL}link{OSC_END_BEL}more',
+        5,
+        [f'{OSC_START_BEL}link{OSC_END_BEL}', 'more'],
+    ),
+    (   # hyperlink breaks after word, 'prefix',
+        f'prefix{OSC_START_ST}link{OSC_END_ST}',
+        6,
+        ['prefix', f'{OSC_START_ST}link{OSC_END_ST}'],
+    ),
+    (
+        f'prefix{OSC_START_BEL}link{OSC_END_BEL}',
+        6,
+        ['prefix', f'{OSC_START_BEL}link{OSC_END_BEL}'],
+    ),
+    (   # hyperlink breaks before following, 'suffix',
+        f'prefix{OSC_START_ST}link{OSC_END_ST}suffix',
+        6,
+        ['prefix', f'{OSC_START_ST}link{OSC_END_ST}', 'suffix'],
+    ),
+    (
+        f'prefix{OSC_START_BEL}link{OSC_END_BEL}suffix',
+        6,
+        ['prefix', f'{OSC_START_BEL}link{OSC_END_BEL}', 'suffix'],
+    ),
+    (   # hyperlink *surrounded* by SGR attributes
+        f'foo {SGR_RED}{OSC_START_ST}link{OSC_END_ST}{SGR_RESET} bar',
+        6,
+        ['foo', f'{SGR_RED}{OSC_START_ST}link{OSC_END_ST}{SGR_RESET}', 'bar'],
+    ),
+    (
+        f'foo {SGR_RED}{OSC_START_BEL}link{OSC_END_BEL}{SGR_RESET} bar',
+        6,
+        ['foo', f'{SGR_RED}{OSC_START_BEL}link{OSC_END_BEL}{SGR_RESET}', 'bar'],
+    ),
+    (   # hyperlink *containing* SGR attributes
+        f'foo {OSC_START_ST}{SGR_RED}link{SGR_RESET}{OSC_END_ST} bar',
+        6,
+        ['foo', f'{OSC_START_ST}{SGR_RED}link{SGR_RESET}{OSC_END_ST}', 'bar'],
+    ),
+    (
+        f'foo {OSC_START_BEL}{SGR_RED}link{SGR_RESET}{OSC_END_BEL} bar',
+        6,
+        ['foo', f'{OSC_START_BEL}{SGR_RED}link{SGR_RESET}{OSC_END_BEL}', 'bar'],
+    ),
+    (   # hyperlink with internal space - breaks with id continuation (ST)
+        f'Go {OSC_START_ST}Click here{OSC_END_ST} now',
+        5,
+        [
+            'Go',
+            '\x1b]8;id=00000001;http://example.com\x1b\\Click\x1b]8;;\x1b\\',
+            '\x1b]8;id=00000001;http://example.com\x1b\\here\x1b]8;;\x1b\\',
+            'now',
+        ],
+    ),
+    (   # hyperlink with internal space - breaks with id continuation (BEL)
+        f'Go {OSC_START_BEL}Click here{OSC_END_BEL} now',
+        5,
+        [
+            'Go',
+            '\x1b]8;id=00000001;http://example.com\x07Click\x1b]8;;\x07',
+            '\x1b]8;id=00000001;http://example.com\x07here\x1b]8;;\x07',
+            'now',
+        ],
+    ),
+    (   # hyperlink with existing id= parameter is preserved
+        '\x1b]8;id=my-link;http://example.com\x1b\\Click here\x1b]8;;\x1b\\',
+        6,
+        [
+            '\x1b]8;id=my-link;http://example.com\x1b\\Click\x1b]8;;\x1b\\',
+            '\x1b]8;id=my-link;http://example.com\x1b\\here\x1b]8;;\x1b\\',
+        ],
+    ),
+    (   # hyperlink spanning 3+ lines
+        f'{OSC_START_ST}one two three{OSC_END_ST}',
+        5,
+        [
+            '\x1b]8;id=00000001;http://example.com\x1b\\one\x1b]8;;\x1b\\',
+            '\x1b]8;id=00000001;http://example.com\x1b\\two\x1b]8;;\x1b\\',
+            '\x1b]8;id=00000001;http://example.com\x1b\\three\x1b]8;;\x1b\\',
+        ],
+    ),
+    (   # multiple hyperlinks in same text
+        f'{OSC_START_ST}ab cd{OSC_END_ST} {OSC_START_BEL}ef gh{OSC_END_BEL}',
+        4,
+        [
+            '\x1b]8;id=00000001;http://example.com\x1b\\ab\x1b]8;;\x1b\\',
+            '\x1b]8;id=00000001;http://example.com\x1b\\cd\x1b]8;;\x1b\\',
+            '\x1b]8;id=00000002;http://example.com\x07ef\x1b]8;;\x07',
+            '\x1b]8;id=00000002;http://example.com\x07gh\x1b]8;;\x07',
+        ],
+    ),
+    (   # long word inside hyperlink forces character-level breaking
+        f'{OSC_START_ST}abcdefgh{OSC_END_ST}',
+        3,
+        [
+            '\x1b]8;id=00000001;http://example.com\x1b\\abc\x1b]8;;\x1b\\',
+            '\x1b]8;id=00000001;http://example.com\x1b\\def\x1b]8;;\x1b\\',
+            '\x1b]8;id=00000001;http://example.com\x1b\\gh\x1b]8;;\x1b\\',
+        ],
+    ),
+    (   # params with other keys but no id - id is prepended, other params preserved
+        '\x1b]8;foo=bar;http://example.com\x1b\\Click here\x1b]8;;\x1b\\',
+        6,
+        [
+            '\x1b]8;id=00000001:foo=bar;http://example.com\x1b\\Click\x1b]8;;\x1b\\',
+            '\x1b]8;id=00000001:foo=bar;http://example.com\x1b\\here\x1b]8;;\x1b\\',
+        ],
+    ),
+    (   # id not at start of params (junk:id=given) - full params preserved
+        '\x1b]8;foo=bar:id=mylink;http://example.com\x1b\\Click here\x1b]8;;\x1b\\',
+        6,
+        [
+            '\x1b]8;foo=bar:id=mylink;http://example.com\x1b\\Click\x1b]8;;\x1b\\',
+            '\x1b]8;foo=bar:id=mylink;http://example.com\x1b\\here\x1b]8;;\x1b\\',
+        ],
+    ),
+]
+
+
+@pytest.mark.parametrize('text,w,expected', HYPERLINK_WORD_BOUNDARY_CASES)
+def test_wrap_hyperlink_word_boundary(text, w, expected):
+    """OSC hyperlink sequences should act as word boundaries."""
+    result = wrap(text, w)
+    assert result == expected

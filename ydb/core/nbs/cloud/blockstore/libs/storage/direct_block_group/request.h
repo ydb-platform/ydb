@@ -1,8 +1,10 @@
 #pragma once
 
-#include <ydb/library/actors/util/rope.h>
-
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+
+#include <ydb/library/actors/util/rope.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -12,24 +14,40 @@ constexpr size_t BlockSize = 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class IRequestHandler {
+class TBaseRequestHandler
+{
+private:
+    NActors::TActorSystem* const ActorSystem = nullptr;
+    const TBlockRange64 Range;
+
 public:
-    IRequestHandler() = default;
+    TBaseRequestHandler(
+        NActors::TActorSystem* actorSystem,
+        TBlockRange64 range);
 
-    virtual ~IRequestHandler() = default;
+    virtual ~TBaseRequestHandler() = default;
 
-    [[nodiscard]] virtual ui64 GetStartIndex() const = 0;
+    [[nodiscard]] NActors::TActorSystem* GetActorSystem() const;
 
-    [[nodiscard]] virtual ui64 GetStartOffset() const = 0;
-
-    [[nodiscard]] virtual ui64 GetSize() const = 0;
+    [[nodiscard]] ui64 GetStartIndex() const;
+    [[nodiscard]] ui64 GetStartOffset() const;
+    [[nodiscard]] ui64 GetSize() const;
 
     virtual bool IsCompleted(ui64 requestId) = 0;
+
+    void ChildSpanEndOk(ui64 childRequestId);
+
+    void ChildSpanEndError(ui64 childRequestId, const TString& errorMessage);
+
+    NWilson::TSpan Span;
+    std::unordered_map<ui64, NWilson::TSpan> ChildSpanByRequestId;
 };
 
-class TWriteRequestHandler : public IRequestHandler {
+class TWriteRequestHandler: public TBaseRequestHandler
+{
 public:
-    struct TPersistentBufferWriteMeta {
+    struct TPersistentBufferWriteMeta
+    {
         ui8 Index;
         ui64 Lsn;
 
@@ -39,26 +57,28 @@ public:
         {}
     };
 
-    explicit TWriteRequestHandler(std::shared_ptr<TWriteBlocksLocalRequest> request);
+    TWriteRequestHandler(
+        NActors::TActorSystem* actorSystem,
+        std::shared_ptr<TWriteBlocksLocalRequest> request,
+        NWilson::TTraceId traceId,
+        ui64 tabletId);
 
     ~TWriteRequestHandler() override = default;
 
-    [[nodiscard]] ui64 GetStartIndex() const override;
-
-    [[nodiscard]] ui64 GetStartOffset() const override;
-
-    [[nodiscard]] ui64 GetSize() const override;
+    NWilson::TTraceId GetChildSpan(ui64 requestId, ui8 persistentBufferIndex);
 
     bool IsCompleted(ui64 requestId) override;
 
-    void OnWriteRequested(
-        ui64 requestId, ui8 persistentBufferIndex, ui64 lsn);
+    void OnWriteRequested(ui64 requestId, ui8 persistentBufferIndex, ui64 lsn);
 
     [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
 
-    [[nodiscard]] NThreading::TFuture<TWriteBlocksLocalResponse> GetFuture() const;
+    [[nodiscard]] NThreading::TFuture<TWriteBlocksLocalResponse>
+    GetFuture() const;
 
     [[nodiscard]] TGuardedSgList GetData();
+
+    void SetResponse(NProto::TError error);
 
 private:
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
@@ -69,17 +89,18 @@ private:
     std::unordered_map<ui64, TPersistentBufferWriteMeta> WriteMetaByRequestId;
 };
 
-class TFlushRequestHandler : public IRequestHandler {
+class TSyncRequestHandler: public TBaseRequestHandler
+{
 public:
-    TFlushRequestHandler(ui64 startIndex, ui8 persistentBufferIndex, ui64 lsn);
+    TSyncRequestHandler(
+        NActors::TActorSystem* actorSystem,
+        ui64 startIndex,
+        ui8 persistentBufferIndex,
+        ui64 lsn,
+        NWilson::TTraceId traceId,
+        ui64 tabletId);
 
-    ~TFlushRequestHandler() override = default;
-
-    [[nodiscard]] ui64 GetStartIndex() const override;
-
-    [[nodiscard]] ui64 GetStartOffset() const override;
-
-    [[nodiscard]] ui64 GetSize() const override;
+    ~TSyncRequestHandler() override = default;
 
     [[nodiscard]] bool IsCompleted(ui64 requestId) override;
 
@@ -88,23 +109,23 @@ public:
     [[nodiscard]] ui8 GetPersistentBufferIndex() const;
 
 private:
-    ui64 StartIndex;
     ui8 PersistentBufferIndex;
     ui64 Lsn;
 };
 
-class TEraseRequestHandler : public IRequestHandler {
+class TEraseRequestHandler: public TBaseRequestHandler
+{
 public:
-    TEraseRequestHandler(ui64 startIndex, ui8 persistentBufferIndex, ui64 lsn);
+    TEraseRequestHandler(
+        NActors::TActorSystem* actorSystem,
+        ui64 startIndex,
+        ui8 persistentBufferIndex,
+        ui64 lsn,
+        NWilson::TTraceId traceId,
+        ui64 tabletId);
 
     ~TEraseRequestHandler() override = default;
 
-    [[nodiscard]] ui64 GetStartIndex() const override;
-
-    [[nodiscard]] ui64 GetStartOffset() const override;
-
-    [[nodiscard]] ui64 GetSize() const override;
-
     [[nodiscard]] bool IsCompleted(ui64 requestId) override;
 
     [[nodiscard]] ui64 GetLsn() const;
@@ -112,30 +133,31 @@ public:
     [[nodiscard]] ui8 GetPersistentBufferIndex() const;
 
 private:
-    ui64 StartIndex;
     ui8 PersistentBufferIndex;
     ui64 Lsn;
 };
 
-
-class TReadRequestHandler : public IRequestHandler {
+class TReadRequestHandler: public TBaseRequestHandler
+{
 public:
-    explicit TReadRequestHandler(std::shared_ptr<TReadBlocksLocalRequest> request);
+    TReadRequestHandler(
+        NActors::TActorSystem* actorSystem,
+        std::shared_ptr<TReadBlocksLocalRequest> request,
+        NWilson::TTraceId traceId,
+        ui64 tabletId);
 
     ~TReadRequestHandler() override = default;
 
-    [[nodiscard]] ui64 GetStartIndex() const override;
-
-    [[nodiscard]] ui64 GetStartOffset() const override;
-
-    [[nodiscard]] ui64 GetSize() const override;
+    NWilson::TTraceId GetChildSpan(ui64 requestId, bool isReadPersistentBuffer);
 
     bool IsCompleted(ui64 requestId) override;
 
-    [[nodiscard]] NThreading::TFuture<TReadBlocksLocalResponse> GetFuture() const;
+    [[nodiscard]] NThreading::TFuture<TReadBlocksLocalResponse>
+    GetFuture() const;
 
     [[nodiscard]] TGuardedSgList GetData();
 
+    void SetResponse(NProto::TError error);
 
 private:
     std::shared_ptr<TReadBlocksLocalRequest> Request;

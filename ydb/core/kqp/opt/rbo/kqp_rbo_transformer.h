@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/kqp_column_statistics_utils.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -27,8 +28,8 @@ class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
     void Rewind() override;
 
   private:
-    TTypeAnnotationContext &TypeCtx;
-    const TKqpOptimizeContext &KqpCtx;
+    TTypeAnnotationContext& TypeCtx;
+    const TKqpOptimizeContext& KqpCtx;
     ui64 UniqueSourceIdCounter = 0;
 };
 
@@ -38,26 +39,49 @@ TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePt
 class TKqpNewRBOTransformer: public TGraphTransformerBase {
 public:
     TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                          TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry);
+                          TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables, const TString& cluster, const TString& database,
+                          TActorSystem* actorSystem, const NMiniKQL::IFunctionRegistry& funcRegistry);
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final;
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
-    TStatus RequestColumnStatistics();
 
     void Rewind() override;
 
 private:
+    TStatus RequestColumnStatistics(TExprContext& ctx);
+    TStatus ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx);
+    bool IsSuitableToRequestStatistics();
+    void CollectTablesAndColumnsNames(TExprContext& ctx);
+    void CollectTablesAndColumnsNames(const std::shared_ptr<IOperator>& op);
+    void CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props);
+    bool IsSuitableToCollectStatistics(const std::shared_ptr<IOperator>& op) const;
+    void ApplyColumnStatistics();
+
     TTypeAnnotationContext& TypeCtx;
     TKqpOptimizeContext& KqpCtx;
+    TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
+    TAutoPtr<IGraphTransformer> PeepholeTypeAnnTransformer;
+    const NMiniKQL::IFunctionRegistry& FuncRegistry;
+
+    // Special fields to request column statistics.
+    TKikimrTablesData& Tables;
+    TString Cluster;
+    TString Database;
+    TActorSystem* ActorSystem;
+    std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
+    NThreading::TFuture<void> ColumnStatisticsReadiness;
+    THashMap<TString, THashSet<TString>> CMColumnsByTableName;
+    THashMap<TString, THashSet<TString>> HistColumnsByTableName;
+
+    std::unique_ptr<TOpRoot> OpRoot;
     TRuleBasedOptimizer RBO;
-    std::shared_ptr<TOpRoot> OpRoot;
-    NThreading::TPromise<void> ColumnStatisticsReadiness;
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
                                                        TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer,
+                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables,
+                                                       const TString& cluster, const TString& database, TActorSystem* actorSystem,
                                                        const NMiniKQL::IFunctionRegistry& funcRegistry);
 
 class TKqpRBOCleanupTransformer: public TSyncTransformerBase {

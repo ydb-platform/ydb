@@ -1,0 +1,56 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: muted */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    Ensure(0, FALSE, 'muted: flaky xfail: Name not found: count')
+;
+/*
+SELECT
+    Count(DISTINCT cs_order_number) AS `order count`,
+    Sum(cs_ext_ship_cost) AS `total shipping cost`,
+    Sum(cs_net_profit) AS `total net profit`
+FROM
+    plato.catalog_sales AS cs1
+,
+    plato.date_dim
+,
+    plato.customer_address
+,
+    plato.call_center
+WHERE
+    d_date BETWEEN CAST('1999-2-01' AS Date) AND (
+        CAST('1999-2-01' AS Date) + DateTime::IntervalFromDays(60)
+    )
+    AND cs1.cs_ship_date_sk == d_date_sk
+    AND cs1.cs_ship_addr_sk == ca_address_sk
+    AND ca_state == 'IL'
+    AND cs1.cs_call_center_sk == cc_call_center_sk
+    AND cc_county IN (
+        'Williamson County', 'Williamson County',
+        'Williamson County', 'Williamson County',
+        'Williamson County'
+    )
+    AND EXISTS (
+        SELECT
+            *
+        FROM
+            plato.catalog_sales AS cs2
+        WHERE
+            cs1.cs_order_number == cs2.cs_order_number
+            AND cs1.cs_warehouse_sk != cs2.cs_warehouse_sk
+    )
+    AND NOT EXISTS (
+        SELECT
+            *
+        FROM
+            plato.catalog_returns AS cr1
+        WHERE
+            cs1.cs_order_number == cr1.cr_order_number
+    )
+ORDER BY
+    Count(DISTINCT cs_order_number)
+LIMIT 100;
+*/

@@ -1,8 +1,8 @@
 diff --git a/include/__configuration/abi.h b/include/__configuration/abi.h
-index c6ef6fd..f41bce7 100644
+index 5e40e30..c81ccee 100644
 --- a/include/__configuration/abi.h
 +++ b/include/__configuration/abi.h
-@@ -66,7 +66,12 @@
+@@ -64,7 +64,12 @@
  // Previously libc++ used "unsigned int" exclusively.
  #  define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
  // Unstable attempt to provide a more optimized std::function
@@ -17,10 +17,10 @@ index c6ef6fd..f41bce7 100644
  #  define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
  // Re-worked external template instantiations for std::string with a focus on
 diff --git a/include/typeinfo b/include/typeinfo
-index 8d3ebea..295b292 100644
+index 799c6eb..41a76ad 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
-@@ -100,7 +100,13 @@ public:
+@@ -101,7 +101,13 @@ public:
  
    size_t hash_code() const _NOEXCEPT;
  
@@ -36,13 +36,13 @@ index 8d3ebea..295b292 100644
      // from different translation units, so it is sufficient to compare their addresses.
      if (__libcpp_is_constant_evaluated()) {
 diff --git a/src/filesystem/operations.cpp b/src/filesystem/operations.cpp
-index d771f20..074f10b 100644
+index 23c1c28..9037313 100644
 --- a/src/filesystem/operations.cpp
 +++ b/src/filesystem/operations.cpp
-@@ -37,7 +37,7 @@
- #include <fcntl.h> /* values for fchmodat */
- #include <time.h>
- 
+@@ -51,7 +51,7 @@
+ #elif defined(__FreeBSD__)
+ #  define _LIBCPP_FILESYSTEM_USE_COPY_FILE_RANGE
+ #endif
 -#if __has_include(<sys/sendfile.h>)
 +#if __has_include(<sys/sendfile.h>) && !defined(__EMSCRIPTEN__)
  #  include <sys/sendfile.h>

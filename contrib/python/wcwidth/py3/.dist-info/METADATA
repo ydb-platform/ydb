@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wcwidth
-Version: 0.3.5
+Version: 0.5.3
 Summary: Measures the displayed width of unicode strings in a terminal
 Project-URL: Homepage, https://github.com/jquast/wcwidth
 Author-email: Jeff Quast <contact@jeffquast.com>
@@ -78,8 +78,10 @@ Text-justification is solved by the grapheme and sequence-aware functions `ljust
 of the same names.
 
 The iterator functions `iter_graphemes()`_ and `iter_sequences()`_ allow for careful navigation of
-grapheme and terminal control sequence boundaries.  The `clip()`_ function extracts substrings by
-display column positions, and `strip_sequences()`_ removes terminal escape sequences from text.
+grapheme and terminal control sequence boundaries.  `iter_graphemes_reverse()`_, and
+`grapheme_boundary_before()`_ are useful for editing and searching of complex unicode.  The
+`clip()`_ function extracts substrings by display column positions, and `strip_sequences()`_ removes
+terminal escape sequences from text altogether.
 
 Discrepancies
 -------------
@@ -87,8 +89,9 @@ Discrepancies
 You may find that support *varies* for complex unicode sequences or codepoints.
 
 A companion utility, `jquast/ucs-detect`_ was authored to gather and publish the results of Wide
-character support and version level, language support, zero-width joiner, and variation-16 support
-as a `General Tabulated Summary`_ by terminal emulator software and version.
+character, language/grapheme clustering and complex script support, emojis and zero-width joiner,
+variations, and regional indicator (flags) as a `General Tabulated Summary`_ by terminal emulator
+software and version.
 
 ========
 Overview
@@ -117,8 +120,7 @@ Measures width of a single codepoint,
 
 Use function `wcwidth()`_ to determine the length of a *single unicode character*.
 
-See `Specification <Specification_from_pypi_>`_ of character measurements. Note that ``-1`` is
-returned for control codes.
+See specification_ of character measurements. Note that ``-1`` is returned for control codes.
 
 wcswidth()
 ----------
@@ -133,8 +135,8 @@ Measures width of a string, returns -1 for control codes.
 
 Use function `wcswidth()`_ to determine the length of many, a *string of unicode characters*.
 
-See `Specification <Specification_from_pypi_>`_ of character measurements. Note that
-``-1`` is returned if control codes occurs anywhere in the string.
+See specification_ of character measurements. Note that ``-1`` is returned if control codes occurs
+anywhere in the string.
 
 width()
 -------
@@ -250,7 +252,7 @@ Use `center()`_ as replacement of `str.center()`_:
 wrap()
 ------
 
-Use function ``wrap()`` to wrap text containing terminal sequences, Unicode grapheme
+Use function `wrap()`_ to wrap text containing terminal sequences, Unicode grapheme
 clusters, and wide characters to a given display width.
 
 .. code-block:: python
@@ -264,9 +266,10 @@ clusters, and wide characters to a given display width.
     >>> wrap('コンニチハ', 4)
     ['コン', 'ニチ', 'ハ']
 
-    >>> # Text with ANSI color sequences
-    >>> wrap('\x1b[31mhello world\x1b[0m', 5)
-    ['\x1b[31mhello', 'world\x1b[0m']
+    >>> # Text with ANSI color sequences - SGR codes are propagated by default
+    >>> # Each line ends with reset, next line starts with restored style
+    >>> wrap('\x1b[1;31mhello world\x1b[0m', 5)
+    ['\x1b[1;31mhello\x1b[0m', '\x1b[1;31mworld\x1b[0m']
 
 clip()
 ------
@@ -282,8 +285,13 @@ Use `clip()`_ to extract a substring by column positions, preserving terminal se
     >>> clip('中文字', 1, 5, fillchar='.')
     '.文.'
 
-    >>> # *ALL* Terminal sequences are preserved
-    >>> clip('\x1b[31m中文\x1b[0m', 0, 3)
+    >>> # SGR codes are propagated by default - result begins with active style
+    >>> # and ends with reset if styles are active
+    >>> clip('\x1b[1;31mHello world\x1b[0m', 6, 11)
+    '\x1b[1;31mworld\x1b[0m'
+
+    >>> # Disable SGR propagation to preserve original sequences as-is
+    >>> clip('\x1b[31m中文\x1b[0m', 0, 3, propagate_sgr=False)
     '\x1b[31m中 \x1b[0m'
 
 strip_sequences()
@@ -326,10 +334,12 @@ The ``ambiguous_width`` parameter is available on all width-measuring functions:
 The most reliable method to detect whether a terminal profile is set for "Ambiguous width as wide"
 mode is to display an ambiguous character surrounded by a pair of Cursor Position Report (CPR)
 queries with a terminal in cooked or raw mode, and to parse the responses for their ``(y, x)``
-locations, and measure the difference of the ``x`` positions. This code should also check whether
-it is attached to a terminal and timeout, and then fallback to the preferred locale.
+locations and measure the difference ``x``.
 
-`jquast/blessed`_ library provides a `Terminal.detect_ambiguous_width()`_ method:
+This code should also be careful check whether it is attached to a terminal and be careful of
+possible timeout, slow network, or non-response when working with "dumb terminals" like a CI build.
+
+`jquast/blessed`_ library provides such a helping `Terminal.detect_ambiguous_width()`_ method:
 
 .. code-block:: python
 
@@ -357,6 +367,10 @@ Execute all code generation, autoformatters, linters and unit tests using tox::
 Or execute individual tasks, see ``tox -lv`` for all available targets::
 
    tox -e pylint,py36,py314
+
+To run tests with detailed coverage reporting showing missing lines::
+
+   tox -epy314 -- --cov-report=term-missing
 
 Updating Unicode Version
 ------------------------
@@ -472,11 +486,41 @@ languages.
 History
 =======
 
+0.5.3 *2026-01-30*
+  * **Bugfix** Brahmic using Virama conjunct formation. `Issue #155`_, `PR #204`_.
+
+0.5.2 *2026-01-29*
+  * **Bugfix** Measurement of category ``Mc`` (`Spacing Combining Mark`_), approx.  443, has a more
+    nuanced specification_, and may be categorized as either zero or wide. `PR #200`_.
+  * **Bugfix** Measurement of "standalone" modifiers and regional indicators, `PR #202`_.
+  * **Updated** Data files used in some automatic tests are no longer distributed. `PR #199`_
+
+0.5.1 *2026-01-27*
+  * **Updated** generated zero and wide code tables to length of 1 to complete the previously
+    announced removal of historical wide and zero tables. `PR #196`_.
+
+0.5.0 *2026-01-26*
+  * **Drop Support** of many historical versions of wide and zero unicode tables.  Only the latest
+    Unicode version (17.0.0) is now shipped. The related ``unicode_version='auto'`` keyword of the
+    `wcwidth()`_ family of functions are ignored. `list_versions()`_ always returns a tuple of only
+    a single element of the only unicode version supported. `PR #195`_.
+  * **Performance** improvement of most common call without version or ambiguous_width specified by
+    20%. `PR #195`_.
+  * **New** Function `propagate_sgr()`_ for applying SGR state propagation to a list of lines.
+    `PR #194`_.
+  * **Improved** `wrap()`_ and `clip()`_ with ``propagate_sgr=True``. `PR #194`_.
+  * **Bugfix** `clip()`_ zero-width characters at clipping boundaries. `PR #194`_.
+  * **Bugfix** OSC Hyperlinks when broken mid-text by `wrap()`_. `PR #193`_.
+
+0.4.0 *2026-01-25*
+  * **New** Functions `iter_graphemes_reverse()`_, `grapheme_boundary_before()`_. `PR #192`_.
+  * **Bugfix** OSC Hyperlinks should not be broken by `wrap()`_. `PR #191`_.
+
 0.3.5 *2026-01-24*
   * **Bugfix** packaging of 0.3.4 contains a failing test.
 
 0.3.4 *2026-01-24*
-  * **Bugfix** `center()`_ should match the eccentric `parity padding`_
+  * **Bugfix** `center()`_ should match the eccentric `parity padding`_.
     of `str.center()`_. `PR #188`_.
 
 0.3.3 *2026-01-24*
@@ -522,13 +566,12 @@ History
 0.2.10 *2023-11-13*
   * **Bugfix** accounting of some kinds of emoji sequences using U+FE0F
     Variation Selector 16 (`PR #97`_).
-  * **Updated** `Specification <Specification_from_pypi_>`_.
+  * **Updated** specification_.
 
 0.2.9 *2023-10-30*
   * **Bugfix** zero-width characters used in Emoji ZWJ sequences, Balinese,
     Jamo, Devanagari, Tamil, Kannada and others (`PR #91`_).
-  * **Updated** to include `Specification <Specification_from_pypi_>`_ of
-    character measurements.
+  * **Updated** to include specification_ of character measurements.
 
 0.2.8 *2023-09-30*
   * Include requirements files in the source distribution (`PR #82`_).
@@ -609,7 +652,8 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
  * for any purpose and without fee is hereby granted. The author
  * disclaims all warranties with regard to this software.
 
-.. _`Specification_from_pypi`: https://wcwidth.readthedocs.io/en/latest/specs.html
+.. _`Spacing Combining Mark`: https://www.unicode.org/versions/latest/ch04.pdf#G134153
+.. _`specification`: https://wcwidth.readthedocs.io/en/latest/specs.html
 .. _`tox`: https://tox.wiki/en/latest/
 .. _`prospector`: https://github.com/landscapeio/prospector
 .. _`combining`: https://en.wikipedia.org/wiki/Combining_character
@@ -648,7 +692,19 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`PR #184`: https://github.com/jquast/wcwidth/pull/184
 .. _`PR #185`: https://github.com/jquast/wcwidth/pull/185
 .. _`PR #188`: https://github.com/jquast/wcwidth/pull/188
+.. _`PR #191`: https://github.com/jquast/wcwidth/pull/191
+.. _`PR #192`: https://github.com/jquast/wcwidth/pull/192
+.. _`PR #193`: https://github.com/jquast/wcwidth/pull/193
+.. _`PR #194`: https://github.com/jquast/wcwidth/pull/194
+.. _`PR #195`: https://github.com/jquast/wcwidth/pull/195
+.. _`PR #196`: https://github.com/jquast/wcwidth/pull/196
+.. _`PR #199`: https://github.com/jquast/wcwidth/pull/199
+.. _`PR #200`: https://github.com/jquast/wcwidth/pull/200
+.. _`PR #202`: https://github.com/jquast/wcwidth/pull/202
+.. _`PR #204`: https://github.com/jquast/wcwidth/pull/204
 .. _`Issue #101`: https://github.com/jquast/wcwidth/issues/101
+.. _`Issue #155`: https://github.com/jquast/wcwidth/issues/155
+.. _`Issue #190`: https://github.com/jquast/wcwidth/issues/190
 .. _`jquast/blessed`: https://github.com/jquast/blessed
 .. _`selectel/pyte`: https://github.com/selectel/pyte
 .. _`thomasballinger/curtsies`: https://github.com/thomasballinger/curtsies
@@ -690,13 +746,17 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`wcswidth()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.wcswidth
 .. _`width()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.width
 .. _`iter_graphemes()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.iter_graphemes
+.. _`iter_graphemes_reverse()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.iter_graphemes_reverse
+.. _`grapheme_boundary_before()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.grapheme_boundary_before
 .. _`ljust()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.ljust
 .. _`rjust()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.rjust
 .. _`center()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.center
 .. _`wrap()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.wrap
 .. _`clip()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.clip
 .. _`strip_sequences()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.strip_sequences
+.. _`propagate_sgr()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.propagate_sgr
 .. _`iter_sequences()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.iter_sequences
+.. _`list_versions()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.list_versions
 .. _`Unicode Standard Annex #29`: https://www.unicode.org/reports/tr29/
 .. _`Terminal.detect_ambiguous_width()`: https://blessed.readthedocs.io/en/latest/api/terminal.html#blessed.terminal.Terminal.detect_ambiguous_width
 .. _`parity padding`: https://jazcap53.github.io/pythons-eccentric-strcenter.html

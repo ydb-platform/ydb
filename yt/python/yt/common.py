@@ -342,6 +342,10 @@ class YtError(Exception):
         """Tablet is not mounted."""
         return self.contains_code(1702)
 
+    def is_all_writes_disabled(self):
+        """All writes are disabled."""
+        return self.contains_code(1703)
+
     def is_no_such_cell(self):
         """No such cell."""
         return self.contains_code(1721)
@@ -903,6 +907,10 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     else:
         def check_predicate():
             return predicate(), None, None
+
+    result = False
+    last_exception = None
+    last_exception_traceback = None
 
     if timeout is None:
         if iter is None:

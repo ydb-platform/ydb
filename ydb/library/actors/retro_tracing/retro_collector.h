@@ -15,4 +15,7 @@ inline NActors::TActorId MakeRetroCollectorId() {
 
 void DemandTrace(const NWilson::TTraceId& traceId);
 
+// TODO: hide behind friend classes
+void DemandAllTraces();
+
 } // namespace NRetroTracing

@@ -2844,7 +2844,7 @@ Y_UNIT_TEST(ForStatementLangVerFailure) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         res.Issues.ToString(),
-        "FOR without EVALUATE is not available before version 2025.05");
+        "FOR without EVALUATE is not available before language version 2025.05");
 }
 
 Y_UNIT_TEST(ForStatementLangVerSuccess) {
@@ -2868,7 +2868,7 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         res.Issues.ToString(),
-        "PARALLEL FOR is not available before version 2025.05");
+        "PARALLEL FOR is not available before language version 2025.05");
 }
 
 Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
@@ -3401,6 +3401,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
                     MODE = 'KEYS_ONLY',
                     FORMAT = 'json',
                     INITIAL_SCAN = TRUE,
+                    USER_SIDS = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
                     BARRIERS_INTERVAL = Interval("PT1S"),
                     SCHEMA_CHANGES = FALSE,
@@ -3420,6 +3421,7 @@ Y_UNIT_TEST(ChangefeedParseCorrect) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("format"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("json"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("initial_scan"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("user_sids"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
@@ -3969,6 +3971,52 @@ Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
 Y_UNIT_TEST(AlterTableYtNotSupported) {
     ExpectFailWithError("ALTER TABLE plato.table ADD COLUMN a int32",
                         "<main>:1:19: Error: ALTER TABLE is not supported for yt provider.\n");
+}
+
+Y_UNIT_TEST(AlterTableCompactIsCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table COMPACT;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableCompactWithSettingsIsCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableCompactWithSettingsWrongValues) {
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (cascade = 23, MAX_SHARDS_IN_FLIGHT = 2);
+    )sql", "<main>:3:55: Error: CASCADE value should be a boolean\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, max_shards_in_flight = "abc");
+    )sql", "<main>:3:84: Error: MAX_SHARDS_IN_FLIGHT value should be a Int32\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, some_option = 3);
+    )sql", "<main>:3:87: Error: SOME_OPTION: unknown setting for compact\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, max_shards_in_flight = 5000000000);
+    )sql", "<main>:3:84: Error: MAX_SHARDS_IN_FLIGHT value should be a Int32\n");
+}
+
+Y_UNIT_TEST(AlterTableCompactWithSettingsDuplicatedValues) {
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
+    )sql", "<main>:3:87: Error: Duplicated CASCADE\n");
+    ExpectFailWithError(R"sql(
+            USE ydb;
+            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, MAX_SHARDS_IN_FLIGHT = 10);
+    )sql", "<main>:3:87: Error: Duplicated MAX_SHARDS_IN_FLIGHT\n");
 }
 
 Y_UNIT_TEST(AlterSequence) {
@@ -4646,6 +4694,7 @@ Y_UNIT_TEST(LinearAsColumnOrType) {
 Y_UNIT_TEST(CreateTableTrailingComma) {
     UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
     UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32,);").IsOk());
+    UNIT_ASSERT(SqlToYql(R"sql(USE ydb; CREATE TABLE tableName (Key Uint32) WITH (STORE = COLUMN,);)sql").IsOk());
 }
 
 Y_UNIT_TEST(BetweenSymmetric) {
@@ -6577,6 +6626,19 @@ Y_UNIT_TEST(InvalidChangefeedInitialScan) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:95: Error: Literal of Bool type is expected for INITIAL_SCAN\n");
+}
+
+Y_UNIT_TEST(InvalidChangefeedUserSIDs) {
+    auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", USER_SIDS = "foo")
+            );
+        )";
+    auto res = SqlToYql(req);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:92: Error: Literal of Bool type is expected for USER_SIDS\n");
 }
 
 Y_UNIT_TEST(InvalidChangefeedVirtualTimestamps) {
@@ -10502,6 +10564,35 @@ Y_UNIT_TEST(MetricsLevelBadNumericValue) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid numeric value for metrics_value");
 }
+
+Y_UNIT_TEST(TransferCPULimit) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $b($x); }
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+            V_CPU_RATE_LIMIT = 1.5
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTransferWithCPULimit) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        ALTER TRANSFER `TransferName`
+        SET (
+            V_CPU_RATE_LIMIT = 4
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
 } // Y_UNIT_TEST_SUITE(Transfer)
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {
@@ -11713,7 +11804,7 @@ Y_UNIT_TEST(LangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         res.Issues.ToOneLineString(),
-        "YqlSelect is not available before 2025.05");
+        "YqlSelect is not available before language version 2025.05");
 }
 
 Y_UNIT_TEST(AutoTopLevel) {

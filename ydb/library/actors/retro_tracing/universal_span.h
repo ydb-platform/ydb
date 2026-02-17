@@ -44,8 +44,11 @@ public:
         : Span(std::move(span))
     {}
 
-    TUniversalSpan(TUniversalSpan&& span) = default;
-    TUniversalSpan(const TUniversalSpan& span) = delete;
+    TUniversalSpan(TUniversalSpan&&) = default;
+    TUniversalSpan(const TUniversalSpan&) = delete;
+
+    TUniversalSpan& operator=(TUniversalSpan&&) = default;
+    TUniversalSpan& operator=(const TUniversalSpan&) = delete;
 
     NWilson::TSpan* GetWilsonSpanPtr() {
         NWilson::TSpan* res;

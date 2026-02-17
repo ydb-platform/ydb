@@ -27,13 +27,14 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
-    constexpr int F_NULLABLE   = 1 << 0;
-    constexpr int F_COVERING   = 1 << 1;
-    constexpr int F_RETURNING  = 1 << 2;
-    constexpr int F_SIMILARITY = 1 << 3;
-    constexpr int F_SUFFIX_PK  = 1 << 4;
-    constexpr int F_WITH_INDEX = 1 << 5;
-    constexpr int F_OVERLAP    = 1 << 6;
+    constexpr int F_NULLABLE    = 1 << 0;
+    constexpr int F_COVERING    = 1 << 1;
+    constexpr int F_RETURNING   = 1 << 2;
+    constexpr int F_SIMILARITY  = 1 << 3;
+    constexpr int F_SUFFIX_PK   = 1 << 4;
+    constexpr int F_WITH_INDEX  = 1 << 5;
+    constexpr int F_OVERLAP     = 1 << 6;
+    constexpr int F_WITH_PREFIX = 1 << 7;
 
     std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, const TString& query, int flags = 0) {
         {
@@ -62,6 +63,10 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             for (const auto& set : sets) {
                 TResultSetParser parser{set};
                 while (parser.TryNextRow()) {
+                    if (flags & F_WITH_PREFIX) {
+                        auto value = parser.GetValue("user");
+                        UNIT_ASSERT_C(value.GetProto().has_bytes_value(), value.GetProto().ShortUtf8DebugString());
+                    }
                     auto value = parser.GetValue("pk");
                     UNIT_ASSERT_C(value.GetProto().has_int64_value(), value.GetProto().ShortUtf8DebugString());
                     r.push_back(value.GetProto().int64_value());
@@ -104,9 +109,25 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
         {
-            // TODO(vitaliff): Exclude index-covered WHERE fields from KqpReadTableRanges.
-            // Currently even if we SELECT only pk, emb, data WHERE user=xxx we also get `user`
-            // in SELECT columns and thus it's required to add it to covered columns.
+            // We don't select user column so it's not required to be in COVER()
+            const TString plainQuery(Q1_(std::format(R"({}
+                SELECT pk, emb, data FROM `/Root/TestTable`
+                WHERE user = $user
+                ORDER BY {} {}
+                LIMIT 3;
+            )", init, metric, direction)));
+            const TString indexQuery(Q1_(std::format(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "3";
+                {}
+                SELECT pk, emb, data FROM `/Root/TestTable` VIEW index
+                WHERE user = $user
+                ORDER BY {} {}
+                LIMIT 3;
+            )", init, metric, direction)));
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, flags, count);
+        }
+        {
+            // check the same but with user column in select to check that it's not mistakenly removed
             const TString plainQuery(Q1_(std::format(R"({}
                 SELECT * FROM `/Root/TestTable`
                 WHERE user = $user
@@ -121,19 +142,20 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 ORDER BY {} {}
                 LIMIT 3;
             )", init, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, flags, count);
+            // select * will read from the main table
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, flags & ~F_COVERING | F_WITH_PREFIX, count);
         }
         // metric in result
         {
             const TString plainQuery(Q1_(std::format(R"({}
-                SELECT {}, `/Root/TestTable`.* FROM `/Root/TestTable`
+                SELECT {}, pk, emb, data FROM `/Root/TestTable`
                 WHERE user = $user
                 ORDER BY {} {}
                 LIMIT 3;
             )", init, metric, metric, direction)));
             const TString indexQuery(Q1_(std::format(R"({}
-                pragma ydb.KMeansTreeSearchTopSize = "2";
-                SELECT {}, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
+                pragma ydb.KMeansTreeSearchTopSize = "3";
+                SELECT {}, pk, emb, data FROM `/Root/TestTable` VIEW index
                 WHERE user = $user
                 ORDER BY {} {}
                 LIMIT 3;
@@ -144,7 +166,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         // TODO(mbkkt) fix this behavior too
         if constexpr (false) {
             const TString plainQuery(Q1_(std::format(R"({}
-                SELECT {} AS m, `/Root/TestTable`.* FROM `/Root/TestTable`
+                SELECT {} AS m, pk, emb, data FROM `/Root/TestTable`
                 WHERE user = $user
                 ORDER BY m {}
                 LIMIT 3;
@@ -152,7 +174,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             const TString indexQuery(Q1_(std::format(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "1";
                 {}
-                SELECT {} AS m, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
+                SELECT {} AS m, pk, emb, data FROM `/Root/TestTable` VIEW index
                 WHERE user = $user
                 ORDER BY m {}
                 LIMIT 3;
@@ -255,7 +277,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 kmeans.Levels = 2;
                 std::vector<std::string> dataColumns;
                 if (flags & F_COVERING) {
-                    dataColumns = {"user", "emb", "data"};
+                    dataColumns = {"emb", "data"};
                 }
                 tableBuilder.AddVectorKMeansTreeIndex("index", {"user", "emb"}, dataColumns, kmeans);
             }
@@ -320,7 +342,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
     void DoCreatePrefixedVectorIndex(TSession & session, int levels, int flags = 0) {
         const char* cover = "";
         if (flags & F_COVERING) {
-            cover = (flags & F_SUFFIX_PK) ? " COVER (emb, data)" : " COVER (user, emb, data)";
+            cover = " COVER (emb, data)";
         }
 
         const TString createIndex(Q_(Sprintf(R"(
@@ -373,12 +395,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             std::vector<std::string> indexKeyColumns{"user", "emb"};
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
             if (flags & F_COVERING) {
-                std::vector<std::string> indexDataColumns;
-                if (flags & F_SUFFIX_PK) {
-                    indexDataColumns = {"emb", "data"};
-                } else {
-                    indexDataColumns = {"user", "emb", "data"};
-                }
+                std::vector<std::string> indexDataColumns{"emb", "data"};
                 UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), indexDataColumns);
             }
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
@@ -472,6 +489,37 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     Y_UNIT_TEST_TWIN(CosineDistanceWithPkSuffixWithOverlap, Covered) {
         DoTestOrderByCosine(2, F_SUFFIX_PK | F_OVERLAP | (Covered ? F_COVERING : 0));
+    }
+
+    Y_UNIT_TEST(SubPrefix) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, 0);
+
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (user, pk, emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+                )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // index on (user, pk, emb) but selecting on (user order by emb)
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, 0);
     }
 
     void DoTestPrefixedVectorIndexInsert(int flags) {

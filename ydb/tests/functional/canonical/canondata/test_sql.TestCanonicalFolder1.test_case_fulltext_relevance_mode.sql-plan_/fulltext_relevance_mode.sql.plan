@@ -52,6 +52,7 @@
                                                         "DefaultOperator": "\"or\"",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
+                                                        "ItemsLimit": "\"1001\"",
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",
                                                         "QueryColumns": "Text",

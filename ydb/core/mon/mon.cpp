@@ -86,6 +86,8 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!ydbSessionId.empty()) {
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
+    } else if (!request->MTlsClientCertificate.empty()) {
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
         return nullptr;
     }
@@ -158,6 +160,23 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
     if (message.empty()) {
         message = textStatus;
     }
+}
+
+TVector<TString> TMon::GetCountersAllowedSIDs(const NKikimr::TAppData* appData) {
+    TVector<TString> countersAllowedSIDs;
+    if (!appData) {
+        return countersAllowedSIDs;
+    }
+    const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
+    const auto addSIDs = [&countersAllowedSIDs](const auto& allowedSIDs) {
+        for (const auto& sid : allowedSIDs) {
+            countersAllowedSIDs.emplace_back(sid);
+        }
+    };
+    addSIDs(securityConfig.GetViewerAllowedSIDs());
+    addSIDs(securityConfig.GetMonitoringAllowedSIDs());
+    addSIDs(securityConfig.GetAdministrationAllowedSIDs());
+    return countersAllowedSIDs;
 }
 
 IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
@@ -401,7 +420,9 @@ public:
     }
 
     bool CredentialsProvided() {
-        return Container.GetCookie("ydb_session_id") || Container.GetHeader("Authorization");
+        return Container.GetCookie("ydb_session_id") ||
+            Container.GetHeader("Authorization") ||
+            !Event->Get()->Request->MTlsClientCertificate.empty();
     }
 
     TString YdbToHttpError(Ydb::StatusIds::StatusCode status) {
@@ -1027,6 +1048,9 @@ public:
         if (cookies.Has("ydb_session_id")) {
             return true;
         }
+        if (!request->MTlsClientCertificate.empty()) {
+            return true;
+        }
         return false;
     }
 
@@ -1247,6 +1271,9 @@ public:
         }
         NHttp::TCookies cookies(headers["Cookie"]);
         if (cookies.Has("ydb_session_id")) {
+            return true;
+        }
+        if (!request->MTlsClientCertificate.empty()) {
             return true;
         }
         return false;
@@ -1666,7 +1693,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
             HttpProxyActorId,
             CountersMonPage,
             Config.Authorizer,
-            Config.AllowedSIDs);
+            GetCountersAllowedSIDs(ActorSystem->AppData<NKikimr::TAppData>()));
     } else {
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,
@@ -1694,6 +1721,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     addPort->SslCertificatePem = Config.Certificate;
     addPort->CertificateFile = Config.CertificateFile;
     addPort->PrivateKeyFile = Config.PrivateKeyFile;
+    addPort->CaFile = Config.CaFile;
     addPort->Secure = !Config.Certificate.empty() || !Config.CertificateFile.empty();
     addPort->MaxRequestsPerSecond = Config.MaxRequestsPerSecond;
 

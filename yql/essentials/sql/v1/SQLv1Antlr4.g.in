@@ -701,7 +701,7 @@ object_feature_value: id_or_type | bind_parameter | STRING_VALUE | bool_value;
 object_feature_kv: an_id_or_type EQUALS object_feature_value;
 object_feature_flag: an_id_or_type;
 object_feature: object_feature_kv | object_feature_flag;
-object_features: object_feature | LPAREN object_feature (COMMA object_feature)* RPAREN;
+object_features: object_feature | LPAREN object_feature (COMMA object_feature)* COMMA? RPAREN;
 
 object_type_ref: an_id_or_type;
 
@@ -741,7 +741,7 @@ alter_backup_collection_entry:
   | DROP TABLE an_id_table
 ;
 backup_collection: BACKUP COLLECTION object_ref;
-backup_collection_settings: backup_collection_settings_entry (COMMA backup_collection_settings_entry)*;
+backup_collection_settings: backup_collection_settings_entry (COMMA backup_collection_settings_entry)* COMMA?;
 backup_collection_settings_entry: an_id EQUALS table_setting_value;
 
 backup_stmt: BACKUP object_ref (INCREMENTAL)?;
@@ -766,7 +766,7 @@ with_truncate_table_settings: WITH LPAREN RPAREN;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
-with_table_settings: WITH LPAREN table_settings_entry (COMMA table_settings_entry)* RPAREN;
+with_table_settings: WITH LPAREN table_settings_entry (COMMA table_settings_entry)* COMMA? RPAREN;
 table_tablestore: TABLESTORE simple_table_ref_core;
 table_settings_entry: an_id EQUALS table_setting_value;
 table_as_source: AS values_source;
@@ -792,6 +792,7 @@ alter_table_action:
   | alter_table_alter_column_drop_not_null
   | alter_table_alter_column_set_not_null
   | alter_table_alter_column_set_compression
+  | alter_table_compact
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -829,6 +830,7 @@ alter_table_add_changefeed: ADD changefeed;
 alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
 alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
+alter_table_compact: COMPACT with_compact_settings?;
 
 column_schema: an_id_schema type_name_or_bind column_option_list;
 
@@ -881,8 +883,12 @@ index_setting_value:
     | bool_value
 ;
 
+with_compact_settings: WITH LPAREN compact_setting_entry (COMMA compact_setting_entry)* COMMA? RPAREN;
+compact_setting_entry: an_id EQUALS compact_setting_value;
+compact_setting_value: literal_value;
+
 changefeed: CHANGEFEED an_id WITH LPAREN changefeed_settings RPAREN;
-changefeed_settings: changefeed_settings_entry (COMMA changefeed_settings_entry)*;
+changefeed_settings: changefeed_settings_entry (COMMA changefeed_settings_entry)* COMMA?;
 changefeed_settings_entry: an_id EQUALS changefeed_setting_value;
 changefeed_setting_value: expr;
 changefeed_alter_settings:
@@ -1004,7 +1010,7 @@ create_replication_stmt: CREATE ASYNC REPLICATION object_ref
 ;
 
 replication_target: object_ref AS object_ref;
-replication_settings: replication_settings_entry (COMMA replication_settings_entry)*;
+replication_settings: replication_settings_entry (COMMA replication_settings_entry)* COMMA?;
 replication_settings_entry: an_id EQUALS expr;
 
 alter_replication_stmt: ALTER ASYNC REPLICATION object_ref alter_replication_action (COMMA alter_replication_action)*;
@@ -1026,7 +1032,7 @@ create_transfer_stmt: CREATE TRANSFER object_ref
     (WITH LPAREN transfer_settings RPAREN)?
 ;
 
-transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)*;
+transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)* COMMA?;
 transfer_settings_entry: an_id EQUALS expr;
 
 alter_transfer_stmt: ALTER TRANSFER object_ref alter_transfer_action (COMMA alter_transfer_action)*;
@@ -1052,7 +1058,7 @@ table_ref: (cluster_expr DOT)? COMMAT? (table_key | an_id_expr LPAREN (table_arg
 
 table_key: id_table_or_type (VIEW view_name)?;
 table_arg: COMMAT? named_expr (VIEW view_name)?;
-table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
+table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* COMMA? RPAREN);
 table_hint:
       an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
@@ -1115,14 +1121,14 @@ alter_topic_reset_settings: RESET LPAREN an_id (COMMA an_id_pure)* RPAREN;
 
 drop_topic_stmt: DROP TOPIC (IF EXISTS)? topic_ref;
 
-topic_settings: topic_settings_entry (COMMA topic_settings_entry)*;
+topic_settings: topic_settings_entry (COMMA topic_settings_entry)* COMMA?;
 topic_settings_entry: an_id EQUALS topic_setting_value;
 topic_setting_value:
     expr
 ;
 
 topic_consumer_with_settings: WITH LPAREN topic_consumer_settings RPAREN;
-topic_consumer_settings: topic_consumer_settings_entry (COMMA topic_consumer_settings_entry)*;
+topic_consumer_settings: topic_consumer_settings_entry (COMMA topic_consumer_settings_entry)* COMMA?;
 topic_consumer_settings_entry: an_id EQUALS topic_consumer_setting_value;
 topic_consumer_setting_value:
     expr
@@ -1204,7 +1210,7 @@ show_create_table_stmt: SHOW CREATE (TABLE | VIEW) simple_table_ref;
 create_secret_stmt: CREATE SECRET object_ref
     with_secret_settings
 ;
-with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* RPAREN;
+with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* COMMA? RPAREN;
 secret_setting_entry: an_id EQUALS secret_setting_value;
 secret_setting_value:
       STRING_VALUE

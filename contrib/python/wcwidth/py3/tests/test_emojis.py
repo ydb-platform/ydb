@@ -31,7 +31,7 @@ def emoji_zwj_sequence():
               "\u200d"       # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
               "\U0001f4bb")  # Fused, Category So, East Asian Width property 'W' -- PERSONAL COMPUTER
     # This test adapted from https://www.unicode.org/L2/L2023/23107-terminal-suppt.pdf
-    expect_length_each = (2, 0, 0, 2)
+    expect_length_each = (2, 2, 0, 2)
     expect_length_phrase = 2
 
     # exercise,
@@ -49,7 +49,7 @@ def test_unfinished_zwj_sequence():
     phrase = ("\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
               "\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
               "\u200d")      # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
-    expect_length_each = (2, 0, 0)
+    expect_length_each = (2, 2, 0)
     expect_length_phrase = 2
 
     # exercise,
@@ -67,7 +67,7 @@ def test_non_recommended_zwj_sequence():
     phrase = ("\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
               "\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
               "\u200d")      # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
-    expect_length_each = (2, 0, 0)
+    expect_length_each = (2, 2, 0)
     expect_length_phrase = 2
 
     # exercise,
@@ -87,7 +87,7 @@ def test_another_emoji_zwj_sequence():
         "\u200D"        # ZERO WIDTH JOINER
         "\u2640"        # FEMALE SIGN
         "\uFE0F")       # VARIATION SELECTOR-16
-    expect_length_each = (1, 0, 0, 1, 0)
+    expect_length_each = (1, 2, 0, 1, 0)
     expect_length_phrase = 2
 
     # exercise,
@@ -120,7 +120,7 @@ def test_longer_emoji_zwj_sequence():
               "\U0001F3FD"   # 'Sk', 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-4
               ) * 2
     # This test adapted from https://www.unicode.org/L2/L2023/23107-terminal-suppt.pdf
-    expect_length_each = (2, 0, 0, 1, 0, 0, 2, 0, 2, 0) * 2
+    expect_length_each = (2, 2, 0, 1, 0, 0, 2, 0, 2, 2) * 2
     expect_length_phrase = 4
 
     # exercise,
@@ -143,6 +143,8 @@ def read_sequences_from_file(filename):
 
 
 @pytest.mark.skipif(NARROW_ONLY, reason="Some sequences in text file are not compatible with 'narrow' builds")
+@pytest.mark.skipif(not os.path.exists(os.path.join(os.path.dirname(__file__), 'emoji-zwj-sequences.txt')),
+                    reason="emoji-zwj-sequences.txt; missing run bin/update-tables.py")
 def test_recommended_emoji_zwj_sequences(benchmark):
     """Test wcswidth of all of the unicode.org-published emoji-zwj-sequences.txt."""
     lines, sequences = read_sequences_from_file('emoji-zwj-sequences.txt')
@@ -165,6 +167,8 @@ def test_recommended_emoji_zwj_sequences(benchmark):
     assert len(sequences) >= 1468
 
 
+@pytest.mark.skipif(not os.path.exists(os.path.join(os.path.dirname(__file__), 'emoji-variation-sequences.txt')),
+                    reason="emoji-variation-sequences.txt is missing; run bin/update-tables.py")
 def test_recommended_variation_16_sequences(benchmark):
     """Test wcswidth of all of the unicode.org-published emoji-variation-sequences.txt."""
     lines, sequences = read_sequences_from_file('emoji-variation-sequences.txt')
@@ -188,8 +192,58 @@ def test_recommended_variation_16_sequences(benchmark):
     assert len(sequences) >= 742
 
 
-def test_unicode_9_vs16():
-    """Verify effect of VS-16 on unicode_version 9.0 and later."""
+@pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
+def test_regional_indicator_single():
+    """Single Regional Indicator symbol is width 2."""
+    assert wcwidth.wcwidth('\U0001F1FA') == 2
+    assert wcwidth.wcswidth('\U0001F1FA') == 2
+
+
+@pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
+def test_regional_indicator_pair():
+    """Flag pair (two Regional Indicators) is width 2, not 4."""
+    assert wcwidth.wcswidth('\U0001F1FA\U0001F1F8') == 2
+
+
+@pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
+def test_regional_indicator_three():
+    """Three Regional Indicators: one pair (2) + one single (2) = 4."""
+    assert wcwidth.wcswidth('\U0001F1FA\U0001F1F8\U0001F1E6') == 4
+
+
+@pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
+def test_regional_indicator_four():
+    """Four Regional Indicators: two pairs = 2 + 2 = 4."""
+    assert wcwidth.wcswidth(
+        '\U0001F1FA\U0001F1F8\U0001F1E6\U0001F1FA') == 4
+
+
+@pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
+def test_zwj_after_non_emoji():
+    """ZWJ after non-emoji unconditionally consumes next character."""
+    # This does *not* match most terminal behavior -- it is a negative test,
+    # they fail because our library doesn't handle 'glitch' emoji as an
+    # optimization. Non-emoji + ZWJ is undefined per Unicode UAX #29 GB11.
+    assert wcwidth.wcswidth('xx\u200d\U0001F384') == 2
+    assert wcwidth.wcswidth('a\u200d\U0001F600') == 1
+    assert wcwidth.wcswidth('\u4e16\u200d\U0001F600') == 2
+
+
+@pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
+def test_fitzpatrick_standalone():
+    """Standalone Fitzpatrick modifier is width 2."""
+    assert wcwidth.wcwidth('\U0001F3FB') == 2
+    assert wcwidth.wcswidth('\U0001F3FB') == 2
+
+
+@pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
+def test_fitzpatrick_after_emoji():
+    """Fitzpatrick modifier after emoji base combines, total width 2."""
+    assert wcwidth.wcswidth('\U0001F469\U0001F3FB') == 2
+
+
+def test_vs16_effect():
+    """Verify effect of VS-16 (always active with latest Unicode version)."""
     phrase = ("\u2640"        # FEMALE SIGN
               "\uFE0F")       # VARIATION SELECTOR-16
 
@@ -197,25 +251,8 @@ def test_unicode_9_vs16():
     expect_length_phrase = 2
 
     # exercise,
-    length_each = tuple(wcwidth.wcwidth(w_char, unicode_version='9.0') for w_char in phrase)
-    length_phrase = wcwidth.wcswidth(phrase, unicode_version='9.0')
-
-    # verify.
-    assert length_each == expect_length_each
-    assert length_phrase == expect_length_phrase
-
-
-def test_unicode_8_vs16():
-    """Verify that VS-16 has no effect on unicode_version 8.0 and earlier."""
-    phrase = ("\u2640"        # FEMALE SIGN
-              "\uFE0F")       # VARIATION SELECTOR-16
-
-    expect_length_each = (1, 0)
-    expect_length_phrase = 1
-
-    # exercise,
-    length_each = tuple(wcwidth.wcwidth(w_char, unicode_version='8.0') for w_char in phrase)
-    length_phrase = wcwidth.wcswidth(phrase, unicode_version='8.0')
+    length_each = tuple(wcwidth.wcwidth(w_char) for w_char in phrase)
+    length_phrase = wcwidth.wcswidth(phrase)
 
     # verify.
     assert length_each == expect_length_each

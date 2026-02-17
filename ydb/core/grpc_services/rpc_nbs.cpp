@@ -5,8 +5,10 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 
 namespace NKikimr::NGRpcService {
@@ -17,6 +19,9 @@ using TEvCreatePartitionRequest =
 using TEvDeletePartitionRequest =
     TGrpcRequestOperationCall<Ydb::Nbs::DeletePartitionRequest,
         Ydb::Nbs::DeletePartitionResponse>;
+using TEvGetLoadActorAdapterActorIdRequest =
+    TGrpcRequestOperationCall<Ydb::Nbs::GetLoadActorAdapterActorIdRequest,
+        Ydb::Nbs::GetLoadActorAdapterActorIdResponse>;
 using TEvListPartitionsRequest =
     TGrpcRequestOperationCall<Ydb::Nbs::ListPartitionsRequest,
         Ydb::Nbs::ListPartitionsResponse>;
@@ -39,6 +44,7 @@ public:
         const TString storagePoolName = request->GetStoragePoolName();
         const ui32 blockSize = request->GetBlockSize() ? request->GetBlockSize() : 4096;
         const ui64 blocksCount = request->GetBlocksCount() ? request->GetBlocksCount() : 32768;
+        const ui32 storageMedia = request->GetStorageMedia();
 
         NYdb::NBS::NProto::TStorageConfig storageConfig;
         storageConfig.SetDDiskPoolName(storagePoolName);
@@ -48,6 +54,9 @@ public:
 
         NKikimrBlockStore::TVolumeConfig volumeConfig;
         volumeConfig.SetBlockSize(blockSize);
+        if (storageMedia == Ydb::Nbs::StorageMediaKind::STORAGE_MEDIA_MEMORY) {
+            volumeConfig.SetStorageMediaKind(NYdb::NBS::NProto::EStorageMediaKind::STORAGE_MEDIA_MEMORY);
+        }
 
         auto* partition = volumeConfig.AddPartitions();
         partition->SetBlockCount(blocksCount);
@@ -114,6 +123,42 @@ private:
     }
 };
 
+class TGetLoadActorAdapterActorIdRequest
+    : public TRpcOperationRequestActor<TGetLoadActorAdapterActorIdRequest, TEvGetLoadActorAdapterActorIdRequest> {
+
+public:
+    TGetLoadActorAdapterActorIdRequest(IRequestOpCtx* request)
+        : TRpcOperationRequestActor(request) {}
+
+    void Bootstrap() {
+        const auto& ctx = TActivationContext::AsActorContext();
+
+        Become(&TThis::StateWork);
+
+        auto tabletIdStr = GetProtoRequest()->GetTabletId();
+
+        NActors::TActorId tabletId;
+        tabletId.Parse(tabletIdStr.data(), tabletIdStr.size());
+
+        ctx.Send(tabletId, new NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest());
+    }
+
+private:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdResponse, Handle);
+            default:
+                break;
+        }
+    }
+
+    void Handle(NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdResponse::TPtr& ev) {
+        Ydb::Nbs::GetLoadActorAdapterActorIdResult result;
+        result.SetActorId(ev->Get()->ActorId);
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
+    }
+};
+
 class TListPartitionsRequest
     : public TRpcOperationRequestActor<TListPartitionsRequest, TEvListPartitionsRequest> {
 
@@ -140,6 +185,10 @@ void DoCreatePartition(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider
 
 void DoDeletePartition(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TDeletePartitionRequest(p.release()));
+}
+
+void DoGetLoadActorAdapterActorId(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TGetLoadActorAdapterActorIdRequest(p.release()));
 }
 
 void DoListPartitions(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {

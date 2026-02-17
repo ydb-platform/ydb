@@ -356,7 +356,7 @@ private:
 
     //std::string GetDebugIdentity() const;
     Ydb::PersQueue::V1::StreamingWriteClientMessage GetInitClientMessage();
-    bool CleanupOnAcknowledged(ui64 id);
+    bool CleanupOnAcknowledged(ui64 id, TProcessSrvMessageResult& processResult);
     bool IsReadyToSendNextImpl();
     void DumpState();
     ui64 GetNextIdImpl(const std::optional<ui64>& seqNo);

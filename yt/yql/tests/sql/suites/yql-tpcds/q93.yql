@@ -1,0 +1,40 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    ss_customer_sk,
+    Sum(act_sales) AS sumsales
+FROM (
+    SELECT
+        ss_item_sk,
+        ss_ticket_number,
+        ss_customer_sk,
+        CASE
+            WHEN sr_return_quantity IS NOT NULL THEN (
+                (ss_quantity - sr_return_quantity) * ss_sales_price
+            )
+            ELSE (ss_quantity * ss_sales_price)
+        END AS act_sales
+    FROM
+        plato.store_sales
+    LEFT OUTER JOIN
+        plato.store_returns
+    ON
+        (
+            sr_item_sk == ss_item_sk
+            AND sr_ticket_number == ss_ticket_number
+        )
+    ,
+        plato.reason
+    WHERE
+        sr_reason_sk == r_reason_sk
+        AND r_reason_desc == 'Did not like the warranty'
+) AS t
+GROUP BY
+    ss_customer_sk
+ORDER BY
+    sumsales,
+    ss_customer_sk
+LIMIT 100;

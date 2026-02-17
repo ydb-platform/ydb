@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -20,6 +21,7 @@ private:
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;
+
 
 public:
     TPartitionActor(
@@ -37,6 +39,10 @@ private:
 
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleGetLoadActorAdapterActorId(
+        const NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 };
 

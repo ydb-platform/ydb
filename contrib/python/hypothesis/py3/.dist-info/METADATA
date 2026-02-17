@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: hypothesis
-Version: 6.150.3
+Version: 6.151.4
 Summary: The property-based testing library for Python
 Author-email: "David R. MacIver and Zac Hatfield-Dodds" <david@drmaciver.com>
 License-Expression: MPL-2.0
@@ -61,7 +61,7 @@ Provides-Extra: redis
 Requires-Dist: redis>=3.0.0; extra == "redis"
 Provides-Extra: crosshair
 Requires-Dist: hypothesis-crosshair>=0.0.27; extra == "crosshair"
-Requires-Dist: crosshair-tool>=0.0.101; extra == "crosshair"
+Requires-Dist: crosshair-tool>=0.0.102; extra == "crosshair"
 Provides-Extra: zoneinfo
 Requires-Dist: tzdata>=2025.3; (sys_platform == "win32" or sys_platform == "emscripten") and extra == "zoneinfo"
 Provides-Extra: django
@@ -71,7 +71,7 @@ Requires-Dist: watchdog>=4.0.0; extra == "watchdog"
 Provides-Extra: all
 Requires-Dist: black>=20.8b0; extra == "all"
 Requires-Dist: click>=7.0; extra == "all"
-Requires-Dist: crosshair-tool>=0.0.101; extra == "all"
+Requires-Dist: crosshair-tool>=0.0.102; extra == "all"
 Requires-Dist: django>=4.2; extra == "all"
 Requires-Dist: dpcontracts>=0.4; extra == "all"
 Requires-Dist: hypothesis-crosshair>=0.0.27; extra == "all"

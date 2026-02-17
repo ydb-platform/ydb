@@ -19,6 +19,8 @@ TPqConfiguration::TPqConfiguration() {
     REGISTER_SETTING(*this, Consumer);
     REGISTER_SETTING(*this, Database);
     REGISTER_SETTING(*this, PqReadByRtmrCluster_);
+    REGISTER_SETTING(*this, MaxPartitionReadSkew);
+    REGISTER_SETTING(*this, ReadSessionBufferBytes);
 }
 
 TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {

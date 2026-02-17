@@ -636,6 +636,14 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
     }
 
+    app.FeatureFlags.SetEnableConditionalEraseResponseBatching(opts.EnableConditionalEraseResponseBatching_);
+    if (opts.CondEraseResponseBatchSize_) {
+        app.SchemeShardConfig.SetCondEraseResponseBatchSize(*opts.CondEraseResponseBatchSize_);
+    }
+    if (opts.CondEraseResponseBatchMaxTimeMs_) {
+        app.SchemeShardConfig.SetCondEraseResponseBatchMaxTimeMs(*opts.CondEraseResponseBatchMaxTimeMs_);
+    }
+
     // graph settings
     if (opts.GraphBackendType_) {
         app.GraphConfig.SetBackendType(opts.GraphBackendType_.value());

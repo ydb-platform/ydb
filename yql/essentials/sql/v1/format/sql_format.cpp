@@ -2392,7 +2392,12 @@ private:
             NewLine();
             PopCurrentIndent();
 
-            Visit(alt.GetToken4());
+            if (alt.HasBlock4()) {
+                Visit(alt.GetBlock4().GetToken1());
+                NewLine();
+            }
+
+            Visit(alt.GetToken5());
         } else {
             Visit(block2);
         }
@@ -2797,7 +2802,12 @@ private:
             Visit(msg.GetRule_table_settings_entry3());
         }
 
-        Visit(msg.GetToken5());
+        if (msg.HasBlock5()) {
+            Visit(msg.GetBlock5().GetToken1());
+            NewLine();
+        }
+
+        Visit(msg.GetToken6());
     }
 
     void VisitTableSettingValue(const TRule_table_setting_value& msg) {

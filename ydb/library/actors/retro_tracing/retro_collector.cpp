@@ -10,6 +10,7 @@ namespace NRetroTracing {
 struct TEvPrivate {
     enum EEv {
         EvCollectRetroTrace = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvCollectAllRetroTraces
     };
 
     struct TEvCollectRetroTrace : NActors::TEventLocal<TEvCollectRetroTrace, EvCollectRetroTrace> {
@@ -19,12 +20,15 @@ struct TEvPrivate {
             : TraceId(traceId)
         {}
     };
+
+    struct TEvCollectAllRetroTraces : NActors::TEventLocal<TEvCollectAllRetroTraces, EvCollectAllRetroTraces> {};
 };
 
 class TRetroCollector : public NActors::TActorBootstrapped<TRetroCollector> {
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvCollectRetroTrace, Handle);
+        cFunc(TEvPrivate::TEvCollectAllRetroTraces::EventType, HandleCollectAll);
         cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway);
     );
 
@@ -33,11 +37,18 @@ private:
             return;
         }
 
-        std::vector<std::unique_ptr<TRetroSpan>> spans = GetSpansOfTrace(ev->Get()->TraceId);
+        ConvertAndSend(GetSpansOfTrace(ev->Get()->TraceId));
+    }
+
+    void HandleCollectAll() {
+        ConvertAndSend(GetAllSpans());
+    }
+
+    void ConvertAndSend(std::vector<std::unique_ptr<TRetroSpan>>&& spans) {
         for (const std::unique_ptr<TRetroSpan>& span : spans) {
             std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan();
             wilson->Attribute("type", "RETRO");
-            wilson.reset();
+            wilson->End();
         }
     }
 
@@ -55,6 +66,12 @@ void DemandTrace(const NWilson::TTraceId& traceId) {
     NActors::TActivationContext::Send(std::make_unique<NActors::IEventHandle>(
             MakeRetroCollectorId(), NActors::TActorId{},
             new TEvPrivate::TEvCollectRetroTrace(traceId)));
+}
+
+void DemandAllTraces() {
+    NActors::TActivationContext::Send(std::make_unique<NActors::IEventHandle>(
+            MakeRetroCollectorId(), NActors::TActorId{},
+            new TEvPrivate::TEvCollectAllRetroTraces));
 }
 
 } // namespace NRetroTracing

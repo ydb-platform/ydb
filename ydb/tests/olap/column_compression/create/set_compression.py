@@ -4,6 +4,7 @@ import random
 from ydb.tests.olap.column_compression.common.base import ColumnTestBase
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
+from ydb.tests.library.common.protobuf_ss import SchemeDescribeRequest
 
 logger = logging.getLogger(__name__)
 
@@ -59,23 +60,23 @@ class TestCreateWithColumnCompression(TestCompressionBase):
     @classmethod
     def setup_class(cls):
         super(TestCreateWithColumnCompression, cls).setup_class()
-        cls.single_upsert_rows_count: int = 1000
-        cls.upsert_count: int = 10
-        cls.volumes_without_compression: dict[str, int] = {}
-        cls.test_name: str = "all_supported_compression"
-        cls.test_dir: str = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
+        cls.single_upsert_rows_count = 1000
+        cls.upsert_count = 10
+        cls.volumes_without_compression = {}
+        cls.test_name = "all_supported_compression"
+        cls.test_dir = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
 
     COMPRESSION_CASES = [
-        ("default",          ''),
-        ("lz4_compression",  'algorithm=lz4'),
-        ("zstd_compression", 'algorithm=zstd'),
+        ("default",          '',                                   0),
+        ("lz4_compression",  'algorithm=lz4',                      1),
+        ("zstd_compression", 'algorithm=zstd',                     2),
     ] + [
-        (f"zstd_{lvl}_compression", f'algorithm=zstd,level={lvl}')
+        (f"zstd_{lvl}_compression", f'algorithm=zstd,level={lvl}', 2)
         for lvl in range(2, 22)
     ]
 
-    def create_table_without_compression(self, suffix: str):
-        self.table_path: str = f"{self.test_dir}/no_compression_{suffix}_{random.randint(1000, 9999)}"
+    def create_table_without_compression(self, suffix):
+        self.table_path = f"{self.test_dir}/no_compression_{suffix}_{random.randint(1000, 9999)}"
 
         self.ydb_client.query(
             f"""
@@ -105,11 +106,11 @@ class TestCreateWithColumnCompression(TestCompressionBase):
         actual_rows = table.get_portion_stat_by_tier()['__DEFAULT']['Rows']
         assert actual_rows == expected_raw // 8
 
-    @pytest.mark.parametrize("suffix, compression_settings", COMPRESSION_CASES)
-    def test_create_with_compression(self, suffix: str, compression_settings: str):
+    @pytest.mark.parametrize("suffix, compression_settings, codec_id", COMPRESSION_CASES)
+    def test_create_with_compression(self, suffix, compression_settings, codec_id):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13626 '''
         self.create_table_without_compression(suffix)
-        compressed_table_path: str = f"{self.test_dir}/compressed_{suffix}"
+        compressed_table_path = f"{self.test_dir}/compressed_{suffix}"
 
         self.ydb_client.query(
             f"""
@@ -129,11 +130,19 @@ class TestCreateWithColumnCompression(TestCompressionBase):
                 """
         )
         logger.info(f"Table {compressed_table_path} created")
+
+        columns = self.cluster.client.send(
+            SchemeDescribeRequest(compressed_table_path).protobuf,
+            'SchemeDescribe').PathDescription.ColumnTableDescription.Schema.Columns
+
+        for column in columns:
+            if codec_id == 0:
+                assert column.HasField("Serializer") is False
+            else:
+                assert column.Serializer.ArrowCompression.Codec == codec_id
+
         table = ColumnTableHelper(self.ydb_client, compressed_table_path)
         self.upsert_and_wait_portions(table, self.single_upsert_rows_count, self.upsert_count)
-
-        expected_raw = self.upsert_count * self.single_upsert_rows_count * 8
-        assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8
 
         for col in ["vInt", "vStr", "vFlt", "vTs"]:
             volumes = table.get_volumes_column(col)
@@ -143,8 +152,8 @@ class TestCreateWithColumnCompression(TestCompressionBase):
             )
             assert koef > 1, col
 
-    @pytest.mark.parametrize("suffix, compression_settings", COMPRESSION_CASES)
-    def test_add_with_compression(self, suffix: str, compression_settings: str):
+    @pytest.mark.parametrize("suffix, compression_settings, codec_id", COMPRESSION_CASES)
+    def test_add_with_compression(self, suffix, compression_settings, codec_id):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13626 '''
         self.create_table_without_compression(suffix)
 

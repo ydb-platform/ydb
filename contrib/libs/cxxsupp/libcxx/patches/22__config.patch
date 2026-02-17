@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index fe01b58..171c171 100644
+index c165522..85d1aab 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -526,7 +526,7 @@ typedef __char32_t char32_t;
+@@ -530,7 +530,7 @@ typedef __char32_t char32_t;
  // TODO: We provide a escape hatch with _LIBCPP_NO_ABI_TAG for folks who want to avoid increasing
  //       the length of symbols with an ABI tag. In practice, we should remove the escape hatch and
  //       use compression mangling instead, see https://github.com/itanium-cxx-abi/cxx-abi/issues/70.
@@ -22,21 +22,21 @@ index fe01b58..171c171 100644
  #      undef _LIBCPP_HAS_THREAD_API_PTHREAD
  #      define _LIBCPP_HAS_THREAD_API_PTHREAD 1
 diff --git a/include/__configuration/compiler.h b/include/__configuration/compiler.h
-index 80ece22..d34361b 100644
+index cf459a0..761c779 100644
 --- a/include/__configuration/compiler.h
 +++ b/include/__configuration/compiler.h
 @@ -34,7 +34,8 @@
  // LLVM RELEASE Update the minimum compiler versions
  #  if defined(_LIBCPP_CLANG_VER)
- #    if _LIBCPP_CLANG_VER < 1700
--#      warning "Libc++ only supports Clang 17 and later"
+ #    if _LIBCPP_CLANG_VER < 1800
+-#      warning "Libc++ only supports Clang 18 and later"
 +// We allow clang 14 and newer
-+// #      warning "Libc++ only supports Clang 17 and later"
++// #      warning "Libc++ only supports Clang 18 and later"
  #    endif
  #  elif defined(_LIBCPP_APPLE_CLANG_VER)
  #    if _LIBCPP_APPLE_CLANG_VER < 1500
 diff --git a/include/__configuration/platform.h b/include/__configuration/platform.h
-index 2a92ce2..78ad402 100644
+index cff9937..58db9c2 100644
 --- a/include/__configuration/platform.h
 +++ b/include/__configuration/platform.h
 @@ -20,7 +20,7 @@

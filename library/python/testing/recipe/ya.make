@@ -7,6 +7,7 @@ PY_SRCS(
 
 PEERDIR(
     contrib/python/ipdb
+    library/python/port_manager
     library/python/testing/yatest_common
     library/python/testing/yatest_lib
 )

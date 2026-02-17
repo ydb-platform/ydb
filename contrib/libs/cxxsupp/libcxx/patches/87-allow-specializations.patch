@@ -1,0 +1,13 @@
+diff --git a/include/__config b/include/__config
+index c0d1010..016041c 100644
+--- a/include/__config
++++ b/include/__config
+@@ -1171,7 +1171,7 @@ typedef __char32_t char32_t;
+ #    define _LIBCPP_NOESCAPE
+ #  endif
+ 
+-#  if __has_cpp_attribute(_Clang::__no_specializations__)
++#  if __has_cpp_attribute(_Clang::__no_specializations__) && 0
+ #    define _LIBCPP_NO_SPECIALIZATIONS                                                                                 \
+       [[_Clang::__no_specializations__("Users are not allowed to specialize this standard library entity")]]
+ #  else

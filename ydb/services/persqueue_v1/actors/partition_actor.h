@@ -65,8 +65,6 @@ private:
     static constexpr TDuration PREWAIT_DATA = TDuration::Seconds(9);
     static constexpr TDuration WAIT_DELTA = TDuration::MilliSeconds(500);
 
-    static constexpr ui64 INIT_COOKIE = Max<ui64>(); //some identifier
-
     static constexpr ui32 MAX_PIPE_RESTARTS = 100; //after 100 restarts without progress kill session
     static constexpr ui32 RESTART_PIPE_DELAY_MS = 100;
 
@@ -160,12 +158,18 @@ private:
     void SendForgetDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
     void CommitDone(ui64 cookie, const TActorContext& ctx);
-    NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial) const;
+    NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial, ui64 cookie) const;
     NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
                                                                       ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
                                                                       ui64 directReadId, ui64 sizeEstimate = 0) const;
 
-    const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<NPQ::TPartitionGraph> partitionGraph) const;
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const;
+
+    void HandleInit(const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx);
+    void HandleDirectReadRestoreSession(const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx);
+    void Handle(const NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult& response, const TActorContext& ctx);
+    void Handle(const NKikimrClient::TPersQueuePartitionResponse::TCmdPublishDirectReadResult& response, const TActorContext& ctx);
+    void Handle(const NKikimrClient::TCmdReadResult& response, const TActorContext& ctx);
 
 private:
     const TActorId ParentId;
@@ -217,6 +221,8 @@ private:
     ui64 SizeLag;
 
     TString ReadGuid; // empty if not reading
+
+    ui64 InitCookie = 1;
 
     std::set<ui64> WaitDataInfly;
     ui64 WaitDataCookie;

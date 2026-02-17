@@ -1,11 +1,14 @@
 #include "partition_direct_actor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/load_actor_adapter/load_actor_adapter.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
+
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/mind/bscontroller/types.h>
-
-#include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/fast_path_service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/load_actor_adapter/load_actor_adapter.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -86,15 +89,48 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
             persistentBufferDDiskIds.emplace_back(node.GetPersistentBufferDDiskId());
         }
 
-        auto fastPathService = std::make_unique<NYdb::NBS::NBlockStore::TFastPathService>(
-            1, // tabletId
-            1, // generation
-            std::move(ddiskIds),
-            std::move(persistentBufferDDiskIds),
-            VolumeConfig.GetBlockSize(),
-            VolumeConfig.GetPartitions(0).GetBlockCount());
+        auto fastPathService =
+            std::make_shared<NYdb::NBS::NBlockStore::TFastPathService>(
+                TActivationContext::ActorSystem(),
+                SelfId().Hash(),   // tabletId
+                1,                 // generation
+                std::move(ddiskIds),
+                std::move(persistentBufferDDiskIds),
+                VolumeConfig.GetBlockSize(),
+                VolumeConfig.GetPartitions(0).GetBlockCount(),
+                VolumeConfig.GetStorageMediaKind(),  // storageMedia
+                StorageConfig,
+                AppData()->Counters);
 
-        LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, std::move(fastPathService));
+        LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
+
+        {
+            auto service = GetNbsService();
+
+            TString diskId = VolumeConfig.GetDiskId();
+            ui32 blockSize = VolumeConfig.GetBlockSize();
+            ui64 blockCount = 0;
+            for (const auto& p: VolumeConfig.GetPartitions()) {
+                blockCount += p.GetBlockCount();
+            }
+
+            // Fix me
+            diskId = "nbs-1";
+            blockSize = 4096;
+            blockCount = 1000;
+
+            TString socketPath = "/tmp/" + diskId + ".sock";
+            NVhost::TStorageOptions options{
+                .DiskId = diskId,
+                .ClientId = "client-1",
+                .BlockSize = blockSize,
+                .BlocksCount = blockCount,
+                .VhostQueuesCount = 1};
+            service->VhostServer->StartEndpoint(
+                std::move(socketPath),
+                fastPathService,
+                options);
+        }
 
         LOG_INFO(
             NActors::TActivationContext::AsActorContext(),
@@ -111,6 +147,15 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
 }
 
+void TPartitionActor::HandleGetLoadActorAdapterActorId(
+    const NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto response = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdResponse>();
+    response->ActorId = LoadActorAdapter.ToString();
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TPartitionActor::StateWork)
@@ -123,6 +168,7 @@ STFUNC(TPartitionActor::StateWork)
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         HFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult, HandleControllerAllocateDDiskBlockGroupResult);
+        HFunc(NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest, HandleGetLoadActorAdapterActorId);
 
         default:
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,

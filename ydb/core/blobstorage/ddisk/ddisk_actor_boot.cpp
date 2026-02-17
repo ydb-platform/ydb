@@ -7,7 +7,8 @@ namespace NKikimr::NDDisk {
         STLOG(PRI_DEBUG, BS_DDISK, BSDD01, "TDDiskActor::InitPDiskInterface", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
 
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
-            Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId));
+            Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
+            0 /*groupSizeInUnits*/, true /*getDiskFd*/));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
@@ -20,6 +21,12 @@ namespace NKikimr::NDDisk {
 
         PDiskParams = std::move(msg.PDiskParams);
         OwnedChunksOnBoot = std::move(msg.OwnedChunks);
+        DiskFd = std::move(msg.DiskFd);
+        if (!DiskFd.IsOpen()) {
+            STLOG(PRI_INFO, BS_DDISK, BSDD17,
+                "TDDiskActor::Handle(TEvYardInitResult) DiskFd is invalid, all further I/O will be routed through PDisk",
+                (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
+        }
 
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;

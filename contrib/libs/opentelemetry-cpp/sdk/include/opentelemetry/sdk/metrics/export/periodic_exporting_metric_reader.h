@@ -62,7 +62,6 @@ private:
 
   /* The background worker thread */
   std::shared_ptr<sdk::common::ThreadInstrumentation> worker_thread_instrumentation_;
-  std::shared_ptr<sdk::common::ThreadInstrumentation> collect_thread_instrumentation_;
   std::thread worker_thread_;
 };
 

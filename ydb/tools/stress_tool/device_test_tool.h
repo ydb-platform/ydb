@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/tools/stress_tool/proto/device_perf_test.pb.h>
 #include <ydb/library/actors/core/probes.h>
 
@@ -13,6 +14,8 @@
 
 #include <util/generic/map.h>
 #include <util/stream/str.h>
+#include <util/string/cast.h>
+#include <util/string/split.h>
 
 #include <algorithm>
 #include <cmath>
@@ -588,6 +591,7 @@ struct TPerfTestConfig {
     ui32 RunCount;
     ui32 InFlightFrom = 0; // 0 means not specified
     ui32 InFlightTo = 0;   // 0 means not specified
+    TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
 
     TMap<const TString, NPDisk::EDeviceType> DeviceStrToType {
         {"ROT",  NPDisk::DEVICE_TYPE_ROT},
@@ -622,6 +626,26 @@ struct TPerfTestConfig {
             OutputFormat = it_format->second;
         } else {
             OutputFormat = TResultPrinter::OUTPUT_FORMAT_WIKI;
+        }
+
+        // Path scheme: "SectorMap:unique_name[:size_gb[:disk_mode]]"
+        // e.g. "SectorMap:test:64" or "SectorMap:test:64:SSD"
+        if (Path.Contains(":")) {
+            TVector<TString> splitted;
+            Split(Path, ":", splitted);
+            if (splitted.size() >= 2 && splitted[0] == "SectorMap") {
+                ui32 defaultSizeGb = 100;
+                ui64 size = (ui64)defaultSizeGb << 30;
+                if (splitted.size() >= 3) {
+                    size = (ui64)FromStringWithDefault<ui32>(splitted[2], defaultSizeGb) << 30;
+                }
+                auto diskMode = NPDisk::NSectorMap::DM_NONE;
+                if (splitted.size() >= 4) {
+                    diskMode = NPDisk::NSectorMap::DiskModeFromString(splitted[3]);
+                }
+                SectorMap = MakeIntrusive<NPDisk::TSectorMap>(size, diskMode);
+                SectorMap->ZeroInit(1000);
+            }
         }
     }
 

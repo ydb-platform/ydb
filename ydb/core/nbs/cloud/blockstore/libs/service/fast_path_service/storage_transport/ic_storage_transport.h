@@ -1,7 +1,7 @@
 #pragma once
 
-#include "storage_transport.h"
 #include "ic_storage_transport_events.h"
+#include "storage_transport.h"
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
@@ -9,10 +9,11 @@ namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TICStorageTransport : public IStorageTransport
+class TICStorageTransport: public IStorageTransport
 {
 private:
     NActors::TActorId ICStorageTransportActorId;
+
 public:
     TICStorageTransport();
 
@@ -20,42 +21,38 @@ public:
 
     NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvConnectResult> Connect(
         const NActors::TActorId serviceId,
-        const NKikimr::NDDisk::TQueryCredentials credentials,
-        const ui64 requestId) override;
+        const NKikimr::NDDisk::TQueryCredentials credentials) override;
 
-    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult> WritePersistentBuffer(
+    NThreading::TFuture<
+        NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>
+    WritePersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         TGuardedSgList data,
-        const ui64 requestId) override;
+        NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> FlushPersistentBuffer(
+    NThreading::TFuture<
+        NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
+    ErasePersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,
         const ui64 lsn,
-        const std::tuple<ui32, ui32, ui32> ddiskId,
-        const ui64 ddiskInstanceGuid,
-        const ui64 requestId) override;
+        NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> ErasePersistentBuffer(
-        const NActors::TActorId serviceId,
-        const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const ui64 lsn,
-        const ui64 requestId) override;
-
-    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult> ReadPersistentBuffer(
+    NThreading::TFuture<
+        NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>
+    ReadPersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,
         const ui64 lsn,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
-        const ui64 requestId) override;
+        NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> Read(
         const NActors::TActorId serviceId,
@@ -63,7 +60,18 @@ public:
         const NKikimr::NDDisk::TBlockSelector selector,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
-        const ui64 requestId) override;
+        NWilson::TTraceId traceId) override;
+
+    NThreading::TFuture<
+        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
+    SyncWithPersistentBuffer(
+        const NActors::TActorId serviceId,
+        const NKikimr::NDDisk::TQueryCredentials credentials,
+        const NKikimr::NDDisk::TBlockSelector selector,
+        const ui64 lsn,
+        const std::tuple<ui32, ui32, ui32> ddiskId,
+        const ui64 ddiskInstanceGuid,
+        NWilson::TTraceId traceId) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -72,20 +80,25 @@ class TICStorageTransportActor
     : public NActors::TActorBootstrapped<TICStorageTransportActor>
 {
 private:
-    using TPrivateEvents = std::variant<
-        TEvICStorageTransportPrivate::TEvConnect,
-        TEvICStorageTransportPrivate::TEvWritePersistentBuffer,
-        TEvICStorageTransportPrivate::TEvFlushPersistentBuffer,
-        TEvICStorageTransportPrivate::TEvErasePersistentBuffer,
-        TEvICStorageTransportPrivate::TEvReadPersistentBuffer,
-        TEvICStorageTransportPrivate::TEvRead
-    >;
+    ui64 RequestIdGenerator = 0;
 
-    std::unordered_map<ui64, TPrivateEvents> PrivateEventsByRequestId;
+    TMap<ui64, TEvICStorageTransportPrivate::TEvConnect>
+        ConnectEventsByRequestId;
+    TMap<ui64, TEvICStorageTransportPrivate::TEvWritePersistentBuffer>
+        WritePersistentBufferEventsByRequestId;
+    TMap<ui64, TEvICStorageTransportPrivate::TEvErasePersistentBuffer>
+        ErasePersistentBufferEventsByRequestId;
+    TMap<ui64, TEvICStorageTransportPrivate::TEvReadPersistentBuffer>
+        ReadPersistentBufferEventsByRequestId;
+    TMap<ui64, TEvICStorageTransportPrivate::TEvRead> ReadEventsByRequestId;
+    TMap<ui64, TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer>
+        SyncEventsByRequestId;
+
 public:
     TICStorageTransportActor() = default;
 
     void Bootstrap(const NActors::TActorContext& ctx);
+
 private:
     STFUNC(StateWork);
 
@@ -103,14 +116,6 @@ private:
 
     void HandleWritePersistentBufferResult(
         const NKikimr::NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
-        const NActors::TActorContext& ctx);
-
-    void HandleFlushPersistentBuffer(
-        const TEvICStorageTransportPrivate::TEvFlushPersistentBuffer::TPtr& ev,
-        const NActors::TActorContext& ctx);
-
-    void HandleFlushPersistentBufferResult(
-        const NKikimr::NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleErasePersistentBuffer(
@@ -135,6 +140,15 @@ private:
 
     void HandleReadResult(
         const NKikimr::NDDisk::TEvReadResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSyncWithPersistentBuffer(
+        const TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer::TPtr&
+            ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSyncWithPersistentBufferResult(
+        const NKikimr::NDDisk::TEvSyncWithPersistentBufferResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 };
 

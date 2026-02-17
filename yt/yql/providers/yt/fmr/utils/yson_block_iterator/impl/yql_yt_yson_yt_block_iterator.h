@@ -22,10 +22,10 @@ public:
     using TPtr = TIntrusivePtr<TYtBlockIterator>;
 
     explicit TYtBlockIterator(
-        TVector<NYT::TRawTableReaderPtr> partReaders,
-        TVector<TString> keyColumns,
+        std::vector<NYT::TRawTableReaderPtr> partReaders,
+        std::vector<TString> keyColumns,
         TYtBlockIteratorSettings settings,
-        TVector<ESortOrder> sortOrders = {},
+        std::vector<ESortOrder> sortOrders = {},
         TMaybe<bool> isFirstRowKeysInclusive = Nothing(),
         TMaybe<TString> firstRowKeys = Nothing(),
         TMaybe<TString> lastRowKeys = Nothing()
@@ -37,13 +37,13 @@ public:
 
 private:
     bool RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const;
-    TVector<TRowIndexMarkup> FilterRowsInKeyBounds(const TString& blob, const TVector<TRowIndexMarkup>& rows) const;
+    std::vector<TRowIndexMarkup> FilterRowsInKeyBounds(const TString& blob, const std::vector<TRowIndexMarkup>& rows) const;
 
 private:
-    const TVector<NYT::TRawTableReaderPtr> PartReaders_;
-    const TVector<TString> KeyColumns_;
+    const std::vector<NYT::TRawTableReaderPtr> PartReaders_;
+    const std::vector<TString> KeyColumns_;
     const TYtBlockIteratorSettings Settings_;
-    TVector<ESortOrder> SortOrders_;
+    std::vector<ESortOrder> SortOrders_;
     ui64 CurrentPart_ = 0;
 
     // Streaming state for current part.

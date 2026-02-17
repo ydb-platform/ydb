@@ -1824,7 +1824,7 @@ private:
 
     void InitSharedReading() {
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-        if (!streamingQueries.HasExternalStorage() || !FederatedQuerySetup || RowDispatcherService) {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || RowDispatcherService) {
             return;
         }
 

@@ -1,5 +1,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -9,8 +10,7 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
-    Y_UNIT_TEST(Create) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Create, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<TString> userAttrsKeys{"AttrA1", "AttrA2"};
             TUserAttrs userAttrs{{"AttrA1", "ValA1"}, {"AttrA2", "ValA2"}};
@@ -57,8 +57,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DeclareAndDefine) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DeclareAndDefine, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<TString> userAttrsKeys{"AttrA1", "AttrA2"};
             TUserAttrs userAttrs{{"AttrA1", "ValA1"}, {"AttrA2", "ValA2"}};
@@ -106,8 +105,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateWithStoragePools) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateWithStoragePools, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             {
@@ -151,8 +149,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(RootWithStoragePools) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RootWithStoragePools, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -191,8 +188,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(RootWithStoragePoolsAndTable) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RootWithStoragePoolsAndTable, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -242,8 +238,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(Delete) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Delete, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             TLocalPathId subdomainPathId;
@@ -288,8 +283,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DeleteWithStoragePools) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DeleteWithStoragePools, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             TLocalPathId subdomainPathId;
@@ -342,8 +336,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropSplittedTabletInsideWithStoragePools) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropSplittedTabletInsideWithStoragePools, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             TLocalPathId subdomainPathId;
@@ -448,8 +441,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(SplitTabletInsideWithStoragePools) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitTabletInsideWithStoragePools, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             {
@@ -532,8 +524,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateTabletInsideWithStoragePools) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateTabletInsideWithStoragePools, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             {
@@ -593,11 +584,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 }
 
 Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
-    Y_UNIT_TEST(Fake) {
-    }
-
-    Y_UNIT_TEST(ForceDelete) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDelete, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TLocalPathId subdomainPathId;
             {
@@ -633,8 +620,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(ForceDeleteCreateSubdomainInfly) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDeleteCreateSubdomainInfly, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TLocalPathId subdomainPathId;
             {
@@ -664,8 +650,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(ForceDeleteCreateTableInFlyWithRebootAtCommit) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDeleteCreateTableInFlyWithRebootAtCommit, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             TLocalPathId subdomainPathId;
@@ -716,8 +701,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(ForceDeleteCreateTableInFly) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDeleteCreateTableInFly, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             TLocalPathId subdomainPathId;
@@ -768,8 +752,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(ForceDeleteSplitInFly) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDeleteSplitInFly, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             TLocalPathId subdomainPathId;
@@ -838,8 +821,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(ForceDropDeleteInFly) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDropDeleteInFly, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             TLocalPathId subdomainPathId;
@@ -903,8 +885,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DoNotLostDeletedTablets) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DoNotLostDeletedTablets, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -974,8 +955,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(PathsAndShardsCountersSimultaneousAlterSubDomain) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(PathsAndShardsCountersSimultaneousAlterSubDomain, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

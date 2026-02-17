@@ -43,6 +43,9 @@ TExprBase SelectFields(TExprBase node, Container fields, TExprContext& ctx, TPos
 }
 
 TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx) {
+    if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
+        return node;
+    }
     auto maybeReturning = node.Maybe<TKqlReturningList>();
     if (!maybeReturning) {
         return node;
@@ -233,7 +236,10 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
     return node;
 }
 
-TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
+TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
+        return node;
+    }
     auto upsert = node.Cast<TKqlUpsertRows>();
     if (upsert.ReturningColumns().Empty()) {
         return node;
@@ -257,7 +263,10 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
             .Done();
 }
 
-TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
+TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
+        return node;
+    }
     auto del = node.Cast<TKqlDeleteRows>();
     if (del.ReturningColumns().Empty()) {
         return node;

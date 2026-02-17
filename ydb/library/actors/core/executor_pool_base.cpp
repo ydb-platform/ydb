@@ -51,12 +51,7 @@ namespace NActors {
     }
 #endif
 
-    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
-        : TExecutorPoolBaseMailboxed(poolId)
-        , PoolThreads(threads)
-        , UseRingQueueValue(useRingQueue)
-        , ThreadsAffinity(affinity)
-    {
+    TTaskPool::TTaskPool(ui64 threads, bool useRingQueue) {
         if (useRingQueue) {
             Activations.emplace<TRingActivationQueueV4>(threads);
         } else {
@@ -64,9 +59,23 @@ namespace NActors {
         }
     }
 
+    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue, bool useTaskPools)
+        : TExecutorPoolBaseMailboxed(poolId)
+        , PoolThreads(threads)
+        , UseRingQueueValue(useRingQueue)
+        , ThreadsAffinity(affinity)
+    {
+        do {
+            TaskPools.emplace_back(PoolThreads, useRingQueue);
+            threads -= ThreadsForTaskPool;
+        } while (threads > 0 && useTaskPools);
+    }
+
     TExecutorPoolBase::~TExecutorPoolBase() {
-        while (std::visit([](auto &x){return x.Pop(0);}, Activations))
-            ;
+        for (auto &taskPool : TaskPools) {
+            while (std::visit([](auto &x){return x.Pop(0);}, taskPool.Activations))
+                ;
+        }}
     }
 
     TMailbox* TExecutorPoolBaseMailboxed::ResolveMailbox(ui32 hint) {

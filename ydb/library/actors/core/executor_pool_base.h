@@ -8,6 +8,7 @@
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 //#define RING_ACTIVATION_QUEUE
 
@@ -48,19 +49,27 @@ namespace NActors {
         TMailboxTable* GetMailboxTable() const override;
     };
 
+    struct TTaskPool {
+        using TUnorderedCacheActivationQueue = TUnorderedCache<ui32, 512, 4>;
+
+        alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV4> Activations;
+        alignas(64) std::atomic<ui64> Semaphore = 0;
+        alignas(64) std::atomic<ui64> ActivationsRevolvingCounter = 0;
+
+        TTaskPool(ui64 threads, bool useRingQueue);
+    };
+
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
     protected:
-        using TUnorderedCacheActivationQueue = TUnorderedCache<ui32, 512, 4>;
+        static constexpr ui64 ThreadsForTaskPool = 4;
 
         const i16 PoolThreads;
         const bool UseRingQueueValue;
         alignas(64) TIntrusivePtr<TAffinity> ThreadsAffinity;
-        alignas(64) TAtomic Semaphore = 0;
-        alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV4> Activations;
-        TAtomic ActivationsRevolvingCounter = 0;
-        std::atomic_bool StopFlag = false;
+        alignas(64) TStackVec<TTaskPool, 4> TaskPools;
+        alignas(64) std::atomic_bool StopFlag = false;
     public:
-        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue);
+        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue, bool useTaskPools=false);
         ~TExecutorPoolBase();
         void ScheduleActivation(TMailbox* mailbox) override;
         void SpecificScheduleActivation(TMailbox* mailbox) override;

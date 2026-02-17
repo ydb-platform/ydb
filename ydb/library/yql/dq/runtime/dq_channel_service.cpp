@@ -102,13 +102,6 @@ void TLocalBuffer::Push(TDataChunk&& data) {
             FinishPushed = true;
         }
 
-        if (PushStats.CollectBasic()) {
-            PushStats.Chunks++;
-            PushStats.Rows += data.Rows;
-            PushStats.Bytes += data.Bytes;
-            PushStats.Resume();
-        }
-
         (*Registry->LocalBufferChunks)++;
         *Registry->LocalBufferBytes += data.Bytes;
         PushDataChunk(std::move(data));
@@ -117,6 +110,13 @@ void TLocalBuffer::Push(TDataChunk&& data) {
 
 void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     std::lock_guard lock(Mutex);
+
+    if (PushStats.CollectBasic()) {
+        PushStats.Chunks++;
+        PushStats.Rows += data.Rows;
+        PushStats.Bytes += data.Bytes;
+        PushStats.Resume();
+    }
 
     EDqFillLevel fillLevel = FillLevel;
 

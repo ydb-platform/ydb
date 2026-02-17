@@ -2,7 +2,7 @@
 
 #include <util/stream/str.h>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -121,4 +121,4 @@ TString TRangeMap::DumpRanges() const
     return ss.Str();
 }
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

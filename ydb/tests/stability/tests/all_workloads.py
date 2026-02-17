@@ -159,7 +159,7 @@ def _init_stress_utils():
 
     for config_preset in ['common_channel_read', 'inline_channel_read', 'write_read_delete']:
         _all_stress_utils[f'KVVolume_{config_preset}'] = {
-            'args': ["--endpoint", "grpc://{node_host}:2135", '--in-flight', '3', '--config-name', config_preset],
+            'args': ["--endpoint", "grpc://{node_host}:2135", '--in-flight', '3', '--version', 'v1', '--config-name', config_preset],
             'local_path': 'ydb/tests/stress/kv_volume/workload_keyvalue_volume'
         }
 

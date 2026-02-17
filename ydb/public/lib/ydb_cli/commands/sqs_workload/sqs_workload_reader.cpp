@@ -75,9 +75,9 @@ namespace NYdb::NConsoleClient {
             deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_DELETE_MESSAGE_BATCH);
 
-            if (params.SetSubjectToken) {
+            if (params.SetSubjectToken && params.Token.Defined()) {
                 deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
+                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token->c_str());
             }
 
             auto deleteMessageBatchOutcome =
@@ -156,15 +156,15 @@ namespace NYdb::NConsoleClient {
             receiveMessageRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_RECEIVE_MESSAGE);
 
-            if (params.SetSubjectToken) {
+            if (params.SetSubjectToken && params.Token.Defined()) {
                 receiveMessageRequest.SetAdditionalCustomHeaderValue(
-                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
+                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token->c_str());
             }
 
             {
                 std::unique_lock locker(*params.Mutex);
-                // Concurrency tasks are running in parallel and also Concurrency tasks are waiting in executor queue
-                while (*params.StartedCount >= params.Concurrency * 2) {
+                // WorkersCount tasks are running in parallel and also WorkersCount tasks are waiting in executor queue
+                while (*params.StartedCount >= params.WorkersCount * 2) {
                     params.FinishedCond->wait(locker);
                 }
 

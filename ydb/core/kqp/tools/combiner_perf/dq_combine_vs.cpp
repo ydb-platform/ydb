@@ -7,6 +7,7 @@
 #include "kqp_setup.h"
 
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/preallocated_spiller.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_rh_hash.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -104,7 +105,7 @@ TStreamValues GenerateSample(size_t numKeys, size_t numRows, const std::vector<T
     return result;
 }
 
-size_t CountStreamOutputs(const NUdf::TUnboxedValue& wideStream, size_t width)
+size_t CountStreamOutputs(const NUdf::TUnboxedValue& wideStream, size_t width, bool sleepOnYield)
 {
     std::vector<TUnboxedValue> resultValues;
     resultValues.resize(width);
@@ -116,13 +117,15 @@ size_t CountStreamOutputs(const NUdf::TUnboxedValue& wideStream, size_t width)
     while ((fetchStatus = wideStream.WideFetch(resultValues.data(), width)) != NUdf::EFetchStatus::Finish) {
         if (fetchStatus == NUdf::EFetchStatus::Ok) {
             ++lineCount;
+        } else if (sleepOnYield) {
+            ::Sleep(TDuration::MilliSeconds(1));
         }
     }
 
     return lineCount;
 }
 
-size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const std::vector<TFieldDescr>& keyFields, size_t width, TVerificationReferenceData& data)
+size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const std::vector<TFieldDescr>& keyFields, size_t width, TVerificationReferenceData& data, bool sleepOnYield)
 {
     std::vector<TUnboxedValue> resultValues;
     Cerr << "collect width: " << width << Endl;
@@ -135,6 +138,9 @@ size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const std::ve
     NUdf::EFetchStatus fetchStatus;
     while ((fetchStatus = wideStream.WideFetch(resultValues.data(), width)) != NUdf::EFetchStatus::Finish) {
         if (fetchStatus == NUdf::EFetchStatus::Yield) {
+            if (sleepOnYield) {
+                ::Sleep(TDuration::MilliSeconds(1));
+            }
             continue;
         }
 
@@ -343,186 +349,14 @@ std::vector<TType*> FieldDescrToTypes(const std::vector<TFieldDescr>& fds, TProg
     return result;
 }
 
-using TTestEqualsFunc = std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
-using TTestHashFunc = std::function<NUdf::THashType(const NUdf::TUnboxedValuePod*)>;
-
-struct TTestWideUnboxedEqual {
-    TTestWideUnboxedEqual(const TKeyTypes& types, ui64& calls)
-        : Types(types)
-        , Calls(calls)
-    {}
-
-    bool operator()(const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
-        Calls += 1;
-        for (ui32 i = 0U; i < Types.size(); ++i)
-            if (CompareValues(Types[i].first, true, Types[i].second, left[i], right[i]))
-                return false;
-        return true;
-    }
-
-    const TKeyTypes& Types;
-    ui64& Calls;
-};
-
-struct TTestWideUnboxedHasher {
-    TTestWideUnboxedHasher(const TKeyTypes& types, ui64& calls)
-        : Types(types)
-        , Calls(calls)
-    {}
-
-    NUdf::THashType operator()(const NUdf::TUnboxedValuePod* values) const {
-        Calls += 1;
-
-        if (Types.size() == 1U)
-            if (const auto v = *values)
-                return NUdf::GetValueHash(Types.front().first, v);
-            else
-                return HashOfNull;
-
-        NUdf::THashType hash = 0ULL;
-        for (const auto& type : Types) {
-            if (const auto v = *values++)
-                hash = CombineHashes(hash, NUdf::GetValueHash(type.first, v));
-            else
-                hash = CombineHashes(hash, HashOfNull);
-        }
-        return hash;
-    }
-
-    const TKeyTypes& Types;
-    ui64& Calls;
-};
-
-
-struct TCachedHasher {
-    TCachedHasher(const TKeyTypes& types, const NUdf::THashType& cache, ui64& calls, ui64& rawHashCalls)
-        : Types(types)
-        , Cache(cache)
-        , Calls(calls)
-        , RawHashCalls(rawHashCalls)
-    {}
-
-
-    NUdf::THashType operator()(const NUdf::TUnboxedValuePod* values) const {
-        /*RawHashCalls += 1;
-        if (Cache != 0) {
-            return Cache;
-        }
-        Calls += 1;*/
-        if (Types.size() == 1U)
-            if (const auto v = *values)
-                return NUdf::GetValueHash(Types.front().first, v);
-            else
-                return HashOfNull;
-
-        NUdf::THashType hash = 0ULL;
-        for (const auto& type : Types) {
-            if (const auto v = *values++)
-                hash = CombineHashes(hash, NUdf::GetValueHash(type.first, v));
-            else
-                hash = CombineHashes(hash, HashOfNull);
-        }
-        return hash;
-    }
-
-    const TKeyTypes& Types;
-    const NUdf::THashType& Cache;
-    ui64& Calls;
-    ui64& RawHashCalls;
-};
-
-template<bool WithBuckets>
-TRunResult RunHashMapTest(
-    const TRunParams& params,
-    const std::vector<TFieldDescr>& keyFields,
-    const std::vector<TFieldDescr>& valueFields
-)
-{
-    Cerr << "cache hash: " << !std::is_arithmetic<TUnboxedValuePod*>::value << Endl;
-
-    TKqpSetup<false, false> setup(GetPerfTestFactory());
-    TStreamValues inputData = GenerateSample(params.NumKeys, params.RowsPerRun, keyFields, valueFields, nullptr);
-    auto ii = inputData.begin();
-    const auto end = inputData.end();
-    const ui32 stride = keyFields.size() + valueFields.size();
-
-    using TMap = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TTestWideUnboxedEqual, TTestWideUnboxedHasher, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
-    using TMapWithCachedHash = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TTestWideUnboxedEqual, TCachedHasher, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
-
-    TKeyTypes keyTypes;
-    for (const auto& key : keyFields) {
-        if (key.IsString) {
-            keyTypes.emplace_back(NUdf::EDataSlot::String, false);
-        } else {
-            keyTypes.emplace_back(NUdf::EDataSlot::Uint64, false);
-        }
-    }
-
-    ui64 hashCalls = 0;
-    ui64 rawHashCalls = 0;
-    ui64 eqCalls = 0;
-
-    TTestWideUnboxedHasher hasher(keyTypes, hashCalls);
-    TTestWideUnboxedEqual eq(keyTypes, eqCalls);
-
-    TDuration timeStart = TDuration::Zero();
-    TDuration timeDelta = TDuration::Zero();
-
-    if constexpr (!WithBuckets) {
-        std::unique_ptr<TMap> map = std::make_unique<TMap>(hasher, eq, 8_MB);
-        Cerr << map->GetCapacity() << Endl;
-
-        timeStart = GetThreadCPUTime();
-        while (ii != end) {
-            bool isNew = false;
-            map->Insert(ii, isNew);
-            ii += stride;
-        }
-        timeDelta = GetThreadCPUTimeDelta(timeStart);
-        Cerr << "Map size: " << map->GetSize() << Endl;
-    } else {
-        std::vector<std::unique_ptr<TMapWithCachedHash>> maps;
-        maps.reserve(16);
-        ui64 cachedHash = 0;
-        TCachedHasher cachedHasher(keyTypes, cachedHash, hashCalls, rawHashCalls);
-        for (ui32 i = 0; i < 16; ++i) {
-            maps.emplace_back(std::make_unique<TMapWithCachedHash>(cachedHasher, eq, 8_MB / 16));
-            Cerr << maps.back()->GetCapacity() << Endl;
-        }
-
-        timeStart = GetThreadCPUTime();
-        while (ii != end) {
-            bool isNew = false;
-            cachedHash = cachedHasher(ii);
-            ui64 bucket = (cachedHash * 11400714819323198485llu) & (0xFull);
-            auto& map = maps[bucket];
-            map->Insert(ii, isNew);
-            cachedHash = 0;
-            ii += stride;
-        }
-        timeDelta = GetThreadCPUTimeDelta(timeStart);
-
-        for (auto& map : maps) {
-            Cerr << "Map size: " << map->GetSize() << Endl;
-        }
-    }
-
-    Cerr << "Hash calls: " << hashCalls << Endl;
-    Cerr << "Raw hash calls: " << rawHashCalls << Endl;
-    Cerr << "Eq calls: " << hashCalls << Endl;
-
-    TRunResult result;
-    result.ResultTime = timeDelta;
-    return result;
-}
-
 template<bool LLVM, bool Spilling = true>
 TRunResult RunTestOverGraph(
     const TRunParams& params,
     const std::vector<TFieldDescr>& keyFields,
     const std::vector<TFieldDescr>& valueFields,
     const bool doVerification,
-    const bool measureReference)
+    const bool measureReference,
+    const bool slowSpilling = false)
 {
     TKqpSetup<LLVM, Spilling> setup(GetPerfTestFactory());
 
@@ -530,7 +364,11 @@ TRunResult RunTestOverGraph(
 
     NYql::NLog::InitLogger("cerr", false);
 
-    std::shared_ptr<TPreallocatedSpillerFactory> spillerFactory = Spilling ? std::make_shared<TPreallocatedSpillerFactory>() : nullptr;
+    std::shared_ptr<TPreallocatedSpillerFactory> realSpillerFactory = Spilling ? std::make_shared<TPreallocatedSpillerFactory>() : nullptr;
+    std::shared_ptr<ISpillerFactory> spillerFactory = realSpillerFactory;
+    if (realSpillerFactory && slowSpilling) {
+        spillerFactory = std::make_shared<TSlowSpillerFactory>(spillerFactory);
+    }
 
     TVerificationReferenceData referenceData;
     TVerificationReferenceData collectedData;
@@ -539,10 +377,10 @@ TRunResult RunTestOverGraph(
         doVerification ? &referenceData : nullptr);
 
     auto makeStream = [&]() -> THolder<NUdf::TBoxedValue> {
-        size_t yellowZoneTrigger = Spilling ? 1000000 : 0;
+        size_t yellowZoneTrigger = Spilling ? 1000000 : std::numeric_limits<size_t>::max();
         return MakeHolder<TPrebuiltStream>(inputData, keyFields.size() + valueFields.size(), params.NumRuns, yellowZoneTrigger, [&](){
-            //Cerr << "Enabling yellow zone" << Endl;
-            //setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            Cerr << "Enabling yellow zone" << Endl;
+            setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
         });
     };
 
@@ -551,17 +389,17 @@ TRunResult RunTestOverGraph(
         const auto graphTimeStart = GetThreadCPUTime();
         size_t lineCount;
         if (!doVerification) {
-            lineCount = CountStreamOutputs(computeGraphPtr->GetValue(), keyFields.size() + valueFields.size());
+            lineCount = CountStreamOutputs(computeGraphPtr->GetValue(), keyFields.size() + valueFields.size(), slowSpilling);
             Cerr << "Output row count: " << lineCount << Endl;
         } else {
-            lineCount = CollectStreamOutputs(computeGraphPtr->GetValue(), keyFields, keyFields.size() + valueFields.size(), collectedData);
+            lineCount = CollectStreamOutputs(computeGraphPtr->GetValue(), keyFields, keyFields.size() + valueFields.size(), collectedData, slowSpilling);
             Cerr << "Output row count: " << lineCount << Endl;
             Cerr << "Output distinct value count: " << collectedData.size() << Endl;
         }
 
         auto duration = GetThreadCPUTimeDelta(graphTimeStart);
-        if (spillerFactory) {
-            for (auto& spiller : spillerFactory->GetCreatedSpillers()) {
+        if (realSpillerFactory) {
+            for (auto& spiller : realSpillerFactory->GetCreatedSpillers()) {
                 auto preallocSpiller = dynamic_cast<TPreallocatedSpiller*>(spiller.get());
                 if (!preallocSpiller) {
                     continue;
@@ -571,7 +409,7 @@ TRunResult RunTestOverGraph(
                 auto putAmount = std::accumulate(preallocSpiller->GetPutSizes().begin(), preallocSpiller->GetPutSizes().end(), 0ull);
                 Cerr << "\"Written\" MB: " << putAmount / 1_MB << Endl;
             }
-            spillerFactory->ForgetSpillers();
+            realSpillerFactory->ForgetSpillers();
         }
         return duration;
     };
@@ -683,14 +521,6 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
     std::optional<TRunResult> finalResult;
 
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", llvm: " << LLVM << ", mem limit: " << params.WideCombinerMemLimit << Endl;
-
-    /*
-    finalResult = RunHashMapTest<false>(params, keyFields, valueFields);
-    printout.SubmitMetrics(params, *finalResult, "DqHashCombine", LLVM);
-    if (true) {
-        return;
-    }
-    */
 
     if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
         finalResult = RunTestOverGraph<LLVM, Spilling>(params, keyFields, valueFields, false, false);

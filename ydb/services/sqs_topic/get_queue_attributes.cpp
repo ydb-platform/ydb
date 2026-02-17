@@ -168,10 +168,13 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            if (ReplyIfNotTopic(ev)) {
-                return;
-            }
+            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             const auto& response = result->ResultSet.front();
+            if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+                return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
+                                                std::format("The specified queue doesn't exist")));
+            }
+
             Y_ABORT_UNLESS(response.PQGroupInfo);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;

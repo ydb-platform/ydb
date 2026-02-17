@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/library/login/protos/login.pb.h>
 #include <util/generic/string.h>
 
 #ifndef LDAP_NO_ATTRS
@@ -20,11 +21,13 @@ enum class EOption {
     DEBUG,
     TLS_CACERTFILE,
     TLS_CACERTDIR,
+    TLS_CERTFILE,
+    TLS_KEYFILE,
     TLS_REQUIRE_CERT,
     PROTOCOL_VERSION,
 };
 
-int Bind(LDAP* ld, const TString& dn, const TString& password);
+int Bind(LDAP* ld, const TString& dn, const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism, std::vector<char>* credentials);
 int Unbind(LDAP* ld);
 int Init(LDAP** ld, const TString& scheme, const TString& uris, ui32 port);
 int Search(LDAP* ld,

@@ -1,4 +1,5 @@
 #include "yt_codec.h"
+#include "yt_codec_tz.h"
 
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
@@ -705,6 +706,66 @@ T ReadYsonFloatNumberInTableFormat(char cmd, NCommon::TInputBuf& buf) {
     return dbl;
 }
 
+namespace {
+
+// YT format
+template<typename T>
+NUdf::TUnboxedValuePod ReadTz(bool native, NCommon::TInputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    TLayout value;
+    ui16 tzId;
+    if (native) {
+        ReadTzNative<T>(buf, value, tzId);
+    } else {
+        YQL_ENSURE(ReadTzYql<T>(buf, value, tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid payload length");
+    }
+    YQL_ENSURE(NUdf::IsValidLayoutValue<T>(value), "Failed to read " << NUdf::TDataType<T>::Slot << ": time value " << value << " is invalid");
+    YQL_ENSURE(NKikimr::NMiniKQL::IsValidTimezoneId(tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid time zone id " << tzId);
+    NUdf::TUnboxedValuePod result(value);
+    result.SetTimezoneId(tzId);
+    return result;
+}
+
+template<typename T>
+void WriteTz(bool native, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    if (native) {
+        WriteTzNative<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    } else {
+        WriteTzYql<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    }
+}
+
+// table format
+template<typename T>
+NUdf::TUnboxedValuePod ReadTzTable(bool native, NCommon::TInputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    TLayout value;
+    ui16 tzId;
+    if (native) {
+        YQL_ENSURE(ReadTzTableNative<T>(buf, value, tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid timezone string");
+    } else {
+        YQL_ENSURE(ReadTzYqlTable<T>(buf, value, tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid payload length");
+        YQL_ENSURE(NKikimr::NMiniKQL::IsValidTimezoneId(tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid time zone id " << tzId);
+    }
+    YQL_ENSURE(NUdf::IsValidLayoutValue<T>(value), "Failed to read " << NUdf::TDataType<T>::Slot << ": time value " << value << " is invalid");
+    NUdf::TUnboxedValuePod result(value);
+    result.SetTimezoneId(tzId);
+    return result;
+}
+
+template<typename T>
+void WriteTzTable(bool native, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    if (native) {
+        WriteTzTableNative<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    } else {
+        WriteTzYqlTable<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    }
+}
+
+}
+
 NUdf::TUnboxedValue ReadYsonValueInTableFormat(TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, char cmd, NCommon::TInputBuf& buf) {
     switch (type->GetKind()) {
@@ -900,38 +961,17 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormat(TType* type, ui64 nativeYtTypeFla
             CHECK_EXPECTED(cmd, Int64Marker);
             return NUdf::TUnboxedValuePod(buf.ReadVarI64());
 
-        case NUdf::TDataType<NUdf::TTzDate>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            ui16 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzDate(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzDate>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, buf);
 
-        case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            ui32 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzDatetime(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, buf);
 
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            ui64 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzTimestamp(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, buf);
 
         case NUdf::TDataType<NUdf::TDate32>::Id:
             CHECK_EXPECTED(cmd, Int64Marker);
@@ -947,38 +987,17 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormat(TType* type, ui64 nativeYtTypeFla
             return ValueFromString(EDataSlot::JsonDocument, ReadNextString(cmd, buf));
         }
 
-        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            i32 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzDate32(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
 
-        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            i64 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzDatetime64(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
 
-        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-            auto nextString = ReadNextString(cmd, buf);
-            NUdf::TUnboxedValuePod data;
-            i64 value;
-            ui16 tzId = 0;
-            YQL_ENSURE(DeserializeTzTimestamp64(nextString, value, tzId));
-            data = NUdf::TUnboxedValuePod(value);
-            data.SetTimezoneId(tzId);
-            return data;
-        }
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
 
         default:
             YQL_ENSURE(false, "Unsupported data type: " << schemeType);
@@ -1530,71 +1549,29 @@ void WriteYsonValueInTableFormat(NCommon::TOutputBuf& buf, TType* type, ui64 nat
             buf.WriteVarI64(value.Get<i32>());
             break;
 
-        case NUdf::TDataType<NUdf::TTzDate>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui16 data = SwapBytes(value.Get<ui16>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzDate>::Id:
+            WriteTzTable<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui32 data = SwapBytes(value.Get<ui32>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            WriteTzTable<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui64 data = SwapBytes(value.Get<ui64>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            WriteTzTable<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui32 data = 0x80 ^ SwapBytes((ui32)value.Get<i32>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            WriteTzTable<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            WriteTzTable<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
             break;
-        }
 
-        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-            ui16 tzId = SwapBytes(value.GetTimezoneId());
-            ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
-            ui32 size = sizeof(data) + sizeof(tzId);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany((const char*)&data, sizeof(data));
-            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+            WriteTzTable<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
             break;
-        }
 
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             buf.Write(StringMarker);
@@ -2245,50 +2222,18 @@ NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, NCommon::
         }
     }
 
-    case NUdf::TDataType<NUdf::TTzDate>::Id: {
-        ui32 size;
-        buf.ReadMany((char*)&size, sizeof(size));
-        CHECK_STRING_LENGTH_UNSIGNED(size);
-        auto& vec = buf.YsonBuffer();
-        vec.resize(size);
-        buf.ReadMany(vec.data(), size);
-        ui16 value;
-        ui16 tzId;
-        YQL_ENSURE(DeserializeTzDate(TStringBuf(vec.begin(), vec.end()), value, tzId));
-        auto data = NUdf::TUnboxedValuePod(value);
-        data.SetTimezoneId(tzId);
-        return data;
-    }
-
-    case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-        ui32 size;
-        buf.ReadMany((char*)&size, sizeof(size));
-        CHECK_STRING_LENGTH_UNSIGNED(size);
-        auto& vec = buf.YsonBuffer();
-        vec.resize(size);
-        buf.ReadMany(vec.data(), size);
-        ui32 value;
-        ui16 tzId;
-        YQL_ENSURE(DeserializeTzDatetime(TStringBuf(vec.begin(), vec.end()), value, tzId));
-        auto data = NUdf::TUnboxedValuePod(value);
-        data.SetTimezoneId(tzId);
-        return data;
-    }
-
-    case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-        ui32 size;
-        buf.ReadMany((char*)&size, sizeof(size));
-        CHECK_STRING_LENGTH_UNSIGNED(size);
-        auto& vec = buf.YsonBuffer();
-        vec.resize(size);
-        buf.ReadMany(vec.data(), size);
-        ui64 value;
-        ui16 tzId;
-        YQL_ENSURE(DeserializeTzTimestamp(TStringBuf(vec.begin(), vec.end()), value, tzId));
-        auto data = NUdf::TUnboxedValuePod(value);
-        data.SetTimezoneId(tzId);
-        return data;
-    }
+    case NUdf::TDataType<NUdf::TTzDate>::Id:
+        return ReadTz<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+        return ReadTz<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+        return ReadTz<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzDate32>::Id:
+        return ReadTz<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+        return ReadTz<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+        return ReadTz<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
 
     case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
         ui32 size;
@@ -2419,62 +2364,32 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
     }
 
     case NUdf::TDataType<NUdf::TTzDate>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui16 data = SwapBytes(value.Get<ui16>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui32 data = SwapBytes(value.Get<ui32>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui64 data = SwapBytes(value.Get<ui64>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui32 data = 0x80 ^ SwapBytes((ui32)value.Get<i32>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
         break;
     }
 
     case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-        ui16 tzId = SwapBytes(value.GetTimezoneId());
-        ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
-        ui32 size = sizeof(data) + sizeof(tzId);
-        buf.WriteMany((const char*)&size, sizeof(size));
-        buf.WriteMany((const char*)&data, sizeof(data));
-        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        WriteTz<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
         break;
     }
 

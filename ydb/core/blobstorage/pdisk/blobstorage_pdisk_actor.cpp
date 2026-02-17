@@ -210,6 +210,9 @@ public:
     }
 
     ~TPDiskActor() {
+        if (FormattingThread) {
+            FormattingThread->Join();
+        }
         SecureWipeBuffer((ui8*)MainKey.Keys.data(), sizeof(NPDisk::TKey) * MainKey.Keys.size());
     }
 
@@ -377,7 +380,12 @@ public:
     void CheckMagicSector(ui8 *magicData, ui32 magicDataSize) {
         bool isFormatMagicValid = PDisk->IsFormatMagicValid(magicData, magicDataSize, MainKey);
         if (isFormatMagicValid) {
-            auto format = PDisk->CheckMetadataFormatSector(magicData, magicDataSize, MainKey, PCtx->PDiskLogPrefix);
+            auto format = PDisk->CheckMetadataFormatSector(
+                magicData,
+                magicDataSize,
+                MainKey,
+                PCtx->PDiskLogPrefix,
+                Cfg->EnableFormatEncryption);
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TPushUnformattedMetadataSector>(format,
                 !Cfg->MetadataOnly));
             if (Cfg->MetadataOnly) {
@@ -416,14 +424,12 @@ public:
         P_LOG(PRI_WARN, BSP01, PDisk->ErrorStr);
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
-        using TCookieType = std::tuple<TPDiskActor*, TActorSystem*, TActorId, std::optional<TRcBuf>>;
+        using TCookieType = std::tuple<TIntrusivePtr<TPDiskConfig>, NPDisk::TKey, TActorSystem*, TActorId, std::optional<TRcBuf>>;
         FormattingThread.Reset(new TThread(
                 [] (void *cookie) -> void* {
                     auto params = static_cast<TCookieType*>(cookie);
-                    auto [actor, actorSystem, pDiskActor, metadata] = *params;
+                    auto [cfg, mainKey, actorSystem, pDiskActor, metadata] = std::move(*params);
                     delete params;
-
-                    TPDiskConfig *cfg = actor->Cfg.Get();
 
                     if (cfg->ReadOnly) {
                         TString readOnlyError = "PDisk is in read-only mode";
@@ -440,16 +446,23 @@ public:
                     SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
                     try {
+                        TFormatOptions options;
+                        options.TrimEntireDevice = cfg->FeatureFlags.GetTrimEntireDeviceOnStartup();
+                        options.SectorMap = cfg->SectorMap;
+                        options.EnableSmallDiskOptimization = cfg->FeatureFlags.GetEnableSmallDiskOptimization();
+                        options.Metadata = metadata;
+                        options.PlainDataChunks = cfg->PlainDataChunks;
+                        options.EnableFormatEncryption = cfg->EnableFormatEncryption;
+                        options.EnableSectorEncryption = cfg->EnableSectorEncryption;
+
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
-                                cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
+                                options);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
-                                cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
+                                options);
                         }
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                     } catch (yexception ex) {
@@ -458,7 +471,7 @@ public:
                     }
                     return nullptr;
                 },
-                new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
+                new TCookieType(Cfg, MainKey.Keys.back(), TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
 
         FormattingThread->Start();
     }
@@ -584,7 +597,6 @@ public:
                     // PDisk GUID is OK and format is complete
                     *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;
                     *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingSysLogRead;
-                    PDisk->Format.InitMagic();
                     PDisk->ReadSysLog(SelfId());
                 }
             }

@@ -21,5 +21,8 @@ class TestYdbWorkload(StressFixture):
     def test(self):
         client = YdbClient(self.endpoint, self.database, True)
         client.wait_connection()
-        with WorkloadRunner(client, 'oltp_workload', 120) as runner:
-            runner.run()
+        try:
+            with WorkloadRunner(client, 'oltp_workload', 120) as runner:
+                runner.run()
+        finally:
+            client.close()

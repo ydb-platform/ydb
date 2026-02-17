@@ -153,6 +153,7 @@ namespace NLs {
         NKikimrSchemeOp::TTTLSettings::EUnit columnUnit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO);
     TCheckFunc HasTtlDisabled();
     TCheckFunc IsBackupTable(bool value);
+    TCheckFunc IsRestoreTable(bool value);
     TCheckFunc ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode);
     TCheckFunc ReplicationState(NKikimrReplication::TReplicationState::StateCase state);
 

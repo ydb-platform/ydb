@@ -57,7 +57,7 @@ struct TClientConfig
     TClientCredentialsConfigPtr Credentials;
 
     // Allow bypass TLS for http://... URLs.
-    bool AllowHTTP;
+    bool AllowHttp;
 
     REGISTER_YSON_STRUCT(TClientConfig);
 

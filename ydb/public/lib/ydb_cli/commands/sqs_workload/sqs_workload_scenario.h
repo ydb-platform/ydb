@@ -24,18 +24,19 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<TLog> Log;
         std::shared_ptr<std::atomic_bool> ErrorFlag;
         std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
-        TString Token;
+        TMaybe<TString> Token;
+        TMaybe<TString> SecretKey;
         TString QueueUrl;
-        TString Account;
+        TMaybe<TString> Account;
         TMaybe<TString> Region;
-        TMaybe<TString> EndpointOverride;
+        TMaybe<TString> QueueEndpoint;
         ui64 MaxUniqueMessages;
         ui32 BatchSize;
         ui32 MessageSize;
         ui32 GroupsAmount;
-        ui32 Concurrency;
+        ui32 WorkersCount;
         ui32 RequestTimeoutMs;
-        bool UseJsonAPI;
+        bool UseXmlAPI;
         bool SetSubjectToken;
         bool ValidateFifo;
 

@@ -296,7 +296,8 @@ def parse_vdisk_storage_from_http_api(node_id, pdisk_id, vslot_id):
         tablet_id = int(tablet_info['tablet_id'])
         for channel, channel_info in enumerate(tablet_info['channels']):
             size = int(channel_info.get('data_size', 0))
-            res.append((tablet_id, channel, size))
+            count = int(channel_info.get('count', 0))
+            res.append((tablet_id, channel, size, count))
     return res
 
 

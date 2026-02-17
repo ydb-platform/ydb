@@ -3981,7 +3981,9 @@ TString SubstParameters(const TString& str, const TMaybe<NYT::TNode>& params, TS
 
         return res;
     } catch (yexception& e) {
-        throw yexception() << "Failed to substitute parameters into url: " << str << ", reason:" << e.what() << ", position: " << pos;
+        throw TErrorException(EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR)
+            << "Failed to substitute parameters into url: '" << str
+            << "', reason: '" << e.what() << "', position: " << pos;
     }
 }
 

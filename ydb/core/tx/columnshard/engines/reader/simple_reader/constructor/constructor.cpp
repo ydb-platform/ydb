@@ -45,13 +45,35 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuil
     return static_pointer_cast<TReadMetadataBase>(readMetadata);
 }
 
-std::shared_ptr<NKikimr::NOlap::IScanCursor> TIndexScannerConstructor::DoBuildCursor() const {
+std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) const {
     switch (Sorting) {
         case ERequestSorting::ASC:
         case ERequestSorting::DESC:
-            return std::make_shared<TSimpleScanCursor>();
+            switch (impl) {
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple:
+                case NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET:
+                    return std::make_shared<TSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardSimple:
+                    return std::make_shared<TDeprecatedSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardPlain:
+                    AFL_VERIFY(false)("impl", static_cast<ui64>(impl));
+            }
+            Y_ABORT("unreachable");
         case ERequestSorting::NONE:
-            return std::make_shared<TNotSortedSimpleScanCursor>();
+            switch (impl) {
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple:
+                case NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET:
+                    return std::make_shared<TNotSortedSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedSimple:
+                    return std::make_shared<TDeprecatedNotSortedSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardPlain:
+                    AFL_VERIFY(false)("impl", static_cast<ui64>(impl));
+            }
+            Y_ABORT("unreachable");
     }
 }
 

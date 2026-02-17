@@ -776,7 +776,7 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, cons
     }
 
     if (node->IsCallable("Member") && (!parent || parent->IsCallable({"And", "Or", "Not", "Coalesce"}))) {
-        auto* typeAnn = node->GetTypeAnn();
+        auto typeAnn = node->GetTypeAnn();
         if (typeAnn->GetKind() == ETypeAnnotationKind::Optional) {
             typeAnn = typeAnn->Cast<TOptionalExprType>()->GetItemType();
         }

@@ -5865,7 +5865,12 @@ namespace {
                     rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(child->Head().Content(), finishType));
                 }
             } else if (suffix == "Combine" || suffix == "CombineState" || suffix == "MergeState") {
-                auto stateType = isAggApply ? AggApplySerializedStateType(child->ChildPtr(1), ctx.Expr) : child->Child(1)->Child(3)->GetTypeAnn();
+                TCheckedDerefPtr<const TTypeAnnotationNode> stateType;
+                if (isAggApply) {
+                    stateType = AggApplySerializedStateType(child->ChildPtr(1), ctx.Expr);
+                } else {
+                    stateType = child->Child(1)->Child(3)->GetTypeAnn();
+                }
                 if (child->Head().IsList()) {
                     for (const auto& x : child->Head().Children()) {
                         rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(x->Content(), stateType));
@@ -6805,6 +6810,26 @@ namespace {
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
+        }
+
+        auto ensureSortSpecValid = [&]() -> IGraphTransformer::TStatus {
+            if (!IsWindowNewPipelineEnabled(ctx.Types)) {
+                return IGraphTransformer::TStatus::Ok;
+            }
+            auto sortSpec = TWindowFrameSettings::GetSortSpec(*input, ctx.Expr);
+            if (!sortSpec) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Sort specification required."));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!sortSpec->IsCallable({"SortTraits", "Void"})) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "SortTraits required, but got: " << sortSpec->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            return IGraphTransformer::TStatus::Ok;
+        }();
+
+        if (ensureSortSpecValid != IGraphTransformer::TStatus::Ok) {
+            return ensureSortSpecValid;
         }
 
         bool isUniversal;

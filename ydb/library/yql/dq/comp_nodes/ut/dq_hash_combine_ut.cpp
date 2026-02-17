@@ -331,7 +331,7 @@ THolder<IComputationGraph> BuildBlockGraph(TDqSetup<UseLLVM, Spilling>& setup, b
 
     TRuntimeNode rootNode;
     if (useFlow) {
-        rootNode = pb.Collect(pb.NarrowMap(
+        rootNode = pb.FromFlow(
             GetOperatorNode(
                 pb,
                 isAggregator,
@@ -346,28 +346,24 @@ THolder<IComputationGraph> BuildBlockGraph(TDqSetup<UseLLVM, Spilling>& setup, b
                 [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
                     return {keys.front(), state.front()};
                 }
-            ),
-            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
-        ));
+            )
+        );
     } else {
-        rootNode = pb.Collect(pb.NarrowMap(pb.ToFlow(
-            GetOperatorNode(
-                pb,
-                isAggregator,
-                Spilling,
-                memLimit,
-                TRuntimeNode(streamCallable, false),
-                [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
-                [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
-                [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                    return {pb.AggrAdd(state.front(), items.back())};
-                },
-                [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                    return {keys.front(), state.front()};
-                }
-            )),
-            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
-        ));
+        rootNode = GetOperatorNode(
+            pb,
+            isAggregator,
+            Spilling,
+            memLimit,
+            TRuntimeNode(streamCallable, false),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return {pb.AggrAdd(state.front(), items.back())};
+            },
+            [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return {keys.front(), state.front()};
+            }
+        );
     }
 
     return setup.BuildGraph(rootNode, {streamCallable});
@@ -376,7 +372,7 @@ THolder<IComputationGraph> BuildBlockGraph(TDqSetup<UseLLVM, Spilling>& setup, b
 template<bool LLVM, bool Spilling = false>
 THolder<IComputationGraph> BuildWideGraph(
     TDqSetup<LLVM, Spilling>& setup, const bool useFlow, const bool isAggregator,
-    const size_t memLimit, std::vector<TType*>& columnTypes, const bool doCollect = true)
+    const size_t memLimit, std::vector<TType*>& columnTypes)
 {
     auto& pb = setup.GetDqProgramBuilder();
 
@@ -412,20 +408,10 @@ THolder<IComputationGraph> BuildWideGraph(
     );
 
     TRuntimeNode rootNode;
-    if (doCollect) {
-        if (!useFlow) {
-            opNode = pb.ToFlow(opNode);
-        }
-        rootNode = pb.Collect(pb.NarrowMap(
-            opNode,
-            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
-        ));
-    } else {
-        if (useFlow) {
-            opNode = pb.FromFlow(opNode);
-        }
-        rootNode = opNode;
+    if (useFlow) {
+        opNode = pb.FromFlow(opNode);
     }
+    rootNode = opNode;
 
     return setup.BuildGraph(rootNode, {streamCallable});
 }
@@ -446,7 +432,7 @@ THolder<IComputationGraph> BuildZeroWidthWideGraph(TDqSetup<LLVM, Spilling>& set
 
     TRuntimeNode rootNode;
     if (useFlow) {
-        rootNode = pb.Collect(pb.NarrowMap(
+        rootNode = pb.FromFlow(
             GetOperatorNode(
                 pb,
                 isAggregator,
@@ -461,31 +447,70 @@ THolder<IComputationGraph> BuildZeroWidthWideGraph(TDqSetup<LLVM, Spilling>& set
                 [&]([[maybe_unused]] TRuntimeNode::TList keys, [[maybe_unused]] TRuntimeNode::TList state) -> TRuntimeNode::TList {
                     return {};
                 }
-            ),
-            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
-        ));
+            )
+        );
     } else {
-        rootNode = pb.Collect(pb.NarrowMap(pb.ToFlow(
-            GetOperatorNode(
-                pb,
-                isAggregator,
-                Spilling,
-                memLimit,
-                TRuntimeNode(streamCallable, false),
-                [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
-                [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items) -> TRuntimeNode::TList { return { } ; },
-                [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items, [[maybe_unused]] TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                    return {};
-                },
-                [&]([[maybe_unused]] TRuntimeNode::TList keys, [[maybe_unused]] TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                    return {};
-                }
-            )),
-            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
-        ));
+        rootNode = GetOperatorNode(
+            pb,
+            isAggregator,
+            Spilling,
+            memLimit,
+            TRuntimeNode(streamCallable, false),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
+            [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items) -> TRuntimeNode::TList { return { } ; },
+            [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items, [[maybe_unused]] TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return {};
+            },
+            [&]([[maybe_unused]] TRuntimeNode::TList keys, [[maybe_unused]] TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return {};
+            }
+        );
     }
 
     return setup.BuildGraph(rootNode, {streamCallable});
+}
+
+std::shared_ptr<ISpillerFactory> CreateSpillerFactory()
+{
+    return std::make_shared<NKikimr::NMiniKQL::TSlowSpillerFactory>(
+        std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB)
+    );
+}
+
+template<typename TMap>
+size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const ui32 resultWidth, TMap& resultMap, const bool useBlocks, const bool sleepOnYield)
+{
+    std::vector<NUdf::TUnboxedValue> fetchedValues;
+    fetchedValues.resize(resultWidth);
+    Y_ENSURE(wideStream.IsBoxed());
+    size_t lineCount = 0;
+
+    NUdf::EFetchStatus fetchStatus;
+    while ((fetchStatus = wideStream.WideFetch(fetchedValues.data(), resultWidth)) != NUdf::EFetchStatus::Finish) {
+        if (fetchStatus == NUdf::EFetchStatus::Yield) {
+            if (sleepOnYield) {
+                ::Sleep(TDuration::MilliSeconds(1));
+            }
+            continue;
+        }
+
+        if (resultWidth == 0) {
+            ++lineCount;
+        } else if (useBlocks) {
+            lineCount += UpdateMapFromBlocks(resultMap, fetchedValues);
+        } else {
+            std::vector<ui64> valuesVec;
+            valuesVec.reserve(resultWidth);
+            TArrayRef aggregates(fetchedValues.data() + 1, resultWidth - 1);
+            for (const NYql::NUdf::TUnboxedValue& value : aggregates) {
+                valuesVec.push_back(UnboxedToNative<ui64>(value));
+            }
+            AddRowToMap(resultMap, UnboxedToNative<std::string>(fetchedValues[0]), valuesVec);
+            ++lineCount;
+        }
+    }
+
+    return lineCount;
 }
 
 template<bool UseLLVM, typename StreamCreator>
@@ -501,21 +526,10 @@ void RunDqCombineBlockTest(const bool useFlow, StreamCreator streamCreator)
 
     auto stream = NUdf::TUnboxedValuePod(streamCreator(graph->GetContext(), columnTypes, refResult));
     graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(stream));
-    auto resultList = graph->GetValue();
-
-    size_t numResultItems = resultList.GetListLength();
+    auto resultStream = graph->GetValue();
 
     std::unordered_map<std::string, std::vector<ui64>> graphResult;
-
-    const auto ptr = resultList.GetElements();
-    for (size_t i = 0ULL; i < numResultItems; ++i) {
-        UNIT_ASSERT(ptr[i].GetListLength() >= 2);
-
-        const auto elements = ptr[i].GetElements();
-        TArrayRef blocks(elements, ptr[i].GetListLength());
-
-        UpdateMapFromBlocks(graphResult, blocks);
-    }
+    CollectStreamOutputs(resultStream, columnTypes.size() + 1, graphResult, true, true);
 
     AssertMapsEqual(refResult, graphResult);
 }
@@ -533,26 +547,10 @@ void RunDqCombineWideTest(const bool useFlow, StreamCreator streamCreator)
 
     auto stream = NUdf::TUnboxedValuePod(streamCreator(graph->GetContext(), columnTypes, refResult));
     graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(stream));
-    auto resultList = graph->GetValue();
-
-    size_t numResultItems = resultList.GetListLength();
+    auto resultStream = graph->GetValue();
 
     std::unordered_map<std::string, std::vector<ui64>> graphResult;
-
-    const auto ptr = resultList.GetElements();
-    for (size_t i = 0ULL; i < numResultItems; ++i) {
-        UNIT_ASSERT(ptr[i].GetListLength() >= 2);
-
-        const auto elements = ptr[i].GetElements();
-
-        TArrayRef values(elements+1, ptr[i].GetListLength()-1);
-        std::vector<ui64> valuesVec;
-        valuesVec.reserve(values.size());
-        for (const NYql::NUdf::TUnboxedValue& value : values) {
-            valuesVec.push_back(UnboxedToNative<ui64>(value));
-        }
-        AddRowToMap(graphResult, UnboxedToNative<std::string>(elements[0]), valuesVec);
-    }
+    CollectStreamOutputs(resultStream, columnTypes.size(), graphResult, false, true);
 
     AssertMapsEqual(refResult, graphResult);
 }
@@ -565,10 +563,10 @@ void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
 
     std::vector<TType*> columnTypes;
 
-    auto graph = BuildWideGraph(setup, useFlow, true, 0, columnTypes, false);
+    auto graph = BuildWideGraph(setup, useFlow, true, 0, columnTypes);
 
     if (Spilling) {
-        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
@@ -601,29 +599,17 @@ void RunDqAggregateBlockTest(TDqSetup<UseLLVM, Spilling>& setup, const bool useF
     auto graph = BuildBlockGraph(setup, useFlow, true, 0, columnTypes);
 
     if (Spilling) {
-        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
 
     auto stream = NUdf::TUnboxedValuePod(streamCreator(graph->GetContext(), columnTypes, refResult));
     graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(stream));
-    auto resultList = graph->GetValue();
-
-    size_t numResultItems = resultList.GetListLength();
+    auto resultStream = graph->GetValue();
 
     std::unordered_map<std::string, std::vector<ui64>> graphResult;
-    size_t numResultRows = 0;
-
-    const auto ptr = resultList.GetElements();
-    for (size_t i = 0ULL; i < numResultItems; ++i) {
-        UNIT_ASSERT(ptr[i].GetListLength() >= 2);
-
-        const auto elements = ptr[i].GetElements();
-        TArrayRef blocks(elements, ptr[i].GetListLength());
-
-        numResultRows += UpdateMapFromBlocks(graphResult, blocks);
-    }
+    size_t numResultRows = CollectStreamOutputs(resultStream, columnTypes.size() + 1, graphResult, true, true);
 
     UNIT_ASSERT(numResultRows == refResult.size());
     AssertMapsEqual(refResult, graphResult);
@@ -639,35 +625,19 @@ void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow,
     auto graph = BuildWideGraph(setup, useFlow, true, 0, columnTypes);
 
     if (Spilling) {
-        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
 
     auto stream = NUdf::TUnboxedValuePod(streamCreator(graph->GetContext(), columnTypes, refResult));
     graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(stream));
-    auto resultList = graph->GetValue();
-
-    size_t numResultItems = resultList.GetListLength();
-    UNIT_ASSERT(numResultItems == refResult.size());
+    auto resultStream = graph->GetValue();
 
     std::unordered_map<std::string, std::vector<ui64>> graphResult;
+    size_t numResultItems = CollectStreamOutputs(resultStream, columnTypes.size(), graphResult, false, true);
 
-    const auto ptr = resultList.GetElements();
-    for (size_t i = 0ULL; i < numResultItems; ++i) {
-        UNIT_ASSERT(ptr[i].GetListLength() >= 2);
-
-        const auto elements = ptr[i].GetElements();
-
-        TArrayRef values(elements+1, ptr[i].GetListLength()-1);
-        std::vector<ui64> valuesVec;
-        valuesVec.reserve(values.size());
-        for (const NYql::NUdf::TUnboxedValue& value : values) {
-            valuesVec.push_back(UnboxedToNative<ui64>(value));
-        }
-        AddRowToMap(graphResult, UnboxedToNative<std::string>(elements[0]), valuesVec);
-    }
-
+    UNIT_ASSERT(numResultItems == refResult.size());
     AssertMapsEqual(refResult, graphResult);
 }
 
@@ -681,16 +651,18 @@ void RunDqAggregateZeroWidthTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
     auto graph = BuildZeroWidthWideGraph(setup, useFlow, true, 0, columnTypes);
 
     if (Spilling) {
-        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
 
     auto stream = NUdf::TUnboxedValuePod(streamCreator(graph->GetContext(), columnTypes, refResult));
     graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(stream));
-    auto resultList = graph->GetValue();
+    auto resultStream = graph->GetValue();
 
-    size_t numResultItems = resultList.GetListLength();
+    std::unordered_map<std::string, std::vector<ui64>> graphResult;
+    size_t numResultItems = CollectStreamOutputs(resultStream, 0, graphResult, false, true);
+
     UNIT_ASSERT(numResultItems == refResult.size());
 }
 
@@ -713,7 +685,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
 
     Y_UNIT_TEST_QUAD(TestBlockModeMultiBlocks, UseLLVM, UseFlow) {
         RunDqCombineBlockTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
-            return new TBlockKVStream(ctx, 10000, 5, 8192, columnTypes, refMap);
+            return new TBlockKVStream(ctx, 20000, 5, 8192, columnTypes, refMap);
         });
     }
 
@@ -731,7 +703,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
 
     Y_UNIT_TEST_QUAD(TestWideModeMultiRows, UseLLVM, UseFlow) {
         RunDqCombineWideTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
-            return new TWideKVStream(ctx, 10000, 5, columnTypes, refMap);
+            return new TWideKVStream(ctx, 20000, 5, columnTypes, refMap);
         });
     }
 

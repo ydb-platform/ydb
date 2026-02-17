@@ -6524,6 +6524,11 @@
                 "ColumnId": 21,
                 "ColumnName": "ParentIndex",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "SysView",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6550,7 +6555,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -10,7 +10,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -54,4 +54,4 @@ IRequestGeneratorPtr CreateRealRequestGenerator(
     ui64 maxRequestsInMemory,
     std::atomic<bool>& shouldStop);
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

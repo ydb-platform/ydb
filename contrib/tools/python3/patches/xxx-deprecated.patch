@@ -1,0 +1,5 @@
+--- contrib/tools/python3/Include/cpython/unicodeobject.h	(index)
++++ contrib/tools/python3/Include/cpython/unicodeobject.h	(working tree)
+@@ -10 +10 @@ Py_DEPRECATED(3.13) typedef wchar_t PY_UNICODE_TYPE;
+-Py_DEPRECATED(3.13) typedef wchar_t Py_UNICODE;
++typedef wchar_t Py_UNICODE;

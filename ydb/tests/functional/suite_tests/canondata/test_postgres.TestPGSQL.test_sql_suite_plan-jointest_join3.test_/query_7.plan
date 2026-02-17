@@ -61,7 +61,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "InnerJoin (MapJoin)-Filter",
+                                                        "Node Type": "InnerJoin (Map)-Filter",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "qb.a_id = qa.id",
@@ -73,7 +73,7 @@
                                                                         "ExternalPlanNodeId": 10
                                                                     }
                                                                 ],
-                                                                "Name": "InnerJoin (MapJoin)"
+                                                                "Name": "InnerJoin (Map)"
                                                             },
                                                             {
                                                                 "Inputs": [
@@ -169,7 +169,17 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
+                                                        "Node Type": "LeftOnlyJoin (Lookup)",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 5
+                                                                    }
+                                                                ],
+                                                                "Name": "LeftOnlyJoin (Lookup)"
+                                                            }
+                                                        ],
                                                         "PlanNodeId": 6,
                                                         "Plans": [
                                                             {

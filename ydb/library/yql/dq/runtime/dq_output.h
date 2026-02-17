@@ -32,6 +32,8 @@ enum EDqFillLevel {
 
 const constexpr ui32 FILL_COUNTERS_SIZE = 4u;
 
+TString FillLevelToString(EDqFillLevel level);
+
 struct TDqFillAggregator {
 
     alignas(64) std::array<std::atomic<ui64>, FILL_COUNTERS_SIZE> Counts;
@@ -90,14 +92,12 @@ struct TDqFillAggregator {
     }
 
     TString DebugString() {
-        return TStringBuilder() << "TDqFillAggregator { N=" << Counts[static_cast<ui32>(NoLimit)].load()
+        return TStringBuilder() << "TDqFillAggregator " << FillLevelToString(GetFillLevel()) << " { N=" << Counts[static_cast<ui32>(NoLimit)].load()
             << " S=" << Counts[static_cast<ui32>(SoftLimit)].load()
             << " H=" << Counts[static_cast<ui32>(HardLimit)].load()
             << " }";
     }
 };
-
-TString FillLevelToString(EDqFillLevel level);
 
 class IDqOutput : public TSimpleRefCount<IDqOutput> {
 public:

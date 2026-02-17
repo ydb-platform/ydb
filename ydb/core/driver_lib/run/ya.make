@@ -94,6 +94,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
+    ydb/core/retro_tracing_impl
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/security
@@ -139,6 +140,7 @@ PEERDIR(
     ydb/library/actors/memory_log
     ydb/library/actors/prof
     ydb/library/actors/protos
+    ydb/library/actors/retro_tracing
     ydb/library/actors/util
     ydb/library/folder_service
     ydb/library/folder_service/proto
@@ -189,6 +191,8 @@ PEERDIR(
 
 IF (OS_LINUX)
     PEERDIR(
+        ydb/core/nbs/cloud/blockstore/bootstrap
+
         ydb/services/nbs
     )
 ENDIF()

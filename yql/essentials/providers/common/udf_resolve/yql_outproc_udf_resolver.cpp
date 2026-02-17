@@ -49,14 +49,23 @@ void RunResolver(
     }
 
     TShellCommand shell(resolverPath, args, shellOptions);
+    auto status = shell.Run().GetStatus();
+    auto exitCode = shell.GetExitCode();
+    TStringBuilder formattedExitcode;
+    formattedExitcode << "Exit code: ";
+    if (exitCode) {
+        formattedExitcode << *exitCode;
+    } else {
+        formattedExitcode << "(empty)";
+    }
 
-    switch (shell.Run().GetStatus()) {
+    switch (status) {
         case TShellCommand::SHELL_INTERNAL_ERROR:
             ythrow yexception() << "Udf resolver internal error: "
                                 << shell.GetInternalError();
         case TShellCommand::SHELL_ERROR:
-            ythrow yexception() << "Udf resolver shell error: "
-                                << StripString(shell.GetError());
+            ythrow yexception() << "Udf resolver shell error. " << formattedExitcode
+                                << " StdErr: " << StripString(shell.GetError());
         case TShellCommand::SHELL_FINISHED:
             break;
         default:

@@ -451,8 +451,17 @@ void TPCCRunner::RunSync() {
         UpdateDisplayIfNeeded(now);
     }
 
-    LOG_D("Finished measurements");
+    if (GetGlobalErrorVariable().load()) {
+        LOG_D("Stopped by error, joining");
+    } else {
+        LOG_D("Finished measurements, joining");
+    }
+
     Join();
+
+    if (GetGlobalErrorVariable().load()) {
+        ythrow yexception() << "critical error, see the logs";
+    }
 
     switch (Config.Format) {
     case TRunConfig::EFormat::Pretty:

@@ -61,6 +61,10 @@ public:
     //! Removes all clusters that are currently known but are missing in #protoDirectory.
     void UpdateDirectory(const NProto::TClusterDirectory& protoDirectory);
 
+    //! Updates configuration of all clusters given in #config.
+    //! Removes all clusters that are currently known but are missing in #config.
+    void UpdateDirectory(const TClusterDirectoryConfigPtr& config);
+
     //! Returns true if there is a cluster with corresponding TVM id in the directory.
     bool HasTvmId(NAuth::TTvmId tvmId) const;
 
@@ -85,6 +89,7 @@ private:
     THashMap<std::string, TCluster> NameToCluster_;
     THashMultiSet<NAuth::TTvmId> ClusterTvmIds_;
 
+    void UpdateDirectory(const THashMap<std::string, NYTree::INodePtr>& nameToConfig);
     TCluster CreateCluster(const std::string& name, const NYTree::INodePtr& connectionConfig);
 };
 

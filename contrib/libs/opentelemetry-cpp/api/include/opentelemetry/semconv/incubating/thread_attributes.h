@@ -24,7 +24,7 @@ namespace thread
   <p>
   Examples of where the value can be extracted from:
   <p>
-  | Language or platform  | Source |
+  | Language or platform | Source |
   | --- | --- |
   | JVM | @code Thread.currentThread().threadId() @endcode |
   | .NET | @code Thread.CurrentThread.ManagedThreadId @endcode |
@@ -40,7 +40,7 @@ static constexpr const char *kThreadId = "thread.id";
   <p>
   Examples of where the value can be extracted from:
   <p>
-  | Language or platform  | Source |
+  | Language or platform | Source |
   | --- | --- |
   | JVM | @code Thread.currentThread().getName() @endcode |
   | .NET | @code Thread.CurrentThread.Name @endcode |

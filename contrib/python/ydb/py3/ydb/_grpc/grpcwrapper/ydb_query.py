@@ -11,8 +11,8 @@ from . import ydb_query_public_types as public_types
 
 from .common_utils import (
     IFromProto,
-    IToProto,
     IFromPublic,
+    IToProto,
     ServerStatus,
 )
 
@@ -20,7 +20,7 @@ from ... import convert
 
 
 @dataclass
-class CreateSessionResponse(IFromProto):
+class CreateSessionResponse(IFromProto["ydb_query_pb2.CreateSessionResponse", "CreateSessionResponse"]):
     status: ServerStatus
     session_id: str
     node_id: int
@@ -35,7 +35,7 @@ class CreateSessionResponse(IFromProto):
 
 
 @dataclass
-class DeleteSessionResponse(IFromProto):
+class DeleteSessionResponse(IFromProto["ydb_query_pb2.DeleteSessionResponse", "DeleteSessionResponse"]):
     status: ServerStatus
 
     @staticmethod
@@ -52,7 +52,7 @@ class AttachSessionRequest(IToProto):
 
 
 @dataclass
-class TransactionMeta(IFromProto):
+class TransactionMeta(IFromProto["ydb_query_pb2.TransactionMeta", "TransactionMeta"]):
     tx_id: str
 
     @staticmethod
@@ -69,16 +69,8 @@ class TransactionSettings(IFromPublic, IToProto):
         return TransactionSettings(tx_mode=tx_mode)
 
     def to_proto(self) -> ydb_query_pb2.TransactionSettings:
-        if self.tx_mode.name == "snapshot_read_write":
-            return ydb_query_pb2.TransactionSettings(snapshot_read_write=self.tx_mode.to_proto())
-        if self.tx_mode.name == "snapshot_read_only":
-            return ydb_query_pb2.TransactionSettings(snapshot_read_only=self.tx_mode.to_proto())
-        if self.tx_mode.name == "serializable_read_write":
-            return ydb_query_pb2.TransactionSettings(serializable_read_write=self.tx_mode.to_proto())
-        if self.tx_mode.name == "online_read_only":
-            return ydb_query_pb2.TransactionSettings(online_read_only=self.tx_mode.to_proto())
-        if self.tx_mode.name == "stale_read_only":
-            return ydb_query_pb2.TransactionSettings(stale_read_only=self.tx_mode.to_proto())
+        args = {self.tx_mode.name: self.tx_mode.to_proto()}
+        return ydb_query_pb2.TransactionSettings(**args)  # type: ignore[arg-type]
 
 
 @dataclass
@@ -94,7 +86,7 @@ class BeginTransactionRequest(IToProto):
 
 
 @dataclass
-class BeginTransactionResponse(IFromProto):
+class BeginTransactionResponse(IFromProto["ydb_query_pb2.BeginTransactionResponse", "BeginTransactionResponse"]):
     status: Optional[ServerStatus]
     tx_meta: TransactionMeta
 
@@ -107,7 +99,7 @@ class BeginTransactionResponse(IFromProto):
 
 
 @dataclass
-class CommitTransactionResponse(IFromProto):
+class CommitTransactionResponse(IFromProto["ydb_query_pb2.CommitTransactionResponse", "CommitTransactionResponse"]):
     status: Optional[ServerStatus]
 
     @staticmethod
@@ -118,7 +110,9 @@ class CommitTransactionResponse(IFromProto):
 
 
 @dataclass
-class RollbackTransactionResponse(IFromProto):
+class RollbackTransactionResponse(
+    IFromProto["ydb_query_pb2.RollbackTransactionResponse", "RollbackTransactionResponse"]
+):
     status: Optional[ServerStatus]
 
     @staticmethod
@@ -129,7 +123,7 @@ class RollbackTransactionResponse(IFromProto):
 
 
 @dataclass
-class QueryContent(IFromPublic, IToProto):
+class QueryContent(IToProto):
     text: str
     syntax: int
 
@@ -138,7 +132,7 @@ class QueryContent(IFromPublic, IToProto):
         return QueryContent(text=query, syntax=syntax)
 
     def to_proto(self) -> ydb_query_pb2.QueryContent:
-        return ydb_query_pb2.QueryContent(text=self.text, syntax=self.syntax)
+        return ydb_query_pb2.QueryContent(text=self.text, syntax=self.syntax)  # type: ignore[arg-type]
 
 
 @dataclass
@@ -148,14 +142,16 @@ class TransactionControl(IToProto):
     tx_id: Optional[str]
 
     def to_proto(self) -> ydb_query_pb2.TransactionControl:
+        commit_tx = self.commit_tx if self.commit_tx is not None else False
         if self.tx_id:
             return ydb_query_pb2.TransactionControl(
                 tx_id=self.tx_id,
-                commit_tx=self.commit_tx,
+                commit_tx=commit_tx,
             )
+        begin_tx = self.begin_tx.to_proto() if self.begin_tx else None
         return ydb_query_pb2.TransactionControl(
-            begin_tx=self.begin_tx.to_proto(),
-            commit_tx=self.commit_tx,
+            begin_tx=begin_tx,
+            commit_tx=commit_tx,
         )
 
 
@@ -163,7 +159,7 @@ class TransactionControl(IToProto):
 class ExecuteQueryRequest(IToProto):
     session_id: str
     query_content: QueryContent
-    tx_control: TransactionControl
+    tx_control: Optional[TransactionControl]
     concurrent_result_sets: bool
     exec_mode: int
     parameters: dict
@@ -181,9 +177,9 @@ class ExecuteQueryRequest(IToProto):
             session_id=self.session_id,
             tx_control=tx_control,
             query_content=self.query_content.to_proto(),
-            exec_mode=self.exec_mode,
-            stats_mode=self.stats_mode,
-            schema_inclusion_mode=self.schema_inclusion_mode,
+            exec_mode=self.exec_mode,  # type: ignore[arg-type]
+            stats_mode=self.stats_mode,  # type: ignore[arg-type]
+            schema_inclusion_mode=self.schema_inclusion_mode,  # type: ignore[arg-type]
             result_set_format=self.result_set_format,
             arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=self.concurrent_result_sets,

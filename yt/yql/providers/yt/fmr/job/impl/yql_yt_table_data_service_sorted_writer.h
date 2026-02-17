@@ -16,12 +16,6 @@
 
 namespace NYql::NFmr {
 
-struct TSortingColumns {
-    TVector<TString> Columns;
-    TVector<ESortOrder> SortOrders;
-    bool operator==(const TSortingColumns&) const = default;
-};
-
 class TFmrTableDataServiceSortedWriter: public TFmrTableDataServiceBaseWriter {
 public:
     using TPtr = TIntrusivePtr<TFmrTableDataServiceSortedWriter>;
@@ -39,10 +33,10 @@ protected:
     void PutRows() override;
 
 private:
-    void CheckIsSorted(TStringBuf currentYsonContent, const TVector<TRowIndexMarkup>& chunkIndexes) const;
-    TSortedChunkStats GetSortedChunkStats(TStringBuf currentYsonContent, const TVector<TRowIndexMarkup>& chunkIndexes) const;
+    void CheckIsSorted(TStringBuf currentYsonContent, const std::vector<TRowIndexMarkup>& chunkIndexes) const;
+    TSortedChunkStats GetSortedChunkStats(TStringBuf currentYsonContent, const std::vector<TRowIndexMarkup>& chunkIndexes) const;
     TString GetIndexValue(TStringBuf currentYsonContent, const TColumnOffsetRange& index) const;
-    NYT::TNode GetKeyRowByIndexes(TStringBuf currentYsonContent, const TVector<TColumnOffsetRange>& indexes) const;
+    NYT::TNode GetKeyRowByIndexes(TStringBuf currentYsonContent, const std::vector<TColumnOffsetRange>& indexes) const;
 
 private:
     TSortingColumns KeyColumns_;

@@ -1,5 +1,11 @@
 #include "http_proxy.h"
 #include "http_proxy_sock_impl.h"
+#include "http_proxy_ssl.h"
+
+#include <openssl/x509.h>
+#include <openssl/pem.h>
+
+#include <type_traits>
 
 namespace NHttp {
 
@@ -43,6 +49,8 @@ public:
 
     TPollerToken::TPtr PollerToken;
     TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
+
+    TString MTlsClientCertificate;
 
     TIncomingConnectionActor(
             std::shared_ptr<TPrivateEndpointInfo> endpoint,
@@ -115,8 +123,26 @@ protected:
             }
             break;
         }
+        ExtractClientCertificate();
         Become(&TIncomingConnectionActor::StateConnected);
         Send(SelfId(), new TEvPollerReady(nullptr, true, true));
+    }
+
+    void ExtractClientCertificate() {
+        if constexpr (std::is_base_of_v<TSecureSocketImpl, TSocketImpl>) {
+            if (Endpoint->Secure && this->Ssl) {
+                if (TSslHelpers::TSslHolder<X509> peerCert{SSL_get_peer_certificate(this->Ssl.Get())}) {
+                    TSslHelpers::TSslHolder<BIO> bio(BIO_new(BIO_s_mem()));
+                    if (bio && PEM_write_bio_X509(bio.Get(), peerCert.Get()) > 0) {
+                        char* pemData = nullptr;
+                        size_t pemLen = BIO_get_mem_data(bio.Get(), &pemData);
+                        if (pemData && pemLen > 0) {
+                            MTlsClientCertificate = TString(pemData, pemLen);
+                        }
+                    }
+                } // else: client did not provide certificate; that's OK
+            }
+        }
     }
 
     void HandleAccepting(TEvPollerRegisterResult::TPtr& ev) {
@@ -148,8 +174,9 @@ protected:
                         RecycledRequests.pop_front();
                         CurrentRequest->Address = Address;
                         CurrentRequest->Endpoint = Endpoint;
+                        CurrentRequest->MTlsClientCertificate = MTlsClientCertificate;
                     }  else {
-                        CurrentRequest = new THttpIncomingRequest(Endpoint, Address);
+                        CurrentRequest = new THttpIncomingRequest(Endpoint, Address, MTlsClientCertificate);
                     }
                 }
                 if (!CurrentRequest->EnsureEnoughSpaceAvailable()) {

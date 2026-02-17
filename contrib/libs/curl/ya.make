@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(8.5.0)
+VERSION(8.16.0)
 
-ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_5_0/curl-8.5.0.tar.bz2)
+ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_16_0/curl-8.16.0.tar.bz2)
 
 PEERDIR(
     contrib/libs/brotli/c/dec
@@ -46,7 +46,7 @@ DEFAULT(ARCADIA_CURL_DNS_RESOLVER ARES)
 
 CFLAGS(
     GLOBAL -DCURL_STATICLIB
-    -DBUILDING_LIBCURL
+    GLOBAL -DBUILDING_LIBCURL
     -DHAVE_CONFIG_H
     -DARCADIA_CURL_DNS_RESOLVER_${ARCADIA_CURL_DNS_RESOLVER}
 )
@@ -68,21 +68,22 @@ SRCS(
     lib/altsvc.c
     lib/amigaos.c
     lib/asyn-ares.c
-    lib/asyn-thread.c
-    lib/base64.c
+    lib/asyn-base.c
+    lib/asyn-thrdd.c
     lib/bufq.c
     lib/bufref.c
-    lib/c-hyper.c
     lib/cf-h1-proxy.c
     lib/cf-h2-proxy.c
     lib/cf-haproxy.c
     lib/cf-https-connect.c
+    lib/cf-ip-happy.c
     lib/cf-socket.c
     lib/cfilters.c
     lib/conncache.c
     lib/connect.c
     lib/content_encoding.c
     lib/cookie.c
+    lib/cshutdn.c
     lib/curl_addrinfo.c
     lib/curl_des.c
     lib/curl_endian.c
@@ -91,24 +92,37 @@ SRCS(
     lib/curl_gethostname.c
     lib/curl_gssapi.c
     lib/curl_memrchr.c
-    lib/curl_multibyte.c
     lib/curl_ntlm_core.c
-    lib/curl_ntlm_wb.c
-    lib/curl_path.c
     lib/curl_range.c
     lib/curl_rtmp.c
     lib/curl_sasl.c
+    lib/curl_sha512_256.c
     lib/curl_sspi.c
     lib/curl_threads.c
     lib/curl_trc.c
+    lib/curlx/base64.c
+    lib/curlx/dynbuf.c
+    lib/curlx/inet_ntop.c
+    lib/curlx/inet_pton.c
+    lib/curlx/multibyte.c
+    lib/curlx/nonblock.c
+    lib/curlx/strparse.c
+    lib/curlx/timediff.c
+    lib/curlx/timeval.c
+    lib/curlx/version_win32.c
+    lib/curlx/wait.c
+    lib/curlx/warnless.c
+    lib/curlx/winapi.c
+    lib/cw-out.c
+    lib/cw-pause.c
     lib/dict.c
     lib/doh.c
-    lib/dynbuf.c
     lib/dynhds.c
     lib/easy.c
     lib/easygetopt.c
     lib/easyoptions.c
     lib/escape.c
+    lib/fake_addrinfo.c
     lib/file.c
     lib/fileinfo.c
     lib/fopen.c
@@ -121,11 +135,9 @@ SRCS(
     lib/hash.c
     lib/headers.c
     lib/hmac.c
-    lib/hostasyn.c
     lib/hostip.c
     lib/hostip4.c
     lib/hostip6.c
-    lib/hostsyn.c
     lib/hsts.c
     lib/http.c
     lib/http1.c
@@ -136,11 +148,10 @@ SRCS(
     lib/http_negotiate.c
     lib/http_ntlm.c
     lib/http_proxy.c
+    lib/httpsrr.c
     lib/idn.c
     lib/if2ip.c
     lib/imap.c
-    lib/inet_ntop.c
-    lib/inet_pton.c
     lib/krb5.c
     lib/ldap.c
     lib/llist.c
@@ -152,8 +163,8 @@ SRCS(
     lib/mprintf.c
     lib/mqtt.c
     lib/multi.c
+    lib/multi_ev.c
     lib/netrc.c
-    lib/nonblock.c
     lib/noproxy.c
     lib/openldap.c
     lib/parsedate.c
@@ -163,6 +174,7 @@ SRCS(
     lib/psl.c
     lib/rand.c
     lib/rename.c
+    lib/request.c
     lib/rtsp.c
     lib/select.c
     lib/sendf.c
@@ -180,15 +192,16 @@ SRCS(
     lib/splay.c
     lib/strcase.c
     lib/strdup.c
+    lib/strequal.c
     lib/strerror.c
-    lib/strtok.c
-    lib/strtoofft.c
     lib/system_win32.c
     lib/telnet.c
     lib/tftp.c
-    lib/timediff.c
-    lib/timeval.c
     lib/transfer.c
+    lib/uint-bset.c
+    lib/uint-hash.c
+    lib/uint-spbset.c
+    lib/uint-table.c
     lib/url.c
     lib/urlapi.c
     lib/vauth/cleartext.c
@@ -205,25 +218,26 @@ SRCS(
     lib/vauth/spnego_sspi.c
     lib/vauth/vauth.c
     lib/version.c
-    lib/version_win32.c
-    lib/vquic/curl_msh3.c
     lib/vquic/curl_ngtcp2.c
+    lib/vquic/curl_osslq.c
     lib/vquic/curl_quiche.c
+    lib/vquic/vquic-tls.c
     lib/vquic/vquic.c
+    lib/vssh/curl_path.c
     lib/vssh/libssh.c
     lib/vssh/libssh2.c
     lib/vssh/wolfssh.c
-    lib/vtls/bearssl.c
+    lib/vtls/cipher_suite.c
     lib/vtls/hostcheck.c
     lib/vtls/keylog.c
     lib/vtls/mbedtls_threadlock.c
     lib/vtls/openssl.c
     lib/vtls/rustls.c
-    lib/vtls/sectransp.c
     lib/vtls/vtls.c
+    lib/vtls/vtls_scache.c
+    lib/vtls/vtls_spack.c
     lib/vtls/wolfssl.c
     lib/vtls/x509asn1.c
-    lib/warnless.c
     lib/ws.c
 )
 

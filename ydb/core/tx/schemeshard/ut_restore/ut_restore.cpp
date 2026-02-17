@@ -15,6 +15,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -191,6 +192,7 @@ namespace {
         EPathType Type = EPathTypeTable;
         TDataWithChecksum Scheme;
         TDataWithChecksum CreationQuery;
+        TDataWithChecksum SysViewDescription;
         TDataWithChecksum Permissions;
         TImportChangefeed Changefeed;
         TVector<TTestData> Data;
@@ -322,6 +324,9 @@ namespace {
         case EPathTypeExternalTable:
             result.CreationQuery = typedScheme.Scheme;
             break;
+        case EPathTypeSysView:
+            result.SysViewDescription = typedScheme.Scheme;
+            break;
         case EPathTypeCdcStream:
             result.Changefeed.Changefeed = typedScheme.Scheme;
             result.Changefeed.Topic = typedScheme.Attributes.GetTopicDescription();
@@ -363,6 +368,14 @@ namespace {
                 result.emplace(viewKey, item.CreationQuery);
                 if (withChecksum) {
                     result.emplace(NBackup::ChecksumKey(viewKey), item.CreationQuery.Checksum);
+                }
+                break;
+            }
+            case EPathTypeSysView: {
+                auto sysViewKey = prefix + "/system_view.pb";
+                result.emplace(sysViewKey, item.SysViewDescription);
+                if (withChecksum) {
+                    result.emplace(NBackup::ChecksumKey(sysViewKey), item.SysViewDescription.Checksum);
                 }
                 break;
             }
@@ -7431,6 +7444,111 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
+
+    Y_UNIT_TEST(ShouldRestoreSystemViewPermissions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+        ui64 txId = 100;
+
+        const auto permissions = R"(
+            actions {
+                change_owner: "user1@builtin"
+            }
+            actions {
+                grant {
+                    subject: "user2@builtin"
+                    permission_names: "ydb.generic.read"
+                }
+            }
+            actions {
+                grant {
+                    subject: "user2@builtin"
+                    permission_names: "ydb.generic.list"
+                }
+            }
+        )";
+
+        const auto data = GenerateTestData(
+            {
+                EPathTypeSysView,
+                R"(
+                    sys_view_id: 1
+                    sys_view_name: "partition_stats"
+                )"
+            },
+            {},
+            permissions
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: ""
+                    destination_path: "/MyRoot/.sys/partition_stats"
+                }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.sys/partition_stats"), {
+            NLs::PathExist,
+            NLs::IsSysView,
+            NLs::HasOwner("user1@builtin"),
+            NLs::HasRight("+R:user2@builtin"),
+            NLs::HasRight("+L:user2@builtin"),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldFailOnSystemViewWrongPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+        ui64 txId = 100;
+
+        const auto data = GenerateTestData(
+            {
+                EPathTypeSysView,
+                R"(
+                    sys_view_id: 1
+                    sys_view_name: "partition_stats"
+                )"
+            },
+            {}
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        // Try to import partition_stats system view (sys_view_id=1) to a different system view path (nodes)
+        // Import creation should succeed, but then fail during execution when compatibility check happens
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: ""
+                    destination_path: "/MyRoot/.sys/nodes"
+                }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
@@ -7446,7 +7564,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         }
     )";
 
-    void ShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
+    void ShouldSucceed(TTestWithReboots& t, const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -7457,7 +7575,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         const bool createdByQuery = AnyOf(schemes, [](const auto& scheme) {
             return scheme.second.Scheme.Contains("CREATE"); // Hack
         });
@@ -7473,6 +7590,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
                 if (createdByQuery) {
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
                     runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
@@ -7494,8 +7612,18 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
+    void ShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
+        TTestWithReboots t;
+        ShouldSucceed(t, schemes, importSettings);
+    }
+
+    void ShouldSucceed(TTestWithReboots& t, const TTypedScheme& scheme) {
+        ShouldSucceed(t, {{"", scheme}});
+    }
+
     void ShouldSucceed(const TTypedScheme& scheme) {
-        ShouldSucceed({{"", scheme}});
+        TTestWithReboots t;
+        ShouldSucceed(t, {{"", scheme}});
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSimpleTable) {
@@ -7512,7 +7640,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnTableWithChecksum) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnTableWithChecksum, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -7531,7 +7659,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -7554,7 +7681,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnBigCompressedTable) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnBigCompressedTable, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -7573,7 +7700,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -7712,6 +7838,106 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemView, 2, 1, false) {
+        ShouldSucceed(t,
+            {
+                {
+                    "/partition_stats",
+                    {
+                        EPathTypeSysView,
+                        R"(
+                            sys_view_id: 1
+                            sys_view_name: "partition_stats"
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "partition_stats"
+                        destination_path: "/MyRoot/.sys/partition_stats"
+                    }
+                }
+            )"
+        );
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemViewWithPermissions, 2, 1, false) {
+        const TString permissions = R"(
+            actions {
+                change_owner: "user1@builtin"
+            }
+            actions {
+                grant {
+                    subject: "user2@builtin"
+                    permission_names: "ydb.generic.read"
+                }
+            }
+            actions {
+                grant {
+                    subject: "user2@builtin"
+                    permission_names: "ydb.generic.list"
+                }
+            }
+        )";
+
+        THashMap<TString, TTypedScheme> schemes = {
+            {
+                "/partition_stats",
+                {
+                    EPathTypeSysView,
+                    R"(
+                        sys_view_id: 1
+                        sys_view_name: "partition_stats"
+                    )"
+                }
+            }
+        };
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        for (const auto& [prefix, typedScheme] : schemes) {
+            bucketContent.emplace(prefix, GenerateTestData(typedScheme, {}, permissions));
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+            }
+
+            const TString importRequest = Sprintf(R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "partition_stats"
+                        destination_path: "/MyRoot/.sys/partition_stats"
+                    }
+                }
+            )", port);
+
+            AsyncImport(runtime, ++t.TxId, "/MyRoot", importRequest);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetImport(runtime, t.TxId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+            }
+        });
+    }
+
     void CancelShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -7737,6 +7963,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
                 if (createsViews) {
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
                 }
@@ -8024,6 +8251,118 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
+    Y_UNIT_TEST(CancelShouldSucceedOnSystemView) {
+        CancelShouldSucceed(
+            {
+                {
+                    "/partition_stats",
+                    {
+                        EPathTypeSysView,
+                        R"(
+                            sys_view_id: 1
+                            sys_view_name: "partition_stats"
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "partition_stats"
+                        destination_path: "/MyRoot/.sys/partition_stats"
+                    }
+                }
+            )"
+        );
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSystemViewWithPermissions, 2, 1, false) {
+        const TString permissions = R"(
+            actions {
+                change_owner: "user1@builtin"
+            }
+            actions {
+                grant {
+                    subject: "user2@builtin"
+                    permission_names: "ydb.generic.read"
+                }
+            }
+            actions {
+                grant {
+                    subject: "user2@builtin"
+                    permission_names: "ydb.generic.list"
+                }
+            }
+        )";
+
+        THashMap<TString, TTypedScheme> schemes = {
+            {
+                "/partition_stats",
+                {
+                    EPathTypeSysView,
+                    R"(
+                        sys_view_id: 1
+                        sys_view_name: "partition_stats"
+                    )"
+                }
+            }
+        };
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        for (const auto& [prefix, typedScheme] : schemes) {
+            bucketContent.emplace(prefix, GenerateTestData(typedScheme, {}, permissions));
+        }
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot",
+                Sprintf(R"(
+                    ImportFromS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_prefix: "partition_stats"
+                            destination_path: "/MyRoot/.sys/partition_stats"
+                        }
+                    }
+                )", port)
+            );
+
+            t.TestEnv->ReliablePropose(runtime, CancelImportRequest(++t.TxId, "/MyRoot", importId), {
+                Ydb::StatusIds::SUCCESS,
+                Ydb::StatusIds::NOT_FOUND
+            });
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                const auto response = TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::CANCELLED,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+
+                const auto& entry = response.GetResponse().GetEntry();
+                if (entry.GetStatus() == Ydb::StatusIds::CANCELLED) {
+                    UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(entry.GetIssues()), "Cancelled manually");
+                }
+            }
+        });
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
         auto topic = NDescUT::TSimpleTopic(0, 2);
         ShouldSucceed({
@@ -8037,7 +8376,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         }, topic.GetImportRequest());
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnMaterializedIndex) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnMaterializedIndex, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -8074,7 +8413,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -8108,8 +8446,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleReplication) {
-        ShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleReplication, 2, 1, false) {
+        ShouldSucceed(t,
             {
                 EPathTypeReplication,
                 R"(
@@ -8129,7 +8467,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleTransfer) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTransfer, 2, 1, false) {
         const auto settings = R"(
             ImportFromS3Settings {
                 endpoint: "localhost:%d"
@@ -8145,7 +8483,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         )";
 
-        ShouldSucceed({
+        ShouldSucceed(t, {
             {
                 "/Table",
                 {

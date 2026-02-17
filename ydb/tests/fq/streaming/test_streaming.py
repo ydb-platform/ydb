@@ -266,6 +266,8 @@ class TestStreamingInYdb(StreamingTestBase):
 
         data = ['{"dt": 1696849943000001, "str": "C" }']
         self.write_stream(data, endpoint=endpoint)
+        self.wait_completed_checkpoints(kikimr, path)
+
         expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 

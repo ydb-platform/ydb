@@ -1,6 +1,10 @@
 #include "scan_diagnostics_actor.h"
 
+#include <ydb/core/mon/mon.h>
+
 #include <contrib/libs/fmt/include/fmt/format.h>
+
+#include <library/cpp/monlib/service/pages/resource_mon_page.h>
 
 namespace NKikimr::NColumnShard::NDiagnostics {
     
@@ -19,13 +23,17 @@ void ReplaceAll(TString& str, const TString& from, const TString& to) {
 
 }
 
-TScanDiagnosticsActor::TScanDiagnosticsActor()
-    : TActor(&TThis::StateMain) {    
+void TScanDiagnosticsActor::Bootstrap() {
+    TMon* mon = AppData()->Mon;
+    if (mon) {
+        mon->Register(new NMonitoring::TResourceMonPage("columnshard/viz-global.js", "viz-global.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
+    }
+    Become(&TThis::StateMain);
 }
 
 void TScanDiagnosticsActor::Handle(const NMon::TEvRemoteHttpInfo::TPtr& ev) {
     TStringBuilder htmlResult;
-    htmlResult << R"(<script src="https://dreampuf.github.io/GraphvizOnline/viz-global.js"></script>)";
+    htmlResult << R"(<script language="javascript" type="text/javascript" src="../columnshard/viz-global.js"></script>)";
     htmlResult << RenderScanDiagnostics(LastPublicScans, "public");
     htmlResult << RenderScanDiagnostics(LastInternalScans, "internal");
     Send(ev->Sender, std::make_unique<NMon::TEvRemoteHttpInfoRes>(htmlResult));

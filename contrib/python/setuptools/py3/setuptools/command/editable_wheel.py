@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import logging
+import operator
 import os
 import shutil
 import traceback
@@ -406,7 +407,9 @@ class _StaticPth:
         self.name = name
         self.path_entries = path_entries
 
-    def __call__(self, wheel: WheelFile, files: list[str], mapping: Mapping[str, str]):
+    def __call__(
+        self, wheel: WheelFile, files: list[str], mapping: Mapping[str, str]
+    ) -> None:
         entries = "\n".join(str(p.resolve()) for p in self.path_entries)
         contents = _encode_pth(f"{entries}\n")
         wheel.writestr(f"__editable__.{self.name}.pth", contents)
@@ -451,7 +454,9 @@ class _LinkTree(_StaticPth):
         self._file = dist.get_command_obj("build_py").copy_file
         super().__init__(dist, name, [self.auxiliary_dir])
 
-    def __call__(self, wheel: WheelFile, files: list[str], mapping: Mapping[str, str]):
+    def __call__(
+        self, wheel: WheelFile, files: list[str], mapping: Mapping[str, str]
+    ) -> None:
         self._create_links(files, mapping)
         super().__call__(wheel, files, mapping)
 
@@ -545,7 +550,9 @@ class _TopLevelFinder:
         content = _encode_pth(f"import {finder}; {finder}.install()")
         yield (f"__editable__.{self.name}.pth", content)
 
-    def __call__(self, wheel: WheelFile, files: list[str], mapping: Mapping[str, str]):
+    def __call__(
+        self, wheel: WheelFile, files: list[str], mapping: Mapping[str, str]
+    ) -> None:
         for file, content in self.get_implementation():
             wheel.writestr(file, content)
 
@@ -659,7 +666,7 @@ def _parent_path(pkg, pkg_path):
     >>> _parent_path("b", "src/c")
     'src/c'
     """
-    parent = pkg_path[: -len(pkg)] if pkg_path.endswith(pkg) else pkg_path
+    parent = pkg_path.removesuffix(pkg)
     return parent.rstrip("/" + os.sep)
 
 
@@ -900,7 +907,7 @@ def _finder_template(
     """Create a string containing the code for the``MetaPathFinder`` and
     ``PathEntryFinder``.
     """
-    mapping = dict(sorted(mapping.items(), key=lambda p: p[0]))
+    mapping = dict(sorted(mapping.items(), key=operator.itemgetter(0)))
     return _FINDER_TEMPLATE.format(name=name, mapping=mapping, namespaces=namespaces)
 
 

@@ -68,6 +68,8 @@ namespace NActors {
     struct TExecutorThreadCtx : public TGenericExecutorThreadCtx {
         using TBase = TGenericExecutorThreadCtx;
 
+        i16 PriorityTaskPool = -1;
+
         void SetWork() {
             ExchangeState(EThreadState::Work);
         }

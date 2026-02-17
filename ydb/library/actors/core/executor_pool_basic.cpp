@@ -579,6 +579,7 @@ namespace NActors {
                     actorSystem,
                     this,
                     PoolName));
+            Threads[i].PriorityTaskPool = (UseTaskPools ? i / ThreadsForTaskPool : 0);
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 

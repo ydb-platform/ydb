@@ -574,6 +574,7 @@ std::optional<NThreading::TPromise<void>> TKeyedWriteSession::TEventsWorker::Han
 
 void TKeyedWriteSession::TEventsWorker::AddReadyToAcceptEvent() {
     EventsOutputQueue.push_back(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()));
+    ContinuationTokensIndex.push_back(std::prev(EventsOutputQueue.end()));
     Session->Metrics.IncContinuationTokensSent();
 }
 
@@ -678,6 +679,19 @@ bool TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
     return eventsTransferred;
 }
 
+std::optional<TContinuationToken> TKeyedWriteSession::TEventsWorker::GetContinuationToken() {
+    if (ContinuationTokensIndex.empty()) {
+        return std::nullopt;
+    }
+
+    auto iter = ContinuationTokensIndex.front();
+    auto event = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*iter);
+    Y_ABORT_UNLESS(event, "Expected ReadyToAcceptEvent only in ContinuationTokensIndex");
+    EventsOutputQueue.erase(iter);
+    ContinuationTokensIndex.pop_front();
+    return std::move(event->ContinuationToken);
+}
+
 std::list<TWriteSessionEvent::TEvent>::iterator TKeyedWriteSession::TEventsWorker::AckQueueBegin(std::uint32_t partition) {
     auto [queueIt, _] = PartitionsEventQueues.try_emplace(partition);
     return queueIt->second.begin();
@@ -714,6 +728,9 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::Get
         }
 
         auto event = std::move(EventsOutputQueue.front());
+        if (std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)) {
+            ContinuationTokensIndex.pop_front();
+        }
         EventsOutputQueue.pop_front();
         return event;
     }
@@ -1004,6 +1021,10 @@ void TKeyedWriteSession::TMessagesWorker::PopInFlightMessage() {
 
     Y_ABORT_UNLESS(it->Data.size() <= MemoryUsage, "MemoryUsage is less than the size of the message");
     MemoryUsage -= it->Data.size();
+
+    if (it->FlushPromise.Initialized()) {
+        Session->FlushPromises.push_back(it->FlushPromise);
+    }
     InFlightMessages.pop_front();
 }
 
@@ -1308,7 +1329,7 @@ TKeyedWriteSession::TKeyedWriteSession(
         return a.GetPartitionId() < b.GetPartitionId();
     });
 
-    auto partitionChooserStrategy = settings.PartitionChooserStrategy_;
+    PartitionChooserStrategy = settings.PartitionChooserStrategy_;
     auto strategy = topicConfig.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
     auto autoPartitioningEnabled = (strategy != EAutoPartitioningStrategy::Disabled &&
                                 strategy != EAutoPartitioningStrategy::Unspecified);
@@ -1351,7 +1372,7 @@ TKeyedWriteSession::TKeyedWriteSession(
         }
     }
 
-    switch (partitionChooserStrategy) {
+    switch (PartitionChooserStrategy) {
         case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound:
             PartitioningKeyHasher = settings.PartitioningKeyHasher_;
             PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
@@ -1439,7 +1460,16 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
             SeqNoStrategy = message.SeqNo_.has_value() ? ESeqNoStrategy::WithSeqNo : ESeqNoStrategy::WithoutSeqNo;
         }
 
-        auto partition = PartitionChooser->ChoosePartition(key);
+        std::uint32_t partition;
+        if (key.empty()) {
+            if (PartitionChooserStrategy == TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound) {
+                ythrow TContractViolation("Key is required for Bound partition chooser strategy");
+            }
+            partition = ChooseRandomPartition();
+        } else {
+            partition = PartitionChooser->ChoosePartition(key);
+        }
+
         MessagesWorker->AddMessage(key, std::move(message), partition, tx);
         eventsPromise = EventsWorker->HandleNewMessage();
         RunUserEventLoop();
@@ -1449,6 +1479,11 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
     if (eventsPromise) {
         eventsPromise->TrySetValue();
     }
+}
+
+std::uint32_t TKeyedWriteSession::ChooseRandomPartition() {
+    std::uniform_int_distribution<std::uint32_t> distribution(0, Partitions.size() - 1);
+    return distribution(RandomGenerator);
 }
 
 bool TKeyedWriteSession::Close(TDuration closeTimeout) {
@@ -1709,6 +1744,11 @@ void TKeyedWriteSession::RunMainWorker() {
             eventsPromise->TrySetValue();
         }
 
+        while (!FlushPromises.empty()) {
+            FlushPromises.front().TrySetValue();
+            FlushPromises.pop_front();
+        }
+
         const auto isClosed = Closed.load();
         const auto closeTimeout = GetCloseTimeout();
         if (isClosed && (Done.load() || MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
@@ -1743,6 +1783,32 @@ void TKeyedWriteSession::RunMainWorker() {
         }
         // Rerun was requested; continue the loop without recursion.
     }
+}
+
+EWriteResult TKeyedWriteSession::Write(TWriteMessage&& message, const std::string& key,
+               TTransactionBase* tx) {
+    if (Closed.load()) {
+        return EWriteResult::CLOSED;
+    }
+
+    auto continuationToken = EventsWorker->GetContinuationToken();
+    if (!continuationToken) {
+        return EWriteResult::OVERLOADED;
+    }
+
+    Write(std::move(*continuationToken), key, std::move(message), tx);
+    return EWriteResult::SUCCESS;
+}
+
+NThreading::TFuture<void> TKeyedWriteSession::Flush() {
+    std::unique_lock lock(GlobalLock);
+    if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
+        return NThreading::MakeFuture();
+    }
+
+    auto lastInFlightMessage = std::prev(MessagesWorker->InFlightMessages.end());
+    lastInFlightMessage->FlushPromise = NThreading::NewPromise();
+    return lastInFlightMessage->FlushPromise.GetFuture();
 }
 
 TInstant TKeyedWriteSession::GetCloseDeadline() {

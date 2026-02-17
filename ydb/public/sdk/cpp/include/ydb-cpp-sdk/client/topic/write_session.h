@@ -340,6 +340,45 @@ public:
     virtual ~IKeyedWriteSession() = default;
 };
 
+enum class EWriteResult : uint8_t {
+    SUCCESS = 0,
+    OVERLOADED = 1,
+    CLOSED = 2,
+};
+
+//! Producer is an abstraction that can write messages to the topic.
+class IProducer {
+public:
+    //! Write single message.
+    //! key - message key.
+    //! Returns write result.
+    //! If write was successful, returns SUCCESS.
+    //! If write was not successful due to overloaded buffer, returns OVERLOADED.
+    //! If write was not successful because of closed session, returns CLOSED.
+    virtual EWriteResult Write(TWriteMessage&& message, const std::string& key = "",
+        TTransactionBase* tx = nullptr) = 0;
+
+    //! Future that is set when next event is available.
+    virtual NThreading::TFuture<void> WaitEvent() = 0;
+
+    //! Wait and return next event. Use WaitEvent() for non-blocking wait.
+    virtual std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false) = 0;
+
+    //! Get several events in one call.
+    //! If blocking = false, instantly returns up to maxEventsCount available events.
+    //! If blocking = true, blocks till maxEventsCount events are available.
+    //! If maxEventsCount is unset, write session decides the count to return itself.
+    virtual std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt) = 0;
+
+    //! Flush all messages to the server.
+    //! Returns future that is set when flush is complete.
+    virtual NThreading::TFuture<void> Flush() = 0;
+
+    //! Close the producer.
+    virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
+    virtual ~IProducer() = default;
+};
+
 //! Simple blocking keyed write session. Experimental SDK. DO NOT USE IN PRODUCTION.
 class ISimpleBlockingKeyedWriteSession {
 public:

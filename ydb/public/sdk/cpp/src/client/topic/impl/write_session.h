@@ -66,6 +66,7 @@ private:
 // TKeyedWriteSession
 
 class TKeyedWriteSession : public IKeyedWriteSession,
+                           public IProducer,
                            public TContinuationTokenIssuer,
                            public std::enable_shared_from_this<TKeyedWriteSession> {
 private:
@@ -99,6 +100,7 @@ private:
         TTransactionBase* Tx;
         std::uint32_t Partition;
         bool Sent = false;
+        NThreading::TPromise<void> FlushPromise;
 
         TWriteMessage BuildMessage() const;
     };
@@ -285,6 +287,7 @@ private:
         std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt, const std::vector<EEventType>& eventTypes = {});
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueBegin(std::uint32_t partition);
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueEnd(std::uint32_t partition);
+        std::optional<TContinuationToken> GetContinuationToken();
 
     private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, std::uint32_t partition);
@@ -301,6 +304,10 @@ private:
         std::unordered_set<std::uint32_t> ReadyFutures;
         std::unordered_map<std::uint32_t, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
         std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
+
+        using EventsIter = std::list<TWriteSessionEvent::TEvent>::iterator;
+        std::list<EventsIter> ContinuationTokensIndex;
+
         std::mutex Lock;
     
         NThreading::TPromise<void> EventsPromise;
@@ -396,6 +403,8 @@ private:
 
     void NextEpoch();
 
+    std::uint32_t ChooseRandomPartition();
+
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
@@ -404,6 +413,11 @@ public:
     
     void Write(TContinuationToken&& continuationToken, const std::string& key, TWriteMessage&& message,
                TTransactionBase* tx = nullptr) override;
+
+    EWriteResult Write(TWriteMessage&& message, const std::string& key = "",
+               TTransactionBase* tx = nullptr) override;
+
+    NThreading::TFuture<void> Flush() override;
 
     NThreading::TFuture<void> WaitEvent() override;
 
@@ -435,6 +449,7 @@ private:
 
     TKeyedWriteSessionSettings Settings;
     ESeqNoStrategy SeqNoStrategy = ESeqNoStrategy::NotInitialized;
+    TKeyedWriteSessionSettings::EPartitionChooserStrategy PartitionChooserStrategy = TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
@@ -463,6 +478,9 @@ private:
     std::atomic<std::uint8_t> MainWorkerState = 0;
     std::atomic<size_t> Epoch = 0;
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
+    std::mt19937_64 RandomGenerator = std::mt19937_64(std::random_device()());
+    
+    std::list<NThreading::TPromise<void>> FlushPromises;
 
     std::vector<TEventsWorker::EEventType> EventTypesWithHandlers;
 };

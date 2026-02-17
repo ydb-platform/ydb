@@ -1942,7 +1942,42 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(session1->Close(TDuration::Seconds(30)));
         UNIT_ASSERT(session2->Close(TDuration::Seconds(30)));
     }
+
+    Y_UNIT_TEST(Producer_BasicWrite) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("producer_basic_write");
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto msgData = TString(10_KB, 'a');
+
+        for (ui64 i = 0; i < 100; ++i) {    
+            producer->Write(TWriteMessage(msgData));
+        }
+
+        producer->Flush().Wait();
+
+        auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 10);
+
+        ui64 messagesWritten = 0;
+        for (const auto& partition : describe.GetTopicDescription().GetPartitions()) {
+            auto stats = partition.GetPartitionStats();
+            UNIT_ASSERT(stats);
+            messagesWritten += stats->GetEndOffset() - stats->GetStartOffset();
+        }
     
+        UNIT_ASSERT_EQUAL(messagesWritten, 100);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)));
+    }
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
 } // namespace

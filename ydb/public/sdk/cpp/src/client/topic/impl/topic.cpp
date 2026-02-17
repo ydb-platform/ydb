@@ -601,6 +601,10 @@ std::shared_ptr<IKeyedWriteSession> TTopicClient::CreateKeyedWriteSession(
     return Impl_->CreateKeyedWriteSession(settings);
 }
 
+std::shared_ptr<IProducer> TTopicClient::CreateProducer(const TKeyedWriteSessionSettings& settings) {
+    return Impl_->CreateProducer(settings);
+}
+
 std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSessionSettings& settings) {
     return Impl_->CreateWriteSession(settings);
 }

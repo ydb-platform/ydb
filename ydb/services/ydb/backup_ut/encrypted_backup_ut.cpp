@@ -847,7 +847,7 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
 
 protected:
     bool NotEncryptedFileName(const TString& key) {
-        return key.EndsWith(".sha256") || key == "/test_bucket/Prefix/metadata.json" || key.EndsWith("metadata.json");
+        return key.EndsWith(".sha256") || key == "/test_bucket/Prefix/metadata.json";
     }
 
     TString ReencryptWithDifferentIV(const TString& source, NBackup::TEncryptionKey& encryptionKey, const std::string& algorithm) {

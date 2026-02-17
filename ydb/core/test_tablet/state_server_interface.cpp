@@ -1,11 +1,8 @@
 #include "load_actor_impl.h"
 
-<<<<<<< HEAD
-=======
 #include <ydb/library/actors/interconnect/interconnect_stream.h>
 #include <util/network/address.h>
 
->>>>>>> 9c5e0e09915 (Add support for hostname resolve in TestShard (#34263))
 namespace NKikimr::NTestShard {
 
     class TStateServerInterfaceActor : public TActor<TStateServerInterfaceActor> {

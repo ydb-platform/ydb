@@ -181,7 +181,7 @@ namespace NActors {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "don't have leases; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
-            ui64 semaphore = Pools[i]->GetSemaphore().OldSemaphore;
+            ui64 semaphore = Pools[i]->GetMaybeNotEmptyCounter();
             if (semaphore == 0) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "pool[", i, "]::Semaphore == 0; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;

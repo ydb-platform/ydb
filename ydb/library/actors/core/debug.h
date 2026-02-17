@@ -18,7 +18,7 @@ enum class EDebugLevel {
     Test,
 };
 
-constexpr EDebugLevel DebugLevel = EDebugLevel::None;
+constexpr EDebugLevel DebugLevel = EDebugLevel::Activation;
 
 template <typename ...TArgs>
 inline TString ActorLibDebugMakeMsg(const std::string &file, int line, TArgs&& ...args) {

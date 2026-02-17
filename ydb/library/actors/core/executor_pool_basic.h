@@ -133,6 +133,7 @@ namespace NActors {
         friend class TBasicExecutorPoolSanitizer;
         friend class TSharedExecutorPool;
 
+        alignas(64) std::atomic<ui64> MaybeNotEmptyCounter = 0;
         NThreading::TPadded<std::atomic<ui64>> CheckToSleepWorkers = 0;
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
         const ui64 DefaultSpinThresholdCycles;
@@ -284,7 +285,7 @@ namespace NActors {
         void CalcSpinPerThread(ui64 wakingUpConsumption);
         void ClearWaitingStats() const;
 
-        TSemaphore GetSemaphore() const;
+        ui64 GetMaybeNotEmptyCounter() const;
         void SetSharedPool(TSharedExecutorPool* pool);
         void SetSharedCpuQuota(float quota);
 

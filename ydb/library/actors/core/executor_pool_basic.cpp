@@ -193,8 +193,9 @@ namespace NActors {
         ThreadCount = static_cast<i16>(MaxFullThreadCount);
         auto semaphore = TSemaphore();
         semaphore.CurrentThreadCount = ThreadCount;
-        if (!UseTaskPools) {
-            TaskPools[0].Semaphore = semaphore.ConvertToI64();
+
+        for (i16 i = 0; i < TaskPoolsCount; ++i) {
+            TaskPools[i].Semaphore = semaphore.ConvertToI64();
         }
 
         DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
@@ -444,6 +445,10 @@ namespace NActors {
             }
         }
 
+        if (semaphore.OldSemaphore == 1) {
+            MaybeNotEmptyCounter++;
+        }
+
         i16 sleepThreads = 0;
         Y_UNUSED(sleepThreads);
         do {
@@ -664,7 +669,7 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::SetFullThreadCount(i16 threads) {
-        Y_ABORT_UNLESS(!UseTaskPools);
+        //Y_ABORT_UNLESS(!UseTaskPools);
         threads = Max<i16>(MinFullThreadCount, Min(MaxFullThreadCount, threads));
         with_lock (ChangeThreadsLock) {
             i16 prevCount = GetFullThreadCount();
@@ -804,9 +809,8 @@ namespace NActors {
         }
     }
 
-    TBasicExecutorPool::TSemaphore TBasicExecutorPool::GetSemaphore() const {
-        Y_ABORT_UNLESS(!UseTaskPools);
-        return TSemaphore::GetSemaphore(TaskPools[0].Semaphore);
+    ui64 TBasicExecutorPool::GetMaybeNotEmptyCounter() const {
+        return MaybeNotEmptyCounter;
     }
 
     void TBasicExecutorPool::SetSharedPool(TSharedExecutorPool* pool) {
@@ -844,7 +848,9 @@ namespace NActors {
                             SharedPool->Threads[workerId].SetWork();
                             --taskPool.Semaphore;
                             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
-                            return MailboxTable->Get(activation);
+                            TMailbox *mailbox = MailboxTable->Get(activation);
+                            mailbox->PriorityTaskPool = revolvingCounter % TaskPoolsCount;
+                            return mailbox;
                         }
                     }
 
@@ -854,7 +860,11 @@ namespace NActors {
                 }
             }
         } while (!StopFlag.load(std::memory_order_acquire) && findPoolWithWork);
-        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "stop");
+
+        ui64 c = MaybeNotEmptyCounter.load(std::memory_order_acquire);
+        if (c > 0) {
+            MaybeNotEmptyCounter.compare_exchange_strong(c, c / 2, std::memory_order_acquire, std::memory_order_relaxed);
+        }
         return nullptr;
     }
 

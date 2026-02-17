@@ -131,6 +131,32 @@ namespace NActors {
         Y_ABORT_UNLESS(passedThreads == static_cast<ui64>(PoolThreads), "Passed threads %" PRIu64 " != PoolThreads %" PRIu64, passedThreads, static_cast<ui64>(PoolThreads));
 
         Pools.resize(PoolManager.PoolThreadRanges.size());
+
+        EXECUTOR_POOL_SHARED_DEBUG(
+            EDebugLevel::ExecutorPool,
+            "created; poolThreads == ",
+            PoolThreads,
+            " pools == ",
+            PoolManager.PoolInfos.size()
+        );
+        for (i16 poolId = 0; poolId < static_cast<i16>(PoolManager.PoolInfos.size()); ++poolId) {
+            const auto& poolInfo = PoolManager.PoolInfos[poolId];
+            const auto& range = PoolManager.PoolThreadRanges[poolId];
+            EXECUTOR_POOL_SHARED_DEBUG(
+                EDebugLevel::ExecutorPool,
+                "poolId == ",
+                poolId,
+                " poolName == ",
+                poolInfo.PoolName,
+                " sharedThreadCount == ",
+                poolInfo.SharedThreadCount,
+                " threadRange == [",
+                range.Begin,
+                ", ",
+                range.End,
+                ")"
+            );
+        }
     }
 
     TSharedExecutorPool::~TSharedExecutorPool() {
@@ -342,12 +368,16 @@ namespace NActors {
     void TSharedExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {
         TAffinityGuard affinityGuard(Affinity());
 
-        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Prepare: start");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Prepare: start; poolThreads == ", PoolThreads);
 
         ActorSystem = actorSystem;
 
         ScheduleReaders.Reset(new NSchedulerQueue::TReader[PoolThreads]);
         ScheduleWriters.Reset(new NSchedulerQueue::TWriter[PoolThreads]);
+
+        if (PoolThreads == 0) {
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Prepare: no shared workers configured");
+        }
 
 
         for (i16 i = 0; i != PoolThreads; ++i) {
@@ -378,7 +408,10 @@ namespace NActors {
     void TSharedExecutorPool::Start() {
         TAffinityGuard affinityGuard(Affinity());
 
-        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "start");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "start; poolThreads == ", PoolThreads);
+        if (PoolThreads == 0) {
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "start: no shared workers to start");
+        }
 
         for (i16 i = 0; i != PoolThreads; ++i) {
             Y_ABORT_UNLESS(Threads[i].Thread != nullptr, "Thread is nullptr i %" PRIu16, i);
@@ -490,15 +523,18 @@ namespace NActors {
     }
 
     bool TSharedExecutorPool::WakeUpGlobalThreads(i16 ownerPoolId) {
-        if (ForeignThreadsAllowedByPool[ownerPoolId].load(std::memory_order_acquire) == 0) {
+        ui64 allowed = ForeignThreadsAllowedByPool[ownerPoolId].load(std::memory_order_acquire);
+        if (allowed == 0) {
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "ownerPoolId == ", ownerPoolId, " no foreign threads allowed");
             return false;
         }
         ui64 slots = ForeignThreadSlots[ownerPoolId].load(std::memory_order_acquire);
         if (slots <= 0) {
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "ownerPoolId == ", ownerPoolId, " no slots; allowed == ", allowed, " slots == ", slots);
             return false;
         }
 
-        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "ownerPoolId == ", ownerPoolId);
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "ownerPoolId == ", ownerPoolId, " allowed == ", allowed, " slots == ", slots);
         ui64 threadsStateRaw = ThreadsState.load(std::memory_order_acquire);
         TThreadsState threadsState = TThreadsState::GetThreadsState(threadsStateRaw);
         bool allowedToWakeUp = false;
@@ -520,7 +556,17 @@ namespace NActors {
             EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "increase notifications; ", threadsState.Notifications - 1, " -> ", threadsState.Notifications);
         }
         if (!allowedToWakeUp) {
-            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no free threads");
+            EXECUTOR_POOL_SHARED_DEBUG(
+                EDebugLevel::Activation,
+                "no free threads; ownerPoolId == ",
+                ownerPoolId,
+                " poolThreads == ",
+                PoolThreads,
+                " workingThreadCount == ",
+                threadsState.WorkingThreadCount,
+                " notifications == ",
+                threadsState.Notifications
+            );
             return false;
         }
 

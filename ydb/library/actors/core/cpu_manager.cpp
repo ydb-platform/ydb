@@ -40,6 +40,7 @@ namespace NActors {
         }
 
         TVector<TPoolShortInfo> poolInfos;
+        i64 totalSharedThreads = 0;
 
         std::vector<i16> poolIds(Config.Basic.size());
         std::iota(poolIds.begin(), poolIds.end(), 0);
@@ -54,6 +55,24 @@ namespace NActors {
         for (ui32 i = 0; i < Config.Basic.size(); ++i) {
             auto &cfg = Config.Basic[poolIds[i]];
             i16 sharedThreadCount = cfg.AllThreadsAreShared ? cfg.DefaultThreadCount : cfg.MaxThreadCount ? 1 : 0;
+            totalSharedThreads += sharedThreadCount;
+            ACTORLIB_DEBUG(
+                EDebugLevel::ActorSystem,
+                "TCpuManager::SetupShared: basic pool ",
+                cfg.PoolId,
+                " (",
+                cfg.PoolName,
+                ") hasSharedThread=",
+                cfg.HasSharedThread,
+                " allThreadsAreShared=",
+                cfg.AllThreadsAreShared,
+                " defaultThreadCount=",
+                cfg.DefaultThreadCount,
+                " maxThreadCount=",
+                cfg.MaxThreadCount,
+                " -> sharedThreadCount=",
+                sharedThreadCount
+            );
             poolInfos.push_back(TPoolShortInfo{
                 .PoolId = static_cast<i16>(Config.Basic[poolIds[i]].PoolId),
                 .SharedThreadCount = sharedThreadCount,
@@ -74,7 +93,15 @@ namespace NActors {
         }
         Shared = std::make_unique<TSharedExecutorPool>(Config.Shared, poolInfos);
 
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared: created");
+        ACTORLIB_DEBUG(
+            EDebugLevel::ActorSystem,
+            "TCpuManager::SetupShared: created; basicPools=",
+            Config.Basic.size(),
+            " ioPools=",
+            Config.IO.size(),
+            " totalSharedThreads=",
+            totalSharedThreads
+        );
     }
 
     void TCpuManager::Setup() {

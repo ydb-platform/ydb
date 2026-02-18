@@ -87,10 +87,10 @@ template<>
 IActor* TTableUploader<TData>::CreateUploaderInternal(
     const TString& database, const TString& tablePath,
     const std::shared_ptr<TData>& data, 
-    const TString& userSID,
+    const NACLib::TUserContext::TPtr& userCtx,
     ui64 cookie)
 {
-    return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, userSID, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
+    return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, userCtx, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
 }
 
 }

@@ -54,10 +54,10 @@ template<>
 IActor* TTableUploader<arrow::RecordBatch>::CreateUploaderInternal(
     const TString& database, const TString& tablePath,
     const std::shared_ptr<arrow::RecordBatch>& data, 
-    const TString& userSID,
+    const NACLib::TUserContext::TPtr& userCtx,
     ui64 cookie)
 {
-    Y_UNUSED(userSID);
+    Y_UNUSED(userCtx);
     return NTxProxy::CreateUploadColumnsInternal(SelfId(), database, tablePath, Scheme->Types, data, cookie);
 }
 

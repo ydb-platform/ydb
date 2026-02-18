@@ -423,6 +423,7 @@ message TEvCreateSessionRequest {
     optional string ApplicationName = 11;
     optional string UserSID = 12;
     optional string UserName = 13;
+    optional string UserTraceId = 14;
 }
 
 message TCreateSessionResponse {

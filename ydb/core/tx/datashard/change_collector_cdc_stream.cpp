@@ -365,44 +365,9 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
         const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags,
         const NACLib::TUserContext::TPtr& userCtx)
 {
-#if 0
-    // WriteMyLog("Start");
-    {
-        // WriteMyLog("userCtx1=" + std::to_string(reinterpret_cast<const NProtoBuf::uint64>(userCtx.Get())));
-        TString x = userCtx->UserSID;
-        TString y = userCtx->UserTraceId;
-        Y_UNUSED(x);
-        Y_UNUSED(y);
-    }
-
     NKikimrChangeExchange::TDataChange body;
-    {
-        // WriteMyLog("userCtx2=" + std::to_string(reinterpret_cast<const NProtoBuf::uint64>(userCtx.Get())));
-        TString x = userCtx->UserSID;
-        TString y = userCtx->UserTraceId;
-        Y_UNUSED(x);
-        Y_UNUSED(y);
-    }
     Serialize(body, rop, key, keyTags, oldState, newState, valueTags);
-
-    {
-        // WriteMyLog("userCtx3=" + std::to_string(reinterpret_cast<const NProtoBuf::uint64>(userCtx.Get())));
-        TString x = userCtx->UserSID;
-        TString y = userCtx->UserTraceId;
-        Y_UNUSED(x);
-        Y_UNUSED(y);
-    }
     Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, userCtx);
-#else
-    TString userSID = userCtx->UserSID;
-    TString userTraceId = userCtx->UserTraceId;
-
-    NKikimrChangeExchange::TDataChange body;
-    Serialize(body, rop, key, keyTags, oldState, newState, valueTags);
-    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, 
-        new NACLib::TUserContext(userSID, userTraceId));
-
-#endif
 }
 
 } // NDataShard

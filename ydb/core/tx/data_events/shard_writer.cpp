@@ -41,7 +41,7 @@ namespace NKikimr::NEvWrite {
 
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const std::optional<TDuration> timeout, const TString& userSID)
+        const std::optional<TDuration> timeout, const NACLib::TUserContext::TPtr& userCtx)
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
         , TableId(tableId)
@@ -53,12 +53,15 @@ namespace NKikimr::NEvWrite {
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
         , Timeout(timeout)
         , RetryBySubscription(AppData()->FeatureFlags.GetEnableCsOverloadsSubscriptionRetries())
-        , UserSID(userSID) {
+        , UserCtx(userCtx) {
     }
 
     void TShardWriter::SendWriteRequest() {
         auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        ev->SetUserSID(UserSID);
+        if (UserCtx != nullptr) {
+            ev->SetUserSID(UserCtx->UserSID);
+            ev->SetUserTraceId(UserCtx->UserTraceId);
+        }
         DataForShard->Serialize(*ev, TableId, SchemaVersion);
         if (Timeout) {
             ev->Record.SetTimeoutSeconds(Timeout->Seconds());

@@ -12,6 +12,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <ydb/library/actors/core/scheduler_cookie.h>
+
 #include <util/generic/hash.h>
 #include <library/cpp/json/json_reader.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -90,8 +92,9 @@ public:
             << "  AND CompilationDurationMs < " << MaxCompilationDurationMs;
 
         if (!NodeIds.empty()) {
+            ui32 nodesToQuery = std::min<ui32>(MaxNodesToRequest, NodeIds.size());
             sql << "  AND NodeId IN (";
-            for (size_t i = 0; i < MaxNodesToRequest; ++i) {
+            for (ui32 i = 0; i < nodesToQuery; ++i) {
                 if (i > 0) sql << ", ";
                 sql << NodeIds[i];
             }
@@ -294,7 +297,8 @@ public:
               << ", waiting for TEvStartWarmup from KqpProxy");
 
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
-        Schedule(softDeadline, new TEvPrivate::TEvSoftDeadline());
+        SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
+        Schedule(softDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
 
         if (Database.empty()) {
             LOG_I("Database is empty, skipping warmup");
@@ -394,7 +398,10 @@ private:
               << ", nodeIds count: " << NodeIds.size()
               << ", maxNodesToQuery: " << Config.MaxNodesToRequest
               << ", scheduling soft deadline: " << Config.Deadline);
-        Schedule(Config.Deadline, new TEvPrivate::TEvSoftDeadline());
+        // Cancel bootstrap soft deadline (discovery wait) and schedule compilation soft deadline
+        SoftDeadlineCookieHolder.Detach();
+        SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
+        Schedule(Config.Deadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
         StartFetch();
     }
 
@@ -414,8 +421,8 @@ private:
         auto* result = ev->Get();
         
         if (!result->Success) {
-            LOG_I("Fetch failed, skipping warmup: " << result->Error);
-            Complete(true, "Skipped: fetch failed");
+            LOG_W("Fetch failed, skipping warmup: " << result->Error);
+            Complete(false, "Fetch failed: " + result->Error);
             return;
         }
 
@@ -615,6 +622,7 @@ private:
     ui32 MaxConcurrentCompilations = 1;
     bool Completed = false;
     bool SoftDeadlineReached = false;
+    NActors::TSchedulerCookieHolder SoftDeadlineCookieHolder;
     TString SkipReason;
     TVector<ui32> NodeIds;
 };

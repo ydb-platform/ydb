@@ -9,7 +9,7 @@
 #include <util/datetime/base.h>
 
 namespace NKikimr::NKqp {
-    
+
 struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, TKqpEvents::EvWarmupComplete> {
     bool Success;
     TString Message;

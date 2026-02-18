@@ -754,7 +754,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
     if (runConfig.AppConfig.GetTableServiceConfig().HasCompileCacheWarmupConfig()) {
         auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
             runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
-        GRpcServersWrapper->WarmupTimeout = warmupConfig.HardDeadline;
+        GRpcWarmupTimeout = warmupConfig.HardDeadline;
     }
 
     GRpcServersWrapper->GrpcServersFactory = [runConfig, this] { return CreateGRpcServers(runConfig); };
@@ -2216,7 +2216,7 @@ void TKikimrRunner::KikimrStart() {
     if (GRpcServersWrapper) {
         GRpcServersWrapper->Servers = GRpcServersWrapper->GrpcServersFactory();
         GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(
-            GRpcServersWrapper, ProcessMemoryInfoProvider, GRpcServersWrapper->WarmupTimeout));
+            GRpcServersWrapper, ProcessMemoryInfoProvider, GRpcWarmupTimeout));
         ActorSystem->RegisterLocalService(NKikimr::MakeGRpcServersManagerId(ActorSystem->NodeId), GRpcServersManager);
     }
 

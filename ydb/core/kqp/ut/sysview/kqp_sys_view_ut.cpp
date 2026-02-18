@@ -1232,7 +1232,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
     }
 
-    Y_UNIT_TEST(CompileCacheServerlessReturnsEmpty) {
+    Y_UNIT_TEST(CompileCacheTenantMismatchReturnsEmpty) {
         auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
         TKikimrRunner kikimr(serverSettings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -1253,7 +1253,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         auto compileServiceId = NKqp::MakeKqpCompileServiceID(runtime.GetNodeId(0));
 
         auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListQueryCacheQueriesRequest>();
-        req->Record.SetTenantName("/Root/serverless-db");
+        req->Record.SetTenantName("/Root/some-db");
         req->Record.SetFreeSpace(1024 * 1024);
 
         runtime.Send(new IEventHandle(compileServiceId, edgeActor, req.release()), 0);
@@ -1265,8 +1265,107 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT_C(response->Get()->Record.GetFinished(),
             "Response for a serverless database must be marked Finished immediately");
         UNIT_ASSERT_EQUAL_C(response->Get()->Record.GetCacheCacheQueries().size(), 0,
-            "Serverless database must receive an empty compile cache response, got "
+            "Tenant mismatch must produce an empty compile cache response, got "
             << response->Get()->Record.GetCacheCacheQueries().size() << " entries");
+    }
+
+    Y_UNIT_TEST(CompileCacheUserIsolation) {
+        TKikimrSettings settings;
+        settings.SetAuthToken("root@builtin");
+        TKikimrRunner kikimr(settings);
+
+        // Grant user1 and user2 permissions to access tables and sys views
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+            for (const auto& user : {"user1@builtin", "user2@builtin"}) {
+                TPermissions permissions(user,
+                    {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"}
+                );
+                auto result = schemeClient.ModifyPermissions("/Root",
+                    TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                ).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        // User1 compiles a query -> cache entry with UserSid="user1@builtin"
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("user1@builtin");
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.PrepareDataQuery(
+                R"(DECLARE $k AS Uint64; SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;)"
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            driver.Stop(true);
+        }
+
+        // User2 compiles the same query -> separate cache entry with UserSid="user2@builtin"
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("user2@builtin");
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.PrepareDataQuery(
+                R"(DECLARE $k AS Uint64; SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;)"
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            driver.Stop(true);
+        }
+
+        // User1 queries compile_cache -> should see only their own entries
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("user1@builtin");
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(
+                R"(SELECT UserSID FROM `/Root/.sys/compile_cache_queries`;)",
+                TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSet(0);
+            NYdb::TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                auto userSid = parser.ColumnParser("UserSID").GetOptionalUtf8();
+                UNIT_ASSERT_C(userSid && *userSid == "user1@builtin",
+                    "user1 must see only their own queries, but saw UserSID=" << (userSid ? *userSid : "null"));
+            }
+            driver.Stop(true);
+        }
+
+        // Admin queries compile_cache -> should see entries from both users
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(
+                R"(SELECT UserSID FROM `/Root/.sys/compile_cache_queries`;)",
+                TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSet(0);
+            THashSet<TString> seenUsers;
+            NYdb::TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                auto userSid = parser.ColumnParser("UserSID").GetOptionalUtf8();
+                if (userSid) {
+                    seenUsers.insert(*userSid);
+                }
+            }
+            UNIT_ASSERT_C(seenUsers.contains("user1@builtin"),
+                "Admin must see user1's queries");
+            UNIT_ASSERT_C(seenUsers.contains("user2@builtin"),
+                "Admin must see user2's queries");
+        }
     }
 }
 

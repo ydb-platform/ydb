@@ -19,8 +19,8 @@
 #include <util/system/progname.h>
 #include <util/system/thread.i>
 
-#include <stdio.h>
-#include <time.h>
+#include <cstdio>
+#include <ctime>
 
 namespace {
 

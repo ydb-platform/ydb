@@ -28,7 +28,7 @@
     #include <pthread.h>
 #endif
 
-#include <errno.h>
+#include <cerrno>
 
 namespace NYql {
 

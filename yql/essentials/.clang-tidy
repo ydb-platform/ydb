@@ -59,6 +59,7 @@ Checks: >
   misc-unconventional-assign-operator,
   misc-use-anonymous-namespace,
   modernize-concat-nested-namespaces,
+  modernize-deprecated-headers,
   modernize-use-override
 CheckOptions:
   - key: readability-identifier-naming.StructPrefix

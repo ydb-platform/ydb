@@ -2,7 +2,7 @@
 
 #include <util/charset/wide.h>
 
-#include <ctype.h>
+#include <cctype>
 #include <vector>
 
 namespace NYql {

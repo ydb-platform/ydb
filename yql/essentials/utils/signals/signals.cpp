@@ -13,10 +13,10 @@
     #include <sys/prctl.h>
 #endif
 
-#include <string.h>
-#include <signal.h>
-#include <errno.h>
-#include <stdlib.h>
+#include <cstring>
+#include <csignal>
+#include <cerrno>
+#include <cstdlib>
 
 namespace NYql {
 

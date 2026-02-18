@@ -8,7 +8,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/json/yson/json2yson.h>
 
-#include <string.h>
+#include <cstring>
 
 extern char** environ;
 

@@ -19,7 +19,7 @@
 #include <util/system/mutex.h>
 
 #ifdef _linux_
-    #include <signal.h>
+    #include <csignal>
 #endif
 
 #include <functional>

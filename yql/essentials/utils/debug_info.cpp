@@ -5,7 +5,7 @@
 #include <util/stream/file.h>
 #include <util/generic/string.h>
 
-#include <string.h>
+#include <cstring>
 
 namespace NYql {
 

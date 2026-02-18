@@ -162,8 +162,7 @@ const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
     return TEvBulkUpsertRequest::GetProtoRequest(req);
 }
 
-static TString GetUserSID(const IRequestOpCtx* request)
-{
+static TString GetUserSID(const IRequestOpCtx* request) {
     return (request->GetInternalToken() != nullptr) ? request->GetInternalToken()->GetUserSID() : "";
 }
 

@@ -88,6 +88,7 @@ ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
 ```yql
 ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
 ```
+
 После сброса колонка будет вести себя аналогично колонке, где сжатие не было задано.
 
 

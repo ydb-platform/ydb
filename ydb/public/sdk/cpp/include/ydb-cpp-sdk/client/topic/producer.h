@@ -79,6 +79,7 @@ public:
 
     //! Flush all messages to the server and wait result.
     //! Returns flush result.
+    //! DO NOT IGNORE THE RETURN VALUE.
     [[nodiscard]] virtual EFlushResult FlushAndWait(TDuration timeout = TDuration::Max()) = 0;
 
     //! Close the producer.

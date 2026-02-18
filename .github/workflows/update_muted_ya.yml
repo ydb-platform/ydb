@@ -296,6 +296,7 @@ jobs:
         env:
           LABELS: ${{ env.LABELS }}
           REVIEWERS: ${{ env.REVIEWERS }}
+          BASE_BRANCH: ${{ matrix.BASE_BRANCH }}
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
@@ -313,8 +314,11 @@ jobs:
               body: commentBody
             });
             
-            // Добавляем лейблы
-            const labelsToAdd = process.env.LABELS.split(',');
+            // Лейблы: базовые + automerge для stable-* (слияние через automerge_pr workflow после прохождения checks_integrated)
+            const labelsToAdd = process.env.LABELS.split(',').map(l => l.trim());
+            if (process.env.BASE_BRANCH.startsWith('stable-')) {
+              labelsToAdd.push('automerge');
+            }
             await github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
@@ -329,7 +333,7 @@ jobs:
               pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               team_reviewers: reviewers
             });
-          
+
       - name: Enable auto-merge (squash)
         if: env.changes == 'true'
         uses: actions/github-script@v7

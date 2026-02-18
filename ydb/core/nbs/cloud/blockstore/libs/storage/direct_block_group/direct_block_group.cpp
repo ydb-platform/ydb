@@ -23,7 +23,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     , BlockSize(blockSize)
     , BlocksCount(blocksCount)
     , BlocksMeta(BlocksCount, TBlockMeta(persistentBufferDDiskIds.size()))
-    , StorageTransport(std::make_unique<TICStorageTransport>())
+    , StorageTransport(std::make_unique<TICStorageTransport>(actorSystem))
 {
     auto guard = Guard(Lock);
 

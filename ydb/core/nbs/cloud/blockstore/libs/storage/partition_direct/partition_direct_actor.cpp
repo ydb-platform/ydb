@@ -30,8 +30,11 @@ void TPartitionActor::Bootstrap(const NActors::TActorContext& ctx)
     Y_UNUSED(ctx);
     Become(&TThis::StateWork);
 
-    LOG_INFO(NActors::TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-        "Started NBS partition: actor id %s", SelfId().ToString().data());
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Started NBS partition: actor id %s",
+        SelfId().ToString().data());
 
     AllocateDDiskBlockGroup(ctx);
 }
@@ -133,13 +136,16 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         }
 
         LOG_INFO(
-            NActors::TActivationContext::AsActorContext(),
+            ctx,
             NKikimrServices::NBS_PARTITION,
             "Started NBS partition LoadActorAdapter: actor id %s",
             LoadActorAdapter.ToString().data());
     } else {
-        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
-            "HandleControllerAllocateDDiskBlockGroupResult finished with error: %d, reason: %s",
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "HandleControllerAllocateDDiskBlockGroupResult finished with "
+            "error: %d, reason: %s",
             msg->Record.GetStatus(),
             msg->Record.GetErrorReason().data());
     }

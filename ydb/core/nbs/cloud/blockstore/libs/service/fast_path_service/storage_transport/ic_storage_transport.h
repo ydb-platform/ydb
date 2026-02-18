@@ -12,10 +12,11 @@ namespace NYdb::NBS::NBlockStore {
 class TICStorageTransport: public IStorageTransport
 {
 private:
+    NActors::TActorSystem* const ActorSystem;
     NActors::TActorId ICStorageTransportActorId;
 
 public:
-    TICStorageTransport();
+    explicit TICStorageTransport(NActors::TActorSystem* actorSystem);
 
     ~TICStorageTransport() override = default;
 

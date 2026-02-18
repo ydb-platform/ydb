@@ -14,7 +14,7 @@ message TJwtInfo {
     optional string PrivateKey = 6;
     optional string Audience = 7 [default = "https://iam.api.cloud.yandex.net/iam/v1/tokens"];
     optional EAuthMethod AuthMethod = 8 [default = StaticCreds];
-    optional string FederatedJwtToken = 9;
+    optional string FederatedJwtTokenPath = 9;
 }
 
 message TOAuthInfo {

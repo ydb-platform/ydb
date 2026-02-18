@@ -24,6 +24,8 @@ SRCS(
     mvp_swagger.h
     mvp_test_runtime.cpp
     mvp_test_runtime.h
+    utils.cpp
+    utils.h
     mvp_tokens.cpp
     mvp_tokens.h
     parser.cpp

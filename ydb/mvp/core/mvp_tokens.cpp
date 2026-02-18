@@ -1,4 +1,5 @@
 #include "mvp_tokens.h"
+#include "utils.h"
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/security/util.h>
@@ -116,6 +117,10 @@ void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamTokenYandex::TPtr event) {
 void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamTokenNebius::TPtr event) {
     TDuration refreshPeriod = SUCCESS_REFRESH_PERIOD;
     if (event->Get()->Status.Ok()) {
+        const i64 responseRefresh = event->Get()->Response.expires_in() / 2;
+        if (responseRefresh > 0) {
+            refreshPeriod = TDuration::Seconds(responseRefresh);
+        }
         BLOG_D("Updating token " << event->Get()->Name << " to " << event->Get()->Subject);
         {
             auto guard = Guard(TokensLock);
@@ -285,18 +290,26 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                     break;
                 }
                 case NMvp::TJwtInfo::FederatedCreds: {
-                    auto fToken = jwtInfo->federatedjwttoken();
+                    TString fToken;
+                    TString error;
+                    const TString& fTokenPath = jwtInfo->federatedjwttokenpath();
+                    if (!NMVP::TryLoadTokenFromFile(fTokenPath, fToken, error, jwtInfo->name())) {
+                        BLOG_ERROR(error);
+                        RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, jwtInfo->name()});
+                        return;
+                    }
                     request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
                     request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
                     request.set_subject_token_type("urn:nebius:params:oauth:token-type:subject_identifier");
-                    request.set_subject_token(TString(serviceAccountId));
+                    request.set_subject_token(serviceAccountId);
                     request.set_actor_token_type("urn:ietf:params:oauth:token-type:jwt");
-                    request.set_actor_token(TString(fToken));
+                    request.set_actor_token(fToken);
                     break;
                 }
                 default: {
                     BLOG_ERROR("Unsupported JWT auth method: " << static_cast<int>(jwtInfo->authmethod()) << " for token " << jwtInfo->name());
-                    break;
+                    RefreshQueue.push({TInstant::Now() + ERROR_REFRESH_PERIOD, jwtInfo->name()});
+                    return;
                 }
             }
 

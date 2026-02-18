@@ -28,7 +28,7 @@ private:
 public:
     YAML::Node Config;
 
-    TString FederatedJwtToken;
+    TString FederatedJwtTokenPath;
     TString FederatedJwtSaId;
     TString FederatedJwtTokenEndpoint;
 

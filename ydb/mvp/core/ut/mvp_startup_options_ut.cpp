@@ -1,9 +1,7 @@
 #include <ydb/mvp/core/mvp_startup_options.h>
+#include <ydb/mvp/core/mvp_test_runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/system/tempfile.h>
-#include <util/stream/file.h>
 
 using namespace NMVP;
 
@@ -16,14 +14,6 @@ namespace {
     template <size_t N>
     TMvpStartupOptions MakeOpts(const char* (&&argv)[N]) {
         return TMvpStartupOptions::Build(N, argv);
-    }
-
-    TTempFileHandle MakeTestFile(const TStringBuf content, const TString& name = "test", const TString& extension = "") {
-        TTempFileHandle tmpFile = TTempFileHandle::InCurrentDir(name, extension);
-        TUnbufferedFileOutput ofs(tmpFile.Name());
-        ofs.Write(content);
-        ofs.Finish();
-        return tmpFile;
     }
 }
 
@@ -45,7 +35,7 @@ generic:
   server:
     http_port: 1234
     https_port: 0
-)" , "mvp_startup_options_test", ".yaml");
+        )" , "mvp_startup_options_test", ".yaml");
 
         const char* argvNoCli[] = {"mvp_test", "--config", tmpFile.Name().c_str()};
         TMvpStartupOptions optsFromYaml = MakeOpts(argvNoCli);
@@ -113,11 +103,11 @@ generic:
         TMvpStartupOptions opts = MakeOpts(argv);
 
         UNIT_ASSERT(opts.FederatedCreds());
-        UNIT_ASSERT_VALUES_EQUAL(opts.FederatedJwtToken, "MY_JWT_TOKEN");
+        UNIT_ASSERT_VALUES_EQUAL(opts.FederatedJwtTokenPath, tmpToken.Name());
         UNIT_ASSERT(opts.Tokens.JwtInfoSize() > 0);
         const auto& jwt = opts.Tokens.GetJwtInfo(0);
         UNIT_ASSERT_VALUES_EQUAL(jwt.GetName(), opts.GetFederatedCredsJwtTokenName());
-        UNIT_ASSERT_VALUES_EQUAL(jwt.GetFederatedJwtToken(), "MY_JWT_TOKEN");
+        UNIT_ASSERT_VALUES_EQUAL(jwt.GetFederatedJwtTokenPath(), tmpToken.Name());
         UNIT_ASSERT_VALUES_EQUAL(jwt.GetEndpoint(), "https://token.endpoint/");
         UNIT_ASSERT_VALUES_EQUAL(jwt.GetAccountId(), "sa-1");
         UNIT_ASSERT(jwt.GetAuthMethod() == NMvp::TJwtInfo::FederatedCreds);

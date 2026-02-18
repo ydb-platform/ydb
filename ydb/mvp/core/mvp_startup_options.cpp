@@ -1,8 +1,8 @@
 #include "mvp_startup_options.h"
+#include "utils.h"
 
 #include <util/stream/file.h>
 #include <util/generic/yexception.h>
-#include <util/string/strip.h>
 #include <util/system/hostname.h>
 
 #include <google/protobuf/text_format.h>
@@ -35,7 +35,7 @@ TString TMvpStartupOptions::GetLocalEndpoint() const {
 }
 
 bool TMvpStartupOptions::FederatedCreds() const {
-    return !FederatedJwtToken.empty();
+    return !FederatedJwtTokenPath.empty();
 }
 
 TString TMvpStartupOptions::GetFederatedCredsJwtTokenName() const {
@@ -101,7 +101,7 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
                 ythrow yexception() << "Federated credentials are only supported for Nebius access service type";
             }
 
-            auto tokenPath = federatedCreds["k8s_token_path"].as<std::string>("");
+            auto tokenPath = TString(federatedCreds["k8s_token_path"].as<std::string>(""));
             FederatedJwtTokenEndpoint = federatedCreds["token_service_endpoint"].as<std::string>("");
             FederatedJwtSaId = federatedCreds["service_account_id"].as<std::string>("");
 
@@ -114,13 +114,11 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
             if (FederatedJwtTokenEndpoint.empty()) {
                 ythrow yexception() << "Configuration error: 'token_service_endpoint' must be specified in 'federated_creds'.";
             }
-            try {
-                FederatedJwtToken = Strip(TUnbufferedFileInput(tokenPath).ReadAll());
-            } catch (const yexception& ex) {
-                ythrow yexception() << "Failed to read federated token from '" << tokenPath << "': " << ex.what();
-            }
-            if (FederatedJwtToken.empty()) {
-                ythrow yexception() << "Jwt token read from '" << tokenPath << "' is empty";
+            FederatedJwtTokenPath = tokenPath;
+            TString federatedJwtToken;
+            TString error;
+            if (!NMVP::TryLoadTokenFromFile(tokenPath, federatedJwtToken, error)) {
+                ythrow yexception() << error;
             }
         }
     }
@@ -183,11 +181,11 @@ void TMvpStartupOptions::LoadTokens() {
 }
 
 void TMvpStartupOptions::AddFederatedCredsJwt() {
-    if (!FederatedJwtToken.empty()) {
+    if (!FederatedJwtTokenPath.empty()) {
         auto* jwtInfo = Tokens.AddJwtInfo();
         jwtInfo->SetAuthMethod(NMvp::TJwtInfo::FederatedCreds);
         jwtInfo->SetAccountId(FederatedJwtSaId);
-        jwtInfo->SetFederatedJwtToken(FederatedJwtToken);
+        jwtInfo->SetFederatedJwtTokenPath(FederatedJwtTokenPath);
         jwtInfo->SetEndpoint(FederatedJwtTokenEndpoint);
         jwtInfo->SetName(FEDERATED_CREDS_JWT_TOKEN_NAME);
     }

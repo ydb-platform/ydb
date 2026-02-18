@@ -30,7 +30,7 @@ protected:
     static constexpr TDuration RPC_TIMEOUT = TDuration::Seconds(10);
     static constexpr TDuration PERIODIC_CHECK = TDuration::Seconds(30);
     static constexpr TDuration SUCCESS_REFRESH_PERIOD = TDuration::Hours(1);
-    static constexpr TDuration ERROR_REFRESH_PERIOD = TDuration::Hours(1);
+    static constexpr TDuration ERROR_REFRESH_PERIOD = TDuration::Minutes(10);
 
     struct TEvPrivate {
         enum EEv {

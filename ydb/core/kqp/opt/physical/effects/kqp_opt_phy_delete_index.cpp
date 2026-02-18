@@ -139,7 +139,6 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             }
             case TIndexDescription::EType::LocalBloomFilter:
             case TIndexDescription::EType::LocalBloomNgramFilter:
-                // Local bloom indexes don't have separate impl tables for KQP index effects.
                 break;
         }
 

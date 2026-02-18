@@ -37,7 +37,7 @@ void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon:
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceFinished")("source_idx", source->GetSourceIdx())("limit", Limit)(
         "max", GetMaxInFlight())("in_flight_limit", InFlightLimit)("count", GetSourcesInFlightCount());
     if (source->GetAs<IDataSource>()->GetResultRecordsCount() < Limit && InFlightLimit < GetMaxInFlight()) {
-        InFlightLimit = 2 * InFlightLimit;
+        InFlightLimit = Min(2 * InFlightLimit, GetMaxInFlight());
     }
     AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
                                               "fetching", FetchingInFlightSources.size());
@@ -48,7 +48,7 @@ TScanWithLimitCollection::TScanWithLimitCollection(
     const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
     : TBase(context, std::move(sourcesConstructor))
     , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
-    if (HasAppData() && AppData()->ColumnShardConfig.HasLimitSortedStartInFlightLimit()) {
+    if (HasAppData()) {
         InFlightLimit = AppData()->ColumnShardConfig.GetLimitSortedStartInFlightLimit();
     }
 }

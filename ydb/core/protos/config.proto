@@ -462,6 +462,7 @@ message TInterconnectConfig {
         PER_PEER = 1;
         PER_DATA_CENTER = 2;
         NO_MERGE = 3;
+        PER_HOST = 4;
     }
 
     enum EEncryptionMode {

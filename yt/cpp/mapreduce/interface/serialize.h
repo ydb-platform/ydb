@@ -67,11 +67,13 @@ void Deserialize(TRichYPath& path, const TNode& node);
 void Serialize(const TAttributeFilter& filter, NYson::IYsonConsumer* consumer);
 
 void Serialize(const TColumnSchema& columnSchema, NYson::IYsonConsumer* consumer);
+void Serialize(const TDeletedColumnSchema& columnSchema, NYson::IYsonConsumer* consumer);
 void Serialize(const TTableSchema& tableSchema, NYson::IYsonConsumer* consumer);
 
 void Deserialize(EValueType& valueType, const TNode& node);
 void Deserialize(TTableSchema& tableSchema, const TNode& node);
 void Deserialize(TColumnSchema& columnSchema, const TNode& node);
+void Deserialize(TDeletedColumnSchema& columnSchema, const TNode& node);
 void Deserialize(TTableColumnarStatistics& statistics, const TNode& node);
 void Deserialize(TMultiTablePartition& partition, const TNode& node);
 void Deserialize(TMultiTablePartitions& partitions, const TNode& node);

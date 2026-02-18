@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             return *this;
         }
 
-        void ExecuteFilterIndexesScenario() {
+        void ExecuteSkipIndexesScenario() {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             csController->SetOverrideMemoryLimitForPortionReading(1e+10);
             csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
@@ -1063,11 +1063,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     };
 
     Y_UNIT_TEST(IndexesInBS) {
-        TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteFilterIndexesScenario();
+        TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteSkipIndexesScenario();
     }
 
     Y_UNIT_TEST(IndexesInLocalMetadata) {
-        TTestIndexesScenario().SetStorageId("__LOCAL_METADATA").Initialize().ExecuteFilterIndexesScenario();
+        TTestIndexesScenario().SetStorageId("__LOCAL_METADATA").Initialize().ExecuteSkipIndexesScenario();
     }
 
     Y_UNIT_TEST(CheckCompactionFailingOnIndexes) {

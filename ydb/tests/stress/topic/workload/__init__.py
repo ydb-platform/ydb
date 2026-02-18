@@ -64,21 +64,22 @@ class YdbTopicWorkload(WorkloadBase):
         subprocess.run(cmd, check=True, text=True)
         print(f"End at {time.time()}")
 
-    def __loop(self):
-        # одна таблетка, но распределённая транзакция
+    def __one_tablet_but_a_distributed_transaction(self):
         self.run_topic_write_with_tx(20, 10, 10, "100M")
-        # две таблетки, распределённая транзакция
+
+    def __two_tablets_distributed_transaction(self):
         self.run_topic_write_with_tx(20, 5, 10, "100M")
-        # широкая транзакция 1
+
+    def __a_wide_transaction_with_multiple_partitions_in_one_tablet(self):
         self.run_topic_write_with_tx(20, 100, 10, "100M")
-        # широкая транзакция 2
+
+    def __wide_transaction_one_tablet_contains_one_partition(self):
         self.run_topic_write_with_tx(20, 100, 1, "100M")
-        # immediate-транзакции
+
+    def __immediate_transaction(self):
         self.run_topic_write_with_tx(20, 1, 1, "10M")
 
-        self.run_full()
-
-    def run_full(self):
+    def __loop(self):
         # init
         self.cmd_run(
             self.get_command_prefix(subcmds=['init', '-c', self.consumers, '-p', self.producers])
@@ -151,5 +152,11 @@ class YdbTopicWorkload(WorkloadBase):
         ])
 
     def get_workload_thread_funcs(self):
-        r = [self.__loop]
-        return r
+        return [
+            self.__loop,
+            self.__one_tablet_but_a_distributed_transaction,
+            self.__two_tablets_distributed_transaction,
+            self.__a_wide_transaction_with_multiple_partitions_in_one_tablet,
+            self.__wide_transaction_one_tablet_contains_one_partition,
+            self.__immediate_transaction,
+        ]

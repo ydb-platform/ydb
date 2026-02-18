@@ -17,7 +17,7 @@ bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext
     }
 }
 
-TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::shared_ptr<IRule>>&& rules)
+TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules)
     : IRBOStage(std::move(stageName))
     , Rules(std::move(rules)) {
     for (const auto& r : Rules) {
@@ -106,8 +106,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
         YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
     }
 
-    for (size_t idx = 0; idx < Stages.size(); idx++) {
-        auto stage = Stages[idx];
+    for (const auto& stage : Stages) {
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
         ComputeRequiredProps(root, stage->Props, rboCtx);
         if (needToLog) {

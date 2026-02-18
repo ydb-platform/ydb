@@ -1353,7 +1353,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             auto resultSet = result.GetResultSet(0);
-            THashSet<TString> seenUsers;
+            std::unordered_set<std::string> seenUsers;
             NYdb::TResultSetParser parser(resultSet);
             while (parser.TryNextRow()) {
                 auto userSid = parser.ColumnParser("UserSID").GetOptionalUtf8();

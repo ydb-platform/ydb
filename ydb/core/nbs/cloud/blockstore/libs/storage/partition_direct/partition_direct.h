@@ -15,4 +15,6 @@ NActors::TActorId CreatePartitionTablet(
     NKikimrBlockStore::TVolumeConfig volumeConfig
 );
 
+////////////////////////////////////////////////////////////////////////////////
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

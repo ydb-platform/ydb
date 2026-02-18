@@ -4,9 +4,17 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+using namespace NKikimr;
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-using namespace NKikimr;
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr size_t BlockSize = 4096;
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 

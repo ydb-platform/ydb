@@ -1,14 +1,22 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/storage_transport/storage_transport.h>
+#include "request.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// BlocksCount in one vChunk - current limitation
+constexpr size_t VChunkBlocksCount = 128 * 1024 * 1024 / 4096;
+
+////////////////////////////////////////////////////////////////////////////////
 
 // Abstract base interface for DirectBlockGroup implementations
 class IDirectBlockGroup
@@ -30,11 +38,6 @@ public:
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;
-
-////////////////////////////////////////////////////////////////////////////////
-
-// BlocksCount in one vChunk - current limitation
-constexpr size_t BlocksCount = 128 * 1024 * 1024 / 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -117,7 +120,7 @@ private:
     TVector<TBlockMeta> BlocksMeta;
     TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
 
-    std::unique_ptr<IStorageTransport> StorageTransport;
+    std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
 public:
     TDirectBlockGroup(

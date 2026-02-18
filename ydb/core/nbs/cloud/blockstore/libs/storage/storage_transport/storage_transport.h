@@ -6,7 +6,7 @@
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
-namespace NYdb::NBS::NBlockStore {
+namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -73,4 +73,4 @@ public:
         NWilson::TTraceId traceId) = 0;
 };
 
-}   // namespace NYdb::NBS::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

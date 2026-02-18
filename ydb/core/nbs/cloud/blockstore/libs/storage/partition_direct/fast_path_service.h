@@ -1,16 +1,17 @@
 #pragma once
 
+#include "direct_block_group.h"
+
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/direct_block_group.h>
 
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mon/mon.h>
 
-namespace NYdb::NBS::NBlockStore {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -59,4 +60,4 @@ public:
     void ReportIOError() override;
 };
 
-}   // namespace NYdb::NBS::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -5,7 +5,7 @@
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
-namespace NYdb::NBS::NBlockStore {
+namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -153,4 +153,4 @@ private:
         const NActors::TActorContext& ctx);
 };
 
-}   // namespace NYdb::NBS::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

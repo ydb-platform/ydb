@@ -17,6 +17,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_FEATURE_FLAGS="enable_topic_service_tx")
 
 SRCS(
+    export.cpp
     mock_env.cpp
     parse_command_line.cpp
     run_ydb.cpp

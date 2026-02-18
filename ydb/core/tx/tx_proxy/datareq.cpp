@@ -810,7 +810,7 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
             return "";
         return Sprintf("%" PRIu64 "/%" PRIu64, e->TableId.PathId.OwnerId, e->TableId.PathId.LocalPathId);
     };
-
+jF
     if (FlatMKQLRequest && FlatMKQLRequest->CollectStats) {
         auto* stats = x->Record.MutableTxStats();
         BuildTxStats(*stats);

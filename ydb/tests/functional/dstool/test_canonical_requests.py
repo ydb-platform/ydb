@@ -212,3 +212,89 @@ class Test(TestBase):
             self._trace('cluster', 'set', '--pdisk-space-color-border', 'UNKNOWN'),
             self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
         ]
+<<<<<<< HEAD
+=======
+
+    def test_group_take_snapshot(self):
+        retry_assertions(self.check_vdisks_state_ok)
+
+        def check_vdisk_state_error():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            vslots = [vslot for vslot in base_config.VSlot if vslot.VSlotId.NodeId == 1 and vslot.VSlotId.PDiskId == 1]
+            assert len(vslots) == 1
+            vslot = vslots[0]
+            assert vslot.GroupId == 0
+            assert vslot.VDiskMetrics.State == EVDiskState.PDiskError
+
+        return [
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_1.bin'),
+            self._trace('pdisk', 'stop', '--node-id=1', '--pdisk-id=1'),
+            retry_assertions(check_vdisk_state_error, timeout_seconds=20),
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_2.bin'),
+        ]
+
+    def test_infer_pdisk_slot_count(self):
+        dynconfig_client = DynConfigClient(self.host, self.grpc_port)
+
+        def generate_config():
+            generate_config_response = dynconfig_client.fetch_startup_config()
+            logger.info(f"{generate_config_response=}")
+            assert generate_config_response.operation.status == StatusIds.SUCCESS
+
+            result = dynconfig.FetchStartupConfigResult()
+            generate_config_response.operation.result.Unpack(result)
+
+            return {
+                "metadata": {
+                    "kind": "MainConfig",
+                    "version": 0,
+                    "cluster": "",
+                },
+                "config": yaml.safe_load(result.config)
+            }
+
+        def replace_config(full_config):
+            replace_config_response = dynconfig_client.replace_config(yaml.dump(full_config))
+            logger.info(f"{replace_config_response=}")
+            assert replace_config_response.operation.status == StatusIds.SUCCESS
+
+        full_config = generate_config()
+        full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"] = {
+            "rot": {
+                "prefer_inferred_settings_over_explicit": True,
+                "unit_size": C_4GB,
+                "max_slots": 12,
+            }
+        }
+        replace_config(full_config)
+
+        def check_pdisk_metrics_updated():
+            base_config = self.check_pdisk_metrics_collected()
+            for pdisk in base_config.PDisk:
+                assert pdisk.PDiskMetrics.SlotSizeInUnits > 0
+        retry_assertions(check_pdisk_metrics_updated)
+
+        pdisk_columns = [
+            'NodeId:PDiskId',
+            'Path',
+            'TotalSize',
+            'ExpectedSlotCount',
+            'SlotSizeInUnits',
+        ]
+
+        trace1 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
+
+        del full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"]
+        full_config["metadata"]["version"] = 1
+        replace_config(full_config)
+
+        def check_pdisk_metrics_updated():
+            base_config = self.check_pdisk_metrics_collected()
+            for pdisk in base_config.PDisk:
+                assert pdisk.PDiskMetrics.SlotSizeInUnits == 0
+        retry_assertions(check_pdisk_metrics_updated)
+
+        trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
+
+        return [trace1, trace2]
+>>>>>>> 2cf22b8ae96 (Fix VERIFY caused by dstool group take-snapshot when VDisk is in NotReady or Error state (#34447))

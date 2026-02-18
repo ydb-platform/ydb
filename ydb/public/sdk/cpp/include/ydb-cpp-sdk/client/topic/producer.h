@@ -27,6 +27,7 @@ enum class EFlushResult : uint8_t {
 
 //! Producer is an abstraction that can write messages to the topic.
 //! It does not block on Write calls, it returns write result immediately.
+//! EXPERIMENTAL SDK, DO NOT USE IN PRODUCTION.
 class IProducer {
 public:
     //! Write single message.

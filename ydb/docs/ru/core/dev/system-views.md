@@ -583,4 +583,4 @@ WHERE Sid = "user3"
 | `ResourcePool`    | Имя пула ресурсов, к которому был привязан запрос ([см. пример](../yql/reference/syntax/create-streaming-query.md#examples))<br />Тип: `Utf8`|
 | `RetryCount`      | Число перезапусков запроса<br />Тип: `Uint64`|
 | `LastFailAt`      | Время последней ошибки исполнения запроса<br />Тип: `Timestamp`|
-| `SuspendedUntil`  | Время, до которого приостановлено исполнение запроса<br />Тип: `Timestamp`|
+| `SuspendedUntil`  | Время, когда будет предпринята попытка возобновить остановившийся запрос<br />Тип: `Timestamp`|

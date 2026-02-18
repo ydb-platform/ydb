@@ -256,7 +256,7 @@ jobs:
   run_tests:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
-    timeout-minutes: 1200
+    timeout-minutes: 2400
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
     strategy:
       fail-fast: false

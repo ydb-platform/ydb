@@ -24,7 +24,10 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
       matrix_branches: ${{ steps.set-matrix.outputs.branches }}
+      run_hour_utc: ${{ steps.utc-hour.outputs.hour }}
     steps:
+      - id: utc-hour
+        run: echo "hour=$(date -u +%H)" >> $GITHUB_OUTPUT
       - name: Checkout branches config
         uses: actions/checkout@v4
         with:
@@ -297,6 +300,7 @@ jobs:
           LABELS: ${{ env.LABELS }}
           REVIEWERS: ${{ env.REVIEWERS }}
           BASE_BRANCH: ${{ matrix.BASE_BRANCH }}
+          RUN_HOUR_UTC: ${{ needs.setup.outputs.run_hour_utc }}
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
@@ -314,11 +318,23 @@ jobs:
               body: commentBody
             });
             
-            // Лейблы: базовые + automerge для stable-* (слияние через automerge_pr workflow после прохождения checks_integrated)
+            // Лейблы: базовые + automerge для stable-* и для main при запуске в 7 UTC (раз в сутки)
+            const baseBranch = process.env.BASE_BRANCH;
+            const runHourUtc = process.env.RUN_HOUR_UTC;
+            core.info(`Labels: base_branch=${baseBranch}, run_hour_utc=${runHourUtc}`);
             const labelsToAdd = process.env.LABELS.split(',').map(l => l.trim());
-            if (process.env.BASE_BRANCH.startsWith('stable-')) {
+            if (baseBranch.startsWith('stable-')) {
               labelsToAdd.push('automerge');
+              core.info(`Added 'automerge' (base is stable-*).`);
             }
+            if (baseBranch === 'main' && runHourUtc === '07') {
+              labelsToAdd.push('automerge');
+              core.info(`Added 'automerge' (main, 7 UTC run — daily auto-merge).`);
+            }
+            if (!labelsToAdd.includes('automerge')) {
+              core.info(`No automerge for this PR (main only gets automerge at 7 UTC).`);
+            }
+            core.info(`Applying labels: ${labelsToAdd.join(', ')}`);
             await github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},

@@ -258,22 +258,30 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(this);
     response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
-    if (parser.IsDone() && parser.HasBody()) {
-        if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
-            TStringBuf contentType = Trim(parser.ContentType.Before(';'), ' ');
-            if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
-                if (response->EnableCompression()) {
-                    headers.Erase("Content-Length"); // we will need new length after compression
-                }
-            }
+    bool compress = false;
+    if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
+        TStringBuf contentType = Trim(parser.ContentType.Before(';'), ' ');
+        if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
+            compress = true;
         }
+    }
+    headers.Erase("Content-Encoding"); // we decompress and recompress again, maybe with different algo
+    if (parser.IsDone() && parser.HasBody()) {
         headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
         response->Set(headers);
+        if (compress) {
+            if (response->EnableCompression()) {
+                headers.Erase("Content-Length"); // we will need new length after compression
+            }
+        }
         response->SetBody(parser.Body);
     } else if (parser.HasHeaders()) {
         response->Set(headers);
         if (parser.ExpectedBody() && !headers.IsChunkedEncoding() && !response->ContentLength) {
             response->Set<&THttpResponse::ContentLength>("0"); // workaround for buggy responses
+        }
+        if (compress) {
+            response->EnableCompression();
         }
         if (parser.HasCompletedHeaders()) {
             response->FinishHeader(); // for partial responses (data follows later)
@@ -564,14 +572,14 @@ THttpIncomingResponsePtr THttpOutgoingResponse::Reverse(THttpOutgoingRequestPtr 
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
     : Response(std::move(response))
 {
-    if (data) {
-        if (Response->ContentEncoding == "deflate") {
-            SetData(CompressDeflate(data));
-        } else {
-            SetData(data);
-        }
+    if (Response->CompressContext && !data.empty()) {
+        SetData(Response->CompressContext.Compress(data, false));
     } else {
-        SetEndOfData();
+        if (!data.empty()) {
+            SetData(data);
+        } else {
+            SetEndOfData();
+        }
     }
 }
 
@@ -579,10 +587,19 @@ THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response
     : Response(std::move(response))
 {}
 
+void THttpOutgoingDataChunk::SetEndOfData() {
+    if (Response->CompressContext) {
+        TString trailing = Response->CompressContext.Compress({}, true);
+        if (trailing) {
+            AddData(trailing);
+        }
+    }
+    AddData({});
+}
+
 THttpOutgoingResponsePtr THttpIncomingResponse::Reverse(THttpIncomingRequestPtr request) {
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
-    response->Assign(Data(), Size());
-    response->Reparse();
+    response->Assign(AsStringBuf());
     return response;
 }
 
@@ -613,8 +630,7 @@ THttpOutgoingRequest::THttpOutgoingRequest(TStringBuf method, TStringBuf url, TS
 
 THttpOutgoingRequestPtr THttpOutgoingRequest::CreateRequestString(const TString& data) {
     THttpOutgoingRequestPtr request = new THttpOutgoingRequest();
-    request->Assign(data.data(), data.size());
-    request->Reparse();
+    request->Assign(data);
     return request;
 }
 

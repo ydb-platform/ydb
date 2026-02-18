@@ -16,10 +16,12 @@
 
 #include <util/stream/file.h>
 #include <util/system/env.h>
+#include <util/folder/tempdir.h>
 #include <util/system/tempfile.h>
 
 #include <fmt/format.h>
 
+#include <filesystem>
 #include <memory>
 #include <thread>
 #include <typeinfo>
@@ -28,7 +30,7 @@
 using namespace fmt::literals;
 using namespace yandex::cloud::iam::v1;
 
-const TString TEST_DATABASE = "/test_database";
+extern const TString TEST_DATABASE;
 
 class TChecker {
 public:
@@ -372,6 +374,18 @@ public:
         return name;
     }
 
+    TString EnvHomeFile(const std::string& relativePath, const TString& content) {
+        if (!TempHomeDir) {
+            TempHomeDir = std::make_unique<TTempDir>();
+        }
+
+        std::filesystem::path path(std::string(TempHomeDir->Name()));
+        path /= relativePath;
+        std::filesystem::create_directories(path.parent_path());
+        TUnbufferedFileOutput(path).Write(content);
+        return std::string(path);
+    }
+
     void ExpectToken(const TString& token) {
         Service<TSchemeImpl>().ExpectToken(token);
     }
@@ -410,6 +424,14 @@ public:
         }
     }
 
+    THashMap<TString, TString> GetEndEnv(const THashMap<TString, TString>& env) {
+        THashMap<TString, TString> copy = env;
+        if (TempHomeDir) {
+            copy["HOME"] = TempHomeDir->Name();
+        }
+        return copy;
+    }
+
     TString RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
         ClearFailures();
 
@@ -423,7 +445,7 @@ public:
             {},
             true,
             false,
-            env,
+            GetEndEnv(env),
             ExpectedExitCode
         );
         CheckExpectations();
@@ -446,7 +468,7 @@ public:
             input,
             true,
             false,
-            env,
+            GetEndEnv(env),
             ExpectedExitCode
         );
         CheckExpectations();
@@ -488,6 +510,7 @@ private:
     std::thread ServerThread;
     int ExpectedExitCode = 0;
     std::list<TTempFile> EnvFiles;
+    std::unique_ptr<TTempDir> TempHomeDir;
 
     std::shared_ptr<grpc::ServerCredentials> ServerCredentials;
 };

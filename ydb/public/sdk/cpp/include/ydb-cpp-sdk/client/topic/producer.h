@@ -1,6 +1,7 @@
 #pragma once
 
 #include "write_session.h"
+#include "control_plane.h"
 
 namespace NYdb::NTopic {
 
@@ -18,11 +19,14 @@ enum class EWriteResult : uint8_t {
 //! Result of flush operation.
 //! If flush was successful, returns SUCCESS.
 //! If flush was not successful because of closed session, returns CLOSED.
+//! If flush was not successful because of timeout, returns TIMEOUT.
 enum class EFlushResult : uint8_t {
     SUCCESS = 0,
     CLOSED = 1,
     TIMEOUT = 2,
 };
+
+struct TCloseDescription : public TSessionClosedEvent {};
 
 //! Producer is an abstraction that can write messages to the topic.
 //! It has two versions of Write method:
@@ -53,7 +57,7 @@ public:
     //! Explain why session was closed.
     //! Returns session closed event if session was closed.
     //! Returns std::nullopt if session is not closed.
-    virtual std::optional<TSessionClosedEvent> ExplainClosed() = 0;
+    virtual std::optional<TCloseDescription> ExplainClosed() = 0;
 
     //! Flush all messages to the server.
     //! Returns future that is set when flush is complete.
@@ -66,7 +70,13 @@ public:
     [[nodiscard]] virtual EFlushResult FlushAndWait(TDuration timeout = TDuration::Max()) = 0;
 
     //! Close the producer.
-    virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
+    //! Returns close result.
+    //! If close was successful, returns SUCCESS.
+    //! If close was not successful because of timeout, returns TIMEOUT.
+    //! If close was not successful because of error, returns ERROR.
+    //! DO NOT IGNORE THE RETURN VALUE.
+    [[nodiscard]] virtual ECloseResult Close(TDuration closeTimeout = TDuration::Max()) = 0;
+
     virtual ~IProducer() = default;
 };
 

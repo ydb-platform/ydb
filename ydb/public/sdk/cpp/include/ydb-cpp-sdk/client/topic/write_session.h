@@ -5,10 +5,12 @@
 #include "executor.h"
 #include "retry_policy.h"
 #include "write_events.h"
+#include "control_plane.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+
 
 #include <util/generic/size_literals.h>
 
@@ -338,7 +340,7 @@ public:
     //! If maxEventsCount is unset, write session decides the count to return itself.
     virtual std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt) = 0;
 
-    virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
+    virtual ECloseResult Close(TDuration closeTimeout = TDuration::Max()) = 0;
     virtual TWriterCounters::TPtr GetCounters() = 0;
     virtual ~IKeyedWriteSession() = default;
 };

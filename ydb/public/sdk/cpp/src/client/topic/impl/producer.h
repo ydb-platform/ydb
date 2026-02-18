@@ -379,7 +379,7 @@ public:
     [[nodiscard]] EWriteResult Write(const std::string& key, TWriteMessage&& message,
                TTransactionBase* tx = nullptr) override;
 
-    std::optional<TSessionClosedEvent> ExplainClosed() override;
+    std::optional<TCloseDescription> ExplainClosed() override;
 
     NThreading::TFuture<EFlushResult> Flush() override;
 
@@ -391,7 +391,7 @@ public:
 
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt) override;
 
-    bool Close(TDuration closeTimeout = TDuration::Max()) override;
+    ECloseResult Close(TDuration closeTimeout = TDuration::Max()) override;
 
     TWriterCounters::TPtr GetCounters() override;
 

@@ -1410,21 +1410,27 @@ std::uint32_t TProducer::ChooseRandomPartition() {
     return distribution(RandomGenerator);
 }
 
-bool TProducer::Close(TDuration closeTimeout) {
+ECloseResult TProducer::Close(TDuration closeTimeout) {
     if (Closed.exchange(true)) {
         std::lock_guard lock(GlobalLock);
-        return MessagesWorker->IsQueueEmpty();
+        return ECloseResult::ALREADY_CLOSED;
     }
 
     SetCloseDeadline(closeTimeout);
-
     ClosePromise.TrySetValue();
+
+    auto result = FlushAndWait(GetCloseTimeout());
     ShutdownFuture.Wait(CloseDeadline);
     RunUserEventLoop();
     Done.store(true);
 
-    // No need to lock here, because we are waiting for the shutdown future and it will block until the main worker is done
-    return MessagesWorker->IsQueueEmpty();
+    if (result == EFlushResult::TIMEOUT) {
+        return ECloseResult::TIMEOUT;
+    } else if (result == EFlushResult::CLOSED) {
+        return ECloseResult::ERROR;
+    }
+
+    return ECloseResult::SUCCESS;
 }
 
 void TProducer::NonBlockingClose() {
@@ -1438,7 +1444,7 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 }
 
 TProducer::~TProducer() {
-    Close(TDuration::Zero());
+    auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
     Settings.EventHandlers_.HandlersExecutor_->Stop();
     ShutdownFuture.Wait();
 }
@@ -1676,11 +1682,11 @@ void TProducer::RunMainWorker() {
         const auto isClosed = Closed.load();
         const auto closeTimeout = GetCloseTimeout();
         if (isClosed && (Done.load() || MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
-            ShutdownPromise.TrySetValue();
             EventsWorker->EventsPromise.TrySetValue();
             MessagesWorker->SetStatusToFlushPromises(EFlushResult::CLOSED);
             ClosePromise.TrySetValue();
             MainWorkerState.store(Idle, std::memory_order_release);
+            ShutdownPromise.TrySetValue();
             return;
         }
 
@@ -1751,8 +1757,8 @@ EWriteResult TProducer::Write(const std::string& key, TWriteMessage&& message,
     return WriteImpl(key, std::move(message), tx);
 }
 
-std::optional<TSessionClosedEvent> TProducer::ExplainClosed() {
-    return EventsWorker->GetSessionClosedEvent();
+std::optional<TCloseDescription> TProducer::ExplainClosed() {
+    return std::optional<TCloseDescription>(EventsWorker->GetSessionClosedEvent());
 }
 
 NThreading::TFuture<EFlushResult> TProducer::Flush() {

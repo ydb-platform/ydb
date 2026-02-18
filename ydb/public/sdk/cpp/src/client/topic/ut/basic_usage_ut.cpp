@@ -1053,7 +1053,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             session->Write(std::move(*token), "key-" + ToString(i), std::move(msg));
         }
 
-        UNIT_ASSERT_C(session->Close(TDuration::Seconds(30)), "Failed to close keyed write session");
+        UNIT_ASSERT_EQUAL_C(session->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS, "Failed to close keyed write session");
 
         UNIT_ASSERT_C(readyCount.load() > 0, "ReadyToAcceptHandler was not called");
         UNIT_ASSERT_C(acksCount.load() == messages, "AcksHandler does not work properly");
@@ -1106,7 +1106,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event);
         UNIT_ASSERT_C(sessionClosedEvent, "SessionClosedEvent is not received");
         UNIT_ASSERT_C(sessionClosedEvent->GetStatus() == EStatus::BAD_REQUEST, "Status is not BAD_REQUEST");
-        UNIT_ASSERT(!session->Close(TDuration::Seconds(10)));
+        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::ALREADY_CLOSED);
+
+        auto producer = std::dynamic_pointer_cast<TProducer>(session);
+        UNIT_ASSERT_EQUAL(producer->ExplainClosed()->GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT(!producer->ExplainClosed()->GetIssues().Empty());
     }
 
     Y_UNIT_TEST(KeyedWriteSession_NoAutoPartitioning_HashPartitionChooser) {
@@ -1161,7 +1165,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             session->Write(std::move(*token), key1, std::move(msg));
         }
 
-        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
 
         auto after = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
         UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToOneLineString());
@@ -1245,7 +1249,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             session->Write(std::move(*token), key, std::move(msg));
         }
 
-        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
 
         auto after = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
         UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToOneLineString());
@@ -1294,7 +1298,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(eventLoop.WaitForAcks(count, TDuration::Seconds(60)));
         eventLoop.CheckAcksOrder();
-        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
     }
 
     Y_UNIT_TEST(KeyedWriteSession_MultiThreadedWrite_Acks) {
@@ -1340,7 +1344,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         UNIT_ASSERT(eventLoop.WaitForAcks(total, TDuration::Seconds(60)));
-        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
     }
 
     Y_UNIT_TEST(KeyedWriteSession_IdleSessionsTimeout) {
@@ -1437,7 +1441,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(eventLoop.WaitForAcks(messages, TDuration::Seconds(60)));
         eventLoop.CheckAcksOrder();
-        UNIT_ASSERT(session->Close(TDuration::Seconds(30)));
+        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
     }
 
     Y_UNIT_TEST(KeyedWriteSession_CloseTimeout) {
@@ -1676,8 +1680,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_EQUAL_C(sessionPartitions.size(), partitionsCount,
             "Expected exactly" << partitionsCount << " partitions, actual: " << sessionPartitions.size());
 
-        UNIT_ASSERT(session1->Close(TDuration::Seconds(30)));
-        UNIT_ASSERT(session2->Close(TDuration::Seconds(30)));
+        UNIT_ASSERT_EQUAL(session1->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
+        UNIT_ASSERT_EQUAL(session2->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
     }
 
     Y_UNIT_TEST(AutoPartitioning_KeyedWriteSession_SmallMessages) {
@@ -1810,8 +1814,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_EQUAL_C(sessionPartitions.size(), partitionsCount,
             "Session partitions " << sessionPartitions.size() << " != topic partitions " << partitionsCount);
 
-        UNIT_ASSERT(session1->Close(TDuration::Seconds(30)));
-        UNIT_ASSERT(session2->Close(TDuration::Seconds(30)));
+        UNIT_ASSERT_EQUAL(session1->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
+        UNIT_ASSERT_EQUAL(session2->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
     }
 
     Y_UNIT_TEST(Producer_BasicWrite) {
@@ -1847,7 +1851,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
     
         UNIT_ASSERT_EQUAL(messagesWritten, 100);
-        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)));
+        UNIT_ASSERT_EQUAL(producer->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
     }
 
     Y_UNIT_TEST(Producer_AutoPartitioning) {
@@ -1909,8 +1913,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
         }
 
-        UNIT_ASSERT(producer1->Close(TDuration::Seconds(1)));
-        UNIT_ASSERT(producer2->Close(TDuration::Seconds(1)));
+        UNIT_ASSERT_EQUAL(producer1->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
+        UNIT_ASSERT_EQUAL(producer2->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
     }
 
     Y_UNIT_TEST(Producer_BlockingWrite) {
@@ -1935,7 +1939,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EFlushResult::SUCCESS);
-        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)));
+        UNIT_ASSERT_EQUAL(producer->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
     }
 
     Y_UNIT_TEST(Producer_TimeoutError) {
@@ -1958,7 +1962,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
         UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::TIMEOUT);
-        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)));
+        UNIT_ASSERT_EQUAL(producer->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
     }
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 

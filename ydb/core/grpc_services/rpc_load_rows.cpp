@@ -162,8 +162,7 @@ const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
     return TEvBulkUpsertRequest::GetProtoRequest(req);
 }
 
-static TString GetUserSID(const IRequestOpCtx* request)
-{
+static TString GetUserSID(const IRequestOpCtx* request) {
     if (request == nullptr ) {
         return BUILTIN_ACL_CDC_WITHOUT_USER_SID;
     }
@@ -192,7 +191,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->ReplyWithYdbStatus(Ydb::Statusds::CANCELLED);
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {

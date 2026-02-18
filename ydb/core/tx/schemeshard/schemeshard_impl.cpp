@@ -268,9 +268,9 @@ void TSchemeShard::InitializeTabletMigrations() {
             createSA = true;
         }
 
-        if (AppData()->FeatureFlags.GetEnableBackupService() && subdomain->GetTenantBackupControllerID() == InvalidTabletId) {
-            createBCT = true;
-        }
+        // NOTE: BackupController tablet is not created eagerly anymore.
+        // It is a placeholder with no real functionality, and its eager creation
+        // blocks tenant databases in PENDING state during initial configuration.
 
         if (!createSVP && !createSA && !createBCT) {
             continue;

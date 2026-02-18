@@ -564,5 +564,58 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());        
         }
     }
+
+    Y_UNIT_TEST_TWIN(TestSnapshotWithOnlineRO, AllowInconsistentReads) {
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto upsertSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            const TString query(Q1_(R"(
+                SELECT Value FROM `/Root/KeyValue` WHERE Key = 1u;
+                SELECT Value FROM `/Root/KeyValue2` WHERE Key = "One";
+            )"));
+
+            int results = 0;
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    auto* evRead = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    UNIT_ASSERT((evRead->Record.GetSnapshot().GetStep() == 0) == AllowInconsistentReads);
+                    UNIT_ASSERT((evRead->Record.GetSnapshot().GetTxId() == 0) == AllowInconsistentReads);
+                } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvReadResult::EventType) {
+                    ++results;
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return results == 2;
+            });
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(AllowInconsistentReads))).CommitTx();
+                return session.ExecuteDataQuery(query, txc, execSettings).ExtractValueSync();
+            });
+
+            runtime.DispatchEvents(opts);
+            UNIT_ASSERT(results == 2);
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
 }
 }

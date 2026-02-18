@@ -1094,7 +1094,7 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     }
 
     if (cdcStream.GetUserSIDs()) {
-        Stream << del << "USERT_SIDS = TRUE";
+        Stream << del << "USER_SIDS = TRUE";
         del = ", ";
     }
 
@@ -1133,11 +1133,6 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
 
     if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan || cdcStream.HasScanProgress()) {
         Stream << del << "INITIAL_SCAN = TRUE";
-        del = ", ";
-    }
-
-    if (cdcStream.GetUserSIDs()) {
-        Stream << del << "USER_SIDS = TRUE";
     }
 
     Stream << ");";

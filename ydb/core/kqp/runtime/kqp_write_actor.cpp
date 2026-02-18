@@ -2421,7 +2421,6 @@ public:
                 TActorId{},
                 Counters,
                 UserSID);
-                Counters);
             // Set initial QuerySpanId for direct write actor
             WriteTableActor->SetCurrentQuerySpanId(Settings.GetQuerySpanId());
 

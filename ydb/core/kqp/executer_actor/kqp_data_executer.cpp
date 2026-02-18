@@ -136,7 +136,7 @@ public:
     }
 
     TString GetUserSID() const {
-        return (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+        return (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
     }
 
     bool CheckExecutionComplete() {

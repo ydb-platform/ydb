@@ -115,8 +115,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             .WithSource(source);
 
         if (details.template HaveValue<typename TDetailsTable::UserSID>()) {
-            const TString userSID = details.template GetValue<typename TDetailsTable::UserSID>();
-            builder.WithUserSID(userSID);
+            builder.WithUserSID(details.template GetValue<typename TDetailsTable::UserSID>());
         }
 
         if constexpr (HaveLock) {

@@ -1059,15 +1059,12 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     case WRITE_TX_COOKIE:
         PQ_LOG_D("Handle TEvKeyValue::TEvResponse (WRITE_TX_COOKIE)");
         EndWriteTxs(resp, ctx);
+        // Завершилась операция с CmdWrite. Можно отправлять отложенные TEvReadSetAck
+        SendDeferredReadSetAcks(ctx);
         break;
     default:
         PQ_LOG_ERROR("Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
-    }
-
-    // Завершилась операция с CmdWrite. Можно отправлять отложенные TEvReadSetAck
-    if (resp.GetCookie() != READ_TXS_COOKIE) {
-        SendDefferedReadSetAcks(ctx);
     }
 }
 
@@ -3477,23 +3474,30 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
                     " for TxId " << event.GetTxId() <<
                     " will be sent later");
 
-        TDefferedReadSetAck item;
-        item.Sender = ev->Sender;
-        item.Ack = std::move(ack);
-
-        DefferedReadSetAcks.push_back(std::move(item));
+        AddDeferredReadSetAck({.Sender = ev->Sender, .Ack = std::move(ack)});
     }
 }
 
-void TPersQueue::SendDefferedReadSetAcks(const TActorContext& ctx)
+void TPersQueue::MovePendingDeferredReadSetAcks()
 {
-    for (auto& e : DefferedReadSetAcks) {
+    DeferredReadSetAcks = std::move(PendingDeferredReadSetAcks);
+    PendingDeferredReadSetAcks.clear();
+}
+
+void TPersQueue::AddDeferredReadSetAck(TDeferredReadSetAck&& ack)
+{
+    PendingDeferredReadSetAcks.push_back(std::move(ack));
+}
+
+void TPersQueue::SendDeferredReadSetAcks(const TActorContext& ctx)
+{
+    for (auto& e : DeferredReadSetAcks) {
         PQ_LOG_TX_I("send TEvReadSetAck to " << e.Ack->Record.GetTabletSource() <<
                     " for TxId " << e.Ack->Record.GetTxId());
         ctx.Send(e.Sender, e.Ack.release());
     }
 
-    DefferedReadSetAcks.clear();
+    DeferredReadSetAcks.clear();
 }
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
@@ -3653,6 +3657,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessProposeTransactionQueue(ctx, request->Record);
     ProcessWriteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
+
+    MovePendingDeferredReadSetAcks();
 
     WriteTxsInProgress = true;
 

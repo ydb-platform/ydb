@@ -646,13 +646,18 @@ private:
     bool HasTxDeleteSpan = false;
     ui8 WriteTxsSpanVerbosity = 0;
 
-    struct TDefferedReadSetAck {
+    // Список TEvReadSetAck для неизвестных транзакций. Их нужно отправлять только когда
+    // завершиться запись в цикле WRITE_TX_COOKIE. Так мы уверены, что таблетка является лидером
+    struct TDeferredReadSetAck {
         TActorId Sender;
         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> Ack;
     };
-    TDeque<TDefferedReadSetAck> DefferedReadSetAcks;
+    TDeque<TDeferredReadSetAck> PendingDeferredReadSetAcks; // ждут очередной итерации цикла записи WRITE_TX_COOKIE
+    TDeque<TDeferredReadSetAck> DeferredReadSetAcks;        // ждут пока завершится цикл записи WRITE_TX_COOKIE
 
-    void SendDefferedReadSetAcks(const TActorContext& ctx);
+    void MovePendingDeferredReadSetAcks();
+    void AddDeferredReadSetAck(TDeferredReadSetAck&& ack);
+    void SendDeferredReadSetAcks(const TActorContext& ctx);
 };
 
 }// NPQ

@@ -322,7 +322,8 @@ LEFT JOIN
             COALESCE(tests.status_description, '') AS status_description,
             tests.attempt_number AS attempt_number,
             1 AS is_last_run_in_pr,
-            tests.owners AS owners,
+            -- Prefer stable owners from testowners (derived from main), fallback to owners from test run row.
+            COALESCE(o.owners, tests.owners) AS owners,
             tests.log AS log,
             tests.logsdir AS logsdir,
             tests.stderr AS stderr,
@@ -387,6 +388,10 @@ LEFT JOIN
                 AND suite_folder IS NOT NULL
                 AND test_name IS NOT NULL
         ) AS tests
+        LEFT JOIN
+            `test_results/analytics/testowners` AS o
+            ON o.suite_folder = tests.suite_folder
+            AND o.test_name = tests.test_name
         INNER JOIN (
             -- Last job_id for each PR (attempt 3)
             SELECT 

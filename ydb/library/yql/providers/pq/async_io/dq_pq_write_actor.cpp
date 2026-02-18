@@ -2,7 +2,6 @@
 #include "probes.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/feature_flags.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -164,7 +163,8 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 freeSpace,
         const IPqGateway::TPtr& pqGateway,
-        bool enableStreamingQueriesCounters)
+        bool enableStreamingQueriesCounters,
+        bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -177,7 +177,9 @@ public:
         , FreeSpace(freeSpace)
         , PqGateway(pqGateway)
         , TaskId(taskId)
+        , EnableStreamingQueriesPqSinkDeduplicationFeatureFlag(enableStreamingQueriesPqSinkDeduplicationFeatureFlag)
     { 
+        SINK_LOG_D("GetEnableDeduplication: " << SinkParams.GetEnableDeduplication());
         EgressStats.Level = statsLevel;
     }
 
@@ -327,12 +329,19 @@ private:
     }
 
     NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
-        return NYdb::NTopic::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId(), GetSourceId())
+        auto settings = NYdb::NTopic::TWriteSessionSettings()
+            .Path(SinkParams.GetTopicPath())
             .TraceId(LogPrefix)
             .MaxMemoryUsage(FreeSpace)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
                 : NYdb::NTopic::ECodec::GZIP);
+
+        if (EnableStreamingQueriesPqSinkDeduplicationFeatureFlag && SinkParams.GetEnableDeduplication()) {
+            settings.ProducerId(GetSourceId());
+            settings.MessageGroupId(GetSourceId());
+        }
+        return settings;
     }
 
     IFederatedTopicClient& GetFederatedTopicClient() {
@@ -535,6 +544,7 @@ private:
     IPqGateway::TPtr PqGateway;
     ui64 TaskId;
     bool Inited = false;
+    bool EnableStreamingQueriesPqSinkDeduplicationFeatureFlag = false;
 };
 
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
@@ -550,6 +560,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqGateway::TPtr pqGateway,
     bool enableStreamingQueriesCounters,
+    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
     i64 freeSpace)
 {
     const TString& tokenName = settings.GetToken().GetName();
@@ -568,13 +579,14 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
         counters,
         freeSpace,
         pqGateway,
-        enableStreamingQueriesCounters);
+        enableStreamingQueriesCounters,
+        enableStreamingQueriesPqSinkDeduplicationFeatureFlag);
     return {actor, actor};
 }
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters, bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters, enableStreamingQueriesPqSinkDeduplicationFeatureFlag](
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
@@ -596,7 +608,8 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 args.Callback,
                 counters ? counters : args.TaskCounters,
                 pqGateway,
-                enableStreamingQueriesCounters
+                enableStreamingQueriesCounters,
+                enableStreamingQueriesPqSinkDeduplicationFeatureFlag
             );
         });
 }

@@ -407,6 +407,11 @@ public:
                     sinkDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
                 }
 
+                if (auto maybeEnableDeduplication = State_->Configuration->EnableDeduplication.Get()) {
+                    maybeEnableDeduplication->to_lower();
+                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication == "true"sv);
+                }
+
                 protoSettings.PackFrom(sinkDesc);
                 sinkType = "PqSink";
             }

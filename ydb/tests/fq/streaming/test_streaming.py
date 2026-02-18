@@ -486,3 +486,55 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
+
+
+    @pytest.mark.parametrize("kikimr", [{"checkpointing_period_ms": "20000"}], indirect=["kikimr"])
+    @pytest.mark.parametrize("local_topics", [True])
+    def test_deduplication(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication", local_topics, entity_name, partitions_count=10)
+
+        name = "test_deduplication"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.EnableDeduplication = "TRUE";
+                $in = SELECT time FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL))
+                WHERE time like "%time%";
+                INSERT INTO {out} SELECT time FROM $in;
+            END DO;'''
+
+        path = f"/Root/{name}"
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
+
+        data = ['{"time": "lunch time"}']
+        expected_data1 = 'lunch time'
+        message_count1 = 1
+        for i in range(message_count1):
+            part_key = ''.join(random.choices(string.ascii_uppercase, k=8))
+            print(f"partition_key777 {part_key}")
+
+            self.write_stream(data, topic_path=None, partition_key=part_key, endpoint=endpoint)
+        assert self.read_stream(message_count1, topic_path=self.output_topic, endpoint=endpoint) == [expected_data1 for i in range(message_count1)]
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+        message_count2 = 10
+        data = ['{"time": "dinner time"}']
+        for i in range(message_count2):
+            part_key = ''.join(random.choices(string.ascii_uppercase, k=8))
+            print(f"partition_key777 {part_key}")
+            self.write_stream(data, topic_path=None, partition_key=part_key, endpoint=endpoint)
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+
+        expected_data2 = 'dinner time'
+        readed_data = self.read_stream(message_count1 + message_count2, topic_path=self.output_topic, endpoint=endpoint)
+        expected = [expected_data2 for i in range(message_count2)] + [expected_data1 for i in range(message_count1)]
+        print(f"readed_data {readed_data}")
+        print(f"expected {expected}")
+        assert sorted(readed_data) == sorted(expected)
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")

@@ -144,7 +144,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
-        self.wait_for(lambda: table.get_portion_count() == 1, 70)
+        assert self.wait_for(lambda: table.get_portion_count() == 1, 70)
 
         volumes = table.get_volumes_column("value1")
         koef = self.volumes_without_compression[1] / volumes[1]
@@ -169,7 +169,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
-        self.wait_for(lambda: table.get_portion_count() == 1, 70)
+        assert self.wait_for(lambda: table.get_portion_count() == 1, 70)
 
         volumes = table.get_volumes_column("value1")
         koef = volumes[1] / self.volumes_with_compression[1]

@@ -307,7 +307,7 @@ struct Schema : NIceDb::Schema {
         // there can be only 1 schema Tx on a shard at any moment in time
         struct LastTxId :       Column<6, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct TabletType :     Column<7, NScheme::NTypeIds::Uint32> { using Type = TTabletTypes::EType; static constexpr Type Default = ETabletType::TypeInvalid; };
-        struct CountReferences : Column<8, NScheme::NTypeIds::Uint32> { using Type = ui64; };
+        struct CountReferences : Column<8, NScheme::NTypeIds::Uint64> { using Type = ui64; };
 
         using TKey = TableKey<OwnerShardId, LocalShardId>;
         using TColumns = TableColumns<OwnerShardId, LocalShardId, TabletId, OwnerPathId, LocalPathId, LastTxId, TabletType, CountReferences>;

@@ -945,9 +945,10 @@ ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, c
     return tx.HasCreateColumnTable() ? CreateReadOnlyCopyColumnTable(id, tx) : MakeSubOperation<TCopyTable>(id, tx, localSequences, targetState);
 }
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state) {
+ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state, TOperationContext& context) {
     Y_ABORT_UNLESS(txState != TTxState::Invalid);
-    return state->TxType == TxCreateColumnTable ? CreateReadOnlyCopyColumnTable(id, txState) : MakeSubOperation<TCopyTable>(id, txState, state);
+    TPath srcPath = TPath::Init(state->SourcePathId, context.SS);
+    return srcPath->IsColumnTable() ? CreateReadOnlyCopyColumnTable(id, txState) : MakeSubOperation<TCopyTable>(id, txState, state);
 }
 
 void FillCopyIndexes(TOperationId nextId, const TPath& srcPath, const TPath& dstPath, const NKikimrSchemeOp::TTableDescription& copying, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
@@ -1047,7 +1048,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
     Y_ABORT_UNLESS(copyFromTable);
 
     auto cdcPeerOp = tx.HasCreateCdcStream() ? &tx.GetCreateCdcStream() : nullptr;
-    
+
     TPath srcPath = TPath::Resolve(copyFromTable, context.SS);
 
     {
@@ -1065,7 +1066,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             checks.IsCommonSensePath();
         }
 
-        
+
         if ( tx.HasCreateTable() && !tx.GetCreateTable().GetAllowUnderSameOperation()) {
             checks.NotUnderOperation();
         }
@@ -1078,7 +1079,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
     THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
     TPath workDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
-    
+
     const TString name = tx.HasCreateTable() ? tx.GetCreateTable().GetName() : tx.GetCreateColumnTable().GetName();
     TPath dstPath = workDir.Child(name);
 
@@ -1113,7 +1114,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
 
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
     }
-    
+
     if (tx.HasCreateTable()) {
         FillCopyIndexes(nextId, srcPath, dstPath, tx.GetCreateTable(), tx, context, result);
     }

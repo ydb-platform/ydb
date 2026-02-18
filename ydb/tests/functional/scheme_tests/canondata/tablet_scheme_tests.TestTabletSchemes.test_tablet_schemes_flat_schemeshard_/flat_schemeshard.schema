@@ -549,6 +549,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "CountReferences",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "ShardIdx",
                 "ColumnType": "Uint64"
@@ -583,6 +588,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
@@ -3761,11 +3767,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "TabletType",
-                "ColumnType": "Uint32"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerShardId",
                 "ColumnType": "Uint64"
@@ -3794,19 +3795,30 @@
                 "ColumnId": 6,
                 "ColumnName": "LastTxId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "TabletType",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "CountReferences",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,

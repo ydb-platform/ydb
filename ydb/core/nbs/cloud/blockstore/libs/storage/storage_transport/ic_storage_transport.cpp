@@ -1,6 +1,6 @@
 #include "ic_storage_transport.h"
 
-namespace NYdb::NBS::NBlockStore {
+namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 using namespace NActors;
 using namespace NKikimr::NDDisk;
@@ -631,4 +631,4 @@ STFUNC(TICStorageTransportActor::StateWork)
     }
 }
 
-}   // namespace NYdb::NBS::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

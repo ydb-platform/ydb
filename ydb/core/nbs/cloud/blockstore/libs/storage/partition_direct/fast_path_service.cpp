@@ -1,17 +1,21 @@
 #include "fast_path_service.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/direct_block_group_in_mem.h>
+#include "direct_block_group_in_mem.h"
 
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
 #include <ydb/core/base/counters.h>
 
-namespace NYdb::NBS::NBlockStore {
-
 using namespace NKikimr;
 using namespace NThreading;
 
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
 namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr size_t BlockSize = 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -94,7 +98,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
 
         Counters.RequestStarted(
             EBlockStoreRequest::ReadBlocks,
-            request->Range.Size() * NStorage::NPartitionDirect::BlockSize);
+            request->Range.Size() * BlockSize);
 
         auto result = DirectBlockGroup->ReadBlocksLocal(
             std::move(callContext),
@@ -132,7 +136,7 @@ TFastPathService::WriteBlocksLocal(
 
         Counters.RequestStarted(
             EBlockStoreRequest::WriteBlocks,
-            request->Range.Size() * NStorage::NPartitionDirect::BlockSize);
+            request->Range.Size() * BlockSize);
 
         auto result = DirectBlockGroup->WriteBlocksLocal(
             std::move(callContext),
@@ -169,4 +173,6 @@ void TFastPathService::ReportIOError()
     // TODO: implement
 }
 
-}   // namespace NYdb::NBS::NBlockStore
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

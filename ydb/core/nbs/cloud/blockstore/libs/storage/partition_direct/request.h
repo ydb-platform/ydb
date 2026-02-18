@@ -10,10 +10,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr size_t BlockSize = 4096;
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TBaseRequestHandler
 {
 private:
@@ -163,5 +159,7 @@ private:
     std::shared_ptr<TReadBlocksLocalRequest> Request;
     NThreading::TPromise<TReadBlocksLocalResponse> Future;
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

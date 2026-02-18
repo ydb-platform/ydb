@@ -1,6 +1,6 @@
 #include "direct_block_group.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/storage_transport/ic_storage_transport.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -23,7 +23,8 @@ TDirectBlockGroup::TDirectBlockGroup(
     , BlockSize(blockSize)
     , BlocksCount(blocksCount)
     , BlocksMeta(BlocksCount, TBlockMeta(persistentBufferDDiskIds.size()))
-    , StorageTransport(std::make_unique<TICStorageTransport>(actorSystem))
+    , StorageTransport(
+          std::make_unique<NTransport::TICStorageTransport>(actorSystem))
 {
     auto guard = Guard(Lock);
 

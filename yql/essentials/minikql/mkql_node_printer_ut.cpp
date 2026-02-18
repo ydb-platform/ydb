@@ -4,8 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 TNode* BuildGraph(const TTypeEnvironment& env) {
@@ -119,5 +118,4 @@ Y_UNIT_TEST(RuntimeNodeSerialization) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLNodePrinterTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

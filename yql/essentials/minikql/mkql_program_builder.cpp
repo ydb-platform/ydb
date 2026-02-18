@@ -17,8 +17,7 @@
 
 using namespace std::string_view_literals;
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 static_assert(RuntimeVersion >= 47U);
 
@@ -6998,5 +6997,4 @@ bool CanExportType(TType* type, const TTypeEnvironment& env) {
     return canExport;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

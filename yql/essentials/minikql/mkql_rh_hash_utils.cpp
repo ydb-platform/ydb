@@ -1,7 +1,6 @@
 #include "mkql_rh_hash_utils.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 ui64 RHHashTableNeedsGrow(ui64 size, ui64 capacity) {
     return size * 2 >= capacity;
@@ -29,5 +28,4 @@ ui64 CalculateRHHashTableCapacity(ui64 targetSize) {
     return capacity;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
@@ -1993,7 +1994,7 @@ public:
         }
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
         if (guardLocks.LockTxId) {
             bool createMissing = state.LockMode == NKikimrDataEvents::OPTIMISTIC;
@@ -2149,6 +2150,7 @@ public:
 
         state.LockId = request->Record.GetLockTxId();
         state.LockNodeId = request->Record.GetLockNodeId();
+        state.QuerySpanId = request->Record.GetQuerySpanId();
         state.LockMode = request->Record.GetLockMode();
         switch (state.LockMode) {
             case NKikimrDataEvents::OPTIMISTIC:
@@ -2603,6 +2605,61 @@ private:
         ValidationInfo.SetLoaded();
     }
 
+    // Handle deferred lock break detection: determine victim, log TLI events, and
+    // pass breaker info to SessionActor via the result proto.
+    void HandleDeferredLockBreak(TReadIteratorState& state, TSysLocks& sysLocks, const TActorContext& ctx) {
+        // Check if lock was already broken before we call BreakSetLocks
+        bool lockWasAlreadyBroken = false;
+        if (state.LockId) {
+            if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
+                lockWasAlreadyBroken = rawLock->IsBroken();
+            }
+        }
+
+        sysLocks.BreakSetLocks();
+
+        // Determine victim query trace ID:
+        // - If lock was already broken (e.g., breaker wrote to same key), use the original victim
+        // - If lock wasn't broken before (deferred scenario), use current query as victim
+        TMaybe<ui64> victimQuerySpanId;
+        if (lockWasAlreadyBroken) {
+            victimQuerySpanId = state.LockId ? sysLocks.GetVictimQuerySpanIdForLock(state.LockId) : Nothing();
+        } else {
+            victimQuerySpanId = state.QuerySpanId
+                ? TMaybe<ui64>(state.QuerySpanId)
+                : (state.LockId ? sysLocks.GetVictimQuerySpanIdForLock(state.LockId) : Nothing());
+
+            // Update the lock's VictimQuerySpanId so SessionActor receives the correct victim info
+            if (state.LockId && state.QuerySpanId) {
+                if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
+                    rawLock->SetVictimQuerySpanId(state.QuerySpanId);
+                }
+            }
+        }
+
+        NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
+            "Read transaction was a victim of broken locks",
+            victimQuerySpanId,
+            state.QuerySpanId ? TMaybe<ui64>(state.QuerySpanId) : Nothing());
+
+        // In deferred lock scenarios, emit breaker logs and pass info to SessionActor
+        if (victimQuerySpanId) {
+            Result->Record.SetDeferredVictimQuerySpanId(*victimQuerySpanId);
+
+            auto breakerInfos = Self->FindBreakerInfoForTli(state.ReadVersion);
+            TVector<ui64> victimIds = {*victimQuerySpanId};
+            for (const auto& info : breakerInfos) {
+                NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(),
+                    "Write transaction broke other locks (deferred)",
+                    {}, // No specific lock IDs in deferred scenario
+                    TMaybe<ui64>(info.QuerySpanId),
+                    victimIds);
+                Result->Record.AddDeferredBreakerQuerySpanIds(info.QuerySpanId);
+                Result->Record.AddDeferredBreakerNodeIds(info.SenderNodeId);
+            }
+        }
+    }
+
     void AcquireLock(TReadIteratorState& state, const TActorContext& ctx) {
         auto& sysLocks = Self->SysLocksTable();
 
@@ -2634,14 +2691,14 @@ private:
             }
 
             if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
-                sysLocks.BreakSetLocks();
+                HandleDeferredLockBreak(state, sysLocks, ctx);
             }
 
             break;
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
             if (Reader->HadInconsistentResult()) {
-                sysLocks.BreakSetLocks();
+                HandleDeferredLockBreak(state, sysLocks, ctx);
             }
 
             break;
@@ -3174,7 +3231,7 @@ public:
             << ", FirstUnprocessedQuery# " << state.FirstUnprocessedQuery);
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
         Reader.reset(new TReader(
             state,

@@ -3,8 +3,7 @@
 #include "mkql_node.h"
 #include "mkql_node_visitor.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TString SerializeNode(TNode* node, std::vector<TNode*>& nodeStack) noexcept;
 TString SerializeRuntimeNode(TRuntimeNode node, std::vector<TNode*>& nodeStack) noexcept;
@@ -19,5 +18,4 @@ TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node,
 TNode* DeserializeNode(const TStringBuf& buffer, const TTypeEnvironment& env);
 TRuntimeNode DeserializeRuntimeNode(const TStringBuf& buffer, const TTypeEnvironment& env);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

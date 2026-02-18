@@ -9,11 +9,9 @@
 #include <util/generic/hash.h>
 #include <util/system/mutex.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 void FillProtoFromValue(const NKikimr::NUdf::TUnboxedValuePod& source, NProtoBuf::Message& target,
                         const NKikimr::NUdf::TProtoInfo& info);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

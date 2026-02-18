@@ -30,18 +30,15 @@
 //////////////////////////////////////////////////////////////////////////////
 class IOutputStream;
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 class IMutableFunctionRegistry;
 class TTypeEnvironment;
 struct TFunctionTypeInfo;
 class TStatus;
 class TType;
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using TUdfModuleRemappings = THashMap<TString, TString>; // old => new
 using TUdfModulePathsMap = THashMap<TString, TString>;   // module name => udf path
@@ -151,5 +148,4 @@ const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
 
 void FillStaticModules(IMutableFunctionRegistry& registry);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

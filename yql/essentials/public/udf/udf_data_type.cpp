@@ -3,8 +3,7 @@
 #include <array>
 #include <optional>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 namespace {
 
 template <size_t Size>
@@ -168,5 +167,4 @@ bool IsComparable(EDataSlot left, EDataSlot right) {
     return false;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

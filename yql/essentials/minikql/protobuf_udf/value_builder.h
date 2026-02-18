@@ -6,8 +6,7 @@
 
 #include <google/protobuf/message.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TProtobufValue: public TBoxedValue {
 public:
@@ -46,5 +45,4 @@ TUnboxedValue FillValueFromProto(
     const IValueBuilder* valueBuilder,
     const TProtoInfo& info);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

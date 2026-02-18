@@ -3,8 +3,7 @@
 #include <yql/essentials/public/purecalc/common/interface.h>
 #include <arrow/compute/kernel.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 
 /**
  * Processing mode for working with Apache Arrow batches inputs.
@@ -130,5 +129,4 @@ struct TOutputSpecTraits<TArrowOutputSpec> {
     static void SetConsumerToWorker(const TArrowOutputSpec&, IPushStreamWorker*, THolder<IConsumer<TOutputItemType>>);
 };
 
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

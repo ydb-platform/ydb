@@ -3,8 +3,7 @@
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 TUdfFilter ParseUdfFilter(const NJson::TJsonValue& json) {
     TUdfFilter res;
@@ -47,5 +46,4 @@ void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSe
     }
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

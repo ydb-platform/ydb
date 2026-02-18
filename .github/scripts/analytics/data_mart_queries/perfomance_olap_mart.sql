@@ -2,14 +2,14 @@ $start_timestamp = (CurrentUtcDate() - 30 * Interval("P1D"));
 
 $all_suites = (
     SELECT 
-        Suite, Test 
+        Suite, Test, Db
     FROM (
         SELECT
             Suite,
             ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
         FROM `perfomance/olap/tests_results`
         WHERE Timestamp >= $start_timestamp
-        GROUP BY Suite 
+        GROUP BY Suite, Db
     ) 
     FLATTEN LIST BY Tests AS Test
 );
@@ -17,11 +17,14 @@ $all_suites = (
 $launch_times = (
     SELECT 
         launch_times_raw.*,
-        all_suites.*,
+        all_suites.Suite as Suite,
+        all_suites.Test as Test,
         COALESCE(SubString(CAST(launch_times_raw.Version AS String), 0U, RFIND(CAST(launch_times_raw.Version AS String), '.')), 'unknown') As Branch,
         COALESCE(SubString(CAST(launch_times_raw.CiVersion AS String), 0U, RFIND(CAST(launch_times_raw.CiVersion AS String), '.')), 'unknown') As CiBranch,
         COALESCE(SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, RFIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch,
-    FROM (
+    FROM
+    $all_suites AS all_suites 
+    LEFT JOIN (
         SELECT
             Db,
             Version,
@@ -36,8 +39,7 @@ $launch_times = (
             Db,
             JSON_VALUE(Info, "$.cluster.version") AS Version,
             JSON_VALUE(Info, "$.ci_launch_id") AS LunchId
-    ) AS launch_times_raw
-    CROSS JOIN $all_suites AS all_suites
+    ) AS launch_times_raw ON all_suites.Db == launch_times_raw.Db
 );
 
 $all_tests_raw =

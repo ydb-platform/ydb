@@ -41,6 +41,7 @@ public:
     //! If write was successful, returns QUEUED.
     //! If write was not successful due to overloaded buffer, returns OVERLOADED.
     //! If write was not successful because of closed session, returns CLOSED.
+    //! DO NOT USE IN HIGHLY LOADED SYSTEMS.
     //! DO NOT IGNORE THE RETURN VALUE.
     [[nodiscard]] virtual EWriteResult Write(TWriteMessage&& message,
         TTransactionBase* tx = nullptr) = 0;

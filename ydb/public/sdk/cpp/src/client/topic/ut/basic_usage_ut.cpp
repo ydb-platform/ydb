@@ -14,6 +14,7 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/write_session.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/producer.h>
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
@@ -1439,105 +1440,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(session->Close(TDuration::Seconds(30)));
     }
 
-    Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_BasicWrite) {
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 5);
-
-        auto client = setup.MakeClient();
-        
-        TProducerSettings writeSettings;
-        writeSettings
-            .Path(setup.GetTopicPath(TEST_TOPIC))
-            .Codec(ECodec::RAW);
-        writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-        
-        auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
-
-        const std::string key1 = "key1";
-        const std::string key2 = "key2";
-        
-        // Write several messages with different keys
-        size_t seqNo = 1;
-        for (int i = 0; i < 5; ++i) {
-            std::string payload = "message1-" + ToString(i);
-            TWriteMessage msg(payload);
-            msg.SeqNo(seqNo++);
-            bool res = session->Write(key1, std::move(msg));
-            UNIT_ASSERT(res);
-        }
-        
-        for (int i = 0; i < 5; ++i) {
-            std::string payload = "message2-" + ToString(i);
-            TWriteMessage msg(payload);
-            msg.SeqNo(seqNo++);
-            bool res = session->Write(key2, std::move(msg));
-            UNIT_ASSERT(res);
-        }
-        
-        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
-    }
-
-    Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_NoSeqNo) {
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3);
-
-        auto client = setup.MakeClient();
-
-        TProducerSettings writeSettings;
-        writeSettings
-            .Path(setup.GetTopicPath(TEST_TOPIC))
-            .Codec(ECodec::RAW);
-        writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-
-        auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
-
-        const ui64 messages = 10;
-        for (ui64 i = 0; i < messages; ++i) {
-            std::string payload = "payload-" + ToString(i);
-            TWriteMessage msg(payload);
-            bool res = session->Write("key-" + ToString(i % 3), std::move(msg));
-            UNIT_ASSERT(res);
-        }
-
-        bool closeRes = session->Close(TDuration::Seconds(30));
-        UNIT_ASSERT(closeRes);
-    }
-
-    Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_ManyMessages) {
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
-
-        auto client = setup.MakeClient();
-
-        TProducerSettings writeSettings;
-        writeSettings
-            .Path(setup.GetTopicPath(TEST_TOPIC))
-            .Codec(ECodec::RAW);
-        writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-
-        auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
-
-        ui64 seqNo = 1;
-
-        for (ui64 i = 0; i < 1000; ++i) {
-            auto key = CreateGuidAsString();
-            std::string payload = "payload-" + ToString(seqNo);
-            TWriteMessage msg(payload);
-            msg.SeqNo(seqNo++);
-            bool res = session->Write(key, std::move(msg));
-            UNIT_ASSERT(res);
-        }
-
-        bool closeRes = session->Close(TDuration::Seconds(60));
-        UNIT_ASSERT(closeRes);
-    }
-
     Y_UNIT_TEST(KeyedWriteSession_CloseTimeout) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3);
@@ -1970,8 +1872,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto msgData = TString(1_MB, 'a');
 
         {
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 1), "key1"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 2), "key2"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write("key1", CreateMessage(msgData, 1)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write("key2", CreateMessage(msgData, 2)), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EFlushResult::SUCCESS);
             UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
             auto d = client.DescribeTopic(TEST_TOPIC).GetValueSync();
@@ -1981,17 +1883,17 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         {
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 3), "key3"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 4), "key4"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 5), "key5"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 6), "key6"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 7), "key7"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 8), "key8"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 9), "key9"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 10), "key10"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 11), "key11"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 12), "key12"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 13), "key13"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write("key3", CreateMessage(msgData, 3)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write("key4", CreateMessage(msgData, 4)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write("key5", CreateMessage(msgData, 5)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write("key6", CreateMessage(msgData, 6)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write("key7", CreateMessage(msgData, 7)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write("key8", CreateMessage(msgData, 8)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write("key9", CreateMessage(msgData, 9)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write("key10", CreateMessage(msgData, 10)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write("key11", CreateMessage(msgData, 11)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write("key12", CreateMessage(msgData, 12)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write("key13", CreateMessage(msgData, 13)), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EFlushResult::SUCCESS);
             UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
             auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
@@ -2001,8 +1903,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         {
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 14), "key14"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 15), "key15"), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write("key14", CreateMessage(msgData, 14)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write("key15", CreateMessage(msgData, 15)), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EFlushResult::SUCCESS);
             UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
         }

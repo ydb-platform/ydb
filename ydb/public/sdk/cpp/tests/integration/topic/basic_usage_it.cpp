@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/producer.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
 
 #include <util/generic/overloaded.h>

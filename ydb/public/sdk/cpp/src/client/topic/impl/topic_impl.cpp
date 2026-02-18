@@ -2,6 +2,7 @@
 
 #include "read_session.h"
 #include "write_session.h"
+#include "producer.h"
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -59,25 +60,6 @@ std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::TImpl::CreateSimpleWr
             alteredSettings, shared_from_this(), Connections_, DbDriverState_
     );
     return std::move(session);
-}
-
-std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::TImpl::CreateSimpleKeyedWriteSession(const TProducerSettings& settings) {
-    auto alteredSettings = settings;
-    {
-        std::lock_guard guard(Lock);
-        if (!settings.CompressionExecutor_) {
-            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
-        }
-
-        if (!settings.EventHandlers_.HandlersExecutor_) {
-            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
-        }
-    }
-
-    auto session = std::make_shared<TSimpleBlockingKeyedWriteSession>(
-        alteredSettings, shared_from_this(), Connections_, DbDriverState_
-    );
-    return session;
 }
 
 std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession(const TProducerSettings& settings) {

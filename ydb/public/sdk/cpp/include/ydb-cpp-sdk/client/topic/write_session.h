@@ -360,7 +360,8 @@ enum class EWriteResult : uint8_t {
 //! If flush was not successful because of closed session, returns CLOSED.
 enum class EFlushResult : uint8_t {
     SUCCESS = 0,
-    CLOSED = 2,
+    CLOSED = 1,
+    TIMEOUT = 2,
 };
 
 //! Producer is an abstraction that can write messages to the topic.
@@ -368,13 +369,22 @@ enum class EFlushResult : uint8_t {
 class IProducer {
 public:
     //! Write single message.
+    //! Returns write result.
+    //! If write was successful, returns QUEUED.
+    //! If write was not successful due to overloaded buffer, returns OVERLOADED.
+    //! If write was not successful because of closed session, returns CLOSED.
+    //! DO NOT IGNORE THE RETURN VALUE.
+    [[nodiscard]] virtual EWriteResult Write(TWriteMessage&& message,
+        TTransactionBase* tx = nullptr) = 0;
+
+    //! Write single message.
     //! key - message key.
     //! Returns write result.
     //! If write was successful, returns QUEUED.
     //! If write was not successful due to overloaded buffer, returns OVERLOADED.
     //! If write was not successful because of closed session, returns CLOSED.
     //! DO NOT IGNORE THE RETURN VALUE.
-    [[nodiscard]] virtual EWriteResult Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt,
+    [[nodiscard]] virtual EWriteResult Write(const std::string& key, TWriteMessage&& message,
         TTransactionBase* tx = nullptr) = 0;
 
     //! Explain why session was closed.
@@ -390,30 +400,11 @@ public:
 
     //! Flush all messages to the server and wait result.
     //! Returns flush result.
-    [[nodiscard]] virtual EFlushResult FlushAndWait() = 0;
+    [[nodiscard]] virtual EFlushResult FlushAndWait(TDuration timeout = TDuration::Max()) = 0;
 
     //! Close the producer.
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
     virtual ~IProducer() = default;
-};
-
-//! Simple blocking keyed write session. Experimental SDK. DO NOT USE IN PRODUCTION.
-class ISimpleBlockingKeyedWriteSession {
-public:
-    //! Write single message.
-    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    virtual bool Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx = nullptr,
-        TDuration blockTimeout = TDuration::Max()) = 0;
-
-    //! Wait for all writes to complete (no more that closeTimeout()), then close.
-    //! Return true if all writes were completed and acked, false if timeout was reached and some writes were aborted.
-    virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
-
-    //! Writer counters with different stats (see TWriterConuters).
-    virtual TWriterCounters::TPtr GetCounters() = 0;
-
-    //! Close() with timeout = 0 and destroy everything instantly.
-    virtual ~ISimpleBlockingKeyedWriteSession() = default;
 };
 
 } // namespace NYdb::NTopic

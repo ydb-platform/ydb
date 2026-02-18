@@ -56,6 +56,10 @@ public:
         return !Level && !InternalLevelWeight;
     }
 
+    bool IsCritical() const {
+        return Level >= 10;
+    }
+
     TString DebugString() const {
         return TStringBuilder() << "(" << Level << "," << InternalLevelWeight << ")";
     }
@@ -66,6 +70,10 @@ public:
 
     static TOptimizationPriority Optimization(const i64 weight) {
         return TOptimizationPriority(0, weight);
+    }
+
+    static TOptimizationPriority LevelOptimization(const i64 weight) {
+        return TOptimizationPriority(1, weight);
     }
 
     static TOptimizationPriority Zero() {

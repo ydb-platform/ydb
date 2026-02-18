@@ -69,6 +69,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         info->Id = id;
         info->State = TForcedCompactionInfo::EState::InProgress;
         info->TablePathId = tablePath.Base()->PathId;
+        info->DomainPathId = domainPath.Base()->PathId;
         info->Cascade = settings.cascade();
         info->MaxShardsInFlight = settings.max_shards_in_flight();
         info->StartTime = TAppData::TimeProvider->Now();
@@ -125,6 +126,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 
+private:
     void Reply(
         THolder<TEvForcedCompaction::TEvCreateResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,

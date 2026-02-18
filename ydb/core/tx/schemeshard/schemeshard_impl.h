@@ -1750,6 +1750,7 @@ public:
 
     struct TForcedCompaction {
         struct TTxCreate;
+        struct TTxGet;
         struct TTxProgress;
     };
 
@@ -1771,9 +1772,11 @@ public:
     void HandleForcedCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
 
     NTabletFlatExecutor::ITransaction* CreateTxCreateForcedCompaction(TEvForcedCompaction::TEvCreateRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxGetForcedCompaction(TEvForcedCompaction::TEvGetRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressForcedCompaction();
 
     void Handle(TEvForcedCompaction::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvForcedCompaction::TEvGetRequest::TPtr& ev, const TActorContext& ctx);
     // } // NForcedCompaction
 
     // namespace NCdcStreamScan {

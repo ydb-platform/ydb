@@ -1099,8 +1099,8 @@ TProducer::TProducerRetryPolicy::TProducerRetryPolicy(TProducer* producer)
 
 typename TProducer::TProducerRetryPolicy::IRetryState::TPtr TProducer::TProducerRetryPolicy::CreateRetryState() const {
     struct TRetryState : public IRetryState {
-        TRetryState(TProducer* session)
-            : Session(session)
+        TRetryState(TProducer* producer)
+            : Producer(producer)
         {}
         ~TRetryState() = default;
         TMaybe<TDuration> GetNextRetryDelay(EStatus status) override {
@@ -1109,7 +1109,7 @@ typename TProducer::TProducerRetryPolicy::IRetryState::TPtr TProducer::TProducer
             }
 
             if (!UserRetryState) {
-                auto policy = Session->Settings.RetryPolicy_ ? Session->Settings.RetryPolicy_ : NYdb::NTopic::IRetryPolicy::GetDefaultPolicy();
+                auto policy = Producer->Settings.RetryPolicy_ ? Producer->Settings.RetryPolicy_ : NYdb::NTopic::IRetryPolicy::GetDefaultPolicy();
                 UserRetryState = policy->CreateRetryState();
             }
 
@@ -1117,7 +1117,7 @@ typename TProducer::TProducerRetryPolicy::IRetryState::TPtr TProducer::TProducer
         }
 
     private:
-        TProducer* Session;
+        TProducer* Producer;
         IRetryState::TPtr UserRetryState;
     };
     

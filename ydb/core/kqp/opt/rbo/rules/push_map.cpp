@@ -7,7 +7,7 @@ namespace NKqp {
 // We only push a non-projecting map operator, and there are some limitations to where we can push:
 //  - we cannot push the right side of left join for example or left side of right join
 
-std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+TIntrusivePtr<IOperator> TPushMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -56,21 +56,21 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndApply(const std::shared_p
         return input;
     }
 
-    std::shared_ptr<IOperator> output;
+    TIntrusivePtr<IOperator> output;
     if (!topMapElements.size()) {
         output = join;
     } else {
-        output = std::make_shared<TOpMap>(join, input->Pos, topMapElements, false);
+        output = MakeIntrusive<TOpMap>(join, input->Pos, topMapElements, false);
     }
 
     if (leftMapElements.size()) {
         auto leftInput = join->GetLeftInput();
-        join->SetLeftInput(std::make_shared<TOpMap>(leftInput, input->Pos, leftMapElements, false));
+        join->SetLeftInput(MakeIntrusive<TOpMap>(leftInput, input->Pos, leftMapElements, false));
     }
 
     if (rightMapElements.size()) {
         auto rightInput = join->GetRightInput();
-        join->SetRightInput(std::make_shared<TOpMap>(rightInput, input->Pos, rightMapElements, false));
+        join->SetRightInput(MakeIntrusive<TOpMap>(rightInput, input->Pos, rightMapElements, false));
     }
 
     return output;

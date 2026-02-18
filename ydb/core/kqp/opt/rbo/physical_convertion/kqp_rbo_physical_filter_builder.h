@@ -8,7 +8,7 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalFilterBuilder: public TPhysicalUnaryOpBuilder {
 public:
-    TPhysicalFilterBuilder(std::shared_ptr<TOpFilter> filter, TExprContext& ctx, TPositionHandle pos)
+    TPhysicalFilterBuilder(TIntrusivePtr<TOpFilter> filter, TExprContext& ctx, TPositionHandle pos)
         : TPhysicalUnaryOpBuilder(ctx, pos)
         , Filter(filter) {
     }
@@ -16,5 +16,5 @@ public:
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
 
 private:
-    std::shared_ptr<TOpFilter> Filter;
+    TIntrusivePtr<TOpFilter> Filter;
 };

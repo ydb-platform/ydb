@@ -16,8 +16,8 @@ namespace NKikimr::NKqp {
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     Y_UNIT_TEST(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardBloomFilter(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardBloomNgramFilter(true);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
@@ -88,8 +88,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     Y_UNIT_TEST(AddAndDropLocalBloomIndexesWithSqlSyntax) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardBloomFilter(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardBloomNgramFilter(true);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
@@ -138,8 +138,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     Y_UNIT_TEST(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardBloomFilter(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardBloomNgramFilter(true);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
@@ -174,8 +174,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardBloomFilter(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardBloomNgramFilter(true);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();

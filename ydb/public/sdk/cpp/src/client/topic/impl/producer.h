@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/write_session_impl.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h>
 
 #include <library/cpp/threading/future/future.h>
 

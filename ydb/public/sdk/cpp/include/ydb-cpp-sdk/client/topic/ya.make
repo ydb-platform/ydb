@@ -18,6 +18,7 @@ SRCS(
     retry_policy.h
     write_events.h
     write_session.h
+    producer.h
 )
 
 PEERDIR(

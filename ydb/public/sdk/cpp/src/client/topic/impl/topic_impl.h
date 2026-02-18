@@ -2,6 +2,7 @@
 
 #include "transaction.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #define INCLUDE_YDB_INTERNAL_H

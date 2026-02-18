@@ -3,6 +3,7 @@
 #include "control_plane.h"
 #include "read_session.h"
 #include "write_session.h"
+#include "producer.h"
 
 namespace NYdb::inline Dev::NTopic {
 

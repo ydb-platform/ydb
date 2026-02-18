@@ -960,11 +960,13 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             error = "Index must have a name";
             return false;
         }
+
         if (index.index_columns_size() != 1) {
             status = Ydb::StatusIds::BAD_REQUEST;
             error = "Only one index column is supported for local bloom indexes";
             return false;
         }
+
         if (!index.data_columns().empty()) {
             status = Ydb::StatusIds::BAD_REQUEST;
             error = "Data columns are not supported for local bloom indexes";
@@ -984,11 +986,13 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                     error = "Local bloom filter index support is disabled";
                     return false;
                 }
+
                 upsert->SetClassName("BLOOM_FILTER");
                 auto* bloom = upsert->MutableBloomFilter();
                 if (index.local_bloom_filter_index().has_false_positive_probability()) {
                     bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
                 }
+
                 bloom->AddColumnNames(index.index_columns(0));
                 break;
             }
@@ -998,6 +1002,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                     error = "Local bloom ngram filter index support is disabled";
                     return false;
                 }
+
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
                 auto* ngram = upsert->MutableBloomNGrammFilter();
                 ngram->SetNGrammSize(index.local_bloom_ngram_filter_index().ngram_size());
@@ -1019,6 +1024,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             error = "Only one index can be removed by one operation";
             return false;
         }
+
         auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
         alterColumnTable->SetName(name);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);

@@ -463,7 +463,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
     }
 
     ui32 nextColumnId = 1;
-    for (const auto& name : metadata.ColumnOrder) {
+    for (auto&& name : metadata.ColumnOrder) {
         auto columnIt = metadata.Columns.find(name);
         Y_ENSURE(columnIt != metadata.Columns.end());
 
@@ -495,9 +495,10 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
     }
 
-    for (const auto& keyColumn : metadata.KeyColumnNames) {
+    for (auto&& keyColumn : metadata.KeyColumnNames) {
         schema.AddKeyColumnNames(keyColumn);
     }
+
     schema.SetNextColumnId(nextColumnId);
     return true;
 }
@@ -560,11 +561,11 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
-    for (const auto& index : metadata->Indexes) {
+    for (auto&& index : metadata->Indexes) {
         auto* upsert = tableDesc.MutableSchema()->AddIndexes();
         upsert->SetName(index.Name);
         THashMap<TString, ui32> columnIdsByName;
-        for (const auto& column : tableDesc.GetSchema().GetColumns()) {
+        for (auto&& column : tableDesc.GetSchema().GetColumns()) {
             if (column.HasId()) {
                 columnIdsByName.emplace(column.GetName(), column.GetId());
             }
@@ -577,6 +578,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
                     error = "Local bloom index requires exactly one index column and does not support data columns";
                     return false;
                 }
+
                 upsert->SetClassName("BLOOM_FILTER");
                 auto* bloom = upsert->MutableBloomFilter();
                 auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
@@ -585,11 +587,13 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
                     error = TStringBuilder() << "Unknown index column '" << index.KeyColumns.front() << "' for local bloom index";
                     return false;
                 }
+
                 bloom->AddColumnIds(columnIdIt->second);
                 const auto& settings = std::get<TIndexDescription::TLocalBloomFilterDescription>(index.SpecializedIndexDescription);
                 if (settings.FalsePositiveProbability) {
                     bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
                 }
+
                 break;
             }
             case TIndexDescription::EType::LocalBloomNgramFilter: {
@@ -598,6 +602,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
                     error = "Local bloom ngram index requires exactly one index column and does not support data columns";
                     return false;
                 }
+
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
                 const auto& settings = std::get<TIndexDescription::TLocalBloomNgramFilterDescription>(index.SpecializedIndexDescription);
                 auto* ngram = upsert->MutableBloomNGrammFilter();
@@ -607,6 +612,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
                     error = TStringBuilder() << "Unknown index column '" << index.KeyColumns.front() << "' for local bloom ngram index";
                     return false;
                 }
+
                 ngram->SetColumnId(columnIdIt->second);
                 ngram->SetNGrammSize(settings.NgramSize);
                 ngram->SetHashesCount(settings.HashesCount);

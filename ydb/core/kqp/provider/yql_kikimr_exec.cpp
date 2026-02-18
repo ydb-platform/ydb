@@ -2261,6 +2261,7 @@ public:
                                         TStringBuilder() << "Fulltext index support is disabled"));
                                     return SyncError();
                                 }
+
                                 add_index->mutable_global_fulltext_relevance_index();
                             } else if (type == "localBloomFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
@@ -2268,6 +2269,7 @@ public:
                                         TStringBuilder() << "Local bloom filter index support is disabled"));
                                     return SyncError();
                                 }
+
                                 add_index->mutable_local_bloom_filter_index();
                             } else if (type == "localBloomNgramFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
@@ -2356,6 +2358,7 @@ public:
                                         } else {
                                             error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
                                         }
+
                                         break;
                                     }
                                     case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
@@ -2394,6 +2397,7 @@ public:
                                         } else {
                                             error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
                                         }
+
                                         break;
                                     }
                                     default:
@@ -2462,12 +2466,14 @@ public:
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom indexes are supported only for column tables"));
                                 return SyncError();
                             }
+
                             break;
                         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
                             if (table.Metadata->StoreType != EStoreType::Column) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom ngram indexes are supported only for column tables"));
                                 return SyncError();
                             }
+
                             if (!add_index->local_bloom_ngram_filter_index().ngram_size() ||
                                 !add_index->local_bloom_ngram_filter_index().hashes_count() ||
                                 !add_index->local_bloom_ngram_filter_index().filter_size_bytes() ||
@@ -2476,6 +2482,7 @@ public:
                                     "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
                                 return SyncError();
                             }
+
                             break;
                         case Ydb::Table::TableIndex::TYPE_NOT_SET: {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));

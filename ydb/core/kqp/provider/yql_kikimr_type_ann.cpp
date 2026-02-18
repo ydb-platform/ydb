@@ -1062,12 +1062,14 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter index support is disabled"));
                     return TStatus::Error;
                 }
+
                 indexType = TIndexDescription::EType::LocalBloomFilter;
             } else if (type == "localBloomNgramFilter") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom ngram filter index support is disabled"));
                     return TStatus::Error;
                 }
+
                 indexType = TIndexDescription::EType::LocalBloomNgramFilter;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
@@ -1140,6 +1142,7 @@ private:
                         } else {
                             error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
                         }
+
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomNgramFilter: {
@@ -1178,6 +1181,7 @@ private:
                         } else {
                             error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
                         }
+
                         break;
                     }
                     default:
@@ -1236,6 +1240,7 @@ private:
                             "Local bloom index requires exactly one index column and does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
                     }
+
                     specializedIndexDescription = std::move(localBloomFilterDescription);
                     break;
                 case TIndexDescription::EType::LocalBloomNgramFilter:
@@ -1244,6 +1249,7 @@ private:
                             "Local bloom ngram index requires exactly one index column and does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
                     }
+
                     if (!localBloomNgramFilterDescription.NgramSize ||
                         !localBloomNgramFilterDescription.HashesCount ||
                         !localBloomNgramFilterDescription.FilterSizeBytes ||
@@ -1252,6 +1258,7 @@ private:
                             "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
                         return IGraphTransformer::TStatus::Error;
                     }
+
                     specializedIndexDescription = std::move(localBloomNgramFilterDescription);
                     break;
             }
@@ -1791,8 +1798,6 @@ private:
                 auto nameNode = action.Value().Cast<TCoAtom>();
                 auto name = TString(nameNode.Value());
 
-                // Column tables support local indexes that are not represented in table metadata indexes list.
-                // Skip strict existence check for column store to allow runtime-side validation.
                 if (table->Metadata->StoreType != EStoreType::Column) {
                     const auto& indexes = table->Metadata->Indexes;
 

@@ -48,6 +48,7 @@ namespace NKikimr {
         TIntrusivePtr<TLsnMngr> LsnMngr;
         TIntrusivePtr<TVDiskConfig> Config;
         TActorId LoggerId;
+        bool WriteMetadata = false;
     };
 
     IActor* CreateRecoveryLogCutter(TLogCutterCtx &&logCutterCtx);

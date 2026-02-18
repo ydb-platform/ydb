@@ -293,9 +293,10 @@ protected:
                         case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
                         case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
                             stageInfo.Meta.PrunedPartitions.emplace_back(PartitionPruner->PruneEffect(op, stageInfo));
-                            for (const auto& [shardId, _] : stageInfo.Meta.PrunedPartitions.back()) {
-                                shardIds.insert(shardId);
-                            }
+                            // TODO: do we resolve shards with effects?
+                            // for (const auto& [shardId, _] : stageInfo.Meta.PrunedPartitions.back()) {
+                            //     shardIds.insert(shardId);
+                            // }
                         }
                         default:
                             break; // skip here - there will be an error when we will build tasks.
@@ -315,6 +316,7 @@ protected:
                     (shard_ids_count, shardIds.size()),
                     (trace_id, TraceId()));
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            // TODO: Tasks graph UseFollowers is calculated later, but required now.
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, false, std::move(shardIds));
             KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
             return WAIT_SHARDS;

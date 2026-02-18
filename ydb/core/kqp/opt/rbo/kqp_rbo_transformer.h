@@ -57,6 +57,7 @@ private:
     void CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props);
     bool IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const;
     void ApplyColumnStatistics();
+    void InitializeRBOOptimizationStages();
 
     TTypeAnnotationContext& TypeCtx;
     TKqpOptimizeContext& KqpCtx;

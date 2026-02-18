@@ -91,11 +91,6 @@ class TestAlterColumnCompression(TestCompressionBase):
         )
         logger.info(f"Table {self.table_path} created")
 
-        query = f"""ALTER OBJECT `{self.table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-        {{"levels" : [{{"class_name" : "Zero", "portions_live_duration" : "30", "portions_count_available" : 0, "expected_portion_size" : 10000000}},
-                      {{"class_name" : "OneLayer", "expected_portion_size" : 10000000}}]}}`)"""
-        self.ydb_client.query(query)
-
         table = ColumnTableHelper(self.ydb_client, self.table_path)
         self.upsert_and_wait_portions(table, self.single_upsert_rows_count, self.upsert_count)
 
@@ -149,19 +144,8 @@ class TestAlterColumnCompression(TestCompressionBase):
         # update items for them to be written with compression
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
-        # wait for compaction
-        time.sleep(60)
-
-        result = self.ydb_client.query(
-            f"""
-                select * from `{self.table_path}/.sys/primary_index_portion_stats`;
-            """
-        )
-
-        # check one portion left
-        assert len(result[0].rows) == 1
-
         table = ColumnTableHelper(self.ydb_client, self.table_path)
+        self.wait_for(lambda: table.get_portion_count() == 1, 70)
 
         volumes = table.get_volumes_column("value1")
         koef = self.volumes_without_compression[1] / volumes[1]
@@ -186,6 +170,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
+        self.wait_for(lambda: table.get_portion_count() == 1, 70)
 
         volumes = table.get_volumes_column("value1")
         koef = volumes[1] / self.volumes_with_compression[1]
@@ -209,6 +194,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
+        assert(self.wait_for(lambda: table.get_portion_count() == 1, 70))
 
         volumes = table.get_volumes_column("value1")
         koef = self.volumes_with_compression[1] / volumes[1]
@@ -232,6 +218,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
+        assert(self.wait_for(lambda: table.get_portion_count() == 1, 70))
 
         volumes = table.get_volumes_column("value1")
         koef = volumes[1] / self.volumes_with_compression[1]
@@ -255,6 +242,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
+        assert(self.wait_for(lambda: table.get_portion_count() == 1, 70))
 
         volumes = table.get_volumes_column("value1")
         koef = self.volumes_with_compression[1] / volumes[1]

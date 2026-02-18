@@ -21,6 +21,7 @@ def kikimr(request):
                 "enable_streaming_queries": True,
                 "enable_streaming_queries_counters": True,
                 "enable_topics_sql_io_operations": True,
+                "enable_streaming_queries_pq_sink_deduplication": True,
             },
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],

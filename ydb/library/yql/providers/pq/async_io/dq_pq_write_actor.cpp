@@ -177,9 +177,8 @@ public:
         , FreeSpace(freeSpace)
         , PqGateway(pqGateway)
         , TaskId(taskId)
-        , EnableStreamingQueriesPqSinkDeduplicationFeatureFlag(enableStreamingQueriesPqSinkDeduplicationFeatureFlag)
+        , EnableDeduplication(enableStreamingQueriesPqSinkDeduplicationFeatureFlag && SinkParams.GetEnableDeduplication())
     { 
-        SINK_LOG_D("GetEnableDeduplication: " << SinkParams.GetEnableDeduplication());
         EgressStats.Level = statsLevel;
     }
 
@@ -269,8 +268,10 @@ public:
             YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
             SINK_LOG_D("Load state: " << stateProto);
             SourceId = stateProto.GetSourceId();
-            ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
-            NextSeqNo = ConfirmedSeqNo + 1;
+            if (EnableDeduplication) {
+                ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
+                NextSeqNo = ConfirmedSeqNo + 1;
+            }
             EgressStats.Bytes = stateProto.GetEgressBytes();
             return;
         }
@@ -337,7 +338,8 @@ private:
                 ? NYdb::NTopic::ECodec::RAW
                 : NYdb::NTopic::ECodec::GZIP);
 
-        if (EnableStreamingQueriesPqSinkDeduplicationFeatureFlag && SinkParams.GetEnableDeduplication()) {
+        settings.DeduplicationEnabled(EnableDeduplication);
+        if (EnableDeduplication) {
             settings.ProducerId(GetSourceId());
             settings.MessageGroupId(GetSourceId());
         }
@@ -429,7 +431,12 @@ private:
     }
 
     void WriteNextMessage(NYdb::NTopic::TContinuationToken&& token) {
-        WriteSession->Write(std::move(token), Buffer.front(), NextSeqNo++);
+        std::optional<uint64_t> seqNo;
+        if (EnableDeduplication) {
+            seqNo = NextSeqNo;
+        }
+        NextSeqNo++;
+        WriteSession->Write(std::move(token), Buffer.front(), seqNo);
         auto itemSize = GetItemSize(Buffer.front());
         WaitingAcks.emplace(itemSize, TInstant::Now());
         EgressStats.Bytes += itemSize;
@@ -544,7 +551,7 @@ private:
     IPqGateway::TPtr PqGateway;
     ui64 TaskId;
     bool Inited = false;
-    bool EnableStreamingQueriesPqSinkDeduplicationFeatureFlag = false;
+    bool EnableDeduplication = false;
 };
 
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(

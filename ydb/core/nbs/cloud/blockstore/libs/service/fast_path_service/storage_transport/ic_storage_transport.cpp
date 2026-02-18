@@ -8,13 +8,14 @@ using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TICStorageTransport::TICStorageTransport()
+TICStorageTransport::TICStorageTransport(NActors::TActorSystem* actorSystem)
+    : ActorSystem(actorSystem)
 {
     auto actor = std::make_unique<TICStorageTransportActor>();
 
     ICStorageTransportActorId = NActors::TActivationContext::Register(
         actor.release(),
-        NActors::TActivationContext::AsActorContext().SelfID,
+        NActors::TActorId(),
         NActors::TMailboxType::ReadAsFilled,
         NKikimr::AppData()->SystemPoolId);
 }
@@ -27,7 +28,7 @@ TICStorageTransport::Connect(
     auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvConnectResult>();
     auto future = promise.GetFuture();
 
-    NActors::TActivationContext::AsActorContext().Send(
+    ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvConnect(
             serviceId,
@@ -51,7 +52,7 @@ TICStorageTransport::WritePersistentBuffer(
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>();
     auto future = promise.GetFuture();
 
-    NActors::TActivationContext::AsActorContext().Send(
+    ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvWritePersistentBuffer(
             serviceId,
@@ -78,7 +79,7 @@ TICStorageTransport::ErasePersistentBuffer(
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>();
     auto future = promise.GetFuture();
 
-    NActors::TActivationContext::AsActorContext().Send(
+    ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvErasePersistentBuffer(
             serviceId,
@@ -105,7 +106,7 @@ TICStorageTransport::ReadPersistentBuffer(
         NewPromise<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>();
     auto future = promise.GetFuture();
 
-    NActors::TActivationContext::AsActorContext().Send(
+    ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvReadPersistentBuffer(
             serviceId,
@@ -131,7 +132,7 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
     auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvReadResult>();
     auto future = promise.GetFuture();
 
-    NActors::TActivationContext::AsActorContext().Send(
+    ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvRead(
             serviceId,
@@ -159,7 +160,7 @@ TICStorageTransport::SyncWithPersistentBuffer(
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>();
     auto future = promise.GetFuture();
 
-    NActors::TActivationContext::AsActorContext().Send(
+    ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer(
             serviceId,

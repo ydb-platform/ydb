@@ -1137,7 +1137,7 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     }
 
     if (cdcStream.GetUserSIDs()) {
-        Stream << del << "USERS_SID = TRUE";
+        Stream << del << "USERS_SIDS = TRUE";
     }
 
     Stream << ");";

@@ -32,7 +32,7 @@ class TUringRouterTest : public TPerfTest {
         ui32 Slot = 0;
         NHPTimer::STime Start = 0;
 
-        static void OnCompleteThunk(NPDisk::TUringOperation* op, NActors::TActorSystem*) {
+        static void OnCompleteThunk(NPDisk::TUringOperation* op, NActors::TActorSystem*) noexcept {
             auto* self = static_cast<TOp*>(op);
             self->Owner->OnIoComplete(*self);
         }

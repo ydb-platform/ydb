@@ -127,9 +127,14 @@ class TTablet : public TActor<TTablet> {
         ui64 BytesInFlight;
 
         std::pair<ui32, ui32> Snapshot;
+        TActorId SnapshotSource;
+        ui64 SnapshotCookie = 0;
 
         struct {
             ui32 SyncStep = 0;
+            ui32 Snapshot = 0;
+            TActorId SnapshotSource;
+            ui64 SnapshotCookie = 0;
         } SyncCommit;
 
         TGraph()

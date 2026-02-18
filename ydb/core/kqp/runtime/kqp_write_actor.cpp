@@ -2831,12 +2831,8 @@ public:
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
-<<<<<<< HEAD
         , UserSID(settings.UserSID)
-
-=======
         , QuerySpanId(settings.QuerySpanId)
->>>>>>> a89c09883179f3ebe985db2a08a4713e041f637b
     {
         Counters->BufferActorsCount->Inc();
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
@@ -5123,11 +5119,8 @@ private:
 
     NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;
-<<<<<<< HEAD
     const TString UserSID;
-=======
     ui64 QuerySpanId = 0;
->>>>>>> a89c09883179f3ebe985db2a08a4713e041f637b
 };
 
 class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {

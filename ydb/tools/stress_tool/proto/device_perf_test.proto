@@ -11,6 +11,18 @@ message TAioTest {
     optional uint32 NumberOfRandomRefills = 5 [default = 0];
 }
 
+message TUringRouterTest {
+    optional uint32 DurationSeconds = 1 [default = 0];
+    optional uint32 RequestSize = 2 [default = 4096];
+    optional uint32 QueueDepth = 3 [default = 0];
+    // Keep write buffers 4096-aligned for direct I/O and zero-copy path
+    optional bool UseAlignedData = 4 [default = true];
+    // Refill buffer with random numbers before every write operation
+    optional uint32 NumberOfRandomRefills = 5 [default = 0];
+    // Register buffers and submit I/O via io_uring write_fixed
+    optional bool UseWriteFixed = 6 [default = false];
+}
+
 message TTrimTest {
     optional uint32 DurationSeconds = 1 [default = 0];
     optional uint32 RequestSize = 2 [default = 0];
@@ -35,4 +47,5 @@ message TPerfTests {
     repeated TPDiskTest PDiskTestList = 3;
     optional TDriveEstimatorTest DriveEstimatorTest = 4;
     repeated TDDiskTest DDiskTestList = 5;
+    repeated TUringRouterTest UringRouterTestList = 6;
 }

@@ -13,7 +13,6 @@ enum class EWriteResult : uint8_t {
     OVERLOADED = 1,
     CLOSED = 2,
     TIMEOUT = 3,
-    SUCCESS = 4,
 };
 
 //! Result of flush operation.

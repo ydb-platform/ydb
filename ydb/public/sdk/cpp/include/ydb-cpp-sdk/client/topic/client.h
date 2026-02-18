@@ -58,9 +58,6 @@ public:
     //! Create producer. Experimental feature. DO NOT USE IN PRODUCTION.
     std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
 
-    //! Create simple blocking producer. Experimental feature. DO NOT USE IN PRODUCTION.
-    std::shared_ptr<ISimpleBlockingProducer> CreateSimpleBlockingProducer(const TProducerSettings& settings);
-
     //! Create write session.
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 

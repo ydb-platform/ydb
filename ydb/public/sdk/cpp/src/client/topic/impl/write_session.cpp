@@ -1076,10 +1076,10 @@ bool TKeyedWriteSession::TMessagesWorker::HasInFlightMessages() const {
     return !InFlightMessages.empty();
 }
 
-void TKeyedWriteSession::TMessagesWorker::SetCloseException(std::exception_ptr exception) {
+void TKeyedWriteSession::TMessagesWorker::SetStatusToFlushPromises(EWriteResult status) {
     for (auto& inFlightMessage : InFlightMessages) {
         if (inFlightMessage.FlushPromise.Initialized()) {
-            inFlightMessage.FlushPromise.TrySetException(exception);
+            inFlightMessage.FlushPromise.TrySetValue(status);
         }
     }
 }
@@ -1762,7 +1762,7 @@ void TKeyedWriteSession::RunMainWorker() {
         }
 
         while (!FlushPromises.empty()) {
-            FlushPromises.front().TrySetValue();
+            FlushPromises.front().TrySetValue(EWriteResult::SUCCESS);
             FlushPromises.pop_front();
         }
 
@@ -1771,9 +1771,7 @@ void TKeyedWriteSession::RunMainWorker() {
         if (isClosed && (Done.load() || MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
             ShutdownPromise.TrySetValue();
             EventsWorker->EventsPromise.TrySetValue();
-            MessagesWorker->SetCloseException(std::make_exception_ptr(TProducerClosedException(
-                EventsWorker->GetSessionClosedEvent().value_or(TSessionClosedEvent(EStatus::INTERNAL_ERROR, {})))
-            ));
+            MessagesWorker->SetStatusToFlushPromises(EWriteResult::CLOSED);
             ClosePromise.TrySetValue();
             MainWorkerState.store(Idle, std::memory_order_release);
             return;
@@ -1807,32 +1805,53 @@ void TKeyedWriteSession::RunMainWorker() {
 
 EWriteResult TKeyedWriteSession::Write(TWriteMessage&& message, const std::optional<std::string>& key,
                TTransactionBase* tx) {
-    if (Closed.load()) {
-        return EWriteResult::CLOSED;
-    }
+    auto remainingTimeout = Settings.MaxBlockMs_;
+    auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
+    for (;;) {
+        if (Closed.load()) {
+            return EWriteResult::CLOSED;
+        }
 
-    auto continuationToken = EventsWorker->GetContinuationToken();
-    if (!continuationToken) {
-        return EWriteResult::OVERLOADED;
-    }
+        auto continuationToken = EventsWorker->GetContinuationToken();
+        if (!continuationToken) {
+            if (remainingTimeout > TDuration::Zero()) {
+                auto toSleep = Min(sleepTimeMs, remainingTimeout);
+                Sleep(toSleep);
+                sleepTimeMs *= 2;
+                if (remainingTimeout > toSleep) {
+                    remainingTimeout -= toSleep;
+                    continue;
+                }
 
-    Write(std::move(*continuationToken), key.value_or(""), std::move(message), tx);
-    return EWriteResult::QUEUED;
+                return EWriteResult::TIMEOUT;
+            }
+
+            return EWriteResult::OVERLOADED;
+        }
+
+        Write(std::move(*continuationToken), key.value_or(""), std::move(message), tx);
+        return EWriteResult::QUEUED;
+    }
 }
 
 std::optional<TSessionClosedEvent> TKeyedWriteSession::ExplainClosed() {
     return EventsWorker->GetSessionClosedEvent();
 }
 
-NThreading::TFuture<void> TKeyedWriteSession::Flush() {
+NThreading::TFuture<EWriteResult> TKeyedWriteSession::Flush() {
     std::unique_lock lock(GlobalLock);
     if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
-        return NThreading::MakeFuture();
+        return NThreading::MakeFuture(EWriteResult::SUCCESS);
     }
 
     auto lastInFlightMessage = std::prev(MessagesWorker->InFlightMessages.end());
-    lastInFlightMessage->FlushPromise = NThreading::NewPromise();
+    lastInFlightMessage->FlushPromise = NThreading::NewPromise<EWriteResult>();
     return lastInFlightMessage->FlushPromise.GetFuture();
+}
+
+EWriteResult TKeyedWriteSession::FlushAndWait() {
+    auto future = Flush();
+    return future.GetValueSync();
 }
 
 TInstant TKeyedWriteSession::GetCloseDeadline() {
@@ -2060,37 +2079,6 @@ bool TSimpleBlockingKeyedWriteSession::Write(const std::string& key, TWriteMessa
     auto seqNo = message.SeqNo_;
     Writer->Write(std::move(*continuationToken), std::move(key), std::move(message), tx);
     return WaitForAck(seqNo, blockTimeout);
-}
-
-bool TSimpleBlockingKeyedWriteSession::Write(TWriteMessage&& message, const std::optional<std::string>& key, TDuration blockTimeout, TTransactionBase* tx) {
-    TDuration timeout = DEFAULT_START_BLOCK_TIMEOUT;
-    TDuration remainingTimeout = blockTimeout;
-    TInstant now = TInstant::Now();
-
-    while (true) {
-        auto result = Writer->Write(std::move(message), key, tx);
-        switch (result) {
-            case EWriteResult::QUEUED:
-                return true;
-            case EWriteResult::OVERLOADED:
-                Sleep(Min(timeout, remainingTimeout));
-                timeout *= 2;
-                break;
-            case EWriteResult::CLOSED:
-                throw TProducerClosedException(Writer->ExplainClosed().value_or(TSessionClosedEvent(EStatus::INTERNAL_ERROR, {})));
-        }
-
-        auto newNow = TInstant::Now();
-        if (remainingTimeout < newNow - now) {
-            throw TWriteTimeoutException();
-        }
-        remainingTimeout -= (newNow - now);
-        now = newNow;
-    }
-}
-
-NThreading::TFuture<void> TSimpleBlockingKeyedWriteSession::Flush() {
-    return Writer->Flush();
 }
 
 bool TSimpleBlockingKeyedWriteSession::Close(TDuration closeTimeout) {

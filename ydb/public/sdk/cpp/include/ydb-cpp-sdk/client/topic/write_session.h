@@ -179,6 +179,9 @@ struct TProducerSettings : public TWriteSessionSettings {
     //! SessionID to use.
     FLUENT_SETTING_DEFAULT(std::string, SessionId, "");
 
+    //! Maximum block time for write. If set, write will block for up to MaxBlockMs when the buffer is overloaded.
+    FLUENT_SETTING_DEFAULT(TDuration, MaxBlockMs, TDuration::Zero());
+
 private:
     using TWriteSessionSettings::ProducerId;
 };
@@ -348,26 +351,8 @@ enum class EWriteResult : uint8_t {
     QUEUED = 0,
     OVERLOADED = 1,
     CLOSED = 2,
-};
-
-//! Exception that is thrown when producer is closed.
-struct TProducerClosedException : public std::exception {
-    TProducerClosedException(const TSessionClosedEvent& closedEvent) : ClosedEvent(closedEvent) {}
-
-    const char* what() const noexcept override {
-        return "session closed";
-    }
-private:
-    TSessionClosedEvent ClosedEvent;
-};
-
-//! Exception that is thrown when write timeout is reached in ISimpleBlockingProducer::Write().
-struct TWriteTimeoutException : public std::exception {
-    TWriteTimeoutException() {}
-
-    const char* what() const noexcept override {
-        return "write timeout";
-    }
+    TIMEOUT = 3,
+    SUCCESS = 4,
 };
 
 //! Producer is an abstraction that can write messages to the topic.
@@ -380,7 +365,8 @@ public:
     //! If write was successful, returns QUEUED.
     //! If write was not successful due to overloaded buffer, returns OVERLOADED.
     //! If write was not successful because of closed session, returns CLOSED.
-    virtual EWriteResult Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt,
+    //! DO NOT IGNORE THE RETURN VALUE.
+    [[nodiscard]] virtual EWriteResult Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt,
         TTransactionBase* tx = nullptr) = 0;
 
     //! Explain why session was closed.
@@ -390,8 +376,15 @@ public:
 
     //! Flush all messages to the server.
     //! Returns future that is set when flush is complete.
-    //! Future will contains TProducerClosedException if session is closed.
-    virtual NThreading::TFuture<void> Flush() = 0;
+    //! If flush was successful, returns SUCCESS.
+    //! If flush was not successful because of closed session, returns CLOSED.
+    virtual NThreading::TFuture<EWriteResult> Flush() = 0;
+
+    //! Flush all messages to the server and wait result.
+    //! Returns write result.
+    //! If flush was successful, returns SUCCESS.
+    //! If flush was not successful because of closed session, returns CLOSED.
+    [[nodiscard]] virtual EWriteResult FlushAndWait() = 0;
 
     //! Close the producer.
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
@@ -415,27 +408,6 @@ public:
 
     //! Close() with timeout = 0 and destroy everything instantly.
     virtual ~ISimpleBlockingKeyedWriteSession() = default;
-};
-
-//! Simple blocking producer.
-//! This producer uses exponential backoff to handle overloaded buffer.
-// Experimental SDK. DO NOT USE IN PRODUCTION.
-class ISimpleBlockingProducer {
-public:
-    //! Write single message.
-    //! Throws TProducerClosedException if session was closed.
-    //! Throws TWriteTimeoutException if blockTimeout is reached.
-    virtual bool Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt, TDuration blockTimeout = TDuration::Max(),
-        TTransactionBase* tx = nullptr) = 0;
-
-    //! Flush all messages to the server.
-    //! Returns future that is set when flush is complete.
-    //! Future will contains TProducerClosedException if session is closed.
-    virtual NThreading::TFuture<void> Flush() = 0;
-
-    //! Close the producer.
-    virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
-    virtual ~ISimpleBlockingProducer() = default;
 };
 
 } // namespace NYdb::NTopic

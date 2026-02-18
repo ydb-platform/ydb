@@ -100,7 +100,7 @@ private:
         TTransactionBase* Tx;
         std::uint32_t Partition;
         bool Sent = false;
-        NThreading::TPromise<void> FlushPromise;
+        NThreading::TPromise<EWriteResult> FlushPromise;
 
         TWriteMessage BuildMessage() const;
     };
@@ -207,7 +207,7 @@ private:
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
-        void SetCloseException(std::exception_ptr exception);
+        void SetStatusToFlushPromises(EWriteResult status);
 
     private:
         using MessageIter = std::list<TMessageInfo>::iterator;
@@ -416,12 +416,14 @@ public:
     void Write(TContinuationToken&& continuationToken, const std::string& key, TWriteMessage&& message,
                TTransactionBase* tx = nullptr) override;
 
-    EWriteResult Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt,
+    [[nodiscard]] EWriteResult Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt,
                TTransactionBase* tx = nullptr) override;
 
     std::optional<TSessionClosedEvent> ExplainClosed() override;
 
-    NThreading::TFuture<void> Flush() override;
+    NThreading::TFuture<EWriteResult> Flush() override;
+
+    [[nodiscard]] EWriteResult FlushAndWait() override;
 
     NThreading::TFuture<void> WaitEvent() override;
 
@@ -482,9 +484,10 @@ private:
     std::atomic<std::uint8_t> MainWorkerState = 0;
     std::atomic<size_t> Epoch = 0;
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
+    static constexpr TDuration DEFAULT_START_BLOCK_TIMEOUT = TDuration::MilliSeconds(1);
     std::mt19937_64 RandomGenerator = std::mt19937_64(std::random_device()());
     
-    std::list<NThreading::TPromise<void>> FlushPromises;
+    std::list<NThreading::TPromise<EWriteResult>> FlushPromises;
 
     std::vector<TEventsWorker::EEventType> EventTypesWithHandlers;
 };
@@ -526,7 +529,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TSimpleBlockingKeyedWriteSession
 
-class TSimpleBlockingKeyedWriteSession : public ISimpleBlockingKeyedWriteSession, public ISimpleBlockingProducer {
+class TSimpleBlockingKeyedWriteSession : public ISimpleBlockingKeyedWriteSession {
 private:
     std::optional<TContinuationToken> GetContinuationToken(TDuration timeout);
 
@@ -550,11 +553,6 @@ public:
     bool Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx = nullptr,
         TDuration blockTimeout = TDuration::Max()) override;
 
-    bool Write(TWriteMessage&& message, const std::optional<std::string>& key = std::nullopt, TDuration blockTimeout = TDuration::Max(),
-        TTransactionBase* tx = nullptr) override;
-
-    NThreading::TFuture<void> Flush() override;
-
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
 
     TWriterCounters::TPtr GetCounters() override;
@@ -569,8 +567,6 @@ protected:
 
     std::mutex Lock;
     std::atomic_bool Closed = false;
-
-    static constexpr TDuration DEFAULT_START_BLOCK_TIMEOUT = TDuration::MilliSeconds(1);
 };
 
 } // namespace NYdb::NTopic

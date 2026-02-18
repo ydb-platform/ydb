@@ -1929,11 +1929,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto msgData = TString(10_KB, 'a');
 
         for (ui64 i = 0; i < 100; ++i) {    
-            auto result = producer->Write(TWriteMessage(msgData));
-            UNIT_ASSERT_EQUAL(result, EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
         }
 
-        producer->Flush().GetValueSync();
+        UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EWriteResult::SUCCESS);
 
         auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 10);
@@ -1973,8 +1972,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         {
             UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 1), "key1"), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 2), "key2"), EWriteResult::QUEUED);
-            producer1->Flush().GetValueSync();
-            producer2->Flush().GetValueSync();
+            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EWriteResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EWriteResult::SUCCESS);
             auto d = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             auto partitionsCount = d.GetTopicDescription().GetPartitions().size();
             UNIT_ASSERT_C(partitionsCount >= 2,
@@ -1993,8 +1992,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 11), "key11"), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 12), "key12"), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 13), "key13"), EWriteResult::QUEUED);
-            producer1->Flush().GetValueSync();
-            producer2->Flush().GetValueSync();
+            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EWriteResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EWriteResult::SUCCESS);
             auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             auto partitionsCount = describeResult.GetTopicDescription().GetPartitions().size();
             UNIT_ASSERT_C(partitionsCount >= 4,
@@ -2004,15 +2003,15 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         {
             UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 14), "key14"), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 15), "key15"), EWriteResult::QUEUED);
-            producer1->Flush().GetValueSync();
-            producer2->Flush().GetValueSync();
+            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EWriteResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EWriteResult::SUCCESS);
         }
 
         UNIT_ASSERT(producer1->Close(TDuration::Seconds(1)));
         UNIT_ASSERT(producer2->Close(TDuration::Seconds(1)));
     }
 
-    Y_UNIT_TEST(SimpleBlockingProducer_BasicWrite) {
+    Y_UNIT_TEST(Producer_BlockingWrite) {
         auto settings = TTopicSdkTestSetup::MakeServerSettings();
         settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
         TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
@@ -2024,19 +2023,20 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("simple_blocking_producer_basic_write");
         writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.MaxBlockMs(TDuration::Seconds(1));
 
-        auto producer = client.CreateSimpleBlockingProducer(writeSettings);
+        auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(10_KB, 'a');
 
         for (ui64 i = 0; i < 100; ++i) {    
-            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)));
+            UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
         }
 
-        producer->Flush().GetValueSync();
+        UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EWriteResult::SUCCESS);
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)));
     }
 
-    Y_UNIT_TEST(SimpleBlockingProducer_TimeoutException) {
+    Y_UNIT_TEST(Producer_TimeoutError) {
         auto settings = TTopicSdkTestSetup::MakeServerSettings();
         settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
         TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
@@ -2049,12 +2049,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.ProducerIdPrefix("simple_blocking_producer_basic_write");
         writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
         writeSettings.MaxMemoryUsage(100_KB);
+        writeSettings.MaxBlockMs(TDuration::MilliSeconds(1));
 
-        auto producer = client.CreateSimpleBlockingProducer(writeSettings);
+        auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(1_MB, 'a');
 
-        UNIT_ASSERT(producer->Write(TWriteMessage(msgData)));
-        UNIT_ASSERT_EXCEPTION(producer->Write(TWriteMessage(msgData), std::nullopt, TDuration::Zero()), TWriteTimeoutException);
+        UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
+        UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::TIMEOUT);
         UNIT_ASSERT(producer->Close(TDuration::Seconds(10)));
     }
 } // Y_UNIT_TEST_SUITE(BasicUsage)

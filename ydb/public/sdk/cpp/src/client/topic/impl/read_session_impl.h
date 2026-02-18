@@ -310,6 +310,7 @@ public:
 
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount);
     void OnUserRetrievedEvent(i64 decompressedDataSize, size_t messagesCount);
+    void OnTaskCanceled(i64 sourceSize, size_t messagesCount);
 
 private:
     // Special struct for marking (batch/message) as ready.
@@ -594,6 +595,10 @@ public:
                           std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
                           TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
+    ui64 GetReadyEventsCount() const {
+        return Ready.size();
+    }
+
 private:
     static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                                  size_t& maxEventsCount,
@@ -839,6 +844,10 @@ public:
 
     std::mutex& GetLock() {
         return Lock;
+    }
+
+    ui64 GetReadyEventsCount() const {
+        return EventsQueue.GetReadyEventsCount();
     }
 
 private:
@@ -1102,6 +1111,10 @@ private:
         return visitor.Visit();
     }
 
+    void SelfCheck() final {
+        CbContext->LockShared()->SelfCheck();
+    }
+
 private:
     bool HasEventCallbacks;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
@@ -1200,6 +1213,7 @@ public:
                                         TDeferredActions<UseMigrationProtocol>& deferred);
 
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize = 0);
+    void OnDecompressionTaskCanceled(i64 sourceSize, size_t messagesCount, i64 serverBytesSize);
 
     TReadSessionEventsQueue<UseMigrationProtocol>* GetEventsQueue() {
         return EventsQueue.get();
@@ -1258,6 +1272,8 @@ public:
     void CollectOffsets(TTransactionBase& tx,
                         const TReadSessionEvent::TEvent& event,
                         std::shared_ptr<TTopicClient::TImpl> client);
+
+    void SelfCheck();
 
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);
@@ -1450,6 +1466,7 @@ private:
     typename IProcessor::TPtr Processor;
     typename IARetryPolicy<UseMigrationProtocol>::IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
     size_t ConnectionAttemptsDone = 0;
+    TInstant LastActiveTime = TInstant::Now();
 
     // Memory usage.
     i64 CompressedDataSize = 0;

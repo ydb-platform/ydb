@@ -13,8 +13,7 @@ class LLVMContext;
 class ExecutionEngine;
 } // namespace llvm
 
-namespace NYql {
-namespace NCodegen {
+namespace NYql::NCodegen {
 
 enum class ETarget {
     Native, // Run on current processor and OS
@@ -71,5 +70,4 @@ public:
     static bool IsCodegenAvailable();
 };
 
-} // namespace NCodegen
-} // namespace NYql
+} // namespace NYql::NCodegen

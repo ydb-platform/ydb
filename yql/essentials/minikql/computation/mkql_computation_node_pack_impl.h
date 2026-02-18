@@ -12,10 +12,7 @@
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace NDetails {
+namespace NKikimr::NMiniKQL::NDetails {
 
 template <typename TBuf>
 inline void PackUInt64(ui64 val, TBuf& buf) {
@@ -251,7 +248,4 @@ inline i16 UnpackInt16(TChunkedInputBuffer& buf) {
     return ZigZagDecode(UnpackUInt16(buf));
 }
 
-} // namespace NDetails
-
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL::NDetails

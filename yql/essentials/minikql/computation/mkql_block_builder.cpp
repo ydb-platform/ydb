@@ -10,9 +10,3 @@
 #include <arrow/array/builder_primitive.h>
 #include <arrow/buffer_builder.h>
 #include <arrow/chunked_array.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-} // namespace NMiniKQL
-} // namespace NKikimr

@@ -5,8 +5,8 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TExprContext& ctx);
 TString MakeAliasedColumn(TStringBuf alias, TStringBuf column);
@@ -59,5 +59,5 @@ IGraphTransformer::TStatus PgGroupingSetWrapper(const TExprNode::TPtr& input, TE
 IGraphTransformer::TStatus PgToRecordWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 IGraphTransformer::TStatus PgIterateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl
+

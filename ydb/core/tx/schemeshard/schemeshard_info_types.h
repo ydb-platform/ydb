@@ -1381,6 +1381,14 @@ struct TShardInfo {
         return TShardInfo(txId, pathId, ETabletType::BlockStorePartition2);
     }
 
+    static TShardInfo BlockStoreVolumeDirectInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::BlockStoreVolumeDirect);
+    }
+
+    static TShardInfo BlockStorePartitionDirectInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::BlockStorePartitionDirect);
+    }
+
     static TShardInfo FileStoreInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::FileStore);
     }

@@ -329,7 +329,7 @@ protected:
 
         auto userCtx = record.GetUserCtx();
         if (userCtx != nullptr) {
-            if (!userCtx->UserSID.empty() && Opts.UserSIDs) {
+            if (Opts.UserSIDs && !userCtx->UserSID.empty() ) {
                 json["user"] = userCtx->UserSID;
             }
             if (!userCtx->UserTraceId.empty()) {
@@ -542,7 +542,7 @@ protected:
 
         auto userCtx = record.GetUserCtx();
         if (userCtx!=nullptr) {
-            if (!userCtx->UserSID.empty() && Opts.UserSIDs) {
+            if (Opts.UserSIDs && !userCtx->UserSID.empty()) {
                 auto& userIdentityJson = json["userIdentity"];
                 if (userCtx->UserSID == BUILTIN_ACL_CDC_TTL) {
                     userIdentityJson["type"] = "Service";   
@@ -621,7 +621,7 @@ protected:
 
         auto userCtx = record.GetUserCtx();
         if (userCtx!=nullptr) {
-            if (!userCtx->UserSID.empty() && Opts.UserSIDs) {
+            if (Opts.UserSIDs && !userCtx->UserSID.empty()) {
                 sourceJson["user"] = userCtx->UserSID;
             }
             if (!userCtx->UserTraceId.empty()) {

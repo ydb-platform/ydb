@@ -7,8 +7,7 @@
 
 #include <vector>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <class T>
 class TSafeCircularBuffer {
@@ -140,5 +139,4 @@ private:
     ui64 MutationCount_ = 0;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

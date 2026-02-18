@@ -10,8 +10,7 @@
 
 #include <functional>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class IFunctionRegistry;
 class TBuiltinFunctionRegistry;
@@ -907,5 +906,4 @@ protected:
 bool CanExportType(TType* type, const TTypeEnvironment& env);
 void EnsureDataOrOptionalOfData(TRuntimeNode node);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

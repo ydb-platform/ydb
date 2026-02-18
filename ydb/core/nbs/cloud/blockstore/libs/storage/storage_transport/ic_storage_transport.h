@@ -5,17 +5,18 @@
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
-namespace NYdb::NBS::NBlockStore {
+namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TICStorageTransport: public IStorageTransport
 {
 private:
+    NActors::TActorSystem* const ActorSystem;
     NActors::TActorId ICStorageTransportActorId;
 
 public:
-    TICStorageTransport();
+    explicit TICStorageTransport(NActors::TActorSystem* actorSystem);
 
     ~TICStorageTransport() override = default;
 
@@ -152,4 +153,4 @@ private:
         const NActors::TActorContext& ctx);
 };
 
-}   // namespace NYdb::NBS::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

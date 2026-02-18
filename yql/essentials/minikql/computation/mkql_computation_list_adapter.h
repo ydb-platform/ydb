@@ -3,8 +3,7 @@
 #include "mkql_computation_node_impl.h"
 #include <yql/essentials/minikql/mkql_alloc.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <typename TVectorType>
 class TVectorListAdapter: public TComputationValue<TVectorListAdapter<TVectorType>> {
@@ -256,5 +255,4 @@ NUdf::TUnboxedValue CreateOwningVectorListAdapter(
         &memInfo, std::forward<TVectorType>(list), itemFactory, start, finish, reversed));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

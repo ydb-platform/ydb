@@ -12,8 +12,7 @@
 
 #include <stack>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TType;
 class INodeVisitor;
@@ -388,8 +387,7 @@ private:
     TStringBuf StrBuf_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 template <>
 struct THash<NKikimr::NMiniKQL::TInternName> {
@@ -398,8 +396,7 @@ struct THash<NKikimr::NMiniKQL::TInternName> {
     }
 };
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TTypeEnvironment: private TNonCopyable {
 public:
@@ -1701,5 +1698,4 @@ struct TEqualTType {
     }
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -7,8 +7,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TReprCodeWrapper: public TMutableComputationNode<TReprCodeWrapper> {
     typedef TMutableComputationNode<TReprCodeWrapper> TBaseComputation;
@@ -50,5 +49,4 @@ IComputationNode* WrapReprCode(TCallable& callable, const TComputationNodeFactor
     return new TReprCodeWrapper(ctx.Mutables, value, yson, exprCtxMutableIndex, pos);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

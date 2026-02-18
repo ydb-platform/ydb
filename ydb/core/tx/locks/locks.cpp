@@ -109,6 +109,7 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , Counter(row.Counter)
     , CreationTime(TInstant::MicroSeconds(row.CreateTs))
     , Flags(ELockFlags(row.Flags))
+    , VictimQuerySpanId(row.VictimQuerySpanId)
 {
     if (row.BreakVersion != TRowVersion::Max()) {
         BreakVersion.emplace(row.BreakVersion);
@@ -260,10 +261,10 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     for (auto it = ConflictLocks.begin(); it != ConflictLocks.end(); ++it) {
         TLockInfo* otherLock = it->first;
         if (otherLock->IsPersistent() && !otherLock->IsRemoved()) {
-            if (!!(it->second & ELockConflictFlags::BreakThemOnOurCommit)) {
+            if (!!(it->second.Flags & ELockConflictFlags::BreakThemOnOurCommit)) {
                 db->PersistRemoveConflict(LockId, otherLock->LockId);
             }
-            if (!!(it->second & ELockConflictFlags::BreakUsOnTheirCommit)) {
+            if (!!(it->second.Flags & ELockConflictFlags::BreakUsOnTheirCommit)) {
                 db->PersistRemoveConflict(otherLock->LockId, LockId);
             }
         }
@@ -328,7 +329,7 @@ bool TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, I
     return true;
 }
 
-bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
+bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db, ui64 breakerQuerySpanId) {
     Y_ENSURE(!IsRemoved());
     Y_ENSURE(!otherLock->IsRemoved());
 
@@ -336,11 +337,15 @@ bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
     Y_ENSURE(LockId != otherLock->LockId, "Unexpected conflict between a pair of locks with the same id");
     bool changed = false;
 
-    auto& flags = ConflictLocks[otherLock];
-    if (!(flags & ELockConflictFlags::BreakThemOnOurCommit)) {
-        flags |= ELockConflictFlags::BreakThemOnOurCommit;
-        auto& otherFlags = otherLock->ConflictLocks[this];
-        otherFlags |= ELockConflictFlags::BreakUsOnTheirCommit;
+    auto& conflictInfo = ConflictLocks[otherLock];
+    if (!(conflictInfo.Flags & ELockConflictFlags::BreakThemOnOurCommit)) {
+        conflictInfo.Flags |= ELockConflictFlags::BreakThemOnOurCommit;
+        // Store the BreakerQuerySpanId if provided (only set once, when the conflict is first added)
+        if (breakerQuerySpanId != 0 && conflictInfo.BreakerQuerySpanId == 0) {
+            conflictInfo.BreakerQuerySpanId = breakerQuerySpanId;
+        }
+        auto& otherConflictInfo = otherLock->ConflictLocks[this];
+        otherConflictInfo.Flags |= ELockConflictFlags::BreakUsOnTheirCommit;
         if (IsPersistent() && otherLock->IsPersistent()) {
             // Any conflict between persistent locks is also persistent
             Y_ENSURE(db, "Cannot persist conflicts without a db");
@@ -377,11 +382,11 @@ bool TLockInfo::PersistConflicts(ILocksDb* db) {
             // We don't persist non-persistent conflicts
             continue;
         }
-        if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit)) {
+        if (!!(pr.second.Flags & ELockConflictFlags::BreakThemOnOurCommit)) {
             db->PersistAddConflict(LockId, otherLock->LockId);
             changed = true;
         }
-        if (!!(pr.second & ELockConflictFlags::BreakUsOnTheirCommit)) {
+        if (!!(pr.second.Flags & ELockConflictFlags::BreakUsOnTheirCommit)) {
             db->PersistAddConflict(otherLock->LockId, LockId);
             changed = true;
         }
@@ -505,8 +510,8 @@ void TLockInfo::RestorePersistentRange(const ILocksDb::TLockRange& rangeRow) {
 }
 
 void TLockInfo::RestoreInMemoryConflict(TLockInfo* otherLock) {
-    this->ConflictLocks[otherLock] |= ELockConflictFlags::BreakThemOnOurCommit;
-    otherLock->ConflictLocks[this] |= ELockConflictFlags::BreakUsOnTheirCommit;
+    this->ConflictLocks[otherLock].Flags |= ELockConflictFlags::BreakThemOnOurCommit;
+    otherLock->ConflictLocks[this].Flags |= ELockConflictFlags::BreakUsOnTheirCommit;
 }
 
 void TLockInfo::RestorePersistentConflict(TLockInfo* otherLock) {
@@ -1147,6 +1152,9 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         } else {
             lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
         }
+        if (lock && Update->QuerySpanId != 0) {
+            lock->SetVictimQuerySpanId(Update->QuerySpanId);
+        }
         if (!lock) {
             counter = TLock::ErrorTooMuch;
         } else if (lock->IsBroken()) {
@@ -1184,13 +1192,13 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 }
             }
             for (auto& readConflictLock : Update->ReadConflictLocks) {
-                if (readConflictLock.AddConflict(lock.Get(), Db)) {
+                if (readConflictLock.AddConflict(lock.Get(), Db, Update->GetEffectiveBreakerQuerySpanId())) {
                     waitPersistent = true;
                     waitPersistentMore.emplace_back(&readConflictLock);
                 }
             }
             for (auto& writeConflictLock : Update->WriteConflictLocks) {
-                if (lock->AddConflict(&writeConflictLock, Db)) {
+                if (lock->AddConflict(&writeConflictLock, Db, Update->GetEffectiveBreakerQuerySpanId())) {
                     waitPersistent = true;
                     waitPersistentMore.emplace_back(&writeConflictLock);
                 }
@@ -1258,6 +1266,31 @@ ui64 TSysLocks::ExtractLockTxId(const TArrayRef<const TCell>& key) const {
     Y_ENSURE(ok && Self->TabletID() == tabletId);
     return lockTxId;
 }
+TVector<ui64> TSysLocks::ExtractVictimQuerySpanIds(const TVector<ui64>& lockIds) const {
+    TVector<ui64> victimQuerySpanIds;
+    victimQuerySpanIds.reserve(lockIds.size());
+
+    for (ui64 lockId : lockIds) {
+        if (auto* lock = Locker.FindLockPtr(lockId)) {
+            ui64 victimQuerySpanId = lock->GetVictimQuerySpanId();
+            if (victimQuerySpanId != 0) {
+                victimQuerySpanIds.push_back(victimQuerySpanId);
+            }
+        }
+    }
+
+    return victimQuerySpanIds;
+}
+
+TMaybe<ui64> TSysLocks::GetVictimQuerySpanIdForLock(ui64 lockTxId) const {
+    if (auto* lock = Locker.FindLockPtr(lockTxId)) {
+        ui64 victimQuerySpanId = lock->GetVictimQuerySpanId();
+        if (victimQuerySpanId != 0) {
+            return victimQuerySpanId;
+        }
+    }
+    return Nothing();
+}
 
 TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     ui64 lockTxId, tabletId;
@@ -1324,9 +1357,15 @@ void TSysLocks::EraseLock(const TArrayRef<const TCell>& key) {
 void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
     Y_ENSURE(Update);
     if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {
+        bool foundStoredBreakerQuerySpanId = false;
         for (auto& pr : lock->ConflictLocks) {
-            if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit) && !pr.first->IsRemoved()) {
+            if (!!(pr.second.Flags & ELockConflictFlags::BreakThemOnOurCommit) && !pr.first->IsRemoved()) {
                 Update->AddBreakLock(pr.first);
+                // Prefer the conflict-stored ID (actual breaker query) over the default.
+                if (pr.second.BreakerQuerySpanId != 0 && !foundStoredBreakerQuerySpanId) {
+                    Update->BreakerQuerySpanId = pr.second.BreakerQuerySpanId;
+                    foundStoredBreakerQuerySpanId = true;
+                }
             }
         }
         Update->AddEraseLock(lock);
@@ -1547,6 +1586,9 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     Update->Lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
     if (!Update->Lock) {
         return EEnsureCurrentLock::TooMany;
+    }
+    if (Update->QuerySpanId != 0) {
+        Update->Lock->SetVictimQuerySpanId(Update->QuerySpanId);
     }
 
     return EEnsureCurrentLock::Success;

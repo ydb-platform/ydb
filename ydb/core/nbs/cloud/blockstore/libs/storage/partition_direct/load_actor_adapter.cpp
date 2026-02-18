@@ -1,20 +1,24 @@
 #include "load_actor_adapter.h"
 
-#include <ydb/library/actors/core/actorsystem.h>
-
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/sglist.h>
 
-namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+#include <ydb/library/actors/core/actorsystem.h>
 
 using namespace NThreading;
-using NYdb::NBS::TGuardedBuffer;
-using NYdb::NBS::TGuardedSgList;
-using NYdb::NBS::TSgList;
-using NYdb::NBS::TBlockDataRef;
-using NBlockStore::TCallContext;
+
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr size_t BlockSize = 4096;
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -23,7 +27,7 @@ TLoadActorAdapter::TLoadActorAdapter(
     : FastPathService(std::move(fastPathService))
 {}
 
-void TLoadActorAdapter::Bootstrap(const TActorContext& ctx)
+void TLoadActorAdapter::Bootstrap(const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ctx);
     Become(&TThis::StateWork);
@@ -36,7 +40,7 @@ void TLoadActorAdapter::Bootstrap(const TActorContext& ctx)
 
 void TLoadActorAdapter::HandleWriteBlocksRequest(
     const TEvService::TEvWriteBlocksRequest::TPtr& ev,
-    const TActorContext& ctx)
+    const NActors::TActorContext& ctx)
 {
     const auto* msg = ev->Get();
 
@@ -74,7 +78,7 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
         std::move(request));
 
     future.Subscribe(
-        [actorSystem = TActivationContext::ActorSystem(),
+        [actorSystem = NActors::TActivationContext::ActorSystem(),
          sender = ev->Sender,
          selfId = ctx.SelfID,
          cookie = ev->Cookie,
@@ -95,7 +99,7 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
 
 void TLoadActorAdapter::HandleReadBlocksRequest(
     const TEvService::TEvReadBlocksRequest::TPtr& ev,
-    const TActorContext& ctx)
+    const NActors::TActorContext& ctx)
 {
     const auto* msg = ev->Get();
 
@@ -116,7 +120,7 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
         request);
 
     future.Subscribe(
-        [actorSystem = TActivationContext::ActorSystem(),
+        [actorSystem = NActors::TActivationContext::ActorSystem(),
          sender = ev->Sender,
          selfId = ctx.SelfID,
          cookie = ev->Cookie,
@@ -146,26 +150,29 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
         });
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TLoadActorAdapter::StateWork)
 {
-    LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+    LOG_DEBUG(
+        NActors::TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
         "Processing event: %s from sender: %lu",
         ev->GetTypeName().data(),
         ev->Sender.LocalId());
 
     switch (ev->GetTypeRewrite()) {
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
 
         HFunc(TEvService::TEvWriteBlocksRequest, HandleWriteBlocksRequest);
         HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
 
         default:
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+            LOG_DEBUG_S(
+                NActors::TActivationContext::AsActorContext(),
+                NKikimrServices::NBS_PARTITION,
                 "Unhandled event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString());
+                                         << " event: " << ev->ToString());
             break;
     }
 }
@@ -176,13 +183,13 @@ TActorId CreateLoadActorAdapter(
     const NActors::TActorId& owner,
     std::shared_ptr<TFastPathService> fastPathService)
 {
-    auto actor = std::make_unique<TLoadActorAdapter>(
-        std::move(fastPathService));
+    auto actor =
+        std::make_unique<TLoadActorAdapter>(std::move(fastPathService));
 
-    return TActivationContext::Register(
+    return NActors::TActivationContext::Register(
         actor.release(),
         owner,
-        TMailboxType::ReadAsFilled,
+        NActors::TMailboxType::ReadAsFilled,
         NKikimr::AppData()->SystemPoolId);
 }
 

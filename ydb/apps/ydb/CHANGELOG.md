@@ -1,3 +1,4 @@
+* Added `--tx-mode` option to `ydb workload * run` benchmark commands, allowing to set the transaction mode (e.g. `no-tx`, `serializable-rw`, `snapshot-rw`).
 
 ## 2.29.0 ##
 

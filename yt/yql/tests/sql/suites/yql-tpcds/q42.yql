@@ -1,6 +1,6 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: Error: Unknown alias: store_sales */
+/* custom error: Unknown alias: store_sales */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 

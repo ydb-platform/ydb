@@ -398,7 +398,7 @@ public:
                 << " affected shards " << PerShardStates.size()
                 << " marker# P3");
 
-             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
+            Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
                     new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SNAPSHOT,
                         ctx.SelfID, TxId, txBody, TxFlags),
                     shardId, true));

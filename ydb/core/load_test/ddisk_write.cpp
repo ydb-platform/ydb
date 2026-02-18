@@ -102,12 +102,29 @@ public:
         ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
     }
 
+    void HandleRead(NDDisk::TEvRead::TPtr& ev, const TActorContext& ctx) {
+        const auto& selector = ev->Get()->Record.GetSelector();
+        const size_t size = selector.GetSize();
+        const size_t maxOffset = BufferSize > size ? BufferSize - size : 0;
+        const size_t slots = maxOffset / WriteAlignment;
+        const size_t offset = slots ? (Rng() % (slots + 1)) * WriteAlignment : 0;
+
+        TRope data(TRcBuf::Uninitialized(size));
+        auto it = data.Begin();
+        std::memcpy(const_cast<char*>(it.ContiguousData()), RawBuffer + offset, size);
+
+        auto reply = std::make_unique<NDDisk::TEvReadResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK,
+            std::nullopt, std::move(data));
+        ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
+    }
+
     void HandlePoison(const TActorContext& ctx) {
         Die(ctx);
     }
 
     STRICT_STFUNC(StateFunc,
         HFunc(NDDisk::TEvWrite, Handle)
+        HFunc(NDDisk::TEvRead, HandleRead)
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
     )
 
@@ -154,6 +171,7 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
         ui32 Size;
         TInstant StartTime;
         bool IsInit = false;
+        bool IsBackgroundRead = false;
     };
 
     struct TRequestStat {
@@ -202,6 +220,7 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
     TRope RandomData;
     TRope ZeroData;
     bool AlignSourceData = true;
+    ui32 BackgroundReadRatio = 0; // percentage of background read requests (0-100)
 
     TString WriteSizeInfo = ToString(WriteSizeBytes);
     TString SequentialInfo = "unknown";
@@ -278,6 +297,9 @@ public:
             SimulateActorsCount = 1;
         }
         AlignSourceData = !cmd.HasAlignSourceData() || cmd.GetAlignSourceData();
+
+        BackgroundReadRatio = cmd.GetBackgroundReadRatio();
+        Y_ABORT_UNLESS(BackgroundReadRatio <= 100, "BackgroundReadRatio must be in [0, 100]");
 
         ui64 nextBaseChunk = 0;
         ui64 accumWeight = 0;
@@ -585,14 +607,23 @@ public:
             Report->Size = size;
 
             const TInstant now = TAppData::TimeProvider->Now();
-            const ui64 requestIdx = NewTRequestInfo(size, now, false);
             const ui64 vChunkIndex = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
             const ui32 offsetInChunk = offset % ExpectedChunkSizeBytes;
-            auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials, NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size),
-                NDDisk::TWriteInstruction(0));
-            ev->AddPayload(TRope(RandomData));
-            SendRequest(ctx, std::move(ev), requestIdx);
-            ++Write_RequestsSent;
+
+            const bool isBackgroundRead = BackgroundReadRatio > 0 && (Rng() % 100) < BackgroundReadRatio;
+            const ui64 requestIdx = NewTRequestInfo(size, now, false, isBackgroundRead);
+
+            if (isBackgroundRead) {
+                auto ev = std::make_unique<NDDisk::TEvRead>(Credentials,
+                    NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TReadInstruction(false));
+                SendRequest(ctx, std::move(ev), requestIdx);
+            } else {
+                auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
+                    NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
+                ev->AddPayload(TRope(RandomData));
+                SendRequest(ctx, std::move(ev), requestIdx);
+                ++Write_RequestsSent;
+            }
             ++InFlight;
         }
 
@@ -669,9 +700,17 @@ public:
         CheckDie(ctx);
     }
 
-    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit) {
+    void Handle(NDDisk::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
+        const auto& msg = ev->Get()->Record;
+        const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+        const ui64 requestIdx = ev->Cookie;
+        FinishRequest(ctx, requestIdx, ok);
+        CheckDie(ctx);
+    }
+
+    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit, bool isBackgroundRead = false) {
         const ui64 requestIdx = NextRequestIdx++;
-        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit});
+        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit, isBackgroundRead});
         return requestIdx;
     }
 
@@ -683,7 +722,7 @@ public:
         }
         const TRequestInfo& request = it->second;
 
-        if (!request.IsInit) {
+        if (!request.IsInit && !request.IsBackgroundRead) {
             if (ok) {
                 ++Write_OK;
             } else {
@@ -796,6 +835,7 @@ public:
         HFunc(NDDisk::TEvConnectResult, Handle)
         HFunc(NDDisk::TEvDisconnectResult, Handle)
         HFunc(NDDisk::TEvWriteResult, Handle)
+        HFunc(NDDisk::TEvReadResult, Handle)
         HFunc(TEvUpdateMonitoring, Handle)
         HFunc(NMon::TEvHttpInfo, Handle)
     )

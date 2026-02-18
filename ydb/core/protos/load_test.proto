@@ -179,6 +179,10 @@ message TEvLoadTestRequest {
         optional uint32 SimulateActorsCount = 12 [default = 1];
 
         optional bool AlignSourceData = 13 [default = true];
+
+        // Percentage of background read requests (0-100).
+        // These reads are not counted in any results (IOPS, speed, latency, etc.).
+        optional uint32 BackgroundReadRatio = 14 [default = 0];
     }
     message TVDiskLoad {
         optional uint64 Tag = 1;

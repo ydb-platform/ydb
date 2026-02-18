@@ -137,6 +137,10 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 }
                 break;
             }
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+                // Local bloom indexes don't have separate impl tables for KQP index effects.
+                break;
         }
 
         auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())

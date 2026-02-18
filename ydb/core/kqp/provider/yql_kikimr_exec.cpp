@@ -2262,6 +2262,20 @@ public:
                                     return SyncError();
                                 }
                                 add_index->mutable_global_fulltext_relevance_index();
+                            } else if (type == "localBloomFilter") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Local bloom filter index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_local_bloom_filter_index();
+                            } else if (type == "localBloomNgramFilter") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Local bloom ngram filter index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_local_bloom_ngram_filter_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2331,6 +2345,57 @@ public:
                                             name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
+                                    case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                                        if (name.StringValue() == "false_positive_probability") {
+                                            double fpp = 0.0;
+                                            if (!TryFromString<double>(value.StringValue(), fpp)) {
+                                                error = TStringBuilder() << "Invalid false_positive_probability value: " << value.StringValue();
+                                            } else {
+                                                add_index->mutable_local_bloom_filter_index()->set_false_positive_probability(fpp);
+                                            }
+                                        } else {
+                                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
+                                        }
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                                        ui32 uiValue = 0;
+                                        if (name.StringValue() == "case_sensitive") {
+                                            bool boolValue = true;
+                                            if (!TryFromString<bool>(value.StringValue(), boolValue)) {
+                                                error = TStringBuilder() << "Invalid case_sensitive value: " << value.StringValue();
+                                            } else {
+                                                add_index->mutable_local_bloom_ngram_filter_index()->set_case_sensitive(boolValue);
+                                            }
+                                        } else if (name.StringValue() == "ngram_size") {
+                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
+                                                error = TStringBuilder() << "Invalid ngram_size value: " << value.StringValue();
+                                            } else {
+                                                add_index->mutable_local_bloom_ngram_filter_index()->set_ngram_size(uiValue);
+                                            }
+                                        } else if (name.StringValue() == "hashes_count") {
+                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
+                                                error = TStringBuilder() << "Invalid hashes_count value: " << value.StringValue();
+                                            } else {
+                                                add_index->mutable_local_bloom_ngram_filter_index()->set_hashes_count(uiValue);
+                                            }
+                                        } else if (name.StringValue() == "filter_size_bytes") {
+                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
+                                                error = TStringBuilder() << "Invalid filter_size_bytes value: " << value.StringValue();
+                                            } else {
+                                                add_index->mutable_local_bloom_ngram_filter_index()->set_filter_size_bytes(uiValue);
+                                            }
+                                        } else if (name.StringValue() == "records_count") {
+                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
+                                                error = TStringBuilder() << "Invalid records_count value: " << value.StringValue();
+                                            } else {
+                                                add_index->mutable_local_bloom_ngram_filter_index()->set_records_count(uiValue);
+                                            }
+                                        } else {
+                                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
+                                        }
+                                        break;
+                                    }
                                     default:
                                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                             << "Unknown index setting: " << name.StringValue()));
@@ -2392,6 +2457,26 @@ public:
                             }
                             break;
                         }
+                        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom indexes are supported only for column tables"));
+                                return SyncError();
+                            }
+                            break;
+                        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom ngram indexes are supported only for column tables"));
+                                return SyncError();
+                            }
+                            if (!add_index->local_bloom_ngram_filter_index().ngram_size() ||
+                                !add_index->local_bloom_ngram_filter_index().hashes_count() ||
+                                !add_index->local_bloom_ngram_filter_index().filter_size_bytes() ||
+                                !add_index->local_bloom_ngram_filter_index().records_count()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
+                                return SyncError();
+                            }
+                            break;
                         case Ydb::Table::TableIndex::TYPE_NOT_SET: {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
                             return SyncError();

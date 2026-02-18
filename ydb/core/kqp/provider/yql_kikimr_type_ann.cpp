@@ -1057,8 +1057,28 @@ private:
                     return TStatus::Error;
                 }
                 indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+            } else if (type == "localBloomFilter") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::LocalBloomFilter;
+            } else if (type == "localBloomNgramFilter") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom ngram filter index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::LocalBloomNgramFilter;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
+            }
+
+            if ((indexType == TIndexDescription::EType::LocalBloomFilter ||
+                 indexType == TIndexDescription::EType::LocalBloomNgramFilter) &&
+                meta->StoreType != EStoreType::Column) {
+                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                    "Local bloom indexes are supported only for column tables"));
+                return TStatus::Error;
             }
 
             TVector<TString> indexColums;
@@ -1084,6 +1104,8 @@ private:
 
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
+            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDescription;
+            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDescription;
             // fulltext index has per-column analyzers settings, single value for now
             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
                 indexColums.empty() ? "<none>" : indexColums.back()
@@ -1105,6 +1127,57 @@ private:
                         NKikimr::NFulltext::FillSetting(
                             *fulltextIndexDescription.MutableSettings(),
                             name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::LocalBloomFilter: {
+                        if (name.StringValue() == "false_positive_probability") {
+                            double fpp = 0.0;
+                            if (!TryFromString<double>(value.StringValue(), fpp)) {
+                                error = TStringBuilder() << "Invalid false_positive_probability value: " << value.StringValue();
+                            } else {
+                                localBloomFilterDescription.FalsePositiveProbability = fpp;
+                            }
+                        } else {
+                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
+                        }
+                        break;
+                    }
+                    case TIndexDescription::EType::LocalBloomNgramFilter: {
+                        ui32 uiValue = 0;
+                        if (name.StringValue() == "ngram_size") {
+                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
+                                error = TStringBuilder() << "Invalid ngram_size value: " << value.StringValue();
+                            } else {
+                                localBloomNgramFilterDescription.NgramSize = uiValue;
+                            }
+                        } else if (name.StringValue() == "hashes_count") {
+                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
+                                error = TStringBuilder() << "Invalid hashes_count value: " << value.StringValue();
+                            } else {
+                                localBloomNgramFilterDescription.HashesCount = uiValue;
+                            }
+                        } else if (name.StringValue() == "filter_size_bytes") {
+                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
+                                error = TStringBuilder() << "Invalid filter_size_bytes value: " << value.StringValue();
+                            } else {
+                                localBloomNgramFilterDescription.FilterSizeBytes = uiValue;
+                            }
+                        } else if (name.StringValue() == "records_count") {
+                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
+                                error = TStringBuilder() << "Invalid records_count value: " << value.StringValue();
+                            } else {
+                                localBloomNgramFilterDescription.RecordsCount = uiValue;
+                            }
+                        } else if (name.StringValue() == "case_sensitive") {
+                            bool boolValue = true;
+                            if (!TryFromString<bool>(value.StringValue(), boolValue)) {
+                                error = TStringBuilder() << "Invalid case_sensitive value: " << value.StringValue();
+                            } else {
+                                localBloomNgramFilterDescription.CaseSensitive = boolValue;
+                            }
+                        } else {
+                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
+                        }
                         break;
                     }
                     default:
@@ -1157,6 +1230,30 @@ private:
                     specializedIndexDescription = std::move(fulltextIndexDescription);
                     break;
                 }
+                case TIndexDescription::EType::LocalBloomFilter:
+                    if (indexColums.size() != 1 || !dataColums.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            "Local bloom index requires exactly one index column and does not support data columns"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(localBloomFilterDescription);
+                    break;
+                case TIndexDescription::EType::LocalBloomNgramFilter:
+                    if (indexColums.size() != 1 || !dataColums.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            "Local bloom ngram index requires exactly one index column and does not support data columns"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!localBloomNgramFilterDescription.NgramSize ||
+                        !localBloomNgramFilterDescription.HashesCount ||
+                        !localBloomNgramFilterDescription.FilterSizeBytes ||
+                        !localBloomNgramFilterDescription.RecordsCount) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()),
+                            "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(localBloomNgramFilterDescription);
+                    break;
             }
 
             // IndexState and version, pathId are ignored for create table with index request
@@ -1694,17 +1791,21 @@ private:
                 auto nameNode = action.Value().Cast<TCoAtom>();
                 auto name = TString(nameNode.Value());
 
-                const auto& indexes = table->Metadata->Indexes;
+                // Column tables support local indexes that are not represented in table metadata indexes list.
+                // Skip strict existence check for column store to allow runtime-side validation.
+                if (table->Metadata->StoreType != EStoreType::Column) {
+                    const auto& indexes = table->Metadata->Indexes;
 
-                auto cmp = [name](const TIndexDescription& desc) {
-                    return name == desc.Name;
-                };
+                    auto cmp = [name](const TIndexDescription& desc) {
+                        return name == desc.Name;
+                    };
 
-                if (std::find_if(indexes.begin(), indexes.end(), cmp) == indexes.end()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                        << " Index: \"" << name << "\" does not exist"));
-                    return TStatus::Error;
+                    if (std::find_if(indexes.begin(), indexes.end(), cmp) == indexes.end()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                            << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                            << " Index: \"" << name << "\" does not exist"));
+                        return TStatus::Error;
+                    }
                 }
             } else if (name != "addColumnFamilies"
                     && name != "alterColumnFamilies"

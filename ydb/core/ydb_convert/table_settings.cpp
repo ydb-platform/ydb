@@ -541,6 +541,11 @@ bool FillIndexTablePartitioning(
         }
         break;
 
+    case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+        // local bloom indexes don't have implementation tables with partitioning settings
+        break;
+
     case Ydb::Table::TableIndex::TYPE_NOT_SET:
         break;
     }

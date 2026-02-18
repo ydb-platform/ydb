@@ -92,7 +92,7 @@ jobs:
           PR_BRANCH="${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}"
           echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
 
-      # Всегда checkout main для получения актуальных скриптов
+      # Always checkout main to get up-to-date scripts
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
@@ -110,7 +110,7 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
-      # Получаем base_muted_ya.txt из целевой ветки
+      # Get base_muted_ya.txt from target branch
       - name: Get base muted_ya.txt from target branch
         run: |
           echo "Getting base muted_ya.txt from branch: ${{ env.BASE_BRANCH }}"
@@ -154,13 +154,13 @@ jobs:
       - name: Create PR branch and apply changes
         if: env.changes == 'true'
         run: |
-          # Создаем PR ветку на основе целевой ветки
+          # Create PR branch from target branch
           git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
           
-          # Копируем новый файл в PR ветку (файл остается в рабочей директории)
+          # Copy new file into PR branch (file stays in working dir)
           cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
           
-          # Коммитим изменения
+          # Commit changes
           git add .github/config/muted_ya.txt
           git commit -m "Update muted YA file for ${{ env.BASE_BRANCH }}"
           
@@ -267,7 +267,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          # Возвращаемся на main для доступа к скриптам
+          # Checkout main again for script access
           git checkout main
           
           python .github/scripts/create_or_update_pr.py create_or_update \
@@ -280,7 +280,7 @@ jobs:
         if: env.changes == 'true'
         id: comment_pr
         run: |
-          # Читаем содержимое PR body
+          # Read PR body content
           PR_BODY_CONTENT=$(cat pr_body_content.txt)
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           COMPLETE_BODY=$(cat << EOF
@@ -306,11 +306,11 @@ jobs:
           script: |
             const fs = require('fs');
             
-            // Читаем комментарий из файла
+            // Read comment from file
             const commentFile = '${{ steps.comment_pr.outputs.PR_COMMENT_FILE }}';
             const commentBody = fs.readFileSync(commentFile, 'utf8');
             
-            // Добавляем комментарий
+            // Add comment to PR
             await github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
@@ -318,22 +318,25 @@ jobs:
               body: commentBody
             });
             
-            // Лейблы: базовые + automerge для stable-* и для main при запуске в 7 UTC (раз в сутки)
             const baseBranch = process.env.BASE_BRANCH;
             const runHourUtc = process.env.RUN_HOUR_UTC;
             core.info(`Labels: base_branch=${baseBranch}, run_hour_utc=${runHourUtc}`);
+
+            // Base labels
             const labelsToAdd = process.env.LABELS.split(',').map(l => l.trim());
+
+            // Main: automerge only for the 7 UTC run (PR ~8 UTC, ~10 min checks -> merge ~11 MSK)
+            if (baseBranch === 'main' && runHourUtc === '07') {
+              labelsToAdd.push('automerge');
+              core.info(`Added 'automerge' (main, 7 UTC run - merge ~11 MSK).`);
+            }
+
+            // Stable branches: always automerge
             if (baseBranch.startsWith('stable-')) {
               labelsToAdd.push('automerge');
               core.info(`Added 'automerge' (base is stable-*).`);
             }
-            if (baseBranch === 'main' && runHourUtc === '07') {
-              labelsToAdd.push('automerge');
-              core.info(`Added 'automerge' (main, 7 UTC run — daily auto-merge).`);
-            }
-            if (!labelsToAdd.includes('automerge')) {
-              core.info(`No automerge for this PR (main only gets automerge at 7 UTC).`);
-            }
+
             core.info(`Applying labels: ${labelsToAdd.join(', ')}`);
             await github.rest.issues.addLabels({
               ...context.repo,
@@ -341,7 +344,7 @@ jobs:
               labels: labelsToAdd
             });
             
-            // Добавляем ревьюеров
+            // Add reviewers
             const reviewers = JSON.parse(process.env.REVIEWERS);
             await github.rest.pulls.requestReviewers({
               owner: context.repo.owner,

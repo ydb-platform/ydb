@@ -100,7 +100,7 @@ private:
         TTransactionBase* Tx;
         std::uint32_t Partition;
         bool Sent = false;
-        NThreading::TPromise<EWriteResult> FlushPromise;
+        NThreading::TPromise<EFlushResult> FlushPromise;
 
         TWriteMessage BuildMessage() const;
     };
@@ -207,7 +207,7 @@ private:
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
-        void SetStatusToFlushPromises(EWriteResult status);
+        void SetStatusToFlushPromises(EFlushResult status);
 
     private:
         using MessageIter = std::list<TMessageInfo>::iterator;
@@ -421,9 +421,9 @@ public:
 
     std::optional<TSessionClosedEvent> ExplainClosed() override;
 
-    NThreading::TFuture<EWriteResult> Flush() override;
+    NThreading::TFuture<EFlushResult> Flush() override;
 
-    [[nodiscard]] EWriteResult FlushAndWait() override;
+    [[nodiscard]] EFlushResult FlushAndWait() override;
 
     NThreading::TFuture<void> WaitEvent() override;
 
@@ -487,7 +487,7 @@ private:
     static constexpr TDuration DEFAULT_START_BLOCK_TIMEOUT = TDuration::MilliSeconds(1);
     std::mt19937_64 RandomGenerator = std::mt19937_64(std::random_device()());
     
-    std::list<NThreading::TPromise<EWriteResult>> FlushPromises;
+    std::list<NThreading::TPromise<EFlushResult>> FlushPromises;
 
     std::vector<TEventsWorker::EEventType> EventTypesWithHandlers;
 };

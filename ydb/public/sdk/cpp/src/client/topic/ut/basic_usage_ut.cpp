@@ -1932,7 +1932,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
         }
 
-        UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EWriteResult::SUCCESS);
+        UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EFlushResult::SUCCESS);
 
         auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 10);
@@ -1972,8 +1972,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         {
             UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 1), "key1"), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 2), "key2"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EWriteResult::SUCCESS);
-            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EWriteResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EFlushResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
             auto d = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             auto partitionsCount = d.GetTopicDescription().GetPartitions().size();
             UNIT_ASSERT_C(partitionsCount >= 2,
@@ -1992,8 +1992,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 11), "key11"), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 12), "key12"), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 13), "key13"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EWriteResult::SUCCESS);
-            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EWriteResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EFlushResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
             auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             auto partitionsCount = describeResult.GetTopicDescription().GetPartitions().size();
             UNIT_ASSERT_C(partitionsCount >= 4,
@@ -2003,8 +2003,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         {
             UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, 14), "key14"), EWriteResult::QUEUED);
             UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, 15), "key15"), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EWriteResult::SUCCESS);
-            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EWriteResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EFlushResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
         }
 
         UNIT_ASSERT(producer1->Close(TDuration::Seconds(1)));
@@ -2032,7 +2032,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
         }
 
-        UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EWriteResult::SUCCESS);
+        UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EFlushResult::SUCCESS);
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)));
     }
 

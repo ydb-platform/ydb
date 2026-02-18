@@ -355,6 +355,14 @@ enum class EWriteResult : uint8_t {
     SUCCESS = 4,
 };
 
+//! Result of flush operation.
+//! If flush was successful, returns SUCCESS.
+//! If flush was not successful because of closed session, returns CLOSED.
+enum class EFlushResult : uint8_t {
+    SUCCESS = 0,
+    CLOSED = 2,
+};
+
 //! Producer is an abstraction that can write messages to the topic.
 //! It does not block on Write calls, it returns write result immediately.
 class IProducer {
@@ -378,13 +386,11 @@ public:
     //! Returns future that is set when flush is complete.
     //! If flush was successful, returns SUCCESS.
     //! If flush was not successful because of closed session, returns CLOSED.
-    virtual NThreading::TFuture<EWriteResult> Flush() = 0;
+    virtual NThreading::TFuture<EFlushResult> Flush() = 0;
 
     //! Flush all messages to the server and wait result.
-    //! Returns write result.
-    //! If flush was successful, returns SUCCESS.
-    //! If flush was not successful because of closed session, returns CLOSED.
-    [[nodiscard]] virtual EWriteResult FlushAndWait() = 0;
+    //! Returns flush result.
+    [[nodiscard]] virtual EFlushResult FlushAndWait() = 0;
 
     //! Close the producer.
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;

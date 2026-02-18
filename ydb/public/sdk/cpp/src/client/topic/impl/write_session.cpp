@@ -1076,7 +1076,7 @@ bool TKeyedWriteSession::TMessagesWorker::HasInFlightMessages() const {
     return !InFlightMessages.empty();
 }
 
-void TKeyedWriteSession::TMessagesWorker::SetStatusToFlushPromises(EWriteResult status) {
+void TKeyedWriteSession::TMessagesWorker::SetStatusToFlushPromises(EFlushResult status) {
     for (auto& inFlightMessage : InFlightMessages) {
         if (inFlightMessage.FlushPromise.Initialized()) {
             inFlightMessage.FlushPromise.TrySetValue(status);
@@ -1762,7 +1762,7 @@ void TKeyedWriteSession::RunMainWorker() {
         }
 
         while (!FlushPromises.empty()) {
-            FlushPromises.front().TrySetValue(EWriteResult::SUCCESS);
+            FlushPromises.front().TrySetValue(EFlushResult::SUCCESS);
             FlushPromises.pop_front();
         }
 
@@ -1771,7 +1771,7 @@ void TKeyedWriteSession::RunMainWorker() {
         if (isClosed && (Done.load() || MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
             ShutdownPromise.TrySetValue();
             EventsWorker->EventsPromise.TrySetValue();
-            MessagesWorker->SetStatusToFlushPromises(EWriteResult::CLOSED);
+            MessagesWorker->SetStatusToFlushPromises(EFlushResult::CLOSED);
             ClosePromise.TrySetValue();
             MainWorkerState.store(Idle, std::memory_order_release);
             return;
@@ -1838,18 +1838,18 @@ std::optional<TSessionClosedEvent> TKeyedWriteSession::ExplainClosed() {
     return EventsWorker->GetSessionClosedEvent();
 }
 
-NThreading::TFuture<EWriteResult> TKeyedWriteSession::Flush() {
+NThreading::TFuture<EFlushResult> TKeyedWriteSession::Flush() {
     std::unique_lock lock(GlobalLock);
     if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
-        return NThreading::MakeFuture(EWriteResult::SUCCESS);
+        return NThreading::MakeFuture(EFlushResult::SUCCESS);
     }
 
     auto lastInFlightMessage = std::prev(MessagesWorker->InFlightMessages.end());
-    lastInFlightMessage->FlushPromise = NThreading::NewPromise<EWriteResult>();
+    lastInFlightMessage->FlushPromise = NThreading::NewPromise<EFlushResult>();
     return lastInFlightMessage->FlushPromise.GetFuture();
 }
 
-EWriteResult TKeyedWriteSession::FlushAndWait() {
+EFlushResult TKeyedWriteSession::FlushAndWait() {
     auto future = Flush();
     return future.GetValueSync();
 }

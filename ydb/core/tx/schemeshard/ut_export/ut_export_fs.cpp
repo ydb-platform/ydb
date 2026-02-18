@@ -667,4 +667,52 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
             UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, "Duplicate IV for: " << filePath);
         }
     }
+
+    Y_UNIT_TEST(IndexMaterializationForFs) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "row1");
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 2, "row2");
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_path: "backup/Table"
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr);
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+
+        UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table", "scheme.pb")));
+        UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table/index/indexImplTable", "scheme.pb")));
+    }
 }

@@ -65,7 +65,7 @@ $all_tests_raw =
             )
         ) AS Color
     FROM `perfomance/olap/tests_results` AS tests_results
-    WHERE Timestamp >= $start_timestamp
+    WHERE Timestamp >= $start_timestamp;
 
 SELECT 
     Db,

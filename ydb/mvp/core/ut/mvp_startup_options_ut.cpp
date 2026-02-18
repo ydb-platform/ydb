@@ -35,7 +35,7 @@ generic:
   server:
     http_port: 1234
     https_port: 0
-        )" , "mvp_startup_options_test", ".yaml");
+)" , "mvp_startup_options_test", ".yaml");
 
         const char* argvNoCli[] = {"mvp_test", "--config", tmpFile.Name().c_str()};
         TMvpStartupOptions optsFromYaml = MakeOpts(argvNoCli);

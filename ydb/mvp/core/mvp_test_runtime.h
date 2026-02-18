@@ -16,16 +16,6 @@ void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
     request->Advance(size);
 }
 
-template <typename TOpts, size_t N>
-TOpts MakeOpts(const char* (&argv)[N]) {
-    return TOpts::Build(N, argv);
-}
-
-template <typename TOpts, size_t N>
-TOpts MakeOpts(const char* (&&argv)[N]) {
-    return TOpts::Build(N, argv);
-}
-
 inline TTempFileHandle MakeTestFile(const TStringBuf content, const TString& name = "test", const TString& extension = "") {
     TTempFileHandle tmpFile = TTempFileHandle::InCurrentDir(name, extension);
     TUnbufferedFileOutput ofs(tmpFile.Name());

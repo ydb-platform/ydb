@@ -39,7 +39,7 @@ $launch_times = (
         GROUP BY
             Db,
             JSON_VALUE(Info, "$.cluster.version") AS Version,
-            JSON_VALUE(Info, "$.ci_launch_id") AS LunchId
+            COALESCE(JSON_VALUE(tests_results.Info, "$.ci_launch_id"), CAST(RunId AS String)) AS LunchId
     ) AS launch_times_raw ON all_suites.Db == launch_times_raw.Db
 );
 
@@ -50,7 +50,7 @@ $all_tests_raw =
         JSON_VALUE(tests_results.Info, "$.cluster.version") AS Version_n,
         JSON_VALUE(Info, "$.ci_version") AS CiVersion_n,
         JSON_VALUE(Info, "$.test_tools_version") AS TestToolsVersion_n,
-        JSON_VALUE(tests_results.Info, "$.ci_launch_id") AS LunchId_n,
+        COALESCE(JSON_VALUE(tests_results.Info, "$.ci_launch_id"), CAST(RunId AS String)) AS LunchId_n,
         CAST(JSON_VALUE(Stats, '$.DiffsCount') AS INT) AS diff_response,
         IF(Success > 0, CAST(CAST(JSON_VALUE(Stats, '$.CompilationAvg') AS Double) AS Uint64)) AS CompilationAvg,
         IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,

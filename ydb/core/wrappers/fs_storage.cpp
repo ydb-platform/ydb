@@ -59,6 +59,12 @@ private:
         return RequiresKey<TEvResponse>::value;
     }
 
+    static void FsyncParentDir(const TString& filePath) {
+        TFsPath parent = TFsPath(filePath).Parent();
+        TFile dirFd(parent.GetPath(), RdOnly | Seq);
+        dirFd.Flush();
+    }
+
     template<typename TEvResponse>
     void ReplySuccess(const NActors::TActorId& sender, const std::optional<TString>& key) {
         typename TEvResponse::TAwsResult awsResult;
@@ -202,11 +208,11 @@ public:
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
-            TFile file(fsPath.GetPath(), CreateAlways | WrOnly);
-            file.Flock(LOCK_EX | LOCK_NB);
-            file.Write(body.data(), body.size());
-            file.Flush();
-            file.Close();
+            TMultipartUploadSession session(key);
+            session.File.Write(body.data(), body.size());
+            session.File.Flush();
+            FsyncParentDir(key);
+            session.File.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
@@ -503,6 +509,7 @@ public:
             session.File.Flush();
 
             NFs::Rename(incompleteKey, key);
+            FsyncParentDir(key);
             session.File.Close();
 
             FS_LOG_I("CompleteMultipartUpload"
@@ -545,9 +552,14 @@ public:
                 auto& session = it->second;
                 const TString filePath = session.Key;
 
-                NFs::Remove(filePath);
-                session.File.Close();
+                bool removed = NFs::Remove(filePath);
+                if (!removed) {
+                    FS_LOG_W("AbortMultipartUpload: failed to delete incomplete file"
+                        << ": uploadId# " << uploadId
+                        << ", file# " << filePath);
+                }
                 ActiveUploads.erase(it);
+                session.File.Close();
 
                 FS_LOG_I("AbortMultipartUpload"
                     << ": uploadId# " << uploadId

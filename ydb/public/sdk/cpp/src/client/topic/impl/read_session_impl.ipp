@@ -204,7 +204,15 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> ready;
 
     auto i = NotReady.begin();
-    for (; (i != NotReady.end()) && i->IsReady(); ++i) {
+    for (; i != NotReady.end(); ++i) {
+        if (!i->IsReady()) {
+            // Cancel inflight decompression tasks if any
+            if (!i->IsDataEvent() || i->GetDataEvent().SetAbandoned()) {
+                break;
+            }
+            // Message was decompressed and become ready
+        }
+
         ready.push_back(std::move(*i));
     }
 
@@ -803,6 +811,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnUserRetrievedEvent(i
 
     Y_ABORT_UNLESS(decompressedSize <= DecompressedDataSize);
     DecompressedDataSize -= decompressedSize;
+    LastActiveTime = TInstant::Now();
 
     ContinueReadingDataImpl();
     StartDecompressionTasksImpl(deferred);
@@ -856,6 +865,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
             }
         };
 
+        LastActiveTime = TInstant::Now();
         deferred.DeferReadFromProcessor(Processor, ServerMessage.get(), std::move(callback));
     }
 }
@@ -1525,6 +1535,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTask
                                                                            deferred);
         DecompressedDataSize += sentToDecompress;
         if (current.BatchInfo->AllDecompressionTasksStarted()) {
+            deferred.DeferDestroyDecompressionInfos({current.BatchInfo});
             DecompressionQueue.pop_front();
         } else {
             break;
@@ -1604,8 +1615,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
     UpdateMemoryUsageStatisticsImpl();
     CompressedDataSize -= sourceSize;
     DecompressedDataSize += decompressedSize - estimatedDecompressedSize;
+    LastActiveTime = TInstant::Now();
     constexpr double weight = 0.6;
-    if (sourceSize > 0) {
+    if (sourceSize > 0 && decompressedSize > 0) {
         AverageCompressionRatio = weight * static_cast<double>(decompressedSize) / static_cast<double>(sourceSize) + (1 - weight) * AverageCompressionRatio;
     }
     if (Aborting) {
@@ -1615,6 +1627,34 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
         ReadSizeBudget += serverBytesSize;
     }
+    ContinueReadingDataImpl();
+    StartDecompressionTasksImpl(deferred);
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionTaskCanceled(i64 sourceSize, size_t messagesCount, i64 serverBytesSize) {
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "The application data decompression is cancelled. Number of messages " << messagesCount << ", size " << sourceSize << " bytes");
+
+    *Settings.Counters_->BytesReadCompressed += sourceSize;
+    *Settings.Counters_->MessagesRead += messagesCount;
+    *Settings.Counters_->BytesInflightCompressed -= sourceSize;
+    *Settings.Counters_->BytesInflightTotal -= sourceSize;
+    *Settings.Counters_->MessagesInflight -= messagesCount;
+
+    TDeferredActions<UseMigrationProtocol> deferred;
+    std::lock_guard guard(Lock);
+    UpdateMemoryUsageStatisticsImpl();
+
+    CompressedDataSize -= sourceSize;
+    LastActiveTime = TInstant::Now();
+    if (Aborting) {
+        return;
+    }
+    if constexpr (!UseMigrationProtocol) {
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
+        ReadSizeBudget += serverBytesSize;
+    }
+
     ContinueReadingDataImpl();
     StartDecompressionTasksImpl(deferred);
 }
@@ -1912,6 +1952,48 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
 }
 
 template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
+    const auto delta = TInstant::Now() - LastActiveTime;
+    if (delta < TDuration::Minutes(1)) {
+        // Session ok, we got at least one event from server since last 1 minute
+        return;
+    }
+
+    if (WaitingReadResponse) {
+        // We sent to server non zero memory budget, but don't get read response since last 1 minute
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "[SelfCheck] There is no server events since last: " << delta << ", most likely there is no data in topic partitions");
+        return;
+    }
+
+    if (DecompressionTasksInflight) {
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "[SelfCheck] There is still inflight decompression tasks since last: " << delta << ", read session was stopped by back pressure, most likely decompression is too slow");
+        return;
+    }
+
+    ui64 readyEventsCount = 0;
+    std::unordered_set<ui64> handledPartitionStreams;
+    for (const auto& [assignId, stream] : PartitionStreams) {
+        handledPartitionStreams.emplace(assignId);
+        readyEventsCount += stream->GetReadyEventsCount();
+    }
+
+    // Some streams may have some ready events after finish
+    for (const auto& decompressionItem : DecompressionQueue) {
+        if (const auto& stream = *decompressionItem.PartitionStream; handledPartitionStreams.emplace(stream.GetAssignId()).second) {
+            readyEventsCount += stream.GetReadyEventsCount();
+        }
+    }
+
+    if (readyEventsCount) {
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "[SelfCheck] There is still " << readyEventsCount << " pending ready events since last: " << delta << ", read session was stopped by back pressure, most likely extraction pipeline is too slow");
+        return;
+    }
+
+    // No read from server inflight, no ready events and no decompression tasks inflight => most likely hanging
+    LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "[SelfCheck] There is no ready events / inflight decompression since last: " << delta << ", most likely hanged after stop by back pressure");
+}
+
+template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
     ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
     for (auto& [_, s] : PartitionStreams) {
@@ -2096,6 +2178,7 @@ bool TReadSessionEventsQueue<UseMigrationProtocol>::PushEvent(TIntrusivePtr<TPar
 
     if (std::holds_alternative<TClosedEvent>(event)) {
         stream->DeleteNotReadyTail(deferred);
+        SignalReadyEventsImpl(stream, deferred);
     }
 
     if (!HasDataEventCallback() && !std::holds_alternative<TADataReceivedEvent<UseMigrationProtocol>>(event)) {
@@ -2145,14 +2228,15 @@ bool TReadSessionEventsQueue<UseMigrationProtocol>::PushDataEvent(TIntrusivePtr<
                                                                   size_t batch,
                                                                   size_t message,
                                                                   TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                                                                  std::atomic<bool>& ready)
+                                                                  std::atomic<bool>& ready,
+                                                                  std::atomic<bool>& abandoned)
 {
 
     std::lock_guard<std::mutex> guard(TParent::Mutex);
     if (this->Closed) {
         return false;
     }
-    partitionStream->InsertDataEvent(batch, message, parent, ready);
+    partitionStream->InsertDataEvent(batch, message, parent, ready, abandoned);
     return true;
 }
 
@@ -2494,6 +2578,18 @@ TDataDecompressionInfo<UseMigrationProtocol>::~TDataDecompressionInfo()
 }
 
 template<bool UseMigrationProtocol>
+void TDataDecompressionInfo<UseMigrationProtocol>::Cleanup() {
+    auto session = CbContext->LockShared();
+    Y_ASSERT(session);
+
+    while (!Tasks.empty()) {
+        const auto& task = Tasks.front();
+        OnTaskCanceled(task.AddedDataSize(), task.AddedMessagesCount());
+        Tasks.pop_front();
+    }
+}
+
+template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::BuildBatchesMeta() {
     BatchesMeta.reserve(ServerMessage.batches_size());
     if constexpr (!UseMigrationProtocol) {
@@ -2610,7 +2706,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
                                                      CurrentDecompressingMessage.first,
                                                      CurrentDecompressingMessage.second,
                                                      TDataDecompressionInfo::shared_from_this(),
-                                                     ReadyThresholds.back().Ready);
+                                                     ReadyThresholds.back().Ready,
+                                                     ReadyThresholds.back().Abandoned);
             if (!pushRes) {
                 session->AbortImpl();
                 return;
@@ -2739,15 +2836,6 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
 }
 
 template<bool UseMigrationProtocol>
-bool TDataDecompressionInfo<UseMigrationProtocol>::HasReadyUnreadData() const {
-    std::optional<std::pair<size_t, size_t>> threshold = GetReadyThreshold();
-    if (!threshold) {
-        return false;
-    }
-    return CurrentReadingMessage <= *threshold;
-}
-
-template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount)
 {
     CompressedDataSize -= sourceSize;
@@ -2768,6 +2856,18 @@ void TDataDecompressionInfo<UseMigrationProtocol>::OnUserRetrievedEvent(i64 deco
 
     if (auto session = CbContext->LockShared()) {
         session->OnUserRetrievedEvent(decompressedSize, messagesCount);
+    }
+}
+
+template<bool UseMigrationProtocol>
+void TDataDecompressionInfo<UseMigrationProtocol>::OnTaskCanceled(i64 sourceSize, size_t messagesCount)
+{
+    SourceDataNotProcessed -= sourceSize;
+    CompressedDataSize -= sourceSize;
+    MessagesInflight -= messagesCount;
+
+    if (auto session = CbContext->LockShared()) {
+        session->OnDecompressionTaskCanceled(sourceSize, messagesCount, ServerBytesSize.exchange(0));
     }
 }
 
@@ -2869,6 +2969,11 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     if (auto session = parent->CbContext->LockShared()) {
         session->GetEventsQueue()->SignalReadyEvents(PartitionStream);
     }
+
+    if (bool expected = false; !Ready->Abandoned.compare_exchange_strong(expected, true)) {
+        // Message is dropped due to partition stream cancellation, we should release decompressed memory
+        parent->OnUserRetrievedEvent(DecompressedSize, messagesProcessed);
+    }
 }
 
 template<bool UseMigrationProtocol>
@@ -2960,7 +3065,7 @@ void TDeferredActions<UseMigrationProtocol>::DeferSignalWaiter(TWaiter&& waiter)
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos)
 {
-    DecompressionInfos = std::move(infos);
+    DecompressionInfos.insert(DecompressionInfos.end(), infos.begin(), infos.end());
 }
 
 template<bool UseMigrationProtocol>
@@ -2971,6 +3076,7 @@ void TDeferredActions<UseMigrationProtocol>::DoActions() {
     Reconnect();
     SignalWaiters();
     StartSessions();
+    DestroyDecompressionInfos();
 }
 
 template<bool UseMigrationProtocol>
@@ -3023,6 +3129,13 @@ template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::SignalWaiters() {
     for (auto& w : Waiters) {
         w.Signal();
+    }
+}
+
+template<bool UseMigrationProtocol>
+void TDeferredActions<UseMigrationProtocol>::DestroyDecompressionInfos() {
+    for (const auto& info : DecompressionInfos) {
+        info->Cleanup();
     }
 }
 

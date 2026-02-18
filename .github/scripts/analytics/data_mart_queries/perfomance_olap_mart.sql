@@ -5,6 +5,7 @@ $all_suites = (
         Suite, Test, Db
     FROM (
         SELECT
+            Db,
             Suite,
             ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
         FROM `perfomance/olap/tests_results`

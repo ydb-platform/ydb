@@ -32,7 +32,7 @@ std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode*
     return {std::move(tableName), tableDesc};
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext & ctx) {
     auto table = ResolveTable(read->TableCallable.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
     if (!table.second) {
         YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not resolve table";
@@ -73,7 +73,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpEmptySource> emptySource, TRBOContext & ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpEmptySource> emptySource, TRBOContext & ctx) {
     TVector<const TItemExprType*> resultItems;
     auto resultType = ctx.ExprCtx.MakeType<TStructExprType>(resultItems);
 
@@ -93,7 +93,7 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
         auto subplanEntry = props.Subplans.PlanMap.at(iu);
         if (subplanEntry.Type == ESubplanType::EXPR) {
             auto subplan = subplanEntry.Plan;
-            auto subplanTupleType = subplan->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            auto subplanTupleType = CastOperator<IOperator>(subplan)->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             subplanType = subplanTupleType->GetItems()[0]->GetItemType();
         } else {
             if (!props.PgSyntax) {
@@ -109,7 +109,7 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
     return ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes);
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanProps& props) {
+TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanProps& props) {
     const TTypeAnnotationNode* inputType = filter->GetInput()->Type;
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, inputType: " << *inputType;
 
@@ -173,7 +173,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanP
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
     TVector<const TItemExprType*> resStructItemTypes;
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -220,7 +220,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpAddDependencies> addDeps, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpAddDependencies> addDeps, TRBOContext& ctx) {
     const TTypeAnnotationNode* inputType = addDeps->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto resStructItemTypes = structType->GetItems();
@@ -235,7 +235,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpAddDependencies> addDeps, TRBOContext& c
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
     Y_UNUSED(ctx);
     auto leftInputType = unionAll->GetLeftInput()->Type;
     // TODO: Add sanity checks.
@@ -243,7 +243,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
@@ -286,7 +286,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
     auto leftInputType = join->GetLeftInput()->Type;
     auto rightInputType = join->GetRightInput()->Type;
 
@@ -314,7 +314,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpLimit> limit, TRBOContext & ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpLimit> limit, TRBOContext& ctx) {
     Y_UNUSED(ctx);
     auto inputType = limit->GetInput()->Type;
     // TODO: Add sanity checks.
@@ -322,7 +322,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpLimit> limit, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpSort> sort, TRBOContext & ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpSort> sort, TRBOContext& ctx) {
     Y_UNUSED(ctx);
     auto inputType = sort->GetInput()->Type;
     // TODO: Add sanity checks.
@@ -330,9 +330,9 @@ TStatus ComputeTypes(std::shared_ptr<TOpSort> sort, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props);
+TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props);
 
-TStatus ComputeTypes(std::shared_ptr<TOpCBOTree> cboTree, TRBOContext &ctx, TPlanProps& props) {
+TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanProps& props) {
     for (auto op : cboTree->TreeNodes) {
         if (auto status = ComputeTypes(op, ctx, props); status != TStatus::Ok) {
             return status;
@@ -342,7 +342,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpCBOTree> cboTree, TRBOContext &ctx, TPla
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props) {
+TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props) {
     if (MatchOperator<TOpEmptySource>(op)) {
         return ComputeTypes(CastOperator<TOpEmptySource>(op), ctx);
     }

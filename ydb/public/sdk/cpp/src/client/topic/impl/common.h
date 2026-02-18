@@ -394,6 +394,9 @@ protected:
         }
     }
 
+    virtual void SelfCheck() {
+    }
+
 public:
     NThreading::TFuture<void> WaitEvent() {
         {
@@ -401,6 +404,11 @@ public:
             if (HasEventsImpl()) {
                 return NThreading::MakeFuture(); // Signalled
             } else {
+                if (const auto now = TInstant::Now(); now - LastSelfCheckAt > TDuration::Seconds(10)) {
+                    LastSelfCheckAt = now;
+                    SelfCheck();
+                }
+
                 Y_ABORT_UNLESS(Waiter.Valid());
                 auto res = Waiter.GetFuture();
                 return res;
@@ -421,6 +429,9 @@ protected:
     std::mutex Mutex;
     std::optional<TClosedEvent> CloseEvent;
     std::atomic<bool> Closed = false;
+
+private:
+    TInstant LastSelfCheckAt = TInstant::Now();
 };
 
 } // namespace NYdb::NTopic

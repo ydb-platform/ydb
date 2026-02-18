@@ -8,7 +8,7 @@ $all_suites = (
             Suite,
             ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
         FROM `perfomance/olap/tests_results`
-        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
+        WHERE Timestamp >= $start_timestamp
         GROUP BY Suite 
     ) 
     FLATTEN LIST BY Tests AS Test
@@ -18,9 +18,9 @@ $launch_times = (
     SELECT 
         launch_times_raw.*,
         all_suites.*,
-        COALESCE(SubString(CAST(launch_times_raw.Version AS String), 0U, FIND(CAST(launch_times_raw.Version AS String), '.')), 'unknown') As Branch,
-        COALESCE(SubString(CAST(launch_times_raw.CiVersion AS String), 0U, FIND(CAST(launch_times_raw.CiVersion AS String), '.')), 'unknown') As CiBranch,
-        COALESCE(SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, FIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch,
+        COALESCE(SubString(CAST(launch_times_raw.Version AS String), 0U, RFIND(CAST(launch_times_raw.Version AS String), '.')), 'unknown') As Branch,
+        COALESCE(SubString(CAST(launch_times_raw.CiVersion AS String), 0U, RFIND(CAST(launch_times_raw.CiVersion AS String), '.')), 'unknown') As CiBranch,
+        COALESCE(SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, RFIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch,
     FROM (
         SELECT
             Db,
@@ -31,7 +31,7 @@ $launch_times = (
             JSON_VALUE(MAX_BY(Info, RunId), "$.ci_version") AS CiVersion,
             JSON_VALUE(MAX_BY(Info, RunId), "$.test_tools_version") AS TestToolsVersion,
         FROM `perfomance/olap/tests_results`
-        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
+        WHERE Timestamp >= $start_timestamp
         GROUP BY
             Db,
             JSON_VALUE(Info, "$.cluster.version") AS Version,
@@ -65,7 +65,7 @@ $all_tests_raw =
             )
         ) AS Color
     FROM `perfomance/olap/tests_results` AS tests_results
-    WHERE Timestamp >= $start_timestamp  and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'));
+    WHERE Timestamp >= $start_timestamp;
 
 SELECT 
     Db,

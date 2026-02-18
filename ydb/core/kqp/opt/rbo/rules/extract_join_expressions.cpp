@@ -5,7 +5,7 @@ namespace NKqp {
 
 // Currently we only extract simple expressions where there is only one variable on either side
 
-bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
     if (input->Kind != EOperator::Filter) {
@@ -44,7 +44,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     }
 
     filter->FilterExpr = MakeConjunction(newConjuncts, props.PgSyntax);
-    auto newMap = std::make_shared<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
+    auto newMap = MakeIntrusive<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
     filter->SetInput(newMap);
     return true;
 }

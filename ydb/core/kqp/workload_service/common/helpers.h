@@ -23,7 +23,7 @@ namespace NKikimr::NKqp::NWorkload {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
-#define LOG_REQ(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
+#define LOG_REQ(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE_REQ, "[REQ_JSON] " << stream)
 
 #define LOG_REQ_JSON_INTERNAL(poolId, reqPtr, evName, extraBuilder) do {       \
     if (!(reqPtr)) {                                                           \
@@ -35,7 +35,6 @@ namespace NKikimr::NKqp::NWorkload {
                                                                                \
     for (size_t _i = 0; _i < _total; ++_i) {                                   \
         TStringStream _ss;                                                     \
-        _ss << "[REQ_JSON]";                                                   \
         (reqPtr)->SerializeChunk(_i, _ss, poolId, evName, extraBuilder);       \
         LOG_REQ(_ss.Str());                                                    \
     }                                                                          \

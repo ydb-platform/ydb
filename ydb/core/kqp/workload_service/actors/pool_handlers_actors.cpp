@@ -149,11 +149,13 @@ protected:
             json.WriteKey("total").WriteInt(total);
                 
             json.WriteKey("request");
-                json.BeginObject();
-                    json.WriteKey("event").WriteString(eventName);
-                    json.WriteKey("data").WriteString(partData);
-                    extraFunc(json);
-                json.EndObject();
+            
+            json.BeginObject();
+            json.WriteKey("event").WriteString(eventName);
+            json.WriteKey("data").WriteString(partData);
+            extraFunc(json);
+            json.EndObject();
+            
             json.EndObject();
         }
 

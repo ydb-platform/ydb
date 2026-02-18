@@ -18,26 +18,28 @@ namespace NKikimr::NColumnShard {
 
 class TTiersManager::TActor: public TActorBootstrapped<TTiersManager::TActor> {
 private:
-    enum EPrivateEvents {
-        EvSchemaSecretsResolved = EventSpaceBegin(TEvents::ES_PRIVATE),
-        EvPrivateEnd
-    };
+    struct TEvPrivate {
+        enum EEv {
+            EvSchemaSecretsResolved = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvEnd
+        };
 
-    class TEvSchemaSecretsResolved: public TEventLocal<TEvSchemaSecretsResolved, EvSchemaSecretsResolved> {
-    public:
-        NTiers::TExternalStorageId TierId;
-        NTiers::TTierConfig TierConfig;
-        NKqp::TEvDescribeSecretsResponse::TDescription Description;
+        static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
-        TEvSchemaSecretsResolved(
-            NTiers::TExternalStorageId tierId,
-            NTiers::TTierConfig tierConfig,
-            NKqp::TEvDescribeSecretsResponse::TDescription description)
-            : TierId(std::move(tierId))
-            , TierConfig(std::move(tierConfig))
-            , Description(std::move(description))
-        {
-        }
+        struct TEvSchemaSecretsResolved : TEventLocal<TEvSchemaSecretsResolved, EvSchemaSecretsResolved> {
+            NTiers::TExternalStorageId TierId;
+            NTiers::TTierConfig TierConfig;
+            NKqp::TEvDescribeSecretsResponse::TDescription Description;
+
+            TEvSchemaSecretsResolved(
+                NTiers::TExternalStorageId tierId,
+                NTiers::TTierConfig tierConfig,
+                NKqp::TEvDescribeSecretsResponse::TDescription description)
+                : TierId(std::move(tierId))
+                , TierConfig(std::move(tierConfig))
+                , Description(std::move(description))
+            {}
+        };
     };
 
     using IRetryPolicy = IRetryPolicy<const NTiers::TEvSchemeObjectResolutionFailed::EReason>;
@@ -76,7 +78,7 @@ private:
             hFunc(NTiers::TEvNotifySchemeObjectDeleted, Handle);
             hFunc(NTiers::TEvSchemeObjectResolutionFailed, Handle);
             hFunc(NTiers::TEvWatchSchemeObject, Handle);
-            hFunc(TEvSchemaSecretsResolved, Handle);
+            hFunc(TEvPrivate::TEvSchemaSecretsResolved, Handle);
             default:
                 break;
         }
@@ -138,11 +140,13 @@ private:
                                       selfId,
                                       tierIdCopy,
                                       tier](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
-                        actorSystem->Send(selfId, new TEvSchemaSecretsResolved(tierIdCopy, tier, result.GetValue()));
+                        actorSystem->Send(selfId, new TEvPrivate::TEvSchemaSecretsResolved(tierIdCopy, tier, result.GetValue()));
                     });
 
                     return;
                 }
+            } else {
+                AFL_WARN(NKikimrServices::TX_TIERING)("event", "unsupported_auth_for_tiering")("path", tierId.GetConfigPath())("identity_case", static_cast<int>(auth.identity_case()));
             }
 
             Owner->UpdateTierConfig(tier, tierId);
@@ -152,7 +156,7 @@ private:
         }
     }
 
-    void Handle(TEvSchemaSecretsResolved::TPtr& ev) {
+    void Handle(TEvPrivate::TEvSchemaSecretsResolved::TPtr& ev) {
         if (ev->Get()->Description.Status != Ydb::StatusIds::SUCCESS) {
             AFL_ERROR(NKikimrServices::TX_TIERING)(
                 "event", "cannot_read_schema_secrets")("tier", ev->Get()->TierId.GetConfigPath())(

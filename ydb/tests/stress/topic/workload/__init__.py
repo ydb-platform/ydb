@@ -136,6 +136,9 @@ class YdbTopicWorkload(WorkloadBase):
             'topic', 'create',
             f'--partitions-count={number_of_partitions_in_the_topic}',
             f'--partitions-per-tablet={number_of_partitions_per_tablet}',
+            '--auto-partitioning-strategy=up',                
+            '--auto-partitioning-stabilization-window-seconds=20',
+            '--auto-partitioning-up-utilization-percent=50',                                                                                                                           
             '--retention-period=2s',
             topic_name,
         ])

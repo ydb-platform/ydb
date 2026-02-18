@@ -110,12 +110,12 @@ private:
         using TSelf = TProducerRetryPolicy;
         using TPtr = std::shared_ptr<TSelf>;
 
-        TProducerRetryPolicy(TProducer* session);
+        TProducerRetryPolicy(TProducer* producer);
         ~TProducerRetryPolicy() = default;
         typename IRetryState::TPtr CreateRetryState() const override;
 
     private:
-        TProducer* Session;
+        TProducer* Producer;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -124,7 +124,7 @@ private:
     struct TEventsWorker;
 
     struct TSessionsWorker {
-        TSessionsWorker(TProducer* session);
+        TSessionsWorker(TProducer* producer);
         WrappedWriteSessionPtr GetWriteSession(std::uint32_t partition, bool directToPartition = true);
         void OnReadFromSession(WrappedWriteSessionPtr wrappedSession);
         void OnWriteToSession(WrappedWriteSessionPtr wrappedSession);
@@ -140,7 +140,7 @@ private:
 
         std::string GetProducerId(std::uint32_t partitionId);
 
-        TProducer* Session;
+        TProducer* Producer;
         std::set<IdleSessionPtr, TIdleSession::Comparator> IdlerSessions;
         using IdlerSessionsIterator = std::set<IdleSessionPtr, TIdleSession::Comparator>::iterator;
         std::unordered_map<std::uint32_t, IdlerSessionsIterator> IdlerSessionsIndex;
@@ -148,7 +148,7 @@ private:
     };
 
     struct TMessagesWorker {
-        TMessagesWorker(TProducer* session);
+        TMessagesWorker(TProducer* producer);
         
         void DoWork();
 
@@ -172,7 +172,7 @@ private:
         std::optional<TContinuationToken> GetContinuationToken(std::uint32_t partition);
         void RechoosePartitionIfNeeded(MessageIter message);
 
-        TProducer* Session;
+        TProducer* Producer;
 
         std::list<TMessageInfo> InFlightMessages;
         std::unordered_map<std::uint32_t, std::list<MessageIter>> InFlightMessagesIndex;
@@ -202,7 +202,7 @@ private:
         void HandleDescribeResult();
 
     public:
-        TSplittedPartitionWorker(TProducer* session, std::uint32_t partitionId);
+        TSplittedPartitionWorker(TProducer* producer, std::uint32_t partitionId);
         void DoWork();
         bool IsDone();
         bool IsInit();
@@ -210,7 +210,7 @@ private:
         std::string GetStateName() const;
             
     private:
-        TProducer* Session;
+        TProducer* Producer;
         NThreading::TFuture<TDescribeTopicResult> DescribeTopicFuture;
         EState State = EState::Init;
         std::uint32_t PartitionId;
@@ -230,7 +230,7 @@ private:
             Ack = 2,
         };
 
-        TEventsWorker(TProducer* session);
+        TEventsWorker(TProducer* producer);
         
         std::optional<NThreading::TPromise<void>> DoWork();
         NThreading::TFuture<void> WaitEvent();
@@ -255,7 +255,7 @@ private:
         std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block, const std::vector<EEventType>& eventTypes = {});
         EEventType GetEventType(const TWriteSessionEvent::TEvent& event);
 
-        TProducer* Session;
+        TProducer* Producer;
 
         std::unordered_set<std::uint32_t> ReadyFutures;
         std::unordered_map<std::uint32_t, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
@@ -283,10 +283,10 @@ private:
     };
 
     struct TBoundPartitionChooser : IPartitionChooser {
-        TBoundPartitionChooser(TProducer* session);
+        TBoundPartitionChooser(TProducer* producer);
         std::uint32_t ChoosePartition(const std::string_view key) override;
     private:
-        TProducer* Session;
+        TProducer* Producer;
     };
 
     struct THashPartitionChooser : IPartitionChooser {
@@ -311,7 +311,7 @@ private:
     };
 
     struct TMetrics {
-        TMetrics(TProducer* session);
+        TMetrics(TProducer* producer);
 
         TMetricGauge MainWorkerTimeMs;
         TMetricGauge CycleTimeMs;
@@ -321,7 +321,7 @@ private:
         TMetricGauge IncomingMessages;
         TMetricGauge OutgoingMessages;
         std::mutex Lock;
-        TProducer* Session;
+        TProducer* Producer;
 
         void AddMainWorkerTime(std::uint64_t ms);
         void AddCycleTime(std::uint64_t ms);

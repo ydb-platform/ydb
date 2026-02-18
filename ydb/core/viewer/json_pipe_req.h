@@ -379,7 +379,6 @@ protected:
     TString GetHTTPNOTFOUND(TString contentType = {}, TString response = {});
     TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {});
     TString GetHTTPFORBIDDEN(TString contentType = {}, TString response = {});
-    TString GetHTTPUNAUTHORIZED(TString contentType = {}, TString response = {});
     TString MakeForward(const std::vector<ui32>& nodes);
 
     void RequestDone(i32 requests = 1);

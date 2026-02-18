@@ -316,7 +316,6 @@ public:
     virtual TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPBADREQUEST(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPFORBIDDEN(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPUNAUTHORIZED(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPNOTFOUND(const TRequestState& request) = 0;
     virtual TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) = 0;

@@ -1121,14 +1121,7 @@ TString TViewerPipeClient::GetHTTPINTERNALERROR(TString contentType, TString res
 }
 
 TString TViewerPipeClient::GetHTTPFORBIDDEN(TString contentType, TString response) {
-    if (GetRequest().GetUserTokenObject().empty()) {
-        return Viewer->GetHTTPUNAUTHORIZED(GetRequest(), std::move(contentType), "Unauthorized");
-    }
     return Viewer->GetHTTPFORBIDDEN(GetRequest(), std::move(contentType), std::move(response));
-}
-
-TString TViewerPipeClient::GetHTTPUNAUTHORIZED(TString contentType, TString response) {
-    return Viewer->GetHTTPUNAUTHORIZED(GetRequest(), std::move(contentType), std::move(response));
 }
 
 TString TViewerPipeClient::MakeForward(const std::vector<ui32>& nodes) {

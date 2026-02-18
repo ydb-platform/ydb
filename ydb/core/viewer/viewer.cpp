@@ -243,7 +243,6 @@ public:
     TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPBADREQUEST(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPFORBIDDEN(const TRequestState& request, TString type, TString response) override;
-    TString GetHTTPUNAUTHORIZED(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPNOTFOUND(const TRequestState& request) override;
     TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) override;
     TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) override;
@@ -910,12 +909,10 @@ TString BuildHttpAuthErrorResponse(TViewer* viewer, const TRequestState& request
 } // namespace
 
 TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentType, TString response) {
-    return BuildHttpAuthErrorResponse(this, request, "403 Forbidden", std::move(contentType), std::move(response));
+    TStringBuf statusLine = request.GetUserTokenObject().empty() ? "401 Unauthorized" : "403 Forbidden";
+    return BuildHttpAuthErrorResponse(this, request, statusLine, std::move(contentType), std::move(response));
 }
 
-TString TViewer::GetHTTPUNAUTHORIZED(const TRequestState& request, TString contentType, TString response) {
-    return BuildHttpAuthErrorResponse(this, request, "401 Unauthorized", std::move(contentType), std::move(response));
-}
 
 TString TViewer::GetHTTPNOTFOUND(const TRequestState& request) {
     TStringBuilder res;

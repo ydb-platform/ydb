@@ -510,11 +510,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(3),
+                           {NLs::ChildrenCount(2),
                             NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(4)});
 
-        TLocalPathId movedTablePathId = GetNextLocalPathId(runtime, txId);
         {
             ++txId;
             auto first = DropTableRequest(txId,  "/MyRoot", "Dst");
@@ -535,7 +534,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
                            {NLs::IsTable,
-                            NLs::PathIdEqual(movedTablePathId),
+                            NLs::PathIdEqual(8),
                             NLs::PathVersionEqual(5),
                             NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
@@ -553,7 +552,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
+                           {NLs::ChildrenCount(1),
                             NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
@@ -579,7 +578,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         expectedDomainPaths += 5;
 
-        movedTablePathId = GetNextLocalPathId(runtime, txId);
         {
             ++txId;
             auto first = DropTableRequest(txId,  "/MyRoot", "Dst");
@@ -599,7 +597,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
                            {NLs::IsTable,
-                            NLs::PathIdEqual(movedTablePathId),
+                            NLs::PathIdEqual(18),
                             NLs::PathVersionEqual(5),
                             NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
@@ -617,7 +615,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
+                           {NLs::ChildrenCount(1),
                             NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
     }
@@ -675,11 +673,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         expectedDomainPaths += 5;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(3),
+                           {NLs::ChildrenCount(2),
                             NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(6)});
-
-        TLocalPathId movedTablePathId = GetNextLocalPathId(runtime, txId);
         {
             ++txId;
             auto first = DropTableRequest(txId, "/MyRoot", "Dst");
@@ -699,7 +695,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
                            {NLs::IsTable,
-                            NLs::PathIdEqual(movedTablePathId),
+                            NLs::PathIdEqual(12),
                             NLs::PathVersionEqual(5),
                             NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
@@ -723,7 +719,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::PathNotExist});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
+                           {NLs::ChildrenCount(1),
                             NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
     }

@@ -21,11 +21,13 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
 
         for (auto link : sublinks) {
             auto sublinkVar = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++), true);
+            // clang-format off
             auto member = Build<TCoMember>(Ctx, lambda.Pos())
                     .Struct(lambda.Args().Arg(0).Ptr())
                     .Name<TCoAtom>().Value(sublinkVar.GetFullName()).Build()
                     .Done().Ptr();
             replaceMap[link.Get()] = member;
+            // clang-format on
             auto subplan = ExprNodeToOperator(TKqpSublinkBase(link).Subquery().Ptr());
             TSubplanEntry entry;
             if (TKqpExprSublink::Match(link.Get())) {
@@ -49,14 +51,16 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
         TExprNode::TPtr newLambdaBody;
         RemapExpr(lambdaBody, newLambdaBody, replaceMap, Ctx, settings);
 
+        // clang-format off
         return Build<TCoLambda>(Ctx, lambda.Pos())
             .Args(lambda.Args())
             .Body(newLambdaBody)
             .Done().Ptr();
+        // clang-format on
     }
 }
 
-std::unique_ptr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
+TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto kqpOpRoot = TKqpOpRoot(node);
     auto rootInput = ExprNodeToOperator(kqpOpRoot.Input().Ptr());
     TVector<TString> columnOrder;
@@ -65,7 +69,7 @@ std::unique_ptr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
         columnOrder.push_back(column.StringValue());
     }
 
-    auto opRoot = std::make_unique<TOpRoot>(rootInput, node->Pos(), columnOrder);
+    auto opRoot = MakeIntrusive<TOpRoot>(rootInput, node->Pos(), columnOrder);
     opRoot->Node = node;
     opRoot->PlanProps = PlanProps;
     opRoot->PlanProps.PgSyntax = std::stoi(kqpOpRoot.PgSyntax().StringValue());
@@ -80,16 +84,16 @@ std::unique_ptr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
    return opRoot;
 }
 
-std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node) {
     if (Converted.contains(node.Get())) {
         return Converted.at(node.Get());
     }
 
-    std::shared_ptr<IOperator> result;
+    TIntrusivePtr<IOperator> result;
     if (NYql::NNodes::TKqpOpEmptySource::Match(node.Get())) {
-        result = std::make_shared<TOpEmptySource>(node->Pos());
+        result = MakeIntrusive<TOpEmptySource>(node->Pos());
     } else if (NYql::NNodes::TKqpOpRead::Match(node.Get())) {
-        result = std::make_shared<TOpRead>(node);
+        result = MakeIntrusive<TOpRead>(node);
     } else if (NYql::NNodes::TKqpOpMap::Match(node.Get())) {
         result = ConvertTKqpOpMap(node);
     } else if (NYql::NNodes::TKqpInfuseDependents::Match(node.Get())) {
@@ -150,7 +154,7 @@ TExprNode::TPtr GetMapElementLambda(TExprNode::TPtr lambdaPtr, const bool forceO
     return lambdaPtr;
 }
 
-std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     auto opMap = TKqpOpMap(node);
     auto input = ExprNodeToOperator(opMap.Input().Ptr());
     auto project = opMap.Project().IsValid();
@@ -179,10 +183,10 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
             }
         }
     }
-    return std::make_shared<TOpMap>(input, node->Pos(), mapElements, project, ordered);
+    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements, project, ordered);
 }
 
-std::shared_ptr<IOperator> PlanConverter::ConvertTKqpInfuseDependents(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpInfuseDependents(TExprNode::TPtr node) {
     auto opInfuseDeps = TKqpInfuseDependents(node);
     auto input = ExprNodeToOperator(opInfuseDeps.Input().Ptr());
     TVector<TInfoUnit> columns;
@@ -197,19 +201,19 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpInfuseDependents(TExprNode:
         types.push_back(type->Cast<TTypeExprType>()->GetType());
     }
 
-    return std::make_shared<TOpAddDependencies>(input, node->Pos(), columns, types);
+    return MakeIntrusive<TOpAddDependencies>(input, node->Pos(), columns, types);
 }
 
 
-std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node) {
     auto opFilter = TKqpOpFilter(node);
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
     auto lambda = opFilter.Lambda().Ptr();
     auto newLambda = RemoveSubplans(lambda);
-    return std::make_shared<TOpFilter>(input, node->Pos(), TExpression(newLambda, &Ctx));
+    return MakeIntrusive<TOpFilter>(input, node->Pos(), TExpression(newLambda, &Ctx));
 }
 
-std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) {
     auto opJoin = TKqpOpJoin(node);
 
     auto leftInput = ExprNodeToOperator(opJoin.LeftInput().Ptr());
@@ -223,25 +227,25 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node
 
         joinKeys.push_back(std::make_pair(leftKey, rightKey));
     }
-    return std::make_shared<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys);
+    return MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys);
 }
 
-std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr node) {
     auto opUnionAll = TKqpOpUnionAll(node);
     auto leftInput = ExprNodeToOperator(opUnionAll.LeftInput().Ptr());
     auto rightInput = ExprNodeToOperator(opUnionAll.RightInput().Ptr());
 
-    return std::make_shared<TOpUnionAll>(leftInput, rightInput, node->Pos());
+    return MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos());
 }
 
-std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node) {
     auto opLimit = TKqpOpLimit(node);
     auto input = ExprNodeToOperator(opLimit.Input().Ptr());
     TExpression count(opLimit.Count().Ptr(), &Ctx);
-    return std::make_shared<TOpLimit>(input, node->Pos(), count);
+    return MakeIntrusive<TOpLimit>(input, node->Pos(), count);
 }
 
-std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {
     auto opProject = TKqpOpProject(node);
     auto input = ExprNodeToOperator(opProject.Input().Ptr());
 
@@ -249,10 +253,10 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr n
     for (const auto& p : opProject.ProjectList()) {
         projectList.push_back(TInfoUnit(p.StringValue()));
     }
-    return std::make_shared<TOpProject>(input, node->Pos(), projectList);
+    return MakeIntrusive<TOpProject>(input, node->Pos(), projectList);
 }
 
-std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node) {
     auto opSort = TKqpOpSort(node);
     auto input = ExprNodeToOperator(opSort.Input().Ptr());
     auto output = input;
@@ -274,14 +278,14 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
     }
 
     if (mapElements.size()) {
-        output = std::make_shared<TOpMap>(input, input->Pos, mapElements, false);
+        output = MakeIntrusive<TOpMap>(input, input->Pos, mapElements, false);
     }
 
-    output = std::make_shared<TOpSort>(output, node->Pos(), sortElements);
+    output = MakeIntrusive<TOpSort>(output, node->Pos(), sortElements);
     return output;
 }
 
-std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr node) {
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr node) {
     auto opAggregate = TKqpOpAggregate(node);
     auto input = ExprNodeToOperator(opAggregate.Input().Ptr());
 
@@ -300,7 +304,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
     }
 
     const bool distinctAll = opAggregate.DistinctAll() == "True" ? true : false;
-    return std::make_shared<TOpAggregate>(input, opAggTraitsList, keyColumns, EAggregationPhase::Final, distinctAll, node->Pos());
+    return MakeIntrusive<TOpAggregate>(input, opAggTraitsList, keyColumns, EAggregationPhase::Final, distinctAll, node->Pos());
 }
 
 } // namespace NKqp

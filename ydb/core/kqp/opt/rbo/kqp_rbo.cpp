@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool ISimplifiedRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     auto output = SimpleMatchAndApply(input, ctx, props);
     if (input != output) {

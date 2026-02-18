@@ -11,7 +11,7 @@ namespace NKqp {
 using namespace NYql;
 
 struct TIOperatorSharedPtrHash {
-    size_t operator()(const std::shared_ptr<IOperator> &p) const { return p ? THash<int64_t>{}((int64_t)p.get()) : 0; }
+    size_t operator()(const TIntrusivePtr<IOperator> &p) const { return p ? THash<int64_t>{}((int64_t)p.get()) : 0; }
 };
 
 class PlanConverter {
@@ -19,24 +19,24 @@ class PlanConverter {
     PlanConverter(TTypeAnnotationContext &typeCtx, TExprContext &ctx) : TypeCtx(typeCtx), Ctx(ctx) {}
 
     // Convert KqpOpRoot to OpRoot.
-    std::unique_ptr<TOpRoot> ConvertRoot(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ExprNodeToOperator(TExprNode::TPtr node);
+    TIntrusivePtr<TOpRoot> ConvertRoot(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ExprNodeToOperator(TExprNode::TPtr node);
 
-    std::shared_ptr<IOperator> ConvertTKqpOpMap(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpFilter(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpJoin(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpLimit(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpProject(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
-    std::shared_ptr<IOperator> ConvertTKqpInfuseDependents(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpMap(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpFilter(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpJoin(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpLimit(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpProject(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpInfuseDependents(TExprNode::TPtr node);
 
     TExprNode::TPtr RemoveSubplans(TExprNode::TPtr lambda);
 
     TTypeAnnotationContext &TypeCtx;
     TExprContext &Ctx;
-    THashMap<TExprNode*, std::shared_ptr<IOperator>> Converted;
+    THashMap<TExprNode*, TIntrusivePtr<IOperator>> Converted;
     TPlanProps PlanProps;
 
 };

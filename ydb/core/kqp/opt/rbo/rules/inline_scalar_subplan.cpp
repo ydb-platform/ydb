@@ -7,7 +7,7 @@ namespace NKqp {
 // or into a left join for correlated (assuming at most one tuple in the output of each subquery)
 // FIXME: Need to do correct general case decorellation in the future
 
-bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     auto subplanIUs = input->GetSubplanIUs(props);
     TVector<TInfoUnit> scalarIUs;
     for (const auto& iu : subplanIUs) {
@@ -23,12 +23,12 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
     }
 
     auto scalarIU = scalarIUs[0];
-    auto subplan = props.Subplans.PlanMap.at(scalarIU).Plan;
+    auto subplan = CastOperator<IOperator>(props.Subplans.PlanMap.at(scalarIU).Plan);
     auto subplanResIU = subplan->GetOutputIUs()[0];
     auto subplanResType = subplan->GetIUType(subplanResIU);
 
-    auto unaryOp = std::dynamic_pointer_cast<IUnaryOperator>(input);
-    Y_ENSURE(unaryOp);
+    Y_ENSURE(MatchOperator<IUnaryOperator>(input));
+    auto unaryOp = CastOperator<IUnaryOperator>(input);
 
     auto child = unaryOp->GetInput();
 
@@ -77,40 +77,40 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
         }
 
         if (conflictsWithLeft) {
-            uncorrSubplan = std::make_shared<TOpMap>(uncorrSubplan, uncorrSubplan->Pos, mappings, true);
+            uncorrSubplan = MakeIntrusive<TOpMap>(uncorrSubplan, uncorrSubplan->Pos, mappings, true);
         }
 
-        auto leftJoin = std::make_shared<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys);
+        auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys);
 
         TVector<TMapElement> renameElements;
         renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
-        auto rename = std::make_shared<TOpMap>(leftJoin, subplan->Pos, renameElements, false);
+        auto rename = MakeIntrusive<TOpMap>(leftJoin, subplan->Pos, renameElements, false);
         unaryOp->SetInput(rename);
     }
 
     // Otherwise we assume an uncorrelated supbplan
     // Here we don't assume at most one tuple from the subplan
     else {
-        auto emptySource = std::make_shared<TOpEmptySource>(subplan->Pos);
+        auto emptySource = MakeIntrusive<TOpEmptySource>(subplan->Pos);
 
         TVector<TMapElement> mapElements;
 
         // FIXME: This works only for postgres types, because they are null-compatible
         // For YQL types we will need to handle optionality
         mapElements.emplace_back(scalarIU, MakeNothing(subplan->Pos, subplanResType, &ctx.ExprCtx));
-        auto map = std::make_shared<TOpMap>(emptySource, subplan->Pos, mapElements, true);
+        auto map = MakeIntrusive<TOpMap>(emptySource, subplan->Pos, mapElements, true);
 
         TVector<TMapElement> renameElements;
         renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
-        auto rename = std::make_shared<TOpMap>(subplan, subplan->Pos, renameElements, true);
+        auto rename = MakeIntrusive<TOpMap>(subplan, subplan->Pos, renameElements, true);
         rename->Props.EnsureAtMostOne = true;
 
-        auto unionAll = std::make_shared<TOpUnionAll>(rename, map, subplan->Pos, true);
+        auto unionAll = MakeIntrusive<TOpUnionAll>(rename, map, subplan->Pos, true);
 
-        auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx));
+        auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx));
     
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-        auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
+        auto cross = MakeIntrusive<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
         unaryOp->SetInput(cross);
     }
 

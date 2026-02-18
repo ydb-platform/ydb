@@ -6,7 +6,7 @@ namespace NKqp {
 // Pull up correlated filter inside a subplan
 // We match the parent of the filter, currently we support only Map and Aggregate
 
-bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -69,12 +69,12 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     }
 
     // Split the predicate into a remaining and new part with only dependent conditions
-    std::shared_ptr<IOperator> remainingFilter = deps->GetInput();
+    TIntrusivePtr<IOperator> remainingFilter = deps->GetInput();
     if (!otherFilters.empty() || !remainderSubset.empty()) {
         auto newConjuncts = otherFilters;
         newConjuncts.insert(newConjuncts.end(), remainderSubset.begin(), remainderSubset.end());
         auto expr = MakeConjunction(newConjuncts, props.PgSyntax);
-        remainingFilter = std::make_shared<TOpFilter>(deps->GetInput(), remainingFilter->Pos, expr);
+        remainingFilter = MakeIntrusive<TOpFilter>(deps->GetInput(), remainingFilter->Pos, expr);
     }
 
     auto newExpr = MakeConjunction(dependentSubset, props.PgSyntax);

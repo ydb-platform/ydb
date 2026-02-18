@@ -10,7 +10,7 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalJoinBuilder: public TPhysicalBinaryOpBuilder {
 public:
-    TPhysicalJoinBuilder(std::shared_ptr<TOpJoin> join, TExprContext& ctx, TPositionHandle pos)
+    TPhysicalJoinBuilder(TIntrusivePtr<TOpJoin> join, TExprContext& ctx, TPositionHandle pos)
         : TPhysicalBinaryOpBuilder(ctx, pos)
         , Join(join) {
     }
@@ -22,5 +22,5 @@ private:
     TExprNode::TPtr BuildCrossJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput);
     TString GetValidJoinKind(const TString& joinKind);
 
-    std::shared_ptr<TOpJoin> Join;
+    TIntrusivePtr<TOpJoin> Join;
 };

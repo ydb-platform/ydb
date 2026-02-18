@@ -89,7 +89,7 @@ void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
     // Actual map used in the optimizer
     TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> globalExtractedExprs;
-    TVector<std::shared_ptr<IOperator>> affectedOps;
+    TVector<TIntrusivePtr<IOperator>> affectedOps;
 
     for (auto it : root) {
         if (!it.Current->GetExpressions().empty()) {

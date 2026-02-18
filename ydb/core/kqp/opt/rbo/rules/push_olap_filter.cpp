@@ -6,7 +6,7 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-bool IsSuitableToPushPredicateToColumnTables(const std::shared_ptr<IOperator>& input) {
+bool IsSuitableToPushPredicateToColumnTables(const TIntrusivePtr<IOperator>& input) {
     if (input->Kind != EOperator::Filter) {
         return false;
     }
@@ -21,7 +21,7 @@ bool IsSuitableToPushPredicateToColumnTables(const std::shared_ptr<IOperator>& i
 namespace NKikimr {
 namespace NKqp {
 
-std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
     if (!ctx.KqpCtx.Config->HasOptEnableOlapPushdown()) {
         return input;
@@ -94,7 +94,7 @@ std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const std::s
     // clang-format on
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newOlapFilterLambda, ctx.ExprCtx);
 
-    return std::make_shared<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(),
+    return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(),
                                      read->Pos);
 }
 }

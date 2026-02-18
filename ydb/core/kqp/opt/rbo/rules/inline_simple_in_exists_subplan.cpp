@@ -3,7 +3,7 @@
 namespace NKikimr {
 namespace NKqp {
     
-std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Filter || props.PgSyntax) {
         return input;
     }
@@ -48,17 +48,18 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         return input;
     }
 
-    std::shared_ptr<IOperator> join;
+    TIntrusivePtr<IOperator> join;
     TVector<std::pair<TInfoUnit, TInfoUnit>> extraJoinKeys;
-    std::shared_ptr<IOperator> uncorrSubplan = subplanEntry.Plan;
+    auto uncorrSubplan = CastOperator<IOperator>(subplanEntry.Plan);
+    const auto subPlanKind = uncorrSubplan->Kind;
 
-    if (subplanEntry.Plan->Kind == EOperator::Filter && CastOperator<TOpFilter>(subplanEntry.Plan)->GetInput()->Kind == EOperator::AddDependencies) {
+    if (subPlanKind == EOperator::Filter && CastOperator<TOpFilter>(uncorrSubplan)->GetInput()->Kind == EOperator::AddDependencies) {
         auto subplanFilter = CastOperator<TOpFilter>(subplanEntry.Plan);
         auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         uncorrSubplan = addDeps->GetInput();
         auto subplanConjuncts = subplanFilter->FilterExpr.SplitConjunct();
 
-        for (const auto & conj : subplanConjuncts) {
+        for (const auto& conj : subplanConjuncts) {
             if (!conj.MaybeJoinCondition()) {
                 Y_ENSURE(false, "Expected a filter with only join conditions");
             }
@@ -71,7 +72,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
                 extraJoinKeys.push_back(std::make_pair(jc.GetRightIU(), jc.GetLeftIU()));
             } else {
                 Y_ENSURE(false, "Correlated filter missing join condition");
-            }   
+            }
         }
     }
 
@@ -90,34 +91,34 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
 
         joinKeys.insert(joinKeys.begin(), extraJoinKeys.begin(), extraJoinKeys.end());
 
-        join = std::make_shared<TOpJoin>(leftJoinInput, uncorrSubplan, input->Pos, joinKind, joinKeys);
+        join = MakeIntrusive<TOpJoin>(leftJoinInput, uncorrSubplan, input->Pos, joinKind, joinKeys);
         conjuncts.erase(conjuncts.begin() + conjunctIdx);
     }
     // EXISTS and NOT EXISTS
     else {
-        auto limit = std::make_shared<TOpLimit>(uncorrSubplan, filter->Pos, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx));
+        auto limit = MakeIntrusive<TOpLimit>(uncorrSubplan, filter->Pos, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx));
 
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
         TVector<TMapElement> countMapElements;
         auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
         countMapElements.emplace_back(countResult, zero);
-        auto countMap = std::make_shared<TOpMap>(limit, filter->Pos, countMapElements, true);
+        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements, true);
 
         TOpAggregationTraits aggFunction(countResult, "count", countResult);
         TVector<TOpAggregationTraits> aggs = {aggFunction};
         TVector<TInfoUnit> keyColumns;
 
-        auto agg = std::make_shared<TOpAggregate>(countMap, aggs, keyColumns, EAggregationPhase::Final, false, filter->Pos);
+        auto agg = MakeIntrusive<TOpAggregate>(countMap, aggs, keyColumns, EAggregationPhase::Final, false, filter->Pos);
         const TString compareCallable = negated ? "==" : "!=";
 
         auto comparePredicate = MakeBinaryPredicate(compareCallable, MakeColumnAccess(countResult, filter->Pos, &ctx.ExprCtx, &props), zero);
         TVector<TMapElement> mapElements;
         auto compareResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
         mapElements.emplace_back(compareResult, comparePredicate);
-        auto map = std::make_shared<TOpMap>(agg, filter->Pos, mapElements, true);
+        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements, true);
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-        join = std::make_shared<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys);
+        join = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys);
 
         conjuncts[conjunctIdx] = MakeColumnAccess(compareResult, filter->Pos, &ctx.ExprCtx, &props);
     }
@@ -129,7 +130,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     // Otherwise, we need to pack the remaining conjuncts back into the filter
-    return std::make_shared<TOpFilter>(join, filter->Pos, MakeConjunction(conjuncts, props.PgSyntax));
+    return MakeIntrusive<TOpFilter>(join, filter->Pos, MakeConjunction(conjuncts, props.PgSyntax));
 }
 }
 }

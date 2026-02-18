@@ -180,7 +180,7 @@ bool TExpression::IsColumnAccess() const {
     return body->IsCallable("Member");
 }
 
- bool TExpression::IsSingleCallable(THashSet<TString> allowedCallables) const {
+ bool TExpression::IsSingleCallable(const THashSet<TString>& allowedCallables) const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
      auto body = Node->ChildPtr(1);
     if (body->IsCallable(allowedCallables) && body->ChildrenSize() == 1 && body->Child(0)->IsCallable("Member")) {
@@ -400,7 +400,7 @@ bool TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<
     return expressionExtracted;
 }
 
-TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props) {
+TExpression MakeColumnAccess(const TInfoUnit& column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props) {
     auto lambda_arg = Build<TCoArgument>(*ctx, pos).Name("arg").Done().Ptr();
 
     // clang-format off
@@ -416,7 +416,7 @@ TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext
     return TExpression(lambda, ctx, props);
 }
 
-TExpression MakeConstant(TString type, TString value, TPositionHandle pos, TExprContext* ctx) {
+TExpression MakeConstant(const TString& type, const TString& value, TPositionHandle pos, TExprContext* ctx) {
      auto constExpr = ctx->NewCallable(pos, type, {ctx->NewAtom(pos, value)});
      return TExpression(constExpr, ctx);
 }
@@ -434,7 +434,7 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     TExprContext* ctx;
     TPlanProps* props;
 
-    for (auto & expr : vec) {
+    for (auto& expr : vec) {
         if (expr.Ctx) {
             ctx = expr.Ctx;
         }
@@ -447,10 +447,11 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     Y_ENSURE(props);
     auto pos = vec[0].Node->Pos();
 
-    if (vec.size()==1) {
+    if (vec.size() == 1) {
         return TExpression(vec[0].Node, ctx, props);
     }
 
+    // clang-format off
     auto lambda_arg = Build<TCoArgument>(*ctx, pos).Name("arg").Done().Ptr();
     TVector<TExprNode::TPtr> conjuncts;
 
@@ -471,11 +472,12 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
         .Args({lambda_arg})
         .Body(conjunction)
         .Done().Ptr();
+    // clang-format on
 
     return TExpression(lambda, ctx, props);
 }
 
-TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const TExpression& right) {
+TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right) {
     // Fetch context and plan properties from one of the arguments
     TExprContext* ctx;
     TPlanProps* props;
@@ -501,7 +503,6 @@ TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const
     auto lambda = ctx->NewCallable(pos, callable, {left.GetExpressionBody(), right.GetExpressionBody()});
     return TExpression(lambda, ctx, props);
 }
-
 
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
     if (node->IsCallable("Member")) {

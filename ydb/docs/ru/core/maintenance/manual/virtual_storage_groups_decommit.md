@@ -137,7 +137,7 @@
 - CLI
   1. Выполните команду получения списка групп хранения
 
-  ```bash
+   ```bash
   ydb-dstool -e <cluster-endpoint> \
     --ca-file <path-to-ca-cert> \
     --token-file ~/ydb_token \

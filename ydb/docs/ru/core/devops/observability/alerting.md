@@ -49,6 +49,7 @@
 
 {% endnote %}
 
+{% raw %}
 ```yaml
 - alert: YDBExecPoolHighUtilization
   expr: |
@@ -78,6 +79,7 @@
       - ExecPool: {{ $labels.execpool }}
       - Current utilization: {{ $value | humanizePercentage }}
 ```
+{% endraw %}
 
 **Пример сработавшего алерта:**
 
@@ -88,6 +90,7 @@
 **Описание:** Правило отслеживает ошибки аутентификации в {{ ydb-short-name }}. Срабатывает при появлении более 2 ошибок за период `for`. Это может означать, что кто-то неправильно вводит пароль, есть проблемы с настройками безопасности или что-то не так с конфигурацией системы.
 **Что делать:** Искать в [логах](./logging.md) ошибки аутентификации и разбираться в причинах.
 
+{% raw %}
 ```yaml
 - alert: YDBAuthTicketErrors
   expr: auth_TicketsErrors > 2
@@ -106,6 +109,7 @@
       - Instance: {{ $labels.instance }}
       - Host: {{ $labels.host }}
 ```
+{% endraw %}
 
 **Пример сработавшего алерта:**
 
@@ -118,6 +122,7 @@
 
 #### Warning Storage Usage (80%)
 
+{% raw %}
 ```yaml
 - alert: YDBStorageUsageWarning
   expr: |
@@ -139,9 +144,11 @@
       - Threshold: 80%
       - Duration: more than 5 minutes
 ```
+{% endraw %}
 
 #### Critical Storage Usage (90%)
 
+{% raw %}
 ```yaml
 - alert: YDBStorageUsageCritical
   expr: |
@@ -163,6 +170,7 @@
       - Threshold: 90%
       - Duration: more than 5 minutes
 ```
+{% endraw %}
 
 **Пример сработавшего алерта:**
 

@@ -7,10 +7,7 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 ## Numeric types {#numeric}
 
 #|
-|| Type |
-Description |
-Notes
-    ||
+|| Type | Description | Notes ||
 || `Bool` |
 Boolean value |
     ||

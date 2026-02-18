@@ -119,6 +119,7 @@ public:
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
         GetSettings().SetEnableRealSystemViewPaths(enableRealSystemViewPaths);
+        GetSettings().SetEnableMetadataProvider(false);
 
         Server = new Tests::TServer(Settings);
 

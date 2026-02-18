@@ -315,7 +315,6 @@ private:
             buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
             break;
         }
-        };
 
         buildInfo.IndexName = index.name();
         buildInfo.IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());

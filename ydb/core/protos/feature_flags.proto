@@ -254,4 +254,6 @@ message TFeatureFlags {
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
+    optional bool EnableColumnshardBloomFilter = 230 [default = false];
+    optional bool EnableColumnshardBloomNgramFilter = 231 [default = false];
 }

@@ -462,7 +462,8 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         return false;
     }
 
-    for (const auto& name : metadata.ColumnOrder) {
+    ui32 nextColumnId = 1;
+    for (auto&& name : metadata.ColumnOrder) {
         auto columnIt = metadata.Columns.find(name);
         Y_ENSURE(columnIt != metadata.Columns.end());
 
@@ -479,6 +480,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
 
         NKikimrSchemeOp::TOlapColumnDescription& columnDesc = *schema.AddColumns();
+        columnDesc.SetId(nextColumnId++);
         columnDesc.SetName(columnIt->second.Name);
         columnDesc.SetType(columnIt->second.Type);
         columnDesc.SetNotNull(columnIt->second.NotNull);
@@ -493,9 +495,11 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
     }
 
-    for (const auto& keyColumn : metadata.KeyColumnNames) {
+    for (auto&& keyColumn : metadata.KeyColumnNames) {
         schema.AddKeyColumnNames(keyColumn);
     }
+
+    schema.SetNextColumnId(nextColumnId);    
     return true;
 }
 
@@ -554,6 +558,72 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
         if (inputSettings.ColumnUnit) {
             resultSettings.MutableEnabled()->SetColumnUnit(static_cast<NKikimrSchemeOp::TTTLSettings::EUnit>(*inputSettings.ColumnUnit));
+        }
+    }
+
+    if (auto&& index : metadata->Indexes) {
+        auto* upsert = tableDesc.MutableSchema()->AddIndexes();
+        upsert->SetName(index.Name);
+        THashMap<TString, ui32> columnIdsByName;
+        for (auto&& column : tableDesc.GetSchema().GetColumns()) {
+            if (column.HasId()) {
+                columnIdsByName.emplace(column.GetName(), column.GetId());
+            }
+        }
+
+        switch (index.Type) {
+            case TIndexDescription::EType::LocalBloomFilter: {
+                if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Local bloom index requires exactly one index column and does not support data columns";
+                    return false;
+                }
+
+                upsert->SetClassName("BLOOM_FILTER");
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
+                if (columnIdIt == columnIdsByName.end()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Unknown index column '" << index.KeyColumns.front() << "' for local bloom index";
+                    return false;
+                }
+
+                bloom->AddColumnIds(columnIdIt->second);
+                const auto& settings = std::get<TIndexDescription::TLocalBloomFilterDescription>(index.SpecializedIndexDescription);
+                if (settings.FalsePositiveProbability) {
+                    bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
+                }
+
+                break;
+            }
+            case TIndexDescription::EType::LocalBloomNgramFilter: {
+                if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Local bloom ngram index requires exactly one index column and does not support data columns";
+                    return false;
+                }
+
+                upsert->SetClassName("BLOOM_NGRAMM_FILTER");
+                const auto& settings = std::get<TIndexDescription::TLocalBloomNgramFilterDescription>(index.SpecializedIndexDescription);
+                auto* ngram = upsert->MutableBloomNGrammFilter();
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
+                if (columnIdIt == columnIdsByName.end()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Unknown index column '" << index.KeyColumns.front() << "' for local bloom ngram index";
+                    return false;
+                }
+
+                ngram->SetColumnId(columnIdIt->second);
+                ngram->SetNGrammSize(settings.NgramSize);
+                ngram->SetHashesCount(settings.HashesCount);
+                ngram->SetFilterSizeBytes(settings.FilterSizeBytes);
+                ngram->SetRecordsCount(settings.RecordsCount);
+                ngram->SetCaseSensitive(settings.CaseSensitive);
+                break;
+            }
+            default:
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unsupported index type for column table create: " << static_cast<ui32>(index.Type);
+                return false;
         }
     }
 
@@ -919,6 +989,10 @@ public:
                             case TIndexDescription::EType::GlobalFulltextRelevance:
                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
+                            case TIndexDescription::EType::LocalBloomFilter:
+                            case TIndexDescription::EType::LocalBloomNgramFilter:
+                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom indexes are supported inly for column store tables"));
+                                return;
                         }
                     }
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {

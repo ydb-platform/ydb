@@ -322,6 +322,18 @@ message GlobalFulltextRelevanceIndex {
     FulltextIndexSettings fulltext_settings = 2;
 }
 
+message LocalBloomFilter {
+    optional double false_positive_probability = 1;
+}
+
+message LocalBloomNgramFilter {
+    uint32 ngram_size = 1;
+    uint32 hashes_count = 2;
+    uint32 filter_size_bytes = 3;
+    uint32 records_count = 4;
+    bool case_sensetive = 5;
+}
+
 // Represent table index
 message TableIndex {
     // Name of index
@@ -336,6 +348,8 @@ message TableIndex {
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
        GlobalFulltextPlainIndex global_fulltext_plain_index = 8;
        GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 9;
+       LocalBloomFilter local_bloom_filter = 10;
+       LocalBloomNgramFilter local_bloom_ngram_filter = 11;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -362,6 +376,8 @@ message TableIndexDescription {
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
        GlobalFulltextPlainIndex global_fulltext_plain_index = 10;
        GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 11;
+       LocalBloomFilter local_bloom_filter = 12;
+       LocalBloomNgramFilter local_bloom_ngram_filter = 13;
     }
     Status status = 4;
     // list of columns content to be copied in to index table

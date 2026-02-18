@@ -946,6 +946,87 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             }
         } else if (req->has_drop_ttl_settings()) {
             alterColumnTable->MutableAlterTtlSettings()->MutableDisabled();
+        } else if (OpType == EAlterOperationKind::AddIndex) {
+            if (req->add_indexes_size() != 1) {
+                status = Ydb::StatusIds::UNSUPPORTED;
+                error = "Only one index can be added by one operation";
+                return false;
+            }
+
+            const auto& index req->add_indexes(0);
+            if (index.name().empty()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Index must have a name";
+                return false;
+            }
+
+            if (index.index_columns_size() != 1) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Only one index column is supported for local bloom indexes";
+                return false;
+            }
+
+            if (!index.data_columns().empty()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Data columns aren't supported for local bloom indexes";
+                return false;
+            }
+
+            auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
+            alterColumnTable->SetName(name);
+            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+            auto* upsert = alterColumnTable->MutableAlterSchema()->AddUpsertIndexes();
+            upsert->SetName(index.name());
+
+            switch (index.type_case()) {
+                case Ydb::Table::TableIndex::kLocalBloomFilter: {
+                    if (!AppData()->FeatureFlags.GetEnableColumnshardBloomFilter()) {
+                        status = Ydb::StatusIds::UNSUPPORTED;
+                        error = "Local bloom filter index support is disabled";
+                        return false;
+                    }
+
+                    upsert->SetClassName("BLOOM_FILTER");
+                    auto* bloom = upsert->MutableBloomFilter();
+                    if (index.local_bloom_filter().has_false_positive_probability()) {
+                        bloom->SetFalsePositiveProbability(index.local_bloom_filter().false_positive_probability());
+                    }
+
+                    bloom->AddColumnNames(index.index_columns(0));
+                    break;
+                }
+                case Ydb::Table::TableIndex::kLocalBloomNgramFilter: {
+                    if (!AppData()->FeatureFlags.GetEnableColumnshardBloomNgramFilter()) {
+                        status = Ydb::StatusIds::UNSUPPORTED;
+                        error = "Local bloom ngram filter index support is disabled";
+                        return false;
+                    }
+
+                    upsert->SetClassName("BLOOM_NGRAMM_FILTER");
+                    auto* ngram = upsert->MutableBloomNGrammFilter();
+                    ngram->SetNGrammSize(index.local_bloom_ngram_filter().ngram_size());
+                    ngram->SetHashesCount(index.local_bloom_ngram_filter().hashes_count());
+                    ngram->SetFilterSizeBytes(index.local_bloom_ngram_filter().filter_size_bytes());
+                    ngram->SetRecordsCount(index.local_bloom_ngram_filter().records_count());
+                    ngram->SetCaseSensitive(index.local_bloom_ngram_filter().case_sensitive());
+                    ngram->SetColumnName(index.index_columns(0));
+                    break;
+                }
+                default:
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Only local bloom indexes are supported for column tables";
+                    return false;
+            }
+        } else if (OpType == EAlterOperationKind::DropIndex) {
+            if (req->drop_indexes_size() != 1) {
+                status = Ydb::StatusIds::UNSUPPORTED;
+                error = "Only one index can be removed by one operation";
+                return false;
+            }
+            auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
+            alterColumnTable->SetName(name);
+            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+            alterColumnTable->MutableAlterSchema()->AddDropIndexes(req->drop_indexes(0));
         }
     }
 

@@ -68,6 +68,18 @@ struct TKikimrQueryLimits {
 };
 
 struct TIndexDescription {
+    struct TLocalBloomFilterDescription {
+        std::optional<double> FalsePositiveProbability;
+    };
+
+    struct TLocalBloomNgramFilterDescription {
+        ui32 NgramSize = 0;
+        ui32 HashesCount = 0;
+        ui32 FilterSizeBytes = 0;
+        ui32 RecordsCount = 0;
+        bool CaseSensetive = true;
+    };
+
     enum class EType : ui32 {
         GlobalSync = 0,
         GlobalAsync = 1,
@@ -75,6 +87,8 @@ struct TIndexDescription {
         GlobalSyncVectorKMeansTree = 3,
         GlobalFulltextPlain = 4,
         GlobalFulltextRelevance = 5,
+        LocalBloomFilter = 6,
+        LocalBloomNgramFilter = 7,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -94,8 +108,14 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
-    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrSchemeOp::TFulltextIndexDescription>;
-    TSpecializedIndexDescription SpecializedIndexDescription;
+    using TSpecializedIndexDescription = std::variant<
+        std::monostate,
+        NKikimrKqp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::TFulltextIndexDescription,
+        TLocalBloomFilterDescription,
+        TLocalBloomNgramFilterDescription>;
+
+        TSpecializedIndexDescription SpecializedIndexDescription;
 
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
         EType type, EIndexState state, ui64 schemaVersion, ui64 localPathId, ui64 pathOwnerId,
@@ -169,6 +189,12 @@ struct TIndexDescription {
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
                 SpecializedIndexDescription = message->GetFulltextIndexDescription();
+                break;
+            case EType::LocalBloomFilter:
+                SpecializedIndexDescription = TLocalBloomFilterDescription{};
+                break;
+            case EType::LocalBloomNgramFilter:
+                SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
                 break;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(Type));
@@ -247,6 +273,12 @@ struct TIndexDescription {
             case EType::GlobalFulltextRelevance:
                 *message->MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
                 break;
+            case EType::LocalBloomFilter:
+                Y_ASSERT(std::holds_alternative<TLocalBloomFilterDescription>(SpecializedIndexDescription));
+                break;
+            case EType::LocalBloomNgramFilter:
+                Y_ASSERT(std::holds_alternative<TLocalBloomNgramFilterDescription>(SpecializedIndexDescription));
+                break;
         }
     }
 
@@ -274,6 +306,9 @@ struct TIndexDescription {
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
                 return true;
+            case EType::LocalBloomFilter:
+            case EType::LocalBloomNgramFilter:
+                return false;
         }
     }
 
@@ -288,6 +323,9 @@ struct TIndexDescription {
                 return NKikimr::NTableIndex::GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT);
             case EType::GlobalFulltextRelevance:
                 return NKikimr::NTableIndex::GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+            case EType::LocalBloomFilter:
+            case EType::LocalBloomNgramFilter:
+                return {};
         }
         return {};
     }

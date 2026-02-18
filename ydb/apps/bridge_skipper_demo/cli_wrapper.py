@@ -18,7 +18,7 @@ def execute_cli_command(
         print_info: bool = None,
 ) -> Optional[subprocess.CompletedProcess]:
 
-    if ydb_auth_opts and "--ca-file" in ydb_auth_opts:
+    if ydb_auth_opts and ("--ca-file" in ydb_auth_opts or "--client-cert-file" in ydb_auth_opts):
         grpc_scheme = "grpcs"
     else:
         grpc_scheme = "grpc"

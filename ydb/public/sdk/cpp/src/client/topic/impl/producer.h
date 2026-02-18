@@ -17,9 +17,9 @@ namespace NYdb::inline Dev::NTopic {
 // TProducer
 
 class TProducer : public IKeyedWriteSession,
-                           public IProducer,
-                           public TContinuationTokenIssuer,
-                           public std::enable_shared_from_this<TProducer> {
+                  public IProducer,
+                  public TContinuationTokenIssuer,
+                  public std::enable_shared_from_this<TProducer> {
 private:
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
     static constexpr TDuration DEFAULT_START_BLOCK_TIMEOUT = TDuration::MilliSeconds(1);

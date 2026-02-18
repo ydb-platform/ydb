@@ -88,7 +88,7 @@ namespace NActors {
         TArrayHolder<NThreading::TPadded<TSharedExecutorThreadCtx>> Threads;
         static_assert(sizeof(std::decay_t<decltype(Threads[0])>) == 2 * PLATFORM_CACHE_LINE);
 
-        alignas(64) TArrayHolder<NThreading::TPadded<std::atomic<ui64>>> ForeignThreadsAllowedByPool;
+        TArrayHolder<NThreading::TPadded<std::atomic<ui64>>> ForeignThreadsAllowedByPool;
         TArrayHolder<NThreading::TPadded<std::atomic<ui64>>> ForeignThreadSlots;
         TArrayHolder<NThreading::TPadded<std::atomic<ui64>>> LocalThreads;
         TArrayHolder<NThreading::TPadded<std::atomic<ui64>>> LocalNotifications;

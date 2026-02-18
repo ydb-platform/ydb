@@ -101,6 +101,9 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             if (poolConfig.HasAllThreadsAreShared()) {
                 basic.AllThreadsAreShared = poolConfig.GetAllThreadsAreShared();
             }
+            if (systemConfig.HasUseTaskPools()) {
+                basic.UseTaskPools = systemConfig.GetUseTaskPools();
+            }
             cpuManager.Basic.emplace_back(std::move(basic));
 
             break;

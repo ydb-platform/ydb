@@ -61,9 +61,9 @@ namespace NActors {
         void Init(ui32 threads, bool useRingQueue);
     };
 
+    constexpr ui64 ThreadsForTaskPool = 1;
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
     protected:
-        static constexpr ui64 ThreadsForTaskPool = 4;
 
         const i16 PoolThreads;
         i16 TaskPoolsCount;

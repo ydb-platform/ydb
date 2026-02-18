@@ -118,6 +118,7 @@ namespace NActors {
                 Threads[j].CurrentPoolId = i;
                 Threads[j].SoftDeadlineForPool = 0;
                 Threads[j].SoftProcessingDurationTs = Us2Ts(100'000);
+                Threads[j].PriorityTaskPool = (j - PoolManager.PoolThreadRanges[i].Begin) / ThreadsForTaskPool;
                 passedThreads++;
             }
         }
@@ -378,7 +379,6 @@ namespace NActors {
         if (PoolThreads == 0) {
             EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Prepare: no shared workers configured");
         }
-
 
         for (i16 i = 0; i != PoolThreads; ++i) {
             Y_ABORT_UNLESS(Pools[Threads[i].OwnerPoolId] != nullptr, "Pool is nullptr i %" PRIu16, i);

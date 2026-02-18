@@ -31,9 +31,9 @@ namespace NActors {
         i16 SoftProcessingDurationTs = 0;
         EASProfile ActorSystemProfile = EASProfile::Default;
         bool HasSharedThread = false;
-        bool UseRingQueue = true;
-        bool AllThreadsAreShared = true;
-        bool UseTaskPools = true;
+        bool UseRingQueue = false;
+        bool AllThreadsAreShared = false;
+        bool UseTaskPools = false;
         ui16 MinLocalQueueSize = 0;
         ui16 MaxLocalQueueSize = 0;
 

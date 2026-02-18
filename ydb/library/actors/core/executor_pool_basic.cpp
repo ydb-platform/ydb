@@ -424,7 +424,19 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingCounter, std::optional<TAtomic> initSemaphore) {
-        auto &taskPool = TaskPools[mailbox->PriorityTaskPool];
+        i16 priorityPool = 0;
+        if (UseTaskPools) {
+            priorityPool = mailbox->PriorityTaskPool;
+
+            if (priorityPool >= 0 && priorityPool < TaskPoolsCount && TaskPools[priorityPool].Semaphore.load(std::memory_order_relaxed) < 10) {
+                priorityPool = mailbox->PriorityTaskPool;
+            } else {
+                priorityPool = revolvingCounter % TaskPoolsCount;
+            }
+        }
+        auto &taskPool = TaskPools[priorityPool];
+
+
         std::visit([mailbox, revolvingCounter](auto &queue) {
             queue.Push(mailbox->Hint, revolvingCounter);
         }, taskPool.Activations);
@@ -854,60 +866,76 @@ namespace NActors {
             Harmonizer->Harmonize(hpnow);
         }
 
+        i16 priorityPool = SharedPool->Threads[workerId].PriorityTaskPool;
+
+        auto handleTP = [&] (auto &taskPool, bool &findPoolWithWork) -> TMailbox* {
+            if (UseTaskPools) {
+                i64 x = taskPool.Semaphore.load(std::memory_order_acquire);
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "revolvingCounter == ", revolvingCounter, " semaphoreRaw == ", x);
+                while (!StopFlag.load(std::memory_order_acquire)) {
+                    if (x <= 0) {
+                        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "task pool semaphore == 0;");
+                        break;
+                    } else {
+                        findPoolWithWork = true;
+                        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
+                        if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(revolvingCounter++);}, taskPool.Activations)) {
+                            SharedPool->Threads[workerId].SetWork();
+                            i64 prev = taskPool.Semaphore.fetch_sub(1, std::memory_order_acq_rel);
+                            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphoreRaw: ", prev, " -> ", prev - 1);
+                            TMailbox *mailbox = MailboxTable->Get(activation);
+                            mailbox->PriorityTaskPool = priorityPool;
+                            return mailbox;
+                        }
+                    }
+
+                    SpinLockPause();
+                    x = taskPool.Semaphore.load(std::memory_order_acquire);
+                }
+            } else {
+                i64 x = taskPool.Semaphore;
+                TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "revolvingCounter == ", revolvingCounter, " semaphore == ", semaphore.OldSemaphore);
+                while (!StopFlag.load(std::memory_order_acquire)) {
+                    if (!semaphore.OldSemaphore) {
+                        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "semaphore == 0");
+                        return nullptr;
+                    } else {
+                        findPoolWithWork = true;
+                        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
+                        if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(revolvingCounter++);}, taskPool.Activations)) {
+                            SharedPool->Threads[workerId].SetWork();
+                            --taskPool.Semaphore;
+                            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
+                            return MailboxTable->Get(activation);
+                        }
+                    }
+
+                    SpinLockPause();
+                    x = taskPool.Semaphore;
+                    semaphore = TSemaphore::GetSemaphore(x);
+                }
+            }
+            return nullptr;
+        };
+
         bool findPoolWithWork = false;
+
         do {
             findPoolWithWork = false;
+            if (UseTaskPools) {
+                if (auto x = handleTP(TaskPools[SharedPool->Threads[workerId].PriorityTaskPool], findPoolWithWork)) {
+                    return x;
+                }
+            }
 
             for (i16 i = 0; i < TaskPoolsCount; ++i) {
+                if (UseTaskPools && i == SharedPool->Threads[workerId].PriorityTaskPool) {
+                    continue;
+                }
                 auto &taskPool = TaskPools[i];
-                if (UseTaskPools) {
-                    i64 x = taskPool.Semaphore.load(std::memory_order_acquire);
-                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "revolvingCounter == ", revolvingCounter, " semaphoreRaw == ", x, " taskPool == ", i);
-                    while (!StopFlag.load(std::memory_order_acquire)) {
-                        if (x <= 0) {
-                            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "task pool semaphore == 0; taskPool == ", i);
-                            break;
-                        } else {
-                            findPoolWithWork = true;
-                            TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                            if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(revolvingCounter++);}, taskPool.Activations)) {
-                                SharedPool->Threads[workerId].SetWork();
-                                i64 prev = taskPool.Semaphore.fetch_sub(1, std::memory_order_acq_rel);
-                                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphoreRaw: ", prev, " -> ", prev - 1, " taskPool == ", i);
-                                TMailbox *mailbox = MailboxTable->Get(activation);
-                                mailbox->PriorityTaskPool = revolvingCounter % TaskPoolsCount;
-                                return mailbox;
-                            }
-                        }
-
-                        SpinLockPause();
-                        x = taskPool.Semaphore.load(std::memory_order_acquire);
-                    }
-                } else {
-                    i64 x = taskPool.Semaphore;
-                    TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "revolvingCounter == ", revolvingCounter, " semaphore == ", semaphore.OldSemaphore);
-                    while (!StopFlag.load(std::memory_order_acquire)) {
-                        if (!semaphore.OldSemaphore) {
-                            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "semaphore == 0");
-                            break;
-                        } else {
-                            findPoolWithWork = true;
-                            TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                            if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(revolvingCounter++);}, taskPool.Activations)) {
-                                SharedPool->Threads[workerId].SetWork();
-                                --taskPool.Semaphore;
-                                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
-                                TMailbox *mailbox = MailboxTable->Get(activation);
-                                mailbox->PriorityTaskPool = revolvingCounter % TaskPoolsCount;
-                                return mailbox;
-                            }
-                        }
-
-                        SpinLockPause();
-                        x = taskPool.Semaphore;
-                        semaphore = TSemaphore::GetSemaphore(x);
-                    }
+                if (auto x = handleTP(taskPool, findPoolWithWork)) {
+                    return x;
                 }
             }
         } while (!StopFlag.load(std::memory_order_acquire) && findPoolWithWork);

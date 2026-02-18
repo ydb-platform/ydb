@@ -601,8 +601,14 @@ namespace NKikimr {
                 const ui32 wholeKeep = IndexMerger.GetNumKeepFlags() - subsKeep; // they are counted too
                 const ui32 wholeDoNotKeep = IndexMerger.GetNumDoNotKeepFlags() - subsDoNotKeep; // so are they
 
-                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {subsKeep, subsDoNotKeep, wholeKeep,
-                    wholeDoNotKeep}, HullCtx->AllowKeepFlags, AllowGarbageCollection);
+                NGcOpt::TKeepFlagStat keepFlagStat;
+                if (IsFresh) {
+                    keepFlagStat.Needed = true;
+                } else {
+                    keepFlagStat = {subsKeep, subsDoNotKeep, wholeKeep, wholeDoNotKeep};
+                }
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), keepFlagStat, HullCtx->AllowKeepFlags,
+                    AllowGarbageCollection);
 
                 const TLogoBlobID& id = Key.LogoBlobID();
                 if (!TBlobStorageGroupType::IsCrcModeValid(id.CrcMode())) {

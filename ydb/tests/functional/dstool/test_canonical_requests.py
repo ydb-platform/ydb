@@ -218,6 +218,14 @@ class Test(TestBase):
             self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
         ]
 
+    def test_group_take_snapshot(self):
+        return [
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_1.bin'),
+            self._trace('pdisk', 'stop', '--node-id=1', '--pdisk-id=1'),
+            time.sleep(1),
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_2.bin'),
+        ]
+
     def test_infer_pdisk_slot_count(self):
         dynconfig_client = DynConfigClient(self.host, self.grpc_port)
 

@@ -493,7 +493,7 @@ message ChangefeedDescription {
     InitialScanProgress initial_scan_progress = 9;
     // State of emitting of schema change events
     bool schema_changes = 10;
-    // Emit user information into cdc topic
+    // State of emitting of user security identifier (SID)
     bool user_sids = 11;
 }
 

@@ -438,7 +438,7 @@ public:
 
 class TL1DocumentInfo : public TSimpleRefCount<TL1DocumentInfo> {
 public:
-    using TPtr = TIntrusivePtr<TDocumentInfo>;
+    using TPtr = TIntrusivePtr<TL1DocumentInfo>;
     TDocumentInfo::TPtr Document;
     TString Word;
     TOwnedCellVec IndexKey;
@@ -447,10 +447,10 @@ public:
         : Document(document)
         , Word(word)
     {
-        TOwnedCellVec cellVec = Document->GetDocumentId();
+        const auto& cellVec = Document->GetDocumentId();
         TCell tokenCell(Word.data(), Word.size());
         TVector<TCell> point = TVector<TCell>{tokenCell};
-        point.insert(cellVec.end(), cellVec.begin(), cellVec.end());
+        point.insert(point.end(), cellVec.begin(), cellVec.end());
         IndexKey = TOwnedCellVec(point);
     }
 
@@ -770,6 +770,7 @@ public:
     TOwnedTableRange WordKeyCells;
     bool L1 = true;
     bool L2 = false;
+    ui32 L2StreamIndex = 0;
 
     using TPtr = TIntrusivePtr<TWordReadState>;
 
@@ -1675,10 +1676,12 @@ public:
             shardItems.Items.emplace_back(info);
         }
 
+        auto& cookieReadIds = CookieReads[cookie];
         for(auto& shardId : scheduledShards) {
             auto& inflightItem = inflightItems.at(shardId);
             auto evRead = reader->GetReadRequest(inflightItem.ReadId, inflightItem.Points);
             YQL_ENSURE(evRead);
+            cookieReadIds.push_back(inflightItem.ReadId);
             ReadsState.SendEvRead(shardId, evRead, TReadInfo{.ReadKind = readKind, .Cookie = cookie, .ShardId = shardId});
             Enqueue(inflightItem.ReadId, std::move(inflightItem));
         }
@@ -1977,6 +1980,7 @@ private:
                 TVector<TWordReadState::TPtr> newWords;
                 for (size_t i = 0; i < Words.size(); i++) {
                     newWords.emplace_back(std::move(Words[byFreq[i]]));
+                    newWords[i]->WordIndex = i;
                     if (i >= bestTokenLimit) {
                         newWords.back()->L2 = true;
                         newWords.back()->L1 = false;
@@ -2015,10 +2019,12 @@ private:
                     l1streams.emplace_back(std::make_unique<TCellVecTokenStream>(i, IndexTableReader->GetFrequencyColumnIndex()));
                 }
             } else {
+                int idx = l2streams.size();
+                wordInfo->L2StreamIndex = idx;
                 if (useArrowFormat) {
-                    l2streams.emplace_back(std::make_unique<TArrowTokenStream>(i));
+                    l2streams.emplace_back(std::make_unique<TArrowTokenStream>(idx));
                 } else {
-                    l2streams.emplace_back(std::make_unique<TCellVecTokenStream>(i, IndexTableReader->GetFrequencyColumnIndex()));
+                    l2streams.emplace_back(std::make_unique<TCellVecTokenStream>(idx, IndexTableReader->GetFrequencyColumnIndex()));
                 }
             }
         }
@@ -2067,7 +2073,9 @@ private:
         }
 
         for (auto& word : Words) {
-            ContinueWordRead(word);
+            if (word->L1) {
+                ContinueWordRead(word);
+            }
         }
     }
 
@@ -2554,6 +2562,7 @@ public:
     void L2WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 recReadId, ui64 wordIndex, bool finished) {
         YQL_ENSURE(wordIndex < Words.size());
         auto& wordInfo = Words[wordIndex];
+        YQL_ENSURE(wordInfo->L2);
 
         {
             auto& readItems = L2ReadingQueue.GetReadItems(recReadId);
@@ -2563,34 +2572,39 @@ public:
             }
         }
 
-        auto& readIds = L2ReadingQueue.CookieReads.at(wordIndex);
-        while(!readIds.empty()) {
+        auto cookieIt = L2ReadingQueue.CookieReads.find(wordIndex);
+        YQL_ENSURE(cookieIt != L2ReadingQueue.CookieReads.end());
+        auto& readIds = cookieIt->second;
+
+        // Drain completed reads in order to feed L2MergeAlgo
+        while (!readIds.empty()) {
             ui64 readId = readIds.front();
             auto& readItems = L2ReadingQueue.GetReadItems(readId);
-            while(!readItems.DelayedReads.empty()) {
-                L2MergeAlgo->AddResult(wordInfo.L2StreamIdx, std::move(readItems.DelayedReads.front()));
+            while (!readItems.DelayedReads.empty()) {
+                L2MergeAlgo->AddResult(wordInfo->L2StreamIndex, std::move(readItems.DelayedReads.front()));
                 readItems.DelayedReads.pop_front();
             }
 
             if (readItems.Finished) {
                 L2ReadingQueue.ClearReadItems(readItems);
                 L2ReadingQueue.UpdateReadStatus(readId, readItems, readItems.Finished);
+                readIds.pop_front();
+            } else {
+                break;
             }
+        }
+
+        // When all L2 reads for this word are drained and L1 is complete,
+        // mark the L2 stream as finished
+        if (readIds.empty() && L1MergeAlgo->Done()) {
+            L2MergeAlgo->FinishTokenStream(wordInfo->L2StreamIndex);
         }
 
         std::vector<TDocumentInfo::TPtr> matches = L2MergeAlgo->FindMatches();
-        for(auto& match: matches) {
-            while(!L1MergedDocuments.empty() && !NKikimr::TCellVectorsEquals{}(L1MergedDocuments.front()->GetDocumentId(), match->GetDocumentId())) {
-                L1MergedDocuments.pop_front();
-            }
-
-            YQL_ENSURE(!L1MergedDocuments.empty());
-            auto& l1 = L1MergedDocuments.front();
-            match->TokenFrequencies.insert(match->TokenFrequencies.begin(), l1->TokenFrequencies.begin(), l1->TokenFrequencies.end());
-            L1MergedDocuments.pop_front();
+        if (!matches.empty()) {
+            MergeL2MatchFrequencies(matches);
+            FetchDocumentDetails(matches);
         }
-
-        FetchDocumentDetails(matches);
         NotifyCA();
     }
 
@@ -2613,6 +2627,55 @@ public:
         L1MergedDocuments.insert(L1MergedDocuments.end(), matches.begin(), matches.end());
     }
 
+    void TryFinishL2Streams() {
+        YQL_ENSURE(L2MergeAlgo);
+        YQL_ENSURE(L1MergeAlgo->Done());
+
+        for (size_t i = 0; i < Words.size(); ++i) {
+            if (!Words[i]->L2) {
+                continue;
+            }
+            auto cookieIt = L2ReadingQueue.CookieReads.find(i);
+            bool noPendingReads = (cookieIt == L2ReadingQueue.CookieReads.end() || cookieIt->second.empty());
+            if (noPendingReads) {
+                L2MergeAlgo->FinishTokenStream(Words[i]->L2StreamIndex);
+            }
+        }
+
+        // Drain any remaining L2 matches
+        std::vector<TDocumentInfo::TPtr> matches = L2MergeAlgo->FindMatches();
+        if (!matches.empty()) {
+            MergeL2MatchFrequencies(matches);
+            FetchDocumentDetails(matches);
+        }
+    }
+
+    void MergeL2MatchFrequencies(std::vector<TDocumentInfo::TPtr>& matches) {
+        for (auto& match : matches) {
+            while (!L1MergedDocuments.empty() &&
+                   !NKikimr::TCellVectorsEquals{}(L1MergedDocuments.front()->GetDocumentId(), match->GetDocumentId())) {
+                L1MergedDocuments.pop_front();
+            }
+
+            YQL_ENSURE(!L1MergedDocuments.empty(), "L2 match has no corresponding L1 document");
+            auto& l1Doc = L1MergedDocuments.front();
+
+            std::vector<ui32> combined(Words.size(), 0);
+            for (size_t wi = 0; wi < Words.size(); ++wi) {
+                if (Words[wi]->L1 && wi < l1Doc->TokenFrequencies.size()) {
+                    combined[wi] = l1Doc->TokenFrequencies[wi];
+                }
+            }
+            for (size_t wi = 0; wi < Words.size(); ++wi) {
+                if (Words[wi]->L2 && Words[wi]->L2StreamIndex < match->TokenFrequencies.size()) {
+                    combined[wi] = match->TokenFrequencies[Words[wi]->L2StreamIndex];
+                }
+            }
+            match->TokenFrequencies = std::move(combined);
+            L1MergedDocuments.pop_front();
+        }
+    }
+
     void L1WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 wordIndex, bool finished) {
         YQL_ENSURE(wordIndex < Words.size());
         auto& incomingWordInfo = Words[wordIndex];
@@ -2621,14 +2684,18 @@ public:
         L1MergeAlgo->AddResult(wordIndex, std::move(msg));
 
         if (finished) {
-            if (!ContinueWordRead(incomingWordInfo) ) {
+            if (!ContinueWordRead(incomingWordInfo)) {
                 L1MergeAlgo->FinishTokenStream(wordIndex);
             }
         }
 
         std::vector<TDocumentInfo::TPtr> matches = L1MergeAlgo->FindMatches();
-        if (incomingWordInfo->L1 && L2MergeAlgo) {
+        if (L2MergeAlgo) {
             ScheduleL2Read(matches);
+            // When L1 is fully done, finish any L2 streams that have no pending reads
+            if (L1MergeAlgo->Done()) {
+                TryFinishL2Streams();
+            }
         } else {
             FetchDocumentDetails(matches);
         }

@@ -320,7 +320,7 @@ protected:
             return WAIT_SHARDS;
         }
 
-        // TODO: should we mark shards as resolved here?
+        TasksGraph.ResolveShards({});
 
         return CONTINUE;
     }

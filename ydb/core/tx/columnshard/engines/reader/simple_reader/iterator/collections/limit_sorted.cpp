@@ -49,7 +49,7 @@ TScanWithLimitCollection::TScanWithLimitCollection(
     : TBase(context, std::move(sourcesConstructor))
     , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
     if (HasAppData()) {
-        InFlightLimit = AppData()->ColumnShardConfig.GetLimitSortedStartInFlightLimit();
+        InFlightLimit = AppData()->ColumnShardConfig.GetLimitSortedStartInFlight();
     }
 }
 

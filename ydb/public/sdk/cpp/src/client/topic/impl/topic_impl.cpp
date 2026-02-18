@@ -88,8 +88,17 @@ std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TProducerSe
             alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
         }
 
+        bool handlersSet = settings.EventHandlers_.AcksHandler_ ||
+            settings.EventHandlers_.ReadyToAcceptHandler_ ||
+            settings.EventHandlers_.SessionClosedHandler_ ||
+            settings.EventHandlers_.CommonHandler_;
+
         if (!settings.EventHandlers_.HandlersExecutor_) {
-            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+            if (handlersSet) {
+                alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+            } else {
+                alteredSettings.EventHandlers_.HandlersExecutor(NTopic::CreateSyncExecutor());
+            }
         }
 
         if (!settings.EventHandlers_.AcksHandler_) {

@@ -29,9 +29,10 @@ enum class EFlushResult : uint8_t {
 struct TCloseDescription : public TSessionClosedEvent {};
 
 //! Producer is an abstraction that can write messages to the topic.
-//! It has two versions of Write method:
-//! - Write without key (partition is chosen randomly)
+//! It has three versions of Write method:
+//! - Write without key and partition (partition is chosen randomly by uniform distribution)
 //! - Write with key (partition is chosen based on the key)
+//! - Write with partition
 //! EXPERIMENTAL SDK, DO NOT USE IN PRODUCTION.
 class IProducer {
 public:

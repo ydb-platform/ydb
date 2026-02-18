@@ -68,8 +68,6 @@ namespace NActors {
     struct TExecutorThreadCtx : public TGenericExecutorThreadCtx {
         using TBase = TGenericExecutorThreadCtx;
 
-        i16 PriorityTaskPool = -1;
-
         void SetWork() {
             ExchangeState(EThreadState::Work);
         }
@@ -107,6 +105,12 @@ namespace NActors {
         i16 OwnerPoolId = -1;
         i16 CurrentPoolId = -1;
         i16 AdjacentPoolId = -1;
+
+        i16 PriorityTaskPool = -1;
+        i16 RevolvingCounter = 0;
+        i16 MailBoxRotationCounter = 0;
+        i16 QueueRotationCounter = 0;
+
         NHPTimer::STime SoftDeadlineForPool = 0;
         NHPTimer::STime SoftProcessingDurationTs = 0;
 

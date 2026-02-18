@@ -428,8 +428,8 @@ namespace NActors {
         if (UseTaskPools) {
             priorityPool = mailbox->PriorityTaskPool;
 
-            if (priorityPool >= 0 && priorityPool < TaskPoolsCount && TaskPools[priorityPool].Semaphore.load(std::memory_order_relaxed) < 10) {
-                priorityPool = mailbox->PriorityTaskPool;
+            if (priorityPool >= 0 && TaskPools[priorityPool].Semaphore.load(std::memory_order_relaxed) < 10) {
+                priorityPool = mailbox->PriorityTaskPool % TaskPoolsCount;
             } else {
                 priorityPool = revolvingCounter % TaskPoolsCount;
             }
@@ -599,7 +599,6 @@ namespace NActors {
                     actorSystem,
                     this,
                     PoolName));
-            Threads[i].PriorityTaskPool = (UseTaskPools ? i / ThreadsForTaskPool : 0);
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 
@@ -884,7 +883,13 @@ namespace NActors {
                             i64 prev = taskPool.Semaphore.fetch_sub(1, std::memory_order_acq_rel);
                             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphoreRaw: ", prev, " -> ", prev - 1);
                             TMailbox *mailbox = MailboxTable->Get(activation);
-                            mailbox->PriorityTaskPool = priorityPool;
+                            if (SharedPool->Threads[workerId].MailBoxRotationCounter) {
+                                mailbox->PriorityTaskPool = priorityPool;
+                                SharedPool->Threads[workerId].MailBoxRotationCounter--;
+                            } else {
+                                mailbox->PriorityTaskPool = -1;
+                                SharedPool->Threads[workerId].MailBoxRotationCounter = 5;
+                            }
                             return mailbox;
                         }
                     }
@@ -920,17 +925,46 @@ namespace NActors {
         };
 
         bool findPoolWithWork = false;
+        bool checkPriorityPool = ++SharedPool->Threads[workerId].QueueRotationCounter % 5;
 
         do {
             findPoolWithWork = false;
-            if (UseTaskPools) {
-                if (auto x = handleTP(TaskPools[SharedPool->Threads[workerId].PriorityTaskPool], findPoolWithWork)) {
+            i16 priorityPool = 0;
+            if (UseTaskPools && checkPriorityPool) {
+                priorityPool = SharedPool->Threads[workerId].PriorityTaskPool % TaskPoolsCount;
+                if (auto x = handleTP(TaskPools[priorityPool], findPoolWithWork)) {
+                    TaskPools[priorityPool].LastCheckout.store(hpnow, std::memory_order_relaxed);
+                    bool needHelp = TaskPools[priorityPool].NeedHelp.load(std::memory_order_relaxed);
+                    i64 sem = TaskPools[priorityPool].Semaphore.load(std::memory_order_relaxed);
+                    if (sem > 5 && !needHelp) {
+                        TaskPools[priorityPool].NeedHelp.store(true, std::memory_order_relaxed);
+                    } else if (sem <= 5 && needHelp) {
+                        TaskPools[priorityPool].NeedHelp.store(false, std::memory_order_relaxed);
+                    }
                     return x;
                 }
             }
 
-            for (i16 i = 0; i < TaskPoolsCount; ++i) {
-                if (UseTaskPools && i == SharedPool->Threads[workerId].PriorityTaskPool) {
+            for (i16 i = 0, taskPoolIdx = ++SharedPool->Threads[workerId].RevolvingCounter % TaskPoolsCount; i < TaskPoolsCount; ++i, taskPoolIdx = (taskPoolIdx + 1 >= TaskPoolsCount ? 0 : taskPoolIdx + 1)) {
+                if (UseTaskPools && checkPriorityPool && taskPoolIdx == priorityPool) {
+                    continue;
+                }
+                auto &taskPool = TaskPools[i];
+                if (!taskPool.NeedHelp.load(std::memory_order_relaxed)) {
+                    ui64 lastCheckout = taskPool.LastCheckout.load(std::memory_order_relaxed);
+                    static ui64 ticksForHelp = Us2Ts(10'000);
+                    if (lastCheckout > static_cast<ui64>(hpnow) || hpnow - lastCheckout <= ticksForHelp) {
+                        continue;
+                    }
+                }
+
+                if (auto x = handleTP(taskPool, findPoolWithWork)) {
+                    return x;
+                }
+            }
+
+            for (i16 i = 0, taskPoolIdx = ++SharedPool->Threads[workerId].RevolvingCounter % TaskPoolsCount; i < TaskPoolsCount; ++i, taskPoolIdx = (taskPoolIdx + 1 >= TaskPoolsCount ? 0 : taskPoolIdx + 1)) {
+                if (UseTaskPools && checkPriorityPool && taskPoolIdx == priorityPool) {
                     continue;
                 }
                 auto &taskPool = TaskPools[i];

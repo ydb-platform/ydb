@@ -56,6 +56,10 @@ namespace NActors {
         alignas(64) std::atomic<i64> Semaphore = 0;
         alignas(64) std::atomic<ui64> ActivationsRevolvingCounter = 0;
 
+        alignas(64)
+        std::atomic<bool> NeedHelp = false;
+        std::atomic<ui64> LastCheckout = 0;
+
         TTaskPool();
 
         void Init(ui32 threads, bool useRingQueue);

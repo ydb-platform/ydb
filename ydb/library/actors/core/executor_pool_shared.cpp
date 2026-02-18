@@ -118,7 +118,7 @@ namespace NActors {
                 Threads[j].CurrentPoolId = i;
                 Threads[j].SoftDeadlineForPool = 0;
                 Threads[j].SoftProcessingDurationTs = Us2Ts(100'000);
-                Threads[j].PriorityTaskPool = (j - PoolManager.PoolThreadRanges[i].Begin) / ThreadsForTaskPool;
+                Threads[j].PriorityTaskPool = i / ThreadsForTaskPool;
                 passedThreads++;
             }
         }

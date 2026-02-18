@@ -231,6 +231,9 @@ namespace NActors {
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.PoolId == poolId) {
                 if (Shared) {
+                    if (cfg.UseTaskPools) {
+                        cfg.Threads = cfg.DefaultThreadCount;
+                    }
                     auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                     Shared->SetBasicPool(pool);
                     pool->SetSharedPool(Shared.get());

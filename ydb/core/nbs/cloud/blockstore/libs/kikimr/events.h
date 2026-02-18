@@ -193,12 +193,12 @@ struct TProtoResponseEvent
 // BLOCKSTORE_DECLARE_REQUEST
 
 #define BLOCKSTORE_DECLARE_EVENTS(name, ...)                                   \
-    using TEv##name##Request = TRequestEvent<                                  \
+    using TEv##name##Request = NBlockStore::TRequestEvent<                                  \
         T##name##Request,                                                      \
         Ev##name##Request                                                      \
     >;                                                                         \
                                                                                \
-    using TEv##name##Response = TResponseEvent<                                \
+    using TEv##name##Response = NBlockStore::TResponseEvent<                                \
         T##name##Response,                                                     \
         Ev##name##Response                                                     \
     >;                                                                         \

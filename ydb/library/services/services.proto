@@ -462,6 +462,10 @@ enum EServiceKikimr {
 
     NBS_PARTITION = 3900;
     NBS2_LOAD_TEST = 3901;
+
+    NBS_VOLUME = 4000;
+
+    NBS_SS_PROXY = 4100;
 };
 
 message TActivity {

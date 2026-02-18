@@ -656,7 +656,7 @@ private:
     TDeque<TDeferredReadSetAck> DeferredReadSetAcks;        // ждут пока завершится цикл записи WRITE_TX_COOKIE
 
     void MovePendingDeferredReadSetAcks();
-    void AddDeferredReadSetAck(TDeferredReadSetAck&& ack);
+    void AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack);
     void SendDeferredReadSetAcks(const TActorContext& ctx);
 };
 

@@ -3474,7 +3474,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
                     " for TxId " << event.GetTxId() <<
                     " will be sent later");
 
-        AddDeferredReadSetAck({.Sender = ev->Sender, .Ack = std::move(ack)});
+        AddPendingDeferredReadSetAck({.Sender = ev->Sender, .Ack = std::move(ack)});
     }
 }
 
@@ -3484,7 +3484,7 @@ void TPersQueue::MovePendingDeferredReadSetAcks()
     PendingDeferredReadSetAcks.clear();
 }
 
-void TPersQueue::AddDeferredReadSetAck(TDeferredReadSetAck&& ack)
+void TPersQueue::AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack)
 {
     PendingDeferredReadSetAcks.push_back(std::move(ack));
 }

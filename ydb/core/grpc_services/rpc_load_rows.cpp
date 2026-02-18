@@ -164,9 +164,9 @@ const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
 
 static TString GetUserSID(const IRequestOpCtx* request) {
     if (request == nullptr ) {
-        return BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+        return BUILTIN_ACL_NO_USER_SID;
     }
-    return (request->GetInternalToken() != nullptr) ? request->GetInternalToken()->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+    return (request->GetInternalToken() != nullptr) ? request->GetInternalToken()->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
 }
 
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {

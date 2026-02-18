@@ -1541,7 +1541,7 @@ private:
                 new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
                     ctx.SelfID, state.ReadTxId, txBody, txFlags),
                 shardId, true));
-        
+
         state.State = EShardState::ReadTableProposeSent;
     }
 

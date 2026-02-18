@@ -239,6 +239,10 @@ void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
     ui64 rowCount = val.GetUint64();
 
+    NKikimrStat::TTableSummaryStatistics tableSummary;
+    tableSummary.SetRowCount(rowCount);
+    Results.emplace_back(std::nullopt, EStatType::TABLE_SUMMARY, tableSummary.SerializeAsString());
+
     auto supportedStatTypes = IColumnStatisticEval::SupportedTypes();
 
     TSelectBuilder stage2Builder;

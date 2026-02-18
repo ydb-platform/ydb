@@ -4143,11 +4143,8 @@
         }
     ],
     "test.TestViewer.test_viewer_groups_with_invalid_database": {
-        "FieldsAvailable": "000000100000000000100011111",
-        "FieldsRequired": "111111111111111111111111111",
-        "FoundGroups": 0,
-        "StorageGroups": [],
-        "TotalGroups": 0
+        "status_code": 403,
+        "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Unknown database\n</p></body></html>"
     },
     "test.TestViewer.test_viewer_healthcheck": {
         "/Root": {

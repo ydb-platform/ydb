@@ -1215,11 +1215,11 @@ namespace NKikimr {
         }
 
         void DatabaseErrorHandle(TEvBlobStorage::TEvMonStreamQuery::TPtr& ev, const TActorContext& ctx) {
-            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("ERROR"));
+            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("ERROR"), 0, ev->Cookie);
         }
 
         void DatabaseNotReadyHandle(TEvBlobStorage::TEvMonStreamQuery::TPtr& ev, const TActorContext& ctx) {
-            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("NOT_READY"));
+            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("NOT_READY"), 0, ev->Cookie);
         }
 
         template <class TEventPtr>

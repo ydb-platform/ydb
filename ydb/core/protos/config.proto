@@ -2619,7 +2619,7 @@ message TCompactionConfig {
     }
 
     message TBorrowedCompactionConfig {
-        optional double MaxRate = 1 [default = 0]; // unlimitted
+        optional double MaxRate = 1 [default = 0]; // unlimited
         optional uint64 InflightLimit = 2 [default = 10]; // TODO: consider more?
 
         // After this interval we will try to restart
@@ -2629,12 +2629,30 @@ message TCompactionConfig {
         optional uint64 MinWakeupIntervalMs = 4 [default = 10];
     }
 
+    message TForcedCompactionConfig {
+        optional double MaxRate = 1 [default = 0]; // unlimited
+        optional uint64 InflightLimit = 2 [default = 10];
+
+        // After this interval we will try to restart
+        optional uint64 TimeoutSeconds = 3 [default = 15];
+
+        // Do not wakeup earlier, than this interval
+        optional uint64 MinWakeupIntervalMs = 4 [default = 10];
+
+        // number of shards to persist in one batch
+        optional uint32 PersistBatchSize = 5 [default = 100];
+
+        // maximum time of unpersisted batch of shards
+        optional uint32 PersistBatchMaxTimeMs = 6 [default = 100];
+    }
+
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;
     optional TBorrowedCompactionConfig BorrowedCompactionConfig = 2;
+    optional TForcedCompactionConfig ForcedCompactionConfig = 3;
 }
 
 message TBackgroundCleaningConfig {
-    optional double MaxRate = 1 [default = 0]; // unlimitted
+    optional double MaxRate = 1 [default = 0]; // unlimited
     optional uint64 InflightLimit = 2 [default = 10]; // TODO: consider more?
 
     // After this interval we will try to restart

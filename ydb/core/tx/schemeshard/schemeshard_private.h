@@ -53,6 +53,7 @@ namespace TEvPrivate {
         EvContinuousBackupCleanerResult,
         EvTestNotifySubdomainCleanup,
         EvFlushConditionalEraseBatch,
+        EvRunForcedCompaction,
         EvEnd
     };
 

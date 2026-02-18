@@ -90,7 +90,8 @@ public:
     }
 
     TEvQueryRequest(const TString& userSID) 
-        : UserSID(userSID) {
+        : UserSID(userSID)
+    {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 

@@ -242,7 +242,7 @@ public:
     TString GetChunkedHTTPOK(const TRequestState& request, TString contentType = {}) override;
     TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPBADREQUEST(const TRequestState& request, TString type, TString response) override;
-    TString GetHTTPFORBIDDEN(const TRequestState& request, TString type, TString response) override;
+    TString GETHTTPACCESSDENIED(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPNOTFOUND(const TRequestState& request) override;
     TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) override;
     TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) override;
@@ -908,7 +908,7 @@ TString BuildHttpAuthErrorResponse(TViewer* viewer, const TRequestState& request
 
 } // namespace
 
-TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentType, TString response) {
+TString TViewer::GETHTTPACCESSDENIED(const TRequestState& request, TString contentType, TString response) {
     TStringBuf statusLine = request.GetUserTokenObject().empty() ? "401 Unauthorized" : "403 Forbidden";
     return BuildHttpAuthErrorResponse(this, request, statusLine, std::move(contentType), std::move(response));
 }

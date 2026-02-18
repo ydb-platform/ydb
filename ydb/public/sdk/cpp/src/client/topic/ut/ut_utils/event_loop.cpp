@@ -3,11 +3,11 @@
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
-TKeyedWriteSessionEventLoop::TKeyedWriteSessionEventLoop(std::shared_ptr<IKeyedWriteSession> session)
+TProducerEventLoop::TProducerEventLoop(std::shared_ptr<IKeyedWriteSession> session)
     : Session_(std::move(session))
 {}
 
-void TKeyedWriteSessionEventLoop::Run() {
+void TProducerEventLoop::Run() {
     while (true) {
         auto event = Session_->GetEvent(false);
         if (!event) {
@@ -32,7 +32,7 @@ void TKeyedWriteSessionEventLoop::Run() {
     }
 }
 
-std::optional<TContinuationToken> TKeyedWriteSessionEventLoop::GetContinuationToken(TDuration timeout) {
+std::optional<TContinuationToken> TProducerEventLoop::GetContinuationToken(TDuration timeout) {
     const TInstant deadline = TInstant::Now() + timeout;
     while (TInstant::Now() < deadline) {
         {
@@ -56,7 +56,7 @@ std::optional<TContinuationToken> TKeyedWriteSessionEventLoop::GetContinuationTo
     return std::nullopt;
 }
 
-bool TKeyedWriteSessionEventLoop::WaitForAcks(size_t count, TDuration timeout) {
+bool TProducerEventLoop::WaitForAcks(size_t count, TDuration timeout) {
     const TInstant deadline = TInstant::Now() + timeout;
     while (TInstant::Now() < deadline) {
         {
@@ -71,7 +71,7 @@ bool TKeyedWriteSessionEventLoop::WaitForAcks(size_t count, TDuration timeout) {
     return false;
 }
 
-void TKeyedWriteSessionEventLoop::CheckAcksOrder() {
+void TProducerEventLoop::CheckAcksOrder() {
     std::lock_guard lock(Lock_);
     size_t expectedAck = 1;
     UNIT_ASSERT_C(AckedSeqNos_.size() == AckOrder_.size(), TStringBuilder() << "Unexpected number of acks: got " << AckOrder_.size() << ", expected " << AckedSeqNos_.size());

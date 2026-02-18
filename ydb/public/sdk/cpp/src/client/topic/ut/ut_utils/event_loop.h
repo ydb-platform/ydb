@@ -12,9 +12,9 @@
 namespace NYdb::inline Dev::NTopic::NTests {
 
 //! Helper for keyed write session tests: runs event loop and provides continuation tokens.
-class TKeyedWriteSessionEventLoop {
+class TProducerEventLoop {
 public:
-    explicit TKeyedWriteSessionEventLoop(std::shared_ptr<IKeyedWriteSession> session);
+    explicit TProducerEventLoop(std::shared_ptr<IKeyedWriteSession> session);
 
     //! Block until a continuation token is available or timeout. Calls Run() while waiting.
     //! Returns nullopt on timeout or if session was closed before a token appeared.

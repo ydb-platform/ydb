@@ -40,9 +40,9 @@ std::uint64_t TSimpleWriteSessionTestAdapter::GetAcquiredMessagesCount() const {
         return 0;
 }
 
-class TKeyedWriteSessionTestAdapter {
+class TProducerTestAdapter {
 public:
-    TKeyedWriteSessionTestAdapter(NTopic::IKeyedWriteSession* session);
+    TProducerTestAdapter(NTopic::IKeyedWriteSession* session);
 
     void WaitForAcks(size_t count, TDuration timeout);
     std::optional<TContinuationToken> GetContinuationToken(TDuration timeout);
@@ -57,15 +57,15 @@ private:
     std::vector<std::uint64_t> ackedSeqNos;
 };
 
-TKeyedWriteSessionTestAdapter::TKeyedWriteSessionTestAdapter(NTopic::IKeyedWriteSession* session)
+TProducerTestAdapter::TProducerTestAdapter(NTopic::IKeyedWriteSession* session)
     : Session(session)
 {}
 
-void TKeyedWriteSessionTestAdapter::WaitForAcks(size_t count, TDuration timeout) {
+void TProducerTestAdapter::WaitForAcks(size_t count, TDuration timeout) {
     RunEventLoop(timeout, count, false);
 }
 
-bool TKeyedWriteSessionTestAdapter::ValidateAcksOrder() const {
+bool TProducerTestAdapter::ValidateAcksOrder() const {
     size_t expectedSeqNo = 1;
     for (const auto& seqNo : ackedSeqNos) {
         if (seqNo != expectedSeqNo) {
@@ -76,11 +76,11 @@ bool TKeyedWriteSessionTestAdapter::ValidateAcksOrder() const {
     return true;
 }
 
-size_t TKeyedWriteSessionTestAdapter::GetAckedSeqNosCount() const {
+size_t TProducerTestAdapter::GetAckedSeqNosCount() const {
     return ackedSeqNos.size();
 }
 
-std::optional<TContinuationToken> TKeyedWriteSessionTestAdapter::GetContinuationToken(TDuration timeout) {
+std::optional<TContinuationToken> TProducerTestAdapter::GetContinuationToken(TDuration timeout) {
     RunEventLoop(timeout, 0, true);
     if (tokens.empty()) {
         return std::nullopt;
@@ -90,7 +90,7 @@ std::optional<TContinuationToken> TKeyedWriteSessionTestAdapter::GetContinuation
     return token;
 }
 
-void TKeyedWriteSessionTestAdapter::RunEventLoop(TDuration timeout, size_t stopOnAcksCount, bool stopOnContinuationToken) {
+void TProducerTestAdapter::RunEventLoop(TDuration timeout, size_t stopOnAcksCount, bool stopOnContinuationToken) {
     auto deadline = TInstant::Now() + timeout;
     while (TInstant::Now() < deadline) {
         Session->WaitEvent().Wait(deadline);
@@ -932,7 +932,7 @@ TEST_F(BasicUsage, TEST_NAME(TWriteSession_WriteEncoded_Broken)) {
     }
 }
 
-TEST_F(BasicUsage, TEST_NAME(TKeyedWriteSessionBasicWrite_NoAutoPartitioning)) {
+TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
     // Basic write test for keyed write session.
     // Write 10 messages with different keys and check that they are written to different partitions.
     // Check that the order of messages is preserved.
@@ -958,9 +958,9 @@ TEST_F(BasicUsage, TEST_NAME(TKeyedWriteSessionBasicWrite_NoAutoPartitioning)) {
     });
 
     auto session = client.CreateKeyedWriteSession(writeSettings);
-    auto keyedSession = std::dynamic_pointer_cast<TKeyedWriteSession>(session);
+    auto keyedSession = std::dynamic_pointer_cast<TProducer>(session);
 
-    NPersQueue::NTests::TKeyedWriteSessionTestAdapter testAdapter(session.get());
+    NPersQueue::NTests::TProducerTestAdapter testAdapter(session.get());
     for (size_t i = 0; i < 100; ++i) {
         auto key = CreateGuidAsString();
         auto token = testAdapter.GetContinuationToken(TDuration::Seconds(30));

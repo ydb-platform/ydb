@@ -93,7 +93,7 @@ std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession
         }
     }
 
-    return std::make_shared<TKeyedWriteSession>(
+    return std::make_shared<TProducer>(
         alteredSettings, shared_from_this(), Connections_, DbDriverState_
     );
 }
@@ -115,7 +115,7 @@ std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TProducerSe
         }
     }
 
-    return std::make_shared<TKeyedWriteSession>(
+    return std::make_shared<TProducer>(
         alteredSettings, shared_from_this(), Connections_, DbDriverState_
     );
 }

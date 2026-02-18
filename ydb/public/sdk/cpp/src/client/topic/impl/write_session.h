@@ -63,12 +63,12 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TKeyedWriteSession
+// TProducer
 
-class TKeyedWriteSession : public IKeyedWriteSession,
+class TProducer : public IKeyedWriteSession,
                            public IProducer,
                            public TContinuationTokenIssuer,
-                           public std::enable_shared_from_this<TKeyedWriteSession> {
+                           public std::enable_shared_from_this<TProducer> {
 private:
     using WriteSessionPtr = std::shared_ptr<IWriteSession>;
 
@@ -152,16 +152,16 @@ private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Custom retry policy
 
-    struct TKeyedWriteSessionRetryPolicy : public ::IRetryPolicy<EStatus> {
-        using TSelf = TKeyedWriteSessionRetryPolicy;
+    struct TProducerRetryPolicy : public ::IRetryPolicy<EStatus> {
+        using TSelf = TProducerRetryPolicy;
         using TPtr = std::shared_ptr<TSelf>;
 
-        TKeyedWriteSessionRetryPolicy(TKeyedWriteSession* session);
-        ~TKeyedWriteSessionRetryPolicy() = default;
+        TProducerRetryPolicy(TProducer* session);
+        ~TProducerRetryPolicy() = default;
         typename IRetryState::TPtr CreateRetryState() const override;
 
     private:
-        TKeyedWriteSession* Session;
+        TProducer* Session;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -170,7 +170,7 @@ private:
     struct TEventsWorker;
 
     struct TSessionsWorker {
-        TSessionsWorker(TKeyedWriteSession* session);
+        TSessionsWorker(TProducer* session);
         WrappedWriteSessionPtr GetWriteSession(std::uint32_t partition, bool directToPartition = true);
         void OnReadFromSession(WrappedWriteSessionPtr wrappedSession);
         void OnWriteToSession(WrappedWriteSessionPtr wrappedSession);
@@ -186,7 +186,7 @@ private:
 
         std::string GetProducerId(std::uint32_t partitionId);
 
-        TKeyedWriteSession* Session;
+        TProducer* Session;
         std::set<IdleSessionPtr, TIdleSession::Comparator> IdlerSessions;
         using IdlerSessionsIterator = std::set<IdleSessionPtr, TIdleSession::Comparator>::iterator;
         std::unordered_map<std::uint32_t, IdlerSessionsIterator> IdlerSessionsIndex;
@@ -194,7 +194,7 @@ private:
     };
 
     struct TMessagesWorker {
-        TMessagesWorker(TKeyedWriteSession* session);
+        TMessagesWorker(TProducer* session);
         
         void DoWork();
 
@@ -218,7 +218,7 @@ private:
         std::optional<TContinuationToken> GetContinuationToken(std::uint32_t partition);
         void RechoosePartitionIfNeeded(MessageIter message);
 
-        TKeyedWriteSession* Session;
+        TProducer* Session;
 
         std::list<TMessageInfo> InFlightMessages;
         std::unordered_map<std::uint32_t, std::list<MessageIter>> InFlightMessagesIndex;
@@ -228,7 +228,7 @@ private:
         
         std::uint64_t MemoryUsage = 0;
 
-        friend class TKeyedWriteSession;
+        friend class TProducer;
     };
 
     struct TSplittedPartitionWorker : public std::enable_shared_from_this<TSplittedPartitionWorker> {
@@ -248,7 +248,7 @@ private:
         void HandleDescribeResult();
 
     public:
-        TSplittedPartitionWorker(TKeyedWriteSession* session, std::uint32_t partitionId);
+        TSplittedPartitionWorker(TProducer* session, std::uint32_t partitionId);
         void DoWork();
         bool IsDone();
         bool IsInit();
@@ -256,7 +256,7 @@ private:
         std::string GetStateName() const;
             
     private:
-        TKeyedWriteSession* Session;
+        TProducer* Session;
         NThreading::TFuture<TDescribeTopicResult> DescribeTopicFuture;
         EState State = EState::Init;
         std::uint32_t PartitionId;
@@ -276,7 +276,7 @@ private:
             Ack = 2,
         };
 
-        TEventsWorker(TKeyedWriteSession* session);
+        TEventsWorker(TProducer* session);
         
         std::optional<NThreading::TPromise<void>> DoWork();
         NThreading::TFuture<void> WaitEvent();
@@ -301,7 +301,7 @@ private:
         std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block, const std::vector<EEventType>& eventTypes = {});
         EEventType GetEventType(const TWriteSessionEvent::TEvent& event);
 
-        TKeyedWriteSession* Session;
+        TProducer* Session;
 
         std::unordered_set<std::uint32_t> ReadyFutures;
         std::unordered_map<std::uint32_t, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
@@ -317,7 +317,7 @@ private:
 
         std::optional<TSessionClosedEvent> CloseEvent;
 
-        friend class TKeyedWriteSession;
+        friend class TProducer;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -329,10 +329,10 @@ private:
     };
 
     struct TBoundPartitionChooser : IPartitionChooser {
-        TBoundPartitionChooser(TKeyedWriteSession* session);
+        TBoundPartitionChooser(TProducer* session);
         std::uint32_t ChoosePartition(const std::string_view key) override;
     private:
-        TKeyedWriteSession* Session;
+        TProducer* Session;
     };
 
     struct THashPartitionChooser : IPartitionChooser {
@@ -357,7 +357,7 @@ private:
     };
 
     struct TMetrics {
-        TMetrics(TKeyedWriteSession* session);
+        TMetrics(TProducer* session);
 
         TMetricGauge MainWorkerTimeMs;
         TMetricGauge CycleTimeMs;
@@ -367,7 +367,7 @@ private:
         TMetricGauge IncomingMessages;
         TMetricGauge OutgoingMessages;
         std::mutex Lock;
-        TKeyedWriteSession* Session;
+        TProducer* Session;
 
         void AddMainWorkerTime(std::uint64_t ms);
         void AddCycleTime(std::uint64_t ms);
@@ -408,7 +408,7 @@ private:
     std::uint32_t ChooseRandomPartition();
 
 public:
-    TKeyedWriteSession(const TProducerSettings& settings,
+    TProducer(const TProducerSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);
@@ -441,7 +441,7 @@ public:
 
     std::map<std::string, std::uint32_t> GetPartitionsIndex() const;
 
-    ~TKeyedWriteSession();
+    ~TProducer();
 
 private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
@@ -476,7 +476,7 @@ private:
     std::unordered_map<std::uint32_t, std::shared_ptr<TSplittedPartitionWorker>> SplittedPartitionWorkers;
     std::unordered_map<std::uint32_t, std::shared_ptr<TSplittedPartitionWorker>> ReadySplittedPartitionWorkers;
     std::shared_ptr<TMessagesWorker> MessagesWorker;
-    std::shared_ptr<TKeyedWriteSessionRetryPolicy> RetryPolicy;
+    std::shared_ptr<TProducerRetryPolicy> RetryPolicy;
 
     // TFuture::Subscribe may invoke callback synchronously when the future is already ready.
     // Also, callbacks may arrive concurrently with the attempt to go idle.
@@ -558,7 +558,7 @@ public:
     TWriterCounters::TPtr GetCounters() override;
 
 protected:
-    std::shared_ptr<TKeyedWriteSession> Writer;
+    std::shared_ptr<TProducer> Writer;
     std::unordered_set<std::uint64_t> AckedSeqNos;
     std::queue<TContinuationToken> ContinuationTokensQueue;
 

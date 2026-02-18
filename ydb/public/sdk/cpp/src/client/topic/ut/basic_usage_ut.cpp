@@ -1088,7 +1088,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         auto session = publicClient.CreateKeyedWriteSession(writeSettings);
-        TKeyedWriteSessionEventLoop eventLoop(session);
+        TProducerEventLoop eventLoop(session);
         auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
 
         std::string payload = "msg0";
@@ -1139,7 +1139,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const ui64 count0 = 7;
         const ui64 count1 = 11;
 
-        TKeyedWriteSessionEventLoop eventLoop(session);
+        TProducerEventLoop eventLoop(session);
 
         auto seqNo = 1;
         for (ui64 i = 0; i < count0; ++i) {
@@ -1217,10 +1217,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         });
 
         auto session = publicClient.CreateKeyedWriteSession(writeSettings);
-        auto keyedSession = std::dynamic_pointer_cast<TKeyedWriteSession>(session);
+        auto keyedSession = std::dynamic_pointer_cast<TProducer>(session);
         const auto& partitions = keyedSession->GetPartitions();
 
-        TKeyedWriteSessionEventLoop eventLoop(session);
+        TProducerEventLoop eventLoop(session);
         
         std::unordered_map<ui64, ui64> keysCount;
         for (const auto& p : partitions) {
@@ -1278,7 +1278,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
-        TKeyedWriteSessionEventLoop eventLoop(session);
+        TProducerEventLoop eventLoop(session);
 
         const ui64 count = 3000;
         for (ui64 i = 1; i <= count; ++i) {
@@ -1320,7 +1320,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         std::vector<std::jthread> threads;
         threads.reserve(threadsCount);
 
-        TKeyedWriteSessionEventLoop eventLoop(session);
+        TProducerEventLoop eventLoop(session);
 
         for (ui64 t = 0; t < threadsCount; ++t) {
             threads.emplace_back([&, t]() {
@@ -1358,7 +1358,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
 
-        TKeyedWriteSessionEventLoop eventLoop(session);
+        TProducerEventLoop eventLoop(session);
         constexpr ui64 messages = 100;
         ui64 seqNo = 1;
 
@@ -1411,7 +1411,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto session = client.CreateKeyedWriteSession(writeSettings);
 
         constexpr ui64 messages = 1000;
-        TKeyedWriteSessionEventLoop eventLoop(session);
+        TProducerEventLoop eventLoop(session);
 
         std::jthread writer([&]() {
             for (ui64 i = 1; i <= messages; ++i) {
@@ -1554,7 +1554,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
 
-        TKeyedWriteSessionEventLoop eventLoop(session);
+        TProducerEventLoop eventLoop(session);
 
         for (int i = 0; i < 1000; ++i) {
             auto token = eventLoop.GetContinuationToken(TDuration::Seconds(10));
@@ -1745,8 +1745,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings3.ProducerIdPrefix("autopartitioning_keyed_3");
         auto session3 = client.CreateKeyedWriteSession(writeSettings3);
 
-        auto partitionsMap1 = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitionsMap();
-        auto partitionsMap3 = dynamic_cast<TKeyedWriteSession*>(session3.get())->GetPartitionsMap();
+        auto partitionsMap1 = dynamic_cast<TProducer*>(session1.get())->GetPartitionsMap();
+        auto partitionsMap3 = dynamic_cast<TProducer*>(session3.get())->GetPartitionsMap();
 
         for (const auto& [partitionId, partitionInfo] : partitionsMap1) {
             auto partitionInfo3 = partitionsMap3.find(partitionId);
@@ -1758,8 +1758,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 "To bound is not equal for partition " << partitionId);
         }
 
-        auto partitionsIndex1 = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitionsIndex();
-        auto partitionsIndex3 = dynamic_cast<TKeyedWriteSession*>(session3.get())->GetPartitionsIndex();
+        auto partitionsIndex1 = dynamic_cast<TProducer*>(session1.get())->GetPartitionsIndex();
+        auto partitionsIndex3 = dynamic_cast<TProducer*>(session3.get())->GetPartitionsIndex();
         for (const auto& [key, partitionId] : partitionsIndex1) {
             auto partitionId3 = partitionsIndex3.find(key);
             UNIT_ASSERT_C(partitionId3 != partitionsIndex3.end(),
@@ -1770,7 +1770,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT_EQUAL_C(ackedSeqNos.size(), 14,
             "Expected exactly 14 distinct acks, each seqNo exactly once; got " << ackedSeqNos.size());
-        auto sessionPartitions = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitions();
+        auto sessionPartitions = dynamic_cast<TProducer*>(session1.get())->GetPartitions();
         UNIT_ASSERT_EQUAL_C(sessionPartitions.size(), partitionsCount,
             "Expected exactly" << partitionsCount << " partitions, actual: " << sessionPartitions.size());
 
@@ -1904,7 +1904,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT_EQUAL_C(ackedSeqNos.size(), totalMessages,
             "Expected " << totalMessages << " acks; got " << ackedSeqNos.size());
-        auto sessionPartitions = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitions();
+        auto sessionPartitions = dynamic_cast<TProducer*>(session1.get())->GetPartitions();
         UNIT_ASSERT_EQUAL_C(sessionPartitions.size(), partitionsCount,
             "Session partitions " << sessionPartitions.size() << " != topic partitions " << partitionsCount);
 

@@ -1050,7 +1050,12 @@ void TProducer::TMessagesWorker::ScheduleResendMessages(std::uint32_t partition,
             Y_ABORT_UNLESS((*iter)->SeqNo.value_or(0) > currentSeqNo, "SeqNo is not increasing for partition %d", partition);
         }
 
-        auto newPartition = Producer->PartitionChooser->ChoosePartition((*iter)->Key);
+        std::uint32_t newPartition;
+        if ((*iter)->Key.empty()) {
+            newPartition = Producer->ChooseRandomPartition();
+        } else {
+            newPartition = Producer->PartitionChooser->ChoosePartition((*iter)->Key);
+        }
         (*iter)->Partition = newPartition;
         messagesFromOldPartition.emplace_back(newPartition, *iter);
 
@@ -1366,13 +1371,13 @@ std::map<std::string, std::uint32_t> TProducer::GetPartitionsIndex() const {
     return PartitionsIndex;
 }
 
-void TProducer::Write(TContinuationToken&&, const std::string& key, TWriteMessage&& message, TTransactionBase* tx) {
+EWriteResult TProducer::WriteInternal(TWriteMessage&& message, std::optional<std::uint32_t> partition, const std::string& key, TTransactionBase* tx) {
     std::optional<NThreading::TPromise<void>> eventsPromise;
     {
         std::lock_guard lock(GlobalLock);
         Metrics.IncIncomingMessages();
         if (Closed.load()) {
-            return;
+            return EWriteResult::CLOSED;
         }
 
         if ((message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithoutSeqNo)
@@ -1384,17 +1389,16 @@ void TProducer::Write(TContinuationToken&&, const std::string& key, TWriteMessag
             SeqNoStrategy = message.SeqNo_.has_value() ? ESeqNoStrategy::WithSeqNo : ESeqNoStrategy::WithoutSeqNo;
         }
 
-        std::uint32_t partition;
-        if (key.empty()) {
-            if (PartitionChooserStrategy == TProducerSettings::EPartitionChooserStrategy::Bound) {
-                ythrow TContractViolation("Key is required for Bound partition chooser strategy");
-            }
-            partition = ChooseRandomPartition();
+        std::uint32_t chosenPartition;
+        if (partition.has_value()) {
+            chosenPartition = partition.value();
+        } else if (key.empty()) {
+            chosenPartition = ChooseRandomPartition();
         } else {
-            partition = PartitionChooser->ChoosePartition(key);
+            chosenPartition = PartitionChooser->ChoosePartition(key);
         }
 
-        MessagesWorker->AddMessage(key, std::move(message), partition, tx);
+        MessagesWorker->AddMessage(key, std::move(message), chosenPartition, tx);
         eventsPromise = EventsWorker->HandleNewMessage();
         RunUserEventLoop();
     }
@@ -1403,6 +1407,8 @@ void TProducer::Write(TContinuationToken&&, const std::string& key, TWriteMessag
     if (eventsPromise) {
         eventsPromise->TrySetValue();
     }
+
+    return EWriteResult::QUEUED;
 }
 
 std::uint32_t TProducer::ChooseRandomPartition() {
@@ -1745,6 +1751,15 @@ EWriteResult TProducer::WriteImpl(const std::string& key, TWriteMessage&& messag
         Write(std::move(*continuationToken), key, std::move(message), tx);
         return EWriteResult::QUEUED;
     }
+}
+
+void TProducer::Write(TContinuationToken&&, const std::string& key, TWriteMessage&& message, TTransactionBase* tx) {
+    WriteInternal(std::move(message), std::nullopt, key, tx);
+}
+
+EWriteResult TProducer::Write(std::uint32_t partition, TWriteMessage&& message,
+               TTransactionBase* tx) {
+    return WriteInternal(std::move(message), partition, "", tx);
 }
 
 EWriteResult TProducer::Write(TWriteMessage&& message,

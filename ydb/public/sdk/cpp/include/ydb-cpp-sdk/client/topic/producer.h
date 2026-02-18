@@ -54,6 +54,16 @@ public:
     [[nodiscard]] virtual EWriteResult Write(const std::string& key, TWriteMessage&& message,
         TTransactionBase* tx = nullptr) = 0;
 
+    //! Write single message to partition.
+    //! partition - partition ID.
+    //! Returns write result.
+    //! If write was successful, returns QUEUED.
+    //! If write was not successful due to overloaded buffer, returns OVERLOADED.
+    //! If write was not successful because of closed session, returns CLOSED.
+    //! DO NOT IGNORE THE RETURN VALUE.
+    [[nodiscard]] virtual EWriteResult Write(std::uint32_t partition, TWriteMessage&& message,
+        TTransactionBase* tx = nullptr) = 0;
+
     //! Explain why session was closed.
     //! Returns session closed event if session was closed.
     //! Returns std::nullopt if session is not closed.

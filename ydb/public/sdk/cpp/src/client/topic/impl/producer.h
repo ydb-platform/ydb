@@ -364,6 +364,9 @@ private:
     EWriteResult WriteImpl(const std::string& key, TWriteMessage&& message,
                TTransactionBase* tx = nullptr);
 
+    EWriteResult WriteInternal(TWriteMessage&& message, std::optional<std::uint32_t> partition = std::nullopt, const std::string& key = "",
+               TTransactionBase* tx = nullptr);
+
 public:
     TProducer(const TProducerSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
@@ -371,6 +374,9 @@ public:
             TDbDriverStatePtr dbDriverState);
     
     void Write(TContinuationToken&& continuationToken, const std::string& key, TWriteMessage&& message,
+               TTransactionBase* tx = nullptr) override;
+
+    [[nodiscard]] EWriteResult Write(std::uint32_t partition, TWriteMessage&& message,
                TTransactionBase* tx = nullptr) override;
 
     [[nodiscard]] EWriteResult Write(TWriteMessage&& message,

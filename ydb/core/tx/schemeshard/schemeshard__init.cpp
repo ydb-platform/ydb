@@ -2244,6 +2244,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         pqBalancers[shard.PathId] = idx;
                         break;
                     case ETabletType::BlockStoreVolume:
+                    case ETabletType::BlockStoreVolumeDirect:
                         nbsVolumeShards[shard.PathId] = idx;
                         break;
                     case ETabletType::FileStore:
@@ -4228,6 +4229,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 break;
             case ETabletType::BlockStorePartition2:
                 Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1);
+                break;
+            case ETabletType::BlockStoreVolumeDirect:
+                Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT].Add(1);
+                break;
+            case ETabletType::BlockStorePartitionDirect:
+                Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT].Add(1);
                 break;
             case ETabletType::FileStore:
                 Self->TabletCounters->Simple()[COUNTER_FILESTORE_COUNT].Add(1);

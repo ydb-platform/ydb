@@ -85,6 +85,41 @@ private:
     }
 };
 
+// BlockStorePartitionDirect mock for testing schemeshard
+class TFakeBlockStorePartitionDirect : public TActor<TFakeBlockStorePartitionDirect>, public NTabletFlatExecutor::TTabletExecutedFlat {
+public:
+    TFakeBlockStorePartitionDirect(const TActorId& tablet, TTabletStorageInfo* info)
+        : TActor(&TThis::StateInit)
+          , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
+    {}
+
+    void DefaultSignalTabletActive(const TActorContext&) override {
+        // must be empty
+    }
+
+    void OnActivateExecutor(const TActorContext& ctx) override {
+        Become(&TThis::StateWork);
+        SignalTabletActive(ctx);
+    }
+
+    void OnDetach(const TActorContext& ctx) override {
+        Die(ctx);
+    }
+
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override {
+        Y_UNUSED(ev);
+        Die(ctx);
+    }
+
+    STFUNC(StateInit) {
+        StateInitImpl(ev, SelfId());
+    }
+
+    STFUNC(StateWork) {
+        HandleDefaultEvents(ev, SelfId());
+    }
+};
+
 class TFakeFileStore : public TActor<TFakeFileStore>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     TFakeFileStore(const TActorId& tablet, TTabletStorageInfo* info)
@@ -1003,8 +1038,13 @@ void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime 
 std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStorageInfo *)> NSchemeShardUT_Private::TTestEnv::GetTabletCreationFunc(ui32 type) {
     switch (type) {
     case TTabletTypes::BlockStoreVolume:
+    case TTabletTypes::BlockStoreVolumeDirect:
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeBlockStoreVolume(tablet, info);
+        };
+    case TTabletTypes::BlockStorePartitionDirect:
+        return [](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TFakeBlockStorePartitionDirect(tablet, info);
         };
     case TTabletTypes::FileStore:
         return [](const TActorId& tablet, TTabletStorageInfo* info) {

@@ -11,6 +11,8 @@
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <library/cpp/iterator/functools.h>
 
+#include <util/system/sanitizers.h>
+
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 
 namespace NKikimr {
@@ -335,13 +337,14 @@ Y_UNIT_TEST_SUITE(KqpService) {
             return false;
         };
 
-        size_t InFlight = 10;
+        size_t InFlight = NSan::PlainOrUnderSanitizer(10, 4);
+        const ui32 IterationCount = NSan::PlainOrUnderSanitizer(500u, 50u);
         NPar::LocalExecutor().RunAdditionalThreads(InFlight);
         NPar::LocalExecutor().ExecRange([&](int /*id*/) {
             NYdb::NTable::TTableClient db(driver);
             auto session = db.CreateSession().GetValueSync().GetSession();
 
-            for (ui32 i = 0; i < 500 || async_compilation_condition(); ++i) {
+            for (ui32 i = 0; i < IterationCount || async_compilation_condition(); ++i) {
                 ui32 value = useCache && useAsyncPatternCompilation ? i % AsyncPatternCompilationUniqueRequestsSize : i / 5;
                 ui64 total = 100500;
                 TString request = (TStringBuilder() << R"_(

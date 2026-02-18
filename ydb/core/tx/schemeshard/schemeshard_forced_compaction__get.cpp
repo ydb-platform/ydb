@@ -58,7 +58,6 @@ struct TSchemeShard::TForcedCompaction::TTxGet: public TRwTxBase {
     }
 
 private:
-
     void Reply(
         THolder<TEvForcedCompaction::TEvGetResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,

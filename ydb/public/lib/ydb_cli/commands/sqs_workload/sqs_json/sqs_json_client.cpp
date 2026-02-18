@@ -83,7 +83,7 @@ namespace NYdb::NConsoleClient {
         }
 
         Aws::Utils::Json::JsonValue BuildMessageAttributesJson(
-            const Aws::Map<Aws::String, Aws::SQS::Model::MessageAttributeValue>& messageAttributes) {
+            const Aws::Map<Aws::String, MessageAttributeValue>& messageAttributes) {
             Aws::Utils::Json::JsonValue messageAttributesJson;
             for (const auto& attrPair : messageAttributes) {
                 messageAttributesJson.WithObject(
@@ -93,12 +93,12 @@ namespace NYdb::NConsoleClient {
         }
 
         Aws::Utils::Json::JsonValue BuildMessageSystemAttributesJson(
-            const Aws::Map<Aws::SQS::Model::MessageSystemAttributeNameForSends,
-                           Aws::SQS::Model::MessageSystemAttributeValue>& messageSystemAttributes) {
+            const Aws::Map<MessageSystemAttributeNameForSends,
+                           MessageSystemAttributeValue>& messageSystemAttributes) {
             Aws::Utils::Json::JsonValue messageSystemAttributesJson;
             for (const auto& attrPair : messageSystemAttributes) {
                 Aws::String attrName =
-                    Aws::SQS::Model::MessageSystemAttributeNameForSendsMapper::
+                    MessageSystemAttributeNameForSendsMapper::
                         GetNameForMessageSystemAttributeNameForSends(attrPair.first);
                 messageSystemAttributesJson.WithObject(
                     attrName, BuildAttributeValueJson(attrPair.second));
@@ -244,7 +244,7 @@ namespace NYdb::NConsoleClient {
             Aws::SQS::SQSError error;
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());
-            return Aws::SQS::Model::SendMessageBatchOutcome(error);
+            return SendMessageBatchOutcome(error);
         }
 
         auto responseJson = ReadResponseBody(*response);
@@ -253,17 +253,17 @@ namespace NYdb::NConsoleClient {
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());
             error.SetMessage(responseJson.GetErrorMessage());
-            return Aws::SQS::Model::SendMessageBatchOutcome(error);
+            return SendMessageBatchOutcome(error);
         }
 
-        Aws::SQS::Model::SendMessageBatchResult result;
+        SendMessageBatchResult result;
         const auto& view = responseJson.View();
 
         if (view.KeyExists("Successful")) {
             const auto& successful = view.GetArray("Successful");
             for (size_t i = 0; i < successful.GetLength(); ++i) {
                 result.AddSuccessful(
-                    Aws::SQS::Model::SendMessageBatchResultEntry()
+                    SendMessageBatchResultEntry()
                         .WithId(successful[i].GetString("Id"))
                         .WithMessageId(successful[i].GetString("MessageId"))
                         .WithMD5OfMessageBody(
@@ -277,7 +277,7 @@ namespace NYdb::NConsoleClient {
             const auto& failed = view.GetArray("Failed");
             for (size_t i = 0; i < failed.GetLength(); ++i) {
                 result.AddFailed(
-                    Aws::SQS::Model::BatchResultErrorEntry()
+                    BatchResultErrorEntry()
                         .WithId(failed[i].GetString("Id"))
                         .WithSenderFault(failed[i].GetBool("SenderFault"))
                         .WithCode(failed[i].GetString("Code"))
@@ -285,7 +285,7 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        Aws::SQS::Model::SendMessageBatchOutcome outcome(result);
+        SendMessageBatchOutcome outcome(result);
         return outcome;
     }
 
@@ -311,7 +311,7 @@ namespace NYdb::NConsoleClient {
                  ++i) {
                 const auto& attribute =
                     receiveMessageRequest.GetAttributeNames()[i];
-                attributeNames[i] = Aws::SQS::Model::QueueAttributeNameMapper::
+                attributeNames[i] = QueueAttributeNameMapper::
                     GetNameForQueueAttributeName(attribute);
             }
 
@@ -345,7 +345,7 @@ namespace NYdb::NConsoleClient {
             Aws::SQS::SQSError error;
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());
-            return Aws::SQS::Model::ReceiveMessageOutcome(error);
+            return ReceiveMessageOutcome(error);
         }
 
         auto responseJson = ReadResponseBody(*response);
@@ -354,19 +354,19 @@ namespace NYdb::NConsoleClient {
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());
             error.SetMessage(responseJson.GetErrorMessage());
-            return Aws::SQS::Model::ReceiveMessageOutcome(error);
+            return ReceiveMessageOutcome(error);
         }
 
-        Aws::SQS::Model::ReceiveMessageResult result;
+        ReceiveMessageResult result;
         const auto& view = responseJson.View();
 
         if (!view.KeyExists("Messages")) {
-            return Aws::SQS::Model::ReceiveMessageOutcome(result);
+            return ReceiveMessageOutcome(result);
         }
 
         const auto& messages = view.GetArray("Messages");
         for (size_t i = 0; i < messages.GetLength(); ++i) {
-            Aws::SQS::Model::Message message;
+            Message message;
             message.WithBody(messages[i].GetString("Body"))
                 .WithMessageId(messages[i].GetString("MessageId"))
                 .WithReceiptHandle(messages[i].GetString("ReceiptHandle"))
@@ -375,12 +375,12 @@ namespace NYdb::NConsoleClient {
 
             if (messages[i].KeyExists("Attributes")) {
                 const auto& messageAttributes = messages[i].GetObject("Attributes");
-                Aws::Map<Aws::SQS::Model::MessageSystemAttributeName, Aws::String>
+                Aws::Map<MessageSystemAttributeName, Aws::String>
                     messageSystemAttributesMap;
                 for (const auto& [attributeName, attributeValue] :
                      messageAttributes.GetAllObjects()) {
 
-                    auto messageAttribute = Aws::SQS::Model::MessageSystemAttributeNameMapper::GetMessageSystemAttributeNameForName(attributeName);
+                    auto messageAttribute = MessageSystemAttributeNameMapper::GetMessageSystemAttributeNameForName(attributeName);
                     if (attributeValue.IsString()) {
                         messageSystemAttributesMap[messageAttribute] =
                             attributeValue.AsString();
@@ -396,14 +396,14 @@ namespace NYdb::NConsoleClient {
 
             if (messages[i].KeyExists("MessageAttributes")) {
                 const auto& messageAttributes = messages[i].GetObject("MessageAttributes");
-                Aws::Map<Aws::String, Aws::SQS::Model::MessageAttributeValue>
+                Aws::Map<Aws::String, MessageAttributeValue>
                     messageAttributesMap;
 
                 for (const auto& [attributeName, attributeValue] :
                      messageAttributes.GetAllObjects()) {
                     if (attributeValue.IsString()) {
                         messageAttributesMap[attributeName] =
-                            Aws::SQS::Model::MessageAttributeValue()
+                            MessageAttributeValue()
                                 .WithStringValue(attributeValue.AsString());
                     } else if (attributeValue.IsListType()) {
                         Aws::Vector<Aws::String> stringListValues;
@@ -415,7 +415,7 @@ namespace NYdb::NConsoleClient {
                                 attributeValue.AsArray()[j].AsString());
                         }
                         messageAttributesMap[attributeName] =
-                            Aws::SQS::Model::MessageAttributeValue()
+                            MessageAttributeValue()
                                 .WithStringListValues(stringListValues);
                     } else {
                         Cerr << "Unknown attribute type: " << attributeName << Endl;
@@ -430,7 +430,7 @@ namespace NYdb::NConsoleClient {
             result.AddMessages(message);
         }
 
-        return Aws::SQS::Model::ReceiveMessageOutcome(result);
+        return ReceiveMessageOutcome(result);
     }
 
     DeleteMessageBatchOutcome TSQSJsonClient::DeleteMessageBatch(
@@ -470,7 +470,7 @@ namespace NYdb::NConsoleClient {
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());
             error.SetMessage(response->GetClientErrorMessage());
-            return Aws::SQS::Model::DeleteMessageBatchOutcome(error);
+            return DeleteMessageBatchOutcome(error);
         }
 
         auto responseJson = ReadResponseBody(*response);
@@ -479,17 +479,17 @@ namespace NYdb::NConsoleClient {
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());
             error.SetMessage(responseJson.GetErrorMessage());
-            return Aws::SQS::Model::DeleteMessageBatchOutcome(error);
+            return DeleteMessageBatchOutcome(error);
         }
 
-        Aws::SQS::Model::DeleteMessageBatchResult result;
+        DeleteMessageBatchResult result;
         const auto& view = responseJson.View();
 
         if (view.KeyExists("Successful")) {
             const auto& successful = view.GetArray("Successful");
             for (size_t i = 0; i < successful.GetLength(); ++i) {
                 result.AddSuccessful(
-                    Aws::SQS::Model::DeleteMessageBatchResultEntry().WithId(
+                    DeleteMessageBatchResultEntry().WithId(
                         successful[i].GetString("Id")));
             }
         }
@@ -498,7 +498,7 @@ namespace NYdb::NConsoleClient {
             const auto& failed = view.GetArray("Failed");
             for (size_t i = 0; i < failed.GetLength(); ++i) {
                 result.AddFailed(
-                    Aws::SQS::Model::BatchResultErrorEntry()
+                    BatchResultErrorEntry()
                         .WithId(failed[i].GetString("Id"))
                         .WithSenderFault(failed[i].GetBool("SenderFault"))
                         .WithCode(failed[i].GetString("Code"))
@@ -506,7 +506,7 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        return Aws::SQS::Model::DeleteMessageBatchOutcome(result);
+        return DeleteMessageBatchOutcome(result);
     }
 
     GetQueueUrlOutcome TSQSJsonClient::GetQueueUrl(
@@ -540,7 +540,7 @@ namespace NYdb::NConsoleClient {
             Aws::SQS::SQSError error;
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());
-            return Aws::SQS::Model::GetQueueUrlOutcome(error);
+            return GetQueueUrlOutcome(error);
         }
 
         auto responseJson = ReadResponseBody(*response);
@@ -549,16 +549,16 @@ namespace NYdb::NConsoleClient {
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());
             error.SetMessage(responseJson.GetErrorMessage());
-            return Aws::SQS::Model::GetQueueUrlOutcome(error);
+            return GetQueueUrlOutcome(error);
         }
 
-        Aws::SQS::Model::GetQueueUrlResult result;
+        GetQueueUrlResult result;
         const auto& view = responseJson.View();
         if (view.KeyExists("QueueUrl")) {
             result.SetQueueUrl(view.GetString("QueueUrl"));
         }
 
-        return Aws::SQS::Model::GetQueueUrlOutcome(result);
+        return GetQueueUrlOutcome(result);
     }
 
 } // namespace NYdb::NConsoleClient

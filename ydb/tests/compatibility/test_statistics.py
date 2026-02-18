@@ -259,3 +259,92 @@ class TestBaseStatisticsRollingUpdate(RollingUpgradeAndDowngradeFixture):
         assert wait_for(
             lambda: self.get_planner_row_count_estimate() == self.row_count, timeout_seconds=300), \
             "base stats not ready after node roll"
+
+
+class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        if min(self.versions) < (25, 4):
+            pytest.skip("Only available since 26-1")
+
+        yield from self.setup_cluster(
+            tenant_db="mydb",
+            extra_feature_flags={"enable_column_statistics": True},
+            additional_log_configs={
+                'STATISTICS': LogLevels.DEBUG,
+            },
+        )
+
+    def create_tables(self):
+        def query(table_name, is_column):
+            ret = f"""
+                    CREATE TABLE {table_name} (
+                    key Int64 NOT NULL,
+                    str_val Utf8 NOT NULL,
+                    int_val Int64 NOT NULL,
+                    PRIMARY KEY (key)
+                )"""
+            if is_column:
+                ret += "WITH (STORE=COLUMN)"
+            return ret
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(query('ds_table', False))
+            session_pool.execute_with_retries(query('cs_table', True))
+
+        self.tables = ['ds_table', 'cs_table']
+
+    def write_data(self, count):
+        values_str = ", ".join(f"({k}, 'Hello, YDB {int(k / 10)}!', {int(k / 10)})"
+                               for k in range(count))
+
+        def query(table_name):
+            return f"UPSERT INTO {table_name} (key, str_val, int_val) VALUES {values_str}"
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for table in self.tables:
+                session_pool.execute_with_retries(query(table))
+
+    def get_planner_selectivity_estimate(self, table_name):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            res = session_pool.explain_with_retries(f"SELECT count(*) FROM {table_name} WHERE int_val < 10")
+            logger.debug(f"SELECT count explain: {res}")
+            explain = json.loads(res)
+
+        def get_estimate(plan_node):
+            if plan_node.get("Name") == "Filter" and 'int_val' in plan_node.get("Predicate"):
+                rc = plan_node.get("E-Rows")
+                return int(rc) if rc is not None else None
+            for p in plan_node.get("Plans", []) + plan_node.get("Operators", []):
+                rc = get_estimate(p)
+                if rc is not None:
+                    return rc
+
+        rc = get_estimate(explain["Plan"])
+        logger.debug(f"{table_name} planner selectivity estimate: {rc}")
+        return rc
+
+    def test(self):
+        ROW_COUNT = 1000
+        self.create_tables()
+        self.write_data(ROW_COUNT)
+
+        def try_analyze(session_pool, table_name):
+            try:
+                session_pool.execute_with_retries(f"ANALYZE {table_name}")
+            except ydb.issues.Error as e:
+                logger.warning(f'ANALYZE {table_name} error: {e}, ignoring')
+            else:
+                logger.info(f'ANALYZE {table_name} successful')
+
+        for _ in self.roll():
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                for table in self.tables:
+                    try_analyze(session_pool, table)
+
+        # check that ANALYZE was successful at least once
+        expected_count = len([i for i in range(ROW_COUNT) if int(i / 10) < 10])
+        for table in self.tables:
+            estimate = self.get_planner_selectivity_estimate(table)
+            assert estimate <= expected_count * 1.5
+            assert estimate >= expected_count * 0.5

@@ -152,7 +152,13 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
             return "global sync fulltext_plain";
         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
             return "global sync fulltext_relevance";
+        case NYql::TIndexDescription::EType::LocalBloomFilter:
+            return "local bloom_filter";
+        case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
+            return "local bloom_ngram_filter";
     }
+    Y_UNREACHABLE();
+    return "unknown";
 }
 
 TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary, TMaybe<ui64> tabletId,
@@ -773,6 +779,8 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         switch (x.second->Type) {
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalAsync:
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
                 return false;
             case TIndexDescription::EType::GlobalSyncUnique:
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
@@ -780,6 +788,8 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             case TIndexDescription::EType::GlobalFulltextRelevance:
                 return true;
         }
+        Y_UNREACHABLE();
+        return false;
     };
     const bool needsKqpEffect = std::find_if(indexes.begin(), indexes.end(), idxNeedsKqpEffect) != indexes.end();
 

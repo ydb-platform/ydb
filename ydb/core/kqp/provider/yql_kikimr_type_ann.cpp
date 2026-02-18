@@ -1058,15 +1058,15 @@ private:
                 }
                 indexType = TIndexDescription::EType::GlobalFulltextRelevance;
             } else if (type == "localBloomFilter") {
-                if (!SessionCtx->Config().FeatureFlag.GetEnableColumnshardBloomFilter()) {
-                    stx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter support is disabled"));
+                if (!SessionCtx->Config().FeatureFlags.GetEnableColumnshardBloomFilter()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter support is disabled"));
                     return TStatus::Error;
                 }
 
                 indexType = TIndexDescription::EType::LocalBloomFilter;
             } else if (type == "localBloomNgramFilter") {
-                if (!SessionCtx->Config().FeatureFlag.GetEnableColumnshardBloomNgramFilter()) {
-                    stx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom ngram filter support is disabled"));
+                if (!SessionCtx->Config().FeatureFlags.GetEnableColumnshardBloomNgramFilter()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom ngram filter support is disabled"));
                     return TStatus::Error;
                 }
 
@@ -1795,7 +1795,7 @@ private:
                 auto nameNode = action.Value().Cast<TCoAtom>();
                 auto name = TString(nameNode.Value());
 
-                if (table->Metadata->StoreType == EStoreType != EStoreType::Column) {
+                if (table->Metadata->StoreType != EStoreType::Column) {
                     const auto& indexes = table->Metadata->Indexes;
 
                     auto cmp = [name](const TIndexDescription& desc) {

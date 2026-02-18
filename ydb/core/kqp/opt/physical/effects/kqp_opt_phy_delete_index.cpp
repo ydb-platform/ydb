@@ -84,7 +84,10 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
 
         switch (indexDesc->Type) {
             case TIndexDescription::EType::GlobalAsync:
-                AFL_ENSURE(false);
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+                // Local bloom indexes don't have separate impl tables for KQP index effects.
+                break;
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {
                 // deleteIndexKeys are already correct

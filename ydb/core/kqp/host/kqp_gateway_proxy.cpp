@@ -561,7 +561,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
-    if (auto&& index : metadata->Indexes) {
+    for (auto&& index : metadata->Indexes) {
         auto* upsert = tableDesc.MutableSchema()->AddIndexes();
         upsert->SetName(index.Name);
         THashMap<TString, ui32> columnIdsByName;
@@ -580,6 +580,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
                 }
 
                 upsert->SetClassName("BLOOM_FILTER");
+                auto* bloom = upsert->MutableBloomFilter();
                 auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
                 if (columnIdIt == columnIdsByName.end()) {
                     code = Ydb::StatusIds::BAD_REQUEST;

@@ -545,12 +545,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             fulltextIndexSettings = index.global_fulltext_relevance_index().fulltext_settings();
             break;
         }
-        case Ydb::Table::TableIndex::kLocalBloomFilter: {
+        case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
             Stream << " LOCAL USING bloom_filter ON ";
             isLocalBloomFilter = true;
             break;
         }
-        case Ydb::Table::TableIndex::kLocalBloomNgramFilter: {
+        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
             Stream << " LOCAL USING bloom_ngram_filter ON ";
             isLocalBloomNgramFilter = true;
             break;
@@ -710,12 +710,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         Stream << ")";
     }
 
-    if (isLocalBloomFilter && index.local_bloom_filter().has_false_positive_probability()) {
-        Stream << " WITH (false_positive_probability=" << index.local_bloom_filter().false_positive_probability() << ")";
+    if (isLocalBloomFilter && index.local_bloom_filter_index().has_false_positive_probability()) {
+        Stream << " WITH (false_positive_probability=" << index.local_bloom_filter_index().false_positive_probability() << ")";
     }
 
     if (isLocalBloomNgramFilter) {
-        const auto& settings = index.local_bloom_ngram_filter();
+        const auto& settings = index.local_bloom_ngram_filter_index();
         Stream << " WITH ("
                << "ngram_size=" << settings.ngram_size()
                << ", hashes_count=" << settings.hashes_count()

@@ -77,7 +77,7 @@ struct TIndexDescription {
         ui32 HashesCount = 0;
         ui32 FilterSizeBytes = 0;
         ui32 RecordsCount = 0;
-        bool CaseSensetive = true;
+        bool CaseSensitive = true;
     };
 
     enum class EType : ui32 {

@@ -1,0 +1,1289 @@
+diff --git a/ydb/core/kqp/common/kqp_batch_operations.cpp b/ydb/core/kqp/common/kqp_batch_operations.cpp
+index 3db3bd57cd8..61c32613d99 100644
+--- a/ydb/core/kqp/common/kqp_batch_operations.cpp
++++ b/ydb/core/kqp/common/kqp_batch_operations.cpp
+@@ -12,6 +12,8 @@ bool IsIndexSupported(NYql::TIndexDescription::EType type, bool enabledIndexStre
+         case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+         case NYql::TIndexDescription::EType::GlobalFulltextPlain:
+         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
++        case NYql::TIndexDescription::EType::LocalBloomFilter:
++        case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
+             return false;
+     }
+     Y_UNREACHABLE();
+diff --git a/ydb/core/kqp/host/kqp_gateway_proxy.cpp b/ydb/core/kqp/host/kqp_gateway_proxy.cpp
+index cc6e859106f..31f00dcc54c 100644
+--- a/ydb/core/kqp/host/kqp_gateway_proxy.cpp
++++ b/ydb/core/kqp/host/kqp_gateway_proxy.cpp
+@@ -462,6 +462,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
+         return false;
+     }
+ 
++    ui32 nextColumnId = 1;
+     for (const auto& name : metadata.ColumnOrder) {
+         auto columnIt = metadata.Columns.find(name);
+         Y_ENSURE(columnIt != metadata.Columns.end());
+@@ -479,6 +480,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
+         }
+ 
+         NKikimrSchemeOp::TOlapColumnDescription& columnDesc = *schema.AddColumns();
++        columnDesc.SetId(nextColumnId++);
+         columnDesc.SetName(columnIt->second.Name);
+         columnDesc.SetType(columnIt->second.Type);
+         columnDesc.SetNotNull(columnIt->second.NotNull);
+@@ -496,6 +498,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
+     for (const auto& keyColumn : metadata.KeyColumnNames) {
+         schema.AddKeyColumnNames(keyColumn);
+     }
++    schema.SetNextColumnId(nextColumnId);
+     return true;
+ }
+ 
+@@ -557,6 +560,68 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
+         }
+     }
+ 
++    for (const auto& index : metadata->Indexes) {
++        auto* upsert = tableDesc.MutableSchema()->AddIndexes();
++        upsert->SetName(index.Name);
++        THashMap<TString, ui32> columnIdsByName;
++        for (const auto& column : tableDesc.GetSchema().GetColumns()) {
++            if (column.HasId()) {
++                columnIdsByName.emplace(column.GetName(), column.GetId());
++            }
++        }
++
++        switch (index.Type) {
++            case TIndexDescription::EType::LocalBloomFilter: {
++                if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
++                    code = Ydb::StatusIds::BAD_REQUEST;
++                    error = "Local bloom index requires exactly one index column and does not support data columns";
++                    return false;
++                }
++                upsert->SetClassName("BLOOM_FILTER");
++                auto* bloom = upsert->MutableBloomFilter();
++                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
++                if (columnIdIt == columnIdsByName.end()) {
++                    code = Ydb::StatusIds::BAD_REQUEST;
++                    error = TStringBuilder() << "Unknown index column '" << index.KeyColumns.front() << "' for local bloom index";
++                    return false;
++                }
++                bloom->AddColumnIds(columnIdIt->second);
++                const auto& settings = std::get<TIndexDescription::TLocalBloomFilterDescription>(index.SpecializedIndexDescription);
++                if (settings.FalsePositiveProbability) {
++                    bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
++                }
++                break;
++            }
++            case TIndexDescription::EType::LocalBloomNgramFilter: {
++                if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
++                    code = Ydb::StatusIds::BAD_REQUEST;
++                    error = "Local bloom ngram index requires exactly one index column and does not support data columns";
++                    return false;
++                }
++                upsert->SetClassName("BLOOM_NGRAMM_FILTER");
++                const auto& settings = std::get<TIndexDescription::TLocalBloomNgramFilterDescription>(index.SpecializedIndexDescription);
++                auto* ngram = upsert->MutableBloomNGrammFilter();
++                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
++                if (columnIdIt == columnIdsByName.end()) {
++                    code = Ydb::StatusIds::BAD_REQUEST;
++                    error = TStringBuilder() << "Unknown index column '" << index.KeyColumns.front() << "' for local bloom ngram index";
++                    return false;
++                }
++                ngram->SetColumnId(columnIdIt->second);
++                ngram->SetNGrammSize(settings.NgramSize);
++                ngram->SetHashesCount(settings.HashesCount);
++                ngram->SetFilterSizeBytes(settings.FilterSizeBytes);
++                ngram->SetRecordsCount(settings.RecordsCount);
++                ngram->SetCaseSensitive(settings.CaseSensitive);
++                break;
++            }
++            default:
++                code = Ydb::StatusIds::BAD_REQUEST;
++                error = TStringBuilder() << "Unsupported index type for column table create: " << static_cast<ui32>(index.Type);
++                return false;
++        }
++    }
++
+     tableDesc.SetTemporary(metadata->Temporary);
+ 
+     return true;
+@@ -919,6 +984,10 @@ public:
+                             case TIndexDescription::EType::GlobalFulltextRelevance:
+                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
+                                 break;
++                            case TIndexDescription::EType::LocalBloomFilter:
++                            case TIndexDescription::EType::LocalBloomNgramFilter:
++                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom indexes are supported only for column tables"));
++                                return;
+                         }
+                     }
+                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
+diff --git a/ydb/core/kqp/opt/kqp_opt_kql.cpp b/ydb/core/kqp/opt/kqp_opt_kql.cpp
+index 6418c470e7e..7bb5ab6a4e5 100644
+--- a/ydb/core/kqp/opt/kqp_opt_kql.cpp
++++ b/ydb/core/kqp/opt/kqp_opt_kql.cpp
+@@ -152,7 +152,13 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
+             return "global sync fulltext_plain";
+         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
+             return "global sync fulltext_relevance";
++        case NYql::TIndexDescription::EType::LocalBloomFilter:
++            return "local bloom_filter";
++        case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
++            return "local bloom_ngram_filter";
+     }
++    Y_UNREACHABLE();
++    return "unknown";
+ }
+ 
+ TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary, TMaybe<ui64> tabletId,
+@@ -778,8 +784,12 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
+             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+             case TIndexDescription::EType::GlobalFulltextPlain:
+             case TIndexDescription::EType::GlobalFulltextRelevance:
++            case TIndexDescription::EType::LocalBloomFilter:
++            case TIndexDescription::EType::LocalBloomNgramFilter:
+                 return true;
+         }
++        Y_UNREACHABLE();
++        return false;
+     };
+     const bool needsKqpEffect = std::find_if(indexes.begin(), indexes.end(), idxNeedsKqpEffect) != indexes.end();
+ 
+diff --git a/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_delete_index.cpp b/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_delete_index.cpp
+index a8fb6d7890d..93ba9b9c77e 100644
+--- a/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_delete_index.cpp
++++ b/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_delete_index.cpp
+@@ -137,6 +137,10 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
+                 }
+                 break;
+             }
++            case TIndexDescription::EType::LocalBloomFilter:
++            case TIndexDescription::EType::LocalBloomNgramFilter:
++                // Local bloom indexes don't have separate impl tables for KQP index effects.
++                break;
+         }
+ 
+         auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
+diff --git a/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_indexes.cpp b/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_indexes.cpp
+index a52bda47291..2d5d0a7be39 100644
+--- a/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_indexes.cpp
++++ b/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_indexes.cpp
+@@ -149,6 +149,9 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
+                     result.emplace_back(indexTable, &index);
+                     break;
+                 }
++                case TIndexDescription::EType::LocalBloomFilter:
++                case TIndexDescription::EType::LocalBloomNgramFilter:
++                    break;
+             }
+         }
+     }
+diff --git a/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_insert_index.cpp b/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_insert_index.cpp
+index 76871e021bb..17e4c06b755 100644
+--- a/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_insert_index.cpp
++++ b/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_insert_index.cpp
+@@ -269,6 +269,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
+                 }
+                 break;
+             }
++            case TIndexDescription::EType::LocalBloomFilter:
++            case TIndexDescription::EType::LocalBloomNgramFilter:
++                break;
+         }
+         Y_ENSURE(upsertIndexRows.has_value());
+         Y_ENSURE(indexTableColumns);
+diff --git a/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_upsert_index.cpp b/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_upsert_index.cpp
+index 5ac4e58156e..677fd7ea117 100644
+--- a/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_upsert_index.cpp
++++ b/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_upsert_index.cpp
+@@ -995,6 +995,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode,
+                     }
+                     break;
+                 }
++                case TIndexDescription::EType::LocalBloomFilter:
++                case TIndexDescription::EType::LocalBloomNgramFilter:
++                    break;
+             }
+ 
+             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
+@@ -1066,6 +1069,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode,
+                     }
+                     break;
+                 }
++                case TIndexDescription::EType::LocalBloomFilter:
++                case TIndexDescription::EType::LocalBloomNgramFilter:
++                    break;
+             }
+ 
+             if (fulltextDictDelta.size()) {
+diff --git a/ydb/core/kqp/provider/yql_kikimr_exec.cpp b/ydb/core/kqp/provider/yql_kikimr_exec.cpp
+index 9803a66c554..2cdaa183647 100644
+--- a/ydb/core/kqp/provider/yql_kikimr_exec.cpp
++++ b/ydb/core/kqp/provider/yql_kikimr_exec.cpp
+@@ -2262,6 +2262,20 @@ public:
+                                     return SyncError();
+                                 }
+                                 add_index->mutable_global_fulltext_relevance_index();
++                            } else if (type == "localBloomFilter") {
++                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
++                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
++                                        TStringBuilder() << "Local bloom filter index support is disabled"));
++                                    return SyncError();
++                                }
++                                add_index->mutable_local_bloom_filter_index();
++                            } else if (type == "localBloomNgramFilter") {
++                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
++                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
++                                        TStringBuilder() << "Local bloom ngram filter index support is disabled"));
++                                    return SyncError();
++                                }
++                                add_index->mutable_local_bloom_ngram_filter_index();
+                             } else {
+                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                     TStringBuilder() << "Unknown index type: " << type));
+@@ -2331,6 +2345,57 @@ public:
+                                             name.StringValue(), value.StringValue(), error);
+                                         break;
+                                     }
++                                    case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
++                                        if (name.StringValue() == "false_positive_probability") {
++                                            double fpp = 0.0;
++                                            if (!TryFromString<double>(value.StringValue(), fpp)) {
++                                                error = TStringBuilder() << "Invalid false_positive_probability value: " << value.StringValue();
++                                            } else {
++                                                add_index->mutable_local_bloom_filter_index()->set_false_positive_probability(fpp);
++                                            }
++                                        } else {
++                                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
++                                        }
++                                        break;
++                                    }
++                                    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
++                                        ui32 uiValue = 0;
++                                        if (name.StringValue() == "case_sensitive") {
++                                            bool boolValue = true;
++                                            if (!TryFromString<bool>(value.StringValue(), boolValue)) {
++                                                error = TStringBuilder() << "Invalid case_sensitive value: " << value.StringValue();
++                                            } else {
++                                                add_index->mutable_local_bloom_ngram_filter_index()->set_case_sensitive(boolValue);
++                                            }
++                                        } else if (name.StringValue() == "ngram_size") {
++                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
++                                                error = TStringBuilder() << "Invalid ngram_size value: " << value.StringValue();
++                                            } else {
++                                                add_index->mutable_local_bloom_ngram_filter_index()->set_ngram_size(uiValue);
++                                            }
++                                        } else if (name.StringValue() == "hashes_count") {
++                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
++                                                error = TStringBuilder() << "Invalid hashes_count value: " << value.StringValue();
++                                            } else {
++                                                add_index->mutable_local_bloom_ngram_filter_index()->set_hashes_count(uiValue);
++                                            }
++                                        } else if (name.StringValue() == "filter_size_bytes") {
++                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
++                                                error = TStringBuilder() << "Invalid filter_size_bytes value: " << value.StringValue();
++                                            } else {
++                                                add_index->mutable_local_bloom_ngram_filter_index()->set_filter_size_bytes(uiValue);
++                                            }
++                                        } else if (name.StringValue() == "records_count") {
++                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
++                                                error = TStringBuilder() << "Invalid records_count value: " << value.StringValue();
++                                            } else {
++                                                add_index->mutable_local_bloom_ngram_filter_index()->set_records_count(uiValue);
++                                            }
++                                        } else {
++                                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
++                                        }
++                                        break;
++                                    }
+                                     default:
+                                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                             << "Unknown index setting: " << name.StringValue()));
+@@ -2392,6 +2457,26 @@ public:
+                             }
+                             break;
+                         }
++                        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
++                            if (table.Metadata->StoreType != EStoreType::Column) {
++                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom indexes are supported only for column tables"));
++                                return SyncError();
++                            }
++                            break;
++                        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
++                            if (table.Metadata->StoreType != EStoreType::Column) {
++                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom ngram indexes are supported only for column tables"));
++                                return SyncError();
++                            }
++                            if (!add_index->local_bloom_ngram_filter_index().ngram_size() ||
++                                !add_index->local_bloom_ngram_filter_index().hashes_count() ||
++                                !add_index->local_bloom_ngram_filter_index().filter_size_bytes() ||
++                                !add_index->local_bloom_ngram_filter_index().records_count()) {
++                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
++                                    "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
++                                return SyncError();
++                            }
++                            break;
+                         case Ydb::Table::TableIndex::TYPE_NOT_SET: {
+                             ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
+                             return SyncError();
+diff --git a/ydb/core/kqp/provider/yql_kikimr_gateway.h b/ydb/core/kqp/provider/yql_kikimr_gateway.h
+index b8ad54d7f51..6caac901de1 100644
+--- a/ydb/core/kqp/provider/yql_kikimr_gateway.h
++++ b/ydb/core/kqp/provider/yql_kikimr_gateway.h
+@@ -68,6 +68,18 @@ struct TKikimrQueryLimits {
+ };
+ 
+ struct TIndexDescription {
++    struct TLocalBloomFilterDescription {
++        std::optional<double> FalsePositiveProbability;
++    };
++
++    struct TLocalBloomNgramFilterDescription {
++        ui32 NgramSize = 0;
++        ui32 HashesCount = 0;
++        ui32 FilterSizeBytes = 0;
++        ui32 RecordsCount = 0;
++        bool CaseSensitive = true;
++    };
++
+     enum class EType : ui32 {
+         GlobalSync = 0,
+         GlobalAsync = 1,
+@@ -75,6 +87,8 @@ struct TIndexDescription {
+         GlobalSyncVectorKMeansTree = 3,
+         GlobalFulltextPlain = 4,
+         GlobalFulltextRelevance = 5,
++        LocalBloomFilter = 6,
++        LocalBloomNgramFilter = 7,
+     };
+ 
+     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
+@@ -94,7 +108,12 @@ struct TIndexDescription {
+     const ui64 LocalPathId;
+     const ui64 PathOwnerId;
+ 
+-    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrSchemeOp::TFulltextIndexDescription>;
++    using TSpecializedIndexDescription = std::variant<
++        std::monostate,
++        NKikimrKqp::TVectorIndexKmeansTreeDescription,
++        NKikimrSchemeOp::TFulltextIndexDescription,
++        TLocalBloomFilterDescription,
++        TLocalBloomNgramFilterDescription>;
+     TSpecializedIndexDescription SpecializedIndexDescription;
+ 
+     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
+@@ -141,6 +160,10 @@ struct TIndexDescription {
+                 SpecializedIndexDescription = std::move(fulltextIndexDescription);
+                 break;
+             }
++            case EType::LocalBloomFilter:
++            case EType::LocalBloomNgramFilter:
++                YQL_ENSURE(false, << "Local bloom index type is not represented by NKikimrSchemeOp::TIndexDescription");
++                break;
+             default:
+                 YQL_ENSURE(false, << InvalidIndexType(Type));
+         }
+@@ -170,6 +193,12 @@ struct TIndexDescription {
+             case EType::GlobalFulltextRelevance:
+                 SpecializedIndexDescription = message->GetFulltextIndexDescription();
+                 break;
++            case EType::LocalBloomFilter:
++                SpecializedIndexDescription = TLocalBloomFilterDescription{};
++                break;
++            case EType::LocalBloomNgramFilter:
++                SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
++                break;
+             default:
+                 YQL_ENSURE(false, << InvalidIndexType(Type));
+         }
+@@ -208,6 +237,10 @@ struct TIndexDescription {
+                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain;
+             case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
+                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance;
++            case NYql::TIndexDescription::EType::LocalBloomFilter:
++            case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
++                YQL_ENSURE(false, << "Local bloom index type can't be converted to NKikimrSchemeOp::EIndexType");
++                break;
+             default:
+                 YQL_ENSURE(false, << InvalidIndexType(indexType));
+         }
+@@ -247,6 +280,12 @@ struct TIndexDescription {
+             case EType::GlobalFulltextRelevance:
+                 *message->MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
+                 break;
++            case EType::LocalBloomFilter:
++                Y_ASSERT(std::holds_alternative<TLocalBloomFilterDescription>(SpecializedIndexDescription));
++                break;
++            case EType::LocalBloomNgramFilter:
++                Y_ASSERT(std::holds_alternative<TLocalBloomNgramFilterDescription>(SpecializedIndexDescription));
++                break;
+         }
+     }
+ 
+@@ -274,6 +313,9 @@ struct TIndexDescription {
+             case EType::GlobalFulltextPlain:
+             case EType::GlobalFulltextRelevance:
+                 return true;
++            case EType::LocalBloomFilter:
++            case EType::LocalBloomNgramFilter:
++                return false;
+         }
+     }
+ 
+@@ -288,6 +330,9 @@ struct TIndexDescription {
+                 return NKikimr::NTableIndex::GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT);
+             case EType::GlobalFulltextRelevance:
+                 return NKikimr::NTableIndex::GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
++            case EType::LocalBloomFilter:
++            case EType::LocalBloomNgramFilter:
++                return {};
+         }
+         return {};
+     }
+diff --git a/ydb/core/kqp/provider/yql_kikimr_type_ann.cpp b/ydb/core/kqp/provider/yql_kikimr_type_ann.cpp
+index 35ac66f1fdd..86742d6886f 100644
+--- a/ydb/core/kqp/provider/yql_kikimr_type_ann.cpp
++++ b/ydb/core/kqp/provider/yql_kikimr_type_ann.cpp
+@@ -1057,10 +1057,30 @@ private:
+                     return TStatus::Error;
+                 }
+                 indexType = TIndexDescription::EType::GlobalFulltextRelevance;
++            } else if (type == "localBloomFilter") {
++                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
++                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter index support is disabled"));
++                    return TStatus::Error;
++                }
++                indexType = TIndexDescription::EType::LocalBloomFilter;
++            } else if (type == "localBloomNgramFilter") {
++                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
++                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom ngram filter index support is disabled"));
++                    return TStatus::Error;
++                }
++                indexType = TIndexDescription::EType::LocalBloomNgramFilter;
+             } else {
+                 YQL_ENSURE(false, "Unknown index type: " << type);
+             }
+ 
++            if ((indexType == TIndexDescription::EType::LocalBloomFilter ||
++                 indexType == TIndexDescription::EType::LocalBloomNgramFilter) &&
++                meta->StoreType != EStoreType::Column) {
++                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
++                    "Local bloom indexes are supported only for column tables"));
++                return TStatus::Error;
++            }
++
+             TVector<TString> indexColums;
+             TVector<TString> dataColums;
+ 
+@@ -1084,6 +1104,8 @@ private:
+ 
+             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
+             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
++            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDescription;
++            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDescription;
+             // fulltext index has per-column analyzers settings, single value for now
+             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
+                 indexColums.empty() ? "<none>" : indexColums.back()
+@@ -1107,6 +1129,57 @@ private:
+                             name.StringValue(), value.StringValue(), error);
+                         break;
+                     }
++                    case TIndexDescription::EType::LocalBloomFilter: {
++                        if (name.StringValue() == "false_positive_probability") {
++                            double fpp = 0.0;
++                            if (!TryFromString<double>(value.StringValue(), fpp)) {
++                                error = TStringBuilder() << "Invalid false_positive_probability value: " << value.StringValue();
++                            } else {
++                                localBloomFilterDescription.FalsePositiveProbability = fpp;
++                            }
++                        } else {
++                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
++                        }
++                        break;
++                    }
++                    case TIndexDescription::EType::LocalBloomNgramFilter: {
++                        ui32 uiValue = 0;
++                        if (name.StringValue() == "ngram_size") {
++                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
++                                error = TStringBuilder() << "Invalid ngram_size value: " << value.StringValue();
++                            } else {
++                                localBloomNgramFilterDescription.NgramSize = uiValue;
++                            }
++                        } else if (name.StringValue() == "hashes_count") {
++                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
++                                error = TStringBuilder() << "Invalid hashes_count value: " << value.StringValue();
++                            } else {
++                                localBloomNgramFilterDescription.HashesCount = uiValue;
++                            }
++                        } else if (name.StringValue() == "filter_size_bytes") {
++                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
++                                error = TStringBuilder() << "Invalid filter_size_bytes value: " << value.StringValue();
++                            } else {
++                                localBloomNgramFilterDescription.FilterSizeBytes = uiValue;
++                            }
++                        } else if (name.StringValue() == "records_count") {
++                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
++                                error = TStringBuilder() << "Invalid records_count value: " << value.StringValue();
++                            } else {
++                                localBloomNgramFilterDescription.RecordsCount = uiValue;
++                            }
++                        } else if (name.StringValue() == "case_sensitive") {
++                            bool boolValue = true;
++                            if (!TryFromString<bool>(value.StringValue(), boolValue)) {
++                                error = TStringBuilder() << "Invalid case_sensitive value: " << value.StringValue();
++                            } else {
++                                localBloomNgramFilterDescription.CaseSensitive = boolValue;
++                            }
++                        } else {
++                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
++                        }
++                        break;
++                    }
+                     default:
+                         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder()
+                             << "Unknown index setting: " << name.StringValue()));
+@@ -1157,6 +1230,30 @@ private:
+                     specializedIndexDescription = std::move(fulltextIndexDescription);
+                     break;
+                 }
++                case TIndexDescription::EType::LocalBloomFilter:
++                    if (indexColums.size() != 1 || !dataColums.empty()) {
++                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
++                            "Local bloom index requires exactly one index column and does not support data columns"));
++                        return IGraphTransformer::TStatus::Error;
++                    }
++                    specializedIndexDescription = std::move(localBloomFilterDescription);
++                    break;
++                case TIndexDescription::EType::LocalBloomNgramFilter:
++                    if (indexColums.size() != 1 || !dataColums.empty()) {
++                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
++                            "Local bloom ngram index requires exactly one index column and does not support data columns"));
++                        return IGraphTransformer::TStatus::Error;
++                    }
++                    if (!localBloomNgramFilterDescription.NgramSize ||
++                        !localBloomNgramFilterDescription.HashesCount ||
++                        !localBloomNgramFilterDescription.FilterSizeBytes ||
++                        !localBloomNgramFilterDescription.RecordsCount) {
++                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()),
++                            "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
++                        return IGraphTransformer::TStatus::Error;
++                    }
++                    specializedIndexDescription = std::move(localBloomNgramFilterDescription);
++                    break;
+             }
+ 
+             // IndexState and version, pathId are ignored for create table with index request
+@@ -1694,17 +1791,21 @@ private:
+                 auto nameNode = action.Value().Cast<TCoAtom>();
+                 auto name = TString(nameNode.Value());
+ 
+-                const auto& indexes = table->Metadata->Indexes;
++                // Column tables support local indexes that are not represented in table metadata indexes list.
++                // Skip strict existence check for column store to allow runtime-side validation.
++                if (table->Metadata->StoreType != EStoreType::Column) {
++                    const auto& indexes = table->Metadata->Indexes;
+ 
+-                auto cmp = [name](const TIndexDescription& desc) {
+-                    return name == desc.Name;
+-                };
++                    auto cmp = [name](const TIndexDescription& desc) {
++                        return name == desc.Name;
++                    };
+ 
+-                if (std::find_if(indexes.begin(), indexes.end(), cmp) == indexes.end()) {
+-                    ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+-                        << " Index: \"" << name << "\" does not exist"));
+-                    return TStatus::Error;
++                    if (std::find_if(indexes.begin(), indexes.end(), cmp) == indexes.end()) {
++                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
++                            << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
++                            << " Index: \"" << name << "\" does not exist"));
++                        return TStatus::Error;
++                    }
+                 }
+             } else if (name != "addColumnFamilies"
+                     && name != "alterColumnFamilies"
+diff --git a/ydb/core/kqp/ut/olap/indexes/indexes_ut.cpp b/ydb/core/kqp/ut/olap/indexes/indexes_ut.cpp
+index 5177f4af066..13125fab67d 100644
+--- a/ydb/core/kqp/ut/olap/indexes/indexes_ut.cpp
++++ b/ydb/core/kqp/ut/olap/indexes/indexes_ut.cpp
+@@ -14,6 +14,200 @@
+ namespace NKikimr::NKqp {
+ 
+ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
++    Y_UNIT_TEST(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax) {
++        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
++        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
++        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
++        TKikimrRunner kikimr(settings);
++
++        auto tableClient = kikimr.GetTableClient();
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto query = TStringBuilder() << R"(
++            --!syntax_v1
++            CREATE TABLE `/Root/olapTableWithLocalIndexes`
++            (
++                timestamp Timestamp NOT NULL,
++                resource_id Utf8,
++                uid Utf8 NOT NULL,
++                PRIMARY KEY (timestamp, uid)
++            )
++            PARTITION BY HASH(timestamp, uid)
++            WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
++            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto query = TStringBuilder() << R"(
++                --!syntax_v1
++                ALTER TABLE `/Root/olapTableWithLocalIndexes`
++                ADD INDEX idx_bloom LOCAL USING bloom_filter
++                    ON (resource_id)
++                    WITH (false_positive_probability = 0.01);
++            )";
++            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto query = TStringBuilder() << R"(
++                --!syntax_v1
++                ALTER TABLE `/Root/olapTableWithLocalIndexes`
++                ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
++                    ON (resource_id)
++                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true);
++            )";
++            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto query = TStringBuilder() << R"(
++                --!syntax_v1
++                ALTER TABLE `/Root/olapTableWithLocalIndexes` DROP INDEX idx_bloom;
++            )";
++            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto query = TStringBuilder() << R"(
++                --!syntax_v1
++                ALTER TABLE `/Root/olapTableWithLocalIndexes` DROP INDEX idx_ngram;
++            )";
++            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++    }
++
++    Y_UNIT_TEST(AddAndDropLocalBloomIndexesWithSqlSyntax) {
++        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
++        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
++        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
++        TKikimrRunner kikimr(settings);
++
++        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
++        auto tableClient = kikimr.GetTableClient();
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto query = TStringBuilder() << R"(
++                --!syntax_v1
++                ALTER TABLE `/Root/olapTable`
++                ADD INDEX idx_bloom LOCAL USING bloom_filter
++                    ON (uid)
++                    WITH (false_positive_probability = 0.01);
++            )";
++            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto query = TStringBuilder() << R"(
++                --!syntax_v1
++                ALTER TABLE `/Root/olapTable`
++                ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
++                    ON (resource_id)
++                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true);
++            )";
++            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto result = session.ExecuteSchemeQuery(
++                "ALTER TABLE `/Root/olapTable` DROP INDEX idx_bloom;").GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto result = session.ExecuteSchemeQuery(
++                "ALTER TABLE `/Root/olapTable` DROP INDEX idx_ngram;").GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++    }
++
++    Y_UNIT_TEST(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect) {
++        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
++        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
++        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
++        TKikimrRunner kikimr(settings);
++
++        auto tableClient = kikimr.GetTableClient();
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto query = TStringBuilder() << R"(
++            --!syntax_v1
++            CREATE TABLE `/Root/olapTableCreateBloom`
++            (
++                timestamp Timestamp NOT NULL,
++                resource_id Utf8,
++                uid Utf8 NOT NULL,
++                PRIMARY KEY (timestamp, uid),
++                INDEX idx_bloom LOCAL USING bloom_filter
++                    ON (resource_id)
++                    WITH (false_positive_probability = 0.01)
++            )
++            PARTITION BY HASH(timestamp, uid)
++            WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
++            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto result = session.ExecuteSchemeQuery(
++                "ALTER TABLE `/Root/olapTableCreateBloom` DROP INDEX idx_bloom;").GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++    }
++
++    Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect) {
++        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
++        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
++        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
++        TKikimrRunner kikimr(settings);
++
++        auto tableClient = kikimr.GetTableClient();
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto query = TStringBuilder() << R"(
++            --!syntax_v1
++            CREATE TABLE `/Root/olapTableCreateNgram`
++            (
++                timestamp Timestamp NOT NULL,
++                resource_id Utf8,
++                uid Utf8 NOT NULL,
++                PRIMARY KEY (timestamp, uid),
++                INDEX idx_ngram LOCAL USING bloom_ngram_filter
++                    ON (resource_id)
++                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true)
++            )
++            PARTITION BY HASH(timestamp, uid)
++            WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
++            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++
++        {
++            auto session = tableClient.CreateSession().GetValueSync().GetSession();
++            auto result = session.ExecuteSchemeQuery(
++                "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;").GetValueSync();
++            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
++        }
++    }
++
+     Y_UNIT_TEST(TablesInStore) {
+         auto settings = TKikimrSettings().SetWithSampleTables(false);
+         TKikimrRunner kikimr(settings);
+diff --git a/ydb/core/protos/feature_flags.proto b/ydb/core/protos/feature_flags.proto
+index 6f8d46dab41..4c67498fe08 100644
+--- a/ydb/core/protos/feature_flags.proto
++++ b/ydb/core/protos/feature_flags.proto
+@@ -254,4 +254,6 @@ message TFeatureFlags {
+     optional bool EnableSysViewPermissionsExport = 227 [default = false];
+     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
+     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
++    optional bool EnableLocalBloomFilterIndex = 230 [default = false];
++    optional bool EnableLocalBloomNgramFilterIndex = 231 [default = false];
+ }
+diff --git a/ydb/core/sys_view/show_create/create_table_formatter.cpp b/ydb/core/sys_view/show_create/create_table_formatter.cpp
+index ac0e925daab..be52855fb38 100644
+--- a/ydb/core/sys_view/show_create/create_table_formatter.cpp
++++ b/ydb/core/sys_view/show_create/create_table_formatter.cpp
+@@ -515,6 +515,8 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
+     EscapeName(index.name(), Stream);
+     std::optional<KMeansTreeSettings> kMeansTreeSettings;
+     std::optional<FulltextIndexSettings> fulltextIndexSettings;
++    bool isLocalBloomFilter = false;
++    bool isLocalBloomNgramFilter = false;
+     switch (index.type_case()) {
+         case TableIndex::kGlobalIndex: {
+             Stream << " GLOBAL SYNC ON ";
+@@ -543,6 +545,16 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
+             fulltextIndexSettings = index.global_fulltext_relevance_index().fulltext_settings();
+             break;
+         }
++        case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
++            Stream << " LOCAL USING bloom_filter ON ";
++            isLocalBloomFilter = true;
++            break;
++        }
++        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
++            Stream << " LOCAL USING bloom_ngram_filter ON ";
++            isLocalBloomNgramFilter = true;
++            break;
++        }
+         case Ydb::Table::TableIndex::TYPE_NOT_SET:
+             ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::TableIndex::TYPE_NOT_SET");
+     }
+@@ -697,6 +709,21 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
+ 
+         Stream << ")";
+     }
++
++    if (isLocalBloomFilter && index.local_bloom_filter_index().has_false_positive_probability()) {
++        Stream << " WITH (false_positive_probability=" << index.local_bloom_filter_index().false_positive_probability() << ")";
++    }
++
++    if (isLocalBloomNgramFilter) {
++        const auto& settings = index.local_bloom_ngram_filter_index();
++        Stream << " WITH ("
++               << "ngram_size=" << settings.ngram_size()
++               << ", hashes_count=" << settings.hashes_count()
++               << ", filter_size_bytes=" << settings.filter_size_bytes()
++               << ", records_count=" << settings.records_count()
++               << ", case_sensitive=" << (settings.case_sensitive() ? "true" : "false")
++               << ")";
++    }
+ }
+ 
+ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
+diff --git a/ydb/core/tx/schemeshard/schemeshard_build_index__create.cpp b/ydb/core/tx/schemeshard/schemeshard_build_index__create.cpp
+index 9adb2420e6e..7637db1ac6f 100644
+--- a/ydb/core/tx/schemeshard/schemeshard_build_index__create.cpp
++++ b/ydb/core/tx/schemeshard/schemeshard_build_index__create.cpp
+@@ -315,6 +315,10 @@ private:
+             buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
+             break;
+         }
++        case Ydb::Table::TableIndex::TypeCase::kLocalBloomFilterIndex:
++        case Ydb::Table::TableIndex::TypeCase::kLocalBloomNgramFilterIndex:
++            explain = "Local bloom indexes are not supported by index build operation";
++            return false;
+         };
+ 
+         buildInfo.IndexName = index.name();
+diff --git a/ydb/core/ydb_convert/table_description.cpp b/ydb/core/ydb_convert/table_description.cpp
+index dacd6337e20..5b05ecbd6ae 100644
+--- a/ydb/core/ydb_convert/table_description.cpp
++++ b/ydb/core/ydb_convert/table_description.cpp
+@@ -947,6 +947,82 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
+         } else if (req->has_drop_ttl_settings()) {
+             alterColumnTable->MutableAlterTtlSettings()->MutableDisabled();
+         }
++    } else if (OpType == EAlterOperationKind::AddIndex) {
++        if (req->add_indexes_size() != 1) {
++            status = Ydb::StatusIds::UNSUPPORTED;
++            error = "Only one index can be added by one operation";
++            return false;
++        }
++
++        const auto& index = req->add_indexes(0);
++        if (index.name().empty()) {
++            status = Ydb::StatusIds::BAD_REQUEST;
++            error = "Index must have a name";
++            return false;
++        }
++        if (index.index_columns_size() != 1) {
++            status = Ydb::StatusIds::BAD_REQUEST;
++            error = "Only one index column is supported for local bloom indexes";
++            return false;
++        }
++        if (!index.data_columns().empty()) {
++            status = Ydb::StatusIds::BAD_REQUEST;
++            error = "Data columns are not supported for local bloom indexes";
++            return false;
++        }
++
++        auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
++        alterColumnTable->SetName(name);
++        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
++        auto* upsert = alterColumnTable->MutableAlterSchema()->AddUpsertIndexes();
++        upsert->SetName(index.name());
++
++        switch (index.type_case()) {
++            case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
++                if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
++                    status = Ydb::StatusIds::UNSUPPORTED;
++                    error = "Local bloom filter index support is disabled";
++                    return false;
++                }
++                upsert->SetClassName("BLOOM_FILTER");
++                auto* bloom = upsert->MutableBloomFilter();
++                if (index.local_bloom_filter_index().has_false_positive_probability()) {
++                    bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
++                }
++                bloom->AddColumnNames(index.index_columns(0));
++                break;
++            }
++            case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
++                if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
++                    status = Ydb::StatusIds::UNSUPPORTED;
++                    error = "Local bloom ngram filter index support is disabled";
++                    return false;
++                }
++                upsert->SetClassName("BLOOM_NGRAMM_FILTER");
++                auto* ngram = upsert->MutableBloomNGrammFilter();
++                ngram->SetNGrammSize(index.local_bloom_ngram_filter_index().ngram_size());
++                ngram->SetHashesCount(index.local_bloom_ngram_filter_index().hashes_count());
++                ngram->SetFilterSizeBytes(index.local_bloom_ngram_filter_index().filter_size_bytes());
++                ngram->SetRecordsCount(index.local_bloom_ngram_filter_index().records_count());
++                ngram->SetCaseSensitive(index.local_bloom_ngram_filter_index().case_sensitive());
++                ngram->SetColumnName(index.index_columns(0));
++                break;
++            }
++            default:
++                status = Ydb::StatusIds::BAD_REQUEST;
++                error = "Only local bloom indexes are supported for column tables";
++                return false;
++        }
++    } else if (OpType == EAlterOperationKind::DropIndex) {
++        if (req->drop_indexes_size() != 1) {
++            status = Ydb::StatusIds::UNSUPPORTED;
++            error = "Only one index can be removed by one operation";
++            return false;
++        }
++        auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
++        alterColumnTable->SetName(name);
++        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
++        alterColumnTable->MutableAlterSchema()->AddDropIndexes(req->drop_indexes(0));
+     }
+ 
+     return true;
+@@ -1249,6 +1325,10 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
+             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
+             break;
+ 
++        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
++        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
++            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in secondary index creation config");
++
+         case Ydb::Table::TableIndex::TYPE_NOT_SET:
+             // FIXME: python sdk can create a table with a secondary index without a type
+             // so it's not possible to return an invalid index type error here for now
+diff --git a/ydb/core/ydb_convert/table_settings.cpp b/ydb/core/ydb_convert/table_settings.cpp
+index 80d95c1361e..20e485a938b 100644
+--- a/ydb/core/ydb_convert/table_settings.cpp
++++ b/ydb/core/ydb_convert/table_settings.cpp
+@@ -541,6 +541,11 @@ bool FillIndexTablePartitioning(
+         }
+         break;
+ 
++    case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
++    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
++        // local bloom indexes don't have implementation tables with partitioning settings
++        break;
++
+     case Ydb::Table::TableIndex::TYPE_NOT_SET:
+         break;
+     }
+diff --git a/ydb/public/api/protos/ydb_table.proto b/ydb/public/api/protos/ydb_table.proto
+index 30b31893976..1d7a8ecba24 100644
+--- a/ydb/public/api/protos/ydb_table.proto
++++ b/ydb/public/api/protos/ydb_table.proto
+@@ -322,6 +322,18 @@ message GlobalFulltextRelevanceIndex {
+     FulltextIndexSettings fulltext_settings = 2;
+ }
+ 
++message LocalBloomFilterIndex {
++    optional double false_positive_probability = 1;
++}
++
++message LocalBloomNgramFilterIndex {
++    uint32 ngram_size = 1;
++    uint32 hashes_count = 2;
++    uint32 filter_size_bytes = 3;
++    uint32 records_count = 4;
++    bool case_sensitive = 5;
++}
++
+ // Represent table index
+ message TableIndex {
+     // Name of index
+@@ -336,6 +348,8 @@ message TableIndex {
+        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
+        GlobalFulltextPlainIndex global_fulltext_plain_index = 8;
+        GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 9;
++       LocalBloomFilterIndex local_bloom_filter_index = 10;
++       LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
+     }
+     // list of columns content to be copied in to index table
+     repeated string data_columns = 5;
+@@ -362,6 +376,8 @@ message TableIndexDescription {
+        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
+        GlobalFulltextPlainIndex global_fulltext_plain_index = 10;
+        GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 11;
++       LocalBloomFilterIndex local_bloom_filter_index = 12;
++       LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 13;
+     }
+     Status status = 4;
+     // list of columns content to be copied in to index table
+diff --git a/yql/essentials/sql/v1/SQLv1Antlr4.g.in b/yql/essentials/sql/v1/SQLv1Antlr4.g.in
+index f82f7b25d72..027c9600570 100644
+--- a/yql/essentials/sql/v1/SQLv1Antlr4.g.in
++++ b/yql/essentials/sql/v1/SQLv1Antlr4.g.in
+@@ -881,6 +881,7 @@ index_setting_value:
+     | STRING_VALUE
+     | integer
+     | bool_value
++    | real
+ ;
+ 
+ with_compact_settings: WITH LPAREN compact_setting_entry (COMMA compact_setting_entry)* COMMA? RPAREN;
+diff --git a/yql/essentials/sql/v1/node.h b/yql/essentials/sql/v1/node.h
+index 17576cffed6..545e543bc13 100644
+--- a/yql/essentials/sql/v1/node.h
++++ b/yql/essentials/sql/v1/node.h
+@@ -1253,7 +1253,9 @@ struct TIndexDescription {
+         GlobalSyncUnique,
+         GlobalVectorKmeansTree,
+         GlobalFulltextPlain,
+-        GlobalFulltextRelevance
++        GlobalFulltextRelevance,
++        LocalBloomFilter,
++        LocalBloomNgramFilter
+     };
+ 
+     struct TIndexSetting {
+diff --git a/yql/essentials/sql/v1/query.cpp b/yql/essentials/sql/v1/query.cpp
+index 5d33a948ad4..c66e765319d 100644
+--- a/yql/essentials/sql/v1/query.cpp
++++ b/yql/essentials/sql/v1/query.cpp
+@@ -156,6 +156,10 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
+             return node.Q("globalFulltextPlain");
+         case TIndexDescription::EType::GlobalFulltextRelevance:
+             return node.Q("globalFulltextRelevance");
++        case TIndexDescription::EType::LocalBloomFilter:
++            return node.Q("localBloomFilter");
++        case TIndexDescription::EType::LocalBloomNgramFilter:
++            return node.Q("localBloomNgramFilter");
+     }
+ }
+ 
+diff --git a/yql/essentials/sql/v1/sql_translation.cpp b/yql/essentials/sql/v1/sql_translation.cpp
+index 32f6ce6eeeb..e7875f877ce 100644
+--- a/yql/essentials/sql/v1/sql_translation.cpp
++++ b/yql/essentials/sql/v1/sql_translation.cpp
+@@ -657,6 +657,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
+     indexes.emplace_back(IdEx(node.GetRule_an_id2(), *this));
+ 
+     const auto& indexType = node.GetRule_table_index_type3().GetBlock1();
++    bool isLocalIndex = false;
+     switch (indexType.Alt_case()) {
+         // "GLOBAL"
+         case TRule_table_index_type_TBlock1::kAlt1: {
+@@ -692,8 +693,8 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
+         } break;
+         // "LOCAL"
+         case TRule_table_index_type_TBlock1::kAlt2:
+-            AltNotImplemented("local", indexType);
+-            return false;
++            isLocalIndex = true;
++            break;
+         case TRule_table_index_type_TBlock1::ALT_NOT_SET:
+             Y_UNREACHABLE();
+     }
+@@ -701,6 +702,10 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
+     if (node.GetRule_table_index_type3().HasBlock2()) {
+         const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name);
+         if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT_PLAIN" || subType == "FULLTEXT_RELEVANCE") {
++            if (isLocalIndex) {
++                Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
++                return false;
++            }
+             if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
+                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
+                 return false;
+@@ -715,10 +720,25 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
+             } else {
+                 Y_ABORT("Unreachable");
+             }
++        } else if (subType == "BLOOM_FILTER" || subType == "BLOOM_NGRAM_FILTER") {
++            if (!isLocalIndex) {
++                Ctx_.Error() << subType << " index can only be LOCAL";
++                return false;
++            }
++            if (subType == "BLOOM_FILTER") {
++                indexes.back().Type = TIndexDescription::EType::LocalBloomFilter;
++            } else if (subType == "BLOOM_NGRAM_FILTER") {
++                indexes.back().Type = TIndexDescription::EType::LocalBloomNgramFilter;
++            } else {
++                Y_ABORT("Unreachable");
++            }
+         } else {
+             Ctx_.Error() << subType << " index subtype is not supported";
+             return false;
+         }
++    } else if (isLocalIndex) {
++        AltNotImplemented("local", indexType);
++        return false;
+     }
+ 
+     // WITH
+@@ -727,7 +747,9 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
+         auto& index = indexes.back();
+         if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree ||
+             index.Type == TIndexDescription::EType::GlobalFulltextPlain ||
+-            index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
++            index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
++            index.Type == TIndexDescription::EType::LocalBloomFilter ||
++            index.Type == TIndexDescription::EType::LocalBloomNgramFilter) {
+             if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
+                 return false;
+             }
+@@ -743,6 +765,11 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
+     }
+ 
+     if (node.HasBlock9()) {
++        if (indexes.back().Type == TIndexDescription::EType::LocalBloomFilter ||
++            indexes.back().Type == TIndexDescription::EType::LocalBloomNgramFilter) {
++            Ctx_.Error() << "COVER is not supported for local bloom indexes";
++            return false;
++        }
+         const auto& block = node.GetBlock9();
+         indexes.back().DataColumns.emplace_back(IdEx(block.GetRule_an_id_schema3(), *this));
+         for (const auto& inner : block.GetBlock4()) {
+@@ -872,6 +899,8 @@ TString TSqlTranslation::GetIndexSettingStringValue(const TRule_index_setting_va
+             return Token(node.GetAlt_index_setting_value3().GetRule_integer1().GetToken1());
+         case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue4: // bool_value
+             return Token(node.GetAlt_index_setting_value4().GetRule_bool_value1().GetToken1());
++        case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue5: // real
++            return Token(node.GetAlt_index_setting_value5().GetRule_real1().GetToken1());
+         case NSQLv1Generated::TRule_index_setting_value::ALT_NOT_SET:
+             Y_UNREACHABLE();
+     }
+diff --git a/yql/essentials/sql/v1/sql_ut_common.h b/yql/essentials/sql/v1/sql_ut_common.h
+index a108013e266..d7e4a9f2355 100644
+--- a/yql/essentials/sql/v1/sql_ut_common.h
++++ b/yql/essentials/sql/v1/sql_ut_common.h
+@@ -3726,6 +3726,105 @@ Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
+ #endif
+ }
+ 
++Y_UNIT_TEST(AlterTableAddIndexLocalBloomFilter) {
++    const auto result = SqlToYql(R"sql(USE ydb;
++            ALTER TABLE table ADD INDEX idx
++                LOCAL USING bloom_filter
++                ON (col)
++                WITH (
++                    false_positive_probability=0.05
++                )
++                )sql");
++    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
++}
++
++Y_UNIT_TEST(AlterTableAddIndexLocalBloomNgramFilter) {
++    const auto result = SqlToYql(R"sql(USE ydb;
++            ALTER TABLE table ADD INDEX idx
++                LOCAL USING bloom_ngram_filter
++                ON (col)
++                WITH (
++                    ngram_size=3,
++                    hashes_count=2,
++                    filter_size_bytes=512,
++                    records_count=1024,
++                    case_sensitive=true
++                )
++                )sql");
++    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
++}
++
++Y_UNIT_TEST(CreateTableAddIndexLocalBloomFilter) {
++    const auto result = SqlToYql(R"sql(USE ydb;
++            CREATE TABLE table (
++                pk INT32 NOT NULL,
++                col String,
++                INDEX idx LOCAL USING bloom_filter
++                    ON (col)
++                    WITH (false_positive_probability=0.05),
++                PRIMARY KEY (pk))
++                )sql");
++    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
++}
++
++Y_UNIT_TEST(CreateTableAddIndexLocalBloomNgramFilter) {
++    const auto result = SqlToYql(R"sql(USE ydb;
++            CREATE TABLE table (
++                pk INT32 NOT NULL,
++                col String,
++                INDEX idx LOCAL USING bloom_ngram_filter
++                    ON (col)
++                    WITH (ngram_size=3, hashes_count=2, filter_size_bytes=512, records_count=1024, case_sensitive=true),
++                PRIMARY KEY (pk))
++                )sql");
++    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
++}
++
++Y_UNIT_TEST(AlterTableAddIndexGlobalBloomFilterIsNotSupported) {
++    ExpectFailWithError("USE ydb; ALTER TABLE table ADD INDEX idx GLOBAL USING bloom_filter ON (col)",
++                        "<main>:1:55: Error: BLOOM_FILTER index can only be LOCAL\n");
++}
++
++Y_UNIT_TEST(AlterTableAddIndexLocalBloomCoverIsNotSupported) {
++    ExpectFailWithFuzzyError("USE ydb; ALTER TABLE table ADD INDEX idx LOCAL USING bloom_filter ON (col) COVER (payload)",
++                             "Error: COVER is not supported for local bloom indexes");
++}
++
++Y_UNIT_TEST(AlterTableDropIndexIsCorrect) {
++    const auto result = SqlToYql("USE ydb; ALTER TABLE table DROP INDEX idx");
++    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
++}
++
++Y_UNIT_TEST(CreateTableWithLocalBloomFilterAndDropIndexIsCorrect) {
++    const auto result = SqlToYql(R"sql(USE ydb;
++            CREATE TABLE table (
++                pk INT32 NOT NULL,
++                col String,
++                INDEX idx LOCAL USING bloom_filter
++                    ON (col)
++                    WITH (false_positive_probability=0.05),
++                PRIMARY KEY (pk)
++            );
++            ALTER TABLE table DROP INDEX idx;
++            )sql");
++    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
++}
++
++Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterAndDropIndexIsCorrect) {
++    const auto result = SqlToYql(R"sql(USE ydb;
++            CREATE TABLE table (
++                pk INT32 NOT NULL,
++                col String,
++                INDEX idx LOCAL USING bloom_ngram_filter
++                    ON (col)
++                    WITH (ngram_size=3, hashes_count=2, filter_size_bytes=512, records_count=1024, case_sensitive=true),
++                PRIMARY KEY (pk)
++            );
++            ALTER TABLE table DROP INDEX idx;
++            )sql");
++    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
++}
++
+ Y_UNIT_TEST(CreateTableAddIndexGlobalUnique) {
+     NYql::TAstParseResult result = SqlToYql(R"sql(USE ydb;
+             CREATE TABLE table (

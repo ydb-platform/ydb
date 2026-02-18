@@ -953,7 +953,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 return false;
             }
 
-            const auto& index req->add_indexes(0);
+            const auto& index = req->add_indexes(0);
             if (index.name().empty()) {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = "Index must have a name";
@@ -979,7 +979,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             upsert->SetName(index.name());
 
             switch (index.type_case()) {
-                case Ydb::Table::TableIndex::kLocalBloomFilter: {
+                case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
                     if (!AppData()->FeatureFlags.GetEnableColumnshardBloomFilter()) {
                         status = Ydb::StatusIds::UNSUPPORTED;
                         error = "Local bloom filter index support is disabled";
@@ -988,14 +988,14 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                     upsert->SetClassName("BLOOM_FILTER");
                     auto* bloom = upsert->MutableBloomFilter();
-                    if (index.local_bloom_filter().has_false_positive_probability()) {
-                        bloom->SetFalsePositiveProbability(index.local_bloom_filter().false_positive_probability());
+                    if (index.local_bloom_filter_index().has_false_positive_probability()) {
+                        bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
                     }
 
                     bloom->AddColumnNames(index.index_columns(0));
                     break;
                 }
-                case Ydb::Table::TableIndex::kLocalBloomNgramFilter: {
+                case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
                     if (!AppData()->FeatureFlags.GetEnableColumnshardBloomNgramFilter()) {
                         status = Ydb::StatusIds::UNSUPPORTED;
                         error = "Local bloom ngram filter index support is disabled";
@@ -1004,11 +1004,11 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                     upsert->SetClassName("BLOOM_NGRAMM_FILTER");
                     auto* ngram = upsert->MutableBloomNGrammFilter();
-                    ngram->SetNGrammSize(index.local_bloom_ngram_filter().ngram_size());
-                    ngram->SetHashesCount(index.local_bloom_ngram_filter().hashes_count());
-                    ngram->SetFilterSizeBytes(index.local_bloom_ngram_filter().filter_size_bytes());
-                    ngram->SetRecordsCount(index.local_bloom_ngram_filter().records_count());
-                    ngram->SetCaseSensitive(index.local_bloom_ngram_filter().case_sensitive());
+                    ngram->SetNGrammSize(index.local_bloom_ngram_filter_index().ngram_size());
+                    ngram->SetHashesCount(index.local_bloom_ngram_filter_index().hashes_count());
+                    ngram->SetFilterSizeBytes(index.local_bloom_ngram_filter_index().filter_size_bytes());
+                    ngram->SetRecordsCount(index.local_bloom_ngram_filter_index().records_count());
+                    ngram->SetCaseSensitive(index.local_bloom_ngram_filter_index().case_sensitive());
                     ngram->SetColumnName(index.index_columns(0));
                     break;
                 }
@@ -1329,6 +1329,10 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
             break;
+        
+        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom indexes types aren't supported in secondary index creation config");
 
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             // FIXME: python sdk can create a table with a secondary index without a type

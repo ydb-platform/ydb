@@ -1,7 +1,6 @@
 import logging
 import pytest
 import random
-import time
 from ydb.tests.olap.column_compression.common.base import ColumnTestBase
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
@@ -194,7 +193,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
-        assert(self.wait_for(lambda: table.get_portion_count() == 1, 70))
+        assert self.wait_for(lambda: table.get_portion_count() == 1, 70)
 
         volumes = table.get_volumes_column("value1")
         koef = self.volumes_with_compression[1] / volumes[1]
@@ -218,7 +217,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
-        assert(self.wait_for(lambda: table.get_portion_count() == 1, 70))
+        assert self.wait_for(lambda: table.get_portion_count() == 1, 70)
 
         volumes = table.get_volumes_column("value1")
         koef = volumes[1] / self.volumes_with_compression[1]
@@ -242,7 +241,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
-        assert(self.wait_for(lambda: table.get_portion_count() == 1, 70))
+        assert self.wait_for(lambda: table.get_portion_count() == 1, 70)
 
         volumes = table.get_volumes_column("value1")
         koef = self.volumes_with_compression[1] / volumes[1]

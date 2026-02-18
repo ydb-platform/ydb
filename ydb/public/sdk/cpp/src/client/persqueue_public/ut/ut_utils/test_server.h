@@ -44,6 +44,14 @@ public:
     {
     }
 
+    TTestServer(TTestServer&&) = default;
+    TTestServer& operator=(TTestServer&&) = default;
+
+    ~TTestServer() {
+        ShutdownGRpc();
+        ShutdownServer();
+    }
+
     void StartServer(bool doClientInit = true, TMaybe<TString> databaseName = Nothing()) {
         Log.SetFormatter([](ELogPriority priority, TStringBuf message) {
             return TStringBuilder() << TInstant::Now() << " " << priority << ": " << message << Endl;
@@ -64,7 +72,9 @@ public:
     }
 
     void ShutdownGRpc() {
-        CleverServer->ShutdownGRpc();
+        if (CleverServer) {
+            CleverServer->ShutdownGRpc();
+        }
     }
 
     void EnableGRpc() {

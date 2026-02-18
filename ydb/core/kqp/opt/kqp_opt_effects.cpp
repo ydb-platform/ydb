@@ -342,32 +342,50 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
 
     if (sinkEffect) {
-        auto sink = Build<TDqSink>(ctx, node.Pos())
-            .DataSink<TKqpTableSink>()
-                .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
-                .Cluster(ctx.NewAtom(node.Pos(), "db"))
-                .Build()
-            .Index().Value("0").Build()
-            .Settings<TKqpTableSinkSettings>()
-                .Table(node.Table())
-                .InconsistentWrite(settings.AllowInconsistentWrites
-                    ? ctx.NewAtom(node.Pos(), "true")
-                    : ctx.NewAtom(node.Pos(), "false"))
-                .StreamWrite(useStreamWrite
-                    ? ctx.NewAtom(node.Pos(), "true")
-                    : ctx.NewAtom(node.Pos(), "false"))
-                .Mode(ctx.NewAtom(node.Pos(), settings.Mode))
-                .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
-                .IsBatch(node.IsBatch())
-                .IsIndexImplTable(isIndexImplTable
-                    ? ctx.NewAtom(node.Pos(), "true")
-                    : ctx.NewAtom(node.Pos(), "false"))
-                .DefaultColumns(node.DefaultColumns())
-                .ReturningColumns(node.ReturningColumns())
-                .Settings()
-                    .Build()
+        auto sinkSettings = Build<TKqpTableSinkSettings>(ctx, node.Pos())
+            .Table(node.Table())
+            .InconsistentWrite(settings.AllowInconsistentWrites
+                ? ctx.NewAtom(node.Pos(), "true")
+                : ctx.NewAtom(node.Pos(), "false"))
+            .StreamWrite(useStreamWrite
+                ? ctx.NewAtom(node.Pos(), "true")
+                : ctx.NewAtom(node.Pos(), "false"))
+            .Mode(ctx.NewAtom(node.Pos(), settings.Mode))
+            .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
+            .IsBatch(node.IsBatch())
+            .IsIndexImplTable(isIndexImplTable
+                ? ctx.NewAtom(node.Pos(), "true")
+                : ctx.NewAtom(node.Pos(), "false"))
+            .DefaultColumns(node.DefaultColumns())
+            .ReturningColumns(node.ReturningColumns())
+            .Settings()
                 .Build()
             .Done();
+        auto sink = [&ctx, &node, &sinkSettings, &table](bool needOutputTransform) {
+            if (!needOutputTransform) {
+                return Build<TDqSink>(ctx, node.Pos())
+                    .DataSink<TKqpTableSink>()
+                        .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
+                        .Cluster(ctx.NewAtom(node.Pos(), "db"))
+                        .Build()
+                    .Index().Value("0").Build()
+                    .Settings(sinkSettings)
+                    .Done().Ptr();
+            } else {
+                return Build<TDqTransform>(ctx, node.Pos())
+                    .Index().Build("0")
+                    .DataSink<TKqpTableSink>()
+                        .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
+                        .Cluster(ctx.NewAtom(node.Pos(), "db"))
+                        .Build()
+                    .Type<TCoAtom>()
+                        .Build("ReturningSink")
+                    .InputType(ExpandType(node.Pos(), GetSeqItemType(*node.Input().Ref().GetTypeAnn()), ctx))
+                    .OutputType(ExpandType(node.Pos(), *BuildReturningType(node.ReturningColumns(), table, ctx), ctx))
+                    .Settings(sinkSettings)
+                    .Done().Ptr();
+            }
+        }(kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty());
 
         const auto rowArgument = Build<TCoArgument>(ctx, node.Pos())
             .Name("row")
@@ -519,30 +537,48 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
 
     if (sinkEffect) {
-        auto sink = Build<TDqSink>(ctx, node.Pos())
-            .DataSink<TKqpTableSink>()
-                .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
-                .Cluster(ctx.NewAtom(node.Pos(), "db"))
-                .Build()
-            .Index().Value("0").Build()
-            .Settings<TKqpTableSinkSettings>()
-                .Table(node.Table())
-                .InconsistentWrite(ctx.NewAtom(node.Pos(), "false"))
-                .StreamWrite(useStreamWrite
-                        ? ctx.NewAtom(node.Pos(), "true")
-                        : ctx.NewAtom(node.Pos(), "false"))
-                .Mode(ctx.NewAtom(node.Pos(), "delete"))
-                .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
-                .IsBatch(node.IsBatch())
-                .IsIndexImplTable(isIndexImplTable
-                        ? ctx.NewAtom(node.Pos(), "true")
-                        : ctx.NewAtom(node.Pos(), "false"))
-                .DefaultColumns<TCoAtomList>().Build()
-                .ReturningColumns(node.ReturningColumns())
-                .Settings()
-                    .Build()
+        auto sinkSettings = Build<TKqpTableSinkSettings>(ctx, node.Pos())
+            .Table(node.Table())
+            .InconsistentWrite(ctx.NewAtom(node.Pos(), "false"))
+            .StreamWrite(useStreamWrite
+                    ? ctx.NewAtom(node.Pos(), "true")
+                    : ctx.NewAtom(node.Pos(), "false"))
+            .Mode(ctx.NewAtom(node.Pos(), "delete"))
+            .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
+            .IsBatch(node.IsBatch())
+            .IsIndexImplTable(isIndexImplTable
+                    ? ctx.NewAtom(node.Pos(), "true")
+                    : ctx.NewAtom(node.Pos(), "false"))
+            .DefaultColumns<TCoAtomList>().Build()
+            .ReturningColumns(node.ReturningColumns())
+            .Settings()
                 .Build()
             .Done();
+        auto sink = [&ctx, &node, &sinkSettings, &table](bool needOutputTransform) {
+            if (!needOutputTransform) {
+                return Build<TDqSink>(ctx, node.Pos())
+                    .DataSink<TKqpTableSink>()
+                        .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
+                        .Cluster(ctx.NewAtom(node.Pos(), "db"))
+                        .Build()
+                    .Index().Value("0").Build()
+                    .Settings(sinkSettings)
+                    .Done().Ptr();
+            } else {
+                return Build<TDqTransform>(ctx, node.Pos())
+                    .Index().Build("0")
+                    .DataSink<TKqpTableSink>()
+                        .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
+                        .Cluster(ctx.NewAtom(node.Pos(), "db"))
+                        .Build()
+                    .Type<TCoAtom>()
+                        .Build("ReturningSink")
+                    .InputType(ExpandType(node.Pos(), GetSeqItemType(*node.Input().Ref().GetTypeAnn()), ctx))
+                    .OutputType(ExpandType(node.Pos(), *BuildReturningType(node.ReturningColumns(), table, ctx), ctx))
+                    .Settings(sinkSettings)
+                    .Done().Ptr();
+            }
+        }(kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty());
 
         const auto rowArgument = Build<TCoArgument>(ctx, node.Pos())
             .Name("row")

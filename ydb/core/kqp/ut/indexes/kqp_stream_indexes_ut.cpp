@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
-    Y_UNIT_TEST(SecondaryAndReturning) {
+    Y_UNIT_TEST_TWIN(SecondaryAndReturning, WithIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
@@ -561,9 +561,9 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             CREATE TABLE `/Root/DataShard` (
                 c0 Int64, c1 Int64, c2 Int64,
                 PRIMARY KEY (c0),
-                INDEX idx0 GLOBAL SYNC ON (c2),
+                %s
             );
-        )");
+        )", WithIndex ? "INDEX idx0 GLOBAL SYNC ON (c2)," : "");
 
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -595,13 +595,58 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         {
             auto it = client.StreamExecuteQuery(
                 R"(
+                    UPSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES
+                        (0, 10, 20)
+                    RETURNING c0, c1, c2;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0];[10];[20]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT c0, c1, c2 FROM `/Root/DataShard` ORDER BY c0, c1, c2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0];[10];[20]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                R"(
+                    UPDATE `/Root/DataShard`
+                    SET c2 = c2 + 10
+                    WHERE c0 = 0
+                    RETURNING c0, c1, c2;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0];[10];[30]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT c0, c1, c2 FROM `/Root/DataShard` ORDER BY c0, c1, c2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0];[10];[30]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                R"(
                     DELETE FROM `/Root/DataShard` ON (c0) VALUES (0)
                     RETURNING c0, c1, c2;
                 )",
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[[0];[1];[2]]])");
+            CompareYson(output, R"([[[0];[10];[30]]])");
         }
 
         {

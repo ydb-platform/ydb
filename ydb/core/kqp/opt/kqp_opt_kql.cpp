@@ -798,7 +798,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Columns<TCoAtomList>()
                 .Add(updateColumnsList)
                 .Build()
-            .ReturningColumns<TCoAtomList>().Build()
+            .ReturningColumns(update.ReturningColumns())
             .IsBatch(update.IsBatch())
             .Settings(IsConditionalUpdateSetting(useStreamIndex, ctx, update.Pos()))
             .Done();

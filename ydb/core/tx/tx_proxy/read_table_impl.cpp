@@ -1537,9 +1537,11 @@ private:
         TXLOG_D("Sending TEvProposeTransaction (scan) to shard " << shardId << " ReadTxId# " << state.ReadTxId);
 
         // TODO: support followers?
-        auto ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN, ctx.SelfID, state.ReadTxId, txBody, txFlags);
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(ev, shardId, true));
-
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
+                new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
+                    ctx.SelfID, state.ReadTxId, txBody, txFlags),
+                shardId, true));
+        
         state.State = EShardState::ReadTableProposeSent;
     }
 

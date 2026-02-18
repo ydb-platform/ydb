@@ -164,7 +164,10 @@ const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
 
 static TString GetUserSID(const IRequestOpCtx* request)
 {
-    return (request->GetInternalToken() != nullptr) ? request->GetInternalToken()->GetUserSID() : "";
+    if (request == nullptr ) {
+        return BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+    }
+    return (request->GetInternalToken() != nullptr) ? request->GetInternalToken()->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
 }
 
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
@@ -189,7 +192,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
+        Request->ReplyWithYdbStatus(Ydb::Statusds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {

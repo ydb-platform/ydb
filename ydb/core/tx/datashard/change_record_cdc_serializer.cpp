@@ -327,7 +327,7 @@ protected:
             SerializeJsonValue(record.GetSchema(), json["newImage"], body.GetNewImage());
         }
 
-        if (!record.GetUserSID().empty() && Opts.UserSIDs) {
+        if (Opts.UserSIDs && !record.GetUserSID().empty()) {
             json["user"] = record.GetUserSID();
         }
 
@@ -534,7 +534,7 @@ protected:
             Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
 
-        if (!record.GetUserSID().empty() && Opts.UserSIDs) {
+        if (Opts.UserSIDs && !record.GetUserSID().empty()) {
             auto& userIdentityJson = json["userIdentity"];
             if (record.GetUserSID() == BUILTIN_ACL_CDC_TTL) {
                 userIdentityJson["type"] = "Service";   
@@ -607,7 +607,7 @@ protected:
             // TODO: db & table
         });
 
-        if (!record.GetUserSID().empty() && Opts.UserSIDs) {
+        if (Opts.UserSIDs && !record.GetUserSID().empty()) {
             sourceJson["user"] = record.GetUserSID();
         }
     }

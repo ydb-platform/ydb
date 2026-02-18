@@ -89,9 +89,8 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
-    TEvQueryRequest(const TString& userSID) 
-        : UserSID(userSID) {
-        Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+    TEvQueryRequest(const TString& userSID) : TEvQueryRequest() {
+        UserSID = userSID;
     }
 
     bool IsSerializable() const override {

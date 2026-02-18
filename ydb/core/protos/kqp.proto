@@ -843,8 +843,8 @@ message TKqpTableSinkSettings {
     optional bool IsIndexImplTable = 21;
     optional string Database = 22;
     repeated uint32 DefaultColumnsIds = 23;
-    optional string UserSID = 24;
-    repeated TKqpColumnMetadataProto ReturningColumns = 25;
+    repeated TKqpColumnMetadataProto ReturningColumns = 24;
+    optional string UserSID = 25;
 }
 
 message TReadVectorTopK {

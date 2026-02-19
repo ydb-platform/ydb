@@ -311,85 +311,87 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  ```python
-  import os
-  import sqlalchemy as sa
-  import ydb
+  - Native SDK
 
-  engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
-  with engine.connect() as connection:
-      dbapi_conn = connection.connection
+    ```python
+    import posixpath
+    import ydb
 
-      column_types = (
+    def bulk_upsert(driver: ydb.Driver, path: str):
+        column_types = (
             ydb.BulkUpsertColumns()
             .add_column("id", ydb.PrimitiveType.Uint64)
             .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         )
-      rows = [
-          {"id": 1, "val": "1"},
-          {"id": 2, "val": "2"},
-          {"id": 3, "val": "3"},
-      ]
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+        driver.table_client.bulk_upsert(posixpath.join(path, "tablename"), rows, column_types)
+    ```
 
-      dbapi_conn.bulk_upsert("tablename", rows, column_types)
-  ```
+  - Native SDK (Asyncio)
 
-  {% endcut %}
+    ```python
+    import os
+    import posixpath
+    import ydb
+    import asyncio
 
-  {% cut "asyncio" %}
+    async def bulk_upsert(driver: ydb.aio.Driver, path: str):
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("id", ydb.PrimitiveType.Uint64)
+            .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+        await driver.table_client.bulk_upsert(
+            posixpath.join(path, "tablename"), rows, column_types
+        )
 
-  ```python
-  import os
-  import posixpath
-  import ydb
-  import asyncio
+    async def main():
+        async with ydb.aio.Driver(
+            connection_string=os.environ["YDB_CONNECTION_STRING"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            await bulk_upsert(driver, "/local")
 
-  async def bulk_upsert(driver: ydb.aio.Driver, path: str):
-      column_types = (
-          ydb.BulkUpsertColumns()
-          .add_column("id", ydb.PrimitiveType.Uint64)
-          .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-      )
-      rows = [
-          {"id": 1, "val": "1"},
-          {"id": 2, "val": "2"},
-          {"id": 3, "val": "3"},
-      ]
-      await driver.table_client.bulk_upsert(
-          posixpath.join(path, "tablename"), rows, column_types
-      )
+    asyncio.run(main())
+    ```
 
-  async def main():
-      async with ydb.aio.Driver(
-          connection_string=os.environ["YDB_CONNECTION_STRING"],
-          credentials=ydb.credentials_from_env_variables(),
-      ) as driver:
-          await driver.wait()
-          await bulk_upsert(driver, "/local")
+  - SQLAlchemy
 
-  asyncio.run(main())
-  ```
+    ```python
+    import os
+    import sqlalchemy as sa
+    import ydb
 
-  {% endcut %}
+    engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
+    with engine.connect() as connection:
+        dbapi_conn = connection.connection
 
-  ```python
-  import posixpath
-  import ydb
+        column_types = (
+              ydb.BulkUpsertColumns()
+              .add_column("id", ydb.PrimitiveType.Uint64)
+              .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+          )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
 
-  def bulk_upsert(driver: ydb.Driver, path: str):
-      column_types = (
-          ydb.BulkUpsertColumns()
-          .add_column("id", ydb.PrimitiveType.Uint64)
-          .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-      )
-      rows = [
-          {"id": 1, "val": "1"},
-          {"id": 2, "val": "2"},
-          {"id": 3, "val": "3"},
-      ]
-      driver.table_client.bulk_upsert(posixpath.join(path, "tablename"), rows, column_types)
-  ```
+        dbapi_conn.bulk_upsert("tablename", rows, column_types)
+    ```
+
+  {% endlist %}
 
 {% endlist %}

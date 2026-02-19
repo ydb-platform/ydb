@@ -125,29 +125,33 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  import ydb
-  import asyncio
+  - Native SDK
 
-  async def ydb_init():
-    async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
-      await driver.wait()
+    ```python
+    import ydb
+
+    with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
+      driver.wait(timeout=5)
       ...
+    ```
 
-  asyncio.run(ydb_init())
-  ```
+  - Native SDK (Asyncio)
 
-  {% endcut %}
+    ```python
+    import ydb
+    import asyncio
 
-  ```python
-  import ydb
+    async def ydb_init():
+      async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
+        await driver.wait()
+        ...
 
-  with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
-    driver.wait(timeout=5)
-    ...
-  ```
+    asyncio.run(ydb_init())
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

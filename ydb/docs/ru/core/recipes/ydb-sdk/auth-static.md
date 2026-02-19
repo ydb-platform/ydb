@@ -85,34 +85,36 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  ```python
-  import os
-  import sqlalchemy as sa
+  - Native SDK
 
-  engine = sa.create_engine(
-      "yql+ydb://localhost:2136/local",
-      connect_args={
-          "credentials": {
-              "username": os.environ["YDB_USER"],
-              "password": os.environ["YDB_PASSWORD"]
-          }
-      }
-  )
-  with engine.connect() as connection:
-      result = connection.execute(sa.text("SELECT 1"))
-  ```
+    {% include [auth-static](../../_includes/python/auth-static.md) %}
 
-  {% endcut %}
+  - Native SDK (Asyncio)
 
-  {% cut "asyncio" %}
+    {% include [auth-static](../../_includes/python/async/auth-static.md) %}
 
-  {% include [auth-static](../../_includes/python/async/auth-static.md) %}
+  - SQLAlchemy
 
-  {% endcut %}
+    ```python
+    import os
+    import sqlalchemy as sa
 
-  {% include [auth-static](../../_includes/python/auth-static.md) %}
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": {
+                "username": os.environ["YDB_USER"],
+                "password": os.environ["YDB_PASSWORD"]
+            }
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

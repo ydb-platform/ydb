@@ -130,157 +130,159 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  При использовании {{ ydb-short-name }} через SQLAlchemy для вставки данных используется функция `ydb_sqlalchemy.upsert`, которая формирует запрос `UPSERT INTO` на основе таблицы и переданных значений. Можно вставлять как одну строку, так и несколько строк за один вызов:
+  - Native SDK
 
-  ```python
-  import os
-  import sqlalchemy as sa
-  from sqlalchemy import Column, Integer, MetaData, String, Table
-  import ydb_sqlalchemy as ydb_sa
+    Для вставки данных используется `QuerySessionPool` и метод `execute_with_retries` с параметризованным YQL-запросом. Запрос оперирует контейнерным типом `List<Struct<...>>`, что позволяет передавать несколько строк за один вызов.
 
-  engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
+    ```python
+    import os
+    import ydb
 
-  series = Table(
-      "series",
-      MetaData(),
-      Column("series_id", Integer, primary_key=True),
-      Column("title", String),
-      Column("series_info", String),
-      Column("comment", String, nullable=True),
-  )
+    with ydb.Driver(
+        connection_string=os.environ["YDB_CONNECTION_STRING"],
+        credentials=ydb.credentials_from_env_variables(),
+    ) as driver:
+        driver.wait(timeout=5)
+        pool = ydb.QuerySessionPool(driver)
 
-  with engine.connect() as connection:
-      stmt = ydb_sa.upsert(series).values(
-          [
-              {
-                  "series_id": 1,
-                  "title": "IT Crowd",
-                  "series_info": "The IT Crowd is a British sitcom...",
-                  "comment": None,
-              },
-              {
-                  "series_id": 2,
-                  "title": "Silicon Valley",
-                  "series_info": "Silicon Valley is an American comedy...",
-                  "comment": "lorem ipsum",
-              },
-          ]
-      )
-      connection.execute(stmt)
-      connection.commit()
-  ```
+        series_struct_type = ydb.StructType()
+        series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
+        series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
+        series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
+        series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
 
-  {% endcut %}
+        series_data = [
+            {
+                "series_id": 1,
+                "title": "IT Crowd",
+                "series_info": "The IT Crowd is a British sitcom...",
+                "comment": None,
+            },
+            {
+                "series_id": 2,
+                "title": "Silicon Valley",
+                "series_info": "Silicon Valley is an American comedy...",
+                "comment": "lorem ipsum",
+            },
+        ]
 
-  {% cut "asyncio" %}
+        pool.execute_with_retries(
+            """
+            DECLARE $seriesData AS List<Struct<
+                series_id: Uint64,
+                title: Utf8,
+                series_info: Utf8,
+                comment: Optional<Utf8>
+            >>;
 
-  ```python
-  import os
-  import ydb
-  import asyncio
+            UPSERT INTO series
+            (
+                series_id,
+                title,
+                series_info,
+                comment
+            )
+            SELECT
+                series_id,
+                title,
+                series_info,
+                comment
+            FROM AS_TABLE($seriesData);
+            """,
+            {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
+            retry_settings=ydb.RetrySettings(idempotent=True),
+        )
+    ```
 
-  async def ydb_init():
-      async with ydb.aio.Driver(
-          connection_string=os.environ["YDB_CONNECTION_STRING"],
-          credentials=ydb.credentials_from_env_variables(),
-      ) as driver:
-          await driver.wait()
-          pool = ydb.aio.QuerySessionPool(driver)
+  - Native SDK (Asyncio)
 
-          series_struct_type = ydb.StructType()
-          series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
-          series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
-          series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
-          series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ```python
+    import os
+    import ydb
+    import asyncio
 
-          series_data = [
-              {"series_id": 1, "title": "IT Crowd", "series_info": "The IT Crowd is a British sitcom...", "comment": None},
-              {"series_id": 2, "title": "Silicon Valley", "series_info": "Silicon Valley is an American comedy...", "comment": "lorem ipsum"},
-          ]
+    async def ydb_init():
+        async with ydb.aio.Driver(
+            connection_string=os.environ["YDB_CONNECTION_STRING"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            pool = ydb.aio.QuerySessionPool(driver)
 
-          await pool.execute_with_retries(
-              """
-              DECLARE $seriesData AS List<Struct<
-                  series_id: Uint64,
-                  title: Utf8,
-                  series_info: Utf8,
-                  comment: Optional<Utf8>
-              >>;
+            series_struct_type = ydb.StructType()
+            series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
+            series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
+            series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
+            series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
 
-              UPSERT INTO series (series_id, title, series_info, comment)
-              SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
-              """,
-              {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
-              retry_settings=ydb.RetrySettings(idempotent=True),
-          )
+            series_data = [
+                {"series_id": 1, "title": "IT Crowd", "series_info": "The IT Crowd is a British sitcom...", "comment": None},
+                {"series_id": 2, "title": "Silicon Valley", "series_info": "Silicon Valley is an American comedy...", "comment": "lorem ipsum"},
+            ]
 
-  asyncio.run(ydb_init())
-  ```
+            await pool.execute_with_retries(
+                """
+                DECLARE $seriesData AS List<Struct<
+                    series_id: Uint64,
+                    title: Utf8,
+                    series_info: Utf8,
+                    comment: Optional<Utf8>
+                >>;
 
-  {% endcut %}
+                UPSERT INTO series (series_id, title, series_info, comment)
+                SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+                """,
+                {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
+                retry_settings=ydb.RetrySettings(idempotent=True),
+            )
 
-  Для вставки данных используется `QuerySessionPool` и метод `execute_with_retries` с параметризованным YQL-запросом. Запрос оперирует контейнерным типом `List<Struct<...>>`, что позволяет передавать несколько строк за один вызов.
+    asyncio.run(ydb_init())
+    ```
 
-  ```python
-  import os
-  import ydb
+  - SQLAlchemy
 
-  with ydb.Driver(
-      connection_string=os.environ["YDB_CONNECTION_STRING"],
-      credentials=ydb.credentials_from_env_variables(),
-  ) as driver:
-      driver.wait(timeout=5)
-      pool = ydb.QuerySessionPool(driver)
+    При использовании {{ ydb-short-name }} через SQLAlchemy для вставки данных используется функция `ydb_sqlalchemy.upsert`, которая формирует запрос `UPSERT INTO` на основе таблицы и переданных значений. Можно вставлять как одну строку, так и несколько строк за один вызов:
 
-      series_struct_type = ydb.StructType()
-      series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
-      series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
-      series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
-      series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ```python
+    import os
+    import sqlalchemy as sa
+    from sqlalchemy import Column, Integer, MetaData, String, Table
+    import ydb_sqlalchemy as ydb_sa
 
-      series_data = [
-          {
-              "series_id": 1,
-              "title": "IT Crowd",
-              "series_info": "The IT Crowd is a British sitcom...",
-              "comment": None,
-          },
-          {
-              "series_id": 2,
-              "title": "Silicon Valley",
-              "series_info": "Silicon Valley is an American comedy...",
-              "comment": "lorem ipsum",
-          },
-      ]
+    engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
 
-      pool.execute_with_retries(
-          """
-          DECLARE $seriesData AS List<Struct<
-              series_id: Uint64,
-              title: Utf8,
-              series_info: Utf8,
-              comment: Optional<Utf8>
-          >>;
+    series = Table(
+        "series",
+        MetaData(),
+        Column("series_id", Integer, primary_key=True),
+        Column("title", String),
+        Column("series_info", String),
+        Column("comment", String, nullable=True),
+    )
 
-          UPSERT INTO series
-          (
-              series_id,
-              title,
-              series_info,
-              comment
-          )
-          SELECT
-              series_id,
-              title,
-              series_info,
-              comment
-          FROM AS_TABLE($seriesData);
-          """,
-          {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
-          retry_settings=ydb.RetrySettings(idempotent=True),
-      )
-  ```
+    with engine.connect() as connection:
+        stmt = ydb_sa.upsert(series).values(
+            [
+                {
+                    "series_id": 1,
+                    "title": "IT Crowd",
+                    "series_info": "The IT Crowd is a British sitcom...",
+                    "comment": None,
+                },
+                {
+                    "series_id": 2,
+                    "title": "Silicon Valley",
+                    "series_info": "Silicon Valley is an American comedy...",
+                    "comment": "lorem ipsum",
+                },
+            ]
+        )
+        connection.execute(stmt)
+        connection.commit()
+    ```
+
+  {% endlist %}
 
 {% endlist %}

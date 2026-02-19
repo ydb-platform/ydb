@@ -103,61 +103,63 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  ```python
-  import os
-  import sqlalchemy as sa
+  - Native SDK
 
-  engine = sa.create_engine(
-      os.environ["YDB_SQLALCHEMY_URL"],
-      connect_args={
-          "driver_config_kwargs": {
-              "use_all_nodes": False,  # предпочитать ближайший дата-центр
-          }
-      },
-  )
-  ```
+    ```python
+    import os
+    import ydb
 
-  {% endcut %}
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+        credentials=ydb.credentials_from_env_variables(),
+        use_all_nodes=False,  # предпочитать ближайший дата-центр
+    )
 
-  {% cut "asyncio" %}
+    with ydb.Driver(driver_config) as driver:
+        driver.wait(timeout=5)
+        # ...
+    ```
 
-  ```python
-  import os
-  import ydb
-  import asyncio
+  - Native SDK (Asyncio)
 
-  async def ydb_init():
-      driver_config = ydb.DriverConfig(
-          endpoint=os.environ["YDB_ENDPOINT"],
-          database=os.environ["YDB_DATABASE"],
-          credentials=ydb.credentials_from_env_variables(),
-          use_all_nodes=False,  # предпочитать ближайший дата-центр
-      )
-      async with ydb.aio.Driver(driver_config) as driver:
-          await driver.wait()
-          # ...
+    ```python
+    import os
+    import ydb
+    import asyncio
 
-  asyncio.run(ydb_init())
-  ```
+    async def ydb_init():
+        driver_config = ydb.DriverConfig(
+            endpoint=os.environ["YDB_ENDPOINT"],
+            database=os.environ["YDB_DATABASE"],
+            credentials=ydb.credentials_from_env_variables(),
+            use_all_nodes=False,  # предпочитать ближайший дата-центр
+        )
+        async with ydb.aio.Driver(driver_config) as driver:
+            await driver.wait()
+            # ...
 
-  {% endcut %}
+    asyncio.run(ydb_init())
+    ```
 
-  ```python
-  import os
-  import ydb
+  - SQLAlchemy
 
-  driver_config = ydb.DriverConfig(
-      endpoint=os.environ["YDB_ENDPOINT"],
-      database=os.environ["YDB_DATABASE"],
-      credentials=ydb.credentials_from_env_variables(),
-      use_all_nodes=False,  # предпочитать ближайший дата-центр
-  )
+    ```python
+    import os
+    import sqlalchemy as sa
 
-  with ydb.Driver(driver_config) as driver:
-      driver.wait(timeout=5)
-      # ...
-  ```
+    engine = sa.create_engine(
+        os.environ["YDB_SQLALCHEMY_URL"],
+        connect_args={
+            "driver_config_kwargs": {
+                "use_all_nodes": False,  # предпочитать ближайший дата-центр
+            }
+        },
+    )
+    ```
+
+  {% endlist %}
 
 {% endlist %}

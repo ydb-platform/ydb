@@ -29,40 +29,44 @@
 
 - Python
 
-    {% cut "asyncio" %}
+    {% list tabs %}
 
-    Для выполнения запросов необходимо создать `ydb.aio.QuerySessionPool`:
+    - Native SDK
 
-    ```python
-    import asyncio
-    import ydb
+      Для выполнения запросов необходимо создать `ydb.QuerySessionPool`.
 
-    async def main():
-        async with ydb.aio.Driver(
-            endpoint=ydb_endpoint,
-            database=ydb_database,
-            credentials=ydb_credentials,
-        ) as driver:
-            await driver.wait(5, fail_fast=True)
-            pool = ydb.aio.QuerySessionPool(driver)
-            # ... используйте pool ...
+      ```python
+      driver = ydb.Driver(
+          endpoint=ydb_endpoint,
+          database=ydb_database,
+          credentials=ydb_credentials,
+      )
+      driver.wait(5, fail_fast=True)
+      pool = ydb.QuerySessionPool(driver)
+      ```
 
-    asyncio.run(main())
-    ```
+    - Native SDK (Asyncio)
 
-    {% endcut %}
+      Для выполнения запросов необходимо создать `ydb.aio.QuerySessionPool`:
 
-    Для выполнения запросов необходимо создать `ydb.QuerySessionPool`.
+      ```python
+      import asyncio
+      import ydb
 
-    ```python
-    driver = ydb.Driver(
-        endpoint=ydb_endpoint,
-        database=ydb_database,
-        credentials=ydb_credentials,
-    )
-    driver.wait(5, fail_fast=True)
-    pool = ydb.QuerySessionPool(driver)
-    ```
+      async def main():
+          async with ydb.aio.Driver(
+              endpoint=ydb_endpoint,
+              database=ydb_database,
+              credentials=ydb_credentials,
+          ) as driver:
+              await driver.wait(5, fail_fast=True)
+              pool = ydb.aio.QuerySessionPool(driver)
+              # ... используйте pool ...
+
+      asyncio.run(main())
+      ```
+
+    {% endlist %}
 
 - C++
 
@@ -98,41 +102,45 @@
 
 - Python
 
-    {% cut "asyncio" %}
+    {% list tabs %}
 
-    ```python
-    import ydb
+    - Native SDK
 
-    async def create_vector_table(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
-        query = f"""
-        CREATE TABLE IF NOT EXISTS `{table_name}` (
-            id Utf8,
-            document Utf8,
-            embedding String,
-            PRIMARY KEY (id)
-        );"""
+      ```python
+      def create_vector_table(pool: ydb.QuerySessionPool, table_name: str) -> None:
+          query = f"""
+          CREATE TABLE IF NOT EXISTS `{table_name}` (
+              id Utf8,
+              document Utf8,
+              embedding String,
+              PRIMARY KEY (id)
+          );"""
 
-        await pool.execute_with_retries(query)
+          pool.execute_with_retries(query)
 
-        print(f"Vector table {table_name} created")
-    ```
+          print(f"Vector table {table_name} created")
+      ```
 
-    {% endcut %}
+    - Native SDK (Asyncio)
 
-    ```python
-    def create_vector_table(pool: ydb.QuerySessionPool, table_name: str) -> None:
-        query = f"""
-        CREATE TABLE IF NOT EXISTS `{table_name}` (
-            id Utf8,
-            document Utf8,
-            embedding String,
-            PRIMARY KEY (id)
-        );"""
+      ```python
+      import ydb
 
-        pool.execute_with_retries(query)
+      async def create_vector_table(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
+          query = f"""
+          CREATE TABLE IF NOT EXISTS `{table_name}` (
+              id Utf8,
+              document Utf8,
+              embedding String,
+              PRIMARY KEY (id)
+          );"""
 
-        print(f"Vector table {table_name} created")
-    ```
+          await pool.execute_with_retries(query)
+
+          print(f"Vector table {table_name} created")
+      ```
+
+    {% endlist %}
 
 - C++
 

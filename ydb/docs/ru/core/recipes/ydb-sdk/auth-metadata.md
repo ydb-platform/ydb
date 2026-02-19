@@ -113,31 +113,33 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  ```python
-  import sqlalchemy as sa
-  import ydb.iam
+  - Native SDK
 
-  engine = sa.create_engine(
-      "yql+ydb://localhost:2136/local",
-      connect_args={
-          "credentials": ydb.iam.MetadataUrlCredentials()
-      }
-  )
-  with engine.connect() as connection:
-      result = connection.execute(sa.text("SELECT 1"))
-  ```
+    {% include [auth-metadata](../../_includes/python/auth-metadata.md) %}
 
-  {% endcut %}
+  - Native SDK (Asyncio)
 
-  {% cut "asyncio" %}
+    {% include [auth-metadata](../../_includes/python/async/auth-metadata.md) %}
 
-  {% include [auth-metadata](../../_includes/python/async/auth-metadata.md) %}
+  - SQLAlchemy
 
-  {% endcut %}
+    ```python
+    import sqlalchemy as sa
+    import ydb.iam
 
-  {% include [auth-metadata](../../_includes/python/auth-metadata.md) %}
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": ydb.iam.MetadataUrlCredentials()
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

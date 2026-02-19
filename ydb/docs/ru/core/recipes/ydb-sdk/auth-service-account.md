@@ -123,34 +123,36 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  ```python
-  import os
-  import sqlalchemy as sa
-  import ydb.iam
+  - Native SDK
 
-  engine = sa.create_engine(
-      "yql+ydb://localhost:2136/local",
-      connect_args={
-          "credentials": ydb.iam.ServiceAccountCredentials.from_file(
-              os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
-          )
-      }
-  )
-  with engine.connect() as connection:
-      result = connection.execute(sa.text("SELECT 1"))
-  ```
+    {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
 
-  {% endcut %}
+  - Native SDK (Asyncio)
 
-  {% cut "asyncio" %}
+    {% include [auth-sa-data](../../_includes/python/async/auth-service-account.md) %}
 
-  {% include [auth-sa-data](../../_includes/python/async/auth-service-account.md) %}
+  - SQLAlchemy
 
-  {% endcut %}
+    ```python
+    import os
+    import sqlalchemy as sa
+    import ydb.iam
 
-  {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": ydb.iam.ServiceAccountCredentials.from_file(
+                os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+            )
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

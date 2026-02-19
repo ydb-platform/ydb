@@ -108,25 +108,27 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  ```python
-  import sqlalchemy as sa
+  - Native SDK
 
-  engine = sa.create_engine("yql+ydb://localhost:2136/local")
-  with engine.connect() as connection:
-      result = connection.execute(sa.text("SELECT 1"))
-  ```
+    {% include [auth-anonymous](../../_includes/python/auth-anonymous.md) %}
 
-  {% endcut %}
+  - Native SDK (Asyncio)
 
-  {% cut "asyncio" %}
+    {% include [auth-anonymous](../../_includes/python/async/auth-anonymous.md) %}
 
-  {% include [auth-anonymous](../../_includes/python/async/auth-anonymous.md) %}
+  - SQLAlchemy
 
-  {% endcut %}
+    ```python
+    import sqlalchemy as sa
 
-  {% include [auth-anonymous](../../_includes/python/auth-anonymous.md) %}
+    engine = sa.create_engine("yql+ydb://localhost:2136/local")
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

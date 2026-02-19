@@ -550,91 +550,89 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  При использовании {{ ydb-short-name }} через SQLAlchemy выполнение повторных попыток происходит под капотом и не регулируется снаружи.
+  - Native SDK
 
-  {% endcut %}
+    В {{ ydb-short-name }} Python SDK выполнение повторных попыток реализовано в `QuerySessionPool` с использованием класса `RetrySettings` для настройки параметров повторов. Класс `RetrySettings` поддерживает следующие опции:
 
-  В {{ ydb-short-name }} Python SDK выполнение повторных попыток реализовано в `QuerySessionPool` с использованием класса `RetrySettings` для настройки параметров повторов. Класс `RetrySettings` поддерживает следующие опции:
+    * `max_retries` - максимальное количество повторных попыток (по умолчанию 10)
+    * `idempotent` - признак идемпотентности операции. Идемпотентные операции повторяются для более широкого списка ошибок (по умолчанию False)
+    * `backoff_ceiling`, `backoff_slot_duration` - параметры алгоритма экспоненциальной задержки
+    * `fast_backoff_settings`, `slow_backoff_settings` - настройки быстрых и медленных повторов
 
-  * `max_retries` - максимальное количество повторных попыток (по умолчанию 10)
-  * `idempotent` - признак идемпотентности операции. Идемпотентные операции повторяются для более широкого списка ошибок (по умолчанию False)
-  * `backoff_ceiling`, `backoff_slot_duration` - параметры алгоритма экспоненциальной задержки
-  * `fast_backoff_settings`, `slow_backoff_settings` - настройки быстрых и медленных повторов
+    Для выполнения запросов с повторными попытками `QuerySessionPool` предоставляет методы `retry_operation_sync` и `execute_with_retries`. Метод `execute_with_retries` предназначен для разовых запросов с неявным режимом транзакции (implicit). Для остальных случаев (явные транзакции, несколько операций в одной транзакции) используйте `retry_operation_sync`.
 
-  Для выполнения запросов с повторными попытками `QuerySessionPool` предоставляет методы `retry_operation_sync` и `execute_with_retries`. Метод `execute_with_retries` предназначен для разовых запросов с неявным режимом транзакции (implicit). Для остальных случаев (явные транзакции, несколько операций в одной транзакции) используйте `retry_operation_sync`.
+    Пример кода, использующего execute_with_retries:
 
-  {% cut "Пример кода, использующего execute_with_retries:" %}
+    ```python
+    import ydb
 
-  {% cut "asyncio" %}
+    def execute_query(pool: ydb.QuerySessionPool):
+        result_sets = pool.execute_with_retries(
+            "SELECT series_id, title FROM series WHERE series_id = 1;",
+            retry_settings=ydb.RetrySettings(idempotent=True),
+        )
+        # ...
+    ```
 
-  ```python
-  import ydb
+    Пример кода, использующего retry_operation_sync:
 
-  async def execute_query(pool: ydb.aio.QuerySessionPool):
-      result_sets = await pool.execute_with_retries(
-          "SELECT series_id, title FROM series WHERE series_id = 1;",
-          retry_settings=ydb.RetrySettings(idempotent=True),
-      )
-      # ...
-  ```
+    ```python
+    import ydb
 
-  {% endcut %}
-
-  ```python
-  import ydb
-
-  def execute_query(pool: ydb.QuerySessionPool):
-      result_sets = pool.execute_with_retries(
-          "SELECT series_id, title FROM series WHERE series_id = 1;",
-          retry_settings=ydb.RetrySettings(idempotent=True),
-      )
-      # ...
-  ```
-
-  {% endcut %}
-
-  {% cut "Пример кода, использующего retry_operation_sync:" %}
-
-  {% cut "asyncio" %}
-
-  ```python
-  import ydb
-
-  async def execute_query(pool: ydb.aio.QuerySessionPool):
-      async def callee(session):
-          async with session.transaction(tx_mode=ydb.QuerySerializableReadWrite()) as tx:
-              async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+    def execute_query(pool: ydb.QuerySessionPool):
+        def callee(session: ydb.QuerySession):
+              with session.transaction().execute(
+                  "SELECT 1",
+                  commit_tx=True,
+              ) as result_sets:
                   pass
 
-      await pool.retry_operation_async(
-          callee,
-          retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
-      )
-      # ...
-  ```
+        result = pool.retry_operation_sync(
+            callee,
+            retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
+        )
+        # ...
+    ```
 
-  {% endcut %}
+  - Native SDK (Asyncio)
 
-  ```python
-  import ydb
+    Пример кода, использующего execute_with_retries:
 
-  def execute_query(pool: ydb.QuerySessionPool):
-      def callee(session: ydb.QuerySession):
-            with session.transaction().execute(
-                "SELECT 1",
-                commit_tx=True,
-            ) as result_sets:
-                pass
+    ```python
+    import ydb
 
-      result = pool.retry_operation_sync(
-          callee,
-          retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
-      )
-      # ...
-  ```
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        result_sets = await pool.execute_with_retries(
+            "SELECT series_id, title FROM series WHERE series_id = 1;",
+            retry_settings=ydb.RetrySettings(idempotent=True),
+        )
+        # ...
+    ```
 
-  {% endcut %}
+    Пример кода, использующего retry_operation_sync:
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        async def callee(session):
+            async with session.transaction(tx_mode=ydb.QuerySerializableReadWrite()) as tx:
+                async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                    pass
+
+        await pool.retry_operation_async(
+            callee,
+            retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
+        )
+        # ...
+    ```
+
+  - SQLAlchemy
+
+    При использовании {{ ydb-short-name }} через SQLAlchemy выполнение повторных попыток происходит под капотом и не регулируется снаружи.
+
+  {% endlist %}
 
 {% endlist %}

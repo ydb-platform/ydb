@@ -43,23 +43,27 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  import ydb
+  - Native SDK
 
-  client = driver.coordination_client
-  await client.create_node("/path/to/mynode")
-  ```
+    ```python
+    import ydb
 
-  {% endcut %}
+    client = driver.coordination_client
+    client.create_node("/path/to/mynode")
+    ```
 
-  ```python
-  import ydb
+  - Native SDK (Asyncio)
 
-  client = driver.coordination_client
-  client.create_node("/path/to/mynode")
-  ```
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    await client.create_node("/path/to/mynode")
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 
@@ -103,27 +107,31 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  import ydb
+  - Native SDK
 
-  client = driver.coordination_client
-  async with client.session("/path/to/mynode") as session:
-      # работа с сессией
-      pass
-  ```
+    ```python
+    import ydb
 
-  {% endcut %}
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        # работа с сессией
+        pass
+    ```
 
-  ```python
-  import ydb
+  - Native SDK (Asyncio)
 
-  client = driver.coordination_client
-  with client.session("/path/to/mynode") as session:
-      # работа с сессией
-      pass
-  ```
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        # работа с сессией
+        pass
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 
@@ -191,27 +199,33 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  В Python SDK семафор создаётся неявно при первом вызове `acquire()` в методе `session.semaphore(name, limit)`. Лимит указывается при создании объекта семафора.
 
-  ```python
-  import ydb
+  {% list tabs %}
 
-  client = driver.coordination_client
-  async with client.session("/path/to/mynode") as session:
-      # семафор будет создан при первом acquire() с лимитом 10
-      semaphore = session.semaphore("my-semaphore", 10)
-  ```
+  - Native SDK
 
-  {% endcut %}
+    ```python
+    import ydb
 
-  ```python
-  import ydb
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        # семафор будет создан при первом acquire() с лимитом 10
+        semaphore = session.semaphore("my-semaphore", 10)
+    ```
 
-  client = driver.coordination_client
-  with client.session("/path/to/mynode") as session:
-      # семафор будет создан при первом acquire() с лимитом 10
-      semaphore = session.semaphore("my-semaphore", 10)
-  ```
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        # семафор будет создан при первом acquire() с лимитом 10
+        semaphore = session.semaphore("my-semaphore", 10)
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 
@@ -264,41 +278,45 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  import ydb
+  - Native SDK
 
-  client = driver.coordination_client
-  async with client.session("/path/to/mynode") as session:
-      semaphore = session.semaphore("my-semaphore", 10)
-      async with semaphore:
-          # семафор захвачен на 1 единицу (значение по умолчанию)
-          pass
-      # или вручную:
-      semaphore = session.semaphore("my-semaphore", 10)
-      await semaphore.acquire(count=5)
-      # работа с ресурсом
-      await semaphore.release()
-  ```
+    ```python
+    import ydb
 
-  {% endcut %}
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        with semaphore:
+            # семафор захвачен на 1 единицу (значение по умолчанию)
+            pass
+        # или вручную:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.acquire(count=5)
+        # работа с ресурсом
+        semaphore.release()
+    ```
 
-  ```python
-  import ydb
+  - Native SDK (Asyncio)
 
-  client = driver.coordination_client
-  with client.session("/path/to/mynode") as session:
-      semaphore = session.semaphore("my-semaphore", 10)
-      with semaphore:
-          # семафор захвачен на 1 единицу (значение по умолчанию)
-          pass
-      # или вручную:
-      semaphore = session.semaphore("my-semaphore", 10)
-      semaphore.acquire(count=5)
-      # работа с ресурсом
-      semaphore.release()
-  ```
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        async with semaphore:
+            # семафор захвачен на 1 единицу (значение по умолчанию)
+            pass
+        # или вручную:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.acquire(count=5)
+        # работа с ресурсом
+        await semaphore.release()
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 
@@ -333,27 +351,31 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  import ydb
+  - Native SDK
 
-  client = driver.coordination_client
-  async with client.session("/path/to/mynode") as session:
-      semaphore = session.semaphore("my-semaphore", 10)
-      await semaphore.update(b"updated-data")
-  ```
+    ```python
+    import ydb
 
-  {% endcut %}
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.update(b"updated-data")
+    ```
 
-  ```python
-  import ydb
+  - Native SDK (Asyncio)
 
-  client = driver.coordination_client
-  with client.session("/path/to/mynode") as session:
-      semaphore = session.semaphore("my-semaphore", 10)
-      semaphore.update(b"updated-data")
-  ```
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.update(b"updated-data")
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 
@@ -412,29 +434,33 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  import ydb
+  - Native SDK
 
-  client = driver.coordination_client
-  async with client.session("/path/to/mynode") as session:
-      semaphore = session.semaphore("my-semaphore", 10)
-      description = await semaphore.describe()
-      # description содержит: name, data, count, limit, owners, waiters, ephemeral
-  ```
+    ```python
+    import ydb
 
-  {% endcut %}
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        description = semaphore.describe()
+        # description содержит: name, data, count, limit, owners, waiters, ephemeral
+    ```
 
-  ```python
-  import ydb
+  - Native SDK (Asyncio)
 
-  client = driver.coordination_client
-  with client.session("/path/to/mynode") as session:
-      semaphore = session.semaphore("my-semaphore", 10)
-      description = semaphore.describe()
-      # description содержит: name, data, count, limit, owners, waiters, ephemeral
-  ```
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        description = await semaphore.describe()
+        # description содержит: name, data, count, limit, owners, waiters, ephemeral
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 
@@ -465,31 +491,35 @@
 
   В Python SDK семафор освобождается методом `release()` у объекта семафора. При использовании контекстного менеджера (`with` или `async with`) освобождение происходит автоматически при выходе из блока.
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  import ydb
+  - Native SDK
 
-  client = driver.coordination_client
-  async with client.session("/path/to/mynode") as session:
-      semaphore = session.semaphore("my-semaphore", 10)
-      await semaphore.acquire(count=5)
-      # работа с ресурсом
-      await semaphore.release()
-  ```
+    ```python
+    import ydb
 
-  {% endcut %}
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.acquire(count=5)
+        # работа с ресурсом
+        semaphore.release()
+    ```
 
-  ```python
-  import ydb
+  - Native SDK (Asyncio)
 
-  client = driver.coordination_client
-  with client.session("/path/to/mynode") as session:
-      semaphore = session.semaphore("my-semaphore", 10)
-      semaphore.acquire(count=5)
-      # работа с ресурсом
-      semaphore.release()
-  ```
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.acquire(count=5)
+        # работа с ресурсом
+        await semaphore.release()
+    ```
+
+  {% endlist %}
 
 {% endlist %}
 

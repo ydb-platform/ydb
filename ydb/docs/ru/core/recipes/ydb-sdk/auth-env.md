@@ -116,32 +116,34 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  ```python
-  import os
-  import sqlalchemy as sa
-  import ydb
+  - Native SDK
 
-  engine = sa.create_engine(
-      "yql+ydb://localhost:2136/local",
-      connect_args={
-          "credentials": ydb.credentials_from_env_variables()
-      }
-  )
-  with engine.connect() as connection:
-      result = connection.execute(sa.text("SELECT 1"))
-  ```
+    {% include [auth-env](../../_includes/python/auth-env.md) %}
 
-  {% endcut %}
+  - Native SDK (Asyncio)
 
-  {% cut "asyncio" %}
+    {% include [auth-env](../../_includes/python/async/auth-env.md) %}
 
-  {% include [auth-env](../../_includes/python/async/auth-env.md) %}
+  - SQLAlchemy
 
-  {% endcut %}
+    ```python
+    import os
+    import sqlalchemy as sa
+    import ydb
 
-  {% include [auth-env](../../_includes/python/auth-env.md) %}
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": ydb.credentials_from_env_variables()
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - PHP
 

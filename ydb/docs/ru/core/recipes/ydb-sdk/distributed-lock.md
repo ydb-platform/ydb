@@ -41,34 +41,38 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  import os
-  import ydb
+  - Native SDK
 
-  async def coordination_service_workflow(driver: ydb.aio.Driver, node_path: str, semaphore_name: str):
-      client = driver.coordination_client
-      await client.create_node(node_path)
-      async with client.session(node_path) as session:
-          async with session.semaphore(semaphore_name) as semaphore:
-              print("Some exclusive work")
-  ```
+    ```python
+    import ydb
 
-  {% endcut %}
+    def coordination_service_workflow(driver: ydb.Driver, node_path: str, semaphore_name: str):
+        client = driver.coordination_client
 
-  ```python
-  import ydb
+        client.create_node(node_path)
 
-  def coordination_service_workflow(driver: ydb.Driver, node_path: str, semaphore_name: str):
-      client = driver.coordination_client
+        with client.session(node_path) as session:
+            with session.semaphore(semaphore_name) as semaphore:
+                print("Some exclusive work")
 
-      client.create_node(node_path)
+    ```
 
-      with client.session(node_path) as session:
-          with session.semaphore(semaphore_name) as semaphore:
-              print("Some exclusive work")
+  - Native SDK (Asyncio)
 
-  ```
+    ```python
+    import os
+    import ydb
+
+    async def coordination_service_workflow(driver: ydb.aio.Driver, node_path: str, semaphore_name: str):
+        client = driver.coordination_client
+        await client.create_node(node_path)
+        async with client.session(node_path) as session:
+            async with session.semaphore(semaphore_name) as semaphore:
+                print("Some exclusive work")
+    ```
+
+  {% endlist %}
 
 {% endlist %}

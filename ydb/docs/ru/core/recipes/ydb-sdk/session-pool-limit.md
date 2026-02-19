@@ -92,44 +92,46 @@
 
 - Python
 
-  {% cut "sqlalchemy" %}
+  {% list tabs %}
 
-  Установка размера пула на данный момент не поддержана.
+  - Native SDK
 
-  {% endcut %}
+    ```python
+    import os
+    import ydb
 
-  {% cut "asyncio" %}
+    with ydb.Driver(
+        connection_string=os.environ["YDB_CONNECTION_STRING"],
+        credentials=ydb.credentials_from_env_variables(),
+    ) as driver:
+        driver.wait(timeout=5)
+        with ydb.QuerySessionPool(driver, size=500) as pool:
+            # ...
+    ```
 
-  ```python
-  import os
-  import ydb
-  import asyncio
+  - Native SDK (Asyncio)
 
-  async def ydb_init():
-      async with ydb.aio.Driver(
-          connection_string=os.environ["YDB_CONNECTION_STRING"],
-          credentials=ydb.credentials_from_env_variables(),
-      ) as driver:
-          await driver.wait()
-          async with ydb.aio.QuerySessionPool(driver, size=500) as pool:
-              # ...
+    ```python
+    import os
+    import ydb
+    import asyncio
 
-  asyncio.run(ydb_init())
-  ```
+    async def ydb_init():
+        async with ydb.aio.Driver(
+            connection_string=os.environ["YDB_CONNECTION_STRING"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            async with ydb.aio.QuerySessionPool(driver, size=500) as pool:
+                # ...
 
-  {% endcut %}
+    asyncio.run(ydb_init())
+    ```
 
-  ```python
-  import os
-  import ydb
+  - SQLAlchemy
 
-  with ydb.Driver(
-      connection_string=os.environ["YDB_CONNECTION_STRING"],
-      credentials=ydb.credentials_from_env_variables(),
-  ) as driver:
-      driver.wait(timeout=5)
-      with ydb.QuerySessionPool(driver, size=500) as pool:
-          # ...
-  ```
+    Установка размера пула на данный момент не поддержана.
+
+  {% endlist %}
 
 {% endlist %}

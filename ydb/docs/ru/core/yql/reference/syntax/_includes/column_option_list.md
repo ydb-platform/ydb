@@ -25,7 +25,7 @@
 
 Данная колонка не принимает значения `NULL`.
 
-### COMPRESSION(algorithm=a_value[, level=l_value])
+### COMPRESSION(algorithm=<algorithm_name>[, level=<value>])
 
 {% if oss == true and backend_name == "YDB" %}
 

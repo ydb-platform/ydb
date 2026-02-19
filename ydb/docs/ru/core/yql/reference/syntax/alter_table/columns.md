@@ -7,7 +7,7 @@
 Строит новую колонку с указанными именем, типом и опциями для указанной таблицы.
 
 ```yql
-ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION(algorithm=a_value[, level=l_value])];
+ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION(algorithm=<algorithm_name>[, level=<value>])];
 ```
 
 ## Параметры запроса
@@ -46,7 +46,7 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альт
 Изменяет свойства существующей колонки в указанной таблице.
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=a_value[, level=l_value]])];
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
 ```
 
 ### Параметры запроса

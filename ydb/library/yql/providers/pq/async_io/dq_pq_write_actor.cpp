@@ -149,7 +149,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
 
         i64 MessageSize = 0;
         TInstant StartTime;
-        ui64 SeqNo =0;
+        ui64 SeqNo = 0;
     };
 
 public:

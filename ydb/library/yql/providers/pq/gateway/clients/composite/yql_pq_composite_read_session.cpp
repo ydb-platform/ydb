@@ -641,7 +641,7 @@ public:
 
         RefreshReadyPartitions();
         if (!ReadyPartitions.empty()) {
-            // Where are already ready events
+            // There are already ready events
             return NThreading::MakeFuture();
         }
 

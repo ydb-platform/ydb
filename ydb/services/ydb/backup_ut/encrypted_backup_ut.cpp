@@ -1018,8 +1018,7 @@ protected:
             NExport::TExportToFsSettings settings;
             settings
                 .BasePath(basePath)
-                .SourcePath("")
-                .SymmetricEncryption("AES-128-GCM", "Cool random key!");
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
             WaitOpSuccess(res);

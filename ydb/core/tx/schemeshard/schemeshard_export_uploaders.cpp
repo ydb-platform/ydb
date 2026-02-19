@@ -58,7 +58,8 @@ protected:
             return NKikimrServices::TActivity::EXPORT_FS_UPLOADER_ACTOR;
         }
 
-        Y_ABORT("Unsupported storage type in backup task");
+        static_assert(std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>
+            || std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>);
     }
 
     // Adds a file to queue.

@@ -433,9 +433,9 @@ public:
         bool withSharedReading = false;
         for (const auto& setting : settings.Raw()->Children()) {
             const auto settingName = setting->Child(0)->Content();
-            if ("skip.json.errors" == settingName) {
+            if ("skip.json.errors" == settingName || "sharedreadingskipjsonerrors" == settingName)) {
                 if (setting->ChildrenSize() != 2) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected `skip.json.errors` = value"));
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected `SHARED_READING_SKIP_JSON_ERRORS` = value"));
                     return {};
                 }
                 const auto settingValue = setting->Child(1);
@@ -443,7 +443,7 @@ public:
                     return {};
                 }
                 if (!TryFromString<bool>(settingValue->Content(), skipJsonErrors)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`skip.json.errors` must be boolean type"));
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`SHARED_READING_SKIP_JSON_ERRORS` must be boolean type"));
                     return {};
                 }
                 if (!skipJsonErrors) {

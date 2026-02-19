@@ -304,9 +304,12 @@ class TRealBlockDevice : public IBlockDevice {
                 SubmitCondVar.Signal();
                 return;
             }
+<<<<<<< HEAD
             Device.IdleCounter.Increment();
 
             Device.IncrementMonInFlight(op->GetType(), op->GetSize());
+=======
+>>>>>>> f1b11606719 (EXT-1681: Fix order of device InFlight counter increment (#34524))
 
             double blockedMs = 0;
             action->OperationIdx = Device.FlightControl.Schedule(blockedMs);
@@ -316,6 +319,9 @@ class TRealBlockDevice : public IBlockDevice {
             if (action->FlushAction) {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
+
+            Device.IdleCounter.Increment();
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
@@ -463,7 +469,12 @@ class TRealBlockDevice : public IBlockDevice {
 
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
+<<<<<<< HEAD
             Device.FlightControl.MarkComplete(completionAction->OperationIdx);
+=======
+            Device.DecrementMonInFlight(op->GetType(), opSize);
+            Device.FlightControl.MarkComplete(completionAction->OperationIdx, opSize);
+>>>>>>> f1b11606719 (EXT-1681: Fix order of device InFlight counter increment (#34524))
 
             NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
             NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
@@ -472,8 +483,11 @@ class TRealBlockDevice : public IBlockDevice {
 
             bool isSeekExpected = (completionAction->SubmitTime + (NHPTimer::STime)Device.SeekCostNs / 25ll >= PrevEventGotAtCycle);
 
+<<<<<<< HEAD
             const ui64 opSize = op->GetSize();
             Device.DecrementMonInFlight(op->GetType(), opSize);
+=======
+>>>>>>> f1b11606719 (EXT-1681: Fix order of device InFlight counter increment (#34524))
             if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
                     Y_VERIFY_S(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr,

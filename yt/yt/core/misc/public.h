@@ -103,6 +103,9 @@ DECLARE_REFCOUNTED_STRUCT(IPersistentDigest)
 DECLARE_REFCOUNTED_STRUCT(TSlruCacheDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TSlruCacheConfig)
 
+template <class TKey, class TValue, class THash = THash<TKey>>
+class TSimpleLruCache;
+
 DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheConfig)
 

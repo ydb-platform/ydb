@@ -930,7 +930,7 @@ private:
             // It was first event in this session, we should wait for time reports, so move partition to suspended
             AdvancePartitionTime(key->GetPartitionId(), TInstant::Zero() + MaxPartitionReadSkew);
         } else if (!key->WaitEvent().IsReady()) {
-            // Where is no ready events in this partition, so move it to pending / idle
+            // There are no ready events in this partition, so move it to pending / idle
             DistributePartitionSession(key);
             NextReadyPartition = ReadyPartitions.erase(NextReadyPartition);
         } else {

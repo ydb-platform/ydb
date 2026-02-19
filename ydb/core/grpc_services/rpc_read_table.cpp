@@ -479,6 +479,7 @@ private:
             }
         }
         NKikimr::NTxProxy::TReadTableSettings settings;
+
         if (Request_->GetSerializedToken()) {
             settings.UserToken = Request_->GetSerializedToken();
         }

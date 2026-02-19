@@ -1139,7 +1139,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             TTestPqEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
-                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userSID);
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, new NACLib::TUserContext(userSID, ""));
             }
 
             auto& client = env.GetClient();
@@ -1227,7 +1227,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             TTestYdsEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
-                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userSID);
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, new NACLib::TUserContext(userSID, ""));
             }
 
             auto& client = env.GetClient();
@@ -1398,7 +1398,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             TTestTopicEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
-                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userSID);
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, new NACLib::TUserContext(userSID, ""));
             }
 
             auto& client = env.GetClient();

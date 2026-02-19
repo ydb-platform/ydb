@@ -1110,9 +1110,9 @@ bool TDatashardInitialEventsFilter::operator()(TTestActorRuntimeBase& runtime, T
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml,
-                                                      const TString& userSID /*= TString()*/)
+                                                      const NACLib::TUserContext::TPtr& userCtx /*= nullptr*/)
 {
-    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(new NACLib::TUserContext(userSID, ""));
+    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(userCtx);
     if (dml) {
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
@@ -2105,10 +2105,10 @@ void ExecSQL(Tests::TServer::TPtr server,
              bool dml,
              Ydb::StatusIds::StatusCode code,
              NYdb::NUt::TTestContext testCtx,
-             const TString& userSID)
+             const NACLib::TUserContext::TPtr& userCtx)
 {
     auto &runtime = *server->GetRuntime();
-    auto request = MakeSQLRequest(sql, dml, userSID);
+    auto request = MakeSQLRequest(sql, dml, userCtx);
     runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     auto& response = ev->Get()->Record;
@@ -2123,9 +2123,9 @@ void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
              bool dml,
-             const TString &userSID)
+             const NACLib::TUserContext::TPtr& userCtx)
 {
-    ExecSQL(server, sender, sql, dml, Ydb::StatusIds::SUCCESS, NYdb::NUt::TTestContext(), userSID);
+    ExecSQL(server, sender, sql, dml, Ydb::StatusIds::SUCCESS, NYdb::NUt::TTestContext(), userCtx);
 }
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex) {

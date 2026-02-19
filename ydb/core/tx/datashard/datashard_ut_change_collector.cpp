@@ -790,7 +790,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
                 RebootTablet(runtime, tabletIds[0], sender);
             } else {
-                ExecSQL(server, sender, query, !query.Contains("ALTER"), userSID);
+                ExecSQL(server, sender, query, !query.Contains("ALTER"), new NACLib::TUserContext(userSID, ""));
             }
         }
 

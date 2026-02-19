@@ -226,7 +226,7 @@ namespace NYql::NDq {
         }
 
         void Handle(TEvListSplitsPart::TPtr ev) {
-            auto response = ev->Get()->Response;
+            auto response = std::move(ev->Get()->Response);
             Y_ABORT_UNLESS(response.splits_size() == 1);
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
@@ -238,7 +238,7 @@ namespace NYql::NDq {
                 return;
             }
 
-            *readRequest.add_splits() = split;
+            *readRequest.add_splits() = std::move(split);
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             readRequest.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
             Connector->ReadSplits(readRequest, RequestTimeout).Subscribe([

@@ -1073,9 +1073,6 @@ protected:
             UNIT_ASSERT_C(key.find("anonymized") == TString::npos, key); // user/group
         }
 
-
-        size_t importIndex = 0;
-
         if (isFsBackup) {
             // TODO: FS import with encryption and recursive mode is not yet fully implemented
             // Skip import tests for FS backups for now
@@ -1087,6 +1084,7 @@ protected:
         importSettings
             .SymmetricKey("Cool random key!");
 
+        size_t importIndex = 0;
         auto copySettings = [&]() {
             NYdb::NImport::TImportFromS3Settings settings = importSettings;
             settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << importIndex++);

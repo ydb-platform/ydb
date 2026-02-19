@@ -179,7 +179,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         NYdb::TResultSetParser parser(showResult.GetResultSet(0));
         UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
         TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
-        // SHOW CREATE outputs index FEATURES as JSON: \"case_sensitive\":true (default)
         bool hasDefault = createText.Contains("case_sensitive=true") ||
             createText.Contains("\"case_sensitive\":true") ||
             createText.Contains("\\\"case_sensitive\\\":true");

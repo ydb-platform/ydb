@@ -2324,6 +2324,8 @@ public:
                                 );
                             }
                             auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
+                            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
+                            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
                             for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
                                 const auto& name = indexSetting.Name();
@@ -2350,54 +2352,15 @@ public:
                                         break;
                                     }
                                     case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
-                                        if (name.StringValue() == "false_positive_probability") {
-                                            double fpp = 0.0;
-                                            if (!TryFromString<double>(value.StringValue(), fpp)) {
-                                                error = TStringBuilder() << "Invalid false_positive_probability value: " << value.StringValue();
-                                            } else {
-                                                add_index->mutable_local_bloom_filter_index()->set_false_positive_probability(fpp);
-                                            }
-                                        } else {
-                                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
+                                        if (!FillLocalBloomFilterSetting(localBloomFilterDesc, name.StringValue(), value.StringValue(), error)) {
+                                            // error already set
                                         }
 
                                         break;
                                     }
                                     case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
-                                        ui32 uiValue = 0;
-                                        if (name.StringValue() == "case_sensitive") {
-                                            bool boolValue = true;
-                                            if (!TryFromString<bool>(value.StringValue(), boolValue)) {
-                                                error = TStringBuilder() << "Invalid case_sensitive value: " << value.StringValue();
-                                            } else {
-                                                add_index->mutable_local_bloom_ngram_filter_index()->set_case_sensitive(boolValue);
-                                            }
-                                        } else if (name.StringValue() == "ngram_size") {
-                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
-                                                error = TStringBuilder() << "Invalid ngram_size value: " << value.StringValue();
-                                            } else {
-                                                add_index->mutable_local_bloom_ngram_filter_index()->set_ngram_size(uiValue);
-                                            }
-                                        } else if (name.StringValue() == "hashes_count") {
-                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
-                                                error = TStringBuilder() << "Invalid hashes_count value: " << value.StringValue();
-                                            } else {
-                                                add_index->mutable_local_bloom_ngram_filter_index()->set_hashes_count(uiValue);
-                                            }
-                                        } else if (name.StringValue() == "filter_size_bytes") {
-                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
-                                                error = TStringBuilder() << "Invalid filter_size_bytes value: " << value.StringValue();
-                                            } else {
-                                                add_index->mutable_local_bloom_ngram_filter_index()->set_filter_size_bytes(uiValue);
-                                            }
-                                        } else if (name.StringValue() == "records_count") {
-                                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
-                                                error = TStringBuilder() << "Invalid records_count value: " << value.StringValue();
-                                            } else {
-                                                add_index->mutable_local_bloom_ngram_filter_index()->set_records_count(uiValue);
-                                            }
-                                        } else {
-                                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
+                                        if (!FillLocalBloomNgramFilterSetting(localBloomNgramFilterDesc, name.StringValue(), value.StringValue(), error)) {
+                                            // error already set
                                         }
 
                                         break;
@@ -2413,8 +2376,20 @@ public:
                                     return SyncError();
                                 }
                             }
-                        }
-                        else {
+
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex && localBloomFilterDesc.FalsePositiveProbability) {
+                                add_index->mutable_local_bloom_filter_index()->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
+                            }
+
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
+                                auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
+                                proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize);
+                                proto->set_hashes_count(localBloomNgramFilterDesc.HashesCount);
+                                proto->set_filter_size_bytes(localBloomNgramFilterDesc.FilterSizeBytes);
+                                proto->set_records_count(localBloomNgramFilterDesc.RecordsCount);
+                                proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive);
+                            }
+                        } else {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));
                             return SyncError();
                         }

@@ -338,6 +338,12 @@ struct TIndexDescription {
     }
 };
 
+bool FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription& desc,
+    const TString& name, const TString& value, TString& error);
+
+bool FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterDescription& desc,
+    const TString& name, const TString& value, TString& error);
+
 struct TColumnFamily {
     TString Name;
     TMaybe<TString> Data;

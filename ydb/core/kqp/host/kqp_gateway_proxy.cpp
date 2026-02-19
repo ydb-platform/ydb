@@ -503,64 +503,9 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
     return true;
 }
 
-bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
-        NKikimrSchemeOp::TColumnTableDescription& tableDesc, Ydb::StatusIds::StatusCode& code, TString& error)
+static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+    const TVector<TIndexDescription>& indexes, Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    if (metadata->Columns.empty()) {
-        tableDesc.SetSchemaPresetName("default");
-    }
-
-    auto& hashSharding = *tableDesc.MutableSharding()->MutableHashSharding();
-
-    for (const TString& column : metadata->TableSettings.PartitionBy) {
-        if (!metadata->Columns.count(column)) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Unknown column '" << column << "' in partition by key";
-            return false;
-        }
-
-        hashSharding.AddColumns(column);
-    }
-
-    if (metadata->TableSettings.PartitionByHashFunction) {
-        if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "cloud_logs") {
-            hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);
-        } else if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "consistency_hash_64") {
-            hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
-        } else if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "modulo_n") {
-            hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
-        } else {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Unknown hash function '"
-                << metadata->TableSettings.PartitionByHashFunction.GetRef() << "' to partition by";
-            return false;
-        }
-    } else {
-        hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
-    }
-
-    if (metadata->TableSettings.MinPartitions) {
-        tableDesc.SetColumnShardCount(*metadata->TableSettings.MinPartitions);
-    }
-
-    if (metadata->TableSettings.TtlSettings.Defined() && metadata->TableSettings.TtlSettings.IsSet()) {
-        const auto& inputSettings = metadata->TableSettings.TtlSettings.GetValueSet();
-        auto& resultSettings = *tableDesc.MutableTtlSettings();
-        resultSettings.MutableEnabled()->SetColumnName(inputSettings.ColumnName);
-        for (const auto& tier : inputSettings.Tiers) {
-            auto* tierProto = resultSettings.MutableEnabled()->AddTiers();
-            tierProto->SetApplyAfterSeconds(tier.ApplyAfter.Seconds());
-            if (tier.StorageName) {
-                tierProto->MutableEvictToExternalStorage()->SetStorage(*tier.StorageName);
-            } else {
-                tierProto->MutableDelete();
-            }
-        }
-        if (inputSettings.ColumnUnit) {
-            resultSettings.MutableEnabled()->SetColumnUnit(static_cast<NKikimrSchemeOp::TTTLSettings::EUnit>(*inputSettings.ColumnUnit));
-        }
-    }
-
     THashMap<TString, ui32> columnIdsByName;
     for (auto&& column : tableDesc.GetSchema().GetColumns()) {
         if (column.HasId()) {
@@ -569,7 +514,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
     }
 
     ui32 nextIndexId = 1;
-    for (auto&& index : metadata->Indexes) {
+    for (auto&& index : indexes) {
         switch (index.Type) {
             case TIndexDescription::EType::LocalBloomFilter: {
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
@@ -629,6 +574,70 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
             default:
                 break;
         }
+    }
+    return true;
+}
+
+bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
+        NKikimrSchemeOp::TColumnTableDescription& tableDesc, Ydb::StatusIds::StatusCode& code, TString& error) {
+    if (metadata->Columns.empty()) {
+        tableDesc.SetSchemaPresetName("default");
+    }
+
+    auto& hashSharding = *tableDesc.MutableSharding()->MutableHashSharding();
+
+    for (auto&& column : metadata->TableSettings.PartitionBy) {
+        if (!metadata->Columns.count(column)) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown column '" << column << "' in partition by key";
+            return false;
+        }
+
+        hashSharding.AddColumns(column);
+    }
+
+    if (metadata->TableSettings.PartitionByHashFunction) {
+        if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "cloud_logs") {
+            hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);
+        } else if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "consistency_hash_64") {
+            hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+        } else if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "modulo_n") {
+            hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+        } else {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown hash function '"
+                << metadata->TableSettings.PartitionByHashFunction.GetRef() << "' to partition by";
+            return false;
+        }
+    } else {
+        hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+    }
+
+    if (metadata->TableSettings.MinPartitions) {
+        tableDesc.SetColumnShardCount(*metadata->TableSettings.MinPartitions);
+    }
+
+    if (metadata->TableSettings.TtlSettings.Defined() && metadata->TableSettings.TtlSettings.IsSet()) {
+        const auto& inputSettings = metadata->TableSettings.TtlSettings.GetValueSet();
+        auto& resultSettings = *tableDesc.MutableTtlSettings();
+        resultSettings.MutableEnabled()->SetColumnName(inputSettings.ColumnName);
+        for (auto&& tier : inputSettings.Tiers) {
+            auto* tierProto = resultSettings.MutableEnabled()->AddTiers();
+            tierProto->SetApplyAfterSeconds(tier.ApplyAfter.Seconds());
+            if (tier.StorageName) {
+                tierProto->MutableEvictToExternalStorage()->SetStorage(*tier.StorageName);
+            } else {
+                tierProto->MutableDelete();
+            }
+        }
+
+        if (inputSettings.ColumnUnit) {
+            resultSettings.MutableEnabled()->SetColumnUnit(static_cast<NKikimrSchemeOp::TTTLSettings::EUnit>(*inputSettings.ColumnUnit));
+        }
+    }
+
+    if (!FillCreateColumnTableIndexDesc(tableDesc, metadata->Indexes, code, error)) {
+        return false;
     }
 
     tableDesc.SetTemporary(metadata->Temporary);

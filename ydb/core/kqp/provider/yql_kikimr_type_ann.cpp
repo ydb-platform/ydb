@@ -1148,54 +1148,15 @@ private:
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomFilter: {
-                        if (name.StringValue() == "false_positive_probability") {
-                            double fpp = 0.0;
-                            if (!TryFromString<double>(value.StringValue(), fpp)) {
-                                error = TStringBuilder() << "Invalid false_positive_probability value: " << value.StringValue();
-                            } else {
-                                localBloomFilterDescription.FalsePositiveProbability = fpp;
-                            }
-                        } else {
-                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
+                        if (!FillLocalBloomFilterSetting(localBloomFilterDescription, name.StringValue(), value.StringValue(), error)) {
+                            // error already set
                         }
 
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomNgramFilter: {
-                        ui32 uiValue = 0;
-                        if (name.StringValue() == "ngram_size") {
-                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
-                                error = TStringBuilder() << "Invalid ngram_size value: " << value.StringValue();
-                            } else {
-                                localBloomNgramFilterDescription.NgramSize = uiValue;
-                            }
-                        } else if (name.StringValue() == "hashes_count") {
-                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
-                                error = TStringBuilder() << "Invalid hashes_count value: " << value.StringValue();
-                            } else {
-                                localBloomNgramFilterDescription.HashesCount = uiValue;
-                            }
-                        } else if (name.StringValue() == "filter_size_bytes") {
-                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
-                                error = TStringBuilder() << "Invalid filter_size_bytes value: " << value.StringValue();
-                            } else {
-                                localBloomNgramFilterDescription.FilterSizeBytes = uiValue;
-                            }
-                        } else if (name.StringValue() == "records_count") {
-                            if (!TryFromString<ui32>(value.StringValue(), uiValue)) {
-                                error = TStringBuilder() << "Invalid records_count value: " << value.StringValue();
-                            } else {
-                                localBloomNgramFilterDescription.RecordsCount = uiValue;
-                            }
-                        } else if (name.StringValue() == "case_sensitive") {
-                            bool boolValue = true;
-                            if (!TryFromString<bool>(value.StringValue(), boolValue)) {
-                                error = TStringBuilder() << "Invalid case_sensitive value: " << value.StringValue();
-                            } else {
-                                localBloomNgramFilterDescription.CaseSensitive = boolValue;
-                            }
-                        } else {
-                            error = TStringBuilder() << "Unknown index setting: " << name.StringValue();
+                        if (!FillLocalBloomNgramFilterSetting(localBloomNgramFilterDescription, name.StringValue(), value.StringValue(), error)) {
+                            // error already set
                         }
 
                         break;

@@ -1,5 +1,7 @@
 #include "yql_kikimr_gateway.h"
 
+#include <util/string/cast.h>
+
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -456,6 +458,84 @@ TVector<Ydb::Topic::Codec> GetTopicCodecsFromString(const TStringBuf& codecsStr)
         }
     }
     return result;
+}
+
+bool FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription& desc,
+    const TString& name, const TString& value, TString& error) {
+    if (name == "false_positive_probability") {
+        double fpp = 0.0;
+        if (!TryFromString<double>(value, fpp)) {
+            error = TStringBuilder() << "Invalid false_positive_probability value: " << value;
+            return false;
+        }
+
+        desc.FalsePositiveProbability = fpp;
+        return true;
+    }
+
+    error = TStringBuilder() << "Unknown index setting: " << name;
+    return false;
+}
+
+bool FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterDescription& desc,
+    const TString& name, const TString& value, TString& error) {
+    if (name == "ngram_size") {
+        ui32 uiValue = 0;
+        if (!TryFromString<ui32>(value, uiValue)) {
+            error = TStringBuilder() << "Invalid ngram_size value: " << value;
+            return false;
+        }
+
+        desc.NgramSize = uiValue;
+        return true;
+    }
+
+    if (name == "hashes_count") {
+        ui32 uiValue = 0;
+        if (!TryFromString<ui32>(value, uiValue)) {
+            error = TStringBuilder() << "Invalid hashes_count value: " << value;
+            return false;
+        }
+
+        desc.HashesCount = uiValue;
+        return true;
+    }
+
+    if (name == "filter_size_bytes") {
+        ui32 uiValue = 0;
+        if (!TryFromString<ui32>(value, uiValue)) {
+            error = TStringBuilder() << "Invalid filter_size_bytes value: " << value;
+            return false;
+        }
+
+        desc.FilterSizeBytes = uiValue;
+        return true;
+    }
+
+    if (name == "records_count") {
+        ui32 uiValue = 0;
+        if (!TryFromString<ui32>(value, uiValue)) {
+            error = TStringBuilder() << "Invalid records_count value: " << value;
+            return false;
+        }
+
+        desc.RecordsCount = uiValue;
+        return true;
+    }
+
+    if (name == "case_sensitive") {
+        bool boolValue = true;
+        if (!TryFromString<bool>(value, boolValue)) {
+            error = TStringBuilder() << "Invalid case_sensitive value: " << value;
+            return false;
+        }
+
+        desc.CaseSensitive = boolValue;
+        return true;
+    }
+
+    error = TStringBuilder() << "Unknown index setting: " << name;
+    return false;
 }
 
 } // namespace NYql

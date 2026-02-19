@@ -605,7 +605,7 @@ public:
                           std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
                           TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
-    size_t GetReadyEventsCount() const {
+    size_t GetReadyEventAmount() const {
         return Ready.size();
     }
 
@@ -856,12 +856,12 @@ public:
         return Lock;
     }
 
-    size_t GetEventsCount() const {
+    size_t GetEventAmount() const {
         return EventsQueue.size();
     }
 
-    size_t GetReadyEventsCount() const {
-        return EventsQueue.GetReadyEventsCount();
+    size_t GetReadyEventAmount() const {
+        return EventsQueue.GetReadyEventAmount();
     }
 
 private:

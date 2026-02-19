@@ -2211,16 +2211,16 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
     std::unordered_set<ui64> handledPartitionStreams;
     for (const auto& [assignId, stream] : PartitionStreams) {
         handledPartitionStreams.emplace(assignId);
-        readyEventsCount += stream->GetReadyEventsCount();
-        amountEvents += stream->GetEventsCount();
+        readyEventsCount += stream->GetReadyEventAmount();
+        amountEvents += stream->GetEventAmount();
     }
 
     // Some streams may have some ready events after finish
     ui64 notStartedTasks = 0;
     for (const auto& decompressionItem : DecompressionQueue) {
         if (const auto& stream = *decompressionItem.PartitionStream; handledPartitionStreams.emplace(stream.GetAssignId()).second) {
-            readyEventsCount += stream.GetReadyEventsCount();
-            amountEvents += stream.GetEventsCount();
+            readyEventsCount += stream.GetReadyEventAmount();
+            amountEvents += stream.GetEventAmount();
             notStartedTasks += decompressionItem.BatchInfo->GetNotStartedTasksCunt();
         }
     }
@@ -2233,7 +2233,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
     // No read from server inflight, no ready events and no decompression tasks inflight => most likely hanging
     LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix()
         << "[SelfCheck] There is no ready events / inflight decompression since last: " << delta
-        << ", most likely hanged after stop by back pressure. Session state: "
+        << ", most likely hung after stop by back pressure. Session state: "
         << "grpc connection alive: " << (Processor ? "yes" : "no")
         << ", waiting grpc reconnect: " << (ConnectDelayContext && !ConnectDelayContext->IsCancelled() ? "yes" : "no")
         << ", reconnect attempts done: " << ConnectionAttemptsDone

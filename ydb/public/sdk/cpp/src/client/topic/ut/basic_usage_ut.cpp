@@ -1989,6 +1989,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, count0 + count1);
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().LastWrittenSeqNo, seqNo - 1);
 
         auto after = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
         UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToOneLineString());
@@ -2106,6 +2108,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, 100);
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
     }
 

@@ -187,8 +187,7 @@ public:
         for (const auto& shard : txState->Shards) {
             auto shardIdx = shard.Idx;
             TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
-            Y_VERIFY(shardInfo.CountReferences > 0);
-            shardInfo.CountReferences = shardInfo.CountReferences + 1;
+            shardInfo.CountReferences = shardInfo.CountReferences == 0 ? 2 : shardInfo.CountReferences + 1;
             context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "copy shard");
             context.SS->PersistShardCountReferences(db, shardIdx, shardInfo.CountReferences);
 

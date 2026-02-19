@@ -289,8 +289,7 @@ private:
             for (auto& shard : txState->Shards) {
                 auto shardIdx = shard.Idx;
                 TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
-                Y_VERIFY(shardInfo.CountReferences > 0);
-                shardInfo.CountReferences = shardInfo.CountReferences - 1;
+                shardInfo.CountReferences = shardInfo.CountReferences == 0 ? 0 : shardInfo.CountReferences - 1;
                 context.SS->PersistShardCountReferences(db, shardIdx, shardInfo.CountReferences);
                 if (shardInfo.CountReferences == 0) {
                     context.OnComplete.DeleteShard(shard.Idx);

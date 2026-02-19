@@ -7552,7 +7552,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
-
     constexpr TStringBuf DefaultImportSettings = R"(
         ImportFromS3Settings {
             endpoint: "localhost:%d"
@@ -7626,8 +7625,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         ShouldSucceed(t, {{"", scheme}});
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSimpleTable) {
-        ShouldSucceed(R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSimpleTable, 2, 1, false) {
+        ShouldSucceed(t, R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -7722,8 +7721,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnIndexedTable) {
-        ShouldSucceed(R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnIndexedTable, 2, 1, false) {
+        ShouldSucceed(t, R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -7741,8 +7740,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleView) {
-        ShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleView, 2, 1, false) {
+        ShouldSucceed(t,
             {
                 EPathTypeView,
                 R"(
@@ -7753,8 +7752,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnViewsAndTables) {
-        ShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnViewsAndTables, 2, 1, false) {
+        ShouldSucceed(t,
             {
                 {
                     "/view",
@@ -7799,8 +7798,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnDependentView) {
-        ShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnDependentView, 2, 1, false) {
+        ShouldSucceed(t,
             {
                 {
                     "/DependentView",
@@ -7938,7 +7937,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    void CancelShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
+    void CancelShouldSucceed(TTestWithReboots& t, const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -7949,7 +7948,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         const bool createsViews = AnyOf(schemes, [](const auto& scheme) {
             return scheme.second.Type == EPathTypeView;
         });
@@ -7993,12 +7991,22 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    void CancelShouldSucceed(const TTypedScheme& scheme) {
-        CancelShouldSucceed({{"", scheme}});
+    void CancelShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
+        TTestWithReboots t;
+        CancelShouldSucceed(t, schemes, importSettings);
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSimpleTable) {
-        CancelShouldSucceed(R"(
+    void CancelShouldSucceed(TTestWithReboots& t, const TTypedScheme& scheme) {
+        CancelShouldSucceed(t, {{"", scheme}});
+    }
+
+    void CancelShouldSucceed(const TTypedScheme& scheme) {
+        TTestWithReboots t;
+        CancelShouldSucceed(t, scheme);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSimpleTable, 2, 1, false) {
+        CancelShouldSucceed(t, R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -8011,8 +8019,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnIndexedTable) {
-        CancelShouldSucceed(R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnIndexedTable, 2, 1, false) {
+        CancelShouldSucceed(t, R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -8030,8 +8038,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleView) {
-        CancelShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleView, 2, 1, false) {
+        CancelShouldSucceed(t,
             {
                 EPathTypeView,
                 R"(
@@ -8042,8 +8050,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnViewsAndTables) {
-        CancelShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnViewsAndTables, 2, 1, false) {
+        CancelShouldSucceed(t,
             {
                 {
                     "/view",
@@ -8175,12 +8183,12 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         return schemes;
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleChangefeed) {
-        ShouldSucceed(GetSchemeWithChangefeed());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleChangefeed, 2, 1, false) {
+        ShouldSucceed(t, GetSchemeWithChangefeed());
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleChangefeed) {
-        CancelShouldSucceed(GetSchemeWithChangefeed());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleChangefeed, 2, 1, false) {
+        CancelShouldSucceed(t, GetSchemeWithChangefeed());
     }
 
     THashMap<TString, TTypedScheme> GetSchemeWithUniqueIndex() {
@@ -8204,16 +8212,16 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         return schemes;
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleTableWithUniqueIndex) {
-        ShouldSucceed(GetSchemeWithUniqueIndex());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTableWithUniqueIndex, 2, 1, false) {
+        ShouldSucceed(t, GetSchemeWithUniqueIndex());
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleTableWithUniqueIndex) {
-        CancelShouldSucceed(GetSchemeWithUniqueIndex());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleTableWithUniqueIndex, 2, 1, false) {
+        CancelShouldSucceed(t, GetSchemeWithUniqueIndex());
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnDependentView) {
-        CancelShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnDependentView, 2, 1, false) {
+        CancelShouldSucceed(t,
             {
                 {
                     "/DependentView",
@@ -8251,8 +8259,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSystemView) {
-        CancelShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSystemView, 2, 1, false) {
+        CancelShouldSucceed(t,
             {
                 {
                     "/partition_stats",
@@ -8363,9 +8371,9 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTopic, 2, 1, false) {
         auto topic = NDescUT::TSimpleTopic(0, 2);
-        ShouldSucceed({
+        ShouldSucceed(t, {
             {
                 topic.GetDir(),
                 {
@@ -8524,8 +8532,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         }, settings);
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleExternalDataSource) {
-        ShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleExternalDataSource, 2, 1, false) {
+        ShouldSucceed(t,
             {
                 EPathTypeExternalDataSource,
                 R"(
@@ -8546,7 +8554,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleExternalTable) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleExternalTable, 2, 1, false) {
         const auto settings = R"(
             ImportFromS3Settings {
                 endpoint: "localhost:%d"
@@ -8562,7 +8570,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         )";
 
-        ShouldSucceed({
+        ShouldSucceed(t, {
             {
                 "/ExternalTable",
                 {

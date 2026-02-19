@@ -428,7 +428,7 @@ TDirectBlockGroup::ReadBlocksLocal(
     auto execSpan = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         std::move(requestHandler->Span.GetTraceId()),
-        "NbsPartition.WriteBlocks.PBRead.Exec",
+        "NbsPartition.ReadBlocks.Exec",
         NWilson::EFlags::NONE,
         ActorSystem);
 
@@ -528,7 +528,7 @@ void TDirectBlockGroup::HandleReadResult(
     auto execSpan = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         std::move(requestHandler->Span.GetTraceId()),
-        "NbsPartition.WriteBlocks.HandleReadResult.Exec",
+        "NbsPartition.ReadBlocks.HandleReadResult.Exec",
         NWilson::EFlags::NONE,
         ActorSystem);
 

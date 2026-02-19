@@ -181,7 +181,7 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
 
     private:
         static TString BuildCounterName(const std::string& topicPath, const TString& counter) {
-            return TStringBuilder() << "groupp=distributed_topic_read_session;topic=" << topicPath << ";counter=" << counter;
+            return TStringBuilder() << "group=distributed_topic_read_session;topic=" << topicPath << ";counter=" << counter;
         }
 
         TValueReporter(const TString& name, const TDqPqReadBalancerActor::TMetrics& metrics, const TActorId& aggregatorActor, NDqProto::TEvUpdateCounterValue&& value)

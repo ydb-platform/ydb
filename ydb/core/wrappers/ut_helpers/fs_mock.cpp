@@ -5,9 +5,7 @@
 
 #include <functional>
 
-namespace NKikimr {
-namespace NWrappers {
-namespace NTestHelpers {
+namespace NKikimr::NWrappers::NTestHelpers {
 
 TFsMock::TFsMock(const TString& basePath)
     : BasePath_(basePath)
@@ -56,6 +54,4 @@ const TString& TFsMock::GetBasePath() const {
     return BasePath_;
 }
 
-} // NTestHelpers
-} // NWrappers
-} // NKikimr
+} // namespace NKikimr::NWrappers::NTestHelpers

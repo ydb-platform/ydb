@@ -307,9 +307,6 @@ class TRealBlockDevice : public IBlockDevice {
                 SubmitCondVar.Signal();
                 return;
             }
-            Device.IdleCounter.Increment();
-
-            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             double blockedMs = 0;
             action->OperationIdx = Device.FlightControl.Schedule(blockedMs, opSize);
@@ -319,6 +316,9 @@ class TRealBlockDevice : public IBlockDevice {
             if (action->FlushAction) {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
+
+            Device.IdleCounter.Increment();
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
@@ -467,6 +467,7 @@ class TRealBlockDevice : public IBlockDevice {
             const ui64 opSize = op->GetSize();
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
+            Device.DecrementMonInFlight(op->GetType(), opSize);
             Device.FlightControl.MarkComplete(completionAction->OperationIdx, opSize);
 
             NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
@@ -476,7 +477,6 @@ class TRealBlockDevice : public IBlockDevice {
 
             bool isSeekExpected = (completionAction->SubmitTime + (NHPTimer::STime)Device.SeekCostNs / 25ll >= PrevEventGotAtCycle);
 
-            Device.DecrementMonInFlight(op->GetType(), opSize);
             if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
                     Y_VERIFY_S(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr,

@@ -264,8 +264,15 @@ namespace NYql::NDq {
         }
 
         void Handle(TEvReadSplitsPart::TPtr ev) {
-            ProcessReceivedData(ev->Get()->Response, ev->Get()->State);
-            ReadNextData(std::move(ev->Get()->State));
+            auto state = std::move(ev->Get()->State);
+            ProcessReceivedData(ev->Get()->Response, state);
+#if 1 // Temporary workaround for not-yet-deployed YQ-5124
+            if (state->FullscanLimit > 0 && state->ResultRows == state->FullscanLimit) {
+                FinalizeRequest(std::move(state));
+                return;
+            }
+#endif
+            ReadNextData(std::move(state));
         }
 
         void Handle(TEvReadSplitsFinished::TPtr ev) {
@@ -450,6 +457,13 @@ namespace NYql::NDq {
             }
 
             auto height = columns[0].size();
+#if 1 // Temporary workaround for not-yet-deployed YQ-5124
+            Y_DEBUG_ABORT_UNLESS(state->FullscanLimit == 0 || state->FullscanLimit > state->ResultRows);
+            if (state->FullscanLimit > 0 && height > state->FullscanLimit - state->ResultRows) {
+                YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << SelfId() << " YQ-5124 Workaround for unimplemented LIMIT invoked " << height << " > " << state->FullscanLimit << " - " << state->ResultRows;
+                height = state->FullscanLimit - state->ResultRows;
+            }
+#endif
             state->ResultRows += height;
             for (size_t i = 0; i != height; ++i) {
                 NUdf::TUnboxedValue* keyItems;

@@ -380,44 +380,50 @@ private:
         auto guard = BindAllocator();
         const auto now = std::chrono::steady_clock::now();
         auto lookupResult = ev->Get()->Result.lock();
-        Y_ABORT_UNLESS(lookupResult == (ev->Get()->FullscanLimit > 0 ? FullscanRequest : KeysForLookup));
         bool fullscan = ev->Get()->FullscanLimit > 0;
-        bool resultIncomplete = fullscan && ev->Get()->ResultRows == ev->Get()->FullscanLimit;
-        if (IsMultiMatches && resultIncomplete) {
-            lookupResult->erase(lookupResult->begin(), lookupResult->end());
-        }
+        bool resultIncomplete = fullscan && ev->Get()->ResultRows >= ev->Get()->FullscanLimit;
         if (!resultIncomplete) {
             for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
                 auto& [lookupKey, inputOther] = AwaitingQueue.front();
                 auto lookupPayload = lookupResult->FindPtr(lookupKey);
-                if (lookupPayload == nullptr) {
-                    continue;
-                }
+                Y_DEBUG_ABORT_UNLESS(fullscan || lookupPayload != nullptr);
                 AddReadyQueue(lookupKey, inputOther, lookupPayload);
+            }
+            if (fullscan) {
+                FullscanReady = true;
+#if 0 // TODO
+                LruCache->Clear(); // Erase now-useless LRU cache
+#endif
             }
             PushReadyWatermark();
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
         } else if (!IsMultiMatches) {
-            // TODO: try partially early resolve AwaitingQueue (for multiMatches we MUST ignore incomplete results)
-        }
-        if (!fullscan || (resultIncomplete && !IsMultiMatches)) {
+#if 0 // TODO
+            // Try to (partially) resolve AwaitingQueue (for MultiMatches we MUST ignore incomplete results)
+#endif
+#if 0 // TODO
+            // Opportunistially populate LRU cache with partial fullscan results
+            // (again, in case of MultiMatches, we cannot use partial results)
             for (auto& [k, v]: *lookupResult) {
-                Y_DEBUG_ABORT_UNLESS(!fullscan || v);
-                LruCache->Update(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+                Y_DEBUG_ABORT_UNLESS(v);
+                LruCache->OpportunisticUpdate(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
             }
-            lookupResult->clear();
-            lookupResult.reset();
+#endif
         }
         if (fullscan) {
             Y_DEBUG_ABORT_UNLESS(FullscanRequested);
-            FullscanExpireTime = now + CacheTtl;
-            if (!resultIncomplete) {
-                // TODO: LruCache->Clear(); // Erase useless LRU cache
-                Y_DEBUG_ABORT_UNLESS(lookupResult);
-                FullscanReady = true;
-                KeysForLookup->clear();
-            }
+            Y_DEBUG_ABORT_UNLESS(lookupResult == FullscanRequest);
             FullscanRequested = false;
+            FullscanExpireTime = now + CacheTtl;
+        } else {
+            Y_ABORT_UNLESS(lookupResult == KeysForLookup);
+            lookupResult.reset();
+            if (!FullscanReady) { // don't use LRU cache when we have (complete) fullscan results
+                for (auto& [k, v]: *KeysForLookup) {
+                    LruCache->Update(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+                }
+            }
+            KeysForLookup->erase(KeysForLookup->begin(), KeysForLookup->end()); // don't ->clear();, it's O(reserved) instead of O(size)
         }
         auto deltaLruSize = (i64)LruCache->Size() - LastLruSize;
         LastLruSize = (i64)LruCache->Size();
@@ -473,11 +479,11 @@ private:
                 }
                 if (nullsInKey) {
                     AddReadyQueue(key, other, nullptr);
-                } else if (auto lookupPayload = LruCache->Get(key, now)) {
-                    AddReadyQueue(key, other, &*lookupPayload);
                 } else if (FullscanReady) {
                     auto it = FullscanRequest->find(key);
                     AddReadyQueue(key, other, it != FullscanRequest->end() ? &it->second : nullptr);
+                } else if (auto lookupPayload = LruCache->Get(key, now)) {
+                    AddReadyQueue(key, other, &*lookupPayload);
                 } else {
                     if (!FullscanRequested && now >= FullscanExpireTime) {
                         Y_DEBUG_ABORT_UNLESS(MaxFullscanRows > 0);

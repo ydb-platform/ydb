@@ -1009,7 +1009,7 @@ message AlterTableRequest {
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
     reserved 22, 23;
-    // Start compaction for table 
+    // Start compaction for table
     CompactItem compact = 24;
 }
 

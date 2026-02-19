@@ -106,15 +106,20 @@ void ToOperation(const NKikimrForcedCompaction::TForcedCompaction& compaction, Y
     }
 
     switch (compaction.GetState()) {
-        case Ydb::Table::CompactState::STATE_DONE:
+        case Ydb::Table::CompactState::STATE_DONE: {
             operation->set_ready(true);
             operation->set_status(Ydb::StatusIds::SUCCESS);
-        case Ydb::Table::CompactState::STATE_CANCELLED:
+            break;
+        }
+        case Ydb::Table::CompactState::STATE_CANCELLED: {
             operation->set_ready(true);
             operation->set_status(Ydb::StatusIds::CANCELLED);
-        default:
+            break;
+        }
+        default: {
             operation->set_ready(false);
             break;
+        }
     }
 
     Ydb::Table::CompactMetadata metadata;
@@ -122,6 +127,10 @@ void ToOperation(const NKikimrForcedCompaction::TForcedCompaction& compaction, Y
     metadata.set_cascade(compaction.GetSettings().cascade());
     metadata.set_max_shards_in_flight(compaction.GetSettings().max_shards_in_flight());
     metadata.set_progress(compaction.GetProgress());
+    metadata.set_state(compaction.GetState());
+
+    auto data = operation->mutable_metadata();
+    data->PackFrom(metadata);
 }
 
 bool TryGetId(const NOperationId::TOperationId& operationId, ui64& id) {

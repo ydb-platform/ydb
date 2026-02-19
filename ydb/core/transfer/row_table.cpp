@@ -86,17 +86,9 @@ const TBackoff DefaultBackoff = TBackoff(TDuration::Seconds(1), TDuration::Secon
 template<>
 IActor* TTableUploader<TData>::CreateUploaderInternal(
     const TString& database, const TString& tablePath,
-<<<<<<< HEAD
-    const std::shared_ptr<TData>& data, 
-    const NACLib::TUserContext::TPtr& userCtx,
-    ui64 cookie)
-{
-    return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, userCtx, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
-=======
     const std::shared_ptr<TData>& data, ui64 cookie)
 {
     return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
->>>>>>> seleznyov/issue_31171
 }
 
 }

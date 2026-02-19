@@ -114,35 +114,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
         table,
         types,
         std::move(rows),
-<<<<<<< HEAD
-        userCtx,
-        mode,
-        writeToPrivateTable,
-        writeToIndexImplTable,
-        cookie,
-        backoff);
-}
-
-IActor* CreateUploadRowsInternal(const TActorId& sender,
-                                 const TString& database,
-                                 const TString& table,
-                                 std::shared_ptr<const TUploadTypes> types,
-                                 std::shared_ptr<const TUploadRows> rows,
-                                 EUploadRowsMode mode,
-                                 bool writeToPrivateTable,
-                                 bool writeToIndexImplTable,
-                                 ui64 cookie,
-                                 TBackoff backoff)
-{
-    return new TUploadRowsInternal(sender,
-        database,
-        table,
-        types,
-        std::move(rows),
-        new NACLib::TUserContext(BUILTIN_ACL_CDC_WITHOUT_USER_SID,""),
-=======
-        BUILTIN_ACL_NO_USER_SID,
->>>>>>> seleznyov/issue_31171
+        new NACLib::TUserContext(BUILTIN_ACL_NO_USER_SID, ""),
         mode,
         writeToPrivateTable,
         writeToIndexImplTable,

@@ -1406,6 +1406,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
 
+        SimulateSleep(server, TDuration::Seconds(2));
+
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (2, 200);

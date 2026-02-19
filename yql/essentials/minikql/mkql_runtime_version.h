@@ -2,8 +2,7 @@
 
 #include <util/system/types.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 // Problem: rolling update of services based on minikql runtime (example: YDB)
 // requires careful management of minikql runtime versions. A minikql program
@@ -32,5 +31,4 @@ namespace NMiniKQL {
 // v14 is the version supported by kikimr-20-2
 constexpr ui32 RuntimeVersion = MKQL_RUNTIME_VERSION;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

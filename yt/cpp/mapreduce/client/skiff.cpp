@@ -122,9 +122,6 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchema(
     TVector<TSkiffSchemaPtr> skiffColumns;
     for (const auto& column: schema.Columns()) {
         TSkiffSchemaPtr skiffColumn;
-        if (column.Deleted().Defined() && *column.Deleted()) {
-            continue;
-        }
         if (column.Type() == VT_ANY && *column.TypeV3() != *NTi::Optional(NTi::Yson())) {
             // We ignore all complex types until YT-12717 is done.
             return nullptr;

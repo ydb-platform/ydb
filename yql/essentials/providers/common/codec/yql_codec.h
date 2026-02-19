@@ -22,8 +22,7 @@ namespace NYT {
 class TNode;
 } // namespace NYT
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 void WriteYsonValue(
     NYson::TYsonConsumerBase& writer,
@@ -71,5 +70,4 @@ TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNodeInResultFormat(const NKikimr::
 TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikimr::NUdf::TUnboxedValuePod& value, TExprContext& ctx,
                                    TPositionHandle pos = {});
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

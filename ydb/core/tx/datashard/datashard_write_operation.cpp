@@ -113,9 +113,9 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
 
     ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};
     DefaultFilledColumnCount = recordOperation.GetDefaultFilledColumnCount();
-    
-    if (DefaultFilledColumnCount != 0 && 
-        OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT) 
+
+    if (DefaultFilledColumnCount != 0 &&
+        OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT)
     {
         return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " doesn't support DefaultFilledColumnsIds"};
     }
@@ -196,10 +196,10 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
                 return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Row cell size of " << cell.Size() << " bytes is larger than the allowed threshold " << NLimits::MaxWriteValueSize};
         }
     }
-    
+
     if (DefaultFilledColumnCount + tableInfo.KeyColumnIds.size() > ColumnIds.size()) {
-        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Column count mismatch: DefaultFilledColumnCount " << 
-                                                                            DefaultFilledColumnCount << " is bigger than count of data columns " << 
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Column count mismatch: DefaultFilledColumnCount " <<
+                                                                            DefaultFilledColumnCount << " is bigger than count of data columns " <<
                                                                             ColumnIds.size() - tableInfo.KeyColumnIds.size()};
     }
 
@@ -215,7 +215,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
                 case NScheme::NTypeIds::Uint8:
                 case NScheme::NTypeIds::Int8:
                 case NScheme::NTypeIds::Uint16:
-                case NScheme::NTypeIds::Int16: 
+                case NScheme::NTypeIds::Int16:
                 case NScheme::NTypeIds::Uint32:
                 case NScheme::NTypeIds::Int32:
                 case NScheme::NTypeIds::Uint64:
@@ -277,7 +277,7 @@ ui32 TValidatedWriteTx::ExtractKeys(const NTable::TScheme& scheme, bool allowErr
     } else {
         Y_ENSURE(isValid, "Validation errors: " << ErrStr);
     }
-    
+
     return KeysCount();
 }
 
@@ -343,7 +343,7 @@ TWriteOperation* TWriteOperation::TryCastWriteOperation(TOperation::TPtr op)
 {
     if (!op->IsWriteTx())
         return nullptr;
-    
+
     TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
     Y_ENSURE(writeOp);
     return writeOp;
@@ -612,7 +612,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 
     TVector<EExecutionUnitKind> plan;
 
-    if (IsImmediate()) 
+    if (IsImmediate())
     {
         Y_ENSURE(!loaded);
         plan.push_back(EExecutionUnitKind::CheckWrite);

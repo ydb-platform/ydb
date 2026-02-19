@@ -2,8 +2,7 @@
 
 #include <util/stream/str.h>
 
-namespace NKikimr {
-namespace NUuid {
+namespace NKikimr::NUuid {
 
 namespace {
 
@@ -80,5 +79,4 @@ void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
     out.Write(buf.Bytes, 16);
 }
 
-} // namespace NUuid
-} // namespace NKikimr
+} // namespace NKikimr::NUuid

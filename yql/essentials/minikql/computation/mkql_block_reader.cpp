@@ -10,8 +10,7 @@
 #include <arrow/array/array_binary.h>
 #include <arrow/chunked_array.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -363,5 +362,4 @@ std::unique_ptr<IBlockItemConverter> MakeBlockItemConverter(
     return NYql::NUdf::DispatchByArrowTraits<TConverterTraits>(typeInfoHelper, type, &pgBuilder);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

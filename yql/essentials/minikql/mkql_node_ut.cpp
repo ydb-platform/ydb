@@ -5,8 +5,7 @@
 
 #include <util/generic/algorithm.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
 Y_UNIT_TEST(TestTypeOfType) {
@@ -680,5 +679,4 @@ Y_UNIT_TEST(TestVariantLiteral) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLNodeTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

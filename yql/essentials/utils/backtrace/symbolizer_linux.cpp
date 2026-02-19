@@ -89,8 +89,7 @@ int HandleLibBacktraceFrame(void* data, uintptr_t, const char* filename, int lin
 }
 } // namespace
 
-namespace NYql {
-namespace NBacktrace {
+namespace NYql::NBacktrace {
 namespace {
 std::mutex Mutex;
 char* Result[Limit];
@@ -148,5 +147,4 @@ void Symbolize(const TStackFrame* frames, size_t count, IOutputStream* out) {
         }
     }
 }
-} // namespace NBacktrace
-} // namespace NYql
+} // namespace NYql::NBacktrace

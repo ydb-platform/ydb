@@ -179,7 +179,7 @@ SRCS(
     queue_client/producer_client.cpp
     queue_client/queue_rowset.cpp
 
-    ypath/rich.cpp
+    ypath/rich_constrained.cpp
     ypath/parser_detail.cpp
 
     transaction_client/batching_timestamp_provider.cpp

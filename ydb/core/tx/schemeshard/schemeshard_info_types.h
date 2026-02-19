@@ -1206,18 +1206,13 @@ public:
         InFlightCondErase.erase(shardIdx);
     }
 
-    void ScheduleNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
-        Y_ENSURE(InFlightCondErase.contains(shardIdx));
-
+    void UpdateNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
         auto it = FindPartition(shardIdx);
         Y_ENSURE(it != Partitions.end());
 
         it->LastCondErase = now;
         it->NextCondErase = now + next;
         it->LastCondEraseLag = TDuration::Zero();
-
-        CondEraseSchedule.push(it);
-        InFlightCondErase.erase(shardIdx);
     }
 
     bool IsUsingSequence(const TString& name) {
@@ -1384,6 +1379,14 @@ struct TShardInfo {
 
     static TShardInfo BlockStorePartition2Info(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::BlockStorePartition2);
+    }
+
+    static TShardInfo BlockStoreVolumeDirectInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::BlockStoreVolumeDirect);
+    }
+
+    static TShardInfo BlockStorePartitionDirectInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::BlockStorePartitionDirect);
     }
 
     static TShardInfo FileStoreInfo(TTxId txId, TPathId pathId) {
@@ -3842,6 +3845,34 @@ inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames =
 
     return true;
 }
+
+// namespace NForcedCompaction {
+struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
+    using TPtr = TIntrusivePtr<TForcedCompactionInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        InProgress = 1,
+        Done = 2,
+    };
+
+    ui64 Id;  // TxId from the original TEvCreateRequest
+    EState State = EState::Invalid; 
+    TPathId TablePathId;
+    bool Cascade;
+    ui32 MaxShardsInFlight;
+
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
+    TMaybe<TString> UserSID;
+
+    ui32 TotalShardCount = 0;
+    ui32 DoneShardCount = 0; // updates only when persisting
+
+    THashSet<TShardIdx> ShardsInFlight;
+};
+// } // NForcedCompaction
 
 }
 

@@ -27,9 +27,7 @@
 
 // TODO: Allow only PODs in key/value. Use runtime key/value sizes instead of compile time type instantiation. Use Read/WriteUnaligned
 
-namespace NKikimr {
-
-namespace NCHash {
+namespace NKikimr::NCHash {
 
 class TListPoolBase {
 public:
@@ -1645,6 +1643,4 @@ public:
     }
 };
 
-} // namespace NCHash
-
-} // namespace NKikimr
+} // namespace NKikimr::NCHash

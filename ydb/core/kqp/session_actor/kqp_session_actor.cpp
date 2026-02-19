@@ -6,6 +6,8 @@
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_tli.h>
+#include <ydb/core/kqp/common/kqp_query_text_cache_events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
@@ -148,6 +150,79 @@ struct TKqpCleanupCtx {
     }
 };
 
+// Performs cross-node query text lookup for TLI deferred lock logging.
+// Sends TEvLookupQueryText to the breaker's node, emits the TLI log, and self-destructs.
+class TDeferredTliLogActor : public TActorBootstrapped<TDeferredTliLogActor> {
+public:
+    static constexpr TDuration LookupTimeout = TDuration::Seconds(5);
+
+    TDeferredTliLogActor(
+        ui64 breakerQuerySpanId,
+        ui32 breakerNodeId,
+        TString traceId,
+        bool isCommitAction)
+        : BreakerQuerySpanId(breakerQuerySpanId)
+        , BreakerNodeId(breakerNodeId)
+        , TraceId(std::move(traceId))
+        , IsCommitAction(isCommitAction)
+    {}
+
+    void Bootstrap() {
+        auto request = MakeHolder<TEvLookupQueryText>();
+        request->Record.SetQuerySpanId(BreakerQuerySpanId);
+        Send(MakeKqpQueryTextCacheServiceId(BreakerNodeId), request.Release(), IEventHandle::FlagTrackDelivery);
+        Schedule(LookupTimeout, new TEvents::TEvWakeup());
+        Become(&TDeferredTliLogActor::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvLookupQueryTextResponse, HandleResponse)
+        hFunc(TEvents::TEvUndelivered, HandleUndelivered)
+        cFunc(TEvents::TSystem::Wakeup, HandleTimeout)
+    )
+
+private:
+    void EmitLog(const TString& breakerQueryText) {
+        TString breakerQueryTexts;
+        if (!breakerQueryText.empty()) {
+            breakerQueryTexts = TStringBuilder() << "[QuerySpanId=" << BreakerQuerySpanId
+                << " QueryText=" << breakerQueryText << "]";
+        }
+
+        NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+            .Component = "SessionActor",
+            .Message = IsCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
+            .QueryText = breakerQueryText,
+            .QueryTexts = breakerQueryTexts,
+            .TraceId = TraceId,
+            .BreakerQuerySpanId = BreakerQuerySpanId,
+            .IsCommitAction = IsCommitAction,
+        }, TlsActivationContext->AsActorContext());
+    }
+
+    void HandleResponse(TEvLookupQueryTextResponse::TPtr& ev) {
+        EmitLog(ev->Get()->Record.GetQueryText());
+        PassAway();
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
+        // Target node unreachable, emit log with empty query text
+        EmitLog("");
+        PassAway();
+    }
+
+    void HandleTimeout() {
+        // Lookup timed out, emit log with empty query text to avoid leaking actors
+        EmitLog("");
+        PassAway();
+    }
+
+    const ui64 BreakerQuerySpanId;
+    const ui32 BreakerNodeId;
+    const TString TraceId;
+    const bool IsCommitAction;
+};
+
 class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor>, IActorExceptionHandler {
 
     class TTimerGuard {
@@ -259,12 +334,20 @@ public:
         return TString();
     }
 
+    ui64 GetQuerySpanId() const {
+        if (QueryState) {
+            return QueryState->GetQuerySpanId();
+        }
+        return 0;
+    }
+
     void MakeNewQueryState(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ++QueryId;
         YQL_ENSURE(!QueryState);
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
         ev->Get()->SetClientLostAction(selfId, as);
+
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, SessionId, AppData()->MonotonicTimeProvider->Now(), Settings.MutableExecuterConfig->RuntimeParameterSizeLimit.load());
@@ -930,7 +1013,7 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
-        QueryState->TxCtx->OnBeginQuery();
+        QueryState->TxCtx->OnBeginQuery(QueryState->GetQuerySpanId(), QueryState->ExtractQueryText());
 
         if (!CheckScriptExecutionState()) {
             co_return;
@@ -1055,7 +1138,7 @@ public:
 
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
-        QueryState->TxCtx->OnBeginQuery();
+        QueryState->TxCtx->OnBeginQuery(QueryState->GetQuerySpanId(), QueryState->ExtractQueryText());
 
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
@@ -1425,12 +1508,20 @@ public:
             : txCtx.Locks.Broken();
 
         if (!txCtx.DeferredEffects.Empty() && broken) {
+            EmitVictimTliLog(
+                txCtx.TxManager ? txCtx.TxManager->GetVictimQuerySpanId() : std::nullopt,
+                std::nullopt,
+                txCtx.TxManager ? txCtx.TxManager->GetBrokenLocksCount() : txCtx.Locks.Size());
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
                 MessageFromIssues(std::vector<TIssue>{txCtx.TxManager ? *txCtx.TxManager->GetLockIssue() : txCtx.Locks.GetIssue()}));
             return false;
         }
 
         if (tx && tx->GetHasEffects() && broken) {
+            EmitVictimTliLog(
+                txCtx.TxManager ? txCtx.TxManager->GetVictimQuerySpanId() : std::nullopt,
+                std::nullopt,
+                txCtx.TxManager ? txCtx.TxManager->GetBrokenLocksCount() : txCtx.Locks.Size());
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
                 MessageFromIssues(std::vector<TIssue>{txCtx.TxManager ? *txCtx.TxManager->GetLockIssue() : txCtx.Locks.GetIssue()}));
             return false;
@@ -1634,7 +1725,7 @@ public:
         QueryState->Commited = true;
 
         for (const auto& effect : txCtx.DeferredEffects) {
-            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params, effect.QuerySpanId);
             STLOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction",
                 (transactions_size, request.Transactions.size()),
                 (trace_id, TraceId()));
@@ -1651,7 +1742,7 @@ public:
         auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());
 
         for (const auto& effect : txCtx.DeferredEffects) {
-            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params, effect.QuerySpanId);
 
             STLOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction",
                 (transactions_size, request.Transactions.size()),
@@ -1769,7 +1860,7 @@ public:
             QueryState->Commited = true;
 
             for (const auto& effect : txCtx.DeferredEffects) {
-                request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+                request.Transactions.emplace_back(effect.PhysicalTx, effect.Params, effect.QuerySpanId);
 
                 STLOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction",
                     (transactions_size, request.Transactions.size()),
@@ -1890,6 +1981,7 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        request.QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0;
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
@@ -1935,6 +2027,7 @@ public:
                 .SessionActorId = SelfId(),
                 .TxManager = txCtx->TxManager,
                 .TraceId = request.TraceId.GetTraceId(),
+                .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),
@@ -2034,6 +2127,7 @@ public:
             .ShardIdToTableInfo = txCtx->ShardIdToTableInfo,
             .WriteBufferInitialMemoryLimit = writeBufferInitialMemoryLimit,
             .WriteBufferMemoryLimit = writeBufferMemoryLimit,
+            .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
         };
 
         auto executerActor = CreateKqpPartitionedExecuter(std::move(settings), ChannelService);
@@ -2189,6 +2283,178 @@ public:
         QueryState->Issues.AddIssues(issues);
     }
 
+    // Emit TLI breaker logs for direct lock breaks (one log per shard that broke locks).
+    void EmitBreakerTliLogs(TEvKqpExecuter::TEvTxResponse* ev) {
+        if (ev->LocksBrokenAsBreaker == 0 || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            return;
+        }
+
+        const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                                   QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+
+        if (!ev->BreakerQuerySpanIds.empty()) {
+            TString combinedQueryTexts = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TString();
+            for (ui64 breakerQuerySpanId : ev->BreakerQuerySpanIds) {
+                TString breakerQueryText;
+                if (QueryState->TxCtx) {
+                    breakerQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(breakerQuerySpanId);
+                }
+                if (breakerQueryText.empty()) {
+                    breakerQueryText = QueryState->ExtractQueryText();
+                }
+
+                NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                    .Component = "SessionActor",
+                    .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
+                    .QueryText = breakerQueryText,
+                    .QueryTexts = combinedQueryTexts,
+                    .TraceId = TraceId(),
+                    .BreakerQuerySpanId = breakerQuerySpanId,
+                    .IsCommitAction = isCommitAction,
+                }, TlsActivationContext->AsActorContext());
+            }
+        } else {
+            // Fallback: no BreakerQuerySpanIds from DataShard, use current query
+            NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                .Component = "SessionActor",
+                .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
+                .QueryText = QueryState->ExtractQueryText(),
+                .QueryTexts = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TString(),
+                .TraceId = TraceId(),
+                .BreakerQuerySpanId = QueryState->GetQuerySpanId(),
+                .IsCommitAction = isCommitAction,
+            }, TlsActivationContext->AsActorContext());
+        }
+    }
+
+    // Emit TLI breaker logs for deferred lock scenarios (lock broken between snapshot and re-read).
+    void EmitDeferredBreakerTliLogs(TEvKqpExecuter::TEvTxResponse* ev) {
+        if (ev->DeferredBreakers.empty() || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            return;
+        }
+
+        const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                                   QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+        const ui32 localNodeId = SelfId().NodeId();
+
+        for (const auto& breaker : ev->DeferredBreakers) {
+            TString breakerQueryText = NDataIntegrity::TNodeQueryTextCache::Instance().Get(breaker.QuerySpanId);
+
+            if (!breakerQueryText.empty() || breaker.NodeId == 0 || breaker.NodeId == localNodeId) {
+                TString breakerQueryTexts;
+                if (!breakerQueryText.empty()) {
+                    breakerQueryTexts = TStringBuilder() << "[QuerySpanId=" << breaker.QuerySpanId
+                        << " QueryText=" << breakerQueryText << "]";
+                }
+
+                NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                    .Component = "SessionActor",
+                    .Message = isCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
+                    .QueryText = breakerQueryText,
+                    .QueryTexts = breakerQueryTexts,
+                    .TraceId = TraceId(),
+                    .BreakerQuerySpanId = breaker.QuerySpanId,
+                    .IsCommitAction = isCommitAction,
+                }, TlsActivationContext->AsActorContext());
+            } else {
+                Register(new TDeferredTliLogActor(
+                    breaker.QuerySpanId, breaker.NodeId, TraceId(), isCommitAction));
+            }
+        }
+    }
+
+    // Resolve the VictimQuerySpanId and corresponding query text for TLI logging.
+    // txManagerQuerySpanId - from TxManager if available, brokenLockQuerySpanId - from DataShard event.
+    std::pair<TMaybe<ui64>, TString> GetVictimQueryInfo(
+        std::optional<ui64> txManagerQuerySpanId,
+        std::optional<ui64> brokenLockQuerySpanId)
+    {
+        TMaybe<ui64> victimQuerySpanId;
+        TString victimQueryText;
+
+        if (txManagerQuerySpanId) {
+            victimQuerySpanId = *txManagerQuerySpanId;
+            victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(*txManagerQuerySpanId);
+        } else if (brokenLockQuerySpanId) {
+            victimQuerySpanId = *brokenLockQuerySpanId;
+            victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(*brokenLockQuerySpanId);
+        }
+
+        // In Snapshot Isolation the conflict is detected during the write, but the actual
+        // victim is the read that established the snapshot.  When the resolved VictimQueryText
+        // is the same as the current (commit) query, prefer the first collected query text
+        // which is the lock-establishing read.
+        if (!victimQueryText.empty() && QueryState->TxCtx) {
+            TString currentQueryText = QueryState->ExtractQueryText();
+            if (victimQueryText == currentQueryText) {
+                TString firstText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
+                if (!firstText.empty() && firstText != currentQueryText) {
+                    victimQueryText = firstText;
+                }
+            }
+        }
+
+        // Fallback for query text: the lock-derived VictimQuerySpanId may differ from the
+        // session-level QuerySpanId (e.g. with OLTP sink where the shard-side SpanId diverges
+        // from the session's). Preserve the lock-derived SpanId for DataShard linkage but
+        // resolve the text from the transaction's collected queries.
+        if (victimQueryText.empty() && QueryState->TxCtx) {
+            auto allSpanIds = QueryState->TxCtx->QueryTextCollector.GetAllQuerySpanIds();
+            for (ui64 spanId : allSpanIds) {
+                TString text = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(spanId);
+                if (!text.empty()) {
+                    victimQueryText = text;
+                    if (!victimQuerySpanId) {
+                        victimQuerySpanId = spanId;
+                    }
+                    break;
+                }
+            }
+            // When tracing is disabled all QuerySpanIds are 0 and GetAllQuerySpanIds
+            // filters them out.  Fall back to the first collected query text which is
+            // the lock-establishing query.
+            if (victimQueryText.empty()) {
+                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
+            }
+        }
+
+        return {victimQuerySpanId, victimQueryText};
+    }
+
+    // Emit a TLI victim log entry and send victim stats.
+    void EmitVictimTliLog(
+        std::optional<ui64> txManagerQuerySpanId,
+        std::optional<ui64> brokenLockQuerySpanId,
+        ui64 locksBrokenAsVictim)
+    {
+        auto [victimQuerySpanId, victimQueryText] = GetVictimQueryInfo(txManagerQuerySpanId, brokenLockQuerySpanId);
+
+        if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                                       QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+
+            NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                .Component = "SessionActor",
+                .Message = isCommitAction ? "Commit was a victim of broken locks" : "Query was a victim of broken locks",
+                .QueryText = QueryState->ExtractQueryText(),
+                .QueryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts(),
+                .TraceId = TraceId(),
+                .VictimQuerySpanId = victimQuerySpanId,
+                .CurrentQuerySpanId = QueryState->GetQuerySpanId(),
+                .VictimQueryText = victimQueryText,
+                .IsCommitAction = isCommitAction,
+            }, TlsActivationContext->AsActorContext());
+        }
+
+        if (locksBrokenAsVictim > 0) {
+            SendVictimStats(
+                TlsActivationContext->AsActorContext(),
+                locksBrokenAsVictim,
+                victimQueryText,
+                QueryState->GetDatabase());
+        }
+    }
+
     void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
         QueryState->Orbit = std::move(ev->Orbit);
 
@@ -2210,6 +2476,9 @@ public:
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
         QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
+
+        EmitBreakerTliLogs(ev);
+        EmitDeferredBreakerTliLogs(ev);
 
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
@@ -2237,12 +2506,22 @@ public:
                 case Ydb::StatusIds::ABORTED: {
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
                         YQL_ENSURE(!issues.Empty());
-                    } else if (ev->BrokenLockPathId) {
+                        auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
+                        // Use TxManager's broken locks count as fallback when executer stats don't
+                        // carry LocksBrokenAsVictim (e.g. lock invalidation detected via AddLock
+                        // on STATUS_COMPLETED response where datashard TxStats lack victim count).
+                        auto victimCount = ev->LocksBrokenAsVictim > 0
+                            ? ev->LocksBrokenAsVictim
+                            : QueryState->TxCtx->TxManager->GetBrokenLocksCount();
+                        EmitVictimTliLog(brokenLockQuerySpanId, ev->BrokenLockQuerySpanId, victimCount);
+                    } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {
+                        // Non-TxManager (obsolete) path: no QuerySpanId tracking
                         YQL_ENSURE(!QueryState->TxCtx->TxManager);
-                        issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
-                    } else if (ev->BrokenLockShardId) {
-                        YQL_ENSURE(!QueryState->TxCtx->TxManager);
-                        issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
+                        if (ev->BrokenLockPathId) {
+                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
+                        } else {
+                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
+                        }
                     }
                     break;
                 }
@@ -2361,6 +2640,13 @@ public:
         if (ExecuterId) {
             Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
         } else {
+            // No executer to forward to; emit victim TLI stats directly since
+            // ProcessExecuterResult (which normally handles this) won't be called.
+            if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
+                auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
+                auto victimCount = QueryState->TxCtx->TxManager->GetBrokenLocksCount();
+                EmitVictimTliLog(brokenLockQuerySpanId, std::nullopt, victimCount);
+            }
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.Issues));
         }
     }

@@ -5,8 +5,7 @@
 #include <string>
 #include <charconv>
 
-namespace NYql {
-namespace NDecimal {
+namespace NYql::NDecimal {
 
 static const TUint128 Ten(10U);
 
@@ -507,5 +506,4 @@ TInt128 MulAndDivNormalDivider(TInt128 a, TInt128 b, TInt128 c) {
     return Normalize(Div<false>(WidenMul(a, b), TInt256(c)));
 }
 
-} // namespace NDecimal
-} // namespace NYql
+} // namespace NYql::NDecimal

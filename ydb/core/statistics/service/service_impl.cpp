@@ -666,16 +666,11 @@ private:
         for (const auto& req : request.StatRequests) {
             auto& response = request.StatResponses.emplace_back();
             response.Req = req;
-            if (!req.ColumnTag) {
-                response.Success = false;
-                ++reqIndex;
-                continue;
-            }
             ui64 queryId = NextLoadQueryCookie++;
             LoadQueriesInFlight[queryId] = std::make_pair(requestId, reqIndex);
 
             DispatchLoadStatisticsQuery(
-                SelfId(), queryId, database, req.PathId, request.StatType, *req.ColumnTag);
+                SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTag);
 
             ++request.ReplyCounter;
             ++reqIndex;
@@ -1123,6 +1118,14 @@ private:
                 response.EqWidthHistogram.Data =
                     std::make_shared<TEqWidthHistogram>(msg->Data->data(), msg->Data->size());
                 break;
+            case EStatType::TABLE_SUMMARY: {
+                NKikimrStat::TTableSummaryStatistics data;
+                response.Success = data.ParseFromString(*msg->Data);
+                if (response.Success) {
+                    response.TableSummary.Data = std::move(data);
+                }
+                break;
+            }
             default:
                 SA_LOG_E("TEvLoadStatisticsQueryResponse, request id = " << requestId
                     << ". Unexpected stat type: " << static_cast<int>(request.StatType));
@@ -1318,6 +1321,7 @@ private:
                     << ", SIMPLE_COLUMN: " << counts[EStatType::SIMPLE_COLUMN]
                     << ", COUNT_MIN_SKETCH: " << counts[EStatType::COUNT_MIN_SKETCH]
                     << ", EQ_WIDTH_HISTOGRAM: " << counts[EStatType::EQ_WIDTH_HISTOGRAM]
+                    << ", TABLE_SUMMARY: " << counts[EStatType::TABLE_SUMMARY]
                     << "]" << Endl;
             }
             str << "NextRequestId: " << NextRequestId << Endl;

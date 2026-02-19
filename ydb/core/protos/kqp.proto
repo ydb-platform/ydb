@@ -843,6 +843,8 @@ message TKqpTableSinkSettings {
     optional bool IsIndexImplTable = 21;
     optional string Database = 22;
     repeated uint32 DefaultColumnsIds = 23;
+    repeated TKqpColumnMetadataProto ReturningColumns = 24;
+    optional uint64 QuerySpanId = 25;
 }
 
 message TReadVectorTopK {
@@ -874,6 +876,7 @@ message TKqpStreamLookupSettings {
     optional NKqpProto.EIsolationLevel IsolationLevel = 17 [default = ISOLATION_LEVEL_UNDEFINED];
     optional string Database = 18;
     optional TReadVectorTopK VectorTopK = 19;
+    optional uint64 QuerySpanId = 20;
 }
 
 message TKqpFullTextSourceSettings {
@@ -1055,4 +1058,16 @@ message TStreamingQueryState {
     optional bool Run = 9;
     optional string ResourcePool = 10;
     optional uint64 QueryTextRevision = 12;
+}
+
+// Cross-node lookup of QuerySpanId -> QueryText for TLI logging.
+// Used when the victim's SessionActor needs to look up the breaker's query text
+// from the node where the breaker's SessionActor ran (where TNodeQueryTextCache is populated).
+message TEvLookupQueryTextRequest {
+    optional uint64 QuerySpanId = 1;
+}
+
+message TEvLookupQueryTextResponse {
+    optional uint64 QuerySpanId = 1;
+    optional string QueryText = 2;
 }

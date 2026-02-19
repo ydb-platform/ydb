@@ -8,8 +8,7 @@
 #include <string_view>
 #include <type_traits>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
 // TStringRefBase
@@ -216,5 +215,4 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(TStringRef, 16);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

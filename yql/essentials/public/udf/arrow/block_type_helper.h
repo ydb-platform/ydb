@@ -6,8 +6,7 @@
 
 #include <arrow/type.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 // ABI stable
 class IBlockTypeHelper1 {
@@ -62,5 +61,4 @@ std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
     }
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

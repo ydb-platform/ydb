@@ -244,6 +244,11 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             KqpEraseLocks(tabletId, kqpLocks, sysLocks);
             auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
             tx->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+            if (!locksBrokenByTx.empty()) {
+                if (auto breakerQuerySpanId = sysLocks.GetCurrentBreakerQuerySpanId()) {
+                    tx->Result()->Record.MutableTxStats()->AddBreakerQuerySpanIds(*breakerQuerySpanId);
+                }
+            }
             NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
             DataShard.SubscribeNewLocks(ctx);
 
@@ -506,6 +511,11 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
 
     // Set the count of locks broken by this transaction
     op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+    if (!locksBrokenByTx.empty()) {
+        if (auto breakerQuerySpanId = DataShard.SysLocksTable().GetCurrentBreakerQuerySpanId()) {
+            op->Result()->Record.MutableTxStats()->AddBreakerQuerySpanIds(*breakerQuerySpanId);
+        }
+    }
 
     LOG_T("add locks to result: " << locks.size());
     for (const auto& lock : locks) {

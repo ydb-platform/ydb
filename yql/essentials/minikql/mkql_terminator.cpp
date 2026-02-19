@@ -5,9 +5,7 @@
 
 #include <util/string/builder.h>
 
-namespace NKikimr {
-
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TTerminateException::TTerminateException()
     : TErrorException(NYql::EYqlIssueCode::TIssuesIds_EIssueCode_CORE_RUNTIME_ERROR)
@@ -58,6 +56,4 @@ void TOnlyThrowingBindTerminator::Terminate(const char* message) const {
     ::abort();
 }
 
-} // namespace NMiniKQL
-
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

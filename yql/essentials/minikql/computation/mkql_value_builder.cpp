@@ -14,8 +14,7 @@
 
 #include <util/system/env.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 ///////////////////////////////////////////////////////////////////////////////
 // TDefaultValueBuilder
@@ -336,5 +335,4 @@ NUdf::IListValueBuilder::TPtr TDefaultValueBuilder::NewListBuilder() const {
     return HolderFactory_.NewList();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

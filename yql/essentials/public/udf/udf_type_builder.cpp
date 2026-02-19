@@ -1,11 +1,9 @@
 #include "udf_type_builder.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 IFunctionTypeInfoBuilder::IFunctionTypeInfoBuilder()
 {
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

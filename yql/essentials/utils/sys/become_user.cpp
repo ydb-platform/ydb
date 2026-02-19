@@ -8,7 +8,7 @@
 
     #include <memory>
     #include <vector>
-    #include <errno.h>
+    #include <cerrno>
 
     #include <grp.h>
     #include <pwd.h>

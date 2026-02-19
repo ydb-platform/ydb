@@ -113,7 +113,7 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
     auto initialQueueSize = ForcedCompactionTablesQueue.Size();
     THashSet<TPathId> tablesWithoutCandidates;
     while (!ForcedCompactionTablesQueue.Empty() && tablesWithoutCandidates.size() < initialQueueSize) {
-        const auto& tablePathId = ForcedCompactionTablesQueue.Front();
+        auto tablePathId = ForcedCompactionTablesQueue.Front();
         auto& compaction = InProgressForcedCompactionsByTable.at(tablePathId);
         auto& shards = ForcedCompactionShardsByTable.at(tablePathId);
         if (!shards.Empty() && compaction->MaxShardsInFlight > compaction->ShardsInFlight.size()) {

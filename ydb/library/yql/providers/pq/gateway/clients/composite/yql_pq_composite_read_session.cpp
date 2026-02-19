@@ -375,7 +375,7 @@ private:
 
         if (const auto delta = now - LastHangingCheckTime; delta > HANGING_CHECK_PERIOD) {
             const auto sharedController = Controller.lock();
-            SRC_LOG_E("Hanging check failed, were is no progress during last " << delta
+            SRC_LOG_E("Hanging check failed, there is no progress during last " << delta
                 << ", LocalReadTime: " << readTime
                 << ", ExternalReadTime: " << (ExternalReadTime ? ToString(*ExternalReadTime) : "<null>")
                 << ", PartitionCountReported: " << PartitionCountReported

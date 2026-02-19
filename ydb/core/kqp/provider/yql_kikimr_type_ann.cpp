@@ -1033,6 +1033,22 @@ private:
             }
         }
 
+        if (meta->TableType == ETableType::Table || meta->TableType == ETableType::TableStore) {
+            for (auto&& setting : create.TableSettings()) {
+                if (setting.Name().Value() == "storeType") {
+                    const TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());
+                    if (storeType) {
+                        const auto& val = to_lower(storeType.GetRef());
+                        if (val == "column") {
+                            meta->StoreType = EStoreType::Column;
+                        }
+                    }
+
+                    break;
+                }
+            }
+        }
+
         for (const auto& index : create.Indexes()) {
             const auto type = index.Type().Value();
             TIndexDescription::EType indexType;

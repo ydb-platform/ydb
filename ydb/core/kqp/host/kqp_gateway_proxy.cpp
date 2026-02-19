@@ -561,18 +561,20 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
-    for (auto&& index : metadata->Indexes) {
-        auto* upsert = tableDesc.MutableSchema()->AddIndexes();
-        upsert->SetName(index.Name);
-        THashMap<TString, ui32> columnIdsByName;
-        for (auto&& column : tableDesc.GetSchema().GetColumns()) {
-            if (column.HasId()) {
-                columnIdsByName.emplace(column.GetName(), column.GetId());
-            }
+    THashMap<TString, ui32> columnIdsByName;
+    for (auto&& column : tableDesc.GetSchema().GetColumns()) {
+        if (column.HasId()) {
+            columnIdsByName.emplace(column.GetName(), column.GetId());
         }
+    }
 
+    ui32 nextIndexId = 1;
+    for (auto&& index : metadata->Indexes) {
         switch (index.Type) {
             case TIndexDescription::EType::LocalBloomFilter: {
+                auto* upsert = tableDesc.MutableSchema()->AddIndexes();
+                upsert->SetId(nextIndexId++);
+                upsert->SetName(index.Name);
                 if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
                     error = "Local bloom index requires exactly one index column and does not support data columns";
@@ -597,6 +599,9 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
                 break;
             }
             case TIndexDescription::EType::LocalBloomNgramFilter: {
+                auto* upsert = tableDesc.MutableSchema()->AddIndexes();
+                upsert->SetId(nextIndexId++);
+                upsert->SetName(index.Name);
                 if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
                     error = "Local bloom ngram index requires exactly one index column and does not support data columns";
@@ -622,9 +627,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
                 break;
             }
             default:
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Unsupported index type for column table create: " << static_cast<ui32>(index.Type);
-                return false;
+                break;
         }
     }
 
@@ -964,7 +967,19 @@ public:
                 if (!metadata->Indexes.empty() || !sequences.empty()) {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
-                    for (const auto& index : metadata->Indexes) {
+                    for (auto&& index : metadata->Indexes) {
+                        const bool isLocalBloom = (index.Type == TIndexDescription::EType::LocalBloomFilter ||
+                                    index.Type == TIndexDescription::EType::LocalBloomNgramFilter);
+
+                        if (isLocalBloom) {
+                            if (metadata->StoreType != EStoreType::Column) {
+                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom indexes are supported only for column tables"));
+                                return;
+                            }
+
+                            continue;
+                        }
+
                         auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
                         indexDesc->SetName(index.Name);
                         indexDesc->SetType(TIndexDescription::ConvertIndexType(index.Type));
@@ -990,10 +1005,8 @@ public:
                             case TIndexDescription::EType::GlobalFulltextRelevance:
                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
-                            case TIndexDescription::EType::LocalBloomFilter:
-                            case TIndexDescription::EType::LocalBloomNgramFilter:
-                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom indexes are supported only for column tables"));
-                                return;
+                            default:
+                                break;
                         }
                     }
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {

@@ -553,7 +553,7 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
                 return lReadTime < rReadTime;
             }
 
-            return Session.get() < other.Session.get();
+            return (uintptr_t)Session.get() < (uintptr_t)other.Session.get();
         }
 
         TPartitionSession* operator->() const {

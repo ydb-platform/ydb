@@ -311,7 +311,7 @@ private:
             return;
         }
 
-        for (const auto& counterId : std::unordered_set(it->second)) {
+        for (const auto& counterId : std::vector(it->second.begin(), it->second.end())) {
             const auto counterIt = AggregateValues.find(counterId);
             Y_VALIDATE(counterIt != AggregateValues.end(), "Aggregate value not found: " << counterId);
 

@@ -16,11 +16,7 @@ TIntCounter::~TIntCounter() {
 }
 
 void TIntCounter::Set(i64 value) {
-    if (value >= CurrentValue) {
-        Counter->Add(value - CurrentValue);
-    } else {
-        Counter->Sub(CurrentValue - value);
-    }
+    Counter->Add(value - CurrentValue);
     CurrentValue = value;
 }
 

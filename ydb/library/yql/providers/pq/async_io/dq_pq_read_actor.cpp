@@ -142,6 +142,7 @@ struct TEvPrivate {
 
 class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr bool STATIC_DISCOVERY = true;
+    static constexpr TDuration CHECK_HANGING_PERIOD = TDuration::Minutes(1);
 
     struct TMetrics {
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -603,7 +604,7 @@ private:
         WakeupScheduled = false;
         ScheduleWakeup();
 
-        if (TInstant::Now() - LastActiveTime <= TDuration::Minutes(1)) {
+        if (TInstant::Now() - LastActiveTime <= CHECK_HANGING_PERIOD) {
             return;
         }
         LastActiveTime = TInstant::Now();
@@ -618,7 +619,7 @@ private:
     void ScheduleWakeup() {
         if (!WakeupScheduled) {
             WakeupScheduled = true;
-            Schedule(TDuration::Minutes(1), new TEvents::TEvWakeup());
+            Schedule(CHECK_HANGING_PERIOD, new TEvents::TEvWakeup());
         }
     }
 

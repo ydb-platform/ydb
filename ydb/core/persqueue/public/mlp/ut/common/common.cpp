@@ -49,12 +49,24 @@ TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& t
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    return client.CreateTopic(topicName, settings).GetValueSync();
+    auto result = client.CreateTopic(topicName, settings).GetValueSync();
+    driver.Stop(true);
+    return result;
 }
 
-TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount, bool keepMessagesOrder) {
+TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount,
+        bool keepMessagesOrder, bool autopartitioning) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
-            .PartitioningSettings(partitionCount, partitionCount)
+            .BeginConfigurePartitioningSettings()
+                .MinActivePartitions(partitionCount)
+                .MaxActivePartitions(128)
+                .BeginConfigureAutoPartitioningSettings()
+                    .Strategy(autopartitioning ? EAutoPartitioningStrategy::ScaleUp : EAutoPartitioningStrategy::Disabled)
+                    .StabilizationWindow(TDuration::Seconds(1))
+                    .UpUtilizationPercent(2)
+                    .DownUtilizationPercent(1)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings()
             .BeginAddSharedConsumer(consumerName)
                 .KeepMessagesOrder(keepMessagesOrder)
                 .BeginDeadLetterPolicy()
@@ -74,7 +86,9 @@ TStatus AlterTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& to
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    return client.AlterTopic(topicName, settings).GetValueSync();
+    auto result = client.AlterTopic(topicName, settings).GetValueSync();
+    driver.Stop(true);
+    return result;
 }
 
 TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings) {

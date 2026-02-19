@@ -598,7 +598,8 @@
                 {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom"},
                 {"Index": 6, "Name": "IsIndexImplTable", "Type": "TCoAtom"},
                 {"Index": 7, "Name": "DefaultColumns", "Type": "TCoAtomList"},
-                {"Index": 8, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 8, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 9, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

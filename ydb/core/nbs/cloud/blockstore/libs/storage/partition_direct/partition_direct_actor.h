@@ -1,10 +1,12 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -39,6 +41,12 @@ private:
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    void HandleGetLoadActorAdapterActorId(
+        const NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 }  // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -1253,7 +1253,9 @@ struct TIndexDescription {
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
         GlobalFulltextPlain,
-        GlobalFulltextRelevance
+        GlobalFulltextRelevance,
+        LocalBloomFilter,
+        LocalBloomNgramFilter,
     };
 
     struct TIndexSetting {
@@ -1287,6 +1289,7 @@ struct TChangefeedSettings {
     TNodePtr Mode;
     TNodePtr Format;
     TNodePtr InitialScan;
+    TNodePtr UserSIDs;
     TNodePtr VirtualTimestamps;
     TNodePtr BarriersInterval;
     TNodePtr SchemaChanges;
@@ -1337,6 +1340,11 @@ struct TAnalyzeParams {
     TVector<TString> Columns;
 };
 
+struct TCompactEntry {
+    TNodePtr Cascade;
+    TNodePtr MaxShardsInFlight;
+};
+
 struct TAlterTableParameters {
     TVector<TColumnSchema> AddColumns;
     TVector<TString> DropColumns;
@@ -1353,9 +1361,24 @@ struct TAlterTableParameters {
     TVector<TChangefeedDescription> AlterChangefeeds;
     TVector<TIdentifier> DropChangefeeds;
     ETableType TableType = ETableType::Table;
+    TMaybe<TCompactEntry> Compact;
 
     bool IsEmpty() const {
-        return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty() && AddColumnFamilies.empty() && AlterColumnFamilies.empty() && !TableSettings.IsSet() && AddIndexes.empty() && AlterIndexes.empty() && DropIndexes.empty() && !RenameIndexTo.Defined() && !RenameTo.Defined() && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
+        return AddColumns.empty() &&
+               DropColumns.empty() &&
+               AlterColumns.empty() &&
+               AddColumnFamilies.empty() &&
+               AlterColumnFamilies.empty() &&
+               !TableSettings.IsSet() &&
+               AddIndexes.empty() &&
+               AlterIndexes.empty() &&
+               DropIndexes.empty() &&
+               !RenameIndexTo.Defined() &&
+               !RenameTo.Defined() &&
+               AddChangefeeds.empty() &&
+               AlterChangefeeds.empty() &&
+               DropChangefeeds.empty() &&
+               !Compact.Defined();
     }
 };
 

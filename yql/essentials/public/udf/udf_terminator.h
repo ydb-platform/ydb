@@ -1,11 +1,9 @@
 #pragma once
 #include <util/system/compiler.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 class TBoxedValue;
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 extern "C" [[noreturn]] void UdfTerminate(const char* message);
 extern "C" void UdfRegisterObject(::NYql::NUdf::TBoxedValue* object);

@@ -4,8 +4,7 @@
 #include "udf_type_size_check.h"
 #include "udf_version.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
 // TPgTypeDescription
@@ -24,5 +23,4 @@ using TPgTypeDescription = TPgTypeDescription1;
 
 UDF_ASSERT_TYPE_SIZE(TPgTypeDescription1, 40);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

@@ -16,6 +16,7 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -159,7 +160,8 @@ public:
 
         ui32 FillDataValues(NUdf::TUnboxedValue* const* result);
 
-        TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, NYql::NDqProto::EDqStatsMode statsMode);
+        TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, NYql::NDqProto::EDqStatsMode statsMode,
+            const TTypeEnvironment* typeEnv = nullptr);
 
         ~TScanData() = default;
 
@@ -276,8 +278,8 @@ public:
                 : IDataBatchReader(columns, systemColumns, resultColumns)
             {}
 
-            TRowBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta)
-                : IDataBatchReader(meta)
+            TRowBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TTypeEnvironment* typeEnv = nullptr)
+                : IDataBatchReader(meta, typeEnv)
             {}
 
             ~TRowBatchReader() {
@@ -341,8 +343,8 @@ public:
                 : IDataBatchReader(columns, systemColumns, resultColumns)
             {}
 
-            TBlockBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta)
-                : IDataBatchReader(meta)
+            TBlockBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TTypeEnvironment* typeEnv = nullptr)
+                : IDataBatchReader(meta, typeEnv)
             {}
 
             ~TBlockBatchReader() {
@@ -389,6 +391,7 @@ public:
             };
 
             TQueue<TBlockBatch> BlockBatches;
+            TVector<std::optional<NYql::TColumnConverter>> CachedPgConverters;
         };
 
         std::unique_ptr<IDataBatchReader> BatchReader;
@@ -405,7 +408,7 @@ public:
         const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys);
 
     void AddTableScan(ui32 callableId, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
-        NYql::NDqProto::EDqStatsMode statsMode);
+        NYql::NDqProto::EDqStatsMode statsMode, const TTypeEnvironment* typeEnv = nullptr);
 
     TScanData& GetTableScan(ui32 callableId);
     TMap<ui32, TScanData>& GetTableScans();

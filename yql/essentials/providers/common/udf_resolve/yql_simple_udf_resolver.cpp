@@ -20,8 +20,7 @@
 #include <util/system/guard.h>
 #include <util/system/spinlock.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -246,5 +245,4 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
     return !hasErrors;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

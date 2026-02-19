@@ -73,8 +73,8 @@ public:
     return recordable;
   }
 
-  virtual void OnStart(Recordable &span,
-                       const opentelemetry::trace::SpanContext &parent_context) noexcept override
+  void OnStart(Recordable &span,
+               const opentelemetry::trace::SpanContext &parent_context) noexcept override
   {
     auto multi_recordable = static_cast<MultiRecordable *>(&span);
     ProcessorNode *node   = head_;
@@ -90,7 +90,7 @@ public:
     }
   }
 
-  virtual void OnEnd(std::unique_ptr<Recordable> &&span) noexcept override
+  void OnEnd(std::unique_ptr<Recordable> &&span) noexcept override
   {
     auto multi_recordable = static_cast<MultiRecordable *>(span.release());
     ProcessorNode *node   = head_;

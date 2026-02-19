@@ -16,8 +16,7 @@
 #include <util/generic/utility.h>
 #include <util/string/join.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NNodes;
 
@@ -1928,5 +1927,4 @@ bool RenamePgSelectColumns(
     return true;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

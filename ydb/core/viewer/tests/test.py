@@ -707,6 +707,14 @@ class TestViewer(object):
         ]
 
     @classmethod
+    def test_viewer_groups_with_invalid_database(cls):
+        # Test that the endpoint doesn't crash when provided with an invalid database
+        result = cls.call_viewer("/viewer/groups", {
+            'database': '/invalid_database_name_that_does_not_exist',
+        })
+        return result
+
+    @classmethod
     def test_viewer_sysinfo(cls):
         result = cls.get_viewer_normalized("/viewer/sysinfo")
         return result

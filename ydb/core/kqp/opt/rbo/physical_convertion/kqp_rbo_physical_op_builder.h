@@ -54,6 +54,6 @@ public:
 };
 
 template <typename TPhysicalBuilder, typename TOperator, typename... Args>
-TExprNode::TPtr Build(std::shared_ptr<TOperator> op, TExprContext& ctx, TPositionHandle pos, Args... args) {
+TExprNode::TPtr Build(TIntrusivePtr<TOperator> op, TExprContext& ctx, TPositionHandle pos, Args... args) {
     return TPhysicalBuilder(op, ctx, pos).BuildPhysicalOp(args...);
 }

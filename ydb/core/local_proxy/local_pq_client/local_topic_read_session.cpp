@@ -645,7 +645,7 @@ public:
     }
 
     std::optional<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) final {
-        Y_VALIDATE(!settings.MaxEventsCount_, "MaxEventsCount is not allowed for GetEvent");
+        Y_VALIDATE(settings.MaxEventsCount_.value_or(1) == 1, "MaxEventsCount should be one for GetEvent");
         Y_VALIDATE(!settings.Tx_, "Transaction is not supported for local topic read session");
         return GetEvent(settings.Block_, settings.MaxByteSize_);
     }

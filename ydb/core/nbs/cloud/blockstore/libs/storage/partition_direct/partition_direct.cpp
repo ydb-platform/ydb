@@ -24,4 +24,6 @@ NActors::TActorId CreatePartitionTablet(
         NKikimr::AppData()->SystemPoolId);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -59,11 +59,26 @@ public:
             return;
         }
 
-        Y_ABORT_UNLESS(!ResponseSent);
-        auto response = std::make_unique<TEvPrivate::TEvAnalyzeScanResult>(
-            status, std::move(issues));
-        Send(Parent, response.release());
-        ResponseSent = true;
+        if (!ResponseSent) {
+            auto response = std::make_unique<TEvPrivate::TEvAnalyzeScanResult>(
+                status, std::move(issues));
+            Send(Parent, response.release());
+            ResponseSent = true;
+        }
+    }
+
+private:
+    STFUNC(StateFunc) final {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvPoison, Handle);
+            default:
+                TQueryBase::StateFunc(ev);
+        }
+    }
+
+    void Handle(TEvents::TEvPoison::TPtr&) {
+        SA_LOG_D("Got TEvPoison");
+        Finish(Ydb::StatusIds::ABORTED, "Query aborted");
     }
 
 private:
@@ -175,7 +190,15 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     Become(&TThis::StateQueryStage1);
     auto actor = std::make_unique<TScanActor>(
         SelfId(), DatabaseName, stage1Builder.Build(TableName), stage1Builder.ColumnCount());
-    Register(actor.release());
+    ScanActorId = Register(actor.release());
+}
+
+void TAnalyzeActor::Handle(TEvents::TEvPoison::TPtr&) {
+    if (ScanActorId) {
+        Send(ScanActorId, new TEvents::TEvPoison());
+    }
+
+    PassAway();
 }
 
 NKikimrStat::TSimpleColumnStatistics TAnalyzeActor::TColumnDesc::ExtractSimpleStats(
@@ -203,6 +226,7 @@ NKikimrStat::TSimpleColumnStatistics TAnalyzeActor::TColumnDesc::ExtractSimpleSt
 }
 
 void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+    ScanActorId = {};
     auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         NYql::TIssue error(TStringBuilder() << "Stage 1 SELECT failed with " << result.Status);
@@ -214,6 +238,10 @@ void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 
     NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
     ui64 rowCount = val.GetUint64();
+
+    NKikimrStat::TTableSummaryStatistics tableSummary;
+    tableSummary.SetRowCount(rowCount);
+    Results.emplace_back(std::nullopt, EStatType::TABLE_SUMMARY, tableSummary.SerializeAsString());
 
     auto supportedStatTypes = IColumnStatisticEval::SupportedTypes();
 
@@ -249,10 +277,11 @@ void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     Become(&TThis::StateQueryStage2);
     auto actor = std::make_unique<TScanActor>(
         SelfId(), DatabaseName, stage2Builder.Build(TableName), stage2Builder.ColumnCount());
-    Register(actor.release());
+    ScanActorId = Register(actor.release());
 }
 
 void TAnalyzeActor::HandleStage2(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+    ScanActorId = {};
     const auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         NYql::TIssue error(TStringBuilder() << "Stage 2 SELECT failed with " << result.Status);

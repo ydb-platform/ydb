@@ -7,8 +7,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TTypeHandleWrapper: public TMutableComputationNode<TTypeHandleWrapper> {
     typedef TMutableComputationNode<TTypeHandleWrapper> TBaseComputation;
@@ -45,5 +44,4 @@ IComputationNode* WrapTypeHandle(TCallable& callable, const TComputationNodeFact
     return new TTypeHandleWrapper(ctx.Mutables, yson, exprCtxMutableIndex);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

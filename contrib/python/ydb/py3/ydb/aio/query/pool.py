@@ -107,7 +107,8 @@ class QuerySessionPool:
         try:
             session = await self._create_new_session()
         except Exception as e:
-            logger.error("Failed to create new session")
+            # TODO: this exception could be retried via retrier, so no need to log error here. Probably we should retry this right in create_new_session method.
+            logger.warning("Failed to create new session")
             self._current_size -= 1
             raise e
 

@@ -1,8 +1,8 @@
 diff --git a/include/__memory/allocator.h b/include/__memory/allocator.h
-index 19e24c0..e344c92 100644
+index c8e3b08..326be6d 100644
 --- a/include/__memory/allocator.h
 +++ b/include/__memory/allocator.h
-@@ -171,6 +171,8 @@ inline _LIBCPP_HIDE_FROM_ABI bool operator!=(const allocator<_Tp>&, const alloca
+@@ -172,6 +172,8 @@ inline _LIBCPP_HIDE_FROM_ABI bool operator!=(const allocator<_Tp>&, const alloca
  
  #endif
  
@@ -12,7 +12,7 @@ index 19e24c0..e344c92 100644
  
  #endif // _LIBCPP___MEMORY_ALLOCATOR_H
 diff --git a/include/__memory/construct_at.h b/include/__memory/construct_at.h
-index 1f129d1..9abd335 100644
+index 21337e7..7c0b6de 100644
 --- a/include/__memory/construct_at.h
 +++ b/include/__memory/construct_at.h
 @@ -37,7 +37,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
@@ -34,10 +34,10 @@ index 1f129d1..9abd335 100644
  }
  
 diff --git a/include/__memory/uninitialized_algorithms.h b/include/__memory/uninitialized_algorithms.h
-index 25d192c..174d968 100644
+index d7f210d..fa7afea 100644
 --- a/include/__memory/uninitialized_algorithms.h
 +++ b/include/__memory/uninitialized_algorithms.h
-@@ -564,8 +564,9 @@ struct __allocator_has_trivial_copy_construct<allocator<_Type>, _Type> : true_ty
+@@ -556,8 +556,9 @@ struct __allocator_has_trivial_copy_construct<allocator<_Type>, _Type> : true_ty
  
  template <class _Alloc,
            class _In,
@@ -48,7 +48,7 @@ index 25d192c..174d968 100644
                              is_same<__remove_const_t<_In>, __remove_const_t<_Out> >::value &&
                              __allocator_has_trivial_copy_construct<_Alloc, _In>::value,
                          int> = 0>
-@@ -579,7 +580,11 @@ __uninitialized_allocator_copy_impl(_Alloc&, _In* __first1, _In* __last1, _Out*
+@@ -571,7 +572,11 @@ __uninitialized_allocator_copy_impl(_Alloc&, _In* __first1, _In* __last1, _Out*
      }
      return __first2;
    } else {
@@ -60,7 +60,7 @@ index 25d192c..174d968 100644
    }
  }
  
-@@ -643,7 +648,11 @@ _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 void __uninitialized_allocat
+@@ -635,7 +640,11 @@ _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 void __uninitialized_allocat
      std::__allocator_destroy(__alloc, __first, __last);
    } else {
      // Casting to void* to suppress clang complaining that this is technically UB.

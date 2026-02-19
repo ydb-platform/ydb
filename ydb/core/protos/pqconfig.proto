@@ -401,6 +401,10 @@ message TPQTabletConfig {
         optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
         optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
         optional bool ContentBasedDeduplication = 20 [default = false]; // For MLP consumers
+
+        optional uint32 MetricsLevel = 21;
+        // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
+        optional string MonitoringProjectId = 22;
     }
 
     repeated TConsumer Consumers = 37;
@@ -895,6 +899,7 @@ message TStatusResponse {
         optional bool ReadingFinished = 10;
         optional uint64 CommitedLagMs = 11;
         optional string CommittedMetadata = 12;
+        optional bool UseForReading = 13;
     }
 
 
@@ -1337,7 +1342,7 @@ message TEvMLPReadRequest {
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
     optional uint64 WaitDeadlineMilliseconds = 4;
-    optional uint64 VisibilityDeadlineMilliseconds = 5; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
+    optional uint64 ProcessingTimeoutMilliseconds = 5;
     // The maximum number of messages to return.
     optional uint32 MaxNumberOfMessages = 6;
 }
@@ -1400,6 +1405,16 @@ message TEvMLPPurgeRequest {
 // From PQTablet
 message TEvMLPPurgeResponse {
     optional uint32 PartitionId = 1;
+}
+
+message TEvMLPConsumerStatus {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional uint64 Messages = 5;
+    optional bool UseForReading = 6;
+    optional uint32 Generation = 7;
+    optional uint64 Cookie = 8;
 }
 
 

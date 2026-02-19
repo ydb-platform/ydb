@@ -36,9 +36,9 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
         // update existing force traversal
         if (existingOperation) {
-            if (existingOperation->Tables.size() == Record().TablesSize()) {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Update existing force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
-                existingOperation->ReplyToActorId = ReplyToActorId;
+            if (existingOperation->ReplyToActorId == Event->Sender) {
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Reattach to existing force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
+                existingOperation->RequestingActorReattached = true;
                 return true;
             } else {
                 SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Delete broken force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
@@ -101,7 +101,8 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             NIceDb::TUpdate<Schema::ForceTraversalOperations::OperationId>(operationId),
             NIceDb::TUpdate<Schema::ForceTraversalOperations::Types>(types),
             NIceDb::TUpdate<Schema::ForceTraversalOperations::CreatedAt>(createdAt.GetValue()),
-            NIceDb::TUpdate<Schema::ForceTraversalOperations::DatabaseName>(databaseName)
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::DatabaseName>(databaseName),
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::ReplyToActorId>(ReplyToActorId)
         );
 
         return true;

@@ -84,6 +84,7 @@ SRCS(
     flat_scheme_op.proto
     flat_tx_scheme.proto
     follower_group.proto
+    forced_compaction.proto
     fs_settings.proto
     grpc.proto
     grpc_pq_old.proto
@@ -132,6 +133,7 @@ SRCS(
     scheme_log.proto
     scheme_type_metadata.proto
     scheme_type_operation.proto
+    schemeshard_config.proto
     serverless_proxy_config.proto
     shared_cache.proto
     sqs.proto

@@ -8,8 +8,8 @@
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
     using namespace NNodes;
 
@@ -1371,5 +1371,5 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl
+

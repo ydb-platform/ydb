@@ -2244,6 +2244,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         pqBalancers[shard.PathId] = idx;
                         break;
                     case ETabletType::BlockStoreVolume:
+                    case ETabletType::BlockStoreVolumeDirect:
                         nbsVolumeShards[shard.PathId] = idx;
                         break;
                     case ETabletType::FileStore:
@@ -3576,7 +3577,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_VERIFY_S(srcPath, "Null path element, pathId: " << txState.SourcePathId);
 
                     // CopyTable source must not be altered or dropped while the Tx is in progress
-                    srcPath->PathState = TPathElement::EPathState::EPathStateCopying;
+                    if (!srcPath->Dropped()) {
+                        srcPath->PathState = TPathElement::EPathState::EPathStateCopying;
+                    }
                     srcPath->DbRefCount++;
                 }
 
@@ -3825,7 +3828,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Y_VERIFY_S(srcPath, "Null path element, pathId: " << txState->SourcePathId);
 
                         // CopyTable source must not be altered or dropped while the Tx is in progress
-                        srcPath->PathState = TPathElement::EPathState::EPathStateCopying;
+                        if (!srcPath->Dropped()) {
+                            srcPath->PathState = TPathElement::EPathState::EPathStateCopying;
+                        }
                         srcPath->DbRefCount++;
                     }
                 }
@@ -4224,6 +4229,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 break;
             case ETabletType::BlockStorePartition2:
                 Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1);
+                break;
+            case ETabletType::BlockStoreVolumeDirect:
+                Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT].Add(1);
+                break;
+            case ETabletType::BlockStorePartitionDirect:
+                Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT].Add(1);
                 break;
             case ETabletType::FileStore:
                 Self->TabletCounters->Simple()[COUNTER_FILESTORE_COUNT].Add(1);
@@ -5595,6 +5606,59 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read forced compactions
+        {
+            auto compactionsRowset = db.Table<Schema::ForcedCompactions>().Select();
+            if (!compactionsRowset.IsReady()) {
+                return false;
+            }
+
+            while (!compactionsRowset.EndOfSet()) {
+                auto info = MakeIntrusive<TForcedCompactionInfo>();
+                info->Id = compactionsRowset.GetValue<Schema::ForcedCompactions::Id>();
+                info->State = static_cast<TForcedCompactionInfo::EState>(compactionsRowset.GetValue<Schema::ForcedCompactions::State>());
+                info->TablePathId = TPathId(
+                        compactionsRowset.GetValue<Schema::ForcedCompactions::TableOwnerId>(),
+                        compactionsRowset.GetValue<Schema::ForcedCompactions::TableLocalId>()
+                );
+                info->Cascade = compactionsRowset.GetValue<Schema::ForcedCompactions::Cascade>();
+                info->MaxShardsInFlight = compactionsRowset.GetValue<Schema::ForcedCompactions::MaxShardsInFlight>();
+                if (compactionsRowset.HaveValue<Schema::ForcedCompactions::UserSID>()) {
+                    info->UserSID = compactionsRowset.GetValue<Schema::ForcedCompactions::UserSID>();
+                }
+                info->StartTime = TInstant::Seconds(compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::StartTime>());
+                info->EndTime = TInstant::Seconds(compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::EndTime>());
+                info->TotalShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::TotalShardCount>();
+                info->DoneShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::DoneShardCount>();
+
+                Self->AddForcedCompaction(info);
+
+                if (!compactionsRowset.Next()) {
+                    return false;
+                }
+            }
+
+            auto shardsRowset = db.Table<Schema::WaitingForcedCompactionShards>().Select();
+            if (!shardsRowset.IsReady()) {
+                return false;
+            }
+
+            while (!shardsRowset.EndOfSet()) {
+                const auto shardIdx = TShardIdx(
+                    shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::OwnerShardIdx>(),
+                    shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::LocalShardIdx>()
+                );
+
+                auto compactionId = shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::ForcedCompactionId>();
+
+                Self->AddForcedCompactionShard(shardIdx, Self->ForcedCompactions.at(compactionId));
+
+                if (!shardsRowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         CollectObjectsToClean();
 
         OnComplete.ApplyOnExecute(Self, txc, ctx);
@@ -5659,6 +5723,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
             .IncrementalBackupIds = std::move(IncrementalBackupsToResume),
         });
+
+        Self->ProcessForcedCompactionQueues();
     }
 };
 

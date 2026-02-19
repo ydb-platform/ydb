@@ -24,7 +24,8 @@ void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query);
 TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
     NYdb::NTopic::TCreateTopicSettings& settings);
 TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
-    const TString& consumerName, size_t partitionCount = 1, bool keepMessagesOrder = false);
+    const TString& consumerName, size_t partitionCount = 1, bool keepMessagesOrder = false,
+    bool autopartitioning = false);
 TStatus AlterTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
     NYdb::NTopic::TAlterTopicSettings& settings);
 TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings);

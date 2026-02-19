@@ -11,6 +11,8 @@ items:
   href: selfheal.md
 - name: Decommissioning a cluster part
   href: ../../devops/deployment-options/manual/decommissioning.md
+- name: Decommissioning groups using virtual groups
+  href: virtual_storage_groups_decommit.md
 - name: Moving VDisks
   href: moving_vdisks.md
 - name: Staying within the failure model

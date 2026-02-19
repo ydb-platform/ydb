@@ -52,7 +52,7 @@ public:
         AddHandler(0, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup));
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
         AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
-        AddHandler(0, &TCoTopSort::Match, HNDL(RewriteFlatMapOverFullTextRelevance));
+        AddHandler(0, &TCoTopBase::Match, HNDL(PushLimitOverFullText));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
 
         AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
@@ -90,6 +90,7 @@ public:
         AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
         AddHandler(4, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
         AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(5, TOptimizeTransformerBase::Any(), HNDL(InspectErroneousIndexAccess));
 
 #undef HNDL
 
@@ -126,6 +127,23 @@ protected:
         TExprBase output = KqpPushDownOlapGroupByKeys(node, ctx, KqpCtx);
         DumpAppliedRule("PushdownOlapGroupByKeys", node.Ptr(), output.Ptr(), ctx);
         return output;
+    }
+
+    TMaybeNode<TExprBase> InspectErroneousIndexAccess(TExprBase node, TExprContext& ctx) {
+        if (IsIn({"FulltextScore", "FulltextMatch"}, node.Ref().Content())) {
+            auto message = TStringBuilder{} << "Failed to rewrite " << node.Ref().Content() << " callable";
+            TIssue baseIssue{ctx.GetPosition(node.Pos()), message};
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, baseIssue);
+
+            TIssue subIssue{ctx.GetPosition(node.Pos()), "Fulltext index is not specified or unsupported predicate is used to access index"};
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, subIssue);
+            baseIssue.AddSubIssue(MakeIntrusive<TIssue>(std::move(subIssue)));
+            ctx.AddError(baseIssue);
+            return {};
+        }
+
+        DumpAppliedRule("InspectErroneousIndexAccess", node.Ptr(), node.Ptr(), ctx);
+        return node;
     }
 
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
@@ -229,15 +247,23 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextRelevance(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpRewriteFlatMapOverFullTextRelevance(node, ctx, KqpCtx, *getParents());
-        DumpAppliedRule("RewriteFlatMapOverFullTextRelevance", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> PushLimitOverFullText(TExprBase node, TExprContext& ctx) {
+        auto output = KqpPushLimitOverFullText(node, ctx);
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("PushLimitOverFullText", node.Ptr(), output.Cast().Ptr(), ctx);
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextMatch(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx, *getParents());
-        DumpAppliedRule("RewriteFlatMapOverFullTextMatch", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextMatch(TExprBase node, TExprContext& ctx) {
+        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx);
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("RewriteFlatMapOverFullTextMatch", node.Ptr(), output.Cast().Ptr(), ctx);
         return output;
     }
 

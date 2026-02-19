@@ -442,6 +442,7 @@ enum EServiceKikimr {
     GROUPED_MEMORY_LIMITER = 2700;
 
     DATA_INTEGRITY = 3000;
+    TLI = 3001;
 
     TX_PRIORITIES_QUEUE = 3100;
 
@@ -1148,5 +1149,6 @@ message TActivity {
         NBS2_TEST_WORKLOAD = 678;
         BS_LOAD_DDISK_WRITE = 679;
         BS_LOAD_DDISK_READ = 680;
+        SCHEMESHARD_FORCED_COMPACTION = 681;
     };
 };

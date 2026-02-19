@@ -76,7 +76,7 @@ void DoValidateRelevanceQuery(NQuery::TQueryClient& db, const TString& relevance
     for (const auto& [query, expectedResults] : cases) {
         // Get the actual relevance score
         auto result = db.ExecuteQuery(
-            Sprintf(relevanceQuery.c_str(), query.c_str()), NYdb::NQuery::TTxControl::NoTx(), params.Build()).ExtractValueSync();
+            Sprintf(relevanceQuery.c_str(), query.c_str(), query.c_str()), NYdb::NQuery::TTxControl::NoTx(), params.Build()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 1, "Expected 1 result set");
@@ -2801,7 +2801,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatch, UTF8) {
         )sql");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
     }
 }
 
@@ -2846,7 +2846,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
-    AddIndex(db);
+    AddIndex(db, "fulltext_relevance");
 
     const auto querySettings = NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(10));
 
@@ -2858,7 +2858,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore node is not reachable by conjunctions.");
     }
 
     {
@@ -2880,7 +2881,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore node is not reachable by conjunctions.");
     }
 
     // temporary forbidden to use multiple fulltext match expressions in the same query.
@@ -2892,7 +2894,55 @@ Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Multiple fulltext predicates in a single read are not supported.");
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE Text = "404 not found"
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FulltextMatch/FulltextScore predicate is not specified to access index.");
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts`
+            WHERE FulltextMatch(`Text`, "404 not found")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Fulltext index is not specified or unsupported predicate is used to access index");
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`, FulltextScore(`Text`, "404 not found") as Score
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(`Text`, "404 not found") > 0
+            ORDER BY `Score` DESC;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`, FulltextScore(`Text`, "404 not found") as Score
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY `Score` DESC;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Score restriction is not found in the predicate. It's required to put FulltextScore() > 0 constraint in the where clause.");
     }
 }
 
@@ -2965,6 +3015,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
     DoValidateRelevanceQuery(db,
         R"sql(
             SELECT Key, Text, FulltextScore(Text, "%s", 1.2 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", 1.2 as B) > 0
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.464092448}, } } });
@@ -2972,6 +3023,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
     DoValidateRelevanceQuery(db,
         R"sql(
             SELECT Key, Text, FulltextScore(Text, "%s", 1.0 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", 1.0 as B) > 0
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.301624815}, } } });
@@ -2979,6 +3031,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
     DoValidateRelevanceQuery(db,
         R"sql(
             SELECT Key, Text, FulltextScore(Text, "%s", 0.8 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", 0.8 as B) > 0
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.159256269}, } } });
@@ -2986,6 +3039,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
     DoValidateRelevanceQuery(db,
         R"sql(
             SELECT Key, Text, FulltextScore(Text, "%s", 0.75 as K1, 1.2 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", 0.75 as K1, 1.2 as B) > 0
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.839970958}, } } });
@@ -2993,6 +3047,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
     DoValidateRelevanceQuery(db,
         R"sql(
             SELECT Key, Text, FulltextScore(Text, "%s", 0.8 as K1, 1.0 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", 0.8 as K1, 1.0 as B) > 0
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.65123871}, } } });
@@ -3000,6 +3055,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
     DoValidateRelevanceQuery(db,
         R"sql(
             SELECT Key, Text, FulltextScore(Text, "%s", 0.9 as K1, 0.8 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", 0.9 as K1, 0.8 as B) > 0
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.421362522}, } } });
@@ -3009,6 +3065,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
             DECLARE $bfactor as Double;
             DECLARE $k1factor as Double;
             SELECT Key, Text, FulltextScore(Text, "собаки любят", $bfactor as B, $k1factor as K1) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "собаки любят", $bfactor as B, $k1factor as K1) > 0
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.839970958}, } } },
@@ -3066,20 +3123,21 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
     {
         TString query = Sprintf(R"sql(
             ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-                GLOBAL USING %s
+                GLOBAL USING fulltext_relevance
                 ON (%s)
                 WITH (tokenizer=standard, use_filter_lowercase=true)
-        )sql", UTF8 ? "fulltext_plain" : "fulltext_relevance", UTF8 ? "text" : "Text");
+        )sql", UTF8 ? "text" : "Text");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextMatch UDF
         TString query = Sprintf(R"sql(
-            SELECT Key, %s FROM `/Root/Texts` VIEW `fulltext_idx`
-            ORDER BY FulltextScore(%s, "%s") DESC
+            SELECT Key, %s, FulltextScore(%s, "%s") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(%s, "%s") > 0
+            ORDER BY Relevance DESC
             LIMIT 10
-        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text", term.c_str());
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text", term.c_str(), UTF8 ? "text" : "Text", term.c_str());
 
         Cerr << "Query: " << query << Endl;
 
@@ -3087,7 +3145,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_C(resultSet.RowsCount() == expectedKeys.size(), "Expected " + std::to_string(expectedKeys.size()) + " rows with " + term + " content");
+        UNIT_ASSERT_C(resultSet.RowsCount() == expectedKeys.size(), "Expected " + std::to_string(expectedKeys.size()) + " rows with " + term + " content" + " but got " + std::to_string(resultSet.RowsCount()));
 
         // Verify that all returned rows actually contain the search term
         NYdb::TResultSetParser parser(resultSet);
@@ -3106,9 +3164,10 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
     for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextMatch UDF
         TString query = Sprintf(R"sql(
             SELECT Key, %s, FulltextScore(%s, "%s") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(%s, "%s") > 0
             ORDER BY Relevance DESC
             LIMIT 10
-        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text", term.c_str());
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text", term.c_str(), UTF8 ? "text" : "Text", term.c_str());
 
         Cerr << "Query: " << query << Endl;
 
@@ -3137,8 +3196,9 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
         TString query = Sprintf(R"sql(
             DECLARE $query as String;
             SELECT Key, %s, FulltextScore(%s, $query) as relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(%s, $query) > 0
             ORDER BY relevance DESC
-        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text");
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text");
 
         auto params = NYdb::TParamsBuilder();
         params
@@ -3153,11 +3213,13 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
     {
         TString query = Sprintf(R"sql(
             SELECT Key, %s FROM `/Root/Texts`
+            WHERE FulltextScore(%s, "машинное обучение") > 0
             ORDER BY FulltextScore(%s, "машинное обучение") DESC
-        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text");
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text", UTF8 ? "text" : "Text");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Fulltext index is not specified or unsupported predicate is used to access index");
     }
 }
 
@@ -3225,6 +3287,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         R"sql(
             SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "1" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", "or" as DefaultOperator, "1" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql",
         testCases);
@@ -3233,6 +3296,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         R"sql(
             SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "50%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", "or" as DefaultOperator, "50%" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql",
         testCases);
@@ -3241,6 +3305,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         R"sql(
             SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "-1" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", "or" as DefaultOperator, "-1" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql",
         testCases);
@@ -3249,6 +3314,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         R"sql(
             SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "-100" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", "or" as DefaultOperator, "-100" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql",
         testCases);
@@ -3277,6 +3343,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         R"sql(
             SELECT Key, FulltextScore(Text, "%s", "and" as DefaultOperator) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", "and" as DefaultOperator) > 0
             ORDER BY Relevance DESC
         )sql",
         andTestCases);
@@ -3285,6 +3352,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         R"sql(
             SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "100" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", "or" as DefaultOperator, "100" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql",
         andTestCases);
@@ -3293,6 +3361,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         TString query = Sprintf(R"sql(
             SELECT Key, FulltextScore(Text, "quick fox", "and" as DefaultOperator, "1" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "quick fox", "and" as DefaultOperator, "1" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql");
 
@@ -3306,6 +3375,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         TString query = Sprintf(R"sql(
             SELECT Key, FulltextScore(Text, "quick fox", "some" as DefaultOperator, "1" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "quick fox", "some" as DefaultOperator, "1" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql");
 
@@ -3319,6 +3389,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         TString query = Sprintf(R"sql(
             SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "101%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "quick fox", "or" as DefaultOperator, "101%" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql");
 
@@ -3332,6 +3403,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         TString query = Sprintf(R"sql(
             SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "-1%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "quick fox", "or" as DefaultOperator, "-1%" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql");
 
@@ -3345,6 +3417,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         TString query = Sprintf(R"sql(
             SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "0%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "quick fox", "or" as DefaultOperator, "0%" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql");
 
@@ -3358,6 +3431,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         TString query = Sprintf(R"sql(
             SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "non_numeric%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "quick fox", "or" as DefaultOperator, "non_numeric%" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql");
 
@@ -3371,6 +3445,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         TString query = Sprintf(R"sql(
             SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "non_numeric" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "quick fox", "or" as DefaultOperator, "non_numeric" as MinimumShouldMatch) > 0
             ORDER BY Relevance DESC
         )sql");
 
@@ -3509,7 +3584,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSingleStar) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*")
+            WHERE FulltextMatch(`Text`, "%")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3691,7 +3766,7 @@ void DoSelectWithFulltextMatchAndNgramWildcard(bool relevance, bool edge, bool c
         CompareYson(R"([
             [[0u];["Arena Allocation"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(edge ? R"([])" : R"([
+        CompareYson(R"([
             [[2u];["Werner Heisenberg"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
         CompareYson(R"([
@@ -3703,6 +3778,24 @@ void DoSelectWithFulltextMatchAndNgramWildcard(bool relevance, bool edge, bool c
         CompareYson(R"([
             [[9u];["морекот"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "%lloc%")
+            ORDER BY `Key`;
+        )sql";
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        if (edge) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[0u];["Arena Allocation"]]
+            ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 }
 
@@ -3912,7 +4005,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardBoundaries) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    for (const TString& q : {"are*", "*rea", "b"}) {
+    for (const TString& q : {"are\%", "\%rea", "b"}) {
         const TString query = std::format(R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextMatch(`Text`, "{}")
@@ -4230,10 +4323,6 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndEdgeNgramWildcard) {
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "%ef%")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextMatch(`Text`, "ef")
             ORDER BY `Key`;
 
@@ -4265,18 +4354,26 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndEdgeNgramWildcard) {
         CompareYson(R"([
             [[0u];["aaaaabbcd efg"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
-        CompareYson(R"([
-            [[0u];["aaaaabbcd efg"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
         CompareYson(R"([
             [[1u];["123456+789="]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
         CompareYson(R"([
             [[1u];["123456+789="]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(7)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(8)));
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(7)));
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "%ef%")
+            ORDER BY `Key`;
+        )sql";
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 }
 
@@ -4494,7 +4591,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
         UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 
-    for (const TString& q : {"at", "*at*"}) {
+    for (const TString& q : {"at", "\%at\%"}) {
         const TString query = std::format(R"sql(
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -4556,6 +4653,7 @@ Y_UNIT_TEST(ExplainFulltextIndexRelevance) {
     TString query = R"sql(
         SELECT Key, Text, FulltextScore(Text, "cats") as Relevance
         FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FulltextScore(Text, "cats") > 0
         ORDER BY Relevance DESC
     )sql";
     auto result = session.ExplainDataQuery(query).ExtractValueSync();
@@ -4618,43 +4716,57 @@ Y_UNIT_TEST(ExplainFulltextIndexScanQuery) {
     UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
 }
 
-Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate) {
+Y_UNIT_TEST(AddFullTextFlatIndexWithTruncateWithSelect) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
     featureFlags.SetEnableTruncateTable(true);
 
     auto kikimr = Kikimr(std::move(featureFlags));
+
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_TRACE);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
     AddIndex(db);
 
+    auto select = [&](){
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "404 not found")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
+    };
+
+    auto ensureTableIsEmpty = [&](){
+        auto result = db.ExecuteQuery("SELECT * FROM `/Root/Texts`;", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
+    };
+
     auto verifyIndexWorksCorrectly = [&](){
-        UpsertTexts(db);
-        auto index = ReadIndex(db);
-        CompareYson(R"([
-            [[100u];"animals"];
-            [[100u];"cats"];
-            [[200u];"cats"];
-            [[300u];"cats"];
-            [[100u];"chase"];
-            [[200u];"chase"];
-            [[200u];"dogs"];
-            [[400u];"dogs"];
-            [[400u];"foxes"];
-            [[300u];"love"];
-            [[400u];"love"];
-            [[100u];"small"];
-            [[200u];"small"]
-        ])", NYdb::FormatResultSetYson(index));
+        select();
+        UpsertSomeTexts(db);
+        select();
     };
 
     verifyIndexWorksCorrectly();
 
     for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
         TruncateTable(db);
+        ensureTableIsEmpty();
         verifyIndexWorksCorrectly();
     }
 }
@@ -5211,6 +5323,7 @@ Y_UNIT_TEST(FulltextRelevanceIndexWithCompositeKey) {
         TString query = R"sql(
             SELECT Category, Id, FulltextScore(Text, "cats") as Relevance
             FROM `/Root/TextsCompositeKeyRelevance` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "cats") > 0
             ORDER BY Relevance DESC
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -5320,8 +5433,9 @@ Y_UNIT_TEST(FullTextDeliveryProblem) {
     // Execute fulltext query using RunCall pattern
     auto result = kikimr.RunCall([&]() {
         TString query = R"sql(
-            SELECT Key, Text FROM `/Root/Texts` VIEW `fulltext_idx`
-            ORDER BY FulltextScore(Text, "cats") DESC
+            SELECT Key, Text, FulltextScore(Text, "cats") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "cats") > 0
+            ORDER BY Relevance DESC
             LIMIT 10
         )sql";
         return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -5338,6 +5452,78 @@ Y_UNIT_TEST(FullTextDeliveryProblem) {
     Cerr << "Test completed successfully, total reads observed: " << readCount << Endl;
 }
 
+Y_UNIT_TEST(FulltextQueryWithResultColumnsCovered) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        const TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                `Name` Utf8,
+                `Text` Utf8,
+                PRIMARY KEY (`Name`)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Name`, `Text`) VALUES
+                ("high cat frequency", "Cats love cats and more cats."),
+                ("medium frequency", "Dogs chase cats."),
+                ("no cats", "Animals in the wild."),
+                ("single cat mention", "Cats are domestic animals.")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX `fulltext_idx`
+                GLOBAL USING fulltext_plain
+                ON (`Name`)
+                WITH (
+                    tokenizer=standard,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=3,
+                    filter_ngram_max_length=3
+                )
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT count(*)
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Name`, "%cat%");
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[3u]])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Name`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Name`, "%cat%");
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["high cat frequency"]];
+            [["no cats"]];
+            [["single cat mention"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 }
+
+} // namespace NKikimr::NKqp

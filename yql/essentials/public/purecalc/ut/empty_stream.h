@@ -2,8 +2,7 @@
 
 #include <yql/essentials/public/purecalc/purecalc.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 template <typename T>
 class TEmptyStreamImpl: public IStream<T> {
 public:
@@ -16,5 +15,4 @@ template <typename T>
 THolder<IStream<T>> EmptyStream() {
     return MakeHolder<TEmptyStreamImpl<T>>();
 }
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

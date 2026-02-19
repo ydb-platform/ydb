@@ -12,7 +12,7 @@ index 1b73438..d954545 100644
  _LIBCPP_BEGIN_NAMESPACE_STD
  
 diff --git a/include/__expected/expected.h b/include/__expected/expected.h
-index 3d3f119..3e4de32 100644
+index 03bbd16..dfded2c 100644
 --- a/include/__expected/expected.h
 +++ b/include/__expected/expected.h
 @@ -55,7 +55,7 @@
@@ -38,7 +38,7 @@ index df52787..fc3be4c 100644
  _LIBCPP_BEGIN_NAMESPACE_STD
  
 diff --git a/include/__expected/unexpected.h b/include/__expected/unexpected.h
-index cf110bc..55360dc 100644
+index 6904889..85edcf9 100644
 --- a/include/__expected/unexpected.h
 +++ b/include/__expected/unexpected.h
 @@ -34,7 +34,7 @@
@@ -51,10 +51,10 @@ index cf110bc..55360dc 100644
  _LIBCPP_BEGIN_NAMESPACE_STD
  
 diff --git a/include/__utility/forward_like.h b/include/__utility/forward_like.h
-index 0206ce2..4302c4b 100644
+index 409f716..8c89f01 100644
 --- a/include/__utility/forward_like.h
 +++ b/include/__utility/forward_like.h
-@@ -22,7 +22,7 @@
+@@ -23,7 +23,7 @@
  
  _LIBCPP_BEGIN_NAMESPACE_STD
  
@@ -62,13 +62,13 @@ index 0206ce2..4302c4b 100644
 +#if _LIBCPP_STD_VER >= 20
  
  template <class _Ap, class _Bp>
- using _CopyConst = _If<is_const_v<_Ap>, const _Bp, _Bp>;
+ using _CopyConst _LIBCPP_NODEBUG = _If<is_const_v<_Ap>, const _Bp, _Bp>;
 diff --git a/include/expected b/include/expected
-index ac2415f..d5779cd 100644
+index 38038d3..d06fc3b 100644
 --- a/include/expected
 +++ b/include/expected
-@@ -42,7 +42,7 @@ namespace std {
- #else // 0
+@@ -43,7 +43,7 @@ namespace std {
+ #else
  #  include <__config>
  
 -#  if _LIBCPP_STD_VER >= 23

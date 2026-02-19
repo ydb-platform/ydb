@@ -12,10 +12,10 @@ class TestYdbTopicWorkload(StressFixture):
         yield from self.setup_cluster()
 
     def test(self):
-        limit_memory_useage = os.environ.get("YDB_STRESS_TEST_LIMIT_MEMORY", "0").lower() in ['true', '1', 'y', 'yes']
+        limit_memory_usage = os.environ.get("YDB_STRESS_TEST_LIMIT_MEMORY", "0").lower() in ['true', '1', 'y', 'yes']
         consumers = 50
         producers = 100
-        if limit_memory_useage:
+        if limit_memory_usage:
             consumers //= 3
             producers //= 3
         cmd_args = [
@@ -26,6 +26,6 @@ class TestYdbTopicWorkload(StressFixture):
             "--consumers", str(consumers),
             "--producers", str(producers),
         ]
-        if limit_memory_useage:
+        if limit_memory_usage:
             cmd_args.append('--limit-memory-usage')
         yatest.common.execute(cmd_args)

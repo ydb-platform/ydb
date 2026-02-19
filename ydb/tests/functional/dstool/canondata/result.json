@@ -75,6 +75,18 @@
             "uri": "file://test_canonical_requests.Test.test_essential/results.txt.8"
         }
     ],
+    "test_canonical_requests.Test.test_group_take_snapshot": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_take_snapshot/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_take_snapshot/results.txt.0"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_take_snapshot/results.txt.1"
+        }
+    ],
     "test_canonical_requests.Test.test_infer_pdisk_slot_count": [
         {
             "uri": "file://test_canonical_requests.Test.test_infer_pdisk_slot_count/results.txt"

@@ -18,8 +18,8 @@
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 using namespace NNodes;
 
@@ -8678,5 +8678,5 @@ namespace {
         input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputRowType));
         return IGraphTransformer::TStatus::Ok;
     }
-} // namespace NTypeAnnImpl
-}
+} // namespace NYql::NTypeAnnImpl
+

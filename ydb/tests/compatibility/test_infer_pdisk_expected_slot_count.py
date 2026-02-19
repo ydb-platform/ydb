@@ -227,6 +227,8 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
             }
         }
         self.replace_config(full_config)
+        inferred_slot_count = 24
+        inferred_slot_size_in_units = 2
         logger.info(f"Inferred PDisk setting applied {time.time()=}")
 
         self.cluster.client.pdisk_set_all_active(pdisk_path=CONST_PDISK_PATH)
@@ -241,8 +243,8 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
-                assert pdisk.PDiskMetrics.SlotCount == 24
-                assert pdisk.PDiskMetrics.SlotSizeInUnits == 2
+                assert pdisk.PDiskMetrics.SlotCount == inferred_slot_count
+                assert pdisk.PDiskMetrics.SlotSizeInUnits == inferred_slot_size_in_units
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 > t2
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 < deadline
         retry_assertions(check_pdisks, timeout)
@@ -268,9 +270,12 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 if self.versions[0] < (25, 3):
                     assert not pdisk.PDiskMetrics.HasField('SlotCount')
                     assert not pdisk.PDiskMetrics.HasField('SlotSizeInUnits')
-                else:
+                elif self.versions[0] < (25, 5):
                     assert pdisk.PDiskMetrics.HasField('SlotCount') and pdisk.PDiskMetrics.SlotCount == CONST_INITIAL_SLOT_COUNT
                     assert pdisk.PDiskMetrics.HasField('SlotSizeInUnits') and pdisk.PDiskMetrics.SlotSizeInUnits == 0
+                else:
+                    assert pdisk.PDiskMetrics.SlotCount == inferred_slot_count
+                    assert pdisk.PDiskMetrics.SlotSizeInUnits == inferred_slot_size_in_units
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 > t3
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 < deadline
         retry_assertions(check_pdisks, timeout)

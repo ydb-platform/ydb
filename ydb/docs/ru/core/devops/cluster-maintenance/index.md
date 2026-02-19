@@ -7,3 +7,4 @@
 Материалы раздела:
 
 - [{#T}](add-new-hard-drive/index.md)
+- [{#T}](hard-disk-replacement.md)

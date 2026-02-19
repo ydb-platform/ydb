@@ -4,3 +4,5 @@ items:
   include:
     mode: link
     path: add-new-hard-drive/toc_p.yaml
+- name: Замена диска
+  href: hard-disk-replacement.md    

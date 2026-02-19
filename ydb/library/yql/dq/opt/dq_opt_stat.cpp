@@ -8,6 +8,7 @@
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 
 #include "util/string/join.h"
+#include <algorithm>
 
 namespace NYql::NDq {
 
@@ -223,6 +224,37 @@ namespace {
         YQL_CLOG(TRACE, CoreDq) << "Extracting ranges from filter: " << PrintExpression(filterLambda, ctx);
         YQL_CLOG(TRACE, CoreDq) << "Extracted ranges for keys [" << keyStringBuilder << "]: " << repr;
 
+    }
+
+    double AggregateSelectivity(std::shared_ptr<TOptimizerStatistics> aggStats, TVector<TString> strKeys) {
+        if (aggStats->KeyColumns) {
+            bool isPrefix = true;
+            bool isKey = false;
+
+            size_t i=0;
+            for (; i<aggStats->KeyColumns->Data.size(); i++) {
+                if (i == strKeys.size()) {
+                    break;
+                }
+                if (aggStats->KeyColumns->Data[i] != strKeys[i]){
+                    isPrefix = false;
+                    break;
+                }
+            }
+
+            if (i == aggStats->KeyColumns->Data.size()) {
+                isKey = true;
+            }
+
+            if (isKey) {
+                return 1.0;
+            }
+            if (isPrefix) {
+                return 0.1;
+            }
+        }
+
+        return 0.7;
     }
 }
 
@@ -913,6 +945,11 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotati
     for (const auto& key: agg.Keys()) {
         strKeys.push_back(key.StringValue());
     }
+
+    double selectivity = AggregateSelectivity(aggStats, strKeys);
+    aggStats->Nrows = aggStats->Nrows * selectivity;
+    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();
     typeCtx->SetStats(input.Get(), std::move(aggStats));
 }
@@ -932,7 +969,39 @@ void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTyp
         return;
     }
 
-    typeCtx->SetStats( input.Get(), inputStats );
+    auto aggStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+
+    TVector<TString> strKeys;
+    strKeys.reserve(agg.Keys().Size());
+    for (const auto& key: agg.Keys()) {
+        strKeys.push_back(key.StringValue());
+    }
+
+    double selectivity = AggregateSelectivity(aggStats, strKeys);
+    aggStats->Nrows = aggStats->Nrows * selectivity;
+    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+
+    typeCtx->SetStats( input.Get(), aggStats );
+}
+
+void InferStatisticsForCombiner(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto agg = inputNode.Cast<TCoWideCombiner>();
+    auto aggInput = agg.Input();
+
+    auto inputStats = typeCtx->GetStats(aggInput.Raw() );
+    if (!inputStats) {
+        return;
+    }
+
+    auto aggStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+    aggStats->Nrows = aggStats->Nrows / 7.0;
+    aggStats->ByteSize = aggStats->ByteSize / 7.0;
+
+    YQL_CLOG(TRACE, CoreDq) << "Stats for aggregatem, Nrows: " << aggStats->Nrows;
+
+
+    typeCtx->SetStats( input.Get(), aggStats );
 }
 
 void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {

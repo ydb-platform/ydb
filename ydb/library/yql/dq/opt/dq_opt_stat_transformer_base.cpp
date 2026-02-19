@@ -109,6 +109,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TCoAggregateMergeFinalize::Match(input.Get())){
         InferStatisticsForAggregateMergeFinalize(input, TypeCtx);
     }
+    else if (TCoWideCombiner::Match(input.Get())) {
+        InferStatisticsForCombiner(input, TypeCtx);
+    }
     else if (TCoAsList::Match(input.Get())){
         InferStatisticsForAsList(input, TypeCtx);
     }

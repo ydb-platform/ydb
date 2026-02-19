@@ -14,6 +14,7 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnota
 void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForCombiner(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);

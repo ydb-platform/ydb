@@ -217,7 +217,10 @@ namespace NKikimr::NDDisk {
         auto* op = static_cast<TDirectIoOp*>(baseOp);
         std::unique_ptr<TDirectIoOp> guard(op);
 
-        // TODO: consider short reads/writes
+        // TODO: properly handle short reads/writes
+        if (op->Result >= 0) {
+            Y_ABORT_UNLESS(op->Result == static_cast<i32>(op->Size), "Short reads and writes are not supported yet");
+        }
 
         std::unique_ptr<IEventBase> reply;
         if (op->IsRead) {

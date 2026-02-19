@@ -85,7 +85,7 @@ TWriteRequestHandler::TWriteRequestHandler(
     Span.Attribute("size", static_cast<i64>(GetSize()));
 }
 
-NWilson::TTraceId TWriteRequestHandler::GetChildSpan(
+NWilson::TSpan& TWriteRequestHandler::GetChildSpan(
     ui64 requestId,
     ui8 persistentBufferIndex)
 {
@@ -103,7 +103,7 @@ NWilson::TTraceId TWriteRequestHandler::GetChildSpan(
 
     ChildSpanByRequestId[requestId] = std::move(childSpan);
 
-    return ChildSpanByRequestId[requestId].GetTraceId();
+    return ChildSpanByRequestId[requestId];
 }
 
 bool TWriteRequestHandler::IsCompleted(ui64 requestId)
@@ -277,7 +277,7 @@ TReadRequestHandler::TReadRequestHandler(
     Span.Attribute("blocksCount", static_cast<i64>(GetSize()));
 }
 
-NWilson::TTraceId TReadRequestHandler::GetChildSpan(
+NWilson::TSpan& TReadRequestHandler::GetChildSpan(
     ui64 requestId,
     bool isReadPersistentBuffer)
 {
@@ -297,7 +297,7 @@ NWilson::TTraceId TReadRequestHandler::GetChildSpan(
 
     ChildSpanByRequestId[requestId] = std::move(childSpan);
 
-    return ChildSpanByRequestId[requestId].GetTraceId();
+    return ChildSpanByRequestId[requestId];
 }
 
 bool TReadRequestHandler::IsCompleted(ui64 requestId)

@@ -33,7 +33,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         TGuardedSgList data,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 
     NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
@@ -42,7 +42,7 @@ public:
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,
         const ui64 lsn,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 
     NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>
@@ -53,7 +53,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 
     NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> Read(
         const NActors::TActorId serviceId,
@@ -61,7 +61,7 @@ public:
         const NKikimr::NDDisk::TBlockSelector selector,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 
     NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
@@ -72,7 +72,7 @@ public:
         const ui64 lsn,
         const std::tuple<ui32, ui32, ui32> ddiskId,
         const ui64 ddiskInstanceGuid,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

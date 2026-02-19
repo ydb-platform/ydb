@@ -189,11 +189,11 @@ namespace NKikimr::NTestShard {
                 << "Status# " << NKikimrKeyValue::Statuses::ReplyStatus_Name(status)
                 << (record.msg() ? TStringBuilder() << " Message# " << record.msg() : TString());
             const EReadOutcome outcome =
-                status == NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT ? EReadOutcome::IMMEDIATE_RETRY :
-                (status == NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR
-                    || status == NKikimrKeyValue::Statuses::RSTATUS_BLOCKED) ? EReadOutcome::RETRY :
-                status == NKikimrKeyValue::Statuses::RSTATUS_OK ? EReadOutcome::OK :
-                                                                  EReadOutcome::ERROR;
+                status == NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT        ? EReadOutcome::IMMEDIATE_RETRY :
+                status == NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR ? EReadOutcome::RETRY           :
+                status == NKikimrKeyValue::Statuses::RSTATUS_BLOCKED        ? EReadOutcome::RETRY           : 
+                status == NKikimrKeyValue::Statuses::RSTATUS_OK             ? EReadOutcome::OK              :
+                                                                              EReadOutcome::ERROR;
 
             ProcessReadResult(record.cookie(), message, outcome, record.value());
 

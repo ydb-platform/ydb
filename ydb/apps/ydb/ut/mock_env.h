@@ -12,6 +12,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <grpcpp/generic/async_generic_service.h>
 #include <grpcpp/server_builder.h>
 
 #include <util/stream/file.h>
@@ -201,6 +202,27 @@ public:
     TString Token;
 };
 
+// Special generic service that fails test if there is an unimplemented service call
+class TFailingGenericService : public grpc::CallbackGenericService {
+public:
+    grpc::ServerGenericBidiReactor* CreateReactor(grpc::GenericCallbackServerContext* ctx) override {
+        UNIT_FAIL("Called unimplemented gRPC method: " << ctx->method());
+
+        class Reactor : public grpc::ServerGenericBidiReactor {
+        public:
+            Reactor() {
+                this->Finish(grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Unimplemented method"));
+            }
+
+            void OnDone() override {
+                delete this;
+            }
+        };
+
+        return new Reactor();
+    }
+};
+
 class TIamTokenServiceImpl : public TMockGrpcServiceBase<IamTokenService::Service> {
 public:
     grpc::Status Create(grpc::ServerContext* context, const CreateIamTokenRequest* request, CreateIamTokenResponse* response) override {
@@ -342,6 +364,8 @@ public:
         }
         builder.AddListeningPort(address, ServerCredentials);
         AddServices();
+        FailingGenericService = std::make_unique<TFailingGenericService>();
+        builder.RegisterCallbackGenericService(FailingGenericService.get());
         for (auto&& [t, srv] : Services) {
             builder.RegisterService(srv->Service());
         }
@@ -513,6 +537,7 @@ private:
     std::unique_ptr<TTempDir> TempHomeDir;
 
     std::shared_ptr<grpc::ServerCredentials> ServerCredentials;
+    std::unique_ptr<TFailingGenericService> FailingGenericService;
 };
 
 class TCliTestFixtureWithSsl : public TCliTestFixture {

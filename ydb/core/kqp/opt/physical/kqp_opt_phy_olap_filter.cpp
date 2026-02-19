@@ -1010,7 +1010,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
     TOLAPPredicateNode predicateTree;
     predicateTree.ExprNode = predicate.Ptr();
-    CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body().Ptr()->GetTypeAnn(), pushdownOptions);
+    CollectPredicates(predicate, predicateTree, &lambdaArg, lambdaArg.GetTypeAnn(), pushdownOptions);
     YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
 
     auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, false);
@@ -1066,7 +1066,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             predicate = maybeIf.Cast().Predicate();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            CollectPredicates(predicate, predicateTree, &lArg, lambda.Body().Ptr()->GetTypeAnn(), {true, pushdownOptions.PushdownSubstring});
+            CollectPredicates(predicate, predicateTree, &lArg, lArg.GetTypeAnn(), {true, pushdownOptions.PushdownSubstring});
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);

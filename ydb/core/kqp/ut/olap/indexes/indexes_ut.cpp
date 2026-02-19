@@ -208,6 +208,46 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
     }
 
+    Y_UNIT_TEST(LocalBloomNgramIndexDefaultCaseSensitivePersisted) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/olapTableNgramDefault`
+                (
+                    timestamp Timestamp NOT NULL,
+                    resource_id Utf8,
+                    uid Utf8 NOT NULL,
+                    PRIMARY KEY (timestamp, uid),
+                    INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                        ON (resource_id)
+                        WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024)
+                )
+                PARTITION BY HASH(timestamp, uid)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto showResult = session.ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/olapTableNgramDefault`;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(showResult.IsSuccess(), showResult.GetIssues().ToString());
+        UNIT_ASSERT(!showResult.GetResultSets().empty());
+        NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+        UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+        TString createText = parser.ColumnParser(0).GetOptionalString().GetOrElse("");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "case_sensitive=true");
+    }
+
     Y_UNIT_TEST(TablesInStore) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

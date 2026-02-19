@@ -331,7 +331,7 @@ message LocalBloomNgramFilterIndex {
     uint32 hashes_count = 2;
     uint32 filter_size_bytes = 3;
     uint32 records_count = 4;
-    bool case_sensitive = 5;
+    optional bool case_sensitive = 5;
 }
 
 // Represent table index

@@ -2277,7 +2277,9 @@ public:
                                         TStringBuilder() << "Local bloom ngram filter index support is disabled"));
                                     return SyncError();
                                 }
-                                add_index->mutable_local_bloom_ngram_filter_index();
+
+                                auto* ngramIndex = add_index->mutable_local_bloom_ngram_filter_index();
+                                ngramIndex->set_case_sensitive(true);
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));

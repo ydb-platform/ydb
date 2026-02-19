@@ -716,12 +716,13 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
     if (isLocalBloomNgramFilter) {
         const auto& settings = index.local_bloom_ngram_filter_index();
+        const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : true;
         Stream << " WITH ("
                << "ngram_size=" << settings.ngram_size()
                << ", hashes_count=" << settings.hashes_count()
                << ", filter_size_bytes=" << settings.filter_size_bytes()
                << ", records_count=" << settings.records_count()
-               << ", case_sensitive=" << (settings.case_sensitive() ? "true" : "false")
+               << ", case_sensitive=" << (caseSensitive ? "true" : "false")
                << ")";
     }
 }

@@ -40,8 +40,7 @@ private:
         }
     }
 
-    IActor* CreateUploaderInternal(const TString& database, const TString& tablePath, const std::shared_ptr<TData>& data,
-                                   ui64 cookie);
+    IActor* CreateUploaderInternal(const TString& database, const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie);
 
     void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data) {
         auto cookie = ++Cookie;

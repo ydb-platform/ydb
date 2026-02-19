@@ -31,6 +31,6 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  bool writeToPrivateTable = false,
                                  bool writeToIndexImplTable = false,
                                  ui64 cookie = 0,
-                                 TBackoff backoff = TBackoff(0));                                 
+                                 TBackoff backoff = TBackoff(0));
 } // namespace NTxProxy
 } // namespace NKikimr

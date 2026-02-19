@@ -99,15 +99,15 @@ private:
 };
 
 IActor* CreateUploadRowsInternal(const TActorId& sender,
-                                 const TString& database,
-                                 const TString& table,
-                                 std::shared_ptr<const TUploadTypes> types,
-                                 std::shared_ptr<const TUploadRows> rows,
-                                 EUploadRowsMode mode,
-                                 bool writeToPrivateTable,
-                                 bool writeToIndexImplTable,
-                                 ui64 cookie,
-                                 TBackoff backoff)
+    const TString& database,
+    const TString& table,
+    std::shared_ptr<const TUploadTypes> types,
+    std::shared_ptr<const TUploadRows> rows,
+    EUploadRowsMode mode,
+    bool writeToPrivateTable,
+    bool writeToIndexImplTable,
+    ui64 cookie,
+    TBackoff backoff)
 {
     return new TUploadRowsInternal(sender,
         database,

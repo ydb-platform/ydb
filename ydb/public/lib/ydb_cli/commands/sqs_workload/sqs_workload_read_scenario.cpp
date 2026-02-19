@@ -22,10 +22,11 @@ namespace NYdb::NConsoleClient {
         InitSqsClient();
 
         auto finishedFlag = std::make_shared<std::atomic_bool>(false);
+        auto queueUrl = GetQueueUrl();
 
         TSqsWorkloadReaderParams params{
             .TotalSec = TotalSec,
-            .QueueUrl = QueueUrl,
+            .QueueUrl = queueUrl,
             .Account = Account,
             .Token = Token,
             .Log = Log,

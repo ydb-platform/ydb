@@ -26,7 +26,7 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
         TMaybe<TString> Token;
         TMaybe<TString> SecretKey;
-        TString QueueUrl;
+        TString QueueName;
         TMaybe<TString> Account;
         TMaybe<TString> Region;
         TMaybe<TString> QueueEndpoint;
@@ -45,6 +45,7 @@ namespace NYdb::NConsoleClient {
         void InitStatsCollector(size_t writerCount, size_t readerCount);
         void InitSqsClient();
         void DestroySqsClient();
+        TString GetQueueUrl() const;
 
     private:
         Aws::SDKOptions AwsOptions;

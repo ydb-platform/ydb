@@ -5,6 +5,7 @@
 #include <aws/core/auth/AWSCredentials.h>
 #include <aws/core/utils/ratelimiter/RateLimiterInterface.h>
 #include <aws/core/utils/threading/Executor.h>
+#include <aws/sqs/model/GetQueueUrlRequest.h>
 #include <library/cpp/logger/log.h>
 #include <library/cpp/uri/http_url.h>
 #include <util/string/builder.h>
@@ -92,6 +93,18 @@ namespace NYdb::NConsoleClient {
                 "json-sqs-client", credentials, sqsClientConfiguration);
             SqsClient = Aws::MakeShared<TSQSClientWrapper>(
                 "sqs-client-wrapper", credentials, sqsClientConfiguration, jsonSqsClient, StatsCollector, ValidateFifo);
+        }
+    }
+
+    TString TSqsWorkloadScenario::GetQueueUrl() const {
+        Aws::SQS::Model::GetQueueUrlRequest request;
+        request.SetQueueName(QueueName);
+        auto outcome = SqsClient->GetQueueUrl(request);
+        if (outcome.IsSuccess()) {
+            return outcome.GetResult().GetQueueUrl().c_str();
+        } else {
+            Cerr << "got error: " << outcome.GetError().GetMessage() << Endl;
+            return "";
         }
     }
 

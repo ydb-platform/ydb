@@ -511,18 +511,11 @@ namespace NYdb::NConsoleClient {
 
     GetQueueUrlOutcome TSQSJsonClient::GetQueueUrl(
         const GetQueueUrlRequest& getQueueUrlRequest) const {
-        const Aws::String endpoint = EndpointOverride.empty()
-            ? Aws::String("https://sqs.ru-central1.amazonaws.com/")
-            : EndpointOverride;
-        auto request = CreateBaseRequest(endpoint);
+        auto request = CreateBaseRequest(EndpointOverride);
         AddHeaders(getQueueUrlRequest.GetAdditionalCustomHeaders(), request);
 
         Aws::Utils::Json::JsonValue jsonRequest;
         jsonRequest.WithString("QueueName", getQueueUrlRequest.GetQueueName());
-        if (getQueueUrlRequest.QueueOwnerAWSAccountIdHasBeenSet()) {
-            jsonRequest.WithString("QueueOwnerAWSAccountId",
-                                  getQueueUrlRequest.GetQueueOwnerAWSAccountId());
-        }
 
         auto jsonBody = jsonRequest.View().WriteCompact();
         auto bodyStream =
@@ -530,13 +523,15 @@ namespace NYdb::NConsoleClient {
         request->SetContentLength(
             Aws::Utils::StringUtils::to_string(jsonBody.size()));
         request->AddContentBody(bodyStream);
-
         request->SetHeaderValue("x-amz-target", "AmazonSQS.GetQueueUrl");
-
         Signer->SignRequest(*request);
 
         auto response = HttpClient->MakeRequest(request);
         if (response->GetResponseCode() != Aws::Http::HttpResponseCode::OK) {
+            Aws::OStringStream oss;
+            auto responseBody = response->GetResponseBody().rdbuf();
+            oss << response->GetClientErrorType() << " " << response->GetResponseCode() << " " << responseBody;
+            Cerr << "got error response: " << oss.str() << Endl;
             Aws::SQS::SQSError error;
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());

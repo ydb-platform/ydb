@@ -17,9 +17,9 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         // Common params
-        config.Opts->AddLongOption("queue-url", "AWS queue URL.")
+        config.Opts->AddLongOption("queue-name", "AWS queue name.")
             .Required()
-            .StoreResult(&Scenario.QueueUrl);
+            .StoreResult(&Scenario.QueueName);
         config.Opts->AddLongOption("queue-endpoint", "Queue endpoint.")
             .Optional()
             .StoreResult(&Scenario.QueueEndpoint);

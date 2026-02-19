@@ -11900,6 +11900,57 @@ Y_UNIT_TEST(LangVerBefore202504) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(InsideLambda) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res;
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> { RETURN (SELECT * FROM $name); };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Reading a table in a pure context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> { RETURN 1 + (SELECT * FROM $name); };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Reading a table in a pure context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> {
+            $x = 1 + (SELECT * FROM $name);
+            RETURN 1 + $x;
+        };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Reading a table in a pure context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> {
+            $x = 1 + (SELECT $name);
+            RETURN 1 + $x;
+        };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> { RETURN (SELECT $name); };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 } // Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery)
 
 Y_UNIT_TEST_SUITE(YqlSelect) {

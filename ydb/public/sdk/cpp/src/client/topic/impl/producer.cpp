@@ -164,7 +164,7 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
                     MoveTo(EState::GotDescribe);
                 }
 
-                producerPtr->RunMainWorker();
+                producerPtr->RunMainWorker(static_cast<std::int64_t>(PartitionId));
             });
             lock.lock();
             if (State == EState::Init) {
@@ -336,7 +336,7 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
             }
 
             if (gotMaxSeqNo) {
-                producerPtr->RunMainWorker();
+                producerPtr->RunMainWorker(static_cast<std::int64_t>(PartitionId));
             }
         });
         lock.lock();
@@ -404,7 +404,7 @@ bool TProducer::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrappedSessio
         }
 
         if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-            Producer->SessionsWorker->OnReadFromSession(wrappedSession);
+            Producer->SessionsWorker->OnReadFromSession(wrappedSession, acksEvent->Acks.size());
             HandleAcksEvent(partition, std::move(*acksEvent));
             continue;
         }
@@ -464,7 +464,7 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
             std::lock_guard lock(selfPtr->Lock);
             selfPtr->ReadyFutures.insert(partition);
         }
-        producerPtr->RunMainWorker();
+        producerPtr->RunMainWorker(static_cast<std::int64_t>(partition));
     });
     Producer->Partitions[partition].Future(newFuture);
 }
@@ -767,12 +767,23 @@ void TProducer::TSessionsWorker::DestroyWriteSession(TSessionsIndexIterator& it,
     auto closeResult = it->second->Session->Close(closeTimeout);
     Y_ABORT_UNLESS(!mustBeEmpty || closeResult, "There are still messages in flight");
     const auto partition = it->second->Partition;
+    if (static_cast<std::int64_t>(partition) == Producer->MainWorkerOwner) {
+        SessionsToRemove.push_back(it->second);
+    }
     it = SessionsIndex.erase(it);
     Producer->EventsWorker->UnsubscribeFromPartition(partition);
 }
 
-void TProducer::TSessionsWorker::OnReadFromSession(WrappedWriteSessionPtr wrappedSession) {
-    if (wrappedSession->RemoveFromQueue(1)) {
+size_t TProducer::TSessionsWorker::GetSessionsCount() const {
+    return SessionsIndex.size();
+}
+
+size_t TProducer::TSessionsWorker::GetIdleSessionsCount() const {
+    return IdlerSessions.size();
+}
+
+void TProducer::TSessionsWorker::OnReadFromSession(WrappedWriteSessionPtr wrappedSession, size_t delta) {
+    if (wrappedSession->RemoveFromQueue(delta)) {
         Y_ABORT_UNLESS(!wrappedSession->IdleSession, "IdleSession is already set");
         auto idleSessionPtr = std::make_shared<TIdleSession>(wrappedSession.get(), TInstant::Now(), Producer->Settings.SubSessionIdleTimeout_);
         auto [itIdle, inserted] = IdlerSessions.insert(idleSessionPtr);
@@ -794,11 +805,21 @@ void TProducer::TSessionsWorker::OnWriteToSession(WrappedWriteSessionPtr wrapped
 }
 
 void TProducer::TSessionsWorker::DoWork() {
+    while (!SessionsToRemove.empty()) {
+        if (static_cast<std::int64_t>(SessionsToRemove.front()->Partition) == Producer->MainWorkerOwner) {
+            break;
+        }
+
+        SessionsToRemove.pop_front();
+    }
+
     while (!IdlerSessions.empty()) {
         auto it = IdlerSessions.begin();
         if (!(*it)->IsExpired()) {
             break;
         }
+
+        LOG_LAZY(Producer->DbDriverState->Log, TLOG_DEBUG, TStringBuilder() << Producer->LogPrefix() << "Removing idle session for partition " << (*it)->Session->Partition);
 
         const auto partition = (*it)->Session->Partition;
         if (Producer->Partitions[partition].Locked_) {
@@ -1346,10 +1367,10 @@ TProducer::TProducer(
     Settings.EventHandlers_.HandlersExecutor_->Start();
 
     CloseFuture.Subscribe([this](const NThreading::TFuture<void>&) {
-        RunMainWorker();
+        RunMainWorker(-1);
     });
 
-    RunMainWorker();
+    RunMainWorker(-1);
 
     LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Keyed write session created");
 }
@@ -1403,7 +1424,7 @@ EWriteResult TProducer::WriteInternal(TWriteMessage&& message, std::optional<std
         RunUserEventLoop();
     }
 
-    RunMainWorker();
+    RunMainWorker(-1);
     if (eventsPromise) {
         eventsPromise->TrySetValue();
     }
@@ -1416,9 +1437,18 @@ std::uint32_t TProducer::ChooseRandomPartition() {
     return distribution(RandomGenerator);
 }
 
+size_t TProducer::GetSessionsCount() {
+    std::lock_guard lock(GlobalLock);
+    return SessionsWorker->GetSessionsCount();
+}
+
+size_t TProducer::GetIdleSessionsCount() {
+    std::lock_guard lock(GlobalLock);
+    return SessionsWorker->GetIdleSessionsCount();
+}
+
 ECloseResult TProducer::Close(TDuration closeTimeout) {
     if (Closed.exchange(true)) {
-        std::lock_guard lock(GlobalLock);
         return ECloseResult::ALREADY_CLOSED;
     }
 
@@ -1509,7 +1539,7 @@ bool TProducer::RunSplittedPartitionWorkers() {
 
     std::vector<std::uint32_t> partitionsToRemove;
     for (const auto& [partition, splittedPartitionWorker] : ReadySplittedPartitionWorkers) {
-        if (splittedPartitionWorker->CanBeRemoved()) {
+        if (MainWorkerOwner != partition) {
             partitionsToRemove.push_back(partition);
         }
     }
@@ -1623,7 +1653,7 @@ void TProducer::NextEpoch() {
     Epoch.fetch_add(1);
 }
 
-void TProducer::RunMainWorker() {
+void TProducer::RunMainWorker(std::int64_t owner) {
     // This function is both "request to run" and the runner itself.
     // We must handle two properties:
     // - TFuture::Subscribe may call back synchronously when future is already ready.
@@ -1654,6 +1684,7 @@ void TProducer::RunMainWorker() {
         }
     }
 
+    MainWorkerOwner = owner;
     NextEpoch();
 
     auto startWorkerTime = TInstant::Now();

@@ -75,7 +75,7 @@ public:
     //! Returns future that is set when flush is complete.
     //! If flush was successful, returns SUCCESS.
     //! If flush was not successful because of closed session, returns CLOSED.
-    virtual NThreading::TFuture<EFlushResult> Flush() = 0;
+    [[nodiscard]] virtual NThreading::TFuture<EFlushResult> Flush() = 0;
 
     //! Flush all messages to the server and wait result.
     //! Returns flush result.

@@ -126,9 +126,11 @@ private:
     struct TSessionsWorker {
         TSessionsWorker(TProducer* producer);
         WrappedWriteSessionPtr GetWriteSession(std::uint32_t partition, bool directToPartition = true);
-        void OnReadFromSession(WrappedWriteSessionPtr wrappedSession);
+        void OnReadFromSession(WrappedWriteSessionPtr wrappedSession, size_t delta);
         void OnWriteToSession(WrappedWriteSessionPtr wrappedSession);
         void DoWork();
+        size_t GetSessionsCount() const;
+        size_t GetIdleSessionsCount() const;
     
     private:
         void AddIdleSession(WrappedWriteSessionPtr wrappedSession, TInstant emptySince, TDuration idleTimeout);
@@ -145,6 +147,9 @@ private:
         using IdlerSessionsIterator = std::set<IdleSessionPtr, TIdleSession::Comparator>::iterator;
         std::unordered_map<std::uint32_t, IdlerSessionsIterator> IdlerSessionsIndex;
         std::unordered_map<std::uint32_t, WrappedWriteSessionPtr> SessionsIndex;
+        std::deque<WrappedWriteSessionPtr> SessionsToRemove;
+
+        static constexpr TDuration SESSION_REMOVE_DELAY = TDuration::Seconds(5);
     };
 
     struct TMessagesWorker {
@@ -335,7 +340,7 @@ private:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    void RunMainWorker();
+    void RunMainWorker(std::int64_t owner);
 
     void NonBlockingClose();
 
@@ -387,7 +392,7 @@ public:
 
     std::optional<TCloseDescription> ExplainClosed() override;
 
-    NThreading::TFuture<EFlushResult> Flush() override;
+    [[nodiscard]] NThreading::TFuture<EFlushResult> Flush() override;
 
     [[nodiscard]] EFlushResult FlushAndWait(TDuration timeout = TDuration::Max()) override;
 
@@ -406,6 +411,10 @@ public:
     std::unordered_map<std::uint32_t, TPartitionInfo> GetPartitionsMap() const;
 
     std::map<std::string, std::uint32_t> GetPartitionsIndex() const;
+
+    size_t GetSessionsCount();
+
+    size_t GetIdleSessionsCount();
 
     ~TProducer();
 
@@ -432,6 +441,7 @@ private:
     std::atomic_bool Closed = false;
     std::atomic_bool Done = false;
     TInstant CloseDeadline = TInstant::Now();
+    std::int64_t MainWorkerOwner = -1;
 
     std::unique_ptr<IPartitionChooser> PartitionChooser;
 

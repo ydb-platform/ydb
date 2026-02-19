@@ -501,7 +501,7 @@ public:
 
         for (const auto& setting : settings.Raw()->Children()) {
             const auto settingName = setting->Child(0)->Content();
-            if ("skip.json.errors" == settingName || "sharedreadingskipjsonerrors" == settingName)) {
+            if ("skip.json.errors" == settingName || "sharedreadingskipjsonerrors" == settingName) {
                 if (setting->ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected `SHARED_READING_SKIP_JSON_ERRORS` = value"));
                     return {};

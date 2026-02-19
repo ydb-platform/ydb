@@ -355,16 +355,12 @@ int main(int argc, const char** argv) {
         << ", threads=" << config.ActorSystemThreadsCount
         << ", udf-files=" << config.UdfFiles.size()
         << ", side-by-side-compare=" << (config.EnableOltpSinkSideBySinkCompare ? "true" : "false")
-        << ", antlr4-ambiguity-error=" << (config.Antlr4ParserIsAmbiguityError ? "true" : "false")
+        << ", enable-antlr4-parser=" << (config.EnableAntlr4Parser ? "true" : "false")
         << Endl;
 
     if (config.QueryFile) {
-<<<<<<< HEAD
-        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel);
-=======
         Cerr << "Running in local mode for single query file: " << config.QueryFile << Endl;
-        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel);
->>>>>>> 3f38994d953 (Query replay debug (#34488))
+        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel);
         fakeMapper.Start(nullptr);
         Y_DEFER {
             fakeMapper.Finish(nullptr);
@@ -426,14 +422,11 @@ int main(int argc, const char** argv) {
     }
     spec.MaxFailedJobCount(10000);
 
-<<<<<<< HEAD
-    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel));
-=======
     Cerr << "Starting map operation. src-path=" << config.SrcPath
         << ", dst-path=" << config.DstPath << Endl;
     const auto mapStart = TInstant::Now();
     try {
-        client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel));
+        client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel));
     } catch (const std::exception& e) {
         Cerr << "Map operation failed after " << (TInstant::Now() - mapStart) << ": " << e.what() << Endl;
         return EXIT_FAILURE;
@@ -442,7 +435,6 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
     Cerr << "Map operation finished in " << (TInstant::Now() - mapStart) << Endl;
->>>>>>> 3f38994d953 (Query replay debug (#34488))
 
     auto mergeSpec = NYT::TMergeOperationSpec();
     mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));

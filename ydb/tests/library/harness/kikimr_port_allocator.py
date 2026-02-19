@@ -36,6 +36,10 @@ class KikimrNodePortAllocatorInterface(object):
         pass
 
     @abc.abstractproperty
+    def http_proxy_port(self):
+        pass
+
+    @abc.abstractproperty
     def public_http_port(self):
         pass
 
@@ -78,6 +82,7 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__mbus_port = None
         self.__ic_port = None
         self.__sqs_port = None
+        self.__http_proxy_port = None
         self.__grpc_ssl_port = None
         self.__ext_port = None
         self.__public_http_port = None
@@ -118,6 +123,12 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         if self.__sqs_port is None:
             self.__sqs_port = self.__port_manager.get_port()
         return self.__sqs_port
+
+    @property
+    def http_proxy_port(self):
+        if self.__http_proxy_port is None:
+            self.__http_proxy_port = self.__port_manager.get_port()
+        return self.__http_proxy_port
 
     @property
     def pgwire_port(self):

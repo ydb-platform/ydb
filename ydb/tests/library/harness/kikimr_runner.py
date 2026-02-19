@@ -77,6 +77,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
+        self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None
         if not configurator.simple_config and configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
@@ -243,6 +244,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,
+                "--http-proxy-port=%d" % self.http_proxy_port,
             ]
         )
 

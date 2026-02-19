@@ -315,6 +315,7 @@ struct TCommonAppOptions {
     TString NodeHost;
     TString NodeResolveHost;
     TString NodeDomain;
+    ui32 HttpProxyPort = 0;
     ui32 SqsHttpPort = 0;
     TString NodeKind = TString(NODE_KIND_YDB);
     TMaybe<TString> NodeType;
@@ -392,6 +393,8 @@ struct TCommonAppOptions {
             .RequiredArgument("NUM").StoreResult(&InterconnectPort);
         opts.AddLongOption("sqs-port", "sqs port")
             .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
+        opts.AddLongOption("http-proxy-port", "http proxy port")
+            .RequiredArgument("NUM").StoreResult(&HttpProxyPort);
         opts.AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
         opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
@@ -665,6 +668,10 @@ struct TCommonAppOptions {
             conf.SetEnableKafkaProxy(true);
             conf.SetListeningPort(KafkaPort);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::KafkaProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (HttpProxyPort) {
+            appConfig.MutableHttpProxyConfig()->SetPort(HttpProxyPort);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::HttpProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (PGWireAddress) {
             appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);

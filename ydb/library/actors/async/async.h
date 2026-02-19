@@ -354,6 +354,15 @@ namespace NActors {
             std::forward<TAwaitable>(awaitable).CoAwaitByValue();
         };
 
+        template<class TAwaiter, class TAwaitable>
+        concept IsSafeCoAwaitByValueAwaiter = (
+            // Awaitable is not returning a reference
+            !std::is_reference_v<TAwaiter> ||
+            // Awaitable is not returning a reference to itself
+            !std::is_base_of_v<std::remove_reference_t<TAwaiter>, TAwaitable> ||
+            // Returned awaiter reference is not trivially destructible
+            !std::is_trivially_destructible_v<std::remove_reference_t<TAwaiter>>);
+
         template<class TAwaitable>
         concept HasMemberCoAwait = requires(TAwaitable&& awaitable) {
             std::forward<TAwaitable>(awaitable).operator co_await();
@@ -953,6 +962,8 @@ namespace NActors {
             {
                 // Note: may be a reference type, even the same reference
                 using TAwaiter = decltype(std::forward<TAwaitable>(awaitable).CoAwaitByValue());
+
+                static_assert(IsSafeCoAwaitByValueAwaiter<TAwaiter, TAwaitable>, "CoAwaitByValue returns an unsafe reference");
 
                 static_assert(IsActorAwareAwaiter<TAwaiter>, "CoAwaitByValue must currently return an actor aware awaiter");
                 if constexpr (IsActorAwareAwaiter<TAwaiter>) {

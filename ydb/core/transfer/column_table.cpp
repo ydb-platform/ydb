@@ -53,11 +53,8 @@ std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, 
 template<>
 IActor* TTableUploader<arrow::RecordBatch>::CreateUploaderInternal(
     const TString& database, const TString& tablePath,
-    const std::shared_ptr<arrow::RecordBatch>& data, 
-    const NACLib::TUserContext::TPtr& userCtx,
-    ui64 cookie)
+    const std::shared_ptr<arrow::RecordBatch>& data, ui64 cookie)
 {
-    Y_UNUSED(userCtx);
     return NTxProxy::CreateUploadColumnsInternal(SelfId(), database, tablePath, Scheme->Types, data, cookie);
 }
 

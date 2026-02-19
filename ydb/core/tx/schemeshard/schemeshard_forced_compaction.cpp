@@ -35,8 +35,8 @@ void TSchemeShard::PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForc
         NIceDb::TUpdate<Schema::ForcedCompactions::EndTime>(info.EndTime.Seconds()),
         NIceDb::TUpdate<Schema::ForcedCompactions::TotalShardCount>(info.TotalShardCount),
         NIceDb::TUpdate<Schema::ForcedCompactions::DoneShardCount>(info.DoneShardCount),
-        NIceDb::TUpdate<Schema::ForcedCompactions::DomainOwnerId>(info.DomainPathId.OwnerId),
-        NIceDb::TUpdate<Schema::ForcedCompactions::DomainLocalId>(info.DomainPathId.LocalPathId)
+        NIceDb::TUpdate<Schema::ForcedCompactions::SubdomainOwnerId>(info.SubdomainPathId.OwnerId),
+        NIceDb::TUpdate<Schema::ForcedCompactions::SubdomainLocalId>(info.SubdomainPathId.LocalPathId)
     );
 
     if (info.UserSID) {

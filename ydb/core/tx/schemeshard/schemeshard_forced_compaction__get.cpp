@@ -25,7 +25,7 @@ struct TSchemeShard::TForcedCompaction::TTxGet: public TRwTxBase {
                 TStringBuilder() << "Database " << request.GetDatabaseName() << " not found"
             );
         }
-        const TPathId domainPathId = database.GetPathIdForDomain();
+        const TPathId subdomainPathId = database.GetPathIdForDomain();
         
         auto compactionId = request.GetForcedCompactionId();
         const auto* forcedCompactionInfoPtr = Self->ForcedCompactions.FindPtr(compactionId);
@@ -37,7 +37,7 @@ struct TSchemeShard::TForcedCompaction::TTxGet: public TRwTxBase {
             );
         }
         const auto& forcedCompactionInfo = *forcedCompactionInfoPtr->get();
-        if (forcedCompactionInfo.DomainPathId != domainPathId) {
+        if (forcedCompactionInfo.SubdomainPathId != subdomainPathId) {
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::NOT_FOUND,

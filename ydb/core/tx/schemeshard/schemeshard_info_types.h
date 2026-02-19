@@ -3860,7 +3860,7 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
     ui64 Id;  // TxId from the original TEvCreateRequest
     EState State = EState::Invalid; 
     TPathId TablePathId;
-    TPathId DomainPathId;
+    TPathId SubdomainPathId;
     bool Cascade;
     ui32 MaxShardsInFlight;
 

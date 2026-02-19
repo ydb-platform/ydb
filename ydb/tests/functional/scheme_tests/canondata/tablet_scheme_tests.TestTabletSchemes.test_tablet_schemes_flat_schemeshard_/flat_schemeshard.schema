@@ -9395,12 +9395,12 @@
             },
             {
                 "ColumnId": 12,
-                "ColumnName": "DomainOwnerId",
+                "ColumnName": "SubdomainOwnerId",
                 "ColumnType": "Uint64"
             },
             {
                 "ColumnId": 13,
-                "ColumnName": "DomainLocalId",
+                "ColumnName": "SubdomainLocalId",
                 "ColumnType": "Uint64"
             }
         ],

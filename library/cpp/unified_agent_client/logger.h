@@ -23,6 +23,22 @@
         }                                                                         \
     } while (false)
 
+// Logging with throttling
+#define YLOG_T(logger, logPriority, ...)                                                                     \
+    do {                                                                                                     \
+        const auto _logPriority = logPriority;                                                               \
+        static ::NUnifiedAgent::TLogger::TThrottleState _throttleState;                                      \
+        auto [_log, _dropped] = logger.Accept(_logPriority, false, _throttleState);                          \
+        if (_log != nullptr) {                                                                               \
+            if (_dropped > 0) {                                                                              \
+                logger.Log(*_log, _logPriority, std::format("{} [+{} suppressed]",                           \
+                                                ::NUnifiedAgent::YLogFormatMessage(__VA_ARGS__), _dropped)); \
+            } else {                                                                                         \
+                logger.Log(*_log, _logPriority, ::NUnifiedAgent::YLogFormatMessage(__VA_ARGS__));            \
+            }                                                                                                \
+        }                                                                                                    \
+    } while (false)
+
 #define YLOG_EMERG(msg)         YLOG(TLOG_EMERG, msg, Logger)
 #define YLOG_ALERT(msg)         YLOG(TLOG_ALERT, msg, Logger)
 #define YLOG_CRIT(msg)          YLOG(TLOG_CRIT, msg, Logger)
@@ -48,12 +64,55 @@
 #define YLOG_RESOURCES_F(fmt, ...) YLOG_RESOURCES(std::format(fmt, __VA_ARGS__))
 #define YLOG_FATAL_F(fmt, ...) YLOG_FATAL(std::format(fmt, __VA_ARGS__))
 
+// Logging with throttling and metrics increment:
+// Errors for ERR+ priorities, RecordsReceived/RecordsDropped
+#define YLOG_EMERG_T(...)         YLOG_T(Logger, TLOG_EMERG, __VA_ARGS__)
+#define YLOG_ALERT_T(...)         YLOG_T(Logger, TLOG_ALERT, __VA_ARGS__)
+#define YLOG_CRITICAL_T(...)      YLOG_T(Logger, TLOG_CRIT, __VA_ARGS__)
+#define YLOG_ERROR_T(...)         YLOG_T(Logger, TLOG_ERR, __VA_ARGS__)
+#define YLOG_WARNING_T(...)       YLOG_T(Logger, TLOG_WARNING, __VA_ARGS__)
+#define YLOG_NOTICE_T(...)        YLOG_T(Logger, TLOG_NOTICE, __VA_ARGS__)
+#define YLOG_INFO_T(...)          YLOG_T(Logger, TLOG_INFO, __VA_ARGS__)
+#define YLOG_DEBUG_T(...)         YLOG_T(Logger, TLOG_DEBUG, __VA_ARGS__)
+#define YLOG_RESOURCES_T(...)     YLOG_T(Logger, TLOG_RESOURCES , __VA_ARGS__)
+
 namespace NUnifiedAgent {
+    // Helper functions to format messages
+    template <typename T>
+    decltype(auto) YLogFormatMessage(T&& msg) {
+        return std::forward<T>(msg);
+    }
+
+    // Overload for multiple arguments (with formatting)
+    template <typename... Args>
+    std::string YLogFormatMessage(std::format_string<Args...> fmt, Args&&... args) {
+        return std::format(fmt, std::forward<Args>(args)...);
+    }
+
     class TScopeLogger;
 
     class TLogger {
     public:
-        TLogger(TLog& log, TFMaybe<size_t> rateLimitBytes);
+        // These counters must outlive the TLogger instance
+        struct TCounters {
+            NMonitoring::TDeprecatedCounter* Errors;
+            NMonitoring::TDeprecatedCounter* DroppedBytes;
+            NMonitoring::TDeprecatedCounter* RecordsReceived;
+            NMonitoring::TDeprecatedCounter* RecordsDropped;
+        };
+
+        // Throttling state for a single log location
+        struct TThrottleState {
+            std::atomic<ui32> TimeSlot{0};
+            std::atomic<ui32> Logged{0};
+            std::atomic<ui32> Dropped{0};
+        };
+
+        TLogger(TLog& log, TFMaybe<size_t> rateLimitBytes, TCounters counters = {});
+
+        TLogger(TLog& log, TFMaybe<size_t> rateLimitBytes, ui32 maxLogsPerSlot, ui32 slotSeconds, TCounters counters = {});
+
+        virtual ~TLogger() = default;
 
         void AddLog(TLog& log);
 
@@ -61,26 +120,22 @@ namespace NUnifiedAgent {
 
         void FinishTracing() noexcept;
 
-        inline TScopeLogger Child(const TString& v, NMonitoring::TDeprecatedCounter* errors = nullptr);
+        TScopeLogger Child(const TString& v, NMonitoring::TDeprecatedCounter* errors = nullptr);
 
-        inline void SetErrorsCounter(NMonitoring::TDeprecatedCounter* counter) noexcept {
-            Errors = counter;
-        }
-
-        inline void SetDroppedBytesCounter(NMonitoring::TDeprecatedCounter* counter) noexcept {
-            DroppedBytes = counter;
-        }
-
-        inline bool HasRateLimit() const noexcept {
-            return Throttler != nullptr;
+        bool HasRateLimit() const noexcept {
+            return Throttler_ != nullptr;
         }
 
         friend class TScopeLogger;
 
-    private:
-        void Log(TLog& log, ELogPriority logPriority, const TStringBuf message, const TString& scope) const;
+    protected:
+        // Accept with throttling support
+        // Returns: pair of (TLog* if should log or nullptr if dropped, number of previously suppressed logs)
+        std::pair<TLog*, ui32> Accept(ELogPriority logPriority, NMonitoring::TDeprecatedCounter* errors, TThrottleState& state) const;
 
-        inline TLog* Accept(ELogPriority logPriority, NMonitoring::TDeprecatedCounter* errors) const noexcept {
+        virtual void Log(TLog& log, ELogPriority logPriority, const TStringBuf message, const TString& scope) const;
+
+        TLog* Accept(ELogPriority logPriority, NMonitoring::TDeprecatedCounter* errors) const noexcept {
             if ((logPriority <= TLOG_ERR) && (errors != nullptr)) {
                 ++(*errors);
             }
@@ -103,8 +158,8 @@ namespace NUnifiedAgent {
             bool TryConsume(double tokens);
 
         private:
-            TThrottler Throttler;
-            TAdaptiveLock Lock;
+            TThrottler Throttler_;
+            TAdaptiveLock Lock_;
         };
 
     private:
@@ -115,43 +170,47 @@ namespace NUnifiedAgent {
         void SetTracing(TLogContext& logContext, const char* action);
 
     private:
-        TLogContext DefaultLogContext;
-        TVector<THolder<TLogContext>> TracingLogContexts;
+        TLogContext DefaultLogContext_;
+        TVector<THolder<TLogContext>> TracingLogContexts_;
         std::atomic<TLogContext*> CurrentLogContext_;
-        NMonitoring::TDeprecatedCounter* Errors;
-        NMonitoring::TDeprecatedCounter* DroppedBytes;
-        const THolder<TThrottlerWithLock> Throttler;
-        TAdaptiveLock Lock;
-        TVector<TLog> AdditionalLogs;
+        TCounters Counters_;
+        const ui32 MaxLogsPerSlot_;
+        const ui32 SlotSeconds_;
+        const THolder<TThrottlerWithLock> Throttler_;
+        TAdaptiveLock Lock_;
+        TVector<TLog> AdditionalLogs_;
     };
 
     class TScopeLogger {
     public:
         TScopeLogger();
 
-        inline void Log(TLog& log, ELogPriority logPriority, const TStringBuf message) const {
-            if (Logger) {
-                Logger->Log(log, logPriority, message, Scope);
+        void Log(TLog& log, ELogPriority logPriority, const TStringBuf message) const {
+            if (Logger_) {
+                Logger_->Log(log, logPriority, message, Scope_);
             }
         }
 
-        inline TLog* Accept(ELogPriority logPriority, bool silent) const noexcept {
-            return Logger ? Logger->Accept(logPriority, silent ? nullptr : Errors) : nullptr;
+        TLog* Accept(ELogPriority logPriority, bool silent) const noexcept {
+            return Logger_ ? Logger_->Accept(logPriority, silent ? nullptr : Errors_) : nullptr;
         }
 
-        inline TScopeLogger Child(const TString& v, NMonitoring::TDeprecatedCounter* errors = nullptr) {
-            return Logger
-                ? Logger->Child(Join('/', Scope, v), errors == nullptr ? Errors : errors)
-                : TScopeLogger();
+        // Accept with throttling support
+        std::pair<TLog*, ui32> Accept(ELogPriority logPriority, bool silent, TLogger::TThrottleState& state) const {
+            return Logger_
+                       ? Logger_->Accept(logPriority, silent ? nullptr : Errors_, state)
+                       : std::make_pair(nullptr, 0);
         }
 
-        inline TLogger* Unwrap() noexcept {
-            return Logger;
+        TScopeLogger Child(const TString& v, NMonitoring::TDeprecatedCounter* errors = nullptr);
+
+        TLogger* Unwrap() noexcept {
+            return Logger_;
         }
 
         ELogPriority FiltrationLevel() const {
-            if (Logger) {
-                return Logger->CurrentLogContext_.load()->Priority;
+            if (Logger_) {
+                return Logger_->CurrentLogContext_.load()->Priority;
             }
             return LOG_DEF_PRIORITY;
         }
@@ -159,22 +218,12 @@ namespace NUnifiedAgent {
         friend class TLogger;
 
     private:
-        TScopeLogger(TLogger* logger,
-                     const TString& scope,
-                     NMonitoring::TDeprecatedCounter* errors);
+        TScopeLogger(TLogger* logger, TString scope, NMonitoring::TDeprecatedCounter* errors);
 
     private:
-        TLogger* Logger;
-        TString Scope;
-        NMonitoring::TDeprecatedCounter* Errors;
+        TLogger* Logger_;
+        TString Scope_;
+        NMonitoring::TDeprecatedCounter* Errors_;
     };
 
-    inline TScopeLogger TLogger::Child(const TString& v, NMonitoring::TDeprecatedCounter* errors) {
-        return TScopeLogger(this, v, errors == nullptr ? Errors : errors);
-    }
-
-    inline ELogPriority ToLogPriority(int level) noexcept {
-        const auto result = ClampVal(level, 0, static_cast<int>(TLOG_RESOURCES));
-        return static_cast<ELogPriority>(result);
-    }
-}
+} // namespace NUnifiedAgent

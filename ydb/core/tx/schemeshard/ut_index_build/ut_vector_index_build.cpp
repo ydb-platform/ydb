@@ -193,17 +193,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(8)});
     }
 
-    Y_UNIT_TEST_FLAG(SimpleDuplicates, Overlap) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
-        ui64 tenantSchemeShard = 0;
-        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
-
+    std::unique_ptr<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> DoCreateIndexWithShardedLevel1(
+        TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui64& buildIndexTx, ui64 tenantSchemeShard, bool overlap) {
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
@@ -226,7 +217,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
         std::unique_ptr<TBlockEvents<TEvDataShard::TEvReshuffleKMeansRequest>> reshuffleBlocker;
         std::unique_ptr<TBlockEvents<TEvDataShard::TEvFilterKMeansRequest>> filterBlocker;
-        if (Overlap) {
+        if (overlap) {
             filterBlocker = std::make_unique<TBlockEvents<TEvDataShard::TEvFilterKMeansRequest>>(runtime, [&](const auto& ) {
                 return true;
             });
@@ -236,18 +227,18 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             });
         }
 
-        ui64 buildIndexTx = ++txId;
+        buildIndexTx = ++txId;
         auto sender = runtime.AllocateEdgeActor();
         auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
             "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
         });
-        if (Overlap) {
+        if (overlap) {
             auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->mutable_global_vector_kmeans_tree_index();
             kmeansSettings->mutable_vector_settings()->set_overlap_clusters(2);
         }
         ForwardToTablet(runtime, tenantSchemeShard, sender, request);
 
-        if (Overlap) {
+        if (overlap) {
             runtime.WaitFor("FilterKMeansRequest", [&]{ return filterBlocker->size(); });
         } else {
             // Wait for the first "reshuffle" request (samples will be already collected on the first level)
@@ -259,28 +250,22 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
 
         // Now wait for the 1st level to be finalized
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> level1Blocker(runtime, [&](auto& ev) {
+        auto level1Blocker = std::make_unique<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [&](auto& ev) {
             const auto& record = ev->Get()->Record;
             if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
                 return true;
             }
             return false;
         });
-        if (Overlap) {
+        if (overlap) {
             filterBlocker->Stop().Unblock();
         } else {
             reshuffleBlocker->Stop().Unblock();
         }
 
         // Reshard the first level table (0build)
-        // First bug checked here: after restarting the schemeshard during reshuffle it
-        //   generates more clusters than requested and dies with VERIFY on shard boundaries (#18278).
-        // Second bug checked here: posting table doesn't contain all rows from the main table
-        //   if the build table was resharded during build (#18355).
-        // Third bug checked here: build with overlap was skipping sample collection on levels > 1
-        //   and 0 clusters were generated if the build table was resharded.
         {
-            const char *buildTable = Overlap
+            const char *buildTable = overlap
                 ? "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable1build"
                 : "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable0build";
             auto indexDesc = DescribePath(runtime, tenantSchemeShard, buildTable, true, true, true);
@@ -298,7 +283,29 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             }
         }
 
-        level1Blocker.Stop().Unblock();
+        return level1Blocker;
+    }
+
+    Y_UNIT_TEST_FLAG(SimpleDuplicates, Overlap) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        // First bug checked here: after restarting the schemeshard during reshuffle it
+        //   generates more clusters than requested and dies with VERIFY on shard boundaries (#18278).
+        // Second bug checked here: posting table doesn't contain all rows from the main table
+        //   if the build table was resharded during build (#18355).
+        // Third bug checked here: build with overlap was skipping sample collection on levels > 1
+        //   and 0 clusters were generated if the build table was resharded.
+        ui64 buildIndexTx = 0;
+        auto level1Blocker = DoCreateIndexWithShardedLevel1(runtime, env, txId, buildIndexTx, tenantSchemeShard, Overlap);
+        level1Blocker->Stop().Unblock();
 
         // Now wait for the index build
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
@@ -311,6 +318,49 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             Cerr << "... posting table contains " << rows << " rows" << Endl;
             UNIT_ASSERT_VALUES_EQUAL(rows, (Overlap ? 400 : 200));
         }
+    }
+
+    Y_UNIT_TEST(ForgetOverlapBorders) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        ui64 buildIndexTx = 0;
+        auto level1Blocker = DoCreateIndexWithShardedLevel1(runtime, env, txId, buildIndexTx, tenantSchemeShard, true);
+
+        TBlockEvents<TEvDataShard::TEvFilterKMeansRequest> filterBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+        level1Blocker->Stop().Unblock();
+        runtime.WaitFor("FilterKMeansRequest level 2", [&]{ return filterBlocker.size(); });
+
+        TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse> uploadBorderBlocker(runtime, [&](const auto& ev) {
+            ev->Get()->Record.SetUploadStatus(Ydb::StatusIds::PRECONDITION_FAILED);
+            auto issue = ev->Get()->Record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message("Datashard test fail");
+            return true;
+        });
+        filterBlocker.Stop().Unblock();
+        runtime.WaitFor("UploadBorders", [&]{ return uploadBorderBlocker.size() > 0; });
+
+        // Cancel and forget the index build
+        TestCancelBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        // Reboot once more - it crashed here because some KMeansTreeSamples (border rows) were not removed
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0)});
     }
 
     Y_UNIT_TEST(PrefixedDuplicates) {

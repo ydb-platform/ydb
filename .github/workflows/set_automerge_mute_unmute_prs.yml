@@ -47,12 +47,16 @@ jobs:
             const automergeLabel = process.env.AUTOMERGE_LABEL;
 
             // List open PRs that have the filter label
-            const { data: issues } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: prLabelFilter
-            });
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: prLabelFilter,
+                per_page: 100,
+              }
+            );
             const prNumbers = issues.filter(i => i.pull_request).map(i => i.number);
             if (prNumbers.length === 0) {
               console.log(`No open PRs with label ${prLabelFilter}`);

@@ -124,8 +124,8 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
         }
         if (shards.Empty()) {
             tablesWithoutCandidates.insert(tablePathId);
-            ForcedCompactionTablesQueue.PopFront();
             ForcedCompactionShardsByTable.erase(tablePathId);
+            ForcedCompactionTablesQueue.PopFront();
         } else {
             if (compaction->MaxShardsInFlight <= compaction->ShardsInFlight.size()) {
                 tablesWithoutCandidates.insert(tablePathId);

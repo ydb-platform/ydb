@@ -4,7 +4,7 @@ name: Set automerge for mute-unmute PRs
 
 on:
   schedule:
-    - cron: "0 4-21/1 * * *"   # Every hour 4–21 UTC (same window as update_muted_ya)
+    - cron: "15 4-21/1 * * *"  # Every hour 4–21 UTC, offset 15 minutes from update_muted_ya
   workflow_dispatch:
     inputs:
       run_hour_utc:

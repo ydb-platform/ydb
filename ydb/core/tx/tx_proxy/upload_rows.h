@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include <ydb/core/util/backoff.h>
+#include <ydb/library/aclib/aclib.h>
 
 namespace Ydb {
     class Type;
@@ -27,7 +28,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  const TString& table,
                                  std::shared_ptr<const TUploadTypes> types,
                                  std::shared_ptr<const TUploadRows> rows,
-                                 const TString& userSID,
+                                 const NACLib::TUserContext::TPtr& userCtx,
                                  EUploadRowsMode mode = EUploadRowsMode::Normal,
                                  bool writeToPrivateTable = false,
                                  bool writeToIndexImplTable = false,

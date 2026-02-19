@@ -90,7 +90,7 @@ IActor* TTableUploader<TData>::CreateUploaderInternal(
     const NACLib::TUserContext::TPtr& userCtx,
     ui64 cookie)
 {
-    return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, userCtx->UserSID, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
+    return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, userCtx, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
 }
 
 }

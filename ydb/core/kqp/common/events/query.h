@@ -292,6 +292,7 @@ public:
     }
 
     bool GetIsWarmupCompilation() const {
+        // RequestCtx is set only if request came from grpc, warmup is internal operation
         return RequestCtx ? false : Record.GetRequest().GetIsWarmupCompilation();
     }
 

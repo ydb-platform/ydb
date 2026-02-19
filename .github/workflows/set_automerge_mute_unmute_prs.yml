@@ -6,6 +6,11 @@ on:
   schedule:
     - cron: "0 4-21/1 * * *"   # Every hour 4–21 UTC (same window as update_muted_ya)
   workflow_dispatch:
+    inputs:
+      run_hour_utc:
+        description: "Override UTC hour for main-branch logic (e.g. 07). Empty = use current time (for testing)."
+        required: false
+        type: string
 
 env:
   # Label that identifies PRs to process (we look for open PRs with this label)
@@ -19,7 +24,14 @@ jobs:
     steps:
       - name: Get run hour UTC
         id: hour
-        run: echo "hour=$(date -u +%H)" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.run_hour_utc }}" ]; then
+            h="${{ github.event.inputs.run_hour_utc }}"
+            printf -v hour "%02d" "$((10#$h))"
+            echo "hour=$hour" >> $GITHUB_OUTPUT
+          else
+            echo "hour=$(date -u +%H)" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set automerge on qualifying PRs
         uses: actions/github-script@v7
@@ -44,9 +56,14 @@ jobs:
             const prNumbers = issues.filter(i => i.pull_request).map(i => i.number);
             if (prNumbers.length === 0) {
               console.log(`No open PRs with label ${prLabelFilter}`);
+              core.summary.addHeading(`PRs with ${prLabelFilter}`);
+              core.summary.addRaw('No open PRs found.').addEol();
+              await core.summary.write();
               return;
             }
             console.log(`Found ${prNumbers.length} PR(s) with ${prLabelFilter}: ${prNumbers.join(', ')}`);
+
+            const prsWithBase = [];
 
             for (const number of prNumbers) {
               const { data: pr } = await github.rest.pulls.get({
@@ -61,6 +78,7 @@ jobs:
               const shouldAutomerge = (base === 'main' && runHourUtc === '07') || base.startsWith('stable-');
               if (!shouldAutomerge) {
                 console.log(`PR #${number} (base=${base}): skip automerge (main only at 7 UTC, run hour=${runHourUtc})`);
+                prsWithBase.push({ number, base, status: 'skipped' });
                 continue;
               }
 
@@ -81,6 +99,7 @@ jobs:
               // Enable squash auto-merge if not already enabled
               if (pr.auto_merge) {
                 console.log(`PR #${number}: auto-merge already enabled`);
+                prsWithBase.push({ number, base, status: 'already_set' });
                 continue;
               }
               const mutation = `
@@ -96,7 +115,18 @@ jobs:
               try {
                 await github.graphql(mutation);
                 console.log(`PR #${number} (base=${base}): enabled auto-merge (squash)`);
+                prsWithBase.push({ number, base, status: 'applied' });
               } catch (err) {
                 console.error(`PR #${number}: failed to enable auto-merge:`, err.message);
+                prsWithBase.push({ number, base, status: 'error' });
               }
             }
+
+            // Job summary: list of branches (base) with links to PRs and status
+            core.summary.addHeading(`PRs with ${prLabelFilter}`);
+            for (const { number, base, status } of prsWithBase) {
+              const url = `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/${number}`;
+              const suffix = status === 'skipped' ? ' _(skipped)_' : status === 'already_set' ? ' _(automerge already set)_' : status === 'error' ? ' _(failed to enable)_' : '';
+              core.summary.addRaw(`- \`${base}\`: [PR #${number}](${url})${suffix}`).addEol();
+            }
+            await core.summary.write();

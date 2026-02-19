@@ -307,7 +307,7 @@ private:
         LOG_I("Received removing counters for sender: " << sender);
         const auto it = Senders.find(sender);
         if (it == Senders.end()) {
-            LOG_I("Sender not found for removeing: " << sender);
+            LOG_I("Sender not found for removing: " << sender);
             return;
         }
 

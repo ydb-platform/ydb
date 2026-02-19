@@ -659,7 +659,7 @@ public:
         waitIdlePartitions = IdlePartitions.size();
 
         if (!SuspendedPartitions.empty()) {
-            // Wait fow advance time, when some partition will be unsuspended
+            // Wait for advance time, when some partition will be unsuspended
             futures.emplace_back(AdvanceTimeSignal.GetFuture());
             waitSuspendedPartitions = 1;
         }

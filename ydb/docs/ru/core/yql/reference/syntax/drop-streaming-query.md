@@ -33,4 +33,7 @@ DROP STREAMING QUERY my_streaming_query
 
 * [{#T}](../../../concepts/streaming-query.md)
 * [{#T}](create-streaming-query.md)
+
+{% if alter_streaming_query == true %}
 * [{#T}](alter-streaming-query.md)
+{% endif %}

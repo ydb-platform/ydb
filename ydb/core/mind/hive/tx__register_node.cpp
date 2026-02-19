@@ -21,12 +21,9 @@ public:
         BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute");
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
-        const bool isNewNode = Self->FindNode(nodeId) == nullptr;
         TNodeInfo& node = Self->GetNode(nodeId);
         if (node.Local != Local) {
-            if (!isNewNode) {
-                Self->RemoveNodeFromSegments(nodeId);
-            }
+            Self->RemoveNodeFromSegments(nodeId);
 
             TInstant now = TActivationContext::Now();
             node.Statistics.AddRestartTimestamp(now.MilliSeconds());

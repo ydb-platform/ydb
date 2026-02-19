@@ -309,7 +309,7 @@ public:
         }
     };
 
-    using TSegments = std::unordered_multiset<const TNodeInfo*, TNodeInfo::THashSegment, TNodeInfo::TEqualSegment>;
+    using TSegments = std::unordered_multiset<const TNodeInfo*, THashSegment, TEqualSegment>;
     TSegments::const_iterator Segment;
 };
 

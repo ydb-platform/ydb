@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index 85d1aab..c0d1010 100644
+index a72ada0..4169f6d 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1121,7 +1121,11 @@ typedef __char32_t char32_t;
+@@ -1124,7 +1124,11 @@ typedef __char32_t char32_t;
  // Optional attributes - these are useful for a better QoI, but not required to be available
  
  #  define _LIBCPP_NOALIAS __attribute__((__malloc__))

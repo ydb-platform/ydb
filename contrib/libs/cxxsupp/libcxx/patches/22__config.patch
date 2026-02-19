@@ -1,5 +1,5 @@
 diff --git a/include/__config b/include/__config
-index c165522..85d1aab 100644
+index c8224b0..a72ada0 100644
 --- a/include/__config
 +++ b/include/__config
 @@ -530,7 +530,7 @@ typedef __char32_t char32_t;
@@ -11,7 +11,7 @@ index c165522..85d1aab 100644
  #    define _LIBCPP_HIDE_FROM_ABI                                                                                      \
        _LIBCPP_HIDDEN _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION                                                       \
        __attribute__((__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))))
-@@ -825,7 +825,8 @@ typedef __char32_t char32_t;
+@@ -828,7 +828,8 @@ typedef __char32_t char32_t;
          defined(__APPLE__) ||                                                                                          \
          defined(__MVS__) ||                                                                                            \
          defined(_AIX) ||                                                                                               \
@@ -36,7 +36,7 @@ index cf459a0..761c779 100644
  #  elif defined(_LIBCPP_APPLE_CLANG_VER)
  #    if _LIBCPP_APPLE_CLANG_VER < 1500
 diff --git a/include/__configuration/platform.h b/include/__configuration/platform.h
-index cff9937..58db9c2 100644
+index 8d0f8f6..50be389 100644
 --- a/include/__configuration/platform.h
 +++ b/include/__configuration/platform.h
 @@ -20,7 +20,7 @@

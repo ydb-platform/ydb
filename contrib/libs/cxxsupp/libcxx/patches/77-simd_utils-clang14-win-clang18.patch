@@ -1,8 +1,8 @@
 diff --git a/include/__algorithm/simd_utils.h b/include/__algorithm/simd_utils.h
-index 658763c..ed21c65 100644
+index 32cdc8a..b44d42a 100644
 --- a/include/__algorithm/simd_utils.h
 +++ b/include/__algorithm/simd_utils.h
-@@ -28,7 +28,7 @@ _LIBCPP_PUSH_MACROS
+@@ -26,7 +26,7 @@ _LIBCPP_PUSH_MACROS
  #include <__undef_macros>
  
  // TODO: Find out how altivec changes things and allow vectorizations there too.

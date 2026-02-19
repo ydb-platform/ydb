@@ -1,5 +1,5 @@
 diff --git a/include/string b/include/string
-index 396e735..d016d41 100644
+index fa87dc2..f0d7288 100644
 --- a/include/string
 +++ b/include/string
 @@ -83,6 +83,7 @@ template <> struct char_traits<char32_t>;
@@ -10,7 +10,7 @@ index 396e735..d016d41 100644
  public:
  // types:
      typedef traits traits_type;
-@@ -1088,15 +1089,18 @@ public:
+@@ -1050,15 +1051,18 @@ public:
      __init(__s, traits_type::length(__s));
    }
  
@@ -30,8 +30,8 @@ index 396e735..d016d41 100644
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
    basic_string(const _CharT* __s, size_type __n, const _Allocator& __a)
        : __alloc_(__a) {
-@@ -1256,7 +1260,7 @@ public:
-   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(const value_type* __s) {
+@@ -1219,7 +1223,7 @@ public:
+   operator=(const value_type* _LIBCPP_DIAGNOSE_NULLPTR __s) {
      return assign(__s);
    }
 -#  if _LIBCPP_STD_VER >= 23
@@ -39,7 +39,7 @@ index 396e735..d016d41 100644
    basic_string& operator=(nullptr_t) = delete;
  #  endif
    _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(value_type __c);
-@@ -1313,6 +1317,10 @@ public:
+@@ -1284,6 +1288,10 @@ public:
      return (__is_long() ? __get_long_cap() : static_cast<size_type>(__min_cap)) - 1;
    }
  
@@ -50,7 +50,7 @@ index 396e735..d016d41 100644
    _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n, value_type __c);
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n) { resize(__n, value_type()); }
  
-@@ -2009,7 +2017,7 @@ public:
+@@ -1982,7 +1990,7 @@ public:
  
    // contains
  

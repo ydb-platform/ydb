@@ -1,8 +1,8 @@
 diff --git a/include/__algorithm/simd_utils.h b/include/__algorithm/simd_utils.h
-index 4e03723..658763c 100644
+index e3c7909..32cdc8a 100644
 --- a/include/__algorithm/simd_utils.h
 +++ b/include/__algorithm/simd_utils.h
-@@ -28,7 +28,7 @@ _LIBCPP_PUSH_MACROS
+@@ -26,7 +26,7 @@ _LIBCPP_PUSH_MACROS
  #include <__undef_macros>
  
  // TODO: Find out how altivec changes things and allow vectorizations there too.
@@ -101,7 +101,7 @@ index df18159..cef958a 100644
  } // namespace literals
  #  endif
 diff --git a/include/tuple b/include/tuple
-index 5d968bf..dbd27da 100644
+index 1e07034..3218a43 100644
 --- a/include/tuple
 +++ b/include/tuple
 @@ -309,7 +309,7 @@ class __tuple_leaf {

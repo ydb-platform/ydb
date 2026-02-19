@@ -67,16 +67,6 @@ private:
         }
     };
 
-    struct TPendingRequests
-    {
-        explicit TPendingRequests(ui32 responsesExpected)
-            : ResponsesExpected(responsesExpected)
-        {}
-
-        ui32 ResponsesHandled = 0;
-        const ui32 ResponsesExpected;
-    };
-
     TMutex Lock;
     NActors::TActorSystem* const ActorSystem = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
@@ -89,6 +79,7 @@ private:
     ui64 StorageRequestId = 0;
 
     class TDirtyMap;
+    struct TPendingRequests;
     std::unique_ptr<TDirtyMap> DirtyMap;
     TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
 

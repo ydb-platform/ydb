@@ -48,6 +48,16 @@ struct TBlockMeta {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TDirectBlockGroup::TPendingRequests
+{
+    explicit TPendingRequests(ui32 responsesExpected)
+        : ResponsesExpected(responsesExpected)
+    {}
+
+    ui32 ResponsesHandled = 0;
+    const ui32 ResponsesExpected;
+};
+
 class TDirectBlockGroup::TDirtyMap
 {
 private:
@@ -273,8 +283,11 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
         const size_t blocksNumber = selector.GetSize() / BlockSize;
 
         for (size_t i = startIndex; i < startIndex + blocksNumber; ++i) {
+            auto lsn = DirtyMap->GetLsnByPersistentBufferIndex(
+                i, persistentBufferIndex);
+            lsn = std::max(lsn, record.GetLsn());
             DirtyMap->SetLsnByPersistentBufferIndex(i, persistentBufferIndex,
-                                                    record.GetLsn());
+                                                    lsn);
         }
     }
 

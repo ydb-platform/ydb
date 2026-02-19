@@ -141,13 +141,15 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
     };
 
     struct TAckInfo {
-        TAckInfo(i64 messageSize, const TInstant& startTime)
+        TAckInfo(i64 messageSize, const TInstant& startTime, ui64 seqNo)
             : MessageSize(messageSize)
             , StartTime(startTime)
+            , SeqNo(seqNo)
         {}
 
         i64 MessageSize = 0;
         TInstant StartTime;
+        ui64 SeqNo =0;
     };
 
 public:
@@ -268,10 +270,8 @@ public:
             YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
             SINK_LOG_D("Load state: " << stateProto);
             SourceId = stateProto.GetSourceId();
-            if (EnableDeduplication) {
-                ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
-                NextSeqNo = ConfirmedSeqNo + 1;
-            }
+            ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
+            NextSeqNo = ConfirmedSeqNo + 1;
             EgressStats.Bytes = stateProto.GetEgressBytes();
             return;
         }
@@ -435,10 +435,10 @@ private:
         if (EnableDeduplication) {
             seqNo = NextSeqNo;
         }
-        NextSeqNo++;
         WriteSession->Write(std::move(token), Buffer.front(), seqNo);
         auto itemSize = GetItemSize(Buffer.front());
-        WaitingAcks.emplace(itemSize, TInstant::Now());
+        WaitingAcks.emplace(itemSize, TInstant::Now(), NextSeqNo);
+        NextSeqNo++;
         EgressStats.Bytes += itemSize;
         Metrics.EgressDataRate->Add(itemSize);
         Buffer.pop();
@@ -467,7 +467,7 @@ private:
 
             for (auto it = ev.Acks.begin(); it != ev.Acks.end(); ++it) {
                 //Y_ABORT_UNLESS(it == ev.Acks.begin() || it->SeqNo == std::prev(it)->SeqNo + 1);
-                LOG_T(Self.LogPrefix << "Ack seq no " << it->SeqNo);
+                LOG_T(Self.LogPrefix << "Ack seq no (from TAcksEvent) " << it->SeqNo);
                 if (it->State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_DISCARDED) {
                     TIssues issues;
                     issues.AddIssue(TStringBuilder() << "Message with seqNo " << it->SeqNo << " was discarded");
@@ -482,12 +482,14 @@ private:
                 Self.Metrics.LastAckLatency->Set((TInstant::Now() - ackInfo.StartTime).MilliSeconds());
                 Self.Metrics.InFlyData->Dec();
                 Self.FreeSpace += ackInfo.MessageSize;
+                ui64 seqNo = ackInfo.SeqNo;        // use seqNo stored on our side because without deduplication we do not specify SeqNo on Write().
+                LOG_T(Self.LogPrefix << "Ack seq no (from WaitingAcks) " << seqNo);
                 Self.WaitingAcks.pop();
 
-                if (!Self.DeferredCheckpoints.empty() && std::get<0>(Self.DeferredCheckpoints.front()) == it->SeqNo) {
-                    Self.ConfirmedSeqNo = it->SeqNo;
+                if (!Self.DeferredCheckpoints.empty() && std::get<0>(Self.DeferredCheckpoints.front()) == seqNo) {
+                    Self.ConfirmedSeqNo = seqNo;
                     const auto& checkpoint = std::get<1>(Self.DeferredCheckpoints.front());
-                    LOG_D(Self.LogPrefix << MakeStringForLog(checkpoint) << "Send a deferred checkpoint, seqNo: " << it->SeqNo);
+                    LOG_D(Self.LogPrefix << MakeStringForLog(checkpoint) << "Send a deferred checkpoint, seqNo: " << seqNo);
                     Self.Callbacks->OnAsyncOutputStateSaved(Self.BuildState(checkpoint), Self.OutputIndex, checkpoint);
                     Self.DeferredCheckpoints.pop();
                     Self.Metrics.InFlyCheckpoints->Dec();

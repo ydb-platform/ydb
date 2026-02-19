@@ -415,8 +415,23 @@ class BaseTestBackupInFiles(object):
         return yatest.common.execute(cmd, check_exit_code=False)
 
     def _capture_snapshot(self, table):
-        with self.session_scope() as session:
-            return sdk_select_table_rows(session, table)
+        max_retries = 5
+        retry_delay = 1.0
+        last_exc = None
+        for attempt in range(max_retries):
+            try:
+                with self.session_scope() as session:
+                    return sdk_select_table_rows(session, table)
+            except Exception as e:
+                last_exc = e
+                if attempt < max_retries - 1:
+                    logger.info(
+                        f"_capture_snapshot({table}) attempt {attempt + 1}/{max_retries} "
+                        f"failed ({e}), retrying in {retry_delay}s"
+                    )
+                    time.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2, 10.0)
+        raise last_exc
 
     def _export_backups(self, collection_src):
         export_dir = output_path(self.test_name, collection_src)
@@ -455,6 +470,7 @@ class BaseTestBackupInFiles(object):
                             poll_interval: float = 0.5):
         deadline = time.time() + timeout_s
         last_exc = None
+        last_rows = None
 
         while time.time() < deadline:
             try:
@@ -466,6 +482,7 @@ class BaseTestBackupInFiles(object):
                     time.sleep(poll_interval)
                     continue
 
+                last_rows = cur_rows
                 if cur_rows == expected_rows:
                     return cur_rows
 
@@ -474,7 +491,17 @@ class BaseTestBackupInFiles(object):
 
             time.sleep(poll_interval)
 
-        raise AssertionError(f"Timeout waiting for table '{table}' rows to match expected (timeout {timeout_s}s). Last error: {last_exc}")
+        diag = f"Timeout waiting for table '{table}' rows to match expected (timeout {timeout_s}s)."
+        if last_rows is not None:
+            diag += f"\n  ACTUAL rows ({len(last_rows)}):\n"
+            for r in last_rows[:20]:
+                diag += f"    {r}\n"
+            diag += f"  EXPECTED rows ({len(expected_rows)}):\n"
+            for r in expected_rows[:20]:
+                diag += f"    {r}\n"
+        if last_exc is not None:
+            diag += f"  Last capture error: {last_exc}"
+        raise AssertionError(diag)
 
     def _count_restore_operations(self):
         endpoint = f"grpc://localhost:{self.cluster.nodes[1].grpc_port}"
@@ -720,14 +747,33 @@ class BaseTestBackupInFiles(object):
         return created
 
     def _try_remove_tables(self, table_paths: List[str]):
-        with self.session_scope() as session:
-            for tp in table_paths:
-                full = tp if tp.startswith("/Root") else f"/Root/{tp}"
+        max_retries = 10
+        retry_delay = 1.0
+        for tp in table_paths:
+            full = tp if tp.startswith("/Root") else f"/Root/{tp}"
+            for attempt in range(max_retries):
                 try:
-                    session.execute_scheme(f"DROP TABLE `{full}`;")
+                    with self.session_scope() as session:
+                        session.execute_scheme(f"DROP TABLE `{full}`;")
                     logger.debug(f"Successfully dropped table: {full}")
+                    break
                 except Exception as e:
-                    logger.error(f"Failed to drop table {full}: {e}")
+                    err_str = str(e)
+                    # Table doesn't exist — nothing to drop
+                    if "does not exist" in err_str or "path hasn't been resolved" in err_str:
+                        logger.debug(f"Table {full} already absent: {e}")
+                        break
+                    # Table is under operation — retry after delay
+                    if attempt < max_retries - 1:
+                        logger.info(
+                            f"Drop table {full} attempt {attempt + 1}/{max_retries} failed "
+                            f"({e}), retrying in {retry_delay}s"
+                        )
+                        time.sleep(retry_delay)
+                        retry_delay = min(retry_delay * 1.5, 10.0)
+                    else:
+                        logger.error(f"Failed to drop table {full} after {max_retries} attempts: {e}")
+            retry_delay = 1.0
 
     def try_drop_table_from_backup(self, collection_name: str, backup_type: str, table_name: str, snapshot_index: int = -1) -> bool:
         try:
@@ -940,10 +986,28 @@ class BackupBuilder:
         else:
             sql = f"BACKUP `{self.collection}`;"
 
-        res = self.test._execute_yql(sql)
-        if res.exit_code != 0:
+        # Retry loop: incremental backups may hit OVERLOADED if a previous
+        # CDC stream alter hasn't finished yet (table still in EPathStateAlter).
+        max_retries = 10
+        retry_delay = 2.0
+        for attempt in range(max_retries + 1):
+            res = self.test._execute_yql(sql)
+            if res.exit_code == 0:
+                break
+
             out = (res.std_out or b"").decode('utf-8', 'ignore')
             err = (res.std_err or b"").decode('utf-8', 'ignore')
+
+            is_retryable = "OVERLOADED" in err or "under operation" in err
+            if is_retryable and attempt < max_retries:
+                logger.info(
+                    f"Backup attempt {attempt + 1}/{max_retries + 1} got retryable error, "
+                    f"retrying in {retry_delay}s: {err.strip()}"
+                )
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 1.5, 15.0)
+                continue
+
             error_msg = f"BACKUP failed: code={res.exit_code} STDOUT: {out} STDERR: {err}"
             return BackupResult(
                 success=False,
@@ -1010,11 +1074,32 @@ class RestoreBuilder:
         if self._remove_tables:
             self.test._try_remove_tables(self._remove_tables)
 
-        # Track restore operations BEFORE restore
-        start_total, start_success, _ = self.test._count_restore_operations()
+        # Execute restore with retries for transient errors (e.g. table
+        # still being dropped or under CDC operation from a prior backup).
+        max_retries = 10 if not self._should_fail else 0
+        retry_delay = 2.0
+        for attempt in range(max_retries + 1):
+            start_total, start_success, _ = self.test._count_restore_operations()
+            res = self.test._execute_yql(f"RESTORE `{self._collection}`;")
 
-        # Execute restore
-        res = self.test._execute_yql(f"RESTORE `{self._collection}`;")
+            if res.exit_code == 0:
+                break
+
+            err = (res.std_err or b"").decode('utf-8', 'ignore') if isinstance(res.std_err, bytes) else str(res.std_err or "")
+            is_retryable = (
+                "path exist" in err
+                or "under operation" in err
+                or "OVERLOADED" in err
+            )
+            if is_retryable and attempt < max_retries:
+                logger.info(
+                    f"Restore attempt {attempt + 1}/{max_retries + 1} got retryable error, "
+                    f"retrying in {retry_delay}s: {err.strip()}"
+                )
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 1.5, 15.0)
+                continue
+            break
 
         if self._should_fail:
             if res.exit_code != 0:

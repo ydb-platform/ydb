@@ -111,9 +111,9 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::StartHandlingQueries() {
 #if defined(__linux__)
-        if (!UringRouter && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe()) {
-            NPDisk::TUringRouterConfig config;
-            config.QueueDepth = MaxInFlight;
+        NPDisk::TUringRouterConfig config;
+        config.QueueDepth = MaxInFlight;
+        if (!UringRouter && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
             UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
             if (const auto result = UringRouter->RegisterFile(); !result) {
                 STLOG(PRI_WARN, BS_DDISK, BSDD17,

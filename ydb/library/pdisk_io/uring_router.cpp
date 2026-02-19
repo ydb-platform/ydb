@@ -14,6 +14,7 @@
 // in by liburing) defines a BLOCK_SIZE macro that clashes with bitmap.h.
 #include <liburing.h>
 
+#include <cerrno>
 #include <cstring>
 
 using NActors::TActorSystem;
@@ -44,8 +45,10 @@ public:
             // For IOPOLL without SQPOLL, ask the kernel to reap polled
             // completions before we peek the CQ ring.
             if (needIoPollReap) {
-                // note, it's not blocking
-                io_uring_enter(Owner.Ring->ring_fd, 0, 0, IORING_ENTER_GETEVENTS, nullptr);
+                int ret;
+                do {
+                    ret = io_uring_enter(Owner.Ring->ring_fd, 0, 0, IORING_ENTER_GETEVENTS, nullptr);
+                } while (ret == -EINTR);
             }
 
             unsigned head;
@@ -88,6 +91,19 @@ public:
 
         // Drain any remaining CQEs after stop (don't call OnComplete).
         // If provided, call OnDrop so owner memory can be reclaimed.
+        //
+        // With IOPOLL, completions are not posted via interrupts; we must
+        // call io_uring_enter(IORING_ENTER_GETEVENTS) to reap completed I/Os
+        // from the device into the CQ ring before peeking.  Operations still
+        // truly in-flight on the device will be cleaned up by
+        // io_uring_queue_exit() in Stop().
+        if (useIOPoll) {
+            int ret;
+            do {
+                ret = io_uring_enter(Owner.Ring->ring_fd, 0, 0, IORING_ENTER_GETEVENTS, nullptr);
+            } while (ret == -EINTR);
+        }
+
         unsigned head;
         unsigned count = 0;
         struct io_uring_cqe* cqe;
@@ -315,7 +331,7 @@ bool TUringRouter::Probe(TUringRouterConfig config) {
         params.flags |= IORING_SETUP_IOPOLL;
     }
 
-    int ret = io_uring_queue_init_params(1, &ring, &params);
+    int ret = io_uring_queue_init_params(config.QueueDepth, &ring, &params);
     if (ret == 0) {
         io_uring_queue_exit(&ring);
         return true;

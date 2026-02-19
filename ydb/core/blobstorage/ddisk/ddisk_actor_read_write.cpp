@@ -447,7 +447,23 @@ namespace NKikimr::NDDisk {
             UringRouter->Flush();
         } else {
             InFlightCount.fetch_sub(1, std::memory_order_relaxed);
+
+            std::unique_ptr<IEventBase> reply;
+            if (op->IsRead) {
+                reply = std::make_unique<TEvReadResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full (short I/O retry)");
+            } else {
+                reply = std::make_unique<TEvWriteResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full (short I/O retry)");
+            }
+            auto h = std::make_unique<IEventHandle>(op->Sender, SelfId(), reply.release(),
+                0, op->Cookie, nullptr, op->Span.GetTraceId());
+            if (op->InterconnectSession) {
+                h->Rewrite(TEvInterconnect::EvForward, op->InterconnectSession);
+            }
             op->Span.End();
+            TActivationContext::Send(h.release());
+
             auto& ctr = op->IsRead ? Counters.Interface.Read : Counters.Interface.Write;
             ctr.Reply(false);
         }

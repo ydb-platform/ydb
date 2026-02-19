@@ -71,7 +71,7 @@ ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_nam
 
 ### Примеры
 
-Приведённый ниже код запретит пустые значения в колонке `title` из таблицы `episodes` .
+Приведённый ниже код запретит пустые значения в колонке `title` из таблицы `episodes`.
 
 ```yql
 ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;

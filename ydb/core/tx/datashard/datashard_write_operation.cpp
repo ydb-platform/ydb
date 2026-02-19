@@ -230,6 +230,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
 
     SetTxKeys(tableInfo, tabletId, keyValidator);
     UserSID = ev.Record.GetUserSID();
+    UserTraceId = ev.Record.GetUserTraceId();
 
     return {NKikimrTxDataShard::TError::OK, {}};
 }

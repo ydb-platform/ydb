@@ -70,7 +70,7 @@ private:
 public:
     TCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, 
         const TIntrusivePtr<TTxProxyMon>& mon,
-        const TString& userSID)
+        const NACLib::TUserContext::TPtr& userCtx)
         : Services(services)
         , TxId(txid)
         , Sender(ev->Sender)
@@ -78,7 +78,7 @@ public:
         , Request(ev->Release())
         , TxProxyMon(mon)
         , DefaultTimeoutMs(60000, 0, 360000)
-        , UserSID(userSID)
+        , UserCtx(userCtx)
     { }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -301,7 +301,10 @@ private:
             auto event = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_COMMIT_WRITES,
                 ctx.SelfID, TxId, txBody,
                 TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0));
-            event->Record.SetUserSID(UserSID);
+            if (UserCtx != nullptr) {
+                event->Record.SetUserSID(UserCtx->UserSID);
+                event->Record.SetUserTraceId(UserCtx->UserTraceId);
+            }
             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(event, shardId, true));
 
             state.AffectedFlags |= TPerShardState::AffectedRead;
@@ -989,7 +992,7 @@ private:
     const TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
     TControlWrapper DefaultTimeoutMs;
-    const TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
 
     TInstant WallClockAccepted;
     TInstant WallClockResolveStarted;
@@ -1031,14 +1034,14 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, 
-    const TIntrusivePtr<TTxProxyMon>& mon, const TString& userSID) 
+    const TIntrusivePtr<TTxProxyMon>& mon, const NACLib::TUserContext::TPtr& userCtx) 
 {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.HasTransaction());
     const auto& tx = record.GetTransaction();
 
     if (tx.HasCommitWrites()) {
-        return new TCommitWritesReq(services, txid, std::move(ev), mon, userSID);
+        return new TCommitWritesReq(services, txid, std::move(ev), mon, userCtx);
     }
 
     Y_ABORT("Unexpected transaction proposal");

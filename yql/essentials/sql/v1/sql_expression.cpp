@@ -122,6 +122,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_neq_subexpr& node, const TTraili
     //   ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?;
     YQL_ENSURE(tailExternal.Count == 0);
     MaybeUnnamedSmartParenOnTop_ = MaybeUnnamedSmartParenOnTop_ && !node.HasBlock3();
+
     TTrailingQuestions tail;
     if (node.HasBlock3() && node.GetBlock3().Alt_case() == TRule_neq_subexpr::TBlock3::kAlt2) {
         auto& questions = node.GetBlock3().GetAlt2();
@@ -137,17 +138,25 @@ TNodeResult TSqlExpression::SubExpr(const TRule_neq_subexpr& node, const TTraili
     }
     if (node.HasBlock3()) {
         auto& block = node.GetBlock3();
-        if (block.Alt_case() == TRule_neq_subexpr::TBlock3::kAlt1) {
-            TSqlExpression altExpr(Ctx_, Mode_);
-            altExpr.SetPure(IsPure_);
-            TNodeResult altResult = SubExpr(block.GetAlt1().GetRule_neq_subexpr2(), {});
-            if (!altResult) {
-                return std::unexpected(altResult.error());
+        switch (block.Alt_case()) {
+            case TRule_neq_subexpr::TBlock3::kAlt1: {
+                TSqlExpression altExpr(Ctx_, Mode_);
+                altExpr.SetPure(IsPure_);
+                TNodeResult altResult = SubExpr(block.GetAlt1().GetRule_neq_subexpr2(), {});
+                if (!altResult) {
+                    return std::unexpected(altResult.error());
+                }
+                const TVector<TNodePtr> args({std::move(*result), std::move(*altResult)});
+                Token(block.GetAlt1().GetRule_double_question1().GetToken1());
+                result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "Coalesce", args,
+                                          /*isYqlSelect=*/IsYqlSelectProduced_);
+                break;
             }
-            const TVector<TNodePtr> args({std::move(*result), std::move(*altResult)});
-            Token(block.GetAlt1().GetRule_double_question1().GetToken1());
-            result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "Coalesce", args,
-                                      /*isYqlSelect=*/IsYqlSelectProduced_);
+            case TRule_neq_subexpr::TBlock3::kAlt2: {
+                break; // It is handled higher
+            }
+            case TRule_neq_subexpr::TBlock3::ALT_NOT_SET:
+                Y_UNREACHABLE();
         }
     }
     return result;
@@ -1191,6 +1200,9 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
 
                 if (auto result = call.BuildCall()) {
                     lastExpr = std::move(*result);
+                    if (auto* call = lastExpr->GetCallNode(); call && call->GetOpName() == "DataType") {
+                        lastExpr = AddOptionals(std::move(lastExpr), tail.Count);
+                    }
                 } else {
                     return std::unexpected(result.error());
                 }

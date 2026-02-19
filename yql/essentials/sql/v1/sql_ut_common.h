@@ -2453,6 +2453,25 @@ Y_UNIT_TEST(DeclareDecimalParameter) {
     UNIT_ASSERT(res.Root);
 }
 
+Y_UNIT_TEST(OptionalDecimal) {
+    const auto optionality = [](TStringBuf query) -> size_t {
+        NYql::TAstParseResult res = SqlToYql(TString(query));
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive stat = {"OptionalType"};
+        VerifyProgram(res, stat, {});
+        return stat["OptionalType"];
+    };
+
+    UNIT_ASSERT_EQUAL(0, optionality(R"sql(SELECT FormatType(Decimal(15, 6)))sql"));
+    UNIT_ASSERT_EQUAL(1, optionality(R"sql(SELECT FormatType(Decimal(15, 6)?))sql"));
+    UNIT_ASSERT_EQUAL(2, optionality(R"sql(SELECT FormatType(Decimal(15, 6)??))sql"));
+    UNIT_ASSERT_EQUAL(3, optionality(R"sql(SELECT FormatType(Decimal(15, 6)???))sql"));
+    UNIT_ASSERT_EQUAL(1, optionality(R"sql(SELECT FormatType(Optional<Decimal(15, 6)>))sql"));
+    UNIT_ASSERT_EQUAL(2, optionality(R"sql(SELECT FormatType(Optional<Decimal(15, 6)>?))sql"));
+    UNIT_ASSERT_EQUAL(3, optionality(R"sql(SELECT FormatType(Optional<Decimal(15, 6)>??))sql"));
+}
+
 Y_UNIT_TEST(SimpleGroupBy) {
     NYql::TAstParseResult res = SqlToYql("select count(1),z from plato.Input group by key as z order by z;");
     UNIT_ASSERT(res.Root);

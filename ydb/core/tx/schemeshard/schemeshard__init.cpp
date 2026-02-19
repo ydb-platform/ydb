@@ -5621,6 +5621,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         compactionsRowset.GetValue<Schema::ForcedCompactions::TableOwnerId>(),
                         compactionsRowset.GetValue<Schema::ForcedCompactions::TableLocalId>()
                 );
+                info->SubdomainPathId = TPathId(
+                        compactionsRowset.GetValue<Schema::ForcedCompactions::SubdomainOwnerId>(),
+                        compactionsRowset.GetValue<Schema::ForcedCompactions::SubdomainLocalId>()
+                );
                 info->Cascade = compactionsRowset.GetValue<Schema::ForcedCompactions::Cascade>();
                 info->MaxShardsInFlight = compactionsRowset.GetValue<Schema::ForcedCompactions::MaxShardsInFlight>();
                 if (compactionsRowset.HaveValue<Schema::ForcedCompactions::UserSID>()) {

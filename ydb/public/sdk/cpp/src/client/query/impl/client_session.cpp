@@ -12,22 +12,22 @@ namespace NYdb::inline Dev::NQuery {
 // Custom lock primitive to protect session from destroying
 // during async read execution.
 // The problem is TSession::TImpl holds grpc stream processor by IntrusivePtr
-// and this processor alredy refcounted by internal code.
-// That mean during TSession::TImpl dtor no gurantee to grpc procerrot will be destroyed.
-// StreamProcessor_->Cancel() doesn't help it just start async cancelation but we have no way
-// to wait cancelation has done.
-// So we need some way to protect access to row session impl pointer
-// from async reader (processor callback). We can't use shared/weak ptr here because TSessionImpl
-// stores as uniq ptr inside session pool and as shared ptr in the TSession
+// and this processor already refcounted by internal code.
+// That mean during TSession::TImpl dtor no guarantee to grpc processor will be destroyed.
+// StreamProcessor_->Cancel() doesn't help it just start async cancellation but we have no way
+// to wait cancellation has done.
+// So we need some way to protect access to raw session impl pointer
+// from async reader (processor callback). We can't use shared/weak ptr here because TSession::TImpl
+// stores as unique_ptr inside session pool and as shared_ptr in the TSession
 // when user got session (see GetSmartDeleter related code).
 
-// Why just not std::mutex? - Requirement do not destroy a mutex while it is locked
+// Why just not std::mutex? - Requirement does not destroy a mutex while it is locked
 // makes it difficult to use here. Moreover we need to allow recursive lock.
 
 // Why recursive lock? - In happy path we destroy session from CloseFromServer call,
 // so the session dtor called from thread which already got the lock.
 
-// TODO: Proably we can add sync version of Cancel method in to grpc stream procesor to make sure
+// TODO: Probably we can add sync version of Cancel method in to grpc stream processor to make sure
 // no more callback will be called.
 
 class TSafeTSessionImplHolder {
@@ -38,6 +38,7 @@ public:
     TSafeTSessionImplHolder(TSession::TImpl* p)
         : Ptr(p)
         , Semaphore(0)
+        , OwnerThread(std::thread::id())
     {}
 
     TSession::TImpl* TrySharedOwning() noexcept {
@@ -62,10 +63,9 @@ public:
 
         uint32_t cur = 0;
         uint32_t newVal = 1;
-        while (!Semaphore.compare_exchange_weak(cur, newVal,
-            std::memory_order_release, std::memory_order_relaxed)) {
-                std::this_thread::yield();
-                cur = 0;
+        while (!Semaphore.compare_exchange_weak(cur, newVal)) {
+            std::this_thread::yield();
+            cur = 0;
         }
     }
 };

@@ -72,6 +72,7 @@ namespace NKikimr::NSqsTopic::V1 {
         ~TSetQueueAttributesActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
+            CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
 
             const Ydb::Ymq::V1::SetQueueAttributesRequest& request = Request();

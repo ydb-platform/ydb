@@ -34,7 +34,9 @@ void TSchemeShard::PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForc
         NIceDb::TUpdate<Schema::ForcedCompactions::StartTime>(info.StartTime.Seconds()),
         NIceDb::TUpdate<Schema::ForcedCompactions::EndTime>(info.EndTime.Seconds()),
         NIceDb::TUpdate<Schema::ForcedCompactions::TotalShardCount>(info.TotalShardCount),
-        NIceDb::TUpdate<Schema::ForcedCompactions::DoneShardCount>(info.DoneShardCount)
+        NIceDb::TUpdate<Schema::ForcedCompactions::DoneShardCount>(info.DoneShardCount),
+        NIceDb::TUpdate<Schema::ForcedCompactions::SubdomainOwnerId>(info.SubdomainPathId.OwnerId),
+        NIceDb::TUpdate<Schema::ForcedCompactions::SubdomainLocalId>(info.SubdomainPathId.LocalPathId)
     );
 
     if (info.UserSID) {
@@ -111,7 +113,7 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
     auto initialQueueSize = ForcedCompactionTablesQueue.Size();
     THashSet<TPathId> tablesWithoutCandidates;
     while (!ForcedCompactionTablesQueue.Empty() && tablesWithoutCandidates.size() < initialQueueSize) {
-        const auto& tablePathId = ForcedCompactionTablesQueue.Front();
+        auto tablePathId = ForcedCompactionTablesQueue.Front();
         auto& compaction = InProgressForcedCompactionsByTable.at(tablePathId);
         auto& shards = ForcedCompactionShardsByTable.at(tablePathId);
         if (!shards.Empty() && compaction->MaxShardsInFlight > compaction->ShardsInFlight.size()) {
@@ -122,8 +124,8 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
         }
         if (shards.Empty()) {
             tablesWithoutCandidates.insert(tablePathId);
-            ForcedCompactionTablesQueue.PopFront();
             ForcedCompactionShardsByTable.erase(tablePathId);
+            ForcedCompactionTablesQueue.PopFront();
         } else {
             if (compaction->MaxShardsInFlight <= compaction->ShardsInFlight.size()) {
                 tablesWithoutCandidates.insert(tablePathId);
@@ -135,6 +137,10 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
 
 void TSchemeShard::Handle(TEvForcedCompaction::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxCreateForcedCompaction(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvForcedCompaction::TEvGetRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxGetForcedCompaction(ev), ctx);
 }
 
 NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardIdx& shardIdx) {

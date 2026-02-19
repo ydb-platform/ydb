@@ -60,6 +60,7 @@ enum EServiceKikimr {
     BS_CLUSTER_BALANCING = 2605;
     BS_BRIDGE_SYNC = 2606;
     BS_PHANTOM_FLAG_STORAGE = 2607;
+    BS_CHUNK_KEEPER = 2608;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -462,6 +463,10 @@ enum EServiceKikimr {
 
     NBS_PARTITION = 3900;
     NBS2_LOAD_TEST = 3901;
+
+    NBS_VOLUME = 4000;
+
+    NBS_SS_PROXY = 4100;
 };
 
 message TActivity {

@@ -10,6 +10,8 @@ struct TEvForcedCompaction {
     enum EEv {
         EvCreateRequest = EventSpaceBegin(TKikimrEvents::ES_FORCED_COMPACTION),
         EvCreateResponse,
+        EvGetRequest,
+        EvGetResponse,
 
         EvEnd
     };
@@ -34,6 +36,19 @@ struct TEvForcedCompaction {
         explicit TEvCreateResponse(const ui64 txId) {
             Record.SetTxId(txId);
         }
+    };
+
+    struct TEvGetRequest: public TEventPB<TEvGetRequest, NKikimrForcedCompaction::TEvGetRequest, EvGetRequest> {
+        TEvGetRequest() = default;
+
+        explicit TEvGetRequest(const TString& dbName, const ui64 forcedCompactionId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetForcedCompactionId(forcedCompactionId);
+        }
+    };
+
+    struct TEvGetResponse: public TEventPB<TEvGetResponse, NKikimrForcedCompaction::TEvGetResponse, EvGetResponse> {
+        TEvGetResponse() = default;
     };
 
 };

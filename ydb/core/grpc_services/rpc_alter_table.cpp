@@ -11,6 +11,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -85,7 +86,7 @@ public:
                 return;
             }
 
-            PrepareAlterTableAddIndex();
+            PrepareAlterTableWithTxId();
             break;
 
         case EOp::Attribute:
@@ -97,6 +98,14 @@ public:
         case EOp::DropIndex:
         case EOp::RenameIndex:
             AlterTable(ctx);
+            break;
+        case EOp::Compact:
+            if (!BuildAlterTableCompactRequest(req, &ForcedCompactionSettings, code, error)) {
+                Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                return;
+            }
+
+            PrepareAlterTableWithTxId();
             break;
         }
 
@@ -110,6 +119,8 @@ private:
            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
            HFunc(NSchemeShard::TEvIndexBuilder::TEvCreateResponse, Handle);
            HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
+           HFunc(NSchemeShard::TEvForcedCompaction::TEvCreateResponse, Handle);
+           HFunc(NSchemeShard::TEvForcedCompaction::TEvGetResponse, Handle);
            default: TBase::StateWork(ev);
         }
     }
@@ -160,9 +171,9 @@ private:
             IEventHandle::FlagTrackDelivery);
     }
 
-    void PrepareAlterTableAddIndex() {
+    void PrepareAlterTableWithTxId() {
         using namespace NTxProxy;
-        LogPrefix = TStringBuilder() << "[AlterTableAddIndexOp " << SelfId() << "] ";
+        LogPrefix = TStringBuilder() << "[AlterTable" << OpType << ' ' << SelfId() << "] ";
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
     }
 
@@ -171,7 +182,7 @@ private:
 
         const auto* msg = ev->Get();
         TxId = msg->TxId;
-        LogPrefix = TStringBuilder() << "[AlterTableAddIndex " << SelfId() << " TxId# " << TxId << "] ";
+        LogPrefix = TStringBuilder() << "[AlterTable" << OpType << ' ' << SelfId() << " TxId# " << TxId << "] ";
 
         Navigate(GetProtoRequest()->path());
     }
@@ -263,7 +274,9 @@ private:
 
         switch (OpType) {
         case EOp::AddIndex:
-            return AlterTableAddIndexOp(entry, ctx);
+            return AlterTableOp(entry, ctx, [this]() {
+                return std::make_unique<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>(TxId, DatabaseName, std::move(IndexBuildSettings));
+            });
         case EOp::Attribute:
             ResolvedPathId = resp->ResultSet.back().TableId.PathId;
             return AlterTable(ctx);
@@ -282,13 +295,17 @@ private:
                 Navigate(entry.TableId);
             }
             break;
+        case EOp::Compact:
+            return AlterTableOp(entry, ctx, [this]() {
+                return std::make_unique<NSchemeShard::TEvForcedCompaction::TEvCreateRequest>(TxId, DatabaseName, std::move(ForcedCompactionSettings));
+            });
         default:
             TXLOG_E("Got unexpected cache response");
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
-    bool CheckAddIndexAccess(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx) {
+    bool CheckAlterAccess(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx) {
         if (!UserToken || !entry.SecurityObject) {
             return true;
         }
@@ -308,8 +325,8 @@ private:
         return false;
     }
 
-    void AlterTableAddIndexOp(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx) {
-        if (!CheckAddIndexAccess(entry, ctx)) {
+    void AlterTableOp(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx, auto createEventFn) {
+        if (!CheckAlterAccess(entry, ctx)) {
             return;
         }
 
@@ -319,12 +336,12 @@ private:
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
 
-        SendAddIndexOpToSS(ctx, domainInfo->ExtractSchemeShard());
+        SendOpToSS(ctx, domainInfo->ExtractSchemeShard(), createEventFn);
     }
 
-    void SendAddIndexOpToSS(const TActorContext& ctx, ui64 schemeShardId) {
+    void SendOpToSS(const TActorContext& ctx, ui64 schemeShardId, auto createEventFn) {
         SetSchemeShardId(schemeShardId);
-        auto ev = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>(TxId, DatabaseName, std::move(IndexBuildSettings));
+        auto ev = createEventFn();
         if (UserToken) {
             ev->Record.SetUserSID(UserToken->GetUserSID());
         }
@@ -364,8 +381,44 @@ private:
         }
     }
 
+    void Handle(NSchemeShard::TEvForcedCompaction::TEvCreateResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& response = ev->Get()->Record;
+        const auto status = response.GetStatus();
+        auto issuesProto = response.GetIssues();
+
+        auto getDebugIssues = [issuesProto]() {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(issuesProto, issues);
+            return issues.ToString();
+        };
+
+        TXLOG_D("Handle TEvForcedCompaction::TEvCreateResponse"
+            << ", status# " << status
+            << ", issues# " << getDebugIssues()
+            << ", Id# " << response.GetForcedCompaction().GetId());
+
+        if (status == Ydb::StatusIds::SUCCESS) {
+            if (GetOperationMode() == Ydb::Operations::OperationParams::SYNC) {
+                DoSubscribe(ctx);
+            } else {
+                auto op = response.GetForcedCompaction();
+                Ydb::Operations::Operation operation;
+                operation.set_id(NOperationId::ProtoToString(ToOperationId(op)));
+                operation.set_ready(false);
+                ReplyOperation(operation);
+            }
+        } else {
+            Reply(status, issuesProto, ctx);
+        }
+    }
+
     void GetIndexStatus(const TActorContext& ctx) {
         auto request = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvGetRequest>(DatabaseName, TxId);
+        ForwardToSchemeShard(ctx, std::move(request));
+    }
+
+    void GetCompactionStatus(const TActorContext& ctx) {
+        auto request = std::make_unique<NSchemeShard::TEvForcedCompaction::TEvGetRequest>(DatabaseName, TxId);
         ForwardToSchemeShard(ctx, std::move(request));
     }
 
@@ -377,6 +430,8 @@ private:
     void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override {
         if (OpType == EOp::AddIndex) {
             GetIndexStatus(ctx);
+        } else if (OpType == EOp::Compact) {
+            GetCompactionStatus(ctx);
         } else {
             TBase::OnNotifyTxCompletionResult(ev, ctx);
         }
@@ -392,6 +447,21 @@ private:
         } else {
             Ydb::Operations::Operation op;
             ::NKikimr::NGRpcService::ToOperation(record.GetIndexBuild(), &op);
+            Request_->SendOperation(op);
+        }
+        Die(ctx);
+    }
+
+    void Handle(NSchemeShard::TEvForcedCompaction::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+
+        TXLOG_D("Handle TEvForcedCompaction::TEvGetResponse: record# " << record.ShortDebugString());
+
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            Request_->ReplyWithYdbStatus(record.GetStatus());
+        } else {
+            Ydb::Operations::Operation op;
+            ::NKikimr::NGRpcService::ToOperation(record.GetForcedCompaction(), &op);
             Request_->SendOperation(op);
         }
         Die(ctx);
@@ -421,6 +491,7 @@ private:
     TTableProfiles Profiles;
     EOp OpType;
     NKikimrIndexBuilder::TIndexBuildSettings IndexBuildSettings;
+    NKikimrForcedCompaction::TForcedCompactionSettings ForcedCompactionSettings;
 };
 
 void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

@@ -2648,6 +2648,41 @@ public:
                             return SyncError();
                         }
                     }
+                } else if (name == "compact") {
+                    if (!SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            TStringBuilder() << "Compact is not allowed"));
+                        return SyncError();
+                    }
+                    auto& compact = *alterTableRequest.mutable_compact();
+                    const auto& listNode = action.Value().Cast<TCoNameValueTupleList>();
+                     for (const auto& compactParam : listNode) {
+                        const auto& paramName = compactParam.Name().Value();
+                        if (paramName == "settings") {
+                            const auto& settingsList = compactParam.Value().Cast<TCoNameValueTupleList>();
+                            for (const auto& setting : settingsList) {
+                                const auto& name = setting.Name().Value();
+                                if (name == "cascade") {
+                                    auto value = FromString<bool>(to_lower(TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    )));
+
+                                    compact.set_cascade(value);
+                                } else if (name == "maxShardsInFlight") {
+                                    i32 value = FromString<i32>(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+                                    if (value <= 0) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << name << " must be positive"));
+                                        return SyncError();
+                                    }
+
+                                    compact.set_max_shards_in_flight(value);
+                                }
+                            }
+                        }
+                     }
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                         TStringBuilder() << "Unknown alter table action: " << name));

@@ -1034,6 +1034,25 @@ public:
             result.SetSuccess();
             tablePromise.SetValue(result);
             return tablePromise.GetFuture();
+        } else if (opType == EAlterOperationKind::Compact) {
+            auto &phyQuery =
+                *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto &phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            auto compactOp = phyTx.MutableSchemeOperation()->MutableCompactTable();
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!BuildAlterTableCompactRequest(&req, compactOp, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
+            TGenericResult result;
+            result.SetSuccess();
+            tablePromise.SetValue(result);
+            return tablePromise.GetFuture();
         }
 
         auto profilesFuture = Gateway->GetTableProfiles();

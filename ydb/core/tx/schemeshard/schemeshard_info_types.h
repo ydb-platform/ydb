@@ -3878,6 +3878,7 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
 
     bool IsFinished() const;
     void AddNotifySubscriber(const TActorId& actorId);
+    float CalcProgress() const;
 };
 // } // NForcedCompaction
 

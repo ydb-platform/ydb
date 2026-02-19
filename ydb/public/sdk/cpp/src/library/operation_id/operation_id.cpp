@@ -72,6 +72,9 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::RESTORE:
             res << "ydb://restore";
             break;
+        case Ydb::TOperationId::COMPACTION:
+            res << "ydb://compaction";
+            break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
     }

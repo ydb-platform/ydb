@@ -1712,7 +1712,8 @@ private:
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"
-                    && name != "alterIndex")
+                    && name != "alterIndex"
+                    && name != "compact")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));

@@ -151,20 +151,6 @@ TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, 
     return TYqlConclusionStatus::Success();
 }
 
-[[nodiscard]] TYqlConclusionStatus ErrorFromActivityType(TExternalDataSourceManager::EActivityType activityType) {
-    using EActivityType = TExternalDataSourceManager::EActivityType;
-
-    switch (activityType) {
-        case EActivityType::Undefined:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for EXTERNAL_DATA_SOURCE object");
-        case EActivityType::Upsert:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for EXTERNAL_DATA_SOURCE objects is not implemented");
-        case EActivityType::Alter:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Alter operation for EXTERNAL_DATA_SOURCE objects is not implemented");
-        default:
-            throw yexception() << "Unexpected status to fail: " << activityType;
-    }
-}
 
 }  // anonymous namespace
 
@@ -177,10 +163,12 @@ TAsyncStatus TExternalDataSourceManager::DoModify(const NYql::TObjectSettingsImp
         switch (context.GetActivityType()) {
             case EActivityType::Create:
                 return CreateExternalDataSource(settings, context);
+            case EActivityType::Alter:
+                return AlterExternalDataSource(settings, context);
             case EActivityType::Drop:
                 return DropExternalDataSource(settings, context);
             default:
-                return NThreading::MakeFuture<TYqlConclusionStatus>(ErrorFromActivityType(context.GetActivityType()));
+                return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Operation for EXTERNAL_DATA_SOURCE is not implemented"));
         }
     } catch (...) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage()));
@@ -193,6 +181,15 @@ TAsyncStatus TExternalDataSourceManager::CreateExternalDataSource(const NYql::TC
         return NThreading::MakeFuture<TYqlConclusionStatus>(status);
     }
     return ExecuteSchemeRequest(schemeOperation.GetCreateExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource);
+}
+
+TAsyncStatus TExternalDataSourceManager::AlterExternalDataSource(const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const {
+    NKqpProto::TKqpSchemeOperation schemeOperation;
+    if (auto status = PrepareAlterExternalDataSource(schemeOperation, settings, context); status.IsFail()) {
+        return NThreading::MakeFuture<TYqlConclusionStatus>(status);
+    }
+
+    return ExecuteSchemeRequest(schemeOperation.GetAlterExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kAlterExternalDataSource);
 }
 
 TAsyncStatus TExternalDataSourceManager::DropExternalDataSource(const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
@@ -212,10 +209,12 @@ TYqlConclusionStatus TExternalDataSourceManager::DoPrepare(NKqpProto::TKqpScheme
         switch (context.GetActivityType()) {
             case EActivityType::Create:
                 return PrepareCreateExternalDataSource(schemeOperation, settings, context);
+            case EActivityType::Alter:
+                return PrepareAlterExternalDataSource(schemeOperation, settings, context);
             case EActivityType::Drop:
                 return PrepareDropExternalDataSource(schemeOperation, settings, context);
             default:
-                return ErrorFromActivityType(context.GetActivityType());
+                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Operation for EXTERNAL_DATA_SOURCE is not implemented");
         }
     } catch (...) {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during preparation of EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage());
@@ -239,6 +238,25 @@ TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource
     schemeTx.SetFailedOnAlreadyExists(!settings.GetExistingOk());
 
     return FillCreateExternalDataSourceDesc(*schemeTx.MutableCreateExternalDataSource(), name, settings);
+}
+
+TYqlConclusionStatus TExternalDataSourceManager::PrepareAlterExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const {
+    if (auto status = CheckFeatureFlag(context); status.IsFail()) {
+        return status;
+    }
+
+    auto pathPairStatus = SplitPath(settings.GetObjectId(), context.GetExternalData().GetDatabase(), false);
+    if (pathPairStatus.IsFail()) {
+        return pathPairStatus;
+    }
+
+    const auto& [workingDir, name] = pathPairStatus.DetachResult();
+
+    auto& schemeTx = *schemeOperation.MutableAlterExternalDataSource();
+    schemeTx.SetWorkingDir(workingDir);
+    schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterExternalDataSource);
+
+    return FillCreateExternalDataSourceDesc(*schemeTx.MutableCreateExternalDataSource(), name, static_cast<const NYql::TCreateObjectSettings&>(settings));
 }
 
 TYqlConclusionStatus TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
@@ -271,6 +289,8 @@ TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSc
         switch (schemeOperation.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource:
                 return ExecuteSchemeRequest(schemeOperation.GetCreateExternalDataSource(), context, schemeOperation.GetOperationCase());
+            case NKqpProto::TKqpSchemeOperation::kAlterExternalDataSource:
+                return ExecuteSchemeRequest(schemeOperation.GetAlterExternalDataSource(), context, schemeOperation.GetOperationCase());
             case NKqpProto::TKqpSchemeOperation::kDropExternalDataSource:
                 return ExecuteSchemeRequest(schemeOperation.GetDropExternalDataSource(), context, schemeOperation.GetOperationCase());
             default:
@@ -283,7 +303,8 @@ TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSc
 
 TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
-    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource ||
+        operationCase == NKqpProto::TKqpSchemeOperation::kAlterExternalDataSource) {
         validationFuture = ChainFeatures(validationFuture, [desc = schemeTx.GetCreateExternalDataSource(), context] {
             return ValidateExternalDatasourceSecrets(desc, context);
         });

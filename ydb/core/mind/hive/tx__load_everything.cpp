@@ -834,6 +834,7 @@ public:
         }
         BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
 
+        Self->NodeSegments.clear();
         for (auto& [_, node] : Self->Nodes) {
             Self->UpdateNodeSegments(&node);
         }

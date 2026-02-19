@@ -1499,6 +1499,7 @@ TNodeInfo& THive::GetNode(TNodeId nodeId) {
     if (it == Nodes.end()) {
         it = Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *this)).first;
         TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Add(1);
+        UpdateNodeSegments(&it->second);
     }
     return it->second;
 }

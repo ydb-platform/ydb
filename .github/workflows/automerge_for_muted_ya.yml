@@ -1,6 +1,6 @@
 # Adds automerge label to open mute-unmute PRs targeting main. Runs at 08:00 UTC daily.
 # Squash and stable-* automerge label are set in update_muted_ya.yml.
-name: Set automerge for mute-unmute PRs (main)
+name: Automerge for muted_ya (main)
 
 on:
   schedule:
@@ -16,11 +16,12 @@ jobs:
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
-            const { data: issues } = await github.rest.issues.listForRepo({
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'mute-unmute'
+              labels: 'mute-unmute',
+              per_page: 100
             });
             const prs = issues.filter(i => i.pull_request);
             core.info(`mute-unmute PRs: ${prs.length}`);

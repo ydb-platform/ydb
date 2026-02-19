@@ -313,7 +313,9 @@ jobs:
             });
 
             // Labels from env; for stable-* add automerge (automerge_pr merges after checks).
-            const labelsToAdd = process.env.LABELS.split(',').map(l => l.trim());
+            const labelsToAdd = Array.from(new Set(
+              (process.env.LABELS || '').split(',').map(l => l.trim()).filter(l => l)
+            ));
             if (process.env.BASE_BRANCH.startsWith('stable-')) {
               labelsToAdd.push('automerge');
             }

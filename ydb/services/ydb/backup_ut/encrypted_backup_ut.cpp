@@ -41,7 +41,7 @@ public:
     void MakeFullExport(bool encrypted = false) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
         if (encrypted) {
-            settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+            settings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
         }
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         WaitOpSuccess(res);
@@ -1038,7 +1038,7 @@ protected:
             fsMockOwner = MakeHolder<NKikimr::NWrappers::NTestHelpers::TFsMock>(basePath);
             fsMockOwner->Refresh();
         }
-        NKikimr::NWrappers::NTestHelpers::TBackupMock& mock = isFsBackup
+        auto& mock = isFsBackup
             ? static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(*fsMockOwner)
             : static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(S3Mock());
 

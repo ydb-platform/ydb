@@ -126,9 +126,19 @@ namespace NKikimr::NDDisk {
             struct {
                 NMonitoring::TDynamicCounters::TCounterPtr ChunksOwned;
             } Chunks;
+
+            struct {
+                NMonitoring::TDynamicCounters::TCounterPtr ShortReads;
+                NMonitoring::TDynamicCounters::TCounterPtr ShortWrites;
+            } DirectIO;
         };
 
         TCounters Counters;
+
+    public:
+#if defined(__linux__)
+        struct TDirectIoOp;
+#endif
 
     private:
         struct TEvPrivate {
@@ -136,6 +146,7 @@ namespace NKikimr::NDDisk {
                 EvHandleSingleQuery = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvHandleEventForChunk,
                 EvHandlePersistentBufferEventForChunk,
+                EvShortIO,
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -155,12 +166,17 @@ namespace NKikimr::NDDisk {
                     : ChunkIndex(chunkIndex)
                 {}
             };
+
+#if defined(__linux__)
+            struct TEvShortIO : TEventLocal<TEvShortIO, EvShortIO> {
+                std::unique_ptr<TDirectIoOp> Op;
+                explicit TEvShortIO(std::unique_ptr<TDirectIoOp> op);
+                ~TEvShortIO();
+            };
+#endif
         };
 
     public:
-#if defined(__linux__)
-        struct TDirectIoOp;
-#endif
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
         void Bootstrap();
@@ -368,6 +384,7 @@ namespace NKikimr::NDDisk {
             TChunkRef& chunkRef, NWilson::TSpan span);
         void DirectRead(TEvRead::TPtr ev, const TBlockSelector& selector, TChunkRef& chunkRef,
             NWilson::TSpan span);
+        void HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev);
 #endif
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

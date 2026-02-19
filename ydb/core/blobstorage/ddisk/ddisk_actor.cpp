@@ -33,6 +33,8 @@ namespace NKikimr::NDDisk {
 
         auto cChunks = counters->GetSubgroup("subsystem", "chunks");
 
+        auto cDirectIO = counters->GetSubgroup("subsystem", "direct_io");
+
 #define COUNTER(GROUP, NAME, DERIV) .NAME = c##GROUP->GetCounter(#NAME, DERIV),
 
         Counters = {
@@ -58,6 +60,10 @@ namespace NKikimr::NDDisk {
             },
             .Chunks = {
                 COUNTER(Chunks, ChunksOwned, false)
+            },
+            .DirectIO = {
+                COUNTER(DirectIO, ShortReads, true)
+                COUNTER(DirectIO, ShortWrites, true)
             },
         };
 
@@ -135,6 +141,9 @@ namespace NKikimr::NDDisk {
             hFunc(NPDisk::TEvCutLog, Handle)
             hFunc(NPDisk::TEvChunkWriteRawResult, Handle)
             hFunc(NPDisk::TEvChunkReadRawResult, Handle)
+#if defined(__linux__)
+            hFunc(TEvPrivate::TEvShortIO, HandleShortIO)
+#endif
 
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 

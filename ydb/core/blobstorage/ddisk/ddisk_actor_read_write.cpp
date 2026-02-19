@@ -5,6 +5,8 @@
 #include <util/generic/overloaded.h>
 #include <ydb/core/util/stlog.h>
 
+#include <cerrno>
+
 namespace NKikimr::NDDisk {
 
 #if defined(__linux__)
@@ -21,9 +23,12 @@ namespace NKikimr::NDDisk {
 
         bool IsRead = false;
         ui32 Size = 0;
-        TRcBuf DataHolder;                  // keeps aligned buffer alive until completion
+        ui64 DiskOffset = 0;
+        ui32 BufferOffset = 0;
+        TRcBuf AlignedDataHolder;
 
-        std::atomic<ui32>& InFlightCount; // shared with DDisk actor
+        // shared with DDisk actor
+        std::atomic<ui32>& InFlightCount;
         TCounters& Counters;
 
         TDirectIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
@@ -34,28 +39,69 @@ namespace NKikimr::NDDisk {
             OnDrop = &TDirectIoOp::OnDirectIoDrop;
         }
 
+        // a poor error mapping
+        static NKikimrBlobStorage::NDDisk::TReplyStatus::E UringErrorToStatus(i32 result, bool isRead) {
+            const int err = -result;
+            switch (err) {
+                case EAGAIN:
+#if EAGAIN != EWOULDBLOCK
+                case EWOULDBLOCK:
+#endif
+                case ENOSPC:
+                case ENOMEM:
+                    return NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED;
+                case EINVAL:
+                    return NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST;
+                case EIO:
+                    return isRead
+                        ? NKikimrBlobStorage::NDDisk::TReplyStatus::LOST_DATA
+                        : NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+                default:
+                    return NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+            }
+        }
+
         static void OnDirectIoComplete(NPDisk::TUringOperation* baseOp, NActors::TActorSystem* actorSystem) noexcept {
             auto* op = static_cast<TDirectIoOp*>(baseOp);
             std::unique_ptr<TDirectIoOp> guard(op);
 
-            // TODO: properly handle short reads/writes
-            if (op->Result >= 0) {
-                Y_ABORT_UNLESS(op->Result == static_cast<i32>(op->Size), "Short reads and writes are not supported yet");
+            const ui32 remaining = op->Size - op->BufferOffset;
+            if (Y_UNLIKELY(op->Result > 0 && static_cast<ui32>(op->Result) < remaining)) {
+                // this should be a very rare case
+                op->BufferOffset += op->Result;
+                op->DiskOffset += op->Result;
+                if (op->IsRead) {
+                    op->Counters.DirectIO.ShortReads->Inc();
+                } else {
+                    op->Counters.DirectIO.ShortWrites->Inc();
+                }
+                auto ddiskId = op->DDiskId;
+                auto ev = std::make_unique<TEvPrivate::TEvShortIO>(std::move(guard));
+                actorSystem->Send(new IEventHandle(ddiskId, {}, ev.release()));
+                return;
             }
 
             std::unique_ptr<IEventBase> reply;
-            if (op->IsRead) {
-                auto status = (op->Result >= 0)
-                    ? NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                    : NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-                TRope data(std::move(op->DataHolder));
-                reply = std::make_unique<TEvReadResult>(status, std::nullopt, std::move(data));
+            if (op->Result >= 0) {
+                if (op->IsRead) {
+                    TRope data(std::move(op->AlignedDataHolder));
+                    reply = std::make_unique<TEvReadResult>(
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, std::move(data));
+                } else {
+                    reply = std::make_unique<TEvWriteResult>(
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                }
             } else {
-                // TODO: set proper status
-                auto status = (op->Result >= 0)
-                    ? NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                    : NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-                reply = std::make_unique<TEvWriteResult>(status);
+                auto status = UringErrorToStatus(op->Result, op->IsRead);
+                TString reason = TStringBuilder()
+                    << (op->IsRead ? "read" : "write")
+                    << " failed: " << strerror(-op->Result)
+                    << " (errno " << (-op->Result) << ")";
+                if (op->IsRead) {
+                    reply = std::make_unique<TEvReadResult>(status, reason);
+                } else {
+                    reply = std::make_unique<TEvWriteResult>(status, reason);
+                }
             }
 
             auto h = std::make_unique<IEventHandle>(op->Sender, op->DDiskId, reply.release(),
@@ -318,16 +364,16 @@ namespace NKikimr::NDDisk {
         auto iter = data.Begin();
         if (iter.ContiguousSize() == data.size() &&
                 reinterpret_cast<uintptr_t>(iter.ContiguousData()) % BlockSize == 0) {
-            op->DataHolder = iter.GetChunk(); // zero-copy: ref-count bump
+            op->AlignedDataHolder = iter.GetChunk(); // zero-copy: ref-count bump
         } else {
-            op->DataHolder = TRcBuf::UninitializedPageAligned(data.size());
-            data.Begin().ExtractPlainDataAndAdvance(op->DataHolder.GetDataMut(), data.size());
+            op->AlignedDataHolder = TRcBuf::UninitializedPageAligned(data.size());
+            data.Begin().ExtractPlainDataAndAdvance(op->AlignedDataHolder.GetDataMut(), data.size());
         }
 
-        const ui64 diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
+        op->DiskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
         InFlightCount.fetch_add(1, std::memory_order_relaxed);
-        const bool submitted = UringRouter->Write(op->DataHolder.data(), op->Size, diskOffset, op.get());
+        const bool submitted = UringRouter->Write(op->AlignedDataHolder.data(), op->Size, op->DiskOffset, op.get());
         if (submitted) {
             op.release();
             // with SQ polling – no syscall
@@ -357,14 +403,11 @@ namespace NKikimr::NDDisk {
         op->Span = std::move(span);
         op->IsRead = true;
         op->Size = selector.Size;
-
-        // Pre-allocate page-aligned buffer for direct I/O read
-        op->DataHolder = TRcBuf::UninitializedPageAligned(selector.Size);
-
-        const ui64 diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
+        op->AlignedDataHolder = TRcBuf::UninitializedPageAligned(selector.Size);
+        op->DiskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
         InFlightCount.fetch_add(1, std::memory_order_relaxed);
-        const bool submitted = UringRouter->Read(op->DataHolder.GetDataMut(), op->Size, diskOffset, op.get());
+        const bool submitted = UringRouter->Read(op->AlignedDataHolder.GetDataMut(), op->Size, op->DiskOffset, op.get());
         if (submitted) {
             op.release();
             UringRouter->Flush();
@@ -375,6 +418,38 @@ namespace NKikimr::NDDisk {
             Counters.Interface.Read.Reply(false);
             SendReply(*ev, std::make_unique<TEvReadResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full"));
+        }
+    }
+
+    TDDiskActor::TEvPrivate::TEvShortIO::TEvShortIO(std::unique_ptr<TDirectIoOp> op)
+        : Op(std::move(op))
+    {}
+
+    TDDiskActor::TEvPrivate::TEvShortIO::~TEvShortIO() = default;
+
+    void TDDiskActor::HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev) {
+        std::unique_ptr<TDirectIoOp> op = std::move(ev->Get()->Op);
+
+        ui32 remaining = op->Size - op->BufferOffset;
+        bool submitted;
+        if (op->IsRead) {
+            submitted = UringRouter->Read(
+                op->AlignedDataHolder.GetDataMut() + op->BufferOffset,
+                remaining, op->DiskOffset, op.get());
+        } else {
+            submitted = UringRouter->Write(
+                op->AlignedDataHolder.data() + op->BufferOffset,
+                remaining, op->DiskOffset, op.get());
+        }
+
+        if (submitted) {
+            op.release();
+            UringRouter->Flush();
+        } else {
+            InFlightCount.fetch_sub(1, std::memory_order_relaxed);
+            op->Span.End();
+            auto& ctr = op->IsRead ? Counters.Interface.Read : Counters.Interface.Write;
+            ctr.Reply(false);
         }
     }
 

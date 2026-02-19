@@ -496,13 +496,6 @@ public:
         TMaybe<ui64> watermarksGranularityUs;
         TMaybe<ui64> watermarksIdleTimeoutUs;
         TMaybe<ui64> watermarksLateArrivalDelayUs;
-        if (!useSharedReading && maybeWatermark) {
-            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermark.Cast());
-            if (!watermarksLateArrivalDelayUs) {
-                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))"));
-                return {};
-            }
-        }
         bool skipJsonErrors = false;
         bool withSharedReading = false;
 
@@ -637,6 +630,13 @@ public:
         if (!sharedReading && skipJsonErrors) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`SHARED_READING_SKIP_JSON_ERRORS` is supported only in shared reading mode"));
             return {};
+        }
+        if (!sharedReading && maybeWatermark) {
+            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermark.Cast());
+            if (!watermarksLateArrivalDelayUs) {
+                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))"));
+                return {};
+            }
         }
         Add(props, SharedReading, ToString(sharedReading), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);

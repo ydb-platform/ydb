@@ -1134,12 +1134,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, const TString& userSID = TString())
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, const NACLib::TUserContext::TPtr& userCtx = nullptr)
         {
             TTestPqEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
-                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, new NACLib::TUserContext(userSID, ""));
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userCtx);
             }
 
             auto& client = env.GetClient();
@@ -1222,12 +1222,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct YdsRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, const TString& userSID = TString())
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, const NACLib::TUserContext::TPtr& userCtx = nullptr)
         {
             TTestYdsEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
-                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, new NACLib::TUserContext(userSID, ""));
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userCtx);
             }
 
             auto& client = env.GetClient();
@@ -1393,12 +1393,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<std::pair<TJsonString, TMessageMeta>>& records,
-                const TString& userSID = TString())
+                const NACLib::TUserContext::TPtr& userCtx = nullptr)
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
-                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, new NACLib::TUserContext(userSID, ""));
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userCtx);
             }
 
             auto& client = env.GetClient();
@@ -1429,7 +1429,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true, 
-                const TString& userSID = TString())
+                const NACLib::TUserContext::TPtr& userCtx = nullptr)
         {
             Y_UNUSED(checkKey);
 
@@ -1438,7 +1438,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 recordsWithMetadata.emplace_back(record, TMessageMeta());
             }
 
-            Read(tableDesc, streamDesc, queries, recordsWithMetadata, userSID);
+            Read(tableDesc, streamDesc, queries, recordsWithMetadata, userCtx);
         }
 
         static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
@@ -1464,7 +1464,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
-    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, const TString& userSID = TString() ) {
+    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, const NACLib::TUserContext::TPtr& userCtx = nullptr) {
         NJsonWriter::TBuf body;
         auto root = body.BeginObject();
         auto payload = root.WriteKey("payload").BeginObject();
@@ -1479,8 +1479,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     .WriteKey("txId").WriteString("***")
                     .WriteKey("ts_ms").WriteString("***")
                     .WriteKey("snapshot").WriteBool(snapshot);
-        if (!userSID.empty()) {
-            payload.WriteKey("user").WriteString(userSID);
+        if (userCtx != nullptr) {
+            if (!userCtx->UserSID.empty()) {
+                payload.WriteKey("user").WriteString(userCtx->UserSID);
+            }
+            if (!userCtx->UserTraceId.empty()) {
+                payload.WriteKey("user_trace_id").WriteString(userCtx->UserTraceId);
+            }
         }
         payload.EndObject();
 
@@ -1619,7 +1624,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"user":"user@test","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
             R"({"user":"user@test","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
             R"({"user":"user@test","erase":{},"key":[1],"oldImage":{"value":100}})",
-        }, true, "user@test");
+        }, true, new NACLib::TUserContext("user@test", ""));
     }
 
      Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserDisabled, PqRunner, YdsRunner, TopicRunner) {
@@ -1643,7 +1648,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
             R"({"update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
             R"({"erase":{},"key":[1],"oldImage":{"value":100}})",
-        }, true, "user@test");
+        }, true, new NACLib::TUserContext("user@test", ""));
     }
 
     Y_UNIT_TEST(NewAndOldImagesLogDebezium) {
@@ -1671,7 +1676,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST(NewAndOldImagesLogDebeziumUser) {
-        const TString userSID{"user@test"};
+        auto userCtx = new NACLib::TUserContext("user@test", "");
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1685,18 +1690,18 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
         )"}, {
-            {DebeziumBody("c", nullptr, R"({"key":1,"value":10})", false, userSID), {{"__key", R"({"payload":{"key":1}})"}}},
-            {DebeziumBody("c", nullptr, R"({"key":2,"value":20})", false, userSID), {{"__key", R"({"payload":{"key":2}})"}}},
-            {DebeziumBody("c", nullptr, R"({"key":3,"value":30})", false, userSID), {{"__key", R"({"payload":{"key":3}})"}}},
-            {DebeziumBody("u", R"({"key":1,"value":10})", R"({"key":1,"value":100})", false, userSID), {{"__key", R"({"payload":{"key":1}})"}}},
-            {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false, userSID), {{"__key", R"({"payload":{"key":2}})"}}},
-            {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false, userSID), {{"__key", R"({"payload":{"key":3}})"}}},
-            {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false, userSID), {{"__key", R"({"payload":{"key":1}})"}}},
-        }, userSID);
+            {DebeziumBody("c", nullptr, R"({"key":1,"value":10})", false, userCtx), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":2,"value":20})", false, userCtx), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":3,"value":30})", false, userCtx), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("u", R"({"key":1,"value":10})", R"({"key":1,"value":100})", false, userCtx), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false, userCtx), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false, userCtx), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false, userCtx), {{"__key", R"({"payload":{"key":1}})"}}},
+        }, userCtx);
     }
 
     Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserDisabled) {
-        const TString userSID{"user@test"};
+        auto userCtx = new NACLib::TUserContext("user@test", "");
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "Stream", false), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1717,7 +1722,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false), {{"__key", R"({"payload":{"key":3}})"}}},
             {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false), {{"__key", R"({"payload":{"key":1}})"}}},
-        }, userSID);
+        }, userCtx);
     }
 
     Y_UNIT_TEST(OldImageLogDebezium) {
@@ -1910,7 +1915,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST_TRIPLET(DocApiUser, PqRunner, YdsRunner, TopicRunner) {
-        const TString userSID{"user@test"};
+        auto userCtx = new NACLib::TUserContext("user@test","");
         TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson), {R"(
             UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
                 1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
@@ -1933,14 +1938,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"eventVersion", "1.0"},
                 {"userIdentity", NJson::TJsonMap({
                     {"type", "User"},
-                    {"principalId", userSID}})
+                    {"principalId", userCtx->UserSID}})
                 },
             }), false),
-        }, false /* do not check key */, userSID);
+        }, false /* do not check key */, userCtx);
     }
 
     Y_UNIT_TEST_TRIPLET(DocApiUserDisabled, PqRunner, YdsRunner, TopicRunner) {
-        const TString userSID{"user@test"};
+        auto userCtx = new NACLib::TUserContext("user@test","");
         TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson, "Stream", false), {R"(
             UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
                 1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
@@ -1962,7 +1967,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"eventSource", "ydb:document-table"},
                 {"eventVersion", "1.0"},
             }), false),
-        }, false /* do not check key */, userSID);
+        }, false /* do not check key */, userCtx);
     }
 
     Y_UNIT_TEST_TRIPLET(NaN, PqRunner, YdsRunner, TopicRunner) {

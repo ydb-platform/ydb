@@ -1147,6 +1147,11 @@
                 "ColumnId": 5,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "UserTraceId",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -1157,7 +1162,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2234,6 +2240,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "UserTraceId",
+                "ColumnType": "Utf8"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "LockId",
                 "ColumnType": "Uint64"
@@ -2268,6 +2279,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,

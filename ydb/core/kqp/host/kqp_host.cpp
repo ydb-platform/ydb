@@ -2011,7 +2011,7 @@ private:
                     return WaitAll(futures);
                 };
             }
-            TypesCtx->StreamLookupJoin = true;
+            TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
         }
 
         InitPgProvider();

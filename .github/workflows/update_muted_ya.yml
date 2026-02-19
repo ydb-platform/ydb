@@ -24,10 +24,7 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
       matrix_branches: ${{ steps.set-matrix.outputs.branches }}
-      run_hour_utc: ${{ steps.utc-hour.outputs.hour }}
     steps:
-      - id: utc-hour
-        run: echo "hour=$(date -u +%H)" >> $GITHUB_OUTPUT
       - name: Checkout branches config
         uses: actions/checkout@v4
         with:

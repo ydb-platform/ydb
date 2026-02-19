@@ -388,6 +388,7 @@ class TTablet : public TActor<TTablet> {
 
     bool ProgressCommitQueue();
     void ProgressFollowerQueue();
+    void ProgressSendSyncCommit();
     void SpreadFollowerAuxUpdate(const TString& auxUpdate);
     void SendFollowerAuxUpdate(TLeaderInfo& info, const TActorId& follower, const TString& auxUpdate);
 

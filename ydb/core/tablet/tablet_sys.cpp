@@ -1561,6 +1561,7 @@ bool TTablet::ProgressCommitQueue() {
     }
 
     ProgressFollowerQueue();
+    ProgressSendSyncCommit();
     TryFinishFollowerSync();
     return true;
 }
@@ -1646,7 +1647,9 @@ void TTablet::ProgressFollowerQueue() {
 
         Graph.PostponedFollowerUpdates.pop_front();
     }
+}
 
+void TTablet::ProgressSendSyncCommit() {
     bool needSyncCommit = (
         // We must have committed and confirmed all commits
         Graph.Queue.empty() &&

@@ -55,15 +55,6 @@
 const bool STRAND_PDISK = true;
 const char *DOMAIN_NAME = "dc-1";
 
-namespace std {
-    template <>
-    struct hash<NKikimr::TSubDomainKey> {
-        std::size_t operator()(const NKikimr::TSubDomainKey& key) const {
-            return key.Hash();
-        }
-    };
-}
-
 namespace NKikimr {
 
 using NNodeWhiteboard::TTabletId;

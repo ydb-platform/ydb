@@ -2411,16 +2411,14 @@ double THive::GetUsage() const {
 }
  
 void THive::RemoveNodeFromSegments(TNodeId nodeId) {
-    for (auto it = NodeSegments.begin(); it != NodeSegments.end(); ++it) {
-        if ((*it)->Id == nodeId) {
-            NodeSegments.erase(it);
-            break;
-        }
+    if (auto* node = FindNode(nodeId); node && node->Segment != NodeSegments.end()) {
+        NodeSegments.erase(node->Segment);
+        node->Segment = NodeSegments.end();
     }
 }
 
-void THive::UpdateNodeSegments(const TNodeInfo* node) {
-    NodeSegments.insert(node);
+void THive::UpdateNodeSegments(TNodeInfo* node) {
+    node->Segment = NodeSegments.insert(node);
 }
 
 std::optional<EResourceToBalance> THive::CheckScatter(const TResourceNormalizedValues& scatterByResource) const {

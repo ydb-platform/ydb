@@ -308,6 +308,9 @@ public:
             return std::hash<decltype(node->GetSegment())>{}(node->GetSegment());
         }
     };
+
+    using TSegments = std::unordered_multiset<const TNodeInfo*, TNodeInfo::THashSegment, TNodeInfo::TEqualSegment>;
+    TSegments::const_iterator Segment;
 };
 
 } // NHive

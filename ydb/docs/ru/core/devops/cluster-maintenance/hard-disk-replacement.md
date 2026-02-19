@@ -14,12 +14,24 @@
 
 ### Определите `label` заменяемого диска
 
+{% list tabs %}
+
+- Командная строка
+
 Команда и результат выполнения:
 
 ```bash
 root@static-node-1:/opt/ydb# ls /dev/disk/by-partlabel/
 ydb_disk_1 ydb_disk_2 ydb_disk_3 ydb_disk_4
 ```
+
+- UI
+
+...
+Скриншот! метка дика выделена
+...
+
+{% endlist %}
 
 Этот `label` потребуется для выполнения следующего шага.
 

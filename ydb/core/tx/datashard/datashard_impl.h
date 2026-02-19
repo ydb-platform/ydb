@@ -7,6 +7,7 @@
 #include "change_record.h"
 #include "change_record_cdc_serializer.h"
 #include "conflicts_cache.h"
+#include "datashard__lock_rows.h"
 #include "datashard_outreadset.h"
 #include "datashard_pipeline.h"
 #include "datashard_repl_offsets.h"
@@ -60,6 +61,8 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <ydb/library/actors/async/event.h>
+#include <ydb/library/actors/async/low_priority.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
@@ -248,6 +251,9 @@ class TDataShard
     class TTxHandleSafeBuildFulltextDictScan;
 
     class TTxMediatorStateRestored;
+
+    class TTxLockRows;
+    class TLockRowsTxObserver;
 
     void HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev);
     void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev);
@@ -1263,6 +1269,10 @@ class TDataShard
     void ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&ev, const TActorContext &ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, const TActorContext& ctx);
+    void CheckLockRowsRejectAll();
+    bool CheckLockRowsReject(TLockRowsRequestState& state);
+    void HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev);
+    void HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::TPtr& ev);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSet::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorContext &ctx);
@@ -1631,7 +1641,7 @@ public:
     ui64 TxPlanned() const { return TransQueue.TxPlanned(); }
     ui64 TxPlanWaiting() const { return TransQueue.TxPlanWaiting(); }
     ui64 ImmediateInFly() const { return Pipeline.ImmediateInFly(); }
-    ui64 TxWaiting() const { return Pipeline.WaitingTxs() + Pipeline.WaitingReadIterators(); }
+    ui64 TxWaiting() const { return Pipeline.WaitingTxs() + Pipeline.WaitingReadIterators() + Pipeline.WaitingCoroutinesCount(); }
 
     // note that not part of ImmediateInFly() to not block scheme ops:
     // we rather abort iterator if scheme changes between iterations
@@ -2580,6 +2590,7 @@ private:
 
         TActorId InterconnectSession;
         THashMap<TActorId, TOverloadSubscriber> OverloadSubscribers;
+        TIntrusiveList<TLockRowsRequestState, TLockRowsRequestPipeServerListTag> LockRowsRequests;
     };
 
     using TPipeServers = THashMap<TActorId, TPipeServerInfo>;
@@ -2684,6 +2695,7 @@ private:
 
     TProposeQueue ProposeQueue;
     TVector<THolder<IEventHandle>> DelayedProposeQueue;
+    TAsyncEvent DelayedProposeCoroutines;
 
     TActorId PersistentPipeCache;
     NTabletPipe::TClientRetryPolicy SchemeShardPipeRetryPolicy;
@@ -2827,6 +2839,7 @@ private:
     ui64 CoordinatorPrevReadStepMax = Max<ui64>();
 
     TVector<THolder<IEventHandle>> MediatorStateWaitingMsgs;
+    TAsyncEvent MediatorStateWaitingCoroutines;
     bool MediatorStateWaiting = false;
     bool MediatorStateRestoreTxPending = false;
 
@@ -3079,6 +3092,8 @@ private:
     TReadIteratorsLocalMap ReadIteratorsByLocalReadId;
     THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
 
+    THashMap<TLockRowsRequestId, TLockRowsRequestState> LockRowsRequests;
+
     NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
 
     bool UpdateFollowerReadEdgePending = false;
@@ -3104,6 +3119,8 @@ private:
         ui32 SenderNodeId;  // Node where the breaker's SessionActor ran (where TNodeQueryTextCache is populated)
     };
     TDeque<TRecentWriteForTli> RecentWritesForTli;
+
+    TAsyncLowPriorityQueue LowPriorityQueue;
 
 public:
     struct TBreakerInfo {
@@ -3282,6 +3299,8 @@ protected:
             hFunc(TEvDataShard::TEvReadScanFinished, Handle);
             HFunc(TEvDataShard::TEvReadColumnsRequest, Handle);
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
+            hFunc(NEvents::TDataEvents::TEvLockRows, HandleLockRowsRequest);
+            hFunc(NEvents::TDataEvents::TEvLockRowsCancel, HandleLockRowsCancel);
             hFunc(TEvDataShard::TEvGetInfoRequest, Handle);
             hFunc(TEvDataShard::TEvListOperationsRequest, Handle);
             hFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);

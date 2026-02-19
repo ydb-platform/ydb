@@ -830,6 +830,14 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
             throw TLockedWriteLimitException();
         }
     }
+
+    if (res.LockTxId != 0) {
+        if (LockTxId) {
+            AddWriteConflict(res.LockTxId);
+        } else {
+            BreakWriteConflict(res.LockTxId);
+        }
+    }
 }
 
 void TDataShardUserDb::AddWriteConflict(ui64 txId) {

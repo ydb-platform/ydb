@@ -36,6 +36,8 @@ enum ESimpleCounters {
     COUNTER_VOLATILE_TX_WAITING_COUNT = 26                         [(CounterOpts) = {Name: "VolatileTxWaitingCount"}];
     COUNTER_VOLATILE_TX_COMMITTED_COUNT = 27                       [(CounterOpts) = {Name: "VolatileTxCommittedCount"}];
     COUNTER_VOLATILE_TX_ABORTING_COUNT = 28                        [(CounterOpts) = {Name: "VolatileTxAbortingCount"}];
+    COUNTER_LOCK_ROWS_INFLIGHT = 29                                [(CounterOpts) = {Name: "LockRowsInFlight"}];
+    COUNTER_LOCK_ROWS_WAITING = 30                                 [(CounterOpts) = {Name: "LockRowsWaiting"}];
 }
 
 enum ECumulativeCounters {
@@ -154,6 +156,7 @@ enum ECumulativeCounters {
     COUNTER_WRITE_DATABASE_DISK_SPACE_QUOTA_EXCEEDED = 112 [(CounterOpts) = {Name: "WriteDatabaseDiskSpaceQuotaExceeded"}];
     COUNTER_PREPARE_DATABASE_DISK_SPACE_QUOTA_EXCEEDED = 113 [(CounterOpts) = {Name: "PrepareDatabaseDiskSpaceQuotaExceeded"}];
     COUNTER_REMOVED_COMMITTED_TXS = 114                   [(CounterOpts) = {Name: "RemovedCommittedTxs"}];
+    COUNTER_LOCK_ROWS_FINISHED = 115                      [(CounterOpts) = {Name: "LockRowsFinished"}];
 }
 
 enum EPercentileCounters {
@@ -531,4 +534,5 @@ enum ETxTypes {
     TXTYPE_INIT_RESTORED = 84                             [(TxTypeOpts) = {Name: "TxInitRestored"}];
     TXTYPE_VACUUM = 85                                    [(TxTypeOpts) = {Name: "TxVacuum"}];
     TXTYPE_COMPLETE_VACUUM = 86                           [(TxTypeOpts) = {Name: "TxCompleteVacuum"}];
+    TXTYPE_LOCK_ROWS = 87                                 [(TxTypeOpts) = {Name: "TxLockRows"}];
 }

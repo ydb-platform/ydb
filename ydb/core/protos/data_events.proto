@@ -70,6 +70,7 @@ message TMvccSnapshot {
 enum ELockMode {
     OPTIMISTIC = 0;
     OPTIMISTIC_SNAPSHOT_ISOLATION = 1;
+    PESSIMISTIC_EXCLUSIVE = 2;
 }
 
 enum EDataFormat {
@@ -172,4 +173,99 @@ message TEvWriteResult {
 
     // Commit version when available
     optional NKikimrProto.TRowVersion CommitVersion = 14;
+}
+
+message TEvLockRows {
+    // A per-sender request id, useful for cancellation. Shards identify
+    // requests using (Sender, RequestId) pairs, which must be unique.
+    optional uint64 RequestId = 1;
+
+    // Lock parameters of the current query or transaction
+    optional uint64 LockId = 2;
+    optional uint32 LockNodeId = 3;
+    optional uint64 LockTimestamp = 4;
+
+    // A desired lock mode, only PESSIMISTIC lock modes are supported
+    optional ELockMode LockMode = 5;
+
+    // An optional snapshot of the current query
+    // Rows which have been modified since the specified snapshot will be
+    // returned in the ModifiedKeys list after locking, which usually means
+    // a read committed transaction will need to re-read these rows.
+    optional NKikimrProto.TRowVersion Snapshot = 6;
+
+    // Previously acquired locks at the destination shard, which are validated
+    // before processing the request. This could be used to avoid re-acquiring
+    // the same LockId with a different counter (implied lock breaking), or
+    // to support savepoints in the future. All locks listed here are implied
+    // to belong to the same transaction and will never conflict with each
+    // other.
+    repeated TLock ExistingLocks = 7;
+
+    // When true rows already locked by other transactions are skipped without
+    // waiting for conflicting transactions to commit or abort.
+    optional bool SkipLocked = 8;
+
+    // Destination global table id, must include SchemaVersion to detect schema changes
+    optional TTableId TableId = 9;
+
+    // A list of primary key column ids used in the payload. This list is
+    // matched against current table schema, and specifies column order, which
+    // must currently match schema primary key exactly, including order.
+    repeated uint32 ColumnIds = 10 [packed = true];
+
+    // Index of the message payload which contains serialized keys to lock.
+    optional uint64 PayloadIndex = 11;
+
+    // Format of the payload. DataShard only supports FORMAT_CELLVEC at the
+    // moment, where serialized data is in the TSerializedCellMatrix format,
+    // with each row matching ColumnIds cells with primary keys to lock.
+    optional EDataFormat PayloadFormat = 12;
+
+    // An optional schema for the serialized keys, used for FORMAT_ARROW
+    optional string PayloadSchema = 13;
+}
+
+message TEvLockRowsCancel {
+    // A previously received request matching (Sender, RequestId) to cancel,
+    // indicating Sender is no longer interested in the response. No response
+    // will be sent when cancellation succeeds.
+    optional uint64 RequestId = 1;
+}
+
+message TEvLockRowsResult {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_BAD_REQUEST = 2;
+        STATUS_OVERLOADED = 3;
+        STATUS_WRONG_SHARD_STATE = 4;
+        STATUS_LOCKS_BROKEN = 5;
+        STATUS_SCHEME_ERROR = 6;
+        STATUS_SCHEME_CHANGED = 7;
+        STATUS_INTERNAL_ERROR = 8;
+    }
+
+    // TabletId of the replying shard
+    optional uint64 TabletId = 1;
+
+    // RequestId specified in TEvLockRows request
+    optional uint64 RequestId = 2;
+
+    // The response status and optional issues
+    optional EStatus Status = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 4;
+
+    // A list of acquired/updated locks
+    // May include previously acquired locks which have been broken
+    repeated TLock Locks = 5;
+
+    // A list of row indexes from the request which have been successfully locked
+    repeated uint32 LockedKeys = 6 [packed = true];
+
+    // A list of row indexes from the request which have been skipped when SkipLocked is true
+    repeated uint32 SkippedKeys = 7 [packed = true];
+
+    // A list of row indexes from the request which have been modified since the specified Snapshot
+    repeated uint32 ModifiedKeys = 8 [packed = true];
 }

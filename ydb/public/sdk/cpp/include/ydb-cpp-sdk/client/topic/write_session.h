@@ -146,6 +146,83 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
 };
 
+template<class T>
+concept SerializableToString =
+    requires(const T& t) {
+        { t.Serialize() } -> std::convertible_to<std::string>;
+    };
+
+//! Contains the message to write and all the options.
+struct TWriteMessage {
+    using TSelf = TWriteMessage;
+    using TMessageMeta = std::vector<std::pair<std::string, std::string>>;
+private:
+    //! This field is used to store serialized data.
+    std::optional<std::string> DataHolder;
+
+public:
+    TWriteMessage() = delete;
+    TWriteMessage(std::string_view data)
+        : Data(data)
+    {}
+
+    template<SerializableToString T>
+    TWriteMessage(const T& data)
+    {
+        DataHolder = data.Serialize();
+    }
+
+    //! A message that is already compressed by codec. Codec from WriteSessionSettings does not apply to this message.
+    //! Compression will not be performed in SDK for such messages.
+    static TWriteMessage CompressedMessage(const std::string_view& data, ECodec codec, uint32_t originalSize) {
+        TWriteMessage result{data};
+        result.Codec = codec;
+        result.OriginalSize = originalSize;
+        return result;
+    }
+
+    bool Compressed() const {
+        return Codec.has_value();
+    }
+
+    std::optional<std::string_view> GetSerializedData() const {
+        return DataHolder.has_value() ? std::make_optional(std::string_view(*DataHolder)) : std::nullopt;
+    }
+ 
+    //! Message body.
+    std::string_view Data;
+
+    //! Codec and original size for compressed message.
+    //! Do not specify or change these options directly, use CompressedMessage()
+    //! method to create an object for compressed message.
+    std::optional<ECodec> Codec;
+    uint32_t OriginalSize = 0;
+
+    //! Message SeqNo, optional. If not provided SDK core will calculate SeqNo automatically.
+    //! NOTICE: Either all messages within one write session must have SeqNo provided or none of them.
+    FLUENT_SETTING_OPTIONAL(uint64_t, SeqNo);
+
+    //! Message creation timestamp. If not provided, Now() will be used.
+    FLUENT_SETTING_OPTIONAL(TInstant, CreateTimestamp);
+
+    //! Message metadata. Limited to 4096 characters overall (all keys and values combined).
+    FLUENT_SETTING(TMessageMeta, MessageMeta);
+
+    //! Message key. It will be used to route message to the partition.
+    FLUENT_SETTING_OPTIONAL(std::string, Key);
+
+    //! Partition to write to.
+    FLUENT_SETTING_OPTIONAL(std::uint32_t, Partition);
+
+    //! Transaction id
+    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
+
+    TTransactionBase* GetTxPtr() const
+    {
+        return Tx_ ? &Tx_->get() : nullptr;
+    }
+};
+
 struct TProducerSettings : public TWriteSessionSettings {
     using TSelf = TProducerSettings;
 
@@ -184,59 +261,11 @@ struct TProducerSettings : public TWriteSessionSettings {
     //! Maximum block time for write. If set, write will block for up to MaxBlockMs when the buffer is overloaded.
     FLUENT_SETTING_DEFAULT(TDuration, MaxBlockMs, TDuration::Zero());
 
+    //! Key producer function.
+    FLUENT_SETTING_OPTIONAL(std::function<std::string(const TWriteMessage& message)>, KeyProducer);
+
 private:
     using TWriteSessionSettings::ProducerId;
-};
-
-//! Contains the message to write and all the options.
-struct TWriteMessage {
-    using TSelf = TWriteMessage;
-    using TMessageMeta = std::vector<std::pair<std::string, std::string>>;
-public:
-    TWriteMessage() = delete;
-    TWriteMessage(std::string_view data)
-        : Data(data)
-    {}
-
-    //! A message that is already compressed by codec. Codec from WriteSessionSettings does not apply to this message.
-    //! Compression will not be performed in SDK for such messages.
-    static TWriteMessage CompressedMessage(const std::string_view& data, ECodec codec, uint32_t originalSize) {
-        TWriteMessage result{data};
-        result.Codec = codec;
-        result.OriginalSize = originalSize;
-        return result;
-    }
-
-    bool Compressed() const {
-        return Codec.has_value();
-    }
-
-    //! Message body.
-    std::string_view Data;
-
-    //! Codec and original size for compressed message.
-    //! Do not specify or change these options directly, use CompressedMessage()
-    //! method to create an object for compressed message.
-    std::optional<ECodec> Codec;
-    uint32_t OriginalSize = 0;
-
-    //! Message SeqNo, optional. If not provided SDK core will calculate SeqNo automatically.
-    //! NOTICE: Either all messages within one write session must have SeqNo provided or none of them.
-    FLUENT_SETTING_OPTIONAL(uint64_t, SeqNo);
-
-    //! Message creation timestamp. If not provided, Now() will be used.
-    FLUENT_SETTING_OPTIONAL(TInstant, CreateTimestamp);
-
-    //! Message metadata. Limited to 4096 characters overall (all keys and values combined).
-    FLUENT_SETTING(TMessageMeta, MessageMeta);
-
-    //! Transaction id
-    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
-
-    TTransactionBase* GetTxPtr() const
-    {
-        return Tx_ ? &Tx_->get() : nullptr;
-    }
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
@@ -325,8 +354,7 @@ class IKeyedWriteSession {
 public:
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    virtual void Write(TContinuationToken&& continuationToken, const std::string& key, TWriteMessage&& message,
-        TTransactionBase* tx = nullptr) = 0;
+    virtual void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) = 0;
 
     //! Future that is set when next event is available.
     virtual NThreading::TFuture<void> WaitEvent() = 0;

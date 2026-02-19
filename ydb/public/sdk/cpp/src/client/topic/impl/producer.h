@@ -41,7 +41,7 @@ private:
     };
 
     struct TMessageInfo {
-        TMessageInfo(const std::string& key, TWriteMessage&& message, std::uint32_t partition, TTransactionBase* tx);
+        TMessageInfo(const std::string& key, TWriteMessage&& message, std::uint32_t partition);
 
         std::string Key;
         std::string Data;
@@ -50,8 +50,7 @@ private:
         std::optional<uint64_t> SeqNo;
         std::optional<TInstant> CreateTimestamp;
         TMessageMeta MessageMeta;
-        std::optional<std::reference_wrapper<TTransactionBase>> TxInMessage;
-        TTransactionBase* Tx;
+        std::optional<std::reference_wrapper<TTransactionBase>> Tx;
         std::uint32_t Partition;
         bool Sent = false;
         NThreading::TPromise<EFlushResult> FlushPromise;
@@ -157,7 +156,7 @@ private:
         
         void DoWork();
 
-        void AddMessage(const std::string& key, TWriteMessage&& message, std::uint32_t partition, TTransactionBase* tx);
+        void AddMessage(const std::string& key, TWriteMessage&& message, std::uint32_t partition);
         void ScheduleResendMessages(std::uint32_t partition, std::uint64_t afterSeqNo);
         void RebuildPendingMessagesIndex(std::uint32_t partition);
         void HandleAck();
@@ -365,11 +364,7 @@ private:
 
     std::uint32_t ChooseRandomPartition();
 
-    EWriteResult WriteImpl(const std::string& key, TWriteMessage&& message,
-               TTransactionBase* tx = nullptr);
-
-    EWriteResult WriteInternal(TWriteMessage&& message, std::optional<std::uint32_t> partition = std::nullopt, const std::string& key = "",
-               TTransactionBase* tx = nullptr);
+    EWriteResult WriteInternal(TContinuationToken&&, TWriteMessage&& message);
 
 public:
     TProducer(const TProducerSettings& settings,
@@ -377,23 +372,15 @@ public:
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);
     
-    void Write(TContinuationToken&& continuationToken, const std::string& key, TWriteMessage&& message,
-               TTransactionBase* tx = nullptr) override;
+    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
 
-    [[nodiscard]] EWriteResult Write(std::uint32_t partition, TWriteMessage&& message,
-               TTransactionBase* tx = nullptr) override;
-
-    [[nodiscard]] EWriteResult Write(TWriteMessage&& message,
-               TTransactionBase* tx = nullptr) override;
-    
-    [[nodiscard]] EWriteResult Write(const std::string& key, TWriteMessage&& message,
-               TTransactionBase* tx = nullptr) override;
+    [[nodiscard]] EWriteResult Write(TWriteMessage&& message) override;
 
     std::optional<TCloseDescription> ExplainClosed() override;
 
     [[nodiscard]] NThreading::TFuture<EFlushResult> Flush() override;
 
-    [[nodiscard]] EFlushResult FlushAndWait(TDuration timeout = TDuration::Max()) override;
+    TWriteStats GetWriteStats() override;
 
     NThreading::TFuture<void> WaitEvent() override;
 
@@ -440,7 +427,6 @@ private:
     std::atomic_bool Closed = false;
     std::atomic_bool Done = false;
     TInstant CloseDeadline = TInstant::Now();
-    std::int64_t MainWorkerOwner = -1;
 
     std::unique_ptr<IPartitionChooser> PartitionChooser;
 
@@ -457,6 +443,11 @@ private:
     // Also, callbacks may arrive concurrently with the attempt to go idle.
     // Use a small state machine to avoid re-entrancy and lost wakeups.
     std::atomic<std::uint8_t> MainWorkerState = 0;
+    // MainWorker has an owner, which can be:
+    // - user's thread, in this case the value of MainWorkerOwner is -1
+    // - subsession's thread, in this case the value of MainWorkerOwner is the subsession's partition ID
+    std::int64_t MainWorkerOwner = -1;
+
     std::atomic<size_t> Epoch = 0;
     std::mt19937_64 RandomGenerator = std::mt19937_64(std::random_device()());
     

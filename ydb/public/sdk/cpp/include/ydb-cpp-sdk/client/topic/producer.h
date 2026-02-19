@@ -26,7 +26,29 @@ enum class EFlushResult : uint8_t {
     TIMEOUT = 2,
 };
 
+//! Description why session was closed.
 struct TCloseDescription : public TSessionClosedEvent {};
+
+//! Result of flush operation.
+//! If flush was successful, returns SUCCESS.
+//! If flush was not successful because of closed session, returns CLOSED.
+//! If flush was not successful because of timeout, returns TIMEOUT.
+struct TFlushResult {
+    //! Status of flush operation.
+    EFlushResult Status;
+    //! Last written sequence number.
+    std::uint64_t LastWrittenSeqNo;
+};
+
+//! Statistics of write operations.
+struct TWriteStats {
+    //! Last written sequence number. If messages do not have sequence numbers, returns std::nullopt.
+    std::optional<std::uint64_t> LastWrittenSeqNo;
+    //! Number of messages written.
+    std::uint64_t MessagesWritten;
+};
+
+//! Result of write operation.
 
 //! Producer is an abstraction that can write messages to the topic.
 //! It has three versions of Write method:
@@ -36,35 +58,13 @@ struct TCloseDescription : public TSessionClosedEvent {};
 //! EXPERIMENTAL SDK, DO NOT USE IN PRODUCTION.
 class IProducer {
 public:
-    //! Write single message.
-    //! Returns write result.
-    //! If write was successful, returns QUEUED.
-    //! If write was not successful due to overloaded buffer, returns OVERLOADED.
-    //! If write was not successful because of closed session, returns CLOSED.
-    //! DO NOT USE IN HIGHLY LOADED SYSTEMS.
-    //! DO NOT IGNORE THE RETURN VALUE.
-    [[nodiscard]] virtual EWriteResult Write(TWriteMessage&& message,
-        TTransactionBase* tx = nullptr) = 0;
-
-    //! Write single message.
-    //! key - message key.
-    //! Returns write result.
-    //! If write was successful, returns QUEUED.
-    //! If write was not successful due to overloaded buffer, returns OVERLOADED.
-    //! If write was not successful because of closed session, returns CLOSED.
-    //! DO NOT IGNORE THE RETURN VALUE.
-    [[nodiscard]] virtual EWriteResult Write(const std::string& key, TWriteMessage&& message,
-        TTransactionBase* tx = nullptr) = 0;
-
     //! Write single message to partition.
-    //! partition - partition ID.
     //! Returns write result.
     //! If write was successful, returns QUEUED.
     //! If write was not successful due to overloaded buffer, returns OVERLOADED.
     //! If write was not successful because of closed session, returns CLOSED.
     //! DO NOT IGNORE THE RETURN VALUE.
-    [[nodiscard]] virtual EWriteResult Write(std::uint32_t partition, TWriteMessage&& message,
-        TTransactionBase* tx = nullptr) = 0;
+    [[nodiscard]] virtual EWriteResult Write(TWriteMessage&& message) = 0;
 
     //! Explain why session was closed.
     //! Returns session closed event if session was closed.
@@ -77,11 +77,6 @@ public:
     //! If flush was not successful because of closed session, returns CLOSED.
     [[nodiscard]] virtual NThreading::TFuture<EFlushResult> Flush() = 0;
 
-    //! Flush all messages to the server and wait result.
-    //! Returns flush result.
-    //! DO NOT IGNORE THE RETURN VALUE.
-    [[nodiscard]] virtual EFlushResult FlushAndWait(TDuration timeout = TDuration::Max()) = 0;
-
     //! Close the producer.
     //! Returns close result.
     //! If close was successful, returns SUCCESS.
@@ -90,7 +85,25 @@ public:
     //! DO NOT IGNORE THE RETURN VALUE.
     [[nodiscard]] virtual ECloseResult Close(TDuration closeTimeout = TDuration::Max()) = 0;
 
+    //! Get statistics of write operations.
+    //! Returns statistics of write operations.
+    virtual TWriteStats GetWriteStats() = 0;
+
     virtual ~IProducer() = default;
+};
+
+//! Typed producer.
+//! Typed producer is a producer that can write messages of a specific type.
+//! It has the same interface as IProducer, but the messages are typed.
+//! It is more efficient than IProducer because it does not need to serialize and deserialize messages.
+template<typename T>
+class ITypedProducer : public IProducer {
+public:
+    //! Write single message.
+    //! Returns write result.
+    [[nodiscard]] EWriteResult Write(TWriteMessage&& message) override {
+        return this->Write(std::move(message));
+    }
 };
 
 } // namespace NYdb::NTopic

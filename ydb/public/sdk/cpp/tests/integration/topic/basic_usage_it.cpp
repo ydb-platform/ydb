@@ -968,7 +968,8 @@ TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
         ASSERT_TRUE(token.has_value()) << "Timed out waiting for ReadyToAcceptEvent";
         TWriteMessage msg("msg");
         msg.SeqNo(i + 1);
-        session->Write(std::move(*token), key, std::move(msg));
+        msg.Key(key);
+        session->Write(std::move(*token), std::move(msg));
     }
 
     testAdapter.WaitForAcks(100, TDuration::Seconds(30));

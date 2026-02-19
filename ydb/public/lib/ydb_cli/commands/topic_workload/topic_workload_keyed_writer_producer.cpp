@@ -56,14 +56,14 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
     writeMessage.SeqNo(MessageId_);
     writeMessage.CreateTimestamp(enqueueTimestamp);
     writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
+    writeMessage.Key(key);
 
     if (transaction.has_value()) {
         writeMessage.Tx(transaction.value());
     }
 
-    TTransactionBase* txPtr = writeMessage.GetTxPtr();
     auto continuationToken = GetContinuationToken();
-    WriteSession_->Write(std::move(continuationToken), key, std::move(writeMessage), txPtr);
+    WriteSession_->Write(std::move(continuationToken), std::move(writeMessage));
 
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
               TStringBuilder() << "Sent keyed message with id " << MessageId_

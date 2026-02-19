@@ -36,6 +36,25 @@
 #include <deque>
 #include <thread>
 
+template <>
+void Out<NYdb::NTopic::EFlushResult>(IOutputStream& s, NYdb::NTopic::EFlushResult v)
+{
+    switch (v) {
+        case NYdb::NTopic::EFlushResult::SUCCESS:
+            s << "EFlushResult::SUCCESS";
+            break;
+        case NYdb::NTopic::EFlushResult::CLOSED:
+            s << "EFlushResult::CLOSED";
+            break;
+        case NYdb::NTopic::EFlushResult::TIMEOUT:
+            s << "EFlushResult::TIMEOUT";
+            break;
+        default:
+            s << "EFlushResult::UNKNOWN(" << static_cast<int>(v) << ")";
+            break;
+    }
+}
+
 using namespace std::chrono_literals;
 
 static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
@@ -55,9 +74,10 @@ TString SerializeDataChunk(ui64 seqNo, const TString& payload) {
     return result;
 }
 
-TWriteMessage CreateMessage(std::string_view payload, ui64 seqNo) {
+TWriteMessage CreateMessage(std::string_view payload, const std::string& key, ui64 seqNo) {
     TWriteMessage msg(payload);
     msg.SeqNo(seqNo);
+    msg.Key(key);
     return msg;
 }
 
@@ -1050,7 +1070,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::string payload = "payload";
             TWriteMessage msg(payload);
             msg.SeqNo(i + 1);
-            session->Write(std::move(*token), "key-" + ToString(i), std::move(msg));
+            msg.Key("key-" + ToString(i));
+            session->Write(std::move(*token), std::move(msg));
         }
 
         UNIT_ASSERT_EQUAL_C(session->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS, "Failed to close keyed write session");
@@ -1095,7 +1116,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         std::string payload = "msg0";
         TWriteMessage msg(payload);
         msg.SeqNo(0);
-        session->Write(std::move(*token), "key", std::move(msg));
+        msg.Key("key");
+        session->Write(std::move(*token), std::move(msg));
 
         auto readyToAcceptEvent = session->GetEvent(false);
         UNIT_ASSERT_C(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(*readyToAcceptEvent), "ReadyToAcceptEvent is not received");
@@ -1154,7 +1176,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::string payload = "msg0";
             TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
-            session->Write(std::move(*token), key0, std::move(msg));
+            msg.Key(key0);
+            session->Write(std::move(*token), std::move(msg));
         }
         for (ui64 i = 0; i < count1; ++i) {
             auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
@@ -1162,7 +1185,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::string payload = "msg1";
             TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
-            session->Write(std::move(*token), key1, std::move(msg));
+            msg.Key(key1);
+            session->Write(std::move(*token), std::move(msg));
         }
 
         UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
@@ -1246,7 +1270,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::string payload = "msg";
             TWriteMessage msg(payload);
             msg.SeqNo(i + 1);
-            session->Write(std::move(*token), key, std::move(msg));
+            msg.Key(key);
+            session->Write(std::move(*token), std::move(msg));
         }
 
         UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
@@ -1293,7 +1318,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::string payload = "data";
             TWriteMessage msg(payload);
             msg.SeqNo(i);
-            session->Write(std::move(*token), key, std::move(msg));
+            msg.Key(key);
+            session->Write(std::move(*token), std::move(msg));
         }
 
         UNIT_ASSERT(eventLoop.WaitForAcks(count, TDuration::Seconds(60)));
@@ -1338,7 +1364,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     std::string payload = "data";
                     TWriteMessage msg(payload);
                     msg.SeqNo(seqNo);
-                    session->Write(std::move(*token), key, std::move(msg));
+                    msg.Key(key);
+                    session->Write(std::move(*token), std::move(msg));
                 }
             });
         }
@@ -1374,7 +1401,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::string payload = "data";
             TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
-            session->Write(std::move(*token), key, std::move(msg));
+            msg.Key(key);
+            session->Write(std::move(*token), std::move(msg));
         }
 
         UNIT_ASSERT(eventLoop.WaitForAcks(messages, TDuration::Seconds(60)));
@@ -1389,7 +1417,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::string payload = "data";
             TWriteMessage msg(payload);
             msg.SeqNo(seqNo++);
-            session->Write(std::move(*token), key, std::move(msg));
+            msg.Key(key);
+            session->Write(std::move(*token), std::move(msg));
         }
 
         UNIT_ASSERT(eventLoop.WaitForAcks(messages * 2, TDuration::Seconds(60)));
@@ -1426,7 +1455,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 std::string payload = "data";   
                 TWriteMessage msg(payload);
                 msg.SeqNo(i);
-                session->Write(std::move(*token), key, std::move(msg));
+                msg.Key(key);
+                session->Write(std::move(*token), std::move(msg));
             }
         });
 
@@ -1468,13 +1498,15 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::string payload = "message-" + ToString(i);
             TWriteMessage msg(payload);
             msg.SeqNo(i + 1);
-            session->Write(std::move(*token), "key1", std::move(msg));
+            msg.Key("key1");
+            session->Write(std::move(*token), std::move(msg));
         }
 
         // Test Close timeout
-        const TDuration closeTimeout = TDuration::Seconds(2);
+        const TDuration closeTimeout = TDuration::Seconds(5);
         const TInstant startTime = TInstant::Now();
-        session->Close(closeTimeout);
+        auto result = session->Close(closeTimeout);
+        UNIT_ASSERT_EQUAL(result, ECloseResult::SUCCESS);
         const TDuration actualDuration = TInstant::Now() - startTime;
         
         // Verify that Close didn't block longer than timeout (with some tolerance)
@@ -1597,7 +1629,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             if (key.empty()) {
                 key = "lalala";
             }
-            s->Write(std::move(*token), key, CreateMessage(payload, seqNo));
+            s->Write(std::move(*token), CreateMessage(payload, key, seqNo));
         };
 
         {
@@ -1768,7 +1800,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT(token);
             auto key = keys[seqNo % keys.size()];
             if (key.empty()) key = "a";
-            s->Write(std::move(*token), key, CreateMessage(payload, seqNo));
+            s->Write(std::move(*token), CreateMessage(payload, key, seqNo));
         };
 
         {
@@ -1838,7 +1870,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
         }
 
-        UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EFlushResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(producer->Flush().GetValueSync(), EFlushResult::SUCCESS);
 
         auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 10);
@@ -1879,9 +1911,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 0; i < 3; ++i) {
             for (const auto& partition : partitions) {
                 for (ui64 i = 0; i < 10; ++i) {
-                    UNIT_ASSERT_EQUAL(producer->Write(partition.GetPartitionId(), TWriteMessage(msgData)), EWriteResult::QUEUED);
+                    TWriteMessage msg(msgData);
+                    msg.Partition(partition.GetPartitionId());
+                    UNIT_ASSERT_EQUAL(producer->Write(std::move(msg)), EWriteResult::QUEUED);
                 }
-                UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EFlushResult::SUCCESS);    
+                UNIT_ASSERT_VALUES_EQUAL(producer->Flush().GetValueSync(), EFlushResult::SUCCESS);    
                 UNIT_ASSERT((producerRaw->GetIdleSessionsCount() == 1 && producerRaw->GetSessionsCount() == 1) ||
                     (producerRaw->GetIdleSessionsCount() == 0 && producerRaw->GetSessionsCount() == 0));
                 Sleep(TDuration::Seconds(1));
@@ -1923,10 +1957,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto msgData = TString(1_MB, 'a');
 
         {
-            UNIT_ASSERT_EQUAL(producer1->Write("key1", CreateMessage(msgData, 1)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write("key2", CreateMessage(msgData, 2)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EFlushResult::SUCCESS);
-            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key1", 1)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key2", 2)), EWriteResult::QUEUED);
+            UNIT_ASSERT_VALUES_EQUAL(producer1->Flush().GetValueSync(), EFlushResult::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(producer2->Flush().GetValueSync(), EFlushResult::SUCCESS);
             auto d = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             auto partitionsCount = d.GetTopicDescription().GetPartitions().size();
             UNIT_ASSERT_C(partitionsCount >= 2,
@@ -1934,19 +1968,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         {
-            UNIT_ASSERT_EQUAL(producer1->Write("key3", CreateMessage(msgData, 3)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write("key4", CreateMessage(msgData, 4)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write("key5", CreateMessage(msgData, 5)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write("key6", CreateMessage(msgData, 6)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write("key7", CreateMessage(msgData, 7)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write("key8", CreateMessage(msgData, 8)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write("key9", CreateMessage(msgData, 9)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write("key10", CreateMessage(msgData, 10)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write("key11", CreateMessage(msgData, 11)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write("key12", CreateMessage(msgData, 12)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write("key13", CreateMessage(msgData, 13)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EFlushResult::SUCCESS);
-            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key3", 3)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key4", 4)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key5", 5)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key6", 6)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key7", 7)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key8", 8)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key9", 9)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key10", 10)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key11", 11)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key12", 12)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key13", 13)), EWriteResult::QUEUED);
+            UNIT_ASSERT_VALUES_EQUAL(producer1->Flush().GetValueSync(), EFlushResult::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(producer2->Flush().GetValueSync(), EFlushResult::SUCCESS);
             auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             auto partitionsCount = describeResult.GetTopicDescription().GetPartitions().size();
             UNIT_ASSERT_C(partitionsCount >= 4,
@@ -1954,10 +1988,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         {
-            UNIT_ASSERT_EQUAL(producer1->Write("key14", CreateMessage(msgData, 14)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write("key15", CreateMessage(msgData, 15)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->FlushAndWait(), EFlushResult::SUCCESS);
-            UNIT_ASSERT_EQUAL(producer2->FlushAndWait(), EFlushResult::SUCCESS);
+            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key14", 14)), EWriteResult::QUEUED);
+            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key15", 15)), EWriteResult::QUEUED);
+            UNIT_ASSERT_VALUES_EQUAL(producer1->Flush().GetValueSync(), EFlushResult::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(producer2->Flush().GetValueSync(), EFlushResult::SUCCESS);
         }
 
         UNIT_ASSERT_EQUAL(producer1->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
@@ -1985,7 +2019,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
         }
 
-        UNIT_ASSERT_EQUAL(producer->FlushAndWait(), EFlushResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(producer->Flush().GetValueSync(), EFlushResult::SUCCESS);
         UNIT_ASSERT_EQUAL(producer->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
     }
 

@@ -28,7 +28,7 @@ When you change anything under **`.github/`** (workflows, scripts, config files,
 - **Workflows** (`.github/workflows/*.yml`, `*.yaml`): which jobs/steps call which scripts or actions; which use `secrets.*`, `vars.*`, or config paths.
 - **Scripts** (`.github/scripts/**`): which workflows or actions invoke them; expected CLI args, env vars, and input files (e.g. `muted_ya.txt`).
 - **Config** (`.github/config/*`): who reads it — e.g. `muted_ya.txt`, `stable_tests_branches.json`, `stable_nightly_branches.json` are used by multiple workflows and by the **test_ya** action (PR-check, postcommit, run_tests, update_muted_ya, create_issues_for_muted_tests).
-- **Actions** (`.github/actions/**`): which workflows call them; inputs/outputs and any hardcoded paths (e.g. ` .github/config/muted_ya.txt` in **test_ya**).
+- **Actions** (`.github/actions/**`): which workflows call them; inputs/outputs and any hardcoded paths (e.g. `.github/config/muted_ya.txt` in **test_ya**).
 
 ### 2. Critical / real problems (warn with high priority)
 

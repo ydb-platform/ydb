@@ -254,7 +254,7 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(DiskFormat);
 
         // TODO: use pool
-        auto* op = new TDirectIoOp();
+        auto op = std::make_unique<TDirectIoOp>();
         op->OnComplete = &TDirectIoOp::OnDirectIoComplete;
         op->Sender = ev->Sender;
         op->Cookie = ev->Cookie;
@@ -285,6 +285,7 @@ namespace NKikimr::NDDisk {
         InFlightCount.fetch_add(1, std::memory_order_relaxed);
         const bool submitted = UringRouter->Write(op->DataHolder.data(), op->Size, diskOffset, op);
         if (submitted) {
+            op.release();
             // with SQ polling – no syscall
             // TODO: without polling do we need batching?
             UringRouter->Flush();
@@ -295,7 +296,6 @@ namespace NKikimr::NDDisk {
             Counters.Interface.Write.Reply(false);
             SendReply(*ev, std::make_unique<TEvWriteResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full"));
-            delete op;
         }
     }
 
@@ -305,7 +305,7 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(DiskFormat);
 
         // TODO: use pool
-        auto* op = new TDirectIoOp();
+        auto op = std::make_unique<TDirectIoOp>();
         op->OnComplete = &TDirectIoOp::OnDirectIoComplete;
         op->Sender = ev->Sender;
         op->Cookie = ev->Cookie;
@@ -324,6 +324,7 @@ namespace NKikimr::NDDisk {
         InFlightCount.fetch_add(1, std::memory_order_relaxed);
         const bool submitted = UringRouter->Read(op->DataHolder.GetDataMut(), op->Size, diskOffset, op);
         if (submitted) {
+            op.release();
             UringRouter->Flush();
         } else {
             // SQ ring full
@@ -332,7 +333,6 @@ namespace NKikimr::NDDisk {
             Counters.Interface.Read.Reply(false);
             SendReply(*ev, std::make_unique<TEvReadResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED, "io_uring SQ ring full"));
-            delete op;
         }
     }
 

@@ -734,7 +734,7 @@ Y_UNIT_TEST(InsertValues) {
     auto validate = [&]() {
         const auto& table = NPg::LookupStaticTable({"pg_catalog", "mytable"});
         UNIT_ASSERT(table.Kind == NPg::ERelKind::Relation);
-        size_t remap[2];
+        size_t remap[2]; // NOLINT(modernize-avoid-c-arrays)
         size_t rowStep;
         const auto& data = *NPg::ReadTable({"pg_catalog", "mytable"}, {"foo", "bar"}, remap, rowStep);
         UNIT_ASSERT_VALUES_EQUAL(rowStep, 3);

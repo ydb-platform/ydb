@@ -1047,70 +1047,71 @@ private:
     }
 
     TAstNode* MakeListType(TAstNode* itemType) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("ListType")),
             itemType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeStreamType(TAstNode* itemType) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("StreamType")),
             itemType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeFlowType(TAstNode* itemType) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("FlowType")),
             itemType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeBlockType(TAstNode* itemType) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("BlockType")),
             itemType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeScalarType(TAstNode* itemType) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("ScalarType")),
             itemType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeErrorType(TStringBuf file, ui32 row, ui32 column, TStringBuf message) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("ErrorType")),
             MakeQuotedAtom(ToString(row)),
             MakeQuotedAtom(ToString(column)),
             MakeQuotedAtom(file, TNodeFlags::ArbitraryContent),
-            MakeQuotedAtom(message, TNodeFlags::ArbitraryContent)};
-        return MakeList(items, Y_ARRAY_SIZE(items));
+            MakeQuotedAtom(message, TNodeFlags::ArbitraryContent),
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeVariantType(TAstNode* underlyingType) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("VariantType")),
             underlyingType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeDictType(TAstNode* keyType, TAstNode* valueType) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("DictType")),
             keyType,
             valueType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeTupleType(TSmallVec<TAstNode*>& items) {
@@ -1123,11 +1124,11 @@ private:
         items.push_back(MakeLiteralAtom(TStringBuf("StructType")));
 
         for (const auto& member : members) {
-            TAstNode* memberType[] = {
+            auto memberType = std::to_array<TAstNode*>({
                 MakeQuotedAtom(member.first, TNodeFlags::ArbitraryContent), // name
                 member.second,                                              // type
-            };
-            items.push_back(MakeQuote(MakeList(memberType, Y_ARRAY_SIZE(memberType))));
+            });
+            items.push_back(MakeQuote(MakeList(memberType.data(), memberType.size())));
         }
 
         return MakeList(items.data(), items.size());
@@ -1182,98 +1183,92 @@ private:
     }
 
     TAstNode* MakeResourceType(TStringBuf tag) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("ResourceType")),
             MakeQuotedAtom(tag),
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeVoidType() {
-        TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("VoidType"))};
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        auto items = std::to_array<TAstNode*>({MakeLiteralAtom(TStringBuf("VoidType"))});
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeNullType() {
-        TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("NullType"))};
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        auto items = std::to_array<TAstNode*>({MakeLiteralAtom(TStringBuf("NullType"))});
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeEmptyListType() {
-        TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("EmptyListType"))};
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        auto items = std::to_array<TAstNode*>({MakeLiteralAtom(TStringBuf("EmptyListType"))});
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeEmptyDictType() {
-        TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("EmptyDictType"))};
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        auto items = std::to_array<TAstNode*>({MakeLiteralAtom(TStringBuf("EmptyDictType"))});
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeUnitType() {
-        TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("UnitType"))};
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        auto items = std::to_array<TAstNode*>({MakeLiteralAtom(TStringBuf("UnitType"))});
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeGenericType() {
-        TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("GenericType"))};
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        auto items = std::to_array<TAstNode*>({MakeLiteralAtom(TStringBuf("GenericType"))});
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeTaggedType(TAstNode* baseType, TStringBuf tag) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("TaggedType")),
             baseType,
-            MakeQuotedAtom(tag)};
-
-        return MakeList(items, Y_ARRAY_SIZE(items));
+            MakeQuotedAtom(tag),
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeDataType(TStringBuf type) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("DataType")),
             MakeQuotedAtom(type),
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakePgType(TStringBuf type) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("PgType")),
             MakeQuotedAtom(type),
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeDecimalType(TStringBuf precision, TStringBuf scale) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("DataType")),
             MakeQuotedAtom(TStringBuf("Decimal")),
             MakeQuotedAtom(precision),
             MakeQuotedAtom(scale),
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeOptionalType(TAstNode* type) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(TStringBuf("OptionalType")),
             type,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeLinearType(TAstNode* type, bool isDynamic) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             MakeLiteralAtom(isDynamic ? TStringBuf("DynamicLinearType") : TStringBuf("LinearType")),
             type,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
@@ -1285,11 +1280,11 @@ private:
     }
 
     TAstNode* MakeQuote(TAstNode* node) {
-        TAstNode* items[] = {
+        auto items = std::to_array<TAstNode*>({
             &TAstNode::QuoteAtom,
             node,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
+        });
+        return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeQuotedAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {

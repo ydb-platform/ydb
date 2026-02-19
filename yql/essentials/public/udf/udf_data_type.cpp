@@ -129,6 +129,7 @@ EDataSlot GetDataSlot(TStringBuf str) {
     ythrow yexception() << "Invalid data type: " << str;
 }
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const TDataTypeInfo DataTypeInfos[DataSlotCount] = {
     UDF_TYPE_ID_MAP(UDF_TYPE_INFO)};
 

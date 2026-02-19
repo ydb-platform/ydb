@@ -198,7 +198,14 @@ struct TMkqlArrowHeader {
     ui64 Size;
     ui64 Offset;
     std::atomic<ui64> UseCount;
-    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64) - sizeof(ui64) - sizeof(std::atomic<ui64>)];
+    std::array<
+        char,
+        ArrowAlignment -
+            sizeof(TAllocState::TListEntry) -
+            sizeof(ui64) -
+            sizeof(ui64) -
+            sizeof(std::atomic<ui64>)>
+        Padding;
 };
 
 static_assert(sizeof(TMkqlArrowHeader) == ArrowAlignment);

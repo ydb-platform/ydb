@@ -1547,9 +1547,9 @@ void TValuePackerTransport<Fast>::BuildMeta(TPagedBuffer::TPtr& buffer, bool add
                 PackData<Fast>(ItemCount_, buf);
             } else {
                 // PackData() can not be used here - it may overwrite some bytes past the end of header
-                char tmp[MAX_PACKED64_SIZE];
-                size_t actualItemCountSize = Pack64(ItemCount_, tmp);
-                std::memcpy(buf.Pos(), tmp, actualItemCountSize);
+                std::array<char, MAX_PACKED64_SIZE> tmp;
+                size_t actualItemCountSize = Pack64(ItemCount_, tmp.data());
+                std::memcpy(buf.Pos(), tmp.data(), actualItemCountSize);
                 buf.Advance(actualItemCountSize);
             }
         }

@@ -147,7 +147,7 @@ public:
     bool CustomTests = false;
     bool EnableLineage = false;
 
-    void Parse(int argc, const char* argv[]);
+    void Parse(int argc, const char** argv);
 
     void AddOptExtension(std::function<void(NLastGetopt::TOpts& opts)> optExtender) {
         OptExtenders_.push_back(std::move(optExtender));
@@ -189,7 +189,7 @@ public:
     explicit TFacadeRunner(TString name);
     ~TFacadeRunner();
 
-    int Main(int argc, const char* argv[]);
+    int Main(int argc, const char** argv);
 
     void AddFsDownloadFactory(std::function<NFS::IDownloaderPtr()> factory) {
         FsDownloadFactories_.push_back(std::move(factory));
@@ -232,7 +232,7 @@ public:
     }
 
 protected:
-    virtual int DoMain(int argc, const char* argv[]);
+    virtual int DoMain(int argc, const char** argv);
     virtual int DoRun(TProgramFactory& factory);
     virtual TProgram::TStatus DoRunProgram(TProgramPtr program);
 

@@ -526,9 +526,9 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
             return value;
 
         case NUdf::EDataSlot::Uuid: {
-            ui16 dw[8];
-            std::memcpy(dw, value.AsStringRef().Data(), sizeof(dw));
-            NUuid::UuidToString(dw, out);
+            std::array<ui16, 8> dw;
+            std::memcpy(dw.data(), value.AsStringRef().Data(), sizeof(dw));
+            NUuid::UuidToString(dw.data(), out);
             break;
         }
 
@@ -1514,24 +1514,24 @@ ui32 ParseNumber(ui32& pos, NUdf::TStringRef buf, ui32& value, i8 dig_cnt) {
 }
 
 NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm) {
-    ui16 dw[8];
+    std::array<ui16, 8> dw;
 
-    if (!NUuid::ParseUuidToArray(buf, dw, shortForm)) {
+    if (!NUuid::ParseUuidToArray(buf, dw.data(), shortForm)) {
         return NUdf::TUnboxedValuePod();
     }
 
-    return MakeString(NUdf::TStringRef(reinterpret_cast<char*>(dw), sizeof(dw)));
+    return MakeString(NUdf::TStringRef(reinterpret_cast<char*>(dw.data()), sizeof(dw)));
 }
 
 bool ParseUuid(NUdf::TStringRef buf, void* out, bool shortForm) {
-    ui16 dw[8];
+    std::array<ui16, 8> dw;
 
-    if (!NUuid::ParseUuidToArray(buf, dw, shortForm)) {
+    if (!NUuid::ParseUuidToArray(buf, dw.data(), shortForm)) {
         return false;
     }
 
     if (out) {
-        std::memcpy(out, dw, sizeof(dw));
+        std::memcpy(out, dw.data(), sizeof(dw));
     }
     return true;
 }

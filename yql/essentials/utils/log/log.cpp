@@ -63,8 +63,8 @@ private:
 class TEmergencyLogOutput: public IOutputStream {
 public:
     TEmergencyLogOutput()
-        : Current_(Buf_)
-        , End_(Y_ARRAY_END(Buf_))
+        : Current_(Buf_.begin())
+        , End_(Buf_.end())
     {
     }
 
@@ -77,9 +77,9 @@ private:
     }
 
     void DoFlush() override {
-        if (Current_ != Buf_) {
-            NYql::NLog::YqlLogger().Write(TLOG_EMERG, Buf_, Current_ - Buf_);
-            Current_ = Buf_;
+        if (Current_ != Buf_.data()) {
+            NYql::NLog::YqlLogger().Write(TLOG_EMERG, Buf_.data(), Current_ - Buf_.data());
+            Current_ = Buf_.data();
         }
     }
 
@@ -93,7 +93,7 @@ private:
     }
 
 private:
-    char Buf_[1 << 20];
+    std::array<char, 1 << 20> Buf_;
     char* Current_;
     char* const End_;
 };
@@ -278,11 +278,11 @@ void WriteLocalTime(IOutputStream* out) {
     time_t seconds = static_cast<time_t>(now.tv_sec);
     localtime_r(&seconds, &tm);
 
-    char buf[sizeof("2016-01-02 03:04:05.006")];
-    int n = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S.", &tm);
-    snprintf(buf + n, sizeof(buf) - n, "%03" PRIu32, static_cast<ui32>(now.tv_usec) / 1000);
+    std::array<char, sizeof("2016-01-02 03:04:05.006")> buf;
+    int n = strftime(buf.data(), sizeof(buf), "%Y-%m-%d %H:%M:%S.", &tm);
+    snprintf(buf.data() + n, sizeof(buf) - n, "%03" PRIu32, static_cast<ui32>(now.tv_usec) / 1000);
 
-    out->Write(buf, sizeof(buf) - 1);
+    out->Write(buf.data(), sizeof(buf) - 1);
 }
 
 TYqlLog::TYqlLog()

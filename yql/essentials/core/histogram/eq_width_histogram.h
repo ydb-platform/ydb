@@ -7,6 +7,8 @@
 #include <util/generic/maybe.h>
 #include <util/system/unaligned_mem.h>
 #include <util/generic/yexception.h>
+
+#include <array>
 #include <cmath>
 
 namespace NKikimr {
@@ -148,11 +150,11 @@ class TEqWidthHistogram {
 public:
 #pragma pack(push, 1)
     struct THistValue {
-        ui8 Value[EqWidthHistogramBucketStorageSize];
+        std::array<ui8, EqWidthHistogramBucketStorageSize> Value;
     };
     struct TDomainRange {
-        ui8 Start[EqWidthHistogramBucketStorageSize];
-        ui8 End[EqWidthHistogramBucketStorageSize];
+        std::array<ui8, EqWidthHistogramBucketStorageSize> Start;
+        std::array<ui8, EqWidthHistogramBucketStorageSize> End;
     };
 #pragma pack(pop)
 
@@ -173,8 +175,8 @@ public:
     // Not using `std::lower_bound()` here because need an index to map to `suffix` and `prefix` sum.
     template <typename T>
     ui32 FindBucketIndex(T val) const {
-        const T domainStart = LoadFrom<T>(DomainRange_.Start);
-        const T domainEnd = LoadFrom<T>(DomainRange_.End);
+        const T domainStart = LoadFrom<T>(DomainRange_.Start.data());
+        const T domainEnd = LoadFrom<T>(DomainRange_.End.data());
         if (CmpLess<T>(val, domainStart)) {
             return 0;
         }
@@ -187,12 +189,12 @@ public:
             const UT start = static_cast<UT>(domainStart);
             const UT value = static_cast<UT>(val);
             const UT diff = value - start;
-            UT bucketIndex = diff / LoadFrom<UT>(bucketWidth.Value);
+            UT bucketIndex = diff / LoadFrom<UT>(bucketWidth.Value.data());
             bucketIndex = std::floor<UT>(bucketIndex);
             bucketIndex = std::min<UT>(GetNumBuckets() - 1, bucketIndex);
             return static_cast<ui32>(bucketIndex);
         }
-        T bucketIndex = std::floor((val - domainStart) / LoadFrom<T>(bucketWidth.Value));
+        T bucketIndex = std::floor((val - domainStart) / LoadFrom<T>(bucketWidth.Value.data()));
         bucketIndex = std::min<T>(GetNumBuckets() - 1, bucketIndex);
         return static_cast<ui32>(bucketIndex);
     }
@@ -201,18 +203,18 @@ public:
     template <typename T>
     THistValue GetBucketWidth() const {
         THistValue returnValue;
-        const T start = LoadFrom<T>(DomainRange_.Start);
-        const T end = LoadFrom<T>(DomainRange_.End);
+        const T start = LoadFrom<T>(DomainRange_.Start.data());
+        const T end = LoadFrom<T>(DomainRange_.End.data());
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             using UT = std::make_unsigned_t<T>;
             const UT rangeLen = static_cast<UT>(end) - static_cast<UT>(start);
             const UT bucketWidth = rangeLen / static_cast<UT>(GetNumBuckets());
-            StoreTo<UT>(returnValue.Value, bucketWidth);
+            StoreTo<UT>(returnValue.Value.data(), bucketWidth);
             return returnValue;
         }
         const T rangeLen = end - start;
         const T bucketWidth = rangeLen / static_cast<T>(GetNumBuckets());
-        StoreTo<T>(returnValue.Value, bucketWidth);
+        StoreTo<T>(returnValue.Value.data(), bucketWidth);
         return returnValue;
     }
 
@@ -221,14 +223,14 @@ public:
     void InitializeBuckets(T rangeStart, T rangeEnd) {
         Y_ENSURE(CmpLess<T>(rangeStart, rangeEnd));
         DomainRange_ = {};
-        StoreTo<T>(DomainRange_.Start, rangeStart);
-        StoreTo<T>(DomainRange_.End, rangeEnd);
+        StoreTo<T>(DomainRange_.Start.data(), rangeStart);
+        StoreTo<T>(DomainRange_.End.data(), rangeEnd);
         const THistValue bucketWidth = GetBucketWidth<T>(); // non-zero positive width of each bucket
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             using UT = std::make_unsigned_t<T>;
-            Y_ENSURE(CmpLess<UT>(0, LoadFrom<UT>(bucketWidth.Value)), "Domain range is too close");
+            Y_ENSURE(CmpLess<UT>(0, LoadFrom<UT>(bucketWidth.Value.data())), "Domain range is too close");
         } else {
-            Y_ENSURE(CmpLess<T>(0, LoadFrom<T>(bucketWidth.Value)), "Domain range is too close");
+            Y_ENSURE(CmpLess<T>(0, LoadFrom<T>(bucketWidth.Value.data())), "Domain range is too close");
         }
     }
 
@@ -239,9 +241,9 @@ public:
             return false;
         } else if (ValueType_ != other.GetType()) {
             return false;
-        } else if (!CmpEqual<T>(LoadFrom<T>(DomainRange_.Start), LoadFrom<T>(other.GetDomainRange().Start))) {
+        } else if (!CmpEqual<T>(LoadFrom<T>(DomainRange_.Start.data()), LoadFrom<T>(other.GetDomainRange().Start.data()))) {
             return false;
-        } else if (!CmpEqual<T>(LoadFrom<T>(DomainRange_.End), LoadFrom<T>(other.GetDomainRange().End))) {
+        } else if (!CmpEqual<T>(LoadFrom<T>(DomainRange_.End.data()), LoadFrom<T>(other.GetDomainRange().End.data()))) {
             return false;
         }
         return true;
@@ -317,10 +319,10 @@ public:
         const TEqWidthHistogram::THistValue bucketWidth = Histogram_->GetBucketWidth<T>();
         // Assuming uniform distribution.
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-            const ui64 width = LoadFrom<ui64>(bucketWidth.Value);
+            const ui64 width = LoadFrom<ui64>(bucketWidth.Value.data());
             return count / width;
         }
-        const T width = LoadFrom<T>(bucketWidth.Value);
+        const T width = LoadFrom<T>(bucketWidth.Value.data());
         return static_cast<ui64>(count / width);
     }
 

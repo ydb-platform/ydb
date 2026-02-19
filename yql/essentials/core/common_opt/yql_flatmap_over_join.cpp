@@ -1185,8 +1185,8 @@ private:
 
     const TJoinLabels& JoinLabels_;
     TExprNode::TPtr JoinTree_;
-    TStringBuf Labels_[2];
-    TStringBuf Columns_[2];
+    std::array<TStringBuf, 2> Labels_;
+    std::array<TStringBuf, 2> Columns_;
     TExprContext& Ctx_;
     bool RotateJoinTree_;
 };

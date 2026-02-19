@@ -2662,8 +2662,8 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TDataExprType* dataType[2];
-        bool isOptional[2];
+        std::array<const TDataExprType*, 2> dataType;
+        std::array<bool, 2> isOptional;
         for (ui32 i = 0; i < 2; ++i) {
             if (IsNull(*input->Child(i))) {
                 output = input->ChildPtr(i);
@@ -2728,8 +2728,8 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TDataExprType* dataType[2];
-        bool isOptional[2];
+        std::array<const TDataExprType*, 2> dataType;
+        std::array<bool, 2> isOptional;
         bool haveOptional = false;
         const TDataExprType* commonType = nullptr;
         for (ui32 i = 0; i < 2; ++i) {
@@ -2832,8 +2832,8 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TDataExprType* dataType[2];
-        bool isOptional[2];
+        std::array<const TDataExprType*, 2> dataType;
+        std::array<bool, 2> isOptional;
         bool haveOptional = false;
         const TDataExprType* commonType = nullptr;
         for (ui32 i = 0; i < 2; ++i) {
@@ -2916,8 +2916,8 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TDataExprType* dataType[2];
-        bool isOptional[2];
+        std::array<const TDataExprType*, 2> dataType;
+        std::array<bool, 2> isOptional;
         bool haveOptional = false;
         const TDataExprType* commonType = nullptr;
         for (ui32 i = 0; i < 2; ++i) {
@@ -2995,8 +2995,8 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TDataExprType* dataType[2];
-        bool isOptional[2];
+        std::array<const TDataExprType*, 2> dataType;
+        std::array<bool, 2> isOptional;
         bool haveOptional = false;
         const TDataExprType* commonType = nullptr;
         for (ui32 i = 0; i < 2; ++i) {
@@ -3065,8 +3065,8 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TDataExprType* dataType[2];
-        bool isOptional[2];
+        std::array<const TDataExprType*, 2> dataType;
+        std::array<bool, 2> isOptional;
         bool haveOptional = false;
         bool allScalars = true;
         const TDataExprType* commonType = nullptr;
@@ -3288,8 +3288,8 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool isOptional[N];
-        const TDataExprType* dataType[N];
+        std::array<bool, N> isOptional;
+        std::array<const TDataExprType*, N> dataType;
         bool haveOptional = false;
         const TDataExprType* commonType = nullptr;
         for (ui32 i = 0; i < N; ++i) {

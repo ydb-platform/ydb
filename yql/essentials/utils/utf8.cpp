@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <vector>
+#include <array>
 
 namespace NYql {
 
@@ -13,7 +14,7 @@ unsigned char GetRange(unsigned char c) {
     // Referring to DFA of http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
     // With new mapping 1 -> 0x10, 7 -> 0x20, 9 -> 0x40, such that AND operation can test multiple types.
     // clang-format off
-    static const unsigned char Type[] = {
+    static const auto Type = std::to_array<unsigned char>({
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -24,7 +25,7 @@ unsigned char GetRange(unsigned char c) {
         0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
         8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2,  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
         10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8,
-    };
+    });
     // clang-format on
     return Type[c];
 }
@@ -36,7 +37,7 @@ struct TByteRange {
 
 struct TUtf8Ranges {
     size_t BytesCount = 0;
-    TByteRange Bytes[4] = {};
+    TByteRange Bytes[4] = {}; // NOLINT(modernize-avoid-c-arrays)
 };
 
 // see https://lemire.me/blog/2018/05/09/how-quickly-can-you-check-that-a-string-is-valid-unicode-utf-8

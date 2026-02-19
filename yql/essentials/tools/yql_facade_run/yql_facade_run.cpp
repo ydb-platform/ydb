@@ -190,7 +190,7 @@ void TFacadeRunOptions::ParseProtoConfig(const TString& cfgFile, google::protobu
     }
 }
 
-void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
+void TFacadeRunOptions::Parse(int argc, const char** argv) {
     User = GetUsername();
 
     if (EnableCredentials) {
@@ -541,7 +541,7 @@ TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegist
     return FuncRegistry_;
 }
 
-int TFacadeRunner::Main(int argc, const char* argv[]) {
+int TFacadeRunner::Main(int argc, const char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
     EnableKikimrBacktraceFormat();
@@ -554,7 +554,7 @@ int TFacadeRunner::Main(int argc, const char* argv[]) {
     }
 }
 
-int TFacadeRunner::DoMain(int argc, const char* argv[]) {
+int TFacadeRunner::DoMain(int argc, const char** argv) {
     Y_UNUSED(NUdf::GetStaticSymbols());
 
     RunOptions_.Parse(argc, argv);

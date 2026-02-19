@@ -58,11 +58,14 @@ Checks: >
   misc-throw-by-value-catch-by-reference,
   misc-unconventional-assign-operator,
   misc-use-anonymous-namespace,
+  modernize-avoid-c-arrays,
   modernize-concat-nested-namespaces,
   modernize-deprecated-headers,
   modernize-deprecated-ios-base-aliases,
   modernize-use-override
 CheckOptions:
+  - key: modernize-avoid-c-arrays.AllowStringArrays
+    value: true
   - key: readability-identifier-naming.StructPrefix
     value: T
   - key: readability-identifier-naming.EnumPrefix

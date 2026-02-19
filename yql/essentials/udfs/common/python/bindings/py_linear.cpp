@@ -44,6 +44,7 @@ struct TPyDynamicLinear {
 
 namespace {
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 PyMethodDef TPyDynamicLinearMethods[] = {
     {"extract", TPyDynamicLinear::Extract, METH_NOARGS, nullptr},
     {nullptr, nullptr, 0, nullptr} /* sentinel */

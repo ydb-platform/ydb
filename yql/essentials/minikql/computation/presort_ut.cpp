@@ -564,10 +564,10 @@ Y_UNIT_TEST(GenericList) {
 Y_UNIT_TEST(GenericTuple) {
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
-    TType* tupleTypes[2];
+    std::array<TType*, 2> tupleTypes;
     tupleTypes[0] = TDataType::Create(NUdf::TDataType<bool>::Id, env);
     tupleTypes[1] = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
-    auto type = TTupleType::Create(2, tupleTypes, env);
+    auto type = TTupleType::Create(2, tupleTypes.data(), env);
     TMemoryUsageInfo memInfo("test");
     THolderFactory holderFactory(alloc.Ref(), memInfo);
     NUdf::TUnboxedValue* items;
@@ -582,10 +582,10 @@ Y_UNIT_TEST(GenericTuple) {
 Y_UNIT_TEST(GenericStruct) {
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
-    TStructMember structTypes[2];
+    std::array<TStructMember, 2> structTypes;
     structTypes[0] = TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, env));
     structTypes[1] = TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, env));
-    auto type = TStructType::Create(2, structTypes, env);
+    auto type = TStructType::Create(2, structTypes.data(), env);
     TMemoryUsageInfo memInfo("test");
     THolderFactory holderFactory(alloc.Ref(), memInfo);
     NUdf::TUnboxedValue* items;
@@ -600,10 +600,10 @@ Y_UNIT_TEST(GenericStruct) {
 Y_UNIT_TEST(GenericTupleVariant) {
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
-    TType* tupleTypes[2];
+    std::array<TType*, 2> tupleTypes;
     tupleTypes[0] = TDataType::Create(NUdf::TDataType<bool>::Id, env);
     tupleTypes[1] = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
-    auto underlying = TTupleType::Create(2, tupleTypes, env);
+    auto underlying = TTupleType::Create(2, tupleTypes.data(), env);
     auto type = TVariantType::Create(underlying, env);
     TMemoryUsageInfo memInfo("test");
     THolderFactory holderFactory(alloc.Ref(), memInfo);
@@ -619,10 +619,10 @@ Y_UNIT_TEST(GenericTupleVariant) {
 Y_UNIT_TEST(GenericStructVariant) {
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
-    TStructMember structTypes[2];
+    std::array<TStructMember, 2> structTypes;
     structTypes[0] = TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, env));
     structTypes[1] = TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, env));
-    auto underlying = TStructType::Create(2, structTypes, env);
+    auto underlying = TStructType::Create(2, structTypes.data(), env);
     auto type = TVariantType::Create(underlying, env);
     TMemoryUsageInfo memInfo("test");
     THolderFactory holderFactory(alloc.Ref(), memInfo);

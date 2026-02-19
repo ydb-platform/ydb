@@ -154,6 +154,7 @@ PyDoc_STRVAR(to_index_dict__doc__, "DEPRECATED: use list[n] instead.");
 PyDoc_STRVAR(has_fast_len__doc__, "DEPRECATED: do not use.");
 PyDoc_STRVAR(has_items__doc__, "DEPRECATED: test list as bool instead.");
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 PyMethodDef TPyLazyListMethods[] = {
     {"__reversed__", TPyLazyList::Reversed, METH_NOARGS, nullptr},
     {"to_index_dict", TPyLazyList::ToIndexDict, METH_NOARGS, to_index_dict__doc__},
@@ -741,6 +742,7 @@ PyNumberMethods ThinListNumbering = {
 
 namespace {
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 PyMethodDef TPyThinListMethods[] = {
     {"__reversed__", TPyThinList::Reversed, METH_NOARGS, nullptr},
     {"to_index_dict", TPyThinList::ToIndexDict, METH_NOARGS, to_index_dict__doc__},

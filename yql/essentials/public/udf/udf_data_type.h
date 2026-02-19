@@ -256,6 +256,7 @@ struct TDataTypeInfo {
     ui8 DecimalDigits;
 };
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 extern const TDataTypeInfo DataTypeInfos[DataSlotCount];
 
 inline const TDataTypeInfo& GetDataTypeInfo(EDataSlot slot) {

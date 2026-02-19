@@ -61,7 +61,7 @@ private:
     IFunctionTypeInfoBuilder&
         Builder_;
     TProtoInfo* Info_;
-    TType* BasicTypes_[FieldDescriptor::Type::MAX_TYPE + 1];
+    std::array<TType*, FieldDescriptor::Type::MAX_TYPE + 1> BasicTypes_;
     TType* YsonType_;
     TSet<TString> KnownMessages_;
     TTypeMap Optionals_;
@@ -87,7 +87,7 @@ TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
     , Info_(nullptr)
     , YsonType_(nullptr)
 {
-    for (size_t i = 0; i < Y_ARRAY_SIZE(BasicTypes_); ++i) {
+    for (size_t i = 0; i < BasicTypes_.size(); ++i) {
         BasicTypes_[i] = nullptr;
     }
 }

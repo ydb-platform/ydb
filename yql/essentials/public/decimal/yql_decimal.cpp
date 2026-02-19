@@ -69,7 +69,7 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
 
     // log_{10}(2^120) ~= 36.12, 37 decimal places
     // plus dot, zero before dot, sign and zero byte at the end
-    static thread_local char Str[40];
+    static thread_local char Str[40]; // NOLINT(modernize-avoid-c-arrays)
     auto end = Str + sizeof(Str);
     *--end = 0;
 
@@ -410,10 +410,10 @@ TInt256 WidenMul(const TInt128& lhs, const TInt128& rhs) {
     const TUint128 l = nl ? -lhs : +lhs;
     const TUint128 r = nr ? -rhs : +rhs;
 
-    const TUint128 lh[] = {GetLowerHalf(l), GetUpperHalf(l)};
-    const TUint128 rh[] = {GetLowerHalf(r), GetUpperHalf(r)};
+    const auto lh = std::to_array<TUint128>({GetLowerHalf(l), GetUpperHalf(l)});
+    const auto rh = std::to_array<TUint128>({GetLowerHalf(r), GetUpperHalf(r)});
 
-    const TUint128 prods[] = {lh[0] * rh[0], lh[0] * rh[1], lh[1] * rh[0], lh[1] * rh[1]};
+    const auto prods = std::to_array<TUint128>({lh[0] * rh[0], lh[0] * rh[1], lh[1] * rh[0], lh[1] * rh[1]});
 
     const TUint128 fourthQ = GetLowerHalf(prods[0]);
     const TUint128 thirdQ = GetUpperHalf(prods[0]) + GetLowerHalf(prods[1]) + GetLowerHalf(prods[2]);

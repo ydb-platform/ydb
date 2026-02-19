@@ -1040,7 +1040,7 @@ void DeleteYtFileTable(const TFsPath& dataDir, const TString tableName, THashMap
     tablesMapping.erase(TString("yt.plato.") + tableName);
 }
 
-int SplitStatements(int argc, char* argv[]) {
+int SplitStatements(int argc, char** argv) {
     Y_UNUSED(argc);
     Y_UNUSED(argv);
 
@@ -1138,7 +1138,7 @@ void FillTablesMapping(const TFsPath& dataDir, THashMap<TString, TString>& table
     }
 }
 
-int Main(int argc, char* argv[])
+int Main(int argc, char** argv)
 {
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
@@ -1351,7 +1351,7 @@ int Main(int argc, char* argv[])
     return 0;
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char** argv)
 {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();

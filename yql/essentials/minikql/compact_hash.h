@@ -721,7 +721,7 @@ struct TNode {
     ui8 Flag;
     union {
         ui8 D1;
-        ui8 D2[Max<size_t>(sizeof(T), sizeof(T*))];
+        std::array<ui8, Max<size_t>(sizeof(T), sizeof(T*))> D2;
     } Storage;
 
     TNode()
@@ -731,18 +731,18 @@ struct TNode {
     TNode(const TNode& n)
         : Flag(n.Flag)
     {
-        MemCopy(Storage.D2, n.Storage.D2, sizeof(Storage.D2));
+        MemCopy(Storage.D2.data(), n.Storage.D2.data(), sizeof(Storage.D2));
     }
     TNode(TNode&& n)
         : Flag(n.Flag)
     {
-        MemCopy(Storage.D2, n.Storage.D2, sizeof(Storage.D2));
+        MemCopy(Storage.D2.data(), n.Storage.D2.data(), sizeof(Storage.D2));
         n.Flag = FlagEmpty;
     }
 
     TNode& operator=(const TNode& n) {
         Flag = n.Flag;
-        MemCopy(Storage.D2, n.Storage.D2, sizeof(Storage.D2));
+        MemCopy(Storage.D2.data(), n.Storage.D2.data(), sizeof(Storage.D2));
         return *this;
     }
 

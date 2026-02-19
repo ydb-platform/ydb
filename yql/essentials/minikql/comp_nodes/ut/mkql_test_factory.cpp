@@ -10,8 +10,8 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 ui64 g_Yield = std::numeric_limits<ui64>::max();
-ui64 g_TestStreamData[] = {0, 0, 1, 0, 0, 0, 1, 2, 3};
-ui64 g_TestYieldStreamData[] = {0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2};
+auto g_TestStreamData = std::to_array<ui64>({0, 0, 1, 0, 0, 0, 1, 2, 3});
+auto g_TestYieldStreamData = std::to_array<ui64>({0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2});
 
 class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
     typedef TMutableComputationNode<TTestStreamWrapper> TBaseComputation;
@@ -44,7 +44,7 @@ public:
 
     TTestStreamWrapper(TComputationMutables& mutables, ui64 count)
         : TBaseComputation(mutables)
-        , Count_(Min<ui64>(count, Y_ARRAY_SIZE(g_TestStreamData)))
+        , Count_(Min<ui64>(count, g_TestStreamData.size()))
     {
     }
 
@@ -76,7 +76,7 @@ public:
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Index_ == Y_ARRAY_SIZE(g_TestYieldStreamData)) {
+            if (Index_ == g_TestYieldStreamData.size()) {
                 return NUdf::EFetchStatus::Finish;
             }
 

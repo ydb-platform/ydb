@@ -233,7 +233,7 @@ struct my_siginfo_t {
     int __pad0; /* Explicit padding.  */
     #endif
     union {
-        int _pad[__SI_PAD_SIZE];
+        int _pad[__SI_PAD_SIZE]; // NOLINT(modernize-avoid-c-arrays)
         struct
         {
             void* _call_addr;   /* Calling user insn.  */
@@ -347,6 +347,7 @@ int main(int argc, char** argv) {
         BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, SYS_##syscall, 0, 1), \
             BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW)
 
+            // NOLINTNEXTLINE(modernize-avoid-c-arrays)
             struct sock_filter filter[] = {
                 /* validate arch */
                 BPF_STMT(BPF_LD + BPF_W + BPF_ABS, ArchField),

@@ -1615,14 +1615,17 @@ struct TColumnInfoRaw {
     const char* UdtType;
 };
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const TTableInfoRaw AllStaticTablesRaw[] = {
 #include "pg_class.generated.h"
 };
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const TColumnInfoRaw AllStaticColumnsRaw[] = {
 #include "columns.generated.h"
 };
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const char* AllowedProcsRaw[] = {
 #include "safe_procs.h"
 #include "used_procs.h"

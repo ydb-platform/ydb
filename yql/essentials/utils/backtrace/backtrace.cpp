@@ -81,7 +81,7 @@ std::vector<std::function<void(int)>> Before, After;
 TMutex FatalCallbackMutex;
 bool KikimrSymbolize = false;
 bool DoNotUnwind = false;
-NYql::NBacktrace::TCollectedFrame Frames[NYql::NBacktrace::Limit];
+NYql::NBacktrace::TCollectedFrame Frames[NYql::NBacktrace::Limit]; // NOLINT(modernize-avoid-c-arrays)
 
 void CallCallbacks(decltype(Before)& where, int signum) {
     for (const auto& fn : where) {
@@ -196,7 +196,7 @@ void EnableKikimrBacktraceFormat() {
 }
 
 namespace {
-NYql::NBacktrace::TStackFrame SFrames[NYql::NBacktrace::Limit];
+NYql::NBacktrace::TStackFrame SFrames[NYql::NBacktrace::Limit]; // NOLINT(modernize-avoid-c-arrays)
 void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t count) {
     auto& outp = *out;
     Y_UNUSED(SFrames);

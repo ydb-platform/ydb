@@ -578,7 +578,7 @@ TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
                               TActiveTransaction::TPtr tx, 
-                              const TString& userSID)
+                              const NACLib::TUserContext::TPtr& userCtx)
 {
     auto it = DataTxCache.find(tx->GetTxId());
     if (it != DataTxCache.end()) {
@@ -597,7 +597,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
     } else if (tx->HasVolatilePrepareFlag()) {
         // Since transaction is volatile it was never stored on disk, and it
         // shouldn't have any artifacts yet.
-        tx->FillVolatileTxData(Self, txc, ctx, userSID);
+        tx->FillVolatileTxData(Self, txc, ctx, userCtx);
 
         ui32 keysCount = 0;
         keysCount = tx->ExtractKeys();
@@ -623,7 +623,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
             return false;
 
         tx->FillTxData(Self, txc, ctx, target, txBody,
-                       std::move(locks), artifactFlags, userSID);
+                       std::move(locks), artifactFlags, userCtx);
 
         ui32 keysCount = 0;
         //if (Config.LimitActiveTx > 1)
@@ -1453,7 +1453,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
                                            const TActorContext &ctx, NWilson::TSpan &&operationSpan,
-                                           const TString& userSID)
+                                           const NACLib::TUserContext::TPtr& userCtx)
 {
     auto &rec = ev->Get()->Record;
     Y_ENSURE(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
@@ -1570,7 +1570,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         tx->SetGlobalWriterFlag();
     } else {
         Y_ENSURE(tx->IsReadTable() || tx->IsDataTx());
-        auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID, true);
+        auto dataTx = tx->BuildDataTx(Self, txc, ctx, userCtx, true);
         if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx()))
             dataTx->ExtractKeys(true);
 
@@ -1768,9 +1768,9 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     return writeOp;
 }
 
-void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx, const TString& userSID)
+void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx, const NACLib::TUserContext::TPtr& userCtx)
 {
-    auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID);
+    auto dataTx = tx->BuildDataTx(Self, txc, ctx, userCtx);
     Y_ENSURE(dataTx->Ready());
     // TODO: we should have no requirement to have keys
     // for restarted immediate tx.

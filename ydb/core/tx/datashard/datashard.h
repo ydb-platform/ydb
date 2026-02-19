@@ -921,6 +921,10 @@ namespace TEvDataShard {
         TString GetUserSID() const {
             return Record.GetUserSID();
         }
+
+        TString GetUserTraceId() const {
+            return Record.GetUserTraceId();
+        }
     };
 
     struct TEvUploadRowsResponse : public TEventPB<TEvUploadRowsResponse,
@@ -1437,6 +1441,10 @@ namespace TEvDataShard {
         }
 
         TString GetUserSID() const {
+            return ""; // S3 import doesn't generates CDC at all (see TTxS3UploadRows constructor)
+        }
+
+        TString GetUserTraceId() const {
             return ""; // S3 import doesn't generates CDC at all (see TTxS3UploadRows constructor)
         }
 

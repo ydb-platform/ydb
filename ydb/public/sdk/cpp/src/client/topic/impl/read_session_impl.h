@@ -273,6 +273,10 @@ public:
         return ServerBytesSize;
     }
 
+    size_t GetNotStartedTasksCunt() const {
+        return Tasks.size();
+    }
+
     std::optional<std::pair<size_t, size_t>> GetReadyThreshold() const {
         size_t readyCount = 0;
         std::pair<size_t, size_t> ret;
@@ -403,8 +407,8 @@ public:
             return true;
         }
 
-        Y_ASSERT(Ready);
-        return false;
+        // If Ready=false, decompression task already successfully cancelled
+        return !Ready;
     }
 
     void TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
@@ -412,6 +416,8 @@ public:
                   std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
                   size_t& maxByteSize,
                   size_t& dataSize) const;
+
+    size_t GetDataSize() const;
 
     TDataDecompressionInfoPtr<UseMigrationProtocol> GetParent() const {
         return Parent;
@@ -576,6 +582,10 @@ public:
         (NotReady.empty() ? Ready : NotReady).pop_back();
     }
 
+    size_t size() const {
+        return NotReady.size() + Ready.size();
+    }
+
     void clear() noexcept {
         NotReady.clear();
         Ready.clear();
@@ -593,7 +603,7 @@ public:
                           std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
                           TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
-    ui64 GetReadyEventsCount() const {
+    size_t GetReadyEventAmount() const {
         return Ready.size();
     }
 
@@ -844,8 +854,12 @@ public:
         return Lock;
     }
 
-    ui64 GetReadyEventsCount() const {
-        return EventsQueue.GetReadyEventsCount();
+    size_t GetEventAmount() const {
+        return EventsQueue.size();
+    }
+
+    size_t GetReadyEventAmount() const {
+        return EventsQueue.GetReadyEventAmount();
     }
 
 private:

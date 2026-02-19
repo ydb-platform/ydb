@@ -347,8 +347,7 @@ namespace NKikimr {
                          << " msgCtx# " << msgCtx.ToString()
                          << " Deadlines# " << Deadlines);
 
-                IdleLight.Set(false, ++IdleLightSeqNo);
-                --InFlightCount;
+                IdleLight.Set(--InFlightCount == 0, ++IdleLightSeqNo);
                 InFlightCost -= msgCtx.Cost;
                 InFlightBytes -= msgCtx.RecByteSize;
 

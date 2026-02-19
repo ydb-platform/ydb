@@ -7,6 +7,77 @@
 
 namespace NKikimr::NDDisk {
 
+#if defined(__linux__)
+
+    // Direct I/O operation context passed through io_uring.
+    // Allocated on the actor thread (new), freed in OnComplete callback (delete).
+    struct TDDiskActor::TDirectIoOp : NPDisk::TUringOperation {
+        TActorId Sender;                    // original requester
+        ui64 Cookie = 0;                    // original event cookie
+        TActorId InterconnectSession;
+        TActorId DDiskId;
+
+        NWilson::TSpan Span;
+
+        bool IsRead = false;
+        ui32 Size = 0;
+        TRcBuf DataHolder;                  // keeps aligned buffer alive until completion
+
+        std::atomic<ui32>& InFlightCount; // shared with DDisk actor
+        TCounters& Counters;
+
+        TDirectIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
+            : InFlightCount(inFlightCount)
+            , Counters(counters)
+        {}
+
+        static void OnDirectIoComplete(NPDisk::TUringOperation* baseOp, NActors::TActorSystem* actorSystem) noexcept {
+            auto* op = static_cast<TDirectIoOp*>(baseOp);
+            std::unique_ptr<TDirectIoOp> guard(op);
+
+            // TODO: properly handle short reads/writes
+            if (op->Result >= 0) {
+                Y_ABORT_UNLESS(op->Result == static_cast<i32>(op->Size), "Short reads and writes are not supported yet");
+            }
+
+            std::unique_ptr<IEventBase> reply;
+            if (op->IsRead) {
+                auto status = (op->Result >= 0)
+                    ? NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                    : NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+                TRope data(std::move(op->DataHolder));
+                reply = std::make_unique<TEvReadResult>(status, std::nullopt, std::move(data));
+            } else {
+                // TODO: set proper status
+                auto status = (op->Result >= 0)
+                    ? NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                    : NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+                reply = std::make_unique<TEvWriteResult>(status);
+            }
+
+            auto h = std::make_unique<IEventHandle>(op->Sender, op->DDiskId, reply.release(),
+                0, op->Cookie, nullptr, op->Span.GetTraceId());
+            if (op->InterconnectSession) {
+                h->Rewrite(TEvInterconnect::EvForward, op->InterconnectSession);
+            }
+            op->Span.End();
+            actorSystem->Send(h.release());
+
+            const bool ok = op->Result >= 0;
+            if (op->IsRead) {
+                op->Counters.Interface.Read.Reply(ok, ok ? op->Size : 0);
+            } else {
+                op->Counters.Interface.Write.Reply(ok, ok ? op->Size : 0);
+            }
+
+            op->InFlightCount.fetch_sub(1, std::memory_order_relaxed);
+
+        }
+
+    };
+
+#endif
+
     void TDDiskActor::SendInternalWrite(
             TChunkRef& chunkRef,
             const TBlockSelector &selector,
@@ -56,7 +127,7 @@ namespace NKikimr::NDDisk {
 
 #if defined(__linux__)
         if (UringRouter) {
-            Counters.Interface.Write.Request(selector.Size);
+            Counters.Interface.Write.Request();
             if (InFlightCount.load(std::memory_order_relaxed) >= MaxInFlight) {
                 span.End();
                 Counters.Interface.Write.Reply(false);
@@ -74,16 +145,16 @@ namespace NKikimr::NDDisk {
             data = ev->Get()->GetPayload(*instr.PayloadId);
         }
 
-        Counters.Interface.Write.Request(selector.Size);
+        Counters.Interface.Write.Request();
 
         auto callback = [this, sender = ev->Sender, cookie = ev->Cookie,
-                session = ev->InterconnectSession](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
+                session = ev->InterconnectSession, size = selector.Size](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
             auto reply = std::make_unique<TEvWriteResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             auto h = std::make_unique<IEventHandle>(sender, SelfId(), reply.release(), 0, cookie, nullptr, span.GetTraceId());
             if (session) {
                 h->Rewrite(TEvInterconnect::EvForward, session);
             }
-            Counters.Interface.Write.Reply(true);
+            Counters.Interface.Write.Reply(true, size);
             span.End();
             TActivationContext::Send(h.release());
         };
@@ -212,49 +283,13 @@ namespace NKikimr::NDDisk {
 
 #if defined(__linux__)
 
-    void TDDiskActor::TDirectIoOp::OnDirectIoComplete(NPDisk::TUringOperation* baseOp,
-            NActors::TActorSystem* actorSystem) noexcept {
-        auto* op = static_cast<TDirectIoOp*>(baseOp);
-        std::unique_ptr<TDirectIoOp> guard(op);
-
-        // TODO: properly handle short reads/writes
-        if (op->Result >= 0) {
-            Y_ABORT_UNLESS(op->Result == static_cast<i32>(op->Size), "Short reads and writes are not supported yet");
-        }
-
-        std::unique_ptr<IEventBase> reply;
-        if (op->IsRead) {
-            auto status = (op->Result >= 0)
-                ? NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                : NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-            TRope data(std::move(op->DataHolder));
-            reply = std::make_unique<TEvReadResult>(status, std::nullopt, std::move(data));
-        } else {
-            // TODO: set proper status
-            auto status = (op->Result >= 0)
-                ? NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                : NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-            reply = std::make_unique<TEvWriteResult>(status);
-        }
-
-        auto h = std::make_unique<IEventHandle>(op->Sender, op->DDiskId, reply.release(),
-            0, op->Cookie, nullptr, op->Span.GetTraceId());
-        if (op->InterconnectSession) {
-            h->Rewrite(TEvInterconnect::EvForward, op->InterconnectSession);
-        }
-        op->Span.End();
-        actorSystem->Send(h.release());
-
-        op->InFlightCount->fetch_sub(1, std::memory_order_relaxed);
-    }
-
     void TDDiskActor::DirectWrite(TEvWrite::TPtr ev, const TBlockSelector& selector,
             const TWriteInstruction& instr, TChunkRef& chunkRef, NWilson::TSpan span) {
         Y_ABORT_UNLESS(chunkRef.ChunkIdx);
         Y_ABORT_UNLESS(DiskFormat);
 
         // TODO: use pool
-        auto op = std::make_unique<TDirectIoOp>();
+        auto op = std::make_unique<TDirectIoOp>(InFlightCount, Counters);
         op->OnComplete = &TDirectIoOp::OnDirectIoComplete;
         op->Sender = ev->Sender;
         op->Cookie = ev->Cookie;
@@ -263,15 +298,14 @@ namespace NKikimr::NDDisk {
         op->Span = std::move(span);
         op->IsRead = false;
         op->Size = selector.Size;
-        op->InFlightCount = &InFlightCount;
 
-        // Zero-copy path: if the payload is contiguous and page-aligned, reuse the buffer directly.
         TRope data;
         if (instr.PayloadId) {
             data = ev->Get()->GetPayload(*instr.PayloadId);
         }
 
-        // TODO: should we check page size? And for large writes and huge pages properly page align?
+        // Zero-copy path: if the payload is contiguous and page-aligned, reuse the buffer directly.
+        // TODO: should we check page size? And for large writes and huge pages should properly align?
         auto iter = data.Begin();
         if (iter.ContiguousSize() == data.size() &&
                 reinterpret_cast<uintptr_t>(iter.ContiguousData()) % BlockSize == 0) {
@@ -284,7 +318,7 @@ namespace NKikimr::NDDisk {
         const ui64 diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
         InFlightCount.fetch_add(1, std::memory_order_relaxed);
-        const bool submitted = UringRouter->Write(op->DataHolder.data(), op->Size, diskOffset, op);
+        const bool submitted = UringRouter->Write(op->DataHolder.data(), op->Size, diskOffset, op.get());
         if (submitted) {
             op.release();
             // with SQ polling – no syscall
@@ -306,7 +340,7 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(DiskFormat);
 
         // TODO: use pool
-        auto op = std::make_unique<TDirectIoOp>();
+        auto op = std::make_unique<TDirectIoOp>(InFlightCount, Counters);
         op->OnComplete = &TDirectIoOp::OnDirectIoComplete;
         op->Sender = ev->Sender;
         op->Cookie = ev->Cookie;
@@ -315,7 +349,6 @@ namespace NKikimr::NDDisk {
         op->Span = std::move(span);
         op->IsRead = true;
         op->Size = selector.Size;
-        op->InFlightCount = &InFlightCount;
 
         // Pre-allocate page-aligned buffer for direct I/O read
         op->DataHolder = TRcBuf::UninitializedPageAligned(selector.Size);
@@ -323,7 +356,7 @@ namespace NKikimr::NDDisk {
         const ui64 diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
         InFlightCount.fetch_add(1, std::memory_order_relaxed);
-        const bool submitted = UringRouter->Read(op->DataHolder.GetDataMut(), op->Size, diskOffset, op);
+        const bool submitted = UringRouter->Read(op->DataHolder.GetDataMut(), op->Size, diskOffset, op.get());
         if (submitted) {
             op.release();
             UringRouter->Flush();

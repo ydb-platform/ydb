@@ -74,52 +74,39 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 BlockSize = 4096;
 
 #if defined(__linux__)
-        // Direct I/O operation context passed through io_uring.
-        // Allocated on the actor thread (new), freed in OnComplete callback (delete).
-        struct TDirectIoOp : NPDisk::TUringOperation {
-            TActorId Sender;                    // original requester
-            ui64 Cookie = 0;                    // original event cookie
-            TActorId InterconnectSession;       // for Rewrite if non-null
-            TActorId DDiskId;                   // DDisk's SelfId (reply source)
-            NWilson::TSpan Span;                // tracing
-            bool IsRead = false;
-            ui32 Size = 0;
-            TRcBuf DataHolder;                  // keeps aligned buffer alive until completion
-            std::atomic<ui32>* InFlightCount = nullptr; // shared with DDisk actor
-
-            static void OnDirectIoComplete(NPDisk::TUringOperation* baseOp, NActors::TActorSystem* actorSystem) noexcept;
-        };
-
         std::unique_ptr<NPDisk::TUringRouter> UringRouter;
         std::atomic<ui32> InFlightCount{0};
-        static constexpr ui32 MaxInFlight = 128;
+        static constexpr ui32 MaxInFlight = 128; // TODO: make configurable
 #endif
+
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
 
     private:
-        struct {
+        struct TInterfaceOpCounters {
+            NMonitoring::TDynamicCounters::TCounterPtr Requests;
+            NMonitoring::TDynamicCounters::TCounterPtr ReplyOk;
+            NMonitoring::TDynamicCounters::TCounterPtr ReplyErr;
+            NMonitoring::TDynamicCounters::TCounterPtr Bytes;
+
+            void Request(ui32 bytes = 0) {
+                ++*Requests;
+                if (bytes) {
+                    *Bytes += bytes;
+                }
+            }
+
+            void Reply(bool ok, ui32 bytes = 0) {
+                ++*(ok ? ReplyOk : ReplyErr);
+                if (bytes) {
+                    *Bytes += bytes;
+                }
+            }
+        };
+
+        struct TCounters {
             struct {
 #define DECLARE_COUNTERS_INTERFACE(NAME) \
-                struct { \
-                    NMonitoring::TDynamicCounters::TCounterPtr Requests; \
-                    NMonitoring::TDynamicCounters::TCounterPtr ReplyOk; \
-                    NMonitoring::TDynamicCounters::TCounterPtr ReplyErr; \
-                    NMonitoring::TDynamicCounters::TCounterPtr Bytes; \
-                    \
-                    void Request(ui32 bytes = 0) { \
-                        ++*Requests; \
-                        if (bytes) { \
-                            *Bytes += bytes; \
-                        } \
-                    } \
-                    \
-                    void Reply(bool ok, ui32 bytes = 0) { \
-                        ++*(ok ? ReplyOk : ReplyErr); \
-                        if (bytes) { \
-                            *Bytes += bytes; \
-                        } \
-                    } \
-                } NAME;
+                TInterfaceOpCounters NAME;
 
                 LIST_COUNTERS_INTERFACE_OPS(DECLARE_COUNTERS_INTERFACE)
 
@@ -139,7 +126,9 @@ namespace NKikimr::NDDisk {
             struct {
                 NMonitoring::TDynamicCounters::TCounterPtr ChunksOwned;
             } Chunks;
-        } Counters;
+        };
+
+        TCounters Counters;
 
     private:
         struct TEvPrivate {
@@ -169,6 +158,9 @@ namespace NKikimr::NDDisk {
         };
 
     public:
+#if defined(__linux__)
+        struct TDirectIoOp;
+#endif
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
         void Bootstrap();
@@ -342,6 +334,7 @@ namespace NKikimr::NDDisk {
                         const TRope& data = ev.Get()->GetPayload(*instruction.PayloadId);
                         size = data.size();
                     }
+                    // this check is crucial for the code submitting IO
                     if (size != selector.Size) {
                         SendReply(ev, std::make_unique<typename TEvent::TResult>(
                             NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,

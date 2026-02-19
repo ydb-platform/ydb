@@ -584,7 +584,7 @@ public:
         Y_VALIDATE(partitions.size() > 0, "Can not start read session without partitions");
         SRC_LOG_AS_I("Created"
             << ", MaxPartitionReadSkew: " << MaxPartitionReadSkew
-            << ", IdleTimeput: " << settings.IdleTimeout
+            << ", IdleTimeout: " << settings.IdleTimeout
             << ", LocalPartitionsCount: " << partitions.size()
             << ", AmountPartitionsCount: " << settings.AmountPartitionsCount
             << ", AggregatorActor: " << settings.AggregatorActor);

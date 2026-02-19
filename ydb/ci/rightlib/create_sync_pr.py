@@ -108,8 +108,8 @@ class PrSyncCreator:
                         if line.startswith('>>>>>>>'):
                             end_line_number = i
                             break
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning("Failed to find conflict lines in %s: %s", file, e)
         return (start_line_number, end_line_number)
 
     def git_revparse_head(self):
@@ -168,7 +168,7 @@ class PrSyncCreator:
             pr_body += "\n\n### Merge failed\n\nFound some unresolved conflicts:\n"
             for conflict_file in conflict_files:
                 lines = self.find_conflict_lines(conflict_file)
-                pr_body += f"- [{conflict_file}](https://github.com/ydb-platform/ydb/blob/{self.git_revparse_head()}/{conflict_file}#L{lines[0]}-L{lines[1]})\n"
+                pr_body += f"- [{conflict_file}]({os.environ['GITHUB_SERVER_URL']}/{self.repo_name}/blob/{self.git_revparse_head()}/{conflict_file}#L{lines[0]}-L{lines[1]})\n"
 
         pr = self.repo.create_pull(
             self.base_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True

@@ -15,7 +15,7 @@
 ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
   [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
-  [COMPRESSION(key1=value1[, key2=value2])]
+  [COMPRESSION(algorithm=a_value[, level=l_value])]
   [, ...],
     INDEX <index_name>
       [GLOBAL]

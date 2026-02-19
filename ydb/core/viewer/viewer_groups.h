@@ -955,7 +955,7 @@ public:
             if (!DatabaseNavigateResponse) {
                 DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(Database, 0);
                 ++NavigateKeySetInFlight;
-            } else {
+            } else if (DatabaseNavigateResponse->IsOk()) {
                 auto pathId = GetPathId(DatabaseNavigateResponse->GetRef());
                 auto result = NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResponse));
                 ProcessNavigate(result.first->second, true);

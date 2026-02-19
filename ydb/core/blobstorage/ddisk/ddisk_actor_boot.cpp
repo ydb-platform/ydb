@@ -115,7 +115,11 @@ namespace NKikimr::NDDisk {
             NPDisk::TUringRouterConfig config;
             config.QueueDepth = MaxInFlight;
             UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
-            UringRouter->RegisterFile();
+            if (const auto result = UringRouter->RegisterFile(); !result) {
+                STLOG(PRI_WARN, BS_DDISK, BSDD17,
+                    "TDDiskActor::StartHandlingQueries failed to register fixed file for io_uring",
+                    (DDiskId, DDiskId), (Errno, result.error()));
+            }
             UringRouter->Start();
         }
 #endif

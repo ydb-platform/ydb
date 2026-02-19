@@ -5,6 +5,7 @@
 #include <sys/uio.h>
 
 #include <atomic>
+#include <expected>
 #include <memory>
 
 struct io_uring;
@@ -58,13 +59,14 @@ public:
     // Therefore all Register* calls must happen before Start().
 
     // Register the fd as a fixed file.  After this, all I/O uses the registered
-    // index, avoiding per-I/O fget()/fput() overhead.  Returns true on success.
-    bool RegisterFile();
+    // index, avoiding per-I/O fget()/fput() overhead.
+    // Returns an error code in std::unexpected on failure.
+    std::expected<void, int> RegisterFile();
 
     // Register a set of pre-allocated aligned buffers for fixed-buffer I/O.
     // iovs[i].iov_base must be aligned to device sector size (typically 4096).
-    // Returns true on success.
-    bool RegisterBuffers(const struct iovec* iovs, unsigned count);
+    // Returns an error code in std::unexpected on failure.
+    std::expected<void, int> RegisterBuffers(const struct iovec* iovs, unsigned count);
 
     // Start the completion poller thread.  Must be called after all Register*
     // calls and before any I/O submissions.

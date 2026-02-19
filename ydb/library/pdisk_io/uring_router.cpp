@@ -133,23 +133,23 @@ TUringRouter::~TUringRouter() {
     Stop();
 }
 
-bool TUringRouter::RegisterFile() {
+std::expected<void, int> TUringRouter::RegisterFile() {
     int fd = Fd;
     int ret = io_uring_register_files(Ring, &fd, 1);
     if (ret == 0) {
         FixedFdIndex = 0;
-        return true;
+        return {};
     }
-    return false;
+    return std::unexpected(-ret);
 }
 
-bool TUringRouter::RegisterBuffers(const struct iovec* iovs, unsigned count) {
+std::expected<void, int> TUringRouter::RegisterBuffers(const struct iovec* iovs, unsigned count) {
     int ret = io_uring_register_buffers(Ring, iovs, count);
     if (ret == 0) {
         BuffersRegistered = true;
-        return true;
+        return {};
     }
-    return false;
+    return std::unexpected(-ret);
 }
 
 void TUringRouter::Start() {

@@ -227,17 +227,13 @@ struct IDqAsyncLookupSource {
         // not be issued.
         // For keyed request, fullscanLimit must be 0 (or omitted)
         // and *request must be non-empty;
+        // Lookup implementation note: Request must never be lock()ed
+        // without bound mkql Alloc, and obtained shared_ptr must be released
+        // before leaving context.
         explicit TEvLookupRequest(std::weak_ptr<TUnboxedValueMap> request, size_t fullscanLimit = 0)
             : Request(std::move(request))
             , FullscanLimit(fullscanLimit)
         {
-            Y_DEBUG_ABORT_UNLESS(([request, fullscanLimit]() {
-                auto locked = request.lock();
-                if (!locked) {
-                    return true;
-                }
-                return locked->empty() == (fullscanLimit > 0);
-            }()));
         }
         std::weak_ptr<TUnboxedValueMap> Request;
         size_t FullscanLimit;
@@ -251,9 +247,7 @@ struct IDqAsyncLookupSource {
             , ResultRows(resultRows)
             , FullscanLimit(fullscanLimit)
         {
-            if (fullscanLimit > 0) {
-                Y_DEBUG_ABORT_UNLESS(resultRows <= fullscanLimit);
-            }
+            Y_DEBUG_ABORT_UNLESS(fullscanLimit == 0 || resultRows <= fullscanLimit);
         }
         std::weak_ptr<TUnboxedValueMap> Result;
         size_t ResultRows;
@@ -263,7 +257,7 @@ struct IDqAsyncLookupSource {
     virtual size_t GetMaxSupportedKeysInRequest() const = 0;
 
     //Initiate lookup for requested keys
-    //Only one request at a time is allowed. Request must contain no more than GetMaxSupportedKeysInRequest() keys
+    //Request must contain no more than GetMaxSupportedKeysInRequest() keys
     //Upon completion, TEvLookupResult event is sent to the preconfigured actor
     virtual void AsyncLookup(std::weak_ptr<TUnboxedValueMap> request) = 0;
 

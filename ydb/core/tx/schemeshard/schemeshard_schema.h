@@ -290,7 +290,7 @@ struct Schema : NIceDb::Schema {
         struct LastTxId :       Column<4, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct TabletType :     Column<5, NScheme::NTypeIds::Uint32> { using Type = TTabletTypes::EType; static constexpr Type Default = ETabletType::TypeInvalid; };
         struct OwnerPathId :    Column<6, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; static constexpr Type Default = InvalidOwnerId; };
-        struct CountReferences : Column<7, NScheme::NTypeIds::Uint32> { using Type = ui64; };
+        struct CountReferences : Column<7, NScheme::NTypeIds::Uint64> { using Type = uint64_t; };
 
         using TKey = TableKey<ShardIdx>;
         using TColumns = TableColumns<ShardIdx, TabletId, PathId, LastTxId, TabletType, OwnerPathId, CountReferences>;

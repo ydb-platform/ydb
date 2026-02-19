@@ -551,7 +551,7 @@
             {
                 "ColumnId": 7,
                 "ColumnName": "CountReferences",
-                "ColumnType": "Uint32"
+                "ColumnType": "Uint64"
             },
             {
                 "ColumnId": 1,

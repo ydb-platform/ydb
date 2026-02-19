@@ -345,6 +345,19 @@ Y_UNIT_TEST(ReadError) {
     RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
 }
 
+Y_UNIT_TEST(ReadBlocked) {
+    TTestEnv env;
+    std::vector<ui32> groupIds = {1, 2, 3};
+
+    TReadRequestBuilder builder("a");
+    TLogoBlobID id(1, 2, 3, 2, 1, 0);
+    env.BlobStorageState.Groups[groupIds[2]].Status = NKikimrProto::BLOCKED;
+    env.BlobStorageState.Put(groupIds[2], id, NKikimrProto::OK, "b");
+    builder.AddToEnd("b", id, 0, 1);
+
+    RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_BLOCKED);
+}
+
 Y_UNIT_TEST(ReadOneItemError) {
     TTestEnv env;
     std::vector<ui32> groupIds = {1, 2, 3};

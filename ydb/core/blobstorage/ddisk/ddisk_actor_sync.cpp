@@ -291,7 +291,7 @@ namespace NKikimr::NDDisk {
             // TODO: common span before the loop?
 
             TBlockSelector segmentSelector(sync.VChunkIndex, begin, end - begin);
-            auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.InternalSyncWrite",
+            auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, ev->TraceId.Clone(), "DDisk.InternalSyncWrite",
                     NWilson::EFlags::NONE, TActivationContext::ActorSystem())
                 .Attribute("tablet_id", static_cast<long>(sync.Creds.TabletId))
                 .Attribute("vchunk_index", static_cast<long>(segmentSelector.VChunkIndex))

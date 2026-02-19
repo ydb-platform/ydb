@@ -1550,8 +1550,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     shares[HullHugeAsyncBlob] * 0.80 < shares[HullHugeUserData]);
         UNIT_ASSERT(shares[HullComp] * 0.90 > shares[HullFresh]);
     }
-<<<<<<< HEAD
-=======
 
     Y_UNIT_TEST(CompactionWriteShouldNotAffectRtWriteLatency) {
         using namespace NPriWrite;
@@ -1713,7 +1711,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         // For comparison, the noop scheduler produces ~×60 latency in the same test.
         UNIT_ASSERT_LE(avgLatencyMs, ioDuration.MillisecondsFloat() * 10);
     }
->>>>>>> 9a7103e29ec (Implement new TFlightControl optimized for latency (#34270))
 }
 
 Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {

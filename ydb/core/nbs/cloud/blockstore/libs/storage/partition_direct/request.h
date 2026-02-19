@@ -61,7 +61,7 @@ public:
 
     ~TWriteRequestHandler() override = default;
 
-    NWilson::TTraceId GetChildSpan(ui64 requestId, ui8 persistentBufferIndex);
+    NWilson::TSpan& GetChildSpan(ui64 requestId, ui8 persistentBufferIndex);
 
     bool IsCompleted(ui64 requestId) override;
 
@@ -144,7 +144,7 @@ public:
 
     ~TReadRequestHandler() override = default;
 
-    NWilson::TTraceId GetChildSpan(ui64 requestId, bool isReadPersistentBuffer);
+    NWilson::TSpan& GetChildSpan(ui64 requestId, bool isReadPersistentBuffer);
 
     bool IsCompleted(ui64 requestId) override;
 

@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT(!showResult.GetResultSets().empty());
         NYdb::TResultSetParser parser(showResult.GetResultSet(0));
         UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
-        TString createText = parser.ColumnParser(0).GetOptionalString().GetOrElse("");
+        TString createText = parser.ColumnParser(0).GetOptionalString().value_or("");
         UNIT_ASSERT_STRING_CONTAINS(createText, "case_sensitive=true");
     }
 

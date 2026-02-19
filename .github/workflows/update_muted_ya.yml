@@ -299,52 +299,31 @@ jobs:
         env:
           LABELS: ${{ env.LABELS }}
           REVIEWERS: ${{ env.REVIEWERS }}
-          BASE_BRANCH: ${{ matrix.BASE_BRANCH }}
-          RUN_HOUR_UTC: ${{ needs.setup.outputs.run_hour_utc }}
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const fs = require('fs');
-            
-            // Read comment from file
+
+            // Read comment from file and post to PR
             const commentFile = '${{ steps.comment_pr.outputs.PR_COMMENT_FILE }}';
             const commentBody = fs.readFileSync(commentFile, 'utf8');
-            
-            // Add comment to PR
             await github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: commentBody
             });
-            
-            const baseBranch = process.env.BASE_BRANCH;
-            const runHourUtc = process.env.RUN_HOUR_UTC;
-            core.info(`Labels: base_branch=${baseBranch}, run_hour_utc=${runHourUtc}`);
 
-            // Base labels
+            // Base labels from env LABELS. Automerge is set by set_automerge_mute_unmute_prs workflow.
             const labelsToAdd = process.env.LABELS.split(',').map(l => l.trim());
-
-            // Main: automerge only for the 7 UTC run (PR ~8 UTC, ~10 min checks -> merge ~11 MSK)
-            if (baseBranch === 'main' && runHourUtc === '07') {
-              labelsToAdd.push('automerge');
-              core.info(`Added 'automerge' (main, 7 UTC run - merge ~11 MSK).`);
-            }
-
-            // Stable branches: always automerge
-            if (baseBranch.startsWith('stable-')) {
-              labelsToAdd.push('automerge');
-              core.info(`Added 'automerge' (base is stable-*).`);
-            }
-
             core.info(`Applying labels: ${labelsToAdd.join(', ')}`);
             await github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               labels: labelsToAdd
             });
-            
-            // Add reviewers
+
+            // Add reviewers from env REVIEWERS
             const reviewers = JSON.parse(process.env.REVIEWERS);
             await github.rest.pulls.requestReviewers({
               owner: context.repo.owner,
@@ -352,36 +331,4 @@ jobs:
               pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               team_reviewers: reviewers
             });
-
-      - name: Enable auto-merge (squash)
-        if: env.changes == 'true'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.YDBOT_TOKEN }}
-          script: |
-            const pr = ${{ steps.create_or_update_pr.outputs.pr_number }};
-            
-            const { data: pullRequest } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr
-            });
-            
-            const mutation = `
-              mutation EnableAutoMerge {
-                enablePullRequestAutoMerge(input: {
-                  pullRequestId: "${pullRequest.node_id}",
-                  mergeMethod: SQUASH
-                }) {
-                  clientMutationId
-                }
-              }
-            `;
-            
-            try {
-              await github.graphql(mutation);
-              console.log("Auto-merge with squash successfully enabled");
-            } catch (error) {
-              console.error("Failed to enable auto-merge with squash:", error);
-            }
 

@@ -123,7 +123,7 @@ namespace NKikimr {
             ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep,
                 HugeKeeperLsnToKeep, ScrubLsnToKeep);
 
-            if (AppData(ctx)->FeatureFlags.GetEnableTinyDisks()) {
+            if (LogCutterCtx.WriteMetadata) {
                 curLsn = Min(curLsn, MetadataLsnToKeep);
             }
 

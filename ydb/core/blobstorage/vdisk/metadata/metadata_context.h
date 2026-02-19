@@ -13,17 +13,20 @@ public:
     const TPDiskCtxPtr PDiskCtx;
     const TActorId LoggerId;
     const TActorId LogCutterId;
+    const bool WriteMetadata = false;
 
     TMetadataContext(TIntrusivePtr<TVDiskContext> vctx,
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
             const TActorId& loggerId,
-            const TActorId& logCutterId)
+            const TActorId& logCutterId,
+            bool writeMetadata)
         : VCtx(std::move(vctx))
         , LsnMngr(std::move(lsnMngr))
         , PDiskCtx(std::move(pdiskCtx))
         , LoggerId(loggerId)
         , LogCutterId(logCutterId)
+        , WriteMetadata(writeMetadata)
     {}
 };
 

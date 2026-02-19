@@ -52,6 +52,7 @@ namespace NKikimr {
         NKikimrVDiskData::TScrubEntrypoint ScrubEntrypoint;
         ui64 ScrubEntrypointLsn;
         NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
+        bool HasMetadata = false;
 
         TEvLocalRecoveryDone(NKikimrProto::EReplyStatus status,
                              TIntrusivePtr<TLocalRecoveryInfo> recovInfo,
@@ -67,7 +68,8 @@ namespace NKikimr {
                              TVDiskIncarnationGuid vdiskIncarnationGuid,
                              NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
                              ui64 scrubEntrypointLsn,
-                             NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint);
+                             NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint,
+                             bool hasMetadata);
         ~TEvLocalRecoveryDone();
     };
 

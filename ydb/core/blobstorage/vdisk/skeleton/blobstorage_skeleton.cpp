@@ -1965,6 +1965,8 @@ namespace NKikimr {
             LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "SKELETON LOCAL RECOVERY SUCCEEDED"
                     << " Marker# BSVS29");
 
+            bool writeMetadata = (ev->Get()->HasMetadata || AppData(ctx)->FeatureFlags.GetEnableTinyDisks());
+
             // run logger forwarder
             auto logWriter = CreateRecoveryLogWriter(PDiskCtx->PDiskId, Db->SkeletonID,
                     PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, Db->LsnMngr->GetStartLsn(),
@@ -1979,13 +1981,13 @@ namespace NKikimr {
 
             // run LogCutter in the same mailbox
             TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
-                    (TActorId)(Db->LoggerID)};
+                    (TActorId)(Db->LoggerID), writeMetadata};
             Db->LogCutterID.Set(ctx.RegisterWithSameMailbox(CreateRecoveryLogCutter(std::move(logCutterCtx))));
             ActiveActors.Insert(Db->LogCutterID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run metadata actor
             auto metadataCtx = MakeIntrusive<TMetadataContext>(VCtx, Db->LsnMngr, PDiskCtx,
-                    (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID));
+                    (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID), writeMetadata);
             auto metadataActor = CreateMetadataActor(metadataCtx, std::move(ev->Get()->MetadataEntryPoint));
             MetadataActorId = ctx.Register(metadataActor);
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever

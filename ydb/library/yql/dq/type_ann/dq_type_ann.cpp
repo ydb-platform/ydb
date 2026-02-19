@@ -1196,8 +1196,8 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
-    // BlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
-    if (!EnsureArgsCount(*node, 5, ctx)) {
+    // BlockHashJoin expects 7 args: leftStream, rightStream, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames
+    if (!EnsureArgsCount(*node, 7, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 

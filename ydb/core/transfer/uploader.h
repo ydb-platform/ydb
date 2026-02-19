@@ -47,7 +47,8 @@ private:
         auto cookie = ++Cookie;
 
         auto actorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            CreateUploaderInternal(Database, tablePath, data, userCtx, cookie)
+            CreateUploaderInternal(Database, tablePath, data, 
+                new NACLib::TUserContext(BUILTIN_ACL_NO_USER_SID,""), cookie)
         );
         CookieMapping[cookie] = {tablePath, actorId};
     }

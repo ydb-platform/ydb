@@ -273,8 +273,8 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxTruncateTable = 213 [(CounterOpts) = {Name: "InFlightOps/TruncateTable"}];
 
-    COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT = 214            [(CounterOpts) = {Name: "BlockStoreVolumeDirectShards"}];
-    COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT = 215        [(CounterOpts) = {Name: "BlockStorePartitionDirectShards"}];
+    COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT = 214 [(CounterOpts) = {Name: "BlockStoreVolumeDirectShards"}];
+    COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT = 215 [(CounterOpts) = {Name: "BlockStorePartitionDirectShards"}];
 }
 
 enum ECumulativeCounters {

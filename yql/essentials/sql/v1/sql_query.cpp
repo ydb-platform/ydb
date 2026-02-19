@@ -3757,6 +3757,26 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         return TNodePtr();
     }),
 
+    TableElemExt("FailOnNonPersistableFlattenAndAggrExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+
+        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                ctx.Pos(),
+                "FailOnNonPersistableFlattenAndAggrExprs",
+                MakeLangVersion(2025, 03)))
+        {
+            return Nothing();
+        }
+
+        if (!values.empty()) {
+            query.Error() << "Expected no pragma arguments";
+            return Nothing();
+        }
+
+        ctx.FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Force;
+        return TNodePtr();
+    }),
+
     // TMaybe<bool> fields.
     PAIRED_TABLE_ELEM("AnsiInForEmptyOrNullableItemsCollections", AnsiInForEmptyOrNullableItemsCollections),
     PAIRED_TABLE_ELEM("AnsiRankForNullableKeys", AnsiRankForNullableKeys),

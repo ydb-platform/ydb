@@ -1107,6 +1107,9 @@
     "name": "FailOnGroupByExprOverride"
   },
   {
+    "name": "FailOnNonPersistableFlattenAndAggrExprs"
+  },
+  {
     "name": "FeatureR010"
   },
   {

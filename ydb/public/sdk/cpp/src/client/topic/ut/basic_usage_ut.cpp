@@ -906,6 +906,32 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
     }
 
+    Y_UNIT_TEST(ReadWithRestartsAndLargeData) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto compressor = std::make_shared<TSyncExecutor>();
+        auto decompressor = CreateThreadPoolManagedExecutor(1);
+
+        TReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName(setup.GetConsumerName())
+            .MaxMemoryUsageBytes(1_MB)
+            .DecompressionExecutor(decompressor)
+            .AppendTopics(setup.GetTopicPath())
+            // .DirectRead(EnableDirectRead)
+            ;
+
+        TWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(ECodec::RAW)
+            .CompressionExecutor(compressor);
+
+        std::uint32_t count = 3000;
+        std::string message(8'000, 'x');
+
+        WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
+    }
+
     Y_UNIT_TEST(ConflictingWrites) {
 
         TTopicSdkTestSetup setup(TEST_CASE_NAME);

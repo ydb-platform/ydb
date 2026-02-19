@@ -3726,6 +3726,117 @@ Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
 #endif
 }
 
+Y_UNIT_TEST(AlterTableAddIndexLocalBloomFilter) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table ADD INDEX idx
+        LOCAL USING bloom_filter
+        ON (col)
+        WITH (
+            false_positive_probability=0.05
+        )
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTableAddIndexLocalBloomNgramFilter) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table ADD INDEX idx
+        LOCAL USING bloom_ngram_filter
+        ON (col)
+        WITH (
+            ngram_size=3,
+            hashes_count=2,
+            filter_size_bytes=512,
+            records_count=1024,
+            case_sensitive=true
+        )
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableAddIndexLocalBloomFilter) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+        pk INT32 NOT NULL,
+        col String,
+        INDEX idx LOCAL USING bloom_filter
+            ON (col)
+            WITH (false_positive_probability=0.05),
+        PRIMARY KEY (pk))
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableAddIndexLocalBloomNgramFilter) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+        pk INT32 NOT NULL,
+        col String,
+        INDEX idx LOCAL USING bloom_ngram_filter
+            ON (col)
+            WITH (ngram_size=3, hashes_count=2, filter_size_bytes=512, records_count=1024, case_sensitive=true),
+        PRIMARY KEY (pk))
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTableAddIndexGlobalBloomFilterIsNotSupported) {
+    ExpectFailWithError("USE ydb; ALTER TABLE table ADD INDEX idx GLOBAL USING bloom_filter ON (col)",
+                        "<main>:1:55: Error: BLOOM_FILTER index can only be LOCAL\n");
+}
+
+Y_UNIT_TEST(AlterTableAddIndexLocalBloomCoverIsNotSupported) {
+    ExpectFailWithFuzzyError("USE ydb; ALTER TABLE table ADD INDEX idx LOCAL USING bloom_filter ON (col) COVER (payload)",
+                             "Error: COVER is not supported for local bloom indexes");
+}
+
+Y_UNIT_TEST(AlterTableDropIndexIsCorrect) {
+    const auto result = SqlToYql("USE ydb; ALTER TABLE table DROP INDEX idx");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableWithLocalBloomFilterAndDropIndexIsCorrect) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+        pk INT32 NOT NULL,
+        col String,
+        INDEX idx LOCAL USING bloom_filter
+            ON (col)
+            WITH (false_positive_probability=0.05),
+        PRIMARY KEY (pk)
+        );
+        ALTER TABLE table DROP INDEX idx;
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterAndDropIndexIsCorrect) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+        pk INT32 NOT NULL,
+        col String,
+        INDEX idx LOCAL USING bloom_ngram_filter
+            ON (col)
+            WITH (ngram_size=3, hashes_count=2, filter_size_bytes=512, records_count=1024, case_sensitive=true),
+        PRIMARY KEY (pk)
+        );
+        ALTER TABLE table DROP INDEX idx;
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
 Y_UNIT_TEST(CreateTableAddIndexGlobalUnique) {
     NYql::TAstParseResult result = SqlToYql(R"sql(USE ydb;
             CREATE TABLE table (

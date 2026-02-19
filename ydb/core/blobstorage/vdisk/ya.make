@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/blobstorage/vdisk/anubis_osiris
+    ydb/core/blobstorage/vdisk/chunk_keeper
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/defrag
     ydb/core/blobstorage/vdisk/huge

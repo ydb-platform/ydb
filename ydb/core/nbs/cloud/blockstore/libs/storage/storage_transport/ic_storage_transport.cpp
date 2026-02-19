@@ -46,12 +46,13 @@ TICStorageTransport::WritePersistentBuffer(
     const ui64 lsn,
     const TWriteInstruction instruction,
     TGuardedSgList data,
-    NWilson::TTraceId traceId)
+    NWilson::TSpan& span)
 {
     auto promise = NewPromise<
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>();
     auto future = promise.GetFuture();
 
+    span.Event("Before_ActorSystem_Send");
     ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvWritePersistentBuffer(
@@ -61,8 +62,9 @@ TICStorageTransport::WritePersistentBuffer(
             lsn,
             instruction,
             std::move(data),
-            std::move(traceId),
+            span.GetTraceId(),
             std::move(promise)));
+    span.Event("After_ActorSystem_Send");
 
     return future;
 }
@@ -73,12 +75,13 @@ TICStorageTransport::ErasePersistentBuffer(
     const TQueryCredentials credentials,
     const TBlockSelector selector,
     const ui64 lsn,
-    NWilson::TTraceId traceId)
+    NWilson::TSpan& span)
 {
     auto promise = NewPromise<
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>();
     auto future = promise.GetFuture();
 
+    span.Event("Before_ActorSystem_Send");
     ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvErasePersistentBuffer(
@@ -86,8 +89,9 @@ TICStorageTransport::ErasePersistentBuffer(
             credentials,
             selector,
             lsn,
-            std::move(traceId),
+            span.GetTraceId(),
             std::move(promise)));
+    span.Event("After_ActorSystem_Send");
 
     return future;
 }
@@ -100,12 +104,13 @@ TICStorageTransport::ReadPersistentBuffer(
     const ui64 lsn,
     const TReadInstruction instruction,
     TGuardedSgList data,
-    NWilson::TTraceId traceId)
+    NWilson::TSpan& span)
 {
     auto promise =
         NewPromise<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>();
     auto future = promise.GetFuture();
 
+    span.Event("Before_ActorSystem_Send");
     ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvReadPersistentBuffer(
@@ -115,8 +120,9 @@ TICStorageTransport::ReadPersistentBuffer(
             lsn,
             instruction,
             std::move(data),
-            std::move(traceId),
+            span.GetTraceId(),
             std::move(promise)));
+    span.Event("After_ActorSystem_Send");
 
     return future;
 }
@@ -127,11 +133,12 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
     const TBlockSelector selector,
     const TReadInstruction instruction,
     TGuardedSgList data,
-    NWilson::TTraceId traceId)
+    NWilson::TSpan& span)
 {
     auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvReadResult>();
     auto future = promise.GetFuture();
 
+    span.Event("Before_ActorSystem_Send");
     ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvRead(
@@ -140,8 +147,9 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
             selector,
             instruction,
             std::move(data),
-            std::move(traceId),
+            span.GetTraceId(),
             std::move(promise)));
+    span.Event("After_ActorSystem_Send");
 
     return future;
 }
@@ -154,12 +162,13 @@ TICStorageTransport::SyncWithPersistentBuffer(
     const ui64 lsn,
     const std::tuple<ui32, ui32, ui32> ddiskId,
     const ui64 ddiskInstanceGuid,
-    NWilson::TTraceId traceId)
+    NWilson::TSpan& span)
 {
     auto promise = NewPromise<
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>();
     auto future = promise.GetFuture();
 
+    span.Event("Before_ActorSystem_Send");
     ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer(
@@ -169,8 +178,9 @@ TICStorageTransport::SyncWithPersistentBuffer(
             lsn,
             ddiskId,
             ddiskInstanceGuid,
-            std::move(traceId),
+            span.GetTraceId(),
             std::move(promise)));
+    span.Event("After_ActorSystem_Send");
 
     return future;
 }

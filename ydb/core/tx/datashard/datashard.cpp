@@ -244,6 +244,9 @@ void TDataShard::OnStopGuardStarting(const TActorContext &ctx) {
             PlanQueue.Progress(ctx);
         }
     }
+
+    // Cancel pending LockRows requests
+    CheckLockRowsRejectAll();
 }
 
 void TDataShard::OnStopGuardComplete(const TActorContext &ctx) {
@@ -2893,6 +2896,11 @@ void TDataShard::FinishMediatorStateRestore(TTransactionContext& txc, ui64 readS
     for (auto& ev : msgs) {
         TActivationContext::Send(ev.Release());
     }
+
+    // Invoke all waiting callbacks
+    MediatorStateWaitingCoroutines.NotifyAll();
+
+    UpdateProposeQueueSize();
 }
 
 NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult code) {
@@ -3168,12 +3176,15 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
     return false;
 }
 void TDataShard::UpdateProposeQueueSize() const {
-    SetCounter(COUNTER_TOTAL_PROPOSE_QUEUE_SIZE, MediatorStateWaitingMsgs.size() + ProposeQueue.Size() + DelayedProposeQueue.size() + Pipeline.WaitingTxs());
+    SetCounter(COUNTER_TOTAL_PROPOSE_QUEUE_SIZE,
+        MediatorStateWaitingMsgs.size() + MediatorStateWaitingCoroutines.AwaitersCount() +
+        ProposeQueue.Size() + DelayedProposeQueue.size() + DelayedProposeCoroutines.AwaitersCount() +
+        Pipeline.WaitingTxs() + Pipeline.WaitingCoroutinesCount());
     SetCounter(COUNTER_READ_ITERATORS_WAITING, Pipeline.WaitingReadIterators());
-    SetCounter(COUNTER_MEADIATOR_STATE_QUEUE_SIZE, MediatorStateWaitingMsgs.size());
-    SetCounter(COUNTER_WAITING_TX_QUEUE_SIZE, Pipeline.WaitingTxs());
+    SetCounter(COUNTER_MEADIATOR_STATE_QUEUE_SIZE, MediatorStateWaitingMsgs.size() + MediatorStateWaitingCoroutines.AwaitersCount());
+    SetCounter(COUNTER_WAITING_TX_QUEUE_SIZE, Pipeline.WaitingTxs() + Pipeline.WaitingCoroutinesCount());
     SetCounter(COUNTER_PROPOSE_QUEUE_SIZE, ProposeQueue.Size());
-    SetCounter(COUNTER_DELAYED_PROPOSE_QUEUE_SIZE, DelayedProposeQueue.size());
+    SetCounter(COUNTER_DELAYED_PROPOSE_QUEUE_SIZE, DelayedProposeQueue.size() + DelayedProposeCoroutines.AwaitersCount());
 }
 
 void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
@@ -3317,13 +3328,23 @@ template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvEraseRowsRequest
 template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvS3UploadRowsRequest::TPtr>(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
 
 void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
-    if (DelayedProposeQueue && !Pipeline.HasProposeDelayers()) {
-        for (auto& ev : DelayedProposeQueue) {
-            ctx.Send(ev.Release());
+    if (!Pipeline.HasProposeDelayers()) {
+        bool updated = false;
+        if (DelayedProposeQueue) [[unlikely]] {
+            for (auto& ev : DelayedProposeQueue) {
+                ctx.Send(ev.Release());
+            }
+            DelayedProposeQueue.clear();
+            DelayedProposeQueue.shrink_to_fit();
+            updated = true;
         }
-        DelayedProposeQueue.clear();
-        DelayedProposeQueue.shrink_to_fit();
-        UpdateProposeQueueSize();
+        if (DelayedProposeCoroutines.HasAwaiters()) [[unlikely]] {
+            DelayedProposeCoroutines.NotifyAll();
+            updated = true;
+        }
+        if (updated) {
+            UpdateProposeQueueSize();
+        }
     }
 }
 
@@ -3768,6 +3789,11 @@ void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TA
         "Unexpected TEvServerDisconnected for " << ev->Get()->ServerId);
 
     DiscardOverloadSubscribers(it->second);
+
+    while (it->second.LockRowsRequests) {
+        auto* req = it->second.LockRowsRequests.PopFront();
+        req->Scope.Cancel();
+    }
 
     PipeServers.erase(it);
 }
@@ -4730,6 +4756,10 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
 
     if (res.Ready == NTable::EReady::Page) {
         return false;
+    }
+
+    if (res.LockTxId != 0) {
+        BreakWriteConflict(res.LockTxId, volatileDependencies);
     }
 
     return true;

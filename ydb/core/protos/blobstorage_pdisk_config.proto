@@ -97,4 +97,5 @@ message TPDiskConfig {
     optional bool PlainDataChunks = 2005;
     optional uint32 SlotSizeInUnits = 2006;
     optional bool SeparateHugePriorities = 2007;
+    optional bool UseBytesFlightControl = 2008;
 };

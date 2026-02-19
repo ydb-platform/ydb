@@ -1,7 +1,7 @@
 #include "backtrace_lib.h"
 
 #include <libunwind.h>
-#include <signal.h>
+#include <csignal>
 
 #include <util/system/backtrace.h>
 

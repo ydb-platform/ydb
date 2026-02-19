@@ -49,8 +49,8 @@ public:
         NYdb::NBS::NProto::TStorageConfig storageConfig;
         storageConfig.SetDDiskPoolName(storagePoolName);
         storageConfig.SetPersistentBufferDDiskPoolName(storagePoolName);
-        // One trace per 100ms should be sufficient for observability.
-        storageConfig.SetTraceSamplePeriod(100);
+        // One trace per 1s should be sufficient for observability.
+        storageConfig.SetTraceSamplePeriod(1000);
 
         NKikimrBlockStore::TVolumeConfig volumeConfig;
         volumeConfig.SetBlockSize(blockSize);

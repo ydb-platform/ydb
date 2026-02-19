@@ -38,7 +38,7 @@ NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
             size_t createdBytes = 0;
             if (size >= partsCount) {
                 for (size_t i = 0; i < partsCount - 1; ++i) {
-                    TRope x(PrepareData(rng.Uniform(1, size / partsCount)));
+                    TRope x(PrepareData(1 + rng.Uniform(size / partsCount)));
                     createdBytes += x.size();
                     rope.Insert(rope.End(), std::move(x));
                 }
@@ -2336,6 +2336,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         auto cfg = testCtx.GetPDiskConfig();
         cfg->SeparateHugePriorities = true;
+        cfg->UseBytesFlightControl = true;
         testCtx.UpdateConfigRecreatePDisk(cfg);
 
         TVDiskMock compVDisk(&testCtx);

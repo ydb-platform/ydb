@@ -209,29 +209,35 @@ template<bool UseMigrationProtocol>
 void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred)
 {
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> ready;
-
-    auto i = NotReady.begin();
-    for (; i != NotReady.end(); ++i) {
-        if (!i->IsReady()) {
-            // Cancel inflight decompression tasks if any
-            if (!i->IsDataEvent() || i->GetDataEvent().SetAbandoned()) {
-                break;
-            }
-            // Message was decompressed and become ready
-        }
-
-        ready.push_back(std::move(*i));
-    }
-
     std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
+    TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
 
-    for (; i != NotReady.end(); ++i) {
-        if (i->IsDataEvent()) {
-            infos.push_back(i->GetDataEvent().GetParent());
+    bool hasNonReadyEvents = false;
+    for (auto& event : NotReady) {
+        const bool isDataEvent = event.IsDataEvent();
+
+        if (event.IsReady() ||
+            (isDataEvent && !event.GetDataEvent().SetAbandoned()) // Try to cancel inflight decompression tasks if any (returns true if message was decompressed and become ready)
+        ) {
+            if (!hasNonReadyEvents) {
+                // Continue ready events prefix
+                ready.push_back(std::move(event));
+            } else if (isDataEvent) {
+                // We should release memory for this ready event here
+                accumulator.Add(event.GetDataEvent().GetParent(), event.GetDataEvent().GetDataSize());
+            }
+        } else {
+            hasNonReadyEvents = true;
+
+            if (isDataEvent) {
+                // We should release memory for non ready data events and cancel decompression tasks
+                infos.push_back(event.GetDataEvent().GetParent());
+            }
         }
     }
 
     deferred.DeferDestroyDecompressionInfos(std::move(infos));
+    accumulator.OnUserRetrievedEvent();
 
     swap(ready, NotReady);
 }
@@ -2184,7 +2190,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
     const auto delta = TInstant::Now() - LastActiveTime;
-    if (delta < TDuration::Minutes(1)) {
+    if (delta < TDuration::Seconds(30)) {
         // Session ok, we got at least one event from server since last 1 minute
         return;
     }
@@ -2201,16 +2207,21 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
     }
 
     ui64 readyEventsCount = 0;
+    ui64 amountEvents = 0;
     std::unordered_set<ui64> handledPartitionStreams;
     for (const auto& [assignId, stream] : PartitionStreams) {
         handledPartitionStreams.emplace(assignId);
-        readyEventsCount += stream->GetReadyEventsCount();
+        readyEventsCount += stream->GetReadyEventAmount();
+        amountEvents += stream->GetEventAmount();
     }
 
     // Some streams may have some ready events after finish
+    ui64 notStartedTasks = 0;
     for (const auto& decompressionItem : DecompressionQueue) {
         if (const auto& stream = *decompressionItem.PartitionStream; handledPartitionStreams.emplace(stream.GetAssignId()).second) {
-            readyEventsCount += stream.GetReadyEventsCount();
+            readyEventsCount += stream.GetReadyEventAmount();
+            amountEvents += stream.GetEventAmount();
+            notStartedTasks += decompressionItem.BatchInfo->GetNotStartedTasksCunt();
         }
     }
 
@@ -2220,7 +2231,20 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
     }
 
     // No read from server inflight, no ready events and no decompression tasks inflight => most likely hanging
-    LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "[SelfCheck] There is no ready events / inflight decompression since last: " << delta << ", most likely hanged after stop by back pressure");
+    LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix()
+        << "[SelfCheck] There is no ready events / inflight decompression since last: " << delta
+        << ", most likely hung after stop by back pressure. Session state: "
+        << "grpc connection alive: " << (Processor ? "yes" : "no")
+        << ", waiting grpc reconnect: " << (ConnectDelayContext && !ConnectDelayContext->IsCancelled() ? "yes" : "no")
+        << ", reconnect attempts done: " << ConnectionAttemptsDone
+        << ", pending decompression batches: " << DecompressionQueue.size()
+        << ", not ready data events: " << amountEvents
+        << ", alive partition streams: " << PartitionStreams.size()
+        << ", unhandled compressed data size: " << CompressedDataSize
+        << ", unhandled decompressed data size: " << DecompressedDataSize
+        << ", avg compression ratio: " << AverageCompressionRatio
+        << ", free memory to request: " << ReadSizeServerDelta
+        << ", not started tasks after reconnect: " << notStartedTasks);
 }
 
 template <>
@@ -2821,11 +2845,16 @@ void TDataDecompressionInfo<UseMigrationProtocol>::Cleanup() {
     auto session = CbContext->LockShared();
     Y_ASSERT(session);
 
+    ui64 sourceSize = 0;
+    ui64 messagesCount = 0;
     while (!Tasks.empty()) {
         const auto& task = Tasks.front();
-        OnTaskCanceled(task.AddedDataSize(), task.AddedMessagesCount());
+        sourceSize += task.AddedDataSize();
+        messagesCount += task.AddedMessagesCount();
         Tasks.pop_front();
     }
+
+    OnTaskCanceled(sourceSize, messagesCount);
 }
 
 template<bool UseMigrationProtocol>
@@ -3072,6 +3101,11 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
                                         << "Take Data. Partition " << partitionStream->GetPartitionId()
                                         << ". Read: {" << Batch << ", " << Message << "} ("
                                         << minOffset << "-" << maxOffset << ")");
+}
+
+template<bool UseMigrationProtocol>
+size_t TDataDecompressionEvent<UseMigrationProtocol>::GetDataSize() const {
+    return Parent->GetServerMessage().batches(Batch).message_data(Message).data().size();
 }
 
 template<bool UseMigrationProtocol>

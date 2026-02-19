@@ -33,6 +33,13 @@ TConclusion<NKikimrSchemeOp::TS3Settings> TTierConfig::GetPatchedConfig(
     return config;
 }
 
+TTierConfig TTierConfig::BuildWithPatchedSecrets(const TString& accessKeyValue, const TString& secretKeyValue) const {
+    auto result = *this;
+    result.ProtoConfig.SetAccessKey(accessKeyValue);
+    result.ProtoConfig.SetSecretKey(secretKeyValue);
+    return result;
+}
+
 TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto) {
     if (!proto.GetAuth().HasAws()) {
         return TConclusionStatus::Fail("AWS auth is not defined for storage tier");

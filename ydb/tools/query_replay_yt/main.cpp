@@ -19,8 +19,37 @@
 
 #include <util/string/split.h>
 #include <util/system/fs.h>
+#include <util/datetime/base.h>
+#include <exception>
 
 using namespace NActors;
+
+namespace {
+
+constexpr size_t MaxOutputFieldBytes = 1024 * 1024; // 1 MiB per heavy text field
+constexpr TStringBuf TruncatedSuffix = "...[truncated]";
+
+TString TruncateOutputField(TString value, TStringBuf fieldName, TStringBuf queryId) {
+    if (value.size() <= MaxOutputFieldBytes) {
+        return value;
+    }
+
+    Cerr << "Truncating output field '" << fieldName
+        << "' for query_id=" << queryId
+        << " from " << value.size()
+        << " bytes to " << MaxOutputFieldBytes << " bytes" << Endl;
+
+    if (MaxOutputFieldBytes > TruncatedSuffix.size()) {
+        value.resize(MaxOutputFieldBytes - TruncatedSuffix.size());
+        value += TruncatedSuffix;
+    } else {
+        value.resize(MaxOutputFieldBytes);
+    }
+
+    return value;
+}
+
+} // anonymous namespace
 
 TVector<std::pair<TString, TString>> GetJobFiles(TVector<TString> udfs) {
     TVector<std::pair<TString, TString>> result;
@@ -235,6 +264,7 @@ public:
     void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
         for (; in->IsValid(); in->Next()) {
             const auto& row = in->GetRow();
+            const TString queryId = row["query_id"].AsString();
             NJson::TJsonValue json(NJson::JSON_MAP);
             for (const auto& [key, child]: row.AsMap()) {
                 if (key == "_logfeller_timestamp")
@@ -254,24 +284,30 @@ public:
                 continue;
             }
 
+            const TString queryPlan = TruncateOutputField(row["query_plan"].AsString(), "query_plan", queryId);
+            const TString queryText = TruncateOutputField(row["query_text"].AsString(), "query_text", queryId);
+            const TString tableMetadata = TruncateOutputField(row["table_metadata"].AsString(), "table_metadata", queryId);
+            const TString extraMessage = TruncateOutputField(response.Get()->Message, "extra_message", queryId);
+            const TString newQueryPlan = TruncateOutputField(response.Get()->Plan, "new_query_plan", queryId);
+
             NYT::TNode result;
-            result = result("query_id", row["query_id"].AsString());
+            result = result("query_id", queryId);
 
             result = result("created_at", row["created_at"].AsString());
             result = result("query_cluster", row["query_cluster"].AsString());
             result = result("query_database", row["query_database"].AsString());
 
-            result = result("query_plan", row["query_plan"].AsString());
+            result = result("query_plan", queryPlan);
             result = result("query_syntax", row["query_syntax"].AsString());
-            result = result("query_text", row["query_text"].AsString());
+            result = result("query_text", queryText);
 
             result = result("query_type", row["query_type"].AsString());
-            result = result("table_metadata", row["table_metadata"].AsString());
+            result = result("table_metadata", tableMetadata);
             result = result("version", row["version"].AsString());
 
             result = result("fail_reason", failReason);
-            result = result("extra_message", response.Get()->Message);
-            result = result("new_query_plan", response.Get()->Plan);
+            result = result("extra_message", extraMessage);
+            result = result("new_query_plan", newQueryPlan);
 
             out->AddRow(result);
         }
@@ -311,7 +347,19 @@ int main(int argc, const char** argv) {
 
     TQueryReplayConfig config;
     config.ParseConfig(argc, argv);
+    Cerr << "query_replay_yt config: "
+        << "cluster=" << config.Cluster
+        << ", src-path=" << config.SrcPath
+        << ", dst-path=" << config.DstPath
+        << ", core-table-path=" << config.CoreTablePath
+        << ", threads=" << config.ActorSystemThreadsCount
+        << ", udf-files=" << config.UdfFiles.size()
+        << ", side-by-side-compare=" << (config.EnableOltpSinkSideBySinkCompare ? "true" : "false")
+        << ", antlr4-ambiguity-error=" << (config.Antlr4ParserIsAmbiguityError ? "true" : "false")
+        << Endl;
+
     if (config.QueryFile) {
+        Cerr << "Running in local mode for single query file: " << config.QueryFile << Endl;
         auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel);
         fakeMapper.Start(nullptr);
         Y_DEFER {
@@ -353,7 +401,9 @@ int main(int argc, const char** argv) {
         return EXIT_FAILURE;
     }
 
+    Cerr << "Creating YT client for cluster: " << config.Cluster << Endl;
     auto client = NYT::CreateClient(config.Cluster);
+    Cerr << "YT client created successfully." << Endl;
 
     NYT::TMapOperationSpec spec;
     spec.AddInput<NYT::TNode>(config.SrcPath);
@@ -372,7 +422,19 @@ int main(int argc, const char** argv) {
     }
     spec.MaxFailedJobCount(10000);
 
-    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel));
+    Cerr << "Starting map operation. src-path=" << config.SrcPath
+        << ", dst-path=" << config.DstPath << Endl;
+    const auto mapStart = TInstant::Now();
+    try {
+        client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel));
+    } catch (const std::exception& e) {
+        Cerr << "Map operation failed after " << (TInstant::Now() - mapStart) << ": " << e.what() << Endl;
+        return EXIT_FAILURE;
+    } catch (...) {
+        Cerr << "Map operation failed after " << (TInstant::Now() - mapStart) << ": unknown exception" << Endl;
+        return EXIT_FAILURE;
+    }
+    Cerr << "Map operation finished in " << (TInstant::Now() - mapStart) << Endl;
 
     auto mergeSpec = NYT::TMergeOperationSpec();
     mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));
@@ -380,7 +442,18 @@ int main(int argc, const char** argv) {
     mergeSpec.CombineChunks(true);
     mergeSpec.ForceTransform(true);
 
-    client->Merge(mergeSpec);
+    Cerr << "Starting merge operation for dst-path=" << config.DstPath << Endl;
+    const auto mergeStart = TInstant::Now();
+    try {
+        client->Merge(mergeSpec);
+    } catch (const std::exception& e) {
+        Cerr << "Merge operation failed after " << (TInstant::Now() - mergeStart) << ": " << e.what() << Endl;
+        return EXIT_FAILURE;
+    } catch (...) {
+        Cerr << "Merge operation failed after " << (TInstant::Now() - mergeStart) << ": unknown exception" << Endl;
+        return EXIT_FAILURE;
+    }
+    Cerr << "Merge operation finished in " << (TInstant::Now() - mergeStart) << Endl;
 
     return EXIT_SUCCESS;
 }

@@ -26,9 +26,10 @@ TEST(TSchemaSerializationTest, ParseUsingNodeAndSerialize)
 {
     TYsonStringBuf schemaString("<"
             "strict=%true;"
-            "unique_keys=%false"
+            "unique_keys=%false;"
+            "deleted_columns=[{stable_name=b}]"
         ">"
-        "[{name=a;required=%false;type=int64;};{stable_name=b;deleted=%true}]");
+        "[{name=a;required=%false;type=int64;}]");
 
     TTableSchema schema;
     Deserialize(schema, NYTree::ConvertToNode(schemaString));
@@ -50,7 +51,8 @@ TEST(TSchemaSerializationTest, ParseUsingNodeAndSerialize)
     TStringBuf expected = "{"
             R"("$attributes":{)"
                 R"("strict":true,)"
-                R"("unique_keys":false)"
+                R"("unique_keys":false,)"
+                R"("deleted_columns":[{"stable_name":"b"}])"
             "},"
             R"("$value":[)"
                 "{"
@@ -58,8 +60,7 @@ TEST(TSchemaSerializationTest, ParseUsingNodeAndSerialize)
                     R"("required":false,)"
                     R"("type":"int64",)"
                     R"("type_v3":{"type_name":"optional","item":"int64"})"
-                "},"
-                R"({"stable_name":"b","deleted":true})"
+                "}"
             "]"
         "}";
 
@@ -83,9 +84,10 @@ TEST(TSchemaSerializationTest, Cursor)
 {
     const char* schemaString = "<"
             "strict=%true;"
-            "unique_keys=%false"
+            "unique_keys=%false;"
+            "deleted_columns=[{stable_name=b}]"
         ">"
-        "[{name=a;required=%false;type=int64;};{stable_name=b;deleted=%true}]";
+        "[{name=a;required=%false;type=int64;}]";
 
     TMemoryInput input(schemaString);
     NYson::TYsonPullParser parser(&input, NYson::EYsonType::Node);
@@ -104,26 +106,25 @@ TEST(TSchemaSerializationTest, Deleted)
 {
     TYsonStringBuf schemaString("<"
             "strict=%true;"
-            "unique_keys=%false"
+            "unique_keys=%false;"
+            "deleted_columns=[{}]"
         ">"
-        "[{name=a;required=%false;type=int64;};{deleted=%true}]");
+        "[{name=a;required=%false;type=int64;}]");
 
     TTableSchema schema;
     EXPECT_THROW_WITH_SUBSTRING(
         Deserialize(schema, NYTree::ConvertToNode(schemaString)),
-        "Stable name should be set for a deleted column");
+        "Stable name should be set for deleted column");
 }
 
 TEST(TConstrainedSchemaSerialization, YsonDeserializeAndSerialize)
 {
     std::string schemaString = "<"
             "strict=%true;"
-            "unique_keys=%false"
+            "unique_keys=%false;"
+            "deleted_columns=[{stable_name=b}]"
         ">"
-        "["
-            "{name=a;stable_name=_a;required=%false;type=int64;constraint=\"BETWEEN 2 AND 3\"};"
-            "{stable_name=b;deleted=%true}"
-        "]";
+        "[{name=a;stable_name=_a;required=%false;type=int64;constraint=\"BETWEEN 2 AND 3\"}]";
 
     auto checkSchemaAndSerialize = [] (const TConstrainedTableSchema& schema) {
         EXPECT_EQ(1, std::ssize(schema.TableSchema().Columns()));
@@ -147,7 +148,8 @@ TEST(TConstrainedSchemaSerialization, YsonDeserializeAndSerialize)
         TStringBuf expected = "{"
             R"("$attributes":{)"
                 R"("strict":true,)"
-                R"("unique_keys":false)"
+                R"("unique_keys":false,)"
+                R"("deleted_columns":[{"stable_name":"b"}])"
             "},"
             R"("$value":[)"
                 "{"
@@ -157,8 +159,7 @@ TEST(TConstrainedSchemaSerialization, YsonDeserializeAndSerialize)
                     R"("stable_name":"_a",)"
                     R"("type":"int64",)"
                     R"("type_v3":{"type_name":"optional","item":"int64"})"
-                "},"
-                R"({"stable_name":"b","deleted":true})"
+                "}"
             "]"
         "}";
         EXPECT_EQ(ref.ToStringBuf(), expected);

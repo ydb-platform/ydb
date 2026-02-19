@@ -20,7 +20,7 @@ class PrSyncCreator:
         self.base_branch = base_branch
         self.head_branch = head_branch
         self.ours_on_conflict = ours_on_conflict
-        self.their_on_conflict = theirs_on_conflict
+        self.theirs_on_conflict = theirs_on_conflict
         self.token = token
         self.pr_label = pr_label
         self.pr_label_fail = pr_label_failed
@@ -85,6 +85,33 @@ class PrSyncCreator:
             self.logger.info("output:\n%s", result.stdout.decode())
         return result
 
+    def git_get_conflict_files(self):
+        conflicting_files = set()
+
+        for line in self.git_run("ls-files", "-u").stdout.decode().strip().splitlines():
+            parts = line.split('\t')
+            if len(parts) > 1:
+                filename = parts[-1]
+                conflicting_files.add(filename)
+
+        return conflicting_files
+
+    def find_conflict_lines(self, file):
+        start_line_number = 1
+        end_line_number = 1
+        if os.path.exists(file):
+            try:
+                with open(file, 'r', encoding='utf-8', errors='ignore') as f:
+                    for i, line in enumerate(f, 1):
+                        if line.startswith('<<<<<<<'):
+                            start_line_number = i
+                        if line.startswith('>>>>>>>'):
+                            end_line_number = i
+                            break
+            except Exception as e:
+                self.logger.warning("Failed to find conflict lines in %s: %s", file, e)
+        return (start_line_number, end_line_number)
+
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").stdout.decode().strip()
 
@@ -105,6 +132,7 @@ class PrSyncCreator:
         merge_result = self.git_run("merge", self.head_branch, "-m", commit_msg, fail=False)
         merge_output = merge_result.stdout.decode()
         merge_failed = merge_result.returncode != 0
+        conflict_files = ''
         if merge_failed and "Automatic merge failed; fix conflicts and then commit the result." in merge_output:
             conflict_files = self.git_run("ls-files", "-u").stdout.decode()
             should_commit = False
@@ -114,17 +142,19 @@ class PrSyncCreator:
                     self.git_run("checkout", "--ours", ours_file)
                     self.git_run("add", ours_file)
                     should_commit = True
-            for theirs_file in self.their_on_conflict:
+            for theirs_file in self.theirs_on_conflict:
                 if theirs_file in conflict_files:
                     self.logger.warning(f"Conflicts while merging. Attempting to resolve only for {theirs_file} with --theirs")
                     self.git_run("checkout", "--theirs", theirs_file)
                     self.git_run("add", theirs_file)
                     should_commit = True
+            conflict_files = self.git_get_conflict_files()
+            if len(conflict_files) > 0:
+                self.logger.info(f"Resolved conflicts while merging. Other conflicts should be fixed manually: {conflict_files}")
+                self.git_run("add", *list(conflict_files))
+                should_commit = True
             if should_commit:
                 self.git_run("commit", "-m", commit_msg)
-            conflict_files = self.git_run("ls-files", "-u").stdout.decode()
-            if len(conflict_files) > 0:
-                raise Exception(f"Resolved for all known files, but more files were in conflict {conflict_files}")
         elif merge_failed:
             raise Exception(f"Unexpected error during merge {merge_output}")
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
@@ -134,11 +164,19 @@ class PrSyncCreator:
         else:
             pr_body = "PR was created by rightlib sync script"
 
+        if merge_failed and len(conflict_files) > 0:
+            pr_body += "\n\n### Merge failed\n\nFound some unresolved conflicts:\n"
+            for conflict_file in conflict_files:
+                lines = self.find_conflict_lines(conflict_file)
+                pr_body += f"- [{conflict_file}]({os.environ['GITHUB_SERVER_URL']}/{self.repo_name}/blob/{self.git_revparse_head()}/{conflict_file}#L{lines[0]}-L{lines[1]})\n"
+
         pr = self.repo.create_pull(
             self.base_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
         )
         pr.add_to_labels(self.pr_label)
         pr.add_to_labels(automerge.automerge_pr_label)
+        if merge_failed and len(conflict_files) > 0:
+            pr.add_to_labels(automerge.pr_label_fail)
 
     def cmd_create_pr(self):
         pr = self.get_latest_open_pr()

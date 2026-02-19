@@ -39,7 +39,7 @@ $launch_times = (
         GROUP BY
             Db,
             JSON_VALUE(Info, "$.cluster.version") AS Version,
-            COALESCE(JSON_VALUE(tests_results.Info, "$.ci_launch_id"), CAST(RunId AS String)) AS LunchId
+            COALESCE(JSON_VALUE(Info, "$.ci_launch_id"), CAST(RunId AS String)) AS LunchId
     ) AS launch_times_raw ON all_suites.Db == launch_times_raw.Db
 );
 

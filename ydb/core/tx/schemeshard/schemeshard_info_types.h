@@ -3854,11 +3854,13 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
         Invalid = 0,
         InProgress = 1,
         Done = 2,
+        Cancelled = 3,
     };
 
     ui64 Id;  // TxId from the original TEvCreateRequest
     EState State = EState::Invalid; 
     TPathId TablePathId;
+    TPathId SubdomainPathId;
     bool Cascade;
     ui32 MaxShardsInFlight;
 
@@ -3871,6 +3873,11 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
     ui32 DoneShardCount = 0; // updates only when persisting
 
     THashSet<TShardIdx> ShardsInFlight;
+
+    TSet<TActorId> Subscribers;
+
+    bool IsFinished() const;
+    void AddNotifySubscriber(const TActorId& actorId);
 };
 // } // NForcedCompaction
 

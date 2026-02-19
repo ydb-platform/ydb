@@ -34,6 +34,9 @@ struct TDataEvents {
     enum EEventType {
         EvWrite = EventSpaceBegin(TKikimrEvents::ES_DATA_OPERATIONS),
         EvWriteResult,
+        EvLockRows,
+        EvLockRowsCancel,
+        EvLockRowsResult,
         EvEnd
     };
 
@@ -180,6 +183,79 @@ struct TDataEvents {
         NLWTrace::TOrbit&& MoveOrbit() { return std::move(Orbit); }
     private:
         NLWTrace::TOrbit Orbit;
+    };
+
+    struct TEvLockRows : public NActors::TEventPB<TEvLockRows, NKikimrDataEvents::TEvLockRows, TDataEvents::EvLockRows> {
+    public:
+        TEvLockRows() = default;
+
+        explicit TEvLockRows(ui64 requestId) {
+            Record.SetRequestId(requestId);
+        }
+
+        TTableId GetTableId() const {
+            const auto& p = Record.GetTableId();
+            return TTableId(p.GetOwnerId(), p.GetTableId(), p.GetSchemaVersion());
+        }
+
+        void SetTableId(const TTableId& tableId) {
+            auto* p = Record.MutableTableId();
+            p->SetOwnerId(tableId.PathId.OwnerId);
+            p->SetTableId(tableId.PathId.LocalPathId);
+            if (tableId.SchemaVersion) {
+                p->SetSchemaVersion(tableId.SchemaVersion);
+            }
+        }
+
+        TSerializedCellMatrix GetCellMatrix() const {
+            TSerializedCellMatrix matrix;
+            TString payload = GetPayload(Record.GetPayloadIndex()).ConvertToString();
+            if (!TSerializedCellMatrix::TryParse(std::move(payload), matrix)) {
+                throw yexception() << "Failed to parse TSerializedCellVec payload";
+            }
+            return matrix;
+        }
+
+        void SetCellMatrix(TString matrix) {
+            auto payloadIndex = AddPayload(TRope(std::move(matrix)));
+            Record.SetPayloadIndex(payloadIndex);
+        }
+    };
+
+    struct TEvLockRowsCancel : public NActors::TEventPB<TEvLockRowsCancel, NKikimrDataEvents::TEvLockRowsCancel, TDataEvents::EvLockRowsCancel> {
+    public:
+        TEvLockRowsCancel() = default;
+    };
+
+    struct TEvLockRowsResult : public NActors::TEventPB<TEvLockRowsResult, NKikimrDataEvents::TEvLockRowsResult, TDataEvents::EvLockRowsResult> {
+    public:
+        TEvLockRowsResult() = default;
+
+        TEvLockRowsResult(ui64 tabletId, ui64 requestId, NKikimrDataEvents::TEvLockRowsResult::EStatus status) {
+            Record.SetTabletId(tabletId);
+            Record.SetRequestId(requestId);
+            Record.SetStatus(status);
+        }
+
+        TEvLockRowsResult(ui64 tabletId, ui64 requestId, NKikimrDataEvents::TEvLockRowsResult::EStatus status, const TString& errorMsg)
+            : TEvLockRowsResult(tabletId, requestId, status)
+        {
+            NYql::TIssue issue(errorMsg);
+            NYql::IssueToMessage(issue, Record.AddIssues());
+        }
+
+        void AddLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
+            auto* entry = Record.AddLocks();
+            entry->SetLockId(lockId);
+            entry->SetDataShard(shard);
+            entry->SetGeneration(generation);
+            entry->SetCounter(counter);
+            entry->SetSchemeShard(ssId);
+            entry->SetPathId(pathId);
+            if (hasWrites) {
+                entry->SetHasWrites(true);
+            }
+        }
     };
 
 };

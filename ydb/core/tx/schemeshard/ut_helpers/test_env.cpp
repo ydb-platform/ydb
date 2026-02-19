@@ -40,7 +40,7 @@ class TFakeBlockStoreVolume : public TActor<TFakeBlockStoreVolume>, public NTabl
 public:
     TFakeBlockStoreVolume(const TActorId& tablet, TTabletStorageInfo* info)
         : TActor(&TThis::StateInit)
-          , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
+        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
     void DefaultSignalTabletActive(const TActorContext&) override {
@@ -90,7 +90,7 @@ class TFakeBlockStorePartitionDirect : public TActor<TFakeBlockStorePartitionDir
 public:
     TFakeBlockStorePartitionDirect(const TActorId& tablet, TTabletStorageInfo* info)
         : TActor(&TThis::StateInit)
-          , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
+        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
     void DefaultSignalTabletActive(const TActorContext&) override {

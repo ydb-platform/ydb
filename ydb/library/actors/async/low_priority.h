@@ -12,6 +12,8 @@ namespace NActors {
     {
         friend TActorRunnableItem::TImpl<TAsyncLowPriorityQueue>;
 
+        class [[nodiscard]] TAsyncLowPriorityQueueAwaiter;
+
     public:
         TAsyncLowPriorityQueue() = default;
 
@@ -27,6 +29,13 @@ namespace NActors {
             }
             Y_ABORT_UNLESS(!Awaiters && !NextAwaiters,
                 "Unexpected TAsyncLowPriorityQueue destruction before all awaiting coroutines");
+        }
+
+        /**
+         * Will wait for the next mailbox cycle when awaited
+         */
+        TAsyncLowPriorityQueueAwaiter Next() {
+            return TAsyncLowPriorityQueueAwaiter{ this };
         }
 
     private:
@@ -136,14 +145,6 @@ namespace NActors {
                 Reschedule();
                 current->Resume();
             }
-        }
-
-    public:
-        /**
-         * Will wait for the next mailbox cycle when awaited
-         */
-        TAsyncLowPriorityQueueAwaiter Next() {
-            return TAsyncLowPriorityQueueAwaiter{ this };
         }
 
     private:

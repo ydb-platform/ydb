@@ -478,7 +478,7 @@ namespace NKikimr {
             }
 
             // refresh statistics for window-based counters
-            void RefreshStatistics() {
+            void UpdateCounters() {
                 SkeletonFrontMaxInFlightCount.Update();
             }
         };
@@ -833,7 +833,7 @@ namespace NKikimr {
             ExtQueueAsyncBlobPuts.SetVDiskLogPrefix(VCtx->VDiskLogPrefix);
             ExtQueueUserDataPuts.SetVDiskLogPrefix(VCtx->VDiskLogPrefix);
 
-            UpdateWhiteboard(ctx);
+            UpdateStats(ctx);
 
             // create and run skeleton
             SkeletonId = ctx.Register(CreateVDiskSkeleton(Config, GInfo, ctx.SelfID, VCtx));
@@ -1129,11 +1129,27 @@ namespace NKikimr {
             return str.Str();
         }
 
+        void UpdateStats(const TActorContext &ctx, bool schedule = true) {
+            UpdateWhiteboard(ctx);
+
+            // Update internal queue counters that are dependant on external ticker
+            for (auto queue : {IntQueueAsyncGets.get(), IntQueueFastGets.get(), IntQueueDiscover.get(),
+                               IntQueueLowGets.get(), IntQueueLogPuts.get(), IntQueueHugePutsForeground.get(),
+                               IntQueueHugePutsBackground.get()}) {
+                queue->UpdateCounters();
+            }
+
+            // repeat later
+            if (schedule) {
+                ctx.Schedule(Config->StatsUpdateInterval, new TEvTimeToUpdateStats);
+            }
+        }
+
         ////////////////////////////////////////////////////////////////////////
         // WHITEBOARD SECTOR
         // Update Whiteboard with the current status
         ////////////////////////////////////////////////////////////////////////
-        void UpdateWhiteboard(const TActorContext &ctx, bool schedule = true) {
+        void UpdateWhiteboard(const TActorContext &ctx) {
             // out of space
             const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
             // skeleton state
@@ -1150,8 +1166,6 @@ namespace NKikimr {
                                IntQueueLowGets.get(), IntQueueLogPuts.get(), IntQueueHugePutsForeground.get(),
                                IntQueueHugePutsBackground.get()}) {
                 light = Max(light, queue->GetCumulativeLight());
-
-                queue->RefreshStatistics();
             }
             // send a message to Whiteboard
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
@@ -1178,10 +1192,6 @@ namespace NKikimr {
                          outOfSpaceFlags,
                          std::nullopt,
                          std::nullopt));
-            // repeat later
-            if (schedule) {
-                ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard);
-            }
         }
 
         template <class TEventPtr>
@@ -1867,7 +1877,7 @@ namespace NKikimr {
 
         void Handle(TEvReportScrubStatus::TPtr ev, const TActorContext& ctx) {
             HasUnreadableBlobs = ev->Get()->HasUnreadableBlobs;
-            UpdateWhiteboard(ctx, false);
+            UpdateWhiteboard(ctx);
         }
 
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate::TPtr ev, const TActorContext& ctx) {
@@ -1911,7 +1921,7 @@ namespace NKikimr {
             hFunc(TEvGetLogoBlobRequest, Handle)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
@@ -1958,7 +1968,7 @@ namespace NKikimr {
             hFunc(TEvGetLogoBlobRequest, Handle)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
@@ -2002,7 +2012,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
@@ -2172,7 +2182,7 @@ namespace NKikimr {
             hFunc(TEvGetLogoBlobRequest, Handle)
             // TEvFrontRecoveryStatus
             HFunc(TEvVDiskRequestCompleted, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)

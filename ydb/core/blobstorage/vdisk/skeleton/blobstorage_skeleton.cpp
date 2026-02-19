@@ -116,7 +116,7 @@ namespace NKikimr {
                          enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->IsThrottling() : false) : std::nullopt,
                          enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0) : std::nullopt));
             // repeat later
-            ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
+            ctx.Schedule(Config->StatsUpdateInterval, new TEvTimeToUpdateStats());
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -2872,7 +2872,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvLocalRecoveryDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
@@ -2924,7 +2924,7 @@ namespace NKikimr {
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
@@ -2996,7 +2996,7 @@ namespace NKikimr {
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
@@ -3029,7 +3029,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)

@@ -651,7 +651,7 @@ struct TEvBlobStorage {
         EvCompactionFinished,
         EvKickEmergencyPutQueue,                                /// 268 636 220
         EvWakeupEmergencyPutQueue,
-        EvTimeToUpdateWhiteboard,
+        EvTimeToUpdateStats,
         EvBulkSstsLoaded,
         EvVDiskGuidWritten,
         EvSyncerCommit,

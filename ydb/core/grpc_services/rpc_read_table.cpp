@@ -478,7 +478,7 @@ private:
                 return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx);
             }
         }
-        
+
         NKikimr::NTxProxy::TReadTableSettings settings;
 
         if (Request_->GetSerializedToken()) {

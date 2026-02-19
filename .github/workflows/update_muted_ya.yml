@@ -2,7 +2,7 @@ name: Update Muted tests
 
 on:
   schedule:
-    - cron: "0 4-21/1 * * *"  # Every 1 hours from 4:00 to 21:00 UTC
+    - cron: "0 4-21/1 * * *"  # Every hour from 4:00 to 21:00 UTC
   workflow_dispatch:
     inputs:
       branches:
@@ -296,6 +296,7 @@ jobs:
         env:
           LABELS: ${{ env.LABELS }}
           REVIEWERS: ${{ env.REVIEWERS }}
+          BASE_BRANCH: ${{ matrix.BASE_BRANCH }}
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
@@ -311,8 +312,11 @@ jobs:
               body: commentBody
             });
 
-            // Base labels from env LABELS. Automerge is set by set_automerge_mute_unmute_prs workflow.
+            // Labels from env; for stable-* add automerge (automerge_pr merges after checks).
             const labelsToAdd = process.env.LABELS.split(',').map(l => l.trim());
+            if (process.env.BASE_BRANCH.startsWith('stable-')) {
+              labelsToAdd.push('automerge');
+            }
             core.info(`Applying labels: ${labelsToAdd.join(', ')}`);
             await github.rest.issues.addLabels({
               ...context.repo,
@@ -320,7 +324,7 @@ jobs:
               labels: labelsToAdd
             });
 
-            // Add reviewers from env REVIEWERS
+            // Request reviewers from env
             const reviewers = JSON.parse(process.env.REVIEWERS);
             await github.rest.pulls.requestReviewers({
               owner: context.repo.owner,
@@ -328,4 +332,33 @@ jobs:
               pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               team_reviewers: reviewers
             });
+
+      - name: Enable auto-merge (squash)
+        if: env.changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const pr = ${{ steps.create_or_update_pr.outputs.pr_number }};
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr
+            });
+            const mutation = `
+              mutation EnableAutoMerge {
+                enablePullRequestAutoMerge(input: {
+                  pullRequestId: "${pullRequest.node_id}",
+                  mergeMethod: SQUASH
+                }) {
+                  clientMutationId
+                }
+              }
+            `;
+            try {
+              await github.graphql(mutation);
+              console.log("Auto-merge with squash successfully enabled");
+            } catch (error) {
+              console.error("Failed to enable auto-merge with squash:", error);
+            }
 

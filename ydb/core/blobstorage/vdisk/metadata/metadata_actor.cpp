@@ -6,7 +6,7 @@
 namespace NKikimr {
 
 class TMetadataActor : public TActor<TMetadataActor> {
-    TIntrusivePtr<TMetadataContext> MetadataCtx;
+    TIntrusivePtr<TVDiskLogContext> LogCtx;
     NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
 
     ui64 CurEntryPointLsn = 0;
@@ -24,15 +24,15 @@ class TMetadataActor : public TActor<TMetadataActor> {
         TRcBuf data(TRcBuf::Uninitialized(MetadataEntryPoint.ByteSizeLong()));
         const bool success = MetadataEntryPoint.SerializeToArray(
                 reinterpret_cast<uint8_t*>(data.UnsafeGetDataMut()), data.GetSize());
-        Y_VERIFY_S(success, MetadataCtx->VCtx->VDiskLogPrefix);
+        Y_VERIFY_S(success, LogCtx->VCtx->VDiskLogPrefix);
 
-        TLsnSeg seg = MetadataCtx->LsnMngr->AllocLsnForLocalUse();
+        TLsnSeg seg = LogCtx->LsnMngr->AllocLsnForLocalUse();
 
-        auto msg = std::make_unique<NPDisk::TEvLog>(MetadataCtx->PDiskCtx->Dsk->Owner,
-            MetadataCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureMetadata,
+        auto msg = std::make_unique<NPDisk::TEvLog>(LogCtx->PDiskCtx->Dsk->Owner,
+            LogCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureMetadata,
             commitRecord, data, seg, nullptr);
 
-        Send(MetadataCtx->LoggerId, msg.release());
+        Send(LogCtx->LoggerId, msg.release());
 
         CommitInFlight = true;
     }
@@ -48,7 +48,7 @@ class TMetadataActor : public TActor<TMetadataActor> {
     }
 
     void Handle(NPDisk::TEvLogResult::TPtr& ev) {
-        CHECK_PDISK_RESPONSE(MetadataCtx->VCtx, ev, TActivationContext::AsActorContext());
+        CHECK_PDISK_RESPONSE(LogCtx->VCtx, ev, TActivationContext::AsActorContext());
 
         CommitInFlight = false;
 
@@ -58,7 +58,7 @@ class TMetadataActor : public TActor<TMetadataActor> {
                 Send(CommitNotifyId, new TEvCommitVDiskMetadataDone);
                 CommitNotifyId = {};
             }
-            Send(MetadataCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Metadata, CurEntryPointLsn));
+            Send(LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Metadata, CurEntryPointLsn));
         }
     }
 
@@ -90,18 +90,18 @@ public:
         return NKikimrServices::TActivity::BS_VDISK_METADATA_ACTOR;
     }
 
-    TMetadataActor(TIntrusivePtr<TMetadataContext> metadataCtx,
+    TMetadataActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
             NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint)
         : TActor(&TThis::StateFunc)
-        , MetadataCtx(std::move(metadataCtx))
-        , MetadataEntryPoint(std::move(metadataEntryPoint))
+        , LogCtx(logCtx)
+        , MetadataEntryPoint(metadataEntryPoint)
     {}
 };
 
-IActor *CreateMetadataActor(TIntrusivePtr<TMetadataContext>& metadataCtx,
+IActor *CreateMetadataActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
         NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint)
 {
-    return new TMetadataActor(metadataCtx, std::move(metadataEntryPoint));
+    return new TMetadataActor(logCtx, metadataEntryPoint);
 }
 
 } // NKikimr

@@ -12777,6 +12777,57 @@ Y_UNIT_TEST(NamedNodeSubqueryReuse) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 1);
 }
 
+Y_UNIT_TEST(SelectOpUnion) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        (SELECT 1 AS a) UNION (SELECT 2 AS a);
+        (SELECT 1 AS a) UNION DISTINCT (SELECT 2 AS a);
+        (SELECT 1 AS a) UNION ALL (SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
+Y_UNIT_TEST(SelectOpExcept) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        (SELECT 1 AS a) EXCEPT (SELECT 2 AS a);
+        (SELECT 1 AS a) EXCEPT DISTINCT (SELECT 2 AS a);
+        (SELECT 1 AS a) EXCEPT ALL (SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
+Y_UNIT_TEST(SelectOpIntersect) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        (SELECT 1 AS a) INTERSECT (SELECT 2 AS a);
+        (SELECT 1 AS a) INTERSECT DISTINCT (SELECT 2 AS a);
+        (SELECT 1 AS a) INTERSECT ALL (SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(CreateViewNewSyntax) {

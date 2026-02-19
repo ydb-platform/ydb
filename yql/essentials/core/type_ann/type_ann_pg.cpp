@@ -5653,9 +5653,11 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
     const TStructExprType* resultStructType = nullptr;
 
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Error;
+    bool areColumnsOrdered = true;
     bool isUniversal = false;
     if (isYql && (1 != setItems->ChildrenSize())) {
         status = InferUnionType(input->Pos(), setItems->ChildrenList(), resultStructType, ctx, /* areHashesChecked = */ false, isUniversal);
+        areColumnsOrdered = false;
     } else if (isYql || (1 == setItems->ChildrenSize() && HasSetting(*setItems->Child(0)->Child(0), "unknowns_allowed"))) {
         status = InferPositionalUnionType(input->Pos(), setItems->ChildrenList(), resultColumnOrder, resultStructType, ctx, isUniversal);
     } else {
@@ -5708,7 +5710,12 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
     }
 
     input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(resultStructType));
-    return ctx.Types.SetColumnOrder(*input, resultColumnOrder, ctx.Expr);
+
+    if (areColumnsOrdered) {
+        return ctx.Types.SetColumnOrder(*input, resultColumnOrder, ctx.Expr);
+    }
+
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus PgBoolOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

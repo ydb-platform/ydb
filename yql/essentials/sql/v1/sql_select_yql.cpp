@@ -4,6 +4,7 @@
 #include "sql_expression.h"
 #include "sql_group_by.h"
 #include "select_yql.h"
+#include "sql_select.h"
 
 #include <util/generic/overloaded.h>
 
@@ -19,31 +20,11 @@ public:
     }
 
     TNodeResult Build(const TRule_select_stmt& rule) {
-        const auto& intersect = rule.GetRule_select_stmt_intersect1();
-        if (!rule.GetBlock2().empty()) {
-            return Unsupported("(union_op select_stmt_intersect)*");
-        }
-
-        const auto& partial = Unpack(intersect.GetRule_select_kind_parenthesis1());
-        if (!intersect.GetBlock2().empty()) {
-            return Unsupported("(intersect_op select_kind_parenthesis)*");
-        }
-
-        return Build(partial);
+        return Finalize(BuildUnion(rule, TYqlSelectArgs()));
     }
 
     TNodeResult Build(const TRule_select_unparenthesized_stmt& rule) {
-        const auto& intersect = rule.GetRule_select_unparenthesized_stmt_intersect1();
-        if (!rule.GetBlock2().empty()) {
-            return Unsupported("(union_op select_stmt_intersect)*");
-        }
-
-        const auto& partial = intersect.GetRule_select_kind_partial1();
-        if (!intersect.GetBlock2().empty()) {
-            return Unsupported("(intersect_op select_kind_parenthesis)*");
-        }
-
-        return Build(partial);
+        return Finalize(BuildUnion(rule, TYqlSelectArgs()));
     }
 
     TNodeResult Build(const TRule_values_stmt& rule) {
@@ -90,6 +71,168 @@ public:
     }
 
 private:
+    const auto& GetFirstArgument(const auto& rule) {
+        using T = std::decay_t<decltype(rule)>;
+
+        if constexpr (std::is_same_v<T, TRule_select_stmt>) {
+            return rule.GetRule_select_stmt_intersect1();
+        } else if constexpr (std::is_same_v<T, TRule_select_stmt_intersect>) {
+            return rule.GetRule_select_kind_parenthesis1();
+        } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt>) {
+            return rule.GetRule_select_unparenthesized_stmt_intersect1();
+        } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_intersect>) {
+            return rule.GetRule_select_kind_partial1();
+        } else {
+            static_assert(false);
+        }
+    }
+
+    const auto& GetNextArgument(const auto& block) {
+        using T = std::decay_t<decltype(block)>;
+
+        if constexpr (std::is_same_v<T, TRule_select_stmt::TBlock2>) {
+            return block.GetRule_select_stmt_intersect2();
+        } else if constexpr (std::is_same_v<T, TRule_select_stmt_intersect::TBlock2>) {
+            return block.GetRule_select_kind_parenthesis2();
+        } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt::TBlock2>) {
+            return block.GetRule_select_stmt_intersect2();
+        } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_intersect::TBlock2>) {
+            return block.GetRule_select_kind_parenthesis2();
+        } else {
+            static_assert(false);
+        }
+    }
+
+    template <class TRule>
+        requires std::is_same_v<TRule, TRule_select_stmt> ||
+                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt>
+    TSQLResult<TYqlSelectArgs>
+    BuildUnion(const TRule& rule, TYqlSelectArgs&& select) {
+        {
+            const auto& first = GetFirstArgument(rule);
+            if (auto result = BuildIntersection(first, std::move(select))) {
+                select = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
+        }
+
+        for (const auto& block : rule.GetBlock2()) {
+            const auto& next = GetNextArgument(block);
+            if (auto result = BuildIntersection(next, std::move(select))) {
+                select = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
+
+            const auto& op = block.GetRule_union_op1();
+            select.SetOps.emplace_back(ToOp(op));
+        }
+
+        return select;
+    }
+
+    template <class TRule>
+        requires std::is_same_v<TRule, TRule_select_stmt_intersect> ||
+                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt_intersect>
+    TSQLResult<TYqlSelectArgs>
+    BuildIntersection(const TRule& rule, TYqlSelectArgs&& select) {
+        {
+            const auto& first = GetFirstArgument(rule);
+            if (auto result = Build(first, std::move(select))) {
+                select = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
+        }
+
+        for (const auto& block : rule.GetBlock2()) {
+            const auto& next = GetNextArgument(block);
+            if (auto result = Build(next, std::move(select))) {
+                select = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
+
+            const auto& op = block.GetRule_intersect_op1();
+            select.SetOps.emplace_back(ToOp(op));
+        }
+
+        return select;
+    }
+
+    TSQLResult<TYqlSelectArgs>
+    Build(const TRule_select_kind_parenthesis& rule, TYqlSelectArgs&& select) {
+        return Build(Unpack(rule), std::move(select), IsParenthesised(rule));
+    }
+
+    bool IsParenthesised(const TRule_select_kind_parenthesis& rule) {
+        switch (rule.GetAltCase()) {
+            case TRule_select_kind_parenthesis::kAltSelectKindParenthesis1:
+                return false;
+            case TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
+                return true;
+            case TRule_select_kind_parenthesis::ALT_NOT_SET:
+                Y_UNREACHABLE();
+        }
+    }
+
+    TSQLResult<TYqlSelectArgs> Build(
+        const TRule_select_kind_partial& rule,
+        TYqlSelectArgs&& select,
+        bool isParenthesised = false)
+    {
+        auto result = Build(rule);
+        if (!result) {
+            return std::unexpected(result.error());
+        }
+
+        if (!isParenthesised && select.OrderBy) {
+            YQL_ENSURE(!select.OrderBy->Keys.empty());
+            Ctx_.Error(select.OrderBy->Keys.at(0)->OrderExpr->GetPos())
+                << "ORDER BY within UNION/EXCEPT/INTERSECT "
+                << "is only allowed after last subquery";
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        if (!isParenthesised && select.Limit) {
+            Ctx_.Error((*select.Limit)->GetPos())
+                << "LIMIT within UNION/EXCEPT/INTERSECT "
+                << "is only allowed after last subquery";
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        if (!isParenthesised && select.Offset) {
+            Ctx_.Error((*select.Offset)->GetPos())
+                << "OFFSET within UNION/EXCEPT/INTERSECT "
+                << "is only allowed after last subquery";
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        TYqlSelectArgs next = DestructYqlSelect(*result);
+
+        YQL_ENSURE(next.SetItems.size() == 1);
+        auto& only = next.SetItems[0];
+
+        YQL_ENSURE(!next.OrderBy);
+        next.OrderBy = std::exchange(only.OrderBy, Nothing());
+        // ORDER BY is linked to `SqlSetItem`, because only this
+        // allows to reference an external column.
+
+        if (isParenthesised) {
+            only.OrderBy = std::exchange(next.OrderBy, Nothing());
+            only.Limit = std::exchange(next.Limit, Nothing());
+            only.Offset = std::exchange(next.Offset, Nothing());
+        }
+
+        select.SetItems.emplace_back(std::move(only));
+        select.SetOps.emplace_back(EYqlSetOp::Push);
+        select.OrderBy = std::move(next.OrderBy);
+        select.Limit = std::move(next.Limit);
+        select.Offset = std::move(next.Offset);
+        return select;
+    }
+
     TNodeResult Build(const TRule_exists_expr::TBlock3& block) {
         switch (block.GetAltCase()) {
             case TRule_exists_expr_TBlock3::kAlt1:
@@ -162,11 +305,13 @@ private:
     }
 
     TNodeResult Build(const TRule_select_core& rule, TYqlSelectArgs&& select) {
+        TYqlSetItemArgs setItem;
+
         if (rule.HasBlock1()) {
             Token(rule.GetBlock1().GetToken1());
 
             if (auto result = Build(rule.GetBlock1().GetRule_join_source2())) {
-                select.Source = std::move(*result);
+                setItem.Source = std::move(*result);
             } else {
                 return std::unexpected(result.error());
             }
@@ -192,7 +337,7 @@ private:
         }
 
         if (auto result = BuildProjection(rule)) {
-            select.Projection = std::move(*result);
+            setItem.Projection = std::move(*result);
         } else {
             return std::unexpected(result.error());
         }
@@ -212,7 +357,7 @@ private:
             }
 
             if (auto result = Build(rule.GetBlock9().GetRule_join_source2())) {
-                select.Source = std::move(*result);
+                setItem.Source = std::move(*result);
             } else {
                 return std::unexpected(result.error());
             }
@@ -221,7 +366,7 @@ private:
         if (rule.HasBlock10()) {
             Token(rule.GetBlock10().GetToken1());
             if (auto result = Build(rule.GetBlock10().GetRule_expr2(), EColumnRefState::Allow)) {
-                select.Where = std::move(*result);
+                setItem.Where = std::move(*result);
             } else {
                 return std::unexpected(result.error());
             }
@@ -229,7 +374,7 @@ private:
 
         if (rule.HasBlock11()) {
             if (auto result = Build(rule.GetBlock11().GetRule_group_by_clause1())) {
-                select.GroupBy = std::move(*result);
+                setItem.GroupBy = std::move(*result);
             } else {
                 return std::unexpected(result.error());
             }
@@ -238,7 +383,7 @@ private:
         if (rule.HasBlock12()) {
             Token(rule.GetBlock12().GetToken1());
             if (auto result = Build(rule.GetBlock12().GetRule_expr2(), EColumnRefState::Allow)) {
-                select.Having = std::move(*result);
+                setItem.Having = std::move(*result);
             } else {
                 return std::unexpected(result.error());
             }
@@ -250,24 +395,27 @@ private:
 
         if (rule.HasBlock14()) {
             if (auto result = Build(rule.GetBlock14().GetRule_ext_order_by_clause1())) {
-                select.OrderBy = std::move(*result);
+                setItem.OrderBy = std::move(*result);
             } else {
                 return std::unexpected(result.error());
             }
         }
 
-        if (select.Source &&
-            1 < select.Source->Sources.size() &&
-            std::holds_alternative<TPlainAsterisk>(select.Projection))
+        if (setItem.Source && 1 < setItem.Source->Sources.size() &&
+            std::holds_alternative<TPlainAsterisk>(setItem.Projection))
         {
             return Unsupported("JOIN with an asterisk projection");
         }
 
-        if (auto node = BuildYqlSelect(Ctx_.Pos(), std::move(select))) {
-            return TNonNull(node);
-        } else {
+        select.SetItems = {std::move(setItem)};
+        select.SetOps = {EYqlSetOp::Push};
+
+        auto node = BuildYqlSelect(Ctx_.Pos(), std::move(select));
+        if (!node) {
             return std::unexpected(ESQLError::Basic);
         }
+
+        return TNonNull(node);
     }
 
     TSQLResult<TProjection> BuildProjection(const TRule_select_core& rule) {
@@ -849,6 +997,119 @@ private:
             columns.emplace_back(Id(id.GetRule_an_id2(), *this));
         }
         return columns;
+    }
+
+    EYqlSetOp ToOp(const TRule_union_op& node) {
+        const TString token = ToLowerUTF8(node.GetToken1().GetValue());
+
+        EYqlSetOp op;
+        if (token == "union") {
+            op = EYqlSetOp::Union;
+        } else if (token == "except") {
+            op = EYqlSetOp::Except;
+        } else {
+            Y_ABORT(
+                "You should change implementation according to grammar changes. "
+                "Invalid token: %s", token.c_str());
+        }
+
+        if (IsAllQualifiedOp(node)) {
+            op = AllQualified(op);
+        }
+
+        return op;
+    }
+
+    EYqlSetOp ToOp(const TRule_intersect_op& node) {
+        const TString token = ToLowerUTF8(node.GetToken1().GetValue());
+
+        EYqlSetOp op;
+        if (token == "intersect") {
+            op = EYqlSetOp::Intersect;
+        } else {
+            Y_ABORT(
+                "You should change implementation according to grammar changes. "
+                "Invalid token: %s", token.c_str());
+        }
+
+        if (IsAllQualifiedOp(node)) {
+            op = AllQualified(op);
+        }
+
+        return op;
+    }
+
+    TNodeResult Finalize(TSQLResult<TYqlSelectArgs> select) {
+        if (!select) {
+            return std::unexpected(select.error());
+        }
+
+        YQL_ENSURE(!select->SetItems.empty());
+        TPosition position = select->SetItems.front().Position;
+
+        if (select->SetItems.size() == 1) {
+            select = FinalizeOnly(std::move(*select));
+        } else {
+            select = FinalizeMulti(std::move(*select));
+        }
+
+        if (!select) {
+            return std::unexpected(select.error());
+        }
+
+        return TNonNull(NSQLTranslationV1::BuildYqlSelect(
+            std::move(position), std::move(*select)));
+    }
+
+    TYqlSelectArgs FinalizeOnly(TYqlSelectArgs&& select) {
+        YQL_ENSURE(select.SetItems.size() == 1);
+        auto& only = select.SetItems[0];
+
+        const bool isItemAugmented =
+            (only.OrderBy || only.Limit || only.Offset);
+
+        const bool isSelectAugmented =
+            (select.OrderBy || select.Limit || select.Offset);
+
+        YQL_ENSURE(!(isItemAugmented && isSelectAugmented));
+
+        if (!only.OrderBy) {
+            // Pass `ORDER BY` to a `SqlSetItem`, because only this
+            // allows to reference an external column
+            only.OrderBy = std::exchange(select.OrderBy, Nothing());
+        }
+
+        if (only.Limit) {
+            // Option `limit` at a `SqlSetItem` is not yet supported.
+            select.Limit = std::exchange(only.Limit, Nothing());
+        }
+
+        if (only.Offset) {
+            // Option `limit` at a `SqlSetItem` is not yet supported.
+            select.Offset = std::exchange(only.Offset, Nothing());
+        }
+
+        return select;
+    }
+
+    TSQLResult<TYqlSelectArgs> FinalizeMulti(TYqlSelectArgs&& select) {
+        YQL_ENSURE(1 < select.SetItems.size());
+
+        for (const auto& item : select.SetItems) {
+            if (item.OrderBy) {
+                return Unsupported("ORDER BY within UNION/EXCEPT/INTERSECT component");
+            }
+
+            if (item.Limit) {
+                return Unsupported("LIMIT within UNION/EXCEPT/INTERSECT component");
+            }
+
+            if (item.Offset) {
+                return Unsupported("OFFSET within UNION/EXCEPT/INTERSECT component");
+            }
+        }
+
+        return select;
     }
 
     std::unexpected<ESQLError> Unsupported(TStringBuf message) {

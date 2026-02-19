@@ -1,9 +1,13 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: (union_op select_stmt_intersect)* */
+/* custom error: muted */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
+SELECT
+    Ensure(0, FALSE, 'muted: sql panic')
+;
+/*
 $ssr = (
     SELECT
         s_store_id AS store_id,
@@ -142,3 +146,4 @@ ORDER BY
     channel,
     id
 LIMIT 100;
+*/

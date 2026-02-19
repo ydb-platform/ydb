@@ -71,6 +71,7 @@ namespace NKikimr::NSqsTopic::V1 {
         ~TCreateQueueActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
+            CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
             const Ydb::Ymq::V1::CreateQueueRequest& request = Request();
             if (request.queue_name().empty()) {
@@ -148,18 +149,6 @@ namespace NKikimr::NSqsTopic::V1 {
             return ReplyAndDie(ctx);
         }
 
-        static std::expected<void, std::string> ValidateQueueName(const TStringBuf name) {
-            if (name.empty()) {
-                return std::unexpected("empty");
-            }
-            for (char c : name) {
-                if (!IsAsciiAlnum(c) && c != '-' && c != '_' && c != '.') {
-                    return std::unexpected("invalid character");
-                }
-            }
-            return {};
-        }
-
         void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,
                                 const TActorContext& ctx,
                                 const TString& workingDir,
@@ -202,8 +191,9 @@ namespace NKikimr::NSqsTopic::V1 {
                 auto* pqDescr = modifyScheme.MutableAlterPersQueueGroup();
                 pqDescr->SetName(name);
                 pqDescr->MutablePQTabletConfig()->CopyFrom(PQGroup.GetPQTabletConfig());
-                pqDescr->MutablePQTabletConfig()->ClearPartitionKeySchema();
                 pqDescr->MutablePQTabletConfig()->AddConsumers()->CopyFrom(ConsumerConfig.Consumer);
+                pqDescr->MutablePQTabletConfig()->ClearPartitionKeySchema();
+                pqDescr->ClearTotalGroupCount();
                 TString error;
                 Ydb::StatusIds::StatusCode code = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(topicRequest, *pqDescr, AppData(ctx), error, false);
                 if (code != Ydb::StatusIds::SUCCESS) {

@@ -488,6 +488,5 @@ message TTableServiceConfig {
         optional uint32 MaxNodesToRequest = 5 [default = 5];            // Max nodes to query for warmup (0 = all nodes, only affects warmup queries)
     }
 
-
     optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 122 [(InvalidateCompileCache) = false];
 };

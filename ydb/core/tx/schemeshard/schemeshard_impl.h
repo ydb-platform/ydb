@@ -484,8 +484,8 @@ public:
 
     bool IsRootPathId(const TPathId& pId) const {
         return pId == RootPathId();
-    }   
-    // отличние ordinary от serverless
+    }
+
     bool IsServerlessDomain(TSubDomainInfo::TPtr domainInfo) const {
         const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
         return !IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != ParentDomainId;

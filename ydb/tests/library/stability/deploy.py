@@ -123,7 +123,7 @@ class StressUtilDeployer:
                     processed_binaries[workload_info['local_path']].append(workload_name)
                     deploy_futures.append(
                         (
-                            tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage or workload_info['nodes_percentage']),
+                            tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage or workload_info.get('nodes_percentage', 1)),
                             workload_name,
                             workload_info['local_path'],
                         )

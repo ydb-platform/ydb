@@ -559,7 +559,6 @@ public:
                         << ", file# " << filePath);
                 }
                 ActiveUploads.erase(it);
-                session.File.Close();
 
                 FS_LOG_I("AbortMultipartUpload"
                     << ": uploadId# " << uploadId

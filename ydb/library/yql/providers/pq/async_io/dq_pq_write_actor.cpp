@@ -567,8 +567,8 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqGateway::TPtr pqGateway,
     bool enableStreamingQueriesCounters,
-    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
-    i64 freeSpace)
+    i64 freeSpace,
+    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -616,6 +616,7 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 counters ? counters : args.TaskCounters,
                 pqGateway,
                 enableStreamingQueriesCounters,
+                DqPqDefaultFreeSpace,
                 enableStreamingQueriesPqSinkDeduplicationFeatureFlag
             );
         });

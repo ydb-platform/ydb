@@ -31,8 +31,8 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqGateway::TPtr pqGateway,
     bool enableStreamingQueriesCounters,
-    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
-    i64 freeSpace = DqPqDefaultFreeSpace);
+    i64 freeSpace = DqPqDefaultFreeSpace,
+    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag = true);
 
 void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), bool enableStreamingQueriesCounters = true, bool enableDeduplicationFeatureFlag = true);
 

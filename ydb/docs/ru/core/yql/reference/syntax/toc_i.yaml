@@ -10,7 +10,7 @@ items:
 - { name: ALTER VIEW,                   href: alter-view.md }
 - { name: ALTER RESOURCE POOL,          href: alter-resource-pool.md }
 - { name: ALTER RESOURCE POOL CLASSIFIER,    href: alter-resource-pool-classifier.md }
-- { name: ALTER STREAMING QUERY,        href: alter-streaming-query.md,      when: feature_federated_queries}
+- { name: ALTER STREAMING QUERY,        href: alter-streaming-query.md,      when: alter_streaming_query}
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER TRANSFER,               href: alter-transfer.md}
 - { name: ALTER SECRET,                 href: alter-secret.md}

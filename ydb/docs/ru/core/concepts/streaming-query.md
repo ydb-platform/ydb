@@ -37,12 +37,12 @@
 
 В текущей версии {{ ydb-short-name }} доступный уровень гарантий доставки данных зависит от сценария использования:
 
-- [**At-least-once**](https://en.wikipedia.org/wiki/Reliable_messaging#At-least-once_delivery) — обеспечивается только в сценариях фильтрафии потоков данных.
+- [**At-least-once**](https://en.wikipedia.org/wiki/Reliable_messaging#At-least-once_delivery) — обеспечивается в сценариях фильтрафии и обогащения потоков данных.
 - **Best effort** — во всех остальных случаях.
 
 {% note info %}
 
-Мы постоянно работаем над развитием механизмов потоковой обработки. В будущих версиях предоставляемые гарантии будут постоянно улучшаться.
+Мы постоянно работаем над развитием механизмов потоковой обработки. В будущих версиях предоставляемые гарантии будут улучшены.
 
 {% endnote %}
 
@@ -66,10 +66,15 @@
 Потоковые запросы создаются, изменяются и удаляются с помощью YQL-команд:
 
 - [CREATE STREAMING QUERY](../yql/reference/syntax/create-streaming-query.md) — создание;
+
+{% if alter_streaming_query == true %}
 - [ALTER STREAMING QUERY](../yql/reference/syntax/alter-streaming-query.md) — изменение и управление состоянием;
+
+{% endif %}
+
 - [DROP STREAMING QUERY](../yql/reference/syntax/drop-streaming-query.md) — удаление.
 
-Состояние запросов доступно в системной таблице [.sys/streaming_queries](../dev/system-views.md#streaming).
+Состояние запросов доступно в системной таблице [`.sys/streaming_queries`](../dev/system-views.md#streaming).
 
 ## Язык запросов {#syntax}
 

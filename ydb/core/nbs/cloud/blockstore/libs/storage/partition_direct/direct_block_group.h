@@ -67,9 +67,9 @@ private:
         }
     };
 
-    struct TRequestsStalking
+    struct TPendingRequests
     {
-        explicit TRequestsStalking(ui32 responsesExpected)
+        explicit TPendingRequests(ui32 responsesExpected)
             : ResponsesExpected(responsesExpected)
         {}
 
@@ -87,7 +87,7 @@ private:
     ui32 BlockSize;
     ui64 BlocksCount;   // Currently unused, uses hardcoded BlocksCount
     ui64 StorageRequestId = 0;
-    std::unordered_map<ui64, std::shared_ptr<IRequestHandler>> RequestHandlersByStorageRequestId;
+
     class TDirtyMap;
     std::unique_ptr<TDirtyMap> DirtyMap;
     TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
@@ -118,13 +118,10 @@ public:
         NWilson::TTraceId traceId) override;
 
 private:
-    void HandleConnectResult(
-        ui64 storageRequestId,
-        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
-        std::shared_ptr<TRequestsStalking> connectionsStalking);
     void HandlePersistentBufferConnected(
         size_t index,
-        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
+        std::shared_ptr<TPendingRequests> connectionsPending);
     void HandleDDiskBufferConnected(
         size_t index,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
@@ -157,13 +154,13 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
 
-    void RestorePersistentBuffer();
+    void RestoreFromPersistentBuffer();
     void HandleListPersistentBufferResultOnRestore(
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
         size_t persistentBufferIndex,
-        std::shared_ptr<TRequestsStalking> requestsStalking);
-    void RestorePersistentBufferFinised();
+        std::shared_ptr<TPendingRequests> requestsPending);
+    void RestoreFromPersistentBufferFinised();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

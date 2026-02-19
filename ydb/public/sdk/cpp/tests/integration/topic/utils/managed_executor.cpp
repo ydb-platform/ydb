@@ -55,10 +55,11 @@ void TManagedExecutor::StartFuncs(const std::vector<size_t>& indicies)
     std::lock_guard lock(Mutex);
 
     for (auto index : indicies) {
-            Y_ABORT_UNLESS(index < Funcs.size());
-            Y_ABORT_UNLESS(Funcs[index]);
+        Y_ABORT_UNLESS(index < Funcs.size());
+        Y_ABORT_UNLESS(Funcs[index]);
 
         RunTask(std::move(Funcs[index]));
+        Funcs[index] = nullptr;
     }
 }
 
@@ -91,6 +92,7 @@ void TManagedExecutor::RunAllTasks()
     for (auto& func : Funcs) {
         if (func) {
             RunTask(std::move(func));
+            func = nullptr;
         }
     }
 }

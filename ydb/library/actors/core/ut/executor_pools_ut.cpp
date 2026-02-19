@@ -412,6 +412,43 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
         }
     }
 
+    Y_UNIT_TEST(SingleMailboxTableWithSharedPool) {
+        std::unique_ptr<TSharedExecutorPool> sharedPool = std::make_unique<TSharedExecutorPool>(TSharedExecutorPoolConfig{
+            .Threads = 2
+        }, std::vector<TPoolShortInfo>{
+            TPoolShortInfo{
+                .PoolId = 0,
+                .SharedThreadCount = 1,
+                .InPriorityOrder = true,
+                .PoolName = "Pool0",
+            },
+            TPoolShortInfo{
+                .PoolId = 1,
+                .SharedThreadCount = 1,
+                .InPriorityOrder = true,
+                .PoolName = "Pool1",
+            }
+        });
+
+        std::vector<std::unique_ptr<TBasicExecutorPool>> pools;
+        for (ui32 i = 0; i < 2; ++i) {
+            pools.push_back(std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
+                .PoolId = i,
+                .PoolName = "Pool" + ToString(i),
+                .Threads = 1,
+                .HasSharedThread = true,
+                .UseRingQueue = false,
+                .MinLocalQueueSize = 0,
+                .MaxLocalQueueSize = 0,
+            }, nullptr));
+        }
+
+        TieBasicPoolsAndSharedPool(pools, sharedPool.get());
+
+        UNIT_ASSERT_EQUAL(pools[0]->GetMailboxTable(), pools[1]->GetMailboxTable());
+        UNIT_ASSERT_EQUAL(pools[0]->GetMailboxTable(), sharedPool->GetMailboxTable());
+    }
+
     Y_UNIT_TEST(SharedPoolWith1Thread1Pool) {
         std::unique_ptr<TSharedExecutorPool> sharedPool = std::make_unique<TSharedExecutorPool>(TSharedExecutorPoolConfig{
             .Threads = 1

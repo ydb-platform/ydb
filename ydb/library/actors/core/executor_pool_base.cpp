@@ -51,12 +51,10 @@ namespace NActors {
     }
 #endif
 
-    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
-        : TExecutorPoolBaseMailboxed(poolId)
-        , PoolThreads(threads)
-        , UseRingQueueValue(useRingQueue)
-        , ThreadsAffinity(affinity)
-    {
+    TTaskPool::TTaskPool() {
+    }
+
+    void TTaskPool::Init(ui32 threads, bool useRingQueue) {
         if (useRingQueue) {
             Activations.emplace<TRingActivationQueueV4>(threads);
         } else {
@@ -64,9 +62,29 @@ namespace NActors {
         }
     }
 
+    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue, bool useTaskPools)
+        : TExecutorPoolBaseMailboxed(poolId)
+        , PoolThreads(threads)
+        , UseRingQueueValue(useRingQueue)
+        , ThreadsAffinity(affinity)
+    {
+        if (useTaskPools) {
+            TaskPoolsCount = (threads + ThreadsForTaskPool - 1) / ThreadsForTaskPool;
+        } else {
+            TaskPoolsCount = 1;
+        }
+        TaskPoolsHolder = std::make_unique<TTaskPool[]>(TaskPoolsCount);
+        TaskPools = TaskPoolsHolder.get(); 
+        for (i16 i = 0; i < TaskPoolsCount; ++i) {
+            TaskPoolsHolder[i].Init((useTaskPools ? ThreadsForTaskPool : threads), useRingQueue);
+        }
+    }
+
     TExecutorPoolBase::~TExecutorPoolBase() {
-        while (std::visit([](auto &x){return x.Pop(0);}, Activations))
-            ;
+        for (i16 i = 0; i < TaskPoolsCount; ++i) {
+            while (std::visit([](auto &x){return x.Pop(0);}, TaskPools[i].Activations))
+                ;
+        }
     }
 
     TMailbox* TExecutorPoolBaseMailboxed::ResolveMailbox(ui32 hint) {
@@ -133,7 +151,8 @@ namespace NActors {
         if (UseRingQueue()) {
             ScheduleActivationEx(mailbox, 0);
         } else {
-            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
+            auto &taskPool = TaskPools[mailbox->PriorityTaskPool];
+            ScheduleActivationEx(mailbox, ++taskPool.ActivationsRevolvingCounter);
         }
     }
 
@@ -158,7 +177,8 @@ namespace NActors {
         if (UseRingQueueValue) {
             ScheduleActivationEx(mailbox, 0);
         } else {
-            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
+            auto &taskPool = TaskPools[mailbox->PriorityTaskPool];
+            ScheduleActivationEx(mailbox, ++taskPool.ActivationsRevolvingCounter);
         }
     }
 

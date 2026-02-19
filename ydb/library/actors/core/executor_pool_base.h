@@ -8,6 +8,7 @@
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 //#define RING_ACTIVATION_QUEUE
 
@@ -48,19 +49,36 @@ namespace NActors {
         TMailboxTable* GetMailboxTable() const override;
     };
 
-    class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
-    protected:
+    struct TTaskPool {
         using TUnorderedCacheActivationQueue = TUnorderedCache<ui32, 512, 4>;
 
-        const i16 PoolThreads;
-        const bool UseRingQueueValue;
-        alignas(64) TIntrusivePtr<TAffinity> ThreadsAffinity;
-        alignas(64) TAtomic Semaphore = 0;
         alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV4> Activations;
-        TAtomic ActivationsRevolvingCounter = 0;
-        std::atomic_bool StopFlag = false;
+        alignas(64) std::atomic<i64> Semaphore = 0;
+        alignas(64) std::atomic<ui64> ActivationsRevolvingCounter = 0;
+
+        alignas(64)
+        std::atomic<bool> NeedHelp = false;
+        std::atomic<ui64> LastCheckout = 0;
+
+        TTaskPool();
+
+        void Init(ui32 threads, bool useRingQueue);
+    };
+
+    constexpr ui64 ThreadsForTaskPool = 1;
+    class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
+    protected:
+
+        const i16 PoolThreads;
+        i16 TaskPoolsCount;
+        const bool UseRingQueueValue;
+        std::unique_ptr<TTaskPool[]> TaskPoolsHolder;
+        TTaskPool* TaskPools;
+        alignas(64) TIntrusivePtr<TAffinity> ThreadsAffinity;
+        alignas(64) std::atomic_bool StopFlag = false;
+
     public:
-        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue);
+        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue, bool useTaskPools=false);
         ~TExecutorPoolBase();
         void ScheduleActivation(TMailbox* mailbox) override;
         void SpecificScheduleActivation(TMailbox* mailbox) override;

@@ -46,6 +46,7 @@ struct TActorBenchmarkSettings {
     static constexpr bool DefaultNoRealtime = true;
     static constexpr ui32 DefaultSpinThreshold = 1'000'000;
     static constexpr ui32 TotalEventsAmountPerThread = 1'000;
+    static constexpr bool UseShared = false;
 
     static constexpr auto MailboxTypes = {
         TMailboxType::Simple,
@@ -290,6 +291,7 @@ struct TActorBenchmark {
         basic.PoolName = TStringBuilder() << "b" << basic.PoolId;
         basic.Threads = threads;
         basic.MaxThreadCount = threads;
+        basic.DefaultThreadCount = threads;
         basic.SpinThreshold = TSettings::DefaultSpinThreshold;
         basic.TimePerMailbox = TDuration::Hours(1);
         basic.HasSharedThread = hasSharedThread;
@@ -315,7 +317,7 @@ struct TActorBenchmark {
         if (poolType == EPoolType::Basic) {
             THolder<TActorSystemSetup> setup = GetActorSystemSetup();
             for (ui32 i = 0; i < poolsCount; ++i) {
-                AddBasicPool(setup, threads, activateEveryEvent, 0);
+                AddBasicPool(setup, threads, activateEveryEvent, TSettings::UseShared);
             }
             return setup;
         }

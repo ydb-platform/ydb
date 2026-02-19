@@ -206,6 +206,7 @@ namespace NActors {
         ui32 Hint = 0;
 
         EActorPack ActorPack = EActorPack::Empty;
+        i16 PriorityTaskPool = -1;
 
         static constexpr TMailboxType::EType Type = TMailboxType::LockFreeIntrusive;
 

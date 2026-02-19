@@ -136,6 +136,7 @@ message TActorSystemConfig {
     optional bool UseSharedThreads = 18;
     optional bool UseUnitedPool = 22;
     optional bool UseRingQueue = 19 [default = true];
+    optional bool UseTaskPools = 23;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;

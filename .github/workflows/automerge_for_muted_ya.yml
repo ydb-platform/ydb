@@ -1,5 +1,4 @@
 # Adds automerge label to open mute-unmute PRs targeting main. Runs at 08:00 UTC daily.
-# Squash and stable-* automerge label are set in update_muted_ya.yml.
 name: Automerge for muted_ya (main)
 
 on:

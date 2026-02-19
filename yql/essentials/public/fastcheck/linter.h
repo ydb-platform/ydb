@@ -7,8 +7,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 enum class ESyntax {
     SExpr,
@@ -68,5 +67,4 @@ TVector<TCheckFilter> ParseChecks(const TString& checks);
 TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters = Nothing());
 TChecksResponse RunChecks(const TChecksRequest& request);
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

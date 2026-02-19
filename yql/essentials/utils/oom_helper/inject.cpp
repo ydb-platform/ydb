@@ -1,10 +1,11 @@
 #include <unistd.h>
 #include <sys/mman.h>
-#include <errno.h>
-#include <stdint.h>
-#include <limits.h>
-#include <stdio.h>
 #include <sys/syscall.h>
+
+#include <cerrno>
+#include <cstdint>
+#include <climits>
+#include <cstdio>
 
 #define SYSCALL_MMAP2_UNIT 4096ULL
 #define UNIT SYSCALL_MMAP2_UNIT

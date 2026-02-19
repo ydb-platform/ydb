@@ -101,7 +101,9 @@ path.bash.inc
 # Editor config
 /.editorconfig
 
-# Cursor ignore
+# Cursor ignore (keep .cursor/rules/ in repo so team shares rules)
+.cursor/*
+!.cursor/rules
 .cursorignore
 
 # Claude Code

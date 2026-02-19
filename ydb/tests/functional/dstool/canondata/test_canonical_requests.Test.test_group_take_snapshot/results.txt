@@ -1,0 +1,4 @@
+dstool -e <endpoint> --mon-port <mon_port> group take-snapshot --group-ids=0 --output=group0_1.bin
+Exit Status: 0
+===== stderr =====
+WARNING: endpoint for http requests is not specified, grpc endpoints will be used instead with conversion to http. You can specify additional endpoints with "http" or "https" protocol.

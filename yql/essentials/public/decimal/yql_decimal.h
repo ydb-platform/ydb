@@ -6,8 +6,7 @@
 #include <type_traits>
 #include <limits>
 
-namespace NYql {
-namespace NDecimal {
+namespace NYql::NDecimal {
 
 #ifdef _win_
     #ifndef DONT_USE_NATIVE_INT128
@@ -365,5 +364,4 @@ public:
     }
 };
 
-} // namespace NDecimal
-} // namespace NYql
+} // namespace NYql::NDecimal

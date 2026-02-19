@@ -15,9 +15,9 @@
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 
-namespace NYql {
 
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 const NPg::TTypeDesc& GetTypeDescOfNode(const TExprNodePtr& node)
 {
@@ -6579,5 +6579,5 @@ IGraphTransformer::TStatus PgIterateWrapper(const TExprNode::TPtr& input, TExprN
     return IGraphTransformer::TStatus::Ok;
 }
 
-} // namespace NTypeAnnImpl
-}
+} // namespace NYql::NTypeAnnImpl
+

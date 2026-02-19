@@ -37,8 +37,7 @@
 #include <array>
 #include <functional>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NYql;
 
@@ -3033,5 +3032,4 @@ bool DeserializeTzTimestamp64(TStringBuf buf, i64& timestamp, ui16& tzId) {
     return true;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

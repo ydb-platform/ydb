@@ -10,8 +10,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
@@ -377,5 +376,4 @@ Y_UNIT_TEST(TestHoppingSaveLoad) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

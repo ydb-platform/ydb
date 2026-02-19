@@ -29,11 +29,9 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TColumnSchema ColumnFromYson(const std::string& yson)
+TColumnSchema ColumnFromYson(std::string_view yson)
 {
-    auto maybeDeletedColumn = ConvertTo<TMaybeDeletedColumnSchema>(TYsonStringBuf(yson));
-    YT_VERIFY(!maybeDeletedColumn.Deleted());
-    return static_cast<TColumnSchema>(maybeDeletedColumn);
+    return ConvertTo<TConstrainedColumnSchema>(TYsonStringBuf(yson));
 }
 
 TEST(TTableSchemaTest, ColumnTypeV1Deserialization)

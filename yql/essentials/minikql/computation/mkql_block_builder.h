@@ -11,12 +11,10 @@
 
 #include <limits>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using NYql::NUdf::IArrayBuilder;
 using NYql::NUdf::MakeArrayBuilder;
 using NYql::NUdf::TInputBuffer;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

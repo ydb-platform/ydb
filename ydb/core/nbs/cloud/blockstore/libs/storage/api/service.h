@@ -1,25 +1,26 @@
 #pragma once
 
-#include <ydb/core/base/events.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/kikimr/events.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
-#include <ydb/library/actors/core/actorid.h>
 
+#include <ydb/core/base/events.h>
+
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NYdb::NBS::NBlockStore {
 
-    struct TEvService {
+struct TEvService
+{
+    //
+    // Events declaration
+    //
 
-        //
-        // Events declaration
-        //
+    enum EEvents
+    {
+        EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_NBS_V2_SERVICE),
 
-        enum EEvents
-        {
-            EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_NBS_V2),
-
-            EvReadBlocksRequest,
-            EvReadBlocksResponse,
+        EvReadBlocksRequest,
+        EvReadBlocksResponse,
 
             EvWriteBlocksRequest,
             EvWriteBlocksResponse,
@@ -42,4 +43,4 @@ namespace NYdb::NBS::NBlockStore {
         };
     };
 
-} // namespace NYdb::NBS::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore

@@ -19,7 +19,7 @@
 #include <util/system/mutex.h>
 
 #ifdef _linux_
-    #include <signal.h>
+    #include <csignal>
 #endif
 
 #include <functional>
@@ -139,8 +139,7 @@ void SignalAction(int signum, siginfo_t*, void* context) {
 #endif
 } // namespace
 
-namespace NYql {
-namespace NBacktrace {
+namespace NYql::NBacktrace {
 THashMap<TString, TString> Mapping;
 
 void SetModulesMapping(const THashMap<TString, TString>& mapping) {
@@ -190,8 +189,7 @@ void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t st
     DoBacktrace(out, (void**)stack, stackSize);
 }
 
-} // namespace NBacktrace
-} // namespace NYql
+} // namespace NYql::NBacktrace
 
 void EnableKikimrBacktraceFormat() {
     SetFormatBackTraceFn(NYql::NBacktrace::KikimrBacktraceFormatImpl);

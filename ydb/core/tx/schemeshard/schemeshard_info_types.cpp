@@ -2887,5 +2887,14 @@ void TImportInfo::TFillItemsFromSchemaMappingResult::AddError(const TString& err
     ErrorMessage += err;
 }
 
+bool TForcedCompactionInfo::IsFinished() const {
+    return State == EState::Done || State == EState::Cancelled;
+}
+
+void TForcedCompactionInfo::AddNotifySubscriber(const TActorId& actorId) {
+    Y_ENSURE(!IsFinished());
+    Subscribers.insert(actorId);
+}
+
 } // namespace NSchemeShard
 } // namespace NKikimr

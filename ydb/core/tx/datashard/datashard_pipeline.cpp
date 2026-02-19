@@ -2051,7 +2051,9 @@ bool TPipeline::CheckInflightLimit() const {
         Self->TxInFly() +
         Self->ImmediateInFly() +
         Self->ReadIteratorsInFly() +
+        Self->LockRowsRequests.size() +
         Self->MediatorStateWaitingMsgs.size() +
+        // Note: we don't include awaiting coroutines here, they must be part of inflight requests
         Self->ProposeQueue.Size() +
         Self->TxWaiting());
 
@@ -2103,13 +2105,79 @@ bool TPipeline::AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev, const T
     return true;
 }
 
+class TPipeline::TWaitForSnapshotAwaiter
+    : public TPipeline::TWaitingCoroutine
+    , public TAsyncAwaiterBase
+{
+public:
+    TWaitForSnapshotAwaiter(TPipeline& pipeline, const TRowVersion& snapshot)
+        : TWaitingCoroutine(snapshot)
+        , Pipeline(pipeline)
+    {}
+
+    ~TWaitForSnapshotAwaiter() {
+        if (HeapIndex != (size_t)-1) {
+            // Coroutine is unwinding without cancellation, possible shutdown
+            Pipeline.WaitingCoroutines.Remove(this);
+        }
+    }
+
+    void await_suspend(std::coroutine_handle<> h) {
+        Pipeline.WaitingCoroutines.Add(this);
+        Pipeline.Self->UpdateProposeQueueSize();
+        TAsyncAwaiterBase::Suspend(h);
+    }
+
+    std::coroutine_handle<> await_cancel(std::coroutine_handle<> h) {
+        if (HeapIndex != (size_t)-1) {
+            Pipeline.WaitingCoroutines.Remove(this);
+            Pipeline.Self->UpdateProposeQueueSize();
+        }
+        // Note: we cancel even when resume is scheduled already
+        TAsyncAwaiterBase::Cancel();
+        return h;
+    }
+
+    void Resume() override {
+        Y_ASSERT(HeapIndex == (size_t)-1);
+        Y_ASSERT(Suspended());
+        TAsyncAwaiterBase::Resume();
+    }
+
+private:
+    TPipeline& Pipeline;
+};
+
+async<bool> TPipeline::WaitForSnapshot(const TRowVersion& snapshot) {
+    TRowVersion unreadableEdge = GetUnreadableEdge();
+    if (snapshot < unreadableEdge) {
+        co_return true;
+    }
+
+    if (!CheckInflightLimit()) {
+        co_return false;
+    }
+
+    const ui64 waitStep = snapshot.Step;
+    if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
+        // Async MediatorTimeCastEntry update, active current queue and return
+        ActivateWaitingTxOps(unreadableEdge, Self->ActorContext());
+        co_return true;
+    }
+
+    co_await TWaitForSnapshotAwaiter(*this, snapshot);
+    co_return true;
+}
+
 void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ActivateWaitingTxOps for version# " << edge
         << ", txOps: " << (WaitingDataTxOps.empty() ? "empty" : ToString(WaitingDataTxOps.begin()->first.Step))
         << ", readIterators: "
-        << (WaitingDataReadIterators.empty() ? "empty" : ToString(WaitingDataReadIterators.begin()->first.Step)));
+        << (WaitingDataReadIterators.empty() ? "empty" : ToString(WaitingDataReadIterators.begin()->first.Step))
+        << ", coroutines: "
+        << (WaitingCoroutines.Empty() ? "empty" : ToString(WaitingCoroutines.Top()->Snapshot.Step)));
 
-    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty();
+    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty() && WaitingCoroutines.Empty();
     if (isEmpty)
         return;
 
@@ -2139,6 +2207,17 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
             activated = true;
         }
 
+        while (WaitingCoroutines) {
+            auto* top = WaitingCoroutines.Top();
+            if (top->Snapshot > TRowVersion::Min() && top->Snapshot >= edge) {
+                minWait = Min(minWait, top->Snapshot);
+                break;
+            }
+            WaitingCoroutines.Remove(top);
+            top->Resume();
+            activated = true;
+        }
+
         if (minWait == TRowVersion::Max() ||
             Self->WaitPlanStep(minWait.Step) ||
             minWait >= (edge = GetUnreadableEdge()))
@@ -2155,7 +2234,7 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
 }
 
 void TPipeline::ActivateWaitingTxOps(const TActorContext& ctx) {
-    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty();
+    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty() && WaitingCoroutines.Empty();
     if (isEmpty)
         return;
 

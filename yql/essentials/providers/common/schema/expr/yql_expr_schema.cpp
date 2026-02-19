@@ -14,8 +14,7 @@
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 template <template <typename> class TSaver>
 class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
@@ -477,5 +476,4 @@ void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationN
     }
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

@@ -7,8 +7,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 template <NYql::ETypeAnnotationKind Kind>
@@ -419,5 +418,4 @@ template IComputationNode* WrapMakeType<NYql::ETypeAnnotationKind::Linear>(TCall
 
 template IComputationNode* WrapMakeType<NYql::ETypeAnnotationKind::DynamicLinear>(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -19,8 +19,8 @@
 #include <util/system/progname.h>
 #include <util/system/thread.i>
 
-#include <stdio.h>
-#include <time.h>
+#include <cstdio>
+#include <ctime>
 
 namespace {
 
@@ -250,8 +250,7 @@ NYql::NLog::TFormatter Formatter(const NYql::NProto::TLoggingConfig& config) {
 
 } // namespace
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 namespace NImpl {
 
@@ -486,8 +485,7 @@ void ReopenLog() {
     }
 }
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog
 
 /**
  * creates default YQL logger writing to /dev/null

@@ -5,7 +5,7 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-void UpdateNumOfConsumers(std::shared_ptr<IOperator> &input) {
+void UpdateNumOfConsumers(TIntrusivePtr<IOperator> &input) {
     auto &props = input->Props;
     if (props.NumOfConsumers.has_value()) {
         props.NumOfConsumers.value() += 1;
@@ -22,7 +22,7 @@ namespace NKqp {
 /**
  * Assign stages and build stage graph in the process
  */
-bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
     auto nodeName = input->ToString(ctx.ExprCtx);

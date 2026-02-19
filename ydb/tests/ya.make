@@ -8,7 +8,6 @@ RECURSE(
     library/sqs
     olap
     oss
-    postgres_integrations
     solomon
     sql
     stability

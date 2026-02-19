@@ -9,8 +9,7 @@
 #include <util/charset/utf8.h>
 #include <util/string/builder.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -143,5 +142,4 @@ std::unique_ptr<ICheckRunner> MakeFormatRunner() {
     return std::make_unique<TFormatRunner>();
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

@@ -211,5 +211,12 @@ struct TKqpBufferWriterEvents {
     };
 };
 
+struct TKqpQueryTextCacheEvents {
+    enum EKqpQueryTextCacheEvents {
+        EvLookupQueryText = EventSpaceBegin(TKikimrEvents::ES_KQP) + 900,
+        EvLookupQueryTextResponse,
+    };
+};
+
 } // namespace NKqp
 } // namespace NKikimr

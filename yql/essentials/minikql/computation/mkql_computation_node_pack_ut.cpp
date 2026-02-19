@@ -26,8 +26,7 @@
 #include <util/system/hp_timer.h>
 #include <util/system/sanitizers.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using NYql::TChunkedBuffer;
 
@@ -1522,5 +1521,4 @@ UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeGenericPackTest);
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeGenericFastPackTest);
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeTransportPackTest);
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeTransportFastPackTest);
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

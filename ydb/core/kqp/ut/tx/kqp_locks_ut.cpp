@@ -304,7 +304,8 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
             INSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (2u, 1, "test");
         )sql", NYdb::NQuery::TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Transaction locks invalidated. Table: `/Root/DataShard`", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Transaction locks invalidated.", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Table: `/Root/DataShard`", result.GetIssues().ToString());
     }
 }
 

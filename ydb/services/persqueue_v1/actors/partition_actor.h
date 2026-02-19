@@ -63,6 +63,7 @@ private:
 
     static constexpr TDuration WAIT_DATA = TDuration::Seconds(10);
     static constexpr TDuration PREWAIT_DATA = TDuration::Seconds(9);
+    static constexpr TDuration READ_METRICS_UPDATE_INTERVAL = TDuration::Seconds(10);
     static constexpr TDuration WAIT_DELTA = TDuration::MilliSeconds(500);
 
     static constexpr ui32 MAX_PIPE_RESTARTS = 100; //after 100 restarts without progress kill session
@@ -99,6 +100,7 @@ private:
             HFunc(TEvPQProxy::TEvGetStatus, Handle)
             HFunc(TEvPQProxy::TEvRestartPipe, Handle)
             HFunc(TEvPQProxy::TEvDirectReadAck, Handle)
+            HFunc(TEvPQProxy::TEvUpdateReadMetrics, Handle)
 
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -137,6 +139,7 @@ private:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);

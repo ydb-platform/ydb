@@ -1941,7 +1941,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
-        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", Ydb::StatusIds::PRECONDITION_FAILED);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 1, Ydb::StatusIds::PRECONDITION_FAILED);
     }
 
     Y_UNIT_TEST(ShouldNotCompactServerless) {
@@ -1955,7 +1955,64 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         auto info = GetPathInfo(runtime, "/MyRoot/User/Simple", schemeshardId);
         UNIT_ASSERT(!info.Shards.empty());
 
-        TestCompact(runtime, schemeshardId, ++txId, "/MyRoot/User", "Simple", Ydb::StatusIds::PRECONDITION_FAILED);
+        TestCompact(runtime, schemeshardId, ++txId, "/MyRoot/User", "Simple", 1, Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(CheckGetOperationSuccess) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
+        
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
+
+        ui64 compactionId = txId;
+
+        {
+            auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().source_path(), "/MyRoot/Simple");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().cascade(), false);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().max_shards_in_flight(), 3);
+            UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 0.0, 1e-7);
+        }
+
+        block.Stop().Unblock();
+
+        {
+            auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().source_path(), "/MyRoot/Simple");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().cascade(), false);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().max_shards_in_flight(), 3);
+            UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 100.0, 1e-7);
+        }
+    }
+
+    Y_UNIT_TEST(CheckGetOperationFailure) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 3);
+
+        ui64 compactionId = txId;
+
+        // wrong db
+        TestGetCompaction(runtime, compactionId, "/UnknownDb", Ydb::StatusIds::NOT_FOUND);
+        // wrong compaction id
+        TestGetCompaction(runtime, compactionId + 43, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 }
 

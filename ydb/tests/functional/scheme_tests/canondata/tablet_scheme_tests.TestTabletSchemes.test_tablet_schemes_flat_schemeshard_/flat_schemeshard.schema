@@ -9392,6 +9392,16 @@
                 "ColumnId": 11,
                 "ColumnName": "DoneShardCount",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "SubdomainOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "SubdomainLocalId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -9408,7 +9418,9 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,

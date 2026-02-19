@@ -35,3 +35,14 @@ message TEvCreateResponse {
     repeated Ydb.Issue.IssueMessage Issues = 3;
     optional TForcedCompaction ForcedCompaction = 4;
 }
+
+message TEvGetRequest {
+    optional string DatabaseName = 1;
+    optional uint64 ForcedCompactionId = 2;
+}
+
+message TEvGetResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional TForcedCompaction ForcedCompaction = 3;
+}

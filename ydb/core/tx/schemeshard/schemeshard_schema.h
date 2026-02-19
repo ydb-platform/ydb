@@ -2288,6 +2288,8 @@ struct Schema : NIceDb::Schema {
         struct EndTime : Column<9, NScheme::NTypeIds::Uint64> {};
         struct TotalShardCount : Column<10, NScheme::NTypeIds::Uint32> {};
         struct DoneShardCount : Column<11, NScheme::NTypeIds::Uint32> {};
+        struct SubdomainOwnerId : Column<12, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct SubdomainLocalId : Column<13, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -2301,7 +2303,9 @@ struct Schema : NIceDb::Schema {
             StartTime,
             EndTime,
             TotalShardCount,
-            DoneShardCount
+            DoneShardCount,
+            SubdomainOwnerId,
+            SubdomainLocalId
         >;
     };
 

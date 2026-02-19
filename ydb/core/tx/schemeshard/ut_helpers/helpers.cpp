@@ -2230,15 +2230,16 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath) {
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
         NKikimrForcedCompaction::TForcedCompactionSettings settings;
         settings.set_source_path(tablePath);
+        settings.set_max_shards_in_flight(maxShardsInFlight);
         auto ev = MakeHolder<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath) {
-        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath);
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
+        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight);
     }
 
     void TestCompact(
@@ -2247,17 +2248,44 @@ namespace NSchemeShardUT_Private {
         ui64 id,
         const TString& dbName,
         const TString& tablePath,
+        ui32 maxShardsInFlight,
         Ydb::StatusIds::StatusCode expectedStatus)
     {
-        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath);
+        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, maxShardsInFlight);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCreateResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
     }
 
-    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, Ydb::StatusIds::StatusCode expectedStatus) {
-        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, expectedStatus);
+    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
+        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 id,
+        const TString& dbName,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvGetRequest(dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvGetResponse>(handle);
+
+        UNIT_ASSERT_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 id,
+        const TString& dbName,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestGetCompaction(runtime, TTestTxConfig::SchemeShard, id, dbName, expectedStatus);
     }
 
     TPathId TestFindTabletSubDomainPathId(

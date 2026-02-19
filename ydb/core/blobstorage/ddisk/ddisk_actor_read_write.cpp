@@ -29,7 +29,10 @@ namespace NKikimr::NDDisk {
         TDirectIoOp(std::atomic<ui32>& inFlightCount, TCounters& counters)
             : InFlightCount(inFlightCount)
             , Counters(counters)
-        {}
+        {
+            OnComplete = &TDirectIoOp::OnDirectIoComplete;
+            OnDrop = &TDirectIoOp::OnDirectIoDrop;
+        }
 
         static void OnDirectIoComplete(NPDisk::TUringOperation* baseOp, NActors::TActorSystem* actorSystem) noexcept {
             auto* op = static_cast<TDirectIoOp*>(baseOp);
@@ -72,6 +75,13 @@ namespace NKikimr::NDDisk {
 
             op->InFlightCount.fetch_sub(1, std::memory_order_relaxed);
 
+        }
+
+        static void OnDirectIoDrop(NPDisk::TUringOperation* baseOp) noexcept {
+            auto* op = static_cast<TDirectIoOp*>(baseOp);
+            std::unique_ptr<TDirectIoOp> guard(op);
+            op->Span.End();
+            op->InFlightCount.fetch_sub(1, std::memory_order_relaxed);
         }
 
     };
@@ -290,7 +300,6 @@ namespace NKikimr::NDDisk {
 
         // TODO: use pool
         auto op = std::make_unique<TDirectIoOp>(InFlightCount, Counters);
-        op->OnComplete = &TDirectIoOp::OnDirectIoComplete;
         op->Sender = ev->Sender;
         op->Cookie = ev->Cookie;
         op->InterconnectSession = ev->InterconnectSession;
@@ -341,7 +350,6 @@ namespace NKikimr::NDDisk {
 
         // TODO: use pool
         auto op = std::make_unique<TDirectIoOp>(InFlightCount, Counters);
-        op->OnComplete = &TDirectIoOp::OnDirectIoComplete;
         op->Sender = ev->Sender;
         op->Cookie = ev->Cookie;
         op->InterconnectSession = ev->InterconnectSession;

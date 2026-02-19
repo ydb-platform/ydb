@@ -36,6 +36,11 @@ struct TUringOperation {
     // After OnComplete returns, the caller is free to return this object to its pool.
     void (*OnComplete)(TUringOperation* op, NActors::TActorSystem* actorSystem) noexcept = nullptr;
 
+    // Optional cleanup callback called by TUringRouter::Stop() for CQEs drained
+    // after shutdown without invoking OnComplete. Use this to release operation-
+    // owned memory/resources for in-flight requests that are no longer delivered.
+    void (*OnDrop)(TUringOperation* op) noexcept = nullptr;
+
     // Scratch space for the iovec used by readv/writev submissions.
     // Populated by TUringRouter and must remain valid until OnComplete is called.
     struct iovec Iov = {};
@@ -93,7 +98,8 @@ public:
     // --- Lifecycle ---
 
     // Stop the completion thread and tear down the io_uring instance.
-    // Outstanding operations OnComplete will NOT be called.
+    // Outstanding operations OnComplete will NOT be called. If TUringOperation::OnDrop
+    // is set, it is called for CQEs drained during shutdown.
     void Stop();
 
     // Returns the number of SQEs still available in the ring.

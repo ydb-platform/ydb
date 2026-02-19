@@ -86,11 +86,21 @@ public:
             }
         }
 
-        // Drain any remaining CQEs after stop (don't call OnComplete)
+        // Drain any remaining CQEs after stop (don't call OnComplete).
+        // If provided, call OnDrop so owner memory can be reclaimed.
         unsigned head;
         unsigned count = 0;
         struct io_uring_cqe* cqe;
         io_uring_for_each_cqe(Owner.Ring, head, cqe) {
+            auto* op = reinterpret_cast<TUringOperation*>(io_uring_cqe_get_data(cqe));
+            if (op) {
+                // Same rationale as above: synchronization flows through io_uring
+                // rings and is invisible to TSAN.
+                NSan::Acquire(op);
+                if (op->OnDrop) {
+                    op->OnDrop(op);
+                }
+            }
             ++count;
         }
         if (count > 0) {

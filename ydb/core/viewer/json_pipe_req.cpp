@@ -1120,8 +1120,8 @@ TString TViewerPipeClient::GetHTTPINTERNALERROR(TString contentType, TString res
     return Viewer->GetHTTPINTERNALERROR(GetRequest(), std::move(contentType), std::move(response));
 }
 
-TString TViewerPipeClient::GetHTTPFORBIDDEN(TString contentType, TString response) {
-    return Viewer->GetHTTPFORBIDDEN(GetRequest(), std::move(contentType), std::move(response));
+TString TViewerPipeClient::GETHTTPACCESSDENIED(TString contentType, TString response) {
+    return Viewer->GETHTTPACCESSDENIED(GetRequest(), std::move(contentType), std::move(response));
 }
 
 TString TViewerPipeClient::MakeForward(const std::vector<ui32>& nodes) {
@@ -1266,7 +1266,7 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
             return true;
         }
         if (checkDatabaseAuth && !Viewer->CheckAccessViewer(request)) {
-            ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
+            ReplyAndPassAway(GETHTTPACCESSDENIED("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
             return true;
         }
     }

@@ -378,7 +378,7 @@ protected:
     TString GetHTTPBADREQUEST(TString contentType = {}, TString response = {});
     TString GetHTTPNOTFOUND(TString contentType = {}, TString response = {});
     TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {});
-    TString GetHTTPFORBIDDEN(TString contentType = {}, TString response = {});
+    TString GETHTTPACCESSDENIED(TString contentType = {}, TString response = {});
     TString MakeForward(const std::vector<ui32>& nodes);
 
     void RequestDone(i32 requests = 1);

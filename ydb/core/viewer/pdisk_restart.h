@@ -27,7 +27,7 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
         }
         if (!Viewer->CheckAccessMonitoring(GetRequest())) {
-            return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
+            return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
         }
         ui32 nodeId = 0;
         ui32 pDiskId = 0;

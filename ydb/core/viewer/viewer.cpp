@@ -242,7 +242,7 @@ public:
     TString GetChunkedHTTPOK(const TRequestState& request, TString contentType = {}) override;
     TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPBADREQUEST(const TRequestState& request, TString type, TString response) override;
-    TString GetHTTPFORBIDDEN(const TRequestState& request, TString type, TString response) override;
+    TString GETHTTPACCESSDENIED(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPNOTFOUND(const TRequestState& request) override;
     TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) override;
     TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) override;
@@ -885,9 +885,11 @@ TString TViewer::GetHTTPBADREQUEST(const TRequestState& request, TString content
     return res;
 }
 
-TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentType, TString response) {
+namespace {
+
+TString BuildHttpAuthErrorResponse(TViewer* viewer, const TRequestState& request, TStringBuf statusLine, TString contentType, TString response) {
     TStringBuilder res;
-    res << "HTTP/1.1 403 Forbidden\r\n"
+    res << "HTTP/1.1 " << statusLine << "\r\n"
         << "Connection: Close\r\n";
     if (contentType) {
         res << "Content-Type: " << contentType << "\r\n";
@@ -895,14 +897,22 @@ TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentT
     if (response) {
         res << "Content-Length: " << response.size() << "\r\n";
     }
-    FillCORS(res, request);
-    FillTraceId(res, request);
+    viewer->FillCORS(res, request);
+    viewer->FillTraceId(res, request);
     res << "\r\n";
     if (response) {
         res << response;
     }
     return res;
 }
+
+} // namespace
+
+TString TViewer::GETHTTPACCESSDENIED(const TRequestState& request, TString contentType, TString response) {
+    TStringBuf statusLine = request.GetUserTokenObject().empty() ? "401 Unauthorized" : "403 Forbidden";
+    return BuildHttpAuthErrorResponse(this, request, statusLine, std::move(contentType), std::move(response));
+}
+
 
 TString TViewer::GetHTTPNOTFOUND(const TRequestState& request) {
     TStringBuilder res;

@@ -90,7 +90,7 @@ public:
             Database = Params.Get("tenant");
         }
         if (!CheckAccess()) {
-            return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
+            return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
         }
         Cache = FromStringWithDefault<bool>(Params.Get("cache"), Cache);
         MergeRecords = FromStringWithDefault<bool>(Params.Get("merge_records"), MergeRecords);

@@ -1568,7 +1568,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
         return {CreateDropExternalDataSource(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
-        return {CreateAlterExternalDataSource(op.NextPartId(), tx)};
+        Y_ABORT("TODO: implement");
 
     // View
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:

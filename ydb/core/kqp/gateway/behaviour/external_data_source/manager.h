@@ -22,11 +22,9 @@ public:
 
 private:
     TAsyncStatus CreateExternalDataSource(const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const;
-    TAsyncStatus AlterExternalDataSource(const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const;
     TAsyncStatus DropExternalDataSource(const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const;
 
     [[nodiscard]] TYqlConclusionStatus PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const;
-    [[nodiscard]] TYqlConclusionStatus PrepareAlterExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const;
     [[nodiscard]] TYqlConclusionStatus PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const;
 
     TAsyncStatus ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const;

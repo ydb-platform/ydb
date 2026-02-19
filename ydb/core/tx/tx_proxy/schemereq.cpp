@@ -409,7 +409,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableCreateExternalDataSource()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
-            return *modifyScheme.MutableCreateExternalDataSource()->MutableName();
+            Y_ABORT("no implementation for ESchemeOpAlterExternalDataSource");
 
         case NKikimrSchemeOp::ESchemeOpCreateView:
             return *modifyScheme.MutableCreateView()->MutableName();

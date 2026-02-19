@@ -3,7 +3,8 @@
 namespace NKikimr {
 
 TEqWidthHistogram::TEqWidthHistogram(ui32 numBuckets, EHistogramValueType valueType)
-    : ValueType_(valueType)
+    : NumBuckets_(numBuckets)
+    , ValueType_(valueType)
     , Buckets_(numBuckets, 0)
 {
     // class invariant: exptected at least one bucket for histogram.
@@ -14,13 +15,16 @@ TEqWidthHistogram::TEqWidthHistogram(ui32 numBuckets, EHistogramValueType valueT
 TEqWidthHistogram::TEqWidthHistogram(const char* str, size_t size) {
     Y_ENSURE(str && size);
     VersionNumber_ = ReadUnaligned<ui8>(str);
-    ui64 offset = sizeof(ui8);
-    const auto numBuckets = ReadUnaligned<ui32>(str + offset);
-    Y_ENSURE(GetBinarySize(numBuckets) == size);
-    offset += sizeof(numBuckets);
+    ui64 offset = sizeof(VersionNumber_);
+
+    NumBuckets_ = ReadUnaligned<ui32>(str + offset);
+    Y_ENSURE(GetSize() == size);
+    offset += sizeof(NumBuckets_);
+
     ValueType_ = ReadUnaligned<EHistogramValueType>(str + offset);
     Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
     offset += sizeof(EHistogramValueType);
+
     DomainRange_ = {};
     for (size_t i = 0; i < EqWidthHistogramBucketStorageSize; ++i) {
         DomainRange_.Start[i] = ReadUnaligned<ui8>(str + offset);
@@ -30,11 +34,13 @@ TEqWidthHistogram::TEqWidthHistogram(const char* str, size_t size) {
         DomainRange_.End[i] = ReadUnaligned<ui8>(str + offset);
         offset += sizeof(ui8);
     }
-    Buckets_ = TVector<ui64>(numBuckets);
-    for (size_t i = 0; i < numBuckets; ++i) {
+
+    Buckets_ = TVector<ui64>(NumBuckets_);
+    for (size_t i = 0; i < NumBuckets_; ++i) {
         Buckets_[i] = ReadUnaligned<ui64>(str + offset);
         offset += sizeof(Buckets_[i]);
     }
+    Y_ENSURE(offset == size);
 }
 
 void TEqWidthHistogram::Aggregate(const TEqWidthHistogram& other) {
@@ -50,33 +56,33 @@ void TEqWidthHistogram::Aggregate(const TEqWidthHistogram& other) {
         default:
             Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
     }
-    for (size_t i = 0; i < GetNumBuckets(); ++i) {
+    for (size_t i = 0; i < NumBuckets_; ++i) {
         Buckets_[i] += other.GetNumElementsInBucket(i);
     }
 }
 
-ui64 TEqWidthHistogram::GetBinarySize(ui32 nBuckets) const {
-    return sizeof(VersionNumber_) + sizeof(nBuckets) + sizeof(EHistogramValueType) + sizeof(TDomainRange) + sizeof(ui64) * nBuckets;
-}
-
 // Binary layout:
+// [1 byte: version number]
 // [4 byte: number of buckets][1 byte: value type]
 // [8 byte: min value][8 byte: max value]
 // [sizeof(ui64)[0]... sizeof(ui64)[n]].
 TString TEqWidthHistogram::Serialize() const {
-    const auto numBuckets = GetNumBuckets();
-    const auto binarySize = GetBinarySize(numBuckets);
+    const auto binarySize = GetSize();
     TString result = TString::Uninitialized(binarySize);
     char* out = result.Detach();
+
     // 1 byte - version number.
     WriteUnaligned<ui8>(out, VersionNumber_);
     ui64 offset = sizeof(VersionNumber_);
+
     // 4 byte - number of buckets.
-    WriteUnaligned<ui32>(out + offset, numBuckets);
-    offset += sizeof(numBuckets);
+    WriteUnaligned<ui32>(out + offset, NumBuckets_);
+    offset += sizeof(NumBuckets_);
+
     // 1 byte - values type.
     WriteUnaligned<EHistogramValueType>(out + offset, ValueType_);
     offset += sizeof(EHistogramValueType);
+
     // 16 byte - domain range.
     for (size_t i = 0; i < EqWidthHistogramBucketStorageSize; ++i) {
         WriteUnaligned<ui8>(out + offset, DomainRange_.Start[i]);
@@ -86,8 +92,9 @@ TString TEqWidthHistogram::Serialize() const {
         WriteUnaligned<ui8>(out + offset, DomainRange_.End[i]);
         offset += sizeof(ui8);
     }
+
     // Buckets.
-    for (size_t i = 0; i < numBuckets; ++i) {
+    for (size_t i = 0; i < NumBuckets_; ++i) {
         WriteUnaligned<ui64>(out + offset, Buckets_[i]);
         offset += sizeof(Buckets_[i]);
     }

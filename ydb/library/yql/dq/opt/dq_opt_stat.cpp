@@ -4,8 +4,11 @@
 #include <yql/essentials/core/yql_cost_function.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
 
 #include "util/string/join.h"
+#include <algorithm>
 
 namespace NYql::NDq {
 
@@ -110,6 +113,149 @@ namespace {
         return res;
     }
 
+    [[maybe_unused]]
+    void GetAllMembers(TExprNode::TPtr node, THashSet<TString>& members) {
+        if (node->IsCallable("Member")) {
+            auto member = TCoMember(node);
+            members.insert(member.Name().StringValue());
+            return;
+        }
+
+        for (auto c : node->Children()) {
+            GetAllMembers(c, members);
+        }
+    }
+
+    TString PrintExpression(TExprNode::TPtr expr, TExprContext & ctx) {
+        if (expr->IsLambda()) {
+            expr = expr->Child(1);
+        }
+        try {
+            TConvertToAstSettings settings;
+            settings.AllowFreeArgs = true;
+    
+            auto ast = ConvertToAst(*expr, ctx, settings);
+            TStringStream exprStream;
+            YQL_ENSURE(ast.Root);
+            ast.Root->PrintTo(exprStream);
+
+            TString exprText = exprStream.Str();
+
+            return exprText;
+        } catch (const std::exception& e) {
+            return TStringBuilder() << "Failed to render expression to pretty string: " << e.what();
+        }
+    }
+
+    TExprNode::TPtr Evaluate(TExprNode::TPtr node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry) {
+        auto evalList = ctx.NewCallable(node->Pos(), "EvaluateExpr", { node });
+
+        auto evaluator = TTransformationPipeline(&typesCtx)
+            .AddServiceTransformers()
+            .AddPreTypeAnnotation()
+            .AddExpressionEvaluation(funcRegistry).Build(false);
+
+        ctx.Step.Repeat(TExprStep::ExprEval);
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+        do {
+            status = evaluator->Transform(evalList, evalList, ctx);
+        } while (status == IGraphTransformer::TStatus::Repeat);
+
+        return evalList;
+    }
+
+    [[maybe_unused]]
+    bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
+        TExprBase expr(node);
+        if (auto sqlin = expr.Maybe<TCoSqlIn>()) {
+            auto collection = sqlin.Cast().Collection().Ptr();
+            bool result = true;
+            VisitExpr(collection,
+                [&](const TExprNode::TPtr& node) {
+                    if (node->IsCallable({"DqPhyPrecompute", "DqPrecompute"})) {
+                        return false;
+                    }
+                    if (node->IsCallable() && (node->Content().StartsWith("Dq") || node->Content().StartsWith("Kql") || node->Content().StartsWith("Kqp"))) {
+                        result = false;
+                        return false;
+                    }
+                    return true;
+                });
+            return result;
+        }
+
+        return true;
+    }
+
+    [[maybe_unused]]
+    void PrintExtractedRanges(const TExprNode::TPtr& filterLambda, const TTypeAnnotationNode& rowType,
+        TExprContext& ctx, TTypeAnnotationContext& typesCtx, const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry) {
+
+        THashSet<TString> possibleIndexKeys;
+        TVector<TString> keyList;
+        TPredicateExtractorSettings settings;
+        settings.MergeAdjacentPointRanges = true;
+        settings.HaveNextValueCallable = true;
+        settings.BuildLiteralRange = true;
+        settings.IsValidForRange = IsValidForRange;
+
+        auto extractor = MakePredicateRangeExtractor(settings);
+        bool prepareSuccess = extractor->Prepare(filterLambda, rowType, possibleIndexKeys, ctx, typesCtx);
+        keyList.insert(keyList.begin(), possibleIndexKeys.begin(), possibleIndexKeys.end());
+
+        if (!prepareSuccess) {
+            return;
+        }
+
+        auto buildResult = extractor->BuildComputeNode(keyList, ctx, typesCtx);
+        if(!buildResult.ComputeNode) {
+            return;
+        }
+
+        auto evaluateRes = Evaluate(buildResult.ComputeNode, ctx, typesCtx, funcRegistry);
+        auto finalExpr = Evaluate(evaluateRes, ctx, typesCtx, funcRegistry);
+        auto repr = PrintExpression(finalExpr, ctx);
+
+        TStringBuilder keyStringBuilder;
+        for (auto k : keyList) {
+            keyStringBuilder << k << ",";
+        }
+
+        YQL_CLOG(TRACE, CoreDq) << "Extracting ranges from filter: " << PrintExpression(filterLambda, ctx);
+        YQL_CLOG(TRACE, CoreDq) << "Extracted ranges for keys [" << keyStringBuilder << "]: " << repr;
+
+    }
+
+    double AggregateSelectivity(std::shared_ptr<TOptimizerStatistics> aggStats, TVector<TString> strKeys) {
+        if (aggStats->KeyColumns) {
+            bool isPrefix = true;
+            bool isKey = false;
+
+            size_t i=0;
+            for (; i<aggStats->KeyColumns->Data.size(); i++) {
+                if (i == strKeys.size()) {
+                    break;
+                }
+                if (aggStats->KeyColumns->Data[i] != strKeys[i]){
+                    isPrefix = false;
+                    break;
+                }
+            }
+
+            if (i == aggStats->KeyColumns->Data.size()) {
+                isKey = true;
+            }
+
+            if (isKey) {
+                return 1.0;
+            }
+            if (isPrefix) {
+                return 0.1;
+            }
+        }
+
+        return 0.7;
+    }
 }
 
 std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
@@ -602,7 +748,10 @@ void InferStatisticsForDqSource(const TExprNode::TPtr& input, TTypeAnnotationCon
  *
  * If this flatmap's lambda is a join, we propagate the join result as the output of FlatMap
  */
-void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, TExprContext& ctx, const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry) {
+
+    Y_UNUSED(ctx);
+    Y_UNUSED(funcRegistry);
 
     auto inputNode = TExprBase(input);
     auto flatmap = inputNode.Cast<TCoFlatMapBase>();
@@ -617,6 +766,12 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         // Selectivity is the fraction of tuples that are selected by this predicate
         // Currently we just set the number to 10% before we have statistics and parse
         // the predicate
+
+        //auto inputType = flatmapInput.Ptr()->GetTypeAnn();
+        //if (inputType->GetKind() == ETypeAnnotationKind::List) {
+        //    auto rowType = flatmapInput.Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        //    PrintExtractedRanges(flatmap.Lambda().Ptr(), *rowType, ctx, *typeCtx, funcRegistry);
+        //}
 
         double selectivity = TPredicateSelectivityComputer(inputStats).Compute(flatmap.Lambda().Body());
 
@@ -770,6 +925,11 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotati
     for (const auto& key: agg.Keys()) {
         strKeys.push_back(key.StringValue());
     }
+
+    double selectivity = AggregateSelectivity(aggStats, strKeys);
+    aggStats->Nrows = aggStats->Nrows * selectivity;
+    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();
     typeCtx->SetStats(input.Get(), std::move(aggStats));
 }
@@ -789,7 +949,39 @@ void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTyp
         return;
     }
 
-    typeCtx->SetStats( input.Get(), inputStats );
+    auto aggStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+
+    TVector<TString> strKeys;
+    strKeys.reserve(agg.Keys().Size());
+    for (const auto& key: agg.Keys()) {
+        strKeys.push_back(key.StringValue());
+    }
+
+    double selectivity = AggregateSelectivity(aggStats, strKeys);
+    aggStats->Nrows = aggStats->Nrows * selectivity;
+    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+
+    typeCtx->SetStats( input.Get(), aggStats );
+}
+
+void InferStatisticsForCombiner(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto agg = inputNode.Cast<TCoWideCombiner>();
+    auto aggInput = agg.Input();
+
+    auto inputStats = typeCtx->GetStats(aggInput.Raw() );
+    if (!inputStats) {
+        return;
+    }
+
+    auto aggStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+    aggStats->Nrows = aggStats->Nrows / 7.0;
+    aggStats->ByteSize = aggStats->ByteSize / 7.0;
+
+    YQL_CLOG(TRACE, CoreDq) << "Stats for aggregatem, Nrows: " << aggStats->Nrows;
+
+
+    typeCtx->SetStats( input.Get(), aggStats );
 }
 
 void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {

@@ -39,9 +39,10 @@ class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase
             const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
             TTypeAnnotationContext& typeCtx,
             const TKikimrConfiguration::TPtr& config,
-            const TKqpProviderContext& pctx
+            const TKqpProviderContext& pctx,
+            const NMiniKQL::IFunctionRegistry* funcRegistry
         ) :
-            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetOptimizerHints(), &kqpCtx->ShufflingOrderingsByJoinLabels, true),
+            TDqStatisticsTransformerBase(&typeCtx, pctx, funcRegistry, kqpCtx->GetOptimizerHints(), &kqpCtx->ShufflingOrderingsByJoinLabels, true),
             Config(config),
             KqpCtx(*kqpCtx) {}
 
@@ -54,6 +55,7 @@ class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx);
+    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx,
+    const NMiniKQL::IFunctionRegistry& funcRegistry);
 }
 }

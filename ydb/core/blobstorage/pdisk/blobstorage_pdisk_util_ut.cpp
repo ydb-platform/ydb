@@ -10,6 +10,7 @@
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_defs.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
+#include "blobstorage_pdisk_util_flightcontrol.h"
 #include "blobstorage_pdisk_util_sector.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -87,6 +88,24 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
             UNIT_ASSERT_EQUAL(res.Seqno, ++s);
             i++;
         }
+    }
+
+    Y_UNIT_TEST(BytesFlightControlMarkCompleteOrder) {
+        TBytesFlightControl flightControl(10, 1024);
+        flightControl.Initialize("ut");
+
+        for (ui64 expectedIdx = 1; expectedIdx <= 6; ++expectedIdx) {
+            UNIT_ASSERT_EQUAL(flightControl.TrySchedule(1), expectedIdx);
+        }
+
+        flightControl.MarkComplete(2, 1);
+        flightControl.MarkComplete(3, 1);
+        flightControl.MarkComplete(4, 1);
+        flightControl.MarkComplete(5, 1);
+        UNIT_ASSERT_EQUAL(flightControl.FirstIncompleteIdx(), 1);
+
+        flightControl.MarkComplete(1, 1);
+        UNIT_ASSERT_EQUAL(flightControl.FirstIncompleteIdx(), 6);
     }
 
     Y_UNIT_TEST(Light) {

@@ -186,24 +186,10 @@ void TBytesFlightControl::MarkComplete(ui64 idx, ui64 size) {
     --InFlightRequests;
     InFlightBytes -= size;
 
-    if (idx == FirstIncompleteIdxValue) {
+    CompletedIdx.push(idx);
+    while (!CompletedIdx.empty() && CompletedIdx.top() == FirstIncompleteIdxValue) {
         ++FirstIncompleteIdxValue;
-    } else {
-        CompletedIdx.push(idx);
-    }
-
-    // Fold contiguous completed requests into the new first incomplete request index.
-    while (!CompletedIdx.empty()) {
-        const ui64 completed = CompletedIdx.top();
-        if (completed < FirstIncompleteIdxValue) {
-            CompletedIdx.pop();
-            continue;
-        }
-        if (completed > FirstIncompleteIdxValue) {
-            break;
-        }
         CompletedIdx.pop();
-        ++FirstIncompleteIdxValue;
     }
 
     AtomicSet(CachedFirstIncompleteIdx, FirstIncompleteIdxValue);

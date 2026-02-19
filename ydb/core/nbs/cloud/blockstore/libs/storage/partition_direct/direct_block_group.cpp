@@ -159,12 +159,6 @@ TDirectBlockGroup::TDirectBlockGroup(
         std::move(persistentBufferDDiskIds),
         PersistentBufferConnections,
         true);
-
-    LOG_DEBUG_S(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "end of TDirectBlockGroup::TDirectBlockGroup: "
-            << "PersistentBufferConnections.size() == " << PersistentBufferConnections.size());
 }
 
 TDirectBlockGroup::~TDirectBlockGroup() = default;
@@ -235,11 +229,6 @@ void TDirectBlockGroup::HandlePersistentBufferConnected(
 // TODO заблокировать IO до полного восстановления (где-то раньше)
 void TDirectBlockGroup::RestoreFromPersistentBuffer()
 {
-    LOG_DEBUG_S(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "RestoreFromPersistentBuffer started"
-            << "PersistentBufferConnections.size(): " << PersistentBufferConnections.size());
     size_t numberOfRequests = PersistentBufferConnections.size();
     auto requestsPending =
         std::make_shared<TPendingRequests>(numberOfRequests);
@@ -256,12 +245,6 @@ void TDirectBlockGroup::RestoreFromPersistentBuffer()
              requestsPending = requestsPending,
              persistentBufferIndex = i](const auto& f)
             {
-                LOG_DEBUG_S(
-                    TActivationContext::AsActorContext(),
-                    NKikimrServices::NBS_PARTITION,
-                    "RestoreFromPersistentBuffer future cb for "
-                    "persistentBufferIndex #"
-                        << persistentBufferIndex);
                 const auto& result = f.GetValue();
                 HandleListPersistentBufferResultOnRestore(
                     requestId, result, persistentBufferIndex, requestsPending);
@@ -275,11 +258,6 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
     size_t persistentBufferIndex,
     std::shared_ptr<TPendingRequests> requestsPending)
 {
-    LOG_DEBUG_S(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "HandleListPersistentBufferResultOnRestore for "
-        "persistentBufferIndex #" << persistentBufferIndex);
     Y_UNUSED(storageRequestId);
     ++requestsPending->ResponsesHandled;
 
@@ -307,10 +285,7 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
 
 void TDirectBlockGroup::RestoreFromPersistentBufferFinised()
 {
-    LOG_DEBUG_S(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "RestoreFromPersistentBufferFinised");
+    // function's body will be writen a bit later
 }
 
 void TDirectBlockGroup::HandleDDiskBufferConnected(

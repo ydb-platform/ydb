@@ -48,17 +48,6 @@ enum class EDeadLetterAction {
     Move = 2,
 };
 
-//! Result of close operation.
-//! If close was successful, returns SUCCESS.
-//! If close was not successful because of timeout, returns TIMEOUT.
-//! If close was not successful because of error, returns ERROR.
-enum class ECloseResult : uint8_t {
-    SUCCESS = 0,
-    TIMEOUT = 1,
-    ERROR = 2,
-    ALREADY_CLOSED = 3,
-};
-
 // 0 - disabled
 // 1 - database level metrics
 // 2 - object level metrics

@@ -37,20 +37,20 @@
 #include <thread>
 
 template <>
-void Out<NYdb::NTopic::EFlushResult>(IOutputStream& s, NYdb::NTopic::EFlushResult v)
+void Out<NYdb::NTopic::EFlushStatus>(IOutputStream& s, NYdb::NTopic::EFlushStatus v)
 {
     switch (v) {
-        case NYdb::NTopic::EFlushResult::SUCCESS:
-            s << "EFlushResult::SUCCESS";
+        case NYdb::NTopic::EFlushStatus::SUCCESS:
+            s << "EFlushStatus::SUCCESS";
             break;
-        case NYdb::NTopic::EFlushResult::CLOSED:
-            s << "EFlushResult::CLOSED";
+        case NYdb::NTopic::EFlushStatus::CLOSED:
+            s << "EFlushStatus::CLOSED";
             break;
-        case NYdb::NTopic::EFlushResult::TIMEOUT:
-            s << "EFlushResult::TIMEOUT";
+        case NYdb::NTopic::EFlushStatus::TIMEOUT:
+            s << "EFlushStatus::TIMEOUT";
             break;
         default:
-            s << "EFlushResult::UNKNOWN(" << static_cast<int>(v) << ")";
+            s << "EFlushStatus::UNKNOWN(" << static_cast<int>(v) << ")";
             break;
     }
 }
@@ -1074,7 +1074,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             session->Write(std::move(*token), std::move(msg));
         }
 
-        UNIT_ASSERT_EQUAL_C(session->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS, "Failed to close keyed write session");
+        UNIT_ASSERT_C(session->Close(TDuration::Seconds(30)).IsSuccess(), "Failed to close keyed write session");
 
         UNIT_ASSERT_C(readyCount.load() > 0, "ReadyToAcceptHandler was not called");
         UNIT_ASSERT_C(acksCount.load() == messages, "AcksHandler does not work properly");
@@ -1128,11 +1128,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event);
         UNIT_ASSERT_C(sessionClosedEvent, "SessionClosedEvent is not received");
         UNIT_ASSERT_C(sessionClosedEvent->GetStatus() == EStatus::BAD_REQUEST, "Status is not BAD_REQUEST");
-        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::ALREADY_CLOSED);
-
-        auto producer = std::dynamic_pointer_cast<TProducer>(session);
-        UNIT_ASSERT_EQUAL(producer->ExplainClosed()->GetStatus(), EStatus::BAD_REQUEST);
-        UNIT_ASSERT(!producer->ExplainClosed()->GetIssues().Empty());
+        UNIT_ASSERT_C(session->Close(TDuration::Seconds(10)).IsAlreadyClosed(), "Session is not already closed");
     }
 
     Y_UNIT_TEST(KeyedWriteSession_NoAutoPartitioning_HashPartitionChooser) {
@@ -1189,7 +1185,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             session->Write(std::move(*token), std::move(msg));
         }
 
-        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
+        UNIT_ASSERT_C(session->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close keyed write session");
 
         auto after = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
         UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToOneLineString());
@@ -1274,7 +1270,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             session->Write(std::move(*token), std::move(msg));
         }
 
-        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
+        UNIT_ASSERT_C(session->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close keyed write session");
 
         auto after = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
         UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToOneLineString());
@@ -1324,7 +1320,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(eventLoop.WaitForAcks(count, TDuration::Seconds(60)));
         eventLoop.CheckAcksOrder();
-        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
+        UNIT_ASSERT_C(session->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close keyed write session");
     }
 
     Y_UNIT_TEST(KeyedWriteSession_MultiThreadedWrite_Acks) {
@@ -1371,7 +1367,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         UNIT_ASSERT(eventLoop.WaitForAcks(total, TDuration::Seconds(60)));
-        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
+        UNIT_ASSERT_C(session->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close keyed write session");
     }
 
     Y_UNIT_TEST(KeyedWriteSession_IdleSessionsTimeout) {
@@ -1471,7 +1467,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(eventLoop.WaitForAcks(messages, TDuration::Seconds(60)));
         eventLoop.CheckAcksOrder();
-        UNIT_ASSERT_EQUAL(session->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
+        UNIT_ASSERT_C(session->Close(TDuration::Seconds(30)).IsSuccess(), "Failed to close keyed write session");
     }
 
     Y_UNIT_TEST(KeyedWriteSession_CloseTimeout) {
@@ -1506,7 +1502,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const TDuration closeTimeout = TDuration::Seconds(5);
         const TInstant startTime = TInstant::Now();
         auto result = session->Close(closeTimeout);
-        UNIT_ASSERT_EQUAL(result, ECloseResult::SUCCESS);
+        UNIT_ASSERT_C(result.IsSuccess(), "Failed to close keyed write session");
         const TDuration actualDuration = TInstant::Now() - startTime;
         
         // Verify that Close didn't block longer than timeout (with some tolerance)
@@ -1712,8 +1708,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_EQUAL_C(sessionPartitions.size(), partitionsCount,
             "Expected exactly" << partitionsCount << " partitions, actual: " << sessionPartitions.size());
 
-        UNIT_ASSERT_EQUAL(session1->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
-        UNIT_ASSERT_EQUAL(session2->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
+        UNIT_ASSERT(session1->Close(TDuration::Seconds(30)).IsSuccess());
+        UNIT_ASSERT(session2->Close(TDuration::Seconds(30)).IsSuccess());
     }
 
     Y_UNIT_TEST(AutoPartitioning_KeyedWriteSession_SmallMessages) {
@@ -1846,8 +1842,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_EQUAL_C(sessionPartitions.size(), partitionsCount,
             "Session partitions " << sessionPartitions.size() << " != topic partitions " << partitionsCount);
 
-        UNIT_ASSERT_EQUAL(session1->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
-        UNIT_ASSERT_EQUAL(session2->Close(TDuration::Seconds(30)), ECloseResult::SUCCESS);
+        UNIT_ASSERT(session1->Close(TDuration::Seconds(30)).IsSuccess());
+        UNIT_ASSERT(session2->Close(TDuration::Seconds(30)).IsSuccess());
     }
 
     Y_UNIT_TEST(Producer_BasicWrite) {
@@ -1867,10 +1863,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto msgData = TString(10_KB, 'a');
 
         for (ui64 i = 0; i < 100; ++i) {    
-            UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
+            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsSuccess());
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(producer->Flush().GetValueSync(), EFlushResult::SUCCESS);
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
 
         auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 10);
@@ -1883,7 +1879,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
     
         UNIT_ASSERT_EQUAL(messagesWritten, 100);
-        UNIT_ASSERT_EQUAL(producer->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
+        UNIT_ASSERT_C(producer->Close(TDuration::Seconds(1)).IsSuccess(), "Failed to close producer");
     }
 
     Y_UNIT_TEST(Producer_SmallSessionIdleTimeout) {
@@ -1913,9 +1909,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 for (ui64 i = 0; i < 10; ++i) {
                     TWriteMessage msg(msgData);
                     msg.Partition(partition.GetPartitionId());
-                    UNIT_ASSERT_EQUAL(producer->Write(std::move(msg)), EWriteResult::QUEUED);
+                    UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
                 }
-                UNIT_ASSERT_VALUES_EQUAL(producer->Flush().GetValueSync(), EFlushResult::SUCCESS);    
+                UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());    
                 UNIT_ASSERT((producerRaw->GetIdleSessionsCount() == 1 && producerRaw->GetSessionsCount() == 1) ||
                     (producerRaw->GetIdleSessionsCount() == 0 && producerRaw->GetSessionsCount() == 0));
                 Sleep(TDuration::Seconds(1));
@@ -1932,7 +1928,97 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             }
             UNIT_ASSERT_EQUAL(messagesWritten, 150);
         }
-        UNIT_ASSERT_EQUAL(producer->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_CustomKeyProducerFunction) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
+
+        // Capture partition ids in the same order as DescribeTopic returns them
+        // (the keyed session uses the same DescribeTopic ordering to map hash bucket -> partition id).
+        auto publicClient = setup.MakeClient();
+        auto describeTopicSettings = TDescribeTopicSettings().IncludeStats(true);
+        auto before = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
+        UNIT_ASSERT_C(before.IsSuccess(), before.GetIssues().ToOneLineString());
+        const auto& beforePartitions = before.GetTopicDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(beforePartitions.size(), 2);
+        const ui64 partitionId0 = beforePartitions[0].GetPartitionId();
+        const ui64 partitionId1 = beforePartitions[1].GetPartitionId();
+
+        constexpr auto keyAttributeName = "__key";
+
+        TProducerSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+        writeSettings.KeyProducer([](const TWriteMessage& message) -> std::string {
+            for (const auto& [attributeName, attributeValue] : message.MessageMeta_) {
+                if (attributeName == keyAttributeName) {
+                    return attributeValue;
+                }
+            }
+            return "";
+        });
+
+        auto producer = publicClient.CreateProducer(writeSettings);
+
+        const std::string key0 = FindKeyForBucket(0, 2);
+        const std::string key1 = FindKeyForBucket(1, 2);
+
+        const ui64 count0 = 7;
+        const ui64 count1 = 11;
+
+        auto seqNo = 1;
+        for (ui64 i = 0; i < count0; ++i) {
+            std::string payload = "msg0";
+            TWriteMessage msg(payload);
+            msg.SeqNo(seqNo++);
+            msg.MessageMeta_.emplace_back(keyAttributeName, key0);
+            UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
+        }
+        for (ui64 i = 0; i < count1; ++i) {
+            std::string payload = "msg1";
+            TWriteMessage msg(payload);
+            msg.SeqNo(seqNo++);
+            msg.MessageMeta_.emplace_back(keyAttributeName, key1);
+            UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
+        }
+
+        UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        auto after = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
+        UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToOneLineString());
+        const auto& afterPartitions = after.GetTopicDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(afterPartitions.size(), 2);
+
+        std::unordered_map<ui64, ui64> endOffsets;
+        for (const auto& p : afterPartitions) {
+            auto stats = p.GetPartitionStats();
+            UNIT_ASSERT(stats.has_value());
+            endOffsets[p.GetPartitionId()] = stats->GetEndOffset();
+        }
+
+        auto it0 = endOffsets.find(partitionId0);
+        auto it1 = endOffsets.find(partitionId1);
+        UNIT_ASSERT(it0 != endOffsets.end());
+        UNIT_ASSERT(it1 != endOffsets.end());
+
+        const ui64 endOffset0 = it0->second;
+        const ui64 endOffset1 = it1->second;
+
+        // Partition ordering in DescribeTopic is not a part of public API contract, so allow swapping.
+        UNIT_ASSERT_VALUES_EQUAL(endOffset0 + endOffset1, count0 + count1);
+        UNIT_ASSERT_C(
+            (endOffset0 == count0 && endOffset1 == count1) || (endOffset0 == count1 && endOffset1 == count0),
+            TStringBuilder() << "Unexpected end offsets distribution: "
+                             << "partitionId0=" << partitionId0 << " endOffset0=" << endOffset0 << ", "
+                             << "partitionId1=" << partitionId1 << " endOffset1=" << endOffset1 << ", "
+                             << "expected (" << count0 << "," << count1 << ") in any order"
+        );
     }
 
     Y_UNIT_TEST(Producer_AutoPartitioning) {
@@ -1957,10 +2043,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto msgData = TString(1_MB, 'a');
 
         {
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key1", 1)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key2", 2)), EWriteResult::QUEUED);
-            UNIT_ASSERT_VALUES_EQUAL(producer1->Flush().GetValueSync(), EFlushResult::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(producer2->Flush().GetValueSync(), EFlushResult::SUCCESS);
+            UNIT_ASSERT(producer1->Write(CreateMessage(msgData, "key1", 1)).IsSuccess());
+            UNIT_ASSERT(producer2->Write(CreateMessage(msgData, "key2", 2)).IsSuccess());
+            UNIT_ASSERT(producer1->Flush().GetValueSync().IsSuccess());
+            UNIT_ASSERT(producer2->Flush().GetValueSync().IsSuccess());
             auto d = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             auto partitionsCount = d.GetTopicDescription().GetPartitions().size();
             UNIT_ASSERT_C(partitionsCount >= 2,
@@ -1968,19 +2054,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         {
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key3", 3)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key4", 4)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key5", 5)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key6", 6)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key7", 7)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key8", 8)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key9", 9)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key10", 10)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key11", 11)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key12", 12)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key13", 13)), EWriteResult::QUEUED);
-            UNIT_ASSERT_VALUES_EQUAL(producer1->Flush().GetValueSync(), EFlushResult::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(producer2->Flush().GetValueSync(), EFlushResult::SUCCESS);
+            UNIT_ASSERT(producer1->Write(CreateMessage(msgData, "key3", 3)).IsSuccess());
+            UNIT_ASSERT(producer2->Write(CreateMessage(msgData, "key4", 4)).IsSuccess());
+            UNIT_ASSERT(producer1->Write(CreateMessage(msgData, "key5", 5)).IsSuccess());
+            UNIT_ASSERT(producer2->Write(CreateMessage(msgData, "key6", 6)).IsSuccess());
+            UNIT_ASSERT(producer1->Write(CreateMessage(msgData, "key7", 7)).IsSuccess());
+            UNIT_ASSERT(producer2->Write(CreateMessage(msgData, "key8", 8)).IsSuccess());
+            UNIT_ASSERT(producer1->Write(CreateMessage(msgData, "key9", 9)).IsSuccess());
+            UNIT_ASSERT(producer2->Write(CreateMessage(msgData, "key10", 10)).IsSuccess());
+            UNIT_ASSERT(producer2->Write(CreateMessage(msgData, "key11", 11)).IsSuccess());
+            UNIT_ASSERT(producer1->Write(CreateMessage(msgData, "key12", 12)).IsSuccess());
+            UNIT_ASSERT(producer1->Write(CreateMessage(msgData, "key13", 13)).IsSuccess());
+            UNIT_ASSERT(producer1->Flush().GetValueSync().IsSuccess());
+            UNIT_ASSERT(producer2->Flush().GetValueSync().IsSuccess());
             auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             auto partitionsCount = describeResult.GetTopicDescription().GetPartitions().size();
             UNIT_ASSERT_C(partitionsCount >= 4,
@@ -1988,14 +2074,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         {
-            UNIT_ASSERT_EQUAL(producer1->Write(CreateMessage(msgData, "key14", 14)), EWriteResult::QUEUED);
-            UNIT_ASSERT_EQUAL(producer2->Write(CreateMessage(msgData, "key15", 15)), EWriteResult::QUEUED);
-            UNIT_ASSERT_VALUES_EQUAL(producer1->Flush().GetValueSync(), EFlushResult::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(producer2->Flush().GetValueSync(), EFlushResult::SUCCESS);
+            UNIT_ASSERT(producer1->Write(CreateMessage(msgData, "key14", 14)).IsSuccess());
+            UNIT_ASSERT(producer2->Write(CreateMessage(msgData, "key15", 15)).IsSuccess());
+            UNIT_ASSERT(producer1->Flush().GetValueSync().IsSuccess());
+            UNIT_ASSERT(producer2->Flush().GetValueSync().IsSuccess());
         }
 
-        UNIT_ASSERT_EQUAL(producer1->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
-        UNIT_ASSERT_EQUAL(producer2->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
+        UNIT_ASSERT(producer1->Close(TDuration::Seconds(1)).IsSuccess());
+        UNIT_ASSERT(producer2->Close(TDuration::Seconds(1)).IsSuccess());
     }
 
     Y_UNIT_TEST(Producer_BlockingWrite) {
@@ -2016,11 +2102,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto msgData = TString(10_KB, 'a');
 
         for (ui64 i = 0; i < 100; ++i) {    
-            UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
+            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsSuccess());
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(producer->Flush().GetValueSync(), EFlushResult::SUCCESS);
-        UNIT_ASSERT_EQUAL(producer->Close(TDuration::Seconds(1)), ECloseResult::SUCCESS);
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
     }
 
     Y_UNIT_TEST(Producer_TimeoutError) {
@@ -2041,9 +2127,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(1_MB, 'a');
 
-        UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::QUEUED);
-        UNIT_ASSERT_EQUAL(producer->Write(TWriteMessage(msgData)), EWriteResult::TIMEOUT);
-        UNIT_ASSERT_EQUAL(producer->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
+        UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsSuccess());
+        UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsTimeout());
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
     }
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 

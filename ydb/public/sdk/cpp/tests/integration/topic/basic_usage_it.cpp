@@ -973,7 +973,7 @@ TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
     }
 
     testAdapter.WaitForAcks(100, TDuration::Seconds(30));
-    ASSERT_EQ(session->Close(TDuration::Seconds(10)), ECloseResult::SUCCESS);
+    ASSERT_TRUE(session->Close(TDuration::Seconds(10)).IsSuccess());
     ASSERT_EQ(testAdapter.GetAckedSeqNosCount(), 100ull);
     ASSERT_TRUE(testAdapter.ValidateAcksOrder());
 

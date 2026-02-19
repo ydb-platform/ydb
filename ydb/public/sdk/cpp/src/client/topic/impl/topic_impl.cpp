@@ -89,7 +89,6 @@ std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TProducerSe
         }
 
         bool handlersSet = settings.EventHandlers_.AcksHandler_ ||
-            settings.EventHandlers_.ReadyToAcceptHandler_ ||
             settings.EventHandlers_.SessionClosedHandler_ ||
             settings.EventHandlers_.CommonHandler_;
 
@@ -100,6 +99,9 @@ std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TProducerSe
                 alteredSettings.EventHandlers_.HandlersExecutor(NTopic::CreateSyncExecutor());
             }
         }
+
+        // As we don't support continuation tokens in IProducer interface
+        alteredSettings.EventHandlers_.ReadyToAcceptHandler({});
 
         if (!settings.EventHandlers_.AcksHandler_) {
             alteredSettings.EventHandlers_.AcksHandler([&](TWriteSessionEvent::TAcksEvent&) {});

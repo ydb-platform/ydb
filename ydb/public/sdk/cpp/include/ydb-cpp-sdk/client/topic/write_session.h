@@ -16,6 +16,44 @@
 
 namespace NYdb::inline Dev::NTopic {
 
+//! Result of close operation.
+//! If close was successful, returns SUCCESS.
+//! If close was not successful because of timeout, returns TIMEOUT.
+//! If close was not successful because of error, returns ERROR.
+enum class ECloseStatus : uint8_t {
+    SUCCESS = 0,
+    TIMEOUT = 1,
+    ERROR = 2,
+    ALREADY_CLOSED = 3,
+};
+
+//! Description why session was closed.
+struct TCloseDescription : public TSessionClosedEvent {};
+
+//! Result of close operation.
+struct TCloseResult {
+    //! Status of close operation.
+    ECloseStatus Status;
+    //! Description why session was closed.
+    std::optional<TCloseDescription> ClosedDescription;
+
+    bool IsSuccess() const {
+        return Status == ECloseStatus::SUCCESS;
+    }
+
+    bool IsTimeout() const {
+        return Status == ECloseStatus::TIMEOUT;
+    }
+
+    bool IsError() const {
+        return Status == ECloseStatus::ERROR;
+    }
+
+    bool IsAlreadyClosed() const {
+        return Status == ECloseStatus::ALREADY_CLOSED;
+    }
+};
+
 //! Settings for write session.
 struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     using TSelf = TWriteSessionSettings;
@@ -112,6 +150,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! Function to handle ReadyToAccept event.
         //! If this handler is set, write these events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
+        //! NOTE: DO NOT USE THIS HANDLER IN IProducer INTERFACE.
         FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHandler);
 
         //! Function to handle close session events.
@@ -211,7 +250,7 @@ public:
     //! Message key. It will be used to route message to the partition.
     FLUENT_SETTING_OPTIONAL(std::string, Key);
 
-    //! Partition to write to.
+    //! Partition to write to. It is not recommended to use this option, use Key instead.
     FLUENT_SETTING_OPTIONAL(std::uint32_t, Partition);
 
     //! Transaction id
@@ -368,7 +407,7 @@ public:
     //! If maxEventsCount is unset, write session decides the count to return itself.
     virtual std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt) = 0;
 
-    virtual ECloseResult Close(TDuration closeTimeout = TDuration::Max()) = 0;
+    virtual TCloseResult Close(TDuration closeTimeout = TDuration::Max()) = 0;
     virtual TWriterCounters::TPtr GetCounters() = 0;
     virtual ~IKeyedWriteSession() = default;
 };

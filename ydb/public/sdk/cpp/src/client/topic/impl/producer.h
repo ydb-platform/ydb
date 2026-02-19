@@ -53,7 +53,7 @@ private:
         std::optional<std::reference_wrapper<TTransactionBase>> Tx;
         std::uint32_t Partition;
         bool Sent = false;
-        NThreading::TPromise<EFlushResult> FlushPromise;
+        NThreading::TPromise<TFlushResult> FlushPromise;
 
         TWriteMessage BuildMessage() const;
     };
@@ -165,7 +165,7 @@ private:
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
-        void SetStatusToFlushPromises(EFlushResult status);
+        void SetClosedStatusToFlushPromises(std::optional<TCloseDescription> closedDescription);
 
     private:
         using MessageIter = std::list<TMessageInfo>::iterator;
@@ -362,9 +362,7 @@ private:
 
     void NextEpoch();
 
-    std::uint32_t ChooseRandomPartition();
-
-    EWriteResult WriteInternal(TContinuationToken&&, TWriteMessage&& message);
+    TWriteResult WriteInternal(TContinuationToken&&, TWriteMessage&& message);
 
 public:
     TProducer(const TProducerSettings& settings,
@@ -374,11 +372,9 @@ public:
     
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
 
-    [[nodiscard]] EWriteResult Write(TWriteMessage&& message) override;
+    [[nodiscard]] TWriteResult Write(TWriteMessage&& message) override;
 
-    std::optional<TCloseDescription> ExplainClosed() override;
-
-    [[nodiscard]] NThreading::TFuture<EFlushResult> Flush() override;
+    [[nodiscard]] NThreading::TFuture<TFlushResult> Flush() override;
 
     TWriteStats GetWriteStats() override;
 
@@ -388,7 +384,7 @@ public:
 
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt) override;
 
-    ECloseResult Close(TDuration closeTimeout = TDuration::Max()) override;
+    TCloseResult Close(TDuration closeTimeout = TDuration::Max()) override;
 
     TWriterCounters::TPtr GetCounters() override;
 
@@ -448,10 +444,13 @@ private:
     // - subsession's thread, in this case the value of MainWorkerOwner is the subsession's partition ID
     std::int64_t MainWorkerOwner = -1;
 
+    std::uint64_t LastWrittenSeqNo = 0;
+    std::uint64_t MessagesWritten = 0;
+
     std::atomic<size_t> Epoch = 0;
     std::mt19937_64 RandomGenerator = std::mt19937_64(std::random_device()());
     
-    std::list<NThreading::TPromise<EFlushResult>> FlushPromises;
+    std::list<std::pair<NThreading::TPromise<TFlushResult>, TFlushResult>> FlushPromises;
 
     std::vector<TEventsWorker::EEventType> EventTypesWithHandlers;
 };

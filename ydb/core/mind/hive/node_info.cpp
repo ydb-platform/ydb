@@ -366,6 +366,8 @@ void TNodeInfo::RegisterInDomains() {
 void TNodeInfo::DeregisterInDomains() {
     Hive.DomainsView.DeregisterNode(*this);
     LastSeenServicedDomains = std::move(ServicedDomains); // clear ServicedDomains
+    Hive.RemoveNodeFromSegments(Id);
+    Hive.UpdateNodeSegments(this);
 }
 
 void TNodeInfo::Ping() {

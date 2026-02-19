@@ -21,8 +21,13 @@ public:
         BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute");
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
+        const bool isNewNode = Self->FindNode(nodeId) == nullptr;
         TNodeInfo& node = Self->GetNode(nodeId);
         if (node.Local != Local) {
+            if (!isNewNode) {
+                Self->RemoveNodeFromSegments(nodeId);
+            }
+
             TInstant now = TActivationContext::Now();
             node.Statistics.AddRestartTimestamp(now.MilliSeconds());
             node.ActualizeNodeStatistics(now);
@@ -73,6 +78,8 @@ public:
             } else {
                 Y_ENSURE(!Self->BridgeInfo, "Running in bridge mode, but node " << nodeId << " has no pile");
             }
+
+            Self->UpdateNodeSegments(&node);
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
             node.Location = TNodeLocation(Record.GetSystemLocation());

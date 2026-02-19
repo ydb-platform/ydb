@@ -831,6 +831,10 @@ public:
         }
         BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
 
+        for (const auto& [_, node] : Self->Nodes) {
+            Self->UpdateNodeSegments(&node);
+        }
+
         TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
 
         auto operationsRowset = db.Table<Schema::OperationsLog>().All().Reverse().Select();

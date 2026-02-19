@@ -1,3 +1,4 @@
+from typing import Optional
 import warnings
 import allure
 import logging
@@ -65,7 +66,7 @@ class ParallelWorkloadTestBase:
         workload_params: dict[str, dict],
         duration_value: float = None,
         nemesis_enabled: bool = False,
-        nodes_percentage: int = None,
+        nodes_percentage: Optional[int] = None,
     ) -> None:
         """
         Executes full workload test cycle with three phases:

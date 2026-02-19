@@ -190,7 +190,7 @@ NProto::TError TranslateTxProxyError(NProto::TError error)
     }
 
     auto status =
-        static_cast<NKikimrScheme::EStatus>(STATUS_FROM_CODE(error.GetCode()));
+        static_cast<NKikimr::NTxProxy::TResultStatus::EStatus>(STATUS_FROM_CODE(error.GetCode()));
     if (RetriableTxProxyErrors.count(status)) {
         error.SetCode(E_REJECTED);
     }

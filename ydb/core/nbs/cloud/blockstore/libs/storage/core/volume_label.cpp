@@ -60,13 +60,6 @@ std::tuple<TString, TString> ExtractParentDirAndName(const TString& rootDir,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString DiskIdToPathDeprecated(const TString& diskId)
-{
-    TString path(diskId);
-    ::CGIEscape(path);
-    return path;
-}
-
 TString DiskIdToPath(const TString& diskId)
 {
     TString path(diskId);
@@ -86,13 +79,6 @@ TString PathNameToDiskId(const TString& pathName)
     TString diskId(pathName);
     ::CGIUnescape(diskId);
     return diskId;
-}
-
-std::tuple<TString, TString> DiskIdToVolumeDirAndNameDeprecated(
-    const TString& rootDir, const TString& diskId)
-{
-    TString path = DiskIdToPathDeprecated(diskId);
-    return ExtractParentDirAndName(rootDir, path);
 }
 
 std::tuple<TString, TString> DiskIdToVolumeDirAndName(const TString& rootDir,

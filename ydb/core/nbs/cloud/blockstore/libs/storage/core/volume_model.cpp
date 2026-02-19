@@ -88,9 +88,6 @@ void SetExplicitChannelProfiles(const NProto::TStorageServiceConfig& config,
 
     AddOrModifyChannel(poolKinds.Log, 1, 1_MB, EChannelDataKind::Log,
                        volumeConfig);
-
-    AddOrModifyChannel(poolKinds.Index, 2, 16_MB, EChannelDataKind::Index,
-                       volumeConfig);
 }
 
 // Volume channels
@@ -103,8 +100,6 @@ void SetVolumeExplicitChannelProfiles(
     SetupVolumeChannel(poolKinds.System, 0, 1_MB, EChannelDataKind::System,
                        volumeConfig);
     SetupVolumeChannel(poolKinds.Log, 1, 1_MB, EChannelDataKind::Log,
-                       volumeConfig);
-    SetupVolumeChannel(poolKinds.Index, 2, 1_MB, EChannelDataKind::Index,
                        volumeConfig);
 }
 

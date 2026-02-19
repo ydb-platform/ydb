@@ -122,7 +122,7 @@ TCreateVolumeActor::TCreateVolumeActor(TRequestInfoPtr requestInfo,
 
 void TCreateVolumeActor::Bootstrap(const TActorContext& ctx)
 {
-    // Try to describe volume at deprecated path first.
+    // Try to describe volume first.
     DescribeVolumeBeforeCreate(ctx);
 }
 
@@ -134,7 +134,7 @@ void TCreateVolumeActor::DescribeVolumeBeforeCreate(const TActorContext& ctx)
 
     TString volumeDir, volumeName;
     std::tie(volumeDir, volumeName) =
-        DiskIdToVolumeDirAndNameDeprecated(SchemeShardDir, diskId);
+        DiskIdToVolumeDirAndName(SchemeShardDir, diskId);
     const auto volumePath = volumeDir + "/" + volumeName;
 
     LOG_DEBUG(

@@ -88,9 +88,6 @@ ui64 ComputeMaxBlocks(const TStorageConfig& config,
                       const NYdb::NBS::NProto::EStorageMediaKind mediaKind,
                       ui32 currentPartitions);
 
-void ComputeChannelCountLimits(int freeChannelCount, int* wantToAddMerged,
-                               int* wantToAddMixed, int* wantToAddFresh);
-
 TVolumeParams ComputeVolumeParams(
     const TStorageConfig& config, ui32 blockSize, ui64 blocksCount,
     NYdb::NBS::NProto::EStorageMediaKind mediaKind, ui32 partitionsCount,

@@ -17,16 +17,15 @@ TVolumeActor::TVolumeActor(const TActorId& tablet,
 
 void TVolumeActor::Bootstrap(const TActorContext& ctx)
 {
-    Y_UNUSED(ctx);
     Become(&TThis::StateWork);
 
-    LOG_INFO(TActivationContext::AsActorContext(), NKikimrServices::NBS_VOLUME,
+    LOG_INFO(ctx, NKikimrServices::NBS_VOLUME,
              "Started NBS volume: tablet id %s", SelfId().ToString().data());
 }
 
 void TVolumeActor::OnDetach(const TActorContext& ctx)
 {
-    LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_VOLUME,
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
               "OnDetach");
     Die(ctx);
 }
@@ -35,16 +34,15 @@ void TVolumeActor::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev,
                                 const TActorContext& ctx)
 {
     Y_UNUSED(ev);
-    LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_VOLUME,
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
               "OnTabletDead");
     Die(ctx);
 }
 
 void TVolumeActor::OnActivateExecutor(const TActorContext& ctx)
 {
-    Y_UNUSED(ctx);
     // RunTxInitSchema(ctx);
-    LOG_INFO(TActivationContext::AsActorContext(), NKikimrServices::NBS_VOLUME,
+    LOG_INFO(ctx, NKikimrServices::NBS_VOLUME,
              "OnActivateExecutor: tablet id %lu", TabletID());
 
     // allow pipes to connect
@@ -55,8 +53,7 @@ void TVolumeActor::OnActivateExecutor(const TActorContext& ctx)
 
 void TVolumeActor::DefaultSignalTabletActive(const TActorContext& ctx)
 {
-    Y_UNUSED(ctx);
-    LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_VOLUME,
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
               "DefaultSignalTabletActive");
 }
 
@@ -66,7 +63,7 @@ void TVolumeActor::ReportTabletState(const TActorContext& ctx)
         NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
     auto request = std::make_unique<
-        NNodeWhiteboard::TEvWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
+        NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
         TabletID(), STATE_WORK);
 
     NYdb::NBS::Send(ctx, service, std::move(request));
@@ -74,7 +71,7 @@ void TVolumeActor::ReportTabletState(const TActorContext& ctx)
 
 STFUNC(TVolumeActor::StateWork)
 {
-    LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_VOLUME,
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME,
               "Processing event: %s from sender: %lu", ev->GetTypeName().data(),
               ev->Sender.LocalId());
 
@@ -93,7 +90,7 @@ STFUNC(TVolumeActor::StateWork)
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_DEBUG_S(
-                    TActivationContext::AsActorContext(),
+                    ctx,
                     NKikimrServices::NBS_VOLUME,
                     "Unhandled event type: " << ev->GetTypeRewrite()
                                              << " event: " << ev->ToString());
@@ -141,7 +138,7 @@ void TVolumeActor::HandleUpdateVolumeConfig(
     const ui64 txId = msg->Record.GetTxId();
 
     LOG_INFO_S(
-        TActivationContext::AsActorContext(),
+        ctx,
         NKikimrServices::NBS_VOLUME,
         "Handle UpdateVolumeConfig request"
             << ", tabletId: " << TabletID() << ", txId: " << txId
@@ -157,12 +154,14 @@ void TVolumeActor::HandleUpdateVolumeConfig(
     request.RequestInfo = std::move(requestInfo);
     request.TxId = txId;
 
+    Y_ABORT_UNLESS(msg->Record.GetPartitions().size() == 1);
+
     // Forward the event to all partitions
     for (const auto& partition: msg->Record.GetPartitions()) {
         ui64 partitionTabletId = partition.GetTabletId();
 
         LOG_INFO_S(
-            TActivationContext::AsActorContext(),
+            ctx,
             NKikimrServices::NBS_VOLUME,
             "Forwarding UpdateVolumeConfig to partition"
                 << ", partitionId: " << partition.GetPartitionId()
@@ -195,7 +194,7 @@ void TVolumeActor::HandleUpdateVolumeConfigResponse(
     const ui64 partitionTabletId = msg->Record.GetOrigin();
 
     LOG_INFO_S(
-        TActivationContext::AsActorContext(),
+        ctx,
         NKikimrServices::NBS_VOLUME,
         "Handle UpdateVolumeConfigResponse"
             << ", tabletId: " << TabletID() << ", txId: " << txId
@@ -205,7 +204,7 @@ void TVolumeActor::HandleUpdateVolumeConfigResponse(
     auto it = UpdateVolumeConfigRequests.find(txId);
     if (it == UpdateVolumeConfigRequests.end()) {
         LOG_WARN_S(
-            TActivationContext::AsActorContext(),
+            ctx,
             NKikimrServices::NBS_VOLUME,
             "Received UpdateVolumeConfigResponse for unknown txId" << ", txId: "
                                                                    << txId);
@@ -224,33 +223,24 @@ void TVolumeActor::HandleUpdateVolumeConfigResponse(
         request.PartitionPipes.erase(pipeIt);
     }
 
-    // Check if all partitions have responded
-    if (request.PendingPartitions.empty()) {
-        LOG_INFO_S(
-            TActivationContext::AsActorContext(),
-            NKikimrServices::NBS_VOLUME,
-            "All partitions responded for UpdateVolumeConfig"
-                << ", tabletId: " << TabletID() << ", txId: " << txId);
+    // Send response to original sender
+    auto response = std::make_unique<
+        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
+    response->Record.SetTxId(txId);
+    response->Record.SetOrigin(TabletID());
+    response->Record.SetStatus(msg->Record.GetStatus();
 
-        // Send response to original sender
-        auto response = std::make_unique<
-            NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-        response->Record.SetTxId(txId);
-        response->Record.SetOrigin(TabletID());
-        response->Record.SetStatus(NKikimrBlockStore::OK);
+    LOG_INFO_S(
+        ctx,
+        NKikimrServices::NBS_VOLUME,
+        "Sending UpdateVolumeConfig response"
+            << ", tabletId: " << TabletID() << ", txId: " << txId
+            << ", status: " << static_cast<int>(msg->Record.GetStatus()));
 
-        LOG_INFO_S(
-            TActivationContext::AsActorContext(),
-            NKikimrServices::NBS_VOLUME,
-            "Sending UpdateVolumeConfig response"
-                << ", tabletId: " << TabletID() << ", txId: " << txId
-                << ", status: OK");
+    NYdb::NBS::Reply(ctx, *request.RequestInfo, std::move(response));
 
-        NYdb::NBS::Reply(ctx, *request.RequestInfo, std::move(response));
-
-        // Cleanup request
-        UpdateVolumeConfigRequests.erase(it);
-    }
+    // Cleanup request
+    UpdateVolumeConfigRequests.erase(it);
 }
 
 }   // namespace NYdb::NBS::NStorage

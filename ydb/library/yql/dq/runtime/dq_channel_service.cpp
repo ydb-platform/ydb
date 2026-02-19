@@ -665,7 +665,7 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
             std::queue<TInputItem> tmpQueue;
             Queue.swap(tmpQueue);
             QueueSize.store(0);
-            PopBytes += QueueBytes.exchange(0) + data.Bytes;
+            PopStats.Bytes += QueueBytes.exchange(0) + data.Bytes;
             Finished.store(true);
             ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
             return true;
@@ -703,8 +703,6 @@ bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
         Queue.pop();
         QueueSize--;
         QueueBytes -= data.Bytes;
-        PopBytes += data.Bytes;
-        Y_ENSURE(PopStats.Bytes == PopBytes.load()); // DELETE
         if (data.Finished) {
             Finished.store(true);
         }
@@ -719,7 +717,7 @@ bool TInputDescriptor::EarlyFinish() {
             std::queue<TInputItem> tmpQueue;
             Queue.swap(tmpQueue);
             QueueSize.store(0);
-            PopBytes += QueueBytes.exchange(0);
+            PopStats.Bytes += QueueBytes.exchange(0);
             if (FinishPushed.load()) {
                 Finished.store(true);
                 ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
@@ -1435,7 +1433,7 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
     evUpdate->Record.SetChannelId(descriptor->Info.ChannelId);
 
     evUpdate->Record.SetEarlyFinished(descriptor->EarlyFinished.load());
-    evUpdate->Record.SetPopBytes(descriptor->PopBytes.load());
+    evUpdate->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
@@ -1690,7 +1688,7 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         return;
     }
 
-    descriptor->PopBytes += record.GetBytes();
+    descriptor->PopStats.Bytes += record.GetBytes();
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
@@ -1704,7 +1702,7 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     evAck->Record.SetChannelId(info.ChannelId);
 
     // evAck->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
-    evAck->Record.SetPopBytes(descriptor->PopBytes.load());
+    evAck->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
 
     SendAck(evAck, ev->Cookie);
 }
@@ -2145,6 +2143,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH() {str << "PeerNodeId";}
                         TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
                         TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
+                        TABLEH() {str << "PushBytes";}
                         TABLEH() {str << "QueueSize";}
                         TABLEH() {str << "QueueBytes";}
                         TABLEH() {str << "PopBytes";}
@@ -2164,9 +2163,10 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << nodeId;}
                                 TABLED() {str << descriptor->Info.SrcStageId;}
                                 TABLED() {str << descriptor->Info.DstStageId;}
+                                TABLED() {str << descriptor->PushStats.Bytes.load();}
                                 TABLED() {str << descriptor->QueueSize.load();}
                                 TABLED() {str << descriptor->QueueBytes.load();}
-                                TABLED() {str << descriptor->PopBytes.load();}
+                                TABLED() {str << descriptor->PopStats.Bytes.load();}
                                 TABLED() {str << descriptor->FinishPushed.load();}
                                 TABLED() {str << descriptor->EarlyFinished.load();}
                                 TABLED() {str << descriptor->Finished.load();}

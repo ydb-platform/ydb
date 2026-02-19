@@ -410,7 +410,6 @@ public:
         , ActorSystem(actorSystem)
         , QueueSize(0)
         , QueueBytes(0)
-        , PopBytes(0)
         , NeedToNotifyInput(false)
         , FinishPushed(false)
         , Finished(false)
@@ -444,8 +443,6 @@ public:
     std::atomic<ui64> QueueSize;
     std::atomic<ui64> QueueBytes;
     mutable std::queue<TInputItem> Queue;
-
-    std::atomic<ui64> PopBytes;
 
     std::atomic<bool> NeedToNotifyInput;
     std::atomic<bool> FinishPushed;

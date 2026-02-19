@@ -1,16 +1,14 @@
 #include "s3_backup_test_base.h"
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/wrappers/ut_helpers/fs_mock.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 
-#include <util/folder/path.h>
 #include <util/folder/tempdir.h>
 #include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/buffer.h>
-#include <util/stream/file.h>
 #include <util/stream/str.h>
-#include <util/system/fs.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/library/testlib/helpers.h>
@@ -846,8 +844,8 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
     }
 
 protected:
-    bool NotEncryptedFileName(const TString& key) {
-        return key.EndsWith(".sha256") || key == "/test_bucket/Prefix/metadata.json";
+    bool NotEncryptedFileName(const TString& key, const TString& metadataPrefix) {
+        return key.EndsWith(".sha256") || key == metadataPrefix + "metadata.json";
     }
 
     TString ReencryptWithDifferentIV(const TString& source, NBackup::TEncryptionKey& encryptionKey, const std::string& algorithm) {
@@ -1035,81 +1033,44 @@ protected:
         THashSet<TString> ivs;
         THashSet<TString> allKeyNames;
 
+        THolder<NKikimr::NWrappers::NTestHelpers::TFsMock> fsMockOwner;
         if (isFsBackup) {
-            Cerr << "Export files (FS):\n";
-            TFsPath baseDir(basePath);
-            std::function<void(const TFsPath&)> collectFiles = [&](const TFsPath& dir) {
-                TVector<TString> children;
-                dir.ListNames(children);
-                for (const auto& child : children) {
-                    TFsPath childPath = dir / child;
-                    if (childPath.IsDirectory()) {
-                        collectFiles(childPath);
-                    } else if (childPath.IsFile()) {
-                        TString relativePath = childPath.GetPath().substr(basePath.size());
-                        if (relativePath.StartsWith("/")) {
-                            relativePath = relativePath.substr(1);
-                        }
-                        Cerr << relativePath << Endl;
+            fsMockOwner = MakeHolder<NKikimr::NWrappers::NTestHelpers::TFsMock>(basePath);
+            fsMockOwner->Refresh();
+        }
+        NKikimr::NWrappers::NTestHelpers::TBackupMock& mock = isFsBackup
+            ? static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(*fsMockOwner)
+            : static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(S3Mock());
 
-                        if (relativePath.EndsWith("metadata.json") || relativePath.EndsWith(".sha256")) {
-                            continue;
-                        }
+        const TString metadataPrefix = isFsBackup ? "" : "/test_bucket/Prefix/";
 
-                        allKeyNames.insert(relativePath);
+        Cerr << "Export files:\n";
+        for (const auto& [key, content] : mock.GetData()) {
+            Cerr << key << Endl;
 
-                        UNIT_ASSERT_C(relativePath.EndsWith(".enc"), relativePath);
-
-                        TFileInput file(childPath.GetPath());
-                        TString content = file.ReadAll();
-
-                        TBuffer decryptedData;
-                        NBackup::TEncryptionIV iv;
-                        UNIT_ASSERT_NO_EXCEPTION_C(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
-                            encryptionKey,
-                            TBuffer(content.data(), content.size())
-                        ), relativePath);
-
-                        UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, relativePath);
-
-                        UNIT_ASSERT_C(relativePath.find("Anonymized") == TString::npos, relativePath);
-                        UNIT_ASSERT_C(relativePath.find("anonymized") == TString::npos, relativePath);
-                    }
-                }
-            };
-            collectFiles(baseDir);
-        } else {
-            Cerr << "Export files (S3):\n";
-            for (const auto& [key, _] : S3Mock().GetData()) {
-                Cerr << key << Endl;
+            if (NotEncryptedFileName(key, metadataPrefix)) {
+                continue;
             }
 
-            for (const auto& [key, content] : S3Mock().GetData()) {
-                // Nonencrypted keys
-                if (NotEncryptedFileName(key)) {
-                    continue;
-                }
+            allKeyNames.insert(key);
 
-                allKeyNames.insert(key);
+            // Check that files are encrypted
+            UNIT_ASSERT_C(key.EndsWith(".enc"), key);
 
-                // Check that files are encrypted
-                UNIT_ASSERT_C(key.EndsWith(".enc"), key);
+            // Check that we can decrypt content with our key (== it is really encrypted with our key)
+            TBuffer decryptedData;
+            NBackup::TEncryptionIV iv;
+            UNIT_ASSERT_NO_EXCEPTION_C(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                encryptionKey,
+                TBuffer(content.data(), content.size())
+            ), key);
 
-                // Check that we can decrypt content with our key (== it is really encrypted with our key)
-                TBuffer decryptedData;
-                NBackup::TEncryptionIV iv;
-                UNIT_ASSERT_NO_EXCEPTION_C(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
-                    encryptionKey,
-                    TBuffer(content.data(), content.size())
-                ), key);
+            // All ivs are unique
+            UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, key);
 
-                // All ivs are unique
-                UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, key);
-
-                // Encrypted export must not show objects real names
-                UNIT_ASSERT_C(key.find("Anonymized") == TString::npos, key);
-                UNIT_ASSERT_C(key.find("anonymized") == TString::npos, key); // user/group
-            }
+            // Encrypted export must not show objects real names
+            UNIT_ASSERT_C(key.find("Anonymized") == TString::npos, key);
+            UNIT_ASSERT_C(key.find("anonymized") == TString::npos, key); // user/group
         }
 
 

@@ -112,13 +112,12 @@ protected:
 
 class TTestEnv: public TBaseTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 0, bool enableRealSystemViewPaths = false)
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 0)
     {
         Settings = new Tests::TServerSettings(PortManager.GetPort(3534));
 
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
-        GetSettings().SetEnableRealSystemViewPaths(enableRealSystemViewPaths);
         GetSettings().SetEnableMetadataProvider(false);
 
         Server = new Tests::TServer(Settings);
@@ -128,10 +127,6 @@ public:
 
         SetLogging();
         InitRoot();
-    }
-
-    TTestEnv(bool enableRealSystemViewPaths) : TTestEnv(1, 0, enableRealSystemViewPaths)
-    {
     }
 
     TStoragePools GetPools() {
@@ -181,7 +176,9 @@ namespace NTestLs {
 }
 
 namespace NHelpers {
+
 const TDuration WaitTimeOut = TDuration::Seconds(ChoiceFastOrFat(10, 600));
+const TDuration SchemeShardInitDuration = TDuration::MilliSeconds(100);
 
 template <typename T>
 inline constexpr static T ChoiceThreadSanOrDefault(T tsan, T def) noexcept {
@@ -193,6 +190,7 @@ inline constexpr static T ChoiceThreadSanOrDefault(T tsan, T def) noexcept {
     return def;
 #endif
 }
+
 const ui32 active_tenants_nodes = ChoiceThreadSanOrDefault(1, 5);
 
 ui64 CreateSubDomainAndTabletInside(TBaseTestEnv &env, const TString& name, ui64 shard_index, const TStoragePools& pools = {});
@@ -207,6 +205,9 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSetting(const TString &
 
 NKikimrSchemeOp::TTableDescription GetTableSimpleDescription(const TString &name);
 void SetRowInSimpletable(TBaseTestEnv& env, ui64 key, ui64 value, const TString &path);
+
+TLocalPathId GetNextLocalPathId(TBaseTestEnv& env, const TString& root);
+
 }
 
 class TTestEnvWithPoolsSupport: public TBaseTestEnv {
@@ -218,7 +219,6 @@ public:
 
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
-        GetSettings().SetEnableRealSystemViewPaths(false);
         GetSettings().SetEnableAlterDatabaseCreateHiveFirst(enableAlterDatabaseCreateHiveFirst);
 
         for (ui32 poolNum = 1; poolNum <= poolsCount; ++poolNum) {
@@ -244,4 +244,5 @@ public:
     }
 };
 
-}}
+}
+}

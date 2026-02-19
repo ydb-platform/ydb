@@ -67,12 +67,7 @@
 Потоковые запросы создаются, изменяются и удаляются с помощью YQL-команд:
 
 - [CREATE STREAMING QUERY](../yql/reference/syntax/create-streaming-query.md) — создание;
-
-{% if alter_streaming_query == true %}
 - [ALTER STREAMING QUERY](../yql/reference/syntax/alter-streaming-query.md) — изменение и управление состоянием;
-
-{% endif %}
-
 - [DROP STREAMING QUERY](../yql/reference/syntax/drop-streaming-query.md) — удаление.
 
 Состояние запросов доступно в системной таблице [`.sys/streaming_queries`](../dev/system-views.md#streaming).

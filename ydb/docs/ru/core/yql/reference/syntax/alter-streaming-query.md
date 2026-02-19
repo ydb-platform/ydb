@@ -4,6 +4,8 @@
 
 ## Синтаксис
 
+{% if alter_streaming_query == true %}
+
 ```sql
 ALTER STREAMING QUERY [IF EXISTS] <query_name> [SET (
     <key1> = <value1>,
@@ -17,14 +19,30 @@ DO BEGIN
 END DO]
 ```
 
+{% else %}
+
+```sql
+ALTER STREAMING QUERY [IF EXISTS] <query_name> SET (
+    <key1> = <value1>,
+    <key2> = <value2>,
+    ...
+)
+```
+
+{% endif %}
+
 ### Параметры
 
 * `IF EXISTS` — не выводить ошибку, если потокового запроса не существует.
 * `query_name` — имя потокового запроса, подлежащего изменению.
 * `SET (<key> = <value>)` — список настроек потокового запроса, которые нужно обновить, опционально.
+
+{% if alter_streaming_query == true %}
 * `AS DO BEGIN ... END DO` — новый текст потокового запроса, опционально.
 
 Необходимо указать блок `SET`, новый текст запроса или оба параметра одновременно.
+
+{% endif %}
 
 ### Изменение параметров запроса
 
@@ -38,11 +56,15 @@ ALTER STREAMING QUERY [IF EXISTS] <query_name> SET (<key> = <value>)
 
 * `RUN = (TRUE|FALSE)` — запустить или остановить запрос.
 * `RESOURCE_POOL = <resource_pool_name>` — имя [пула ресурсов](../../../concepts/glossary.md#resource-pool), в котором будет выполняться запрос.
+{% if alter_streaming_query == true %}
 * `FORCE = (TRUE|FALSE)` — разрешить изменение текста запроса со сбросом состояния агрегаций. Обязателен при [изменении текста запроса](#text-changing-examples).
+{% endif %}
 
 При выполнении `SET (RUN = TRUE)` смещения чтения из топика и состояния агрегационных функций восстанавливаются из [чекпоинта](../../../dev/streaming-query/checkpoints.md). При отсутствии чекпоинта чтение начинается с самых свежих данных.
 
 Примеры изменения параметров запроса [см. ниже](#parameters-changing-examples).
+
+{% if alter_streaming_query == true %}
 
 ### Изменение текста запроса
 
@@ -77,9 +99,11 @@ Changing the query text will result in the loss of the checkpoint. Please use FO
 
 Примеры изменения текста запроса [см. ниже](#text-changing-examples).
 
+{% endif %}
+
 ## Разрешения
 
-Требуется [разрешение](./grant.md#permissions-list) `ALTER SCHEMA` на потоковый запрос, пример выдачи такого разрешения для запроса `my_streaming_query`:
+Для работы с потоковыми запросами требуется [разрешение](./grant.md#permissions-list) `ALTER SCHEMA`, пример выдачи такого разрешения для запроса `my_streaming_query`:
 
 ```sql
 GRANT ALTER SCHEMA ON my_streaming_query TO `user@domain`
@@ -106,6 +130,8 @@ ALTER STREAMING QUERY my_streaming_query SET (
 )
 ```
 
+{% if alter_streaming_query == true %}
+
 ### Изменение текста {#text-changing-examples}
 
 Изменение текста запроса `my_streaming_query` со сбросом состояния агрегаций. После запуска из [чекпоинта](../../../dev/streaming-query/checkpoints.md) восстанавливаются только смещения чтения из топика:
@@ -125,6 +151,8 @@ FROM
 
 END DO
 ```
+
+{% endif %}
 
 ### Статус запроса {#status-of-query}
 

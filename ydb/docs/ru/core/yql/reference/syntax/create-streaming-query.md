@@ -154,9 +154,5 @@ END DO
 
 * [{#T}](../../../dev/streaming-query/patterns.md)
 * [{#T}](../../../concepts/streaming-query.md)
-
-{% if alter_streaming_query == true %}
 * [{#T}](alter-streaming-query.md)
-{% endif %}
-
 * [{#T}](drop-streaming-query.md)

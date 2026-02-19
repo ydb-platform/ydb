@@ -211,7 +211,6 @@ private:
         void DoWork();
         bool IsDone();
         bool IsInit();
-        bool CanBeRemoved();
         std::string GetStateName() const;
             
     private:

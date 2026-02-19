@@ -213,15 +213,6 @@ bool TProducer::TSplittedPartitionWorker::IsDone() {
     return State == EState::Done;
 }
 
-bool TProducer::TSplittedPartitionWorker::CanBeRemoved() {
-    std::lock_guard lock(Lock);
-    if (State != EState::Done) {
-        return false;
-    }
-
-    return TInstant::Now() - DoneAt > TDuration::Seconds(10);
-}
-
 bool TProducer::TSplittedPartitionWorker::IsInit() {
     std::lock_guard lock(Lock);
     return State == EState::Init;

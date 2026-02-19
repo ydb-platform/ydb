@@ -722,7 +722,7 @@ public:
         , FuncRegistry(funcRegistry)
         , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
         , TypeEnv(Alloc)
-        , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry)
+        , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry, config)
         , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx))
         , TypesCtx(typesCtx)
         , OptimizeCtx(optimizeCtx)

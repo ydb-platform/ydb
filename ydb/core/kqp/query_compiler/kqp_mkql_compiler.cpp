@@ -488,9 +488,11 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             }();
 
 
-            // Use the specialized DqBlockHashJoin method
+            bool leftIsBuild = joinKind == EJoinKind::Left
+                && ctx.Config()
+                && ctx.Config()->BlockHashJoinLeftIsBuild.Get().GetOrElse(false);
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,
-                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType);
+                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType, leftIsBuild);
         });
 
     compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {

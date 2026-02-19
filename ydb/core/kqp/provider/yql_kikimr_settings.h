@@ -60,6 +60,7 @@ public:
     NCommon::TConfSetting<TString, Static> OverridePlanner;
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
     NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
+    NCommon::TConfSetting<bool, Static> BlockHashJoinLeftIsBuild;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
     NCommon::TConfSetting<ui32, Static> DqChannelVersion;

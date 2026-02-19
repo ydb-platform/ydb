@@ -87,18 +87,22 @@ public:
 
     void OnSkipCommitted(const TRowVersion&) override {
         // We don't read from snapshot and should never skip committed deltas
+        Y_ENSURE(false, "unreachable");
     }
 
     void OnSkipCommitted(const TRowVersion&, ui64) override {
         // We don't read from snapshot and should never skip committed deltas
+        Y_ENSURE(false, "unreachable");
     }
 
     void OnApplyCommitted(const TRowVersion&) override {
         // We don't conflict with committed rows
+        Y_ENSURE(false, "unreachable");
     }
 
     void OnApplyCommitted(const TRowVersion&, ui64) override {
         // We don't conflict with committed rows
+        Y_ENSURE(false, "unreachable");
     }
 
 private:
@@ -334,11 +338,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
     co_await LowPriorityQueue.Next();
 
     std::vector<ui32> columnIds;
-    {
-        columnIds.reserve(msg->Record.ColumnIdsSize());
-        for (size_t i = 0; i < msg->Record.ColumnIdsSize(); ++i) {
-            columnIds.push_back(msg->Record.GetColumnIds(i));
-        }
+    columnIds.reserve(msg->Record.ColumnIdsSize());
+    for (size_t i = 0; i < msg->Record.ColumnIdsSize(); ++i) {
+        columnIds.push_back(msg->Record.GetColumnIds(i));
     }
 
     TSerializedCellMatrix matrix;
@@ -348,6 +350,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         sendError(NKikimrDataEvents::TEvLockRowsResult::STATUS_BAD_REQUEST, TStringBuilder() << e.what());
         co_return;
     }
+
+    // Don't keep long-term references to paylods which are no longer needed
+    msg->StripPayload();
 
     if (matrix.GetColCount() != columnIds.size()) {
         sendError(NKikimrDataEvents::TEvLockRowsResult::STATUS_BAD_REQUEST, TStringBuilder()

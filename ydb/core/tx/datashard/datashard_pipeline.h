@@ -12,7 +12,6 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_exec_seat.h>
 
-
 #include <ydb/core/util/intrusive_heap.h>
 #include <ydb/library/actors/async/async.h>
 

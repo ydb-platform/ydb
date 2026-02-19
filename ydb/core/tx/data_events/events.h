@@ -189,7 +189,7 @@ struct TDataEvents {
     public:
         TEvLockRows() = default;
 
-        TEvLockRows(ui64 requestId) {
+        explicit TEvLockRows(ui64 requestId) {
             Record.SetRequestId(requestId);
         }
 

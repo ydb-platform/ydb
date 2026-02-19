@@ -23,7 +23,7 @@ namespace NActors {
                 return Count_;
             }
 
-            private:
+        private:
             TIntrusiveList<TAsyncEventAwaiter> Queue_;
             size_t Count_ = 0;
         };

@@ -1036,6 +1036,7 @@ class TestExecuteSqlWithPgSyntax(BaseTestSqlWithDatabase):
         self.table_path = self.tmp_path.name
         create_table_with_data(self.session, self.root_dir + "/" + self.table_path)
 
+    @pytest.mark.skip(reason="pg syntax disabled")
     def test_pg_syntax(self):
         script = "SELECT * FROM \"{}\" WHERE key = 1;".format(self.table_path)
         output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--syntax", "pg"])

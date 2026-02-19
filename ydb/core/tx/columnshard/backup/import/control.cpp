@@ -13,7 +13,7 @@ NKikimr::TConclusionStatus TConfirmSessionControl::DoApply(const std::shared_ptr
 NKikimr::TConclusionStatus TAbortSessionControl::DoApply(const std::shared_ptr<NBackground::ISessionLogic>& session) const {
     auto exportSession = dynamic_pointer_cast<TSession>(session);
     AFL_VERIFY(exportSession);
-    exportSession->Abort();
+    exportSession->Abort("Aborted by user");
     return TConclusionStatus::Success();
 }
 

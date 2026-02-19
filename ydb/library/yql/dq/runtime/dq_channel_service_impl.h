@@ -125,8 +125,10 @@ public:
     TChannelStub(const TChannelFullInfo& info) : IChannelBuffer(info) {
         PushStats.ChannelId = info.ChannelId;
         PushStats.SrcStageId = info.SrcStageId;
+        PushStats.Level = info.Level;
         PopStats.ChannelId = info.ChannelId;
         PopStats.DstStageId = info.DstStageId;
+        PopStats.Level = info.Level;
     }
 
     ~TChannelStub() override {
@@ -149,6 +151,10 @@ public:
     }
 
     bool IsFinished() final {
+        return false;
+    }
+
+    bool IsEarlyFinished() final {
         return false;
     }
 
@@ -196,8 +202,10 @@ public:
     {
         PushStats.ChannelId = info.ChannelId;
         PushStats.SrcStageId = info.SrcStageId;
+        PushStats.Level = info.Level;
         PopStats.ChannelId = info.ChannelId;
         PopStats.DstStageId = info.DstStageId;
+        PopStats.Level = info.Level;
     }
 
     ~TLocalBuffer() override;
@@ -206,6 +214,7 @@ public:
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override;
     void Push(TDataChunk&& data) override;
     bool IsFinished() override;
+    bool IsEarlyFinished() override;
 
     bool IsEmpty() override;
     bool Pop(TDataChunk& data) override;
@@ -286,6 +295,7 @@ public:
     bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
     /* bool PushToWaitQueue(TDataChunk&& data); */
     bool IsFinished();
+    bool IsEarlyFinished();
     void Terminate();
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
@@ -367,8 +377,10 @@ public:
         : IChannelBuffer(descriptor->Info), NodeState(nodeState), Descriptor(descriptor) {
         PushStats.ChannelId = descriptor->Info.ChannelId;
         PushStats.SrcStageId = descriptor->Info.SrcStageId;
+        PushStats.Level = descriptor->Info.Level;
         PopStats.ChannelId = descriptor->Info.ChannelId;
         PopStats.DstStageId = descriptor->Info.DstStageId;
+        PopStats.Level = descriptor->Info.Level;
     }
 
     ~TOutputBuffer() override;
@@ -377,6 +389,7 @@ public:
     void Push(TDataChunk&& data) override;
     void UpdatePopStats() override;
     bool IsFinished() override;
+    bool IsEarlyFinished() override;
     bool IsEmpty() override;
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
@@ -422,6 +435,7 @@ public:
     ui32 GetQueueSize();
 
     bool IsFinished();
+    bool IsEarlyFinished();
     bool EarlyFinish();
     void Terminate();
 
@@ -456,8 +470,10 @@ public:
         : IChannelBuffer(descriptor->Info), NodeState(nodeState), Descriptor(descriptor) {
         PushStats.ChannelId = descriptor->Info.ChannelId;
         PushStats.SrcStageId = descriptor->Info.SrcStageId;
+        PushStats.Level = descriptor->Info.Level;
         PopStats.ChannelId = descriptor->Info.ChannelId;
         PopStats.DstStageId = descriptor->Info.DstStageId;
+        PopStats.Level = descriptor->Info.Level;
     }
 
     ~TInputBuffer() override;
@@ -472,6 +488,7 @@ public:
 
     void Push(TDataChunk&&) override;
     bool IsFinished() override;
+    bool IsEarlyFinished() override;
     bool IsEmpty() override;
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
@@ -561,7 +578,7 @@ public:
     void CleanupUnbound();
     void FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
-    void SendAckWithError(ui64 cookie);
+    void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor);
@@ -788,6 +805,10 @@ public:
         return finishCheckResult;
     }
 
+    bool IsEarlyFinished() const override {
+        return Serializer->Buffer->IsEarlyFinished();
+    }
+
     NKikimr::NMiniKQL::TType* GetOutputType() const override {
         return Serializer->RowType;
     }
@@ -841,10 +862,15 @@ public:
 
     void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override;
 
+    bool IsLocal() const override {
+        return IsLocalChannel;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::unique_ptr<TOutputSerializer> Serializer;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
+    bool IsLocalChannel = false;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {
@@ -941,9 +967,14 @@ public:
 
     void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override;
 
+    bool IsLocal() const override {
+        return IsLocalChannel;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
+    bool IsLocalChannel = false;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {

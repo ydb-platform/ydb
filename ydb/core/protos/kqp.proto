@@ -716,6 +716,14 @@ message TEvKqpScanCursor {
 
     message TColumnShardScanPlain {
     }
+    message TDeprecatedColumnShardScanSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
+    message TDeprecatedColumnShardScanNotSortedSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
     message TColumnShardScanSimple {
         optional uint64 SourceIdx = 1;
         optional uint32 StartRecordIndex = 2;
@@ -728,10 +736,11 @@ message TEvKqpScanCursor {
     }
     oneof Implementation {
         TColumnShardScanPlain ColumnShardPlain = 10;
+        TDeprecatedColumnShardScanSimple DeprecatedColumnShardSimple = 11;
+        TDeprecatedColumnShardScanNotSortedSimple DeprecatedColumnShardNotSortedSimple = 12;
         TColumnShardScanSimple ColumnShardSimple = 13;
         TColumnShardScanNotSortedSimple ColumnShardNotSortedSimple = 14;
     }
-    reserved 11, 12; // deprecated
 }
 
 message TEvRemoteScanData {
@@ -834,6 +843,8 @@ message TKqpTableSinkSettings {
     optional bool IsIndexImplTable = 21;
     optional string Database = 22;
     repeated uint32 DefaultColumnsIds = 23;
+    repeated TKqpColumnMetadataProto ReturningColumns = 24;
+    optional uint64 QuerySpanId = 25;
 }
 
 message TReadVectorTopK {
@@ -865,6 +876,7 @@ message TKqpStreamLookupSettings {
     optional NKqpProto.EIsolationLevel IsolationLevel = 17 [default = ISOLATION_LEVEL_UNDEFINED];
     optional string Database = 18;
     optional TReadVectorTopK VectorTopK = 19;
+    optional uint64 QuerySpanId = 20;
 }
 
 message TKqpFullTextSourceSettings {
@@ -899,7 +911,7 @@ message TKqpFullTextSourceSettings {
 
     optional double K1Factor = 12;
     optional double BFactor = 13;
-    optional string QueryMode = 14;
+    optional string DefaultOperator = 14;
     optional string MinimumShouldMatch = 15;
 };
 
@@ -966,11 +978,21 @@ message TScriptExecutionRetryState {
         optional uint64 RetryCountLimit = 4;
     }
 
+    message TExponentialDelayPolicy {
+        optional double BackoffMultiplier = 1;
+        optional google.protobuf.Duration InitialBackoff = 2;
+        optional google.protobuf.Duration MaxBackoff = 3;
+        optional google.protobuf.Duration ResetBackoffThreshold = 4;
+        optional google.protobuf.Duration QueryUptimeThreshold = 5;
+        optional double JitterFactor = 6;
+    }
+
     message TMapping {
         repeated Ydb.StatusIds.StatusCode StatusCode = 1;
 
         oneof Policy {
             TBackoffPolicy BackoffPolicy = 2;
+            TExponentialDelayPolicy ExponentialDelayPolicy = 3;
         }
     }
 
@@ -1036,4 +1058,16 @@ message TStreamingQueryState {
     optional bool Run = 9;
     optional string ResourcePool = 10;
     optional uint64 QueryTextRevision = 12;
+}
+
+// Cross-node lookup of QuerySpanId -> QueryText for TLI logging.
+// Used when the victim's SessionActor needs to look up the breaker's query text
+// from the node where the breaker's SessionActor ran (where TNodeQueryTextCache is populated).
+message TEvLookupQueryTextRequest {
+    optional uint64 QuerySpanId = 1;
+}
+
+message TEvLookupQueryTextResponse {
+    optional uint64 QuerySpanId = 1;
+    optional string QueryText = 2;
 }

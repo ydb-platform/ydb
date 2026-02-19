@@ -23,8 +23,7 @@
 #include <optional>
 #include <vector>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TMemoryUsageInfo;
 
@@ -673,7 +672,9 @@ public:
     {
         MKQL_ENSURE(Size_ > 0U, "Can't create empty array holder.");
         MKQL_MEM_TAKE(GetMemInfo(), GetPtr(), Size_ * sizeof(NUdf::TUnboxedValue));
-        std::memset(GetPtr(), 0, Size_ * sizeof(NUdf::TUnboxedValue));
+        for (ui64 i = 0U; i < Size_; ++i) {
+            new (GetPtr() + i) NUdf::TUnboxedValue();
+        }
     }
 
     ~TDirectArrayHolderInplace() override {
@@ -1163,5 +1164,4 @@ private:
     const ui32 ObjectIndex_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

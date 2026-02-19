@@ -114,10 +114,6 @@ void swap(TPromise<T>& lhs, TPromise<T>& rhs);
 //! A pre-set successful |void| future.
 extern const TFuture<void> OKFuture;
 
-// COMPAT(babenko): YT-27014; deprecated, don't use!
-// Will be dropped after contrib/ydb migration.
-static constexpr const auto& VoidFuture = OKFuture;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -667,8 +663,8 @@ public:
     TFutureHolder(const TFutureHolder<T>& other) = delete;
     TFutureHolder(TFutureHolder<T>&& other) = default;
 
-    TFutureHolder& operator = (const TFutureHolder<T>& other) = delete;
-    TFutureHolder& operator = (TFutureHolder<T>&& other) = default;
+    TFutureHolder& operator=(const TFutureHolder<T>& other) = delete;
+    TFutureHolder& operator=(TFutureHolder<T>&& other) = default;
 
     //! Returns |true| if the holder has an underlying future.
     explicit operator bool() const;

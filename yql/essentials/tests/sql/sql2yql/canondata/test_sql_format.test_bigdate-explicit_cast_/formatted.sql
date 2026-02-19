@@ -1,9 +1,12 @@
 $date32_min = unwrap(CAST(-53375809 AS date32));
 $date32_max = unwrap(CAST(53375807 AS date32));
+
 $datetime64_min = unwrap(CAST(-4611669897600 AS datetime64));
 $datetime64_max = unwrap(CAST(4611669811199 AS datetime64));
+
 $timestamp64_min = unwrap(CAST(-4611669897600000000 AS timestamp64));
 $timestamp64_max = unwrap(CAST(4611669811199999999 AS timestamp64));
+
 $date32_minus1 = unwrap(CAST(-1 AS date32));
 $datetime64_minus1 = unwrap(CAST(-1 AS datetime64));
 $timestamp64_minus1 = unwrap(CAST(-1 AS timestamp64));

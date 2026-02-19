@@ -21,7 +21,7 @@ TConclusion<TVector<TSerializedCellVec>> BatchToRows(const std::shared_ptr<arrow
     TVector<TSerializedCellVec> cellVecs;
     cellVecs.reserve(batch->num_rows());
     TRowWriter writer(cellVecs);
-    NArrow::TArrowToYdbConverter batchConverter(ydbSchema, writer, false);
+    NArrow::TArrowToYdbConverter batchConverter(ydbSchema, writer, false, false);
     TString errorMessage;
     if (!batchConverter.Process(*batch, errorMessage)) {
         return TConclusionStatus::Fail(errorMessage);

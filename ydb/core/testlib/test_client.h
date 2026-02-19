@@ -191,7 +191,9 @@ namespace Tests {
         std::function<IActor*(const TTokenManagerSettings&)> CreateTokenManager = NKikimr::CreateTokenManager;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
+        std::shared_ptr<void> KqpLoggerScope;
 
+        TServerSettings& SetKqpLoggerScope(std::shared_ptr<void> value) { KqpLoggerScope = value; return *this; }
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetGrpcHost(TString value) { GrpcHost = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }
@@ -423,6 +425,14 @@ namespace Tests {
         const bool UseStoragePools;
 
         std::shared_ptr<void> KqpLoggerScope;
+        // This Driver is used exclusively by TKqpFederatedQuerySetup
+        // (DO NOT USE IT IN A TSERVER), but is stored here in
+        // TServer to ensure it outlives TTestActorRuntime. During
+        // graceful shutdown, the Driver must be destroyed after all
+        // actors are gone; otherwise, lingering gRPC contexts or
+        // background operations can cause the gRPC client to hang
+        // or trigger use-after-free during its destruction.
+        std::shared_ptr<NYdb::TDriver> FederatedQuerySetupDriver_;
         THolder<TTestActorRuntime> Runtime;
         THolder<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;

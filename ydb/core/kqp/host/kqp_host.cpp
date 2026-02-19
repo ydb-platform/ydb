@@ -1981,6 +1981,7 @@ private:
             TypesCtx->OptimizerFlags.insert("sqlinwithnothingornull");
             TypesCtx->OptimizerFlags.insert("filterpushdownoverjoinoptionalsideignoreonlykeys");
         }
+        TypesCtx->OptimizerFlags.insert("disablenormalizeequalityfilteroverjoin");
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 

@@ -34,6 +34,4 @@ private:
     TString SortColumnName_;
 };
 
-using TStringCoreWinFramesCollectorParams = TCoreWinFramesCollectorParams<TString>;
-
 } // namespace NYql::NWindow

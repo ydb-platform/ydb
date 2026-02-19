@@ -23,19 +23,16 @@
 
 class ITimeProvider;
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 class TScopedAlloc;
 class IComputationGraph;
 class IFunctionRegistry;
 class TTypeEnvironment;
 class TType;
 class TStructType;
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * SQL or s-expression translation error.
  */
@@ -286,6 +283,9 @@ public:
     /// Tweaks
     TInternalProgramSettings InternalSettings;
 
+    /// Issue report target
+    TString IssueReportTarget;
+
 public:
     TProgramFactoryOptions();
 
@@ -407,6 +407,13 @@ public:
      * @return reference to self, to allow method chaining.
      */
     TProgramFactoryOptions& SetInternalSettings(const TInternalProgramSettings& settings);
+
+    /**
+     * Set issue report target.
+     *
+     * @return reference to self, to allow method chaining.
+     */
+    TProgramFactoryOptions& SetIssueReportTarget(const TString& reportTarget);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1214,8 +1221,7 @@ void ConfigureLogging(const TLoggingOptions& = {});
  * If the ConfigureLogging method has not been called the default logging initialization will be performed.
  */
 IProgramFactoryPtr MakeProgramFactory(const TProgramFactoryOptions& = {});
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc
 
 Y_DECLARE_OUT_SPEC(inline, NYql::NPureCalc::TCompileError, stream, value) {
     stream << value.AsStrBuf() << Endl << "Issues:" << Endl << value.GetIssues() << Endl << Endl << "Yql:" << Endl << value.GetYql();

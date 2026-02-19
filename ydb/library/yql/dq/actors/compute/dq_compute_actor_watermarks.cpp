@@ -25,6 +25,13 @@ TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix, c
 {
 }
 
+TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TDqComputeActorWatermarks& parent, bool)
+    : LogPrefix(parent.LogPrefix)
+    , Impl(parent.Impl, true)
+    , NotifyHandler(parent.NotifyHandler)
+{
+}
+
 void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId, TDuration idleTimeout, TInstant systemTime) {
     RegisterInput(inputId, true, idleTimeout, systemTime);
 }
@@ -76,6 +83,9 @@ bool TDqComputeActorWatermarks::NotifyInputWatermarkReceived(ui64 inputId, bool 
     if (nextWatermark) {
         PendingWatermark = nextWatermark;
     }
+    if (updated && NotifyHandler) {
+        NotifyHandler();
+    }
     return updated;
 }
 
@@ -120,13 +130,12 @@ TMaybe<TInstant> TDqComputeActorWatermarks::GetMaxWatermark() const {
     return MaxWatermark;
 }
 
-TMaybe<TInstant> TDqComputeActorWatermarks::PrepareIdlenessCheck() {
-    if (auto notifyTime = Impl.GetNextIdlenessCheckAt()) {
-        if (Impl.AddScheduledIdlenessCheck(*notifyTime)) {
-            return notifyTime;
-        }
-    }
-    return Nothing();
+TMaybe<TInstant> TDqComputeActorWatermarks::GetNextIdlenessCheckAt() const {
+    return Impl.GetNextIdlenessCheckAt();
+}
+
+bool TDqComputeActorWatermarks::AddScheduledIdlenessCheck(TInstant checkTime) {
+    return Impl.AddScheduledIdlenessCheck(checkTime);
 }
 
 bool TDqComputeActorWatermarks::ProcessIdlenessCheck(TInstant notifyTime) {
@@ -147,6 +156,17 @@ void TDqComputeActorWatermarks::Out(IOutputStream& str) const {
     Impl.Out(str);
 }
 
+void TDqComputeActorWatermarks::TransferInput(TDqComputeActorWatermarks& otherTracker, ui64 inputId, bool isChannel) {
+    Impl.TransferInput(otherTracker.Impl, TInputKey { inputId, isChannel });
+}
+
+TDuration TDqComputeActorWatermarks::GetMaxIdleTimeout() const {
+    return Impl.GetMaxIdleTimeout();
+}
+
+void TDqComputeActorWatermarks::SetNotifyHandler(TNotifyHandler notifyHandler) {
+    NotifyHandler = std::move(notifyHandler);
+}
 } // namespace NYql::NDq
 
 template<>

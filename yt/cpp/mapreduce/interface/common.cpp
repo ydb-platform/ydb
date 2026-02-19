@@ -47,35 +47,35 @@ TNode TSortColumn::ToNode() const
 // Below lie backward compatibility methods.
 ////////////////////////////////////////////////////////////////////////////////
 
-TSortColumn& TSortColumn::operator = (TStringBuf name)
+TSortColumn& TSortColumn::operator=(TStringBuf name)
 {
     EnsureAscending();
     Name_ = name;
     return *this;
 }
 
-TSortColumn& TSortColumn::operator = (const TString& name)
+TSortColumn& TSortColumn::operator=(const TString& name)
 {
     return (*this = static_cast<TStringBuf>(name));
 }
 
-TSortColumn& TSortColumn::operator = (const char* name)
+TSortColumn& TSortColumn::operator=(const char* name)
 {
     return (*this = static_cast<TStringBuf>(name));
 }
 
-bool TSortColumn::operator == (TStringBuf rhsName) const
+bool TSortColumn::operator==(TStringBuf rhsName) const
 {
     EnsureAscending();
     return Name_ == rhsName;
 }
 
-bool TSortColumn::operator == (const TString& rhsName) const
+bool TSortColumn::operator==(const TString& rhsName) const
 {
     return *this == static_cast<TStringBuf>(rhsName);
 }
 
-bool TSortColumn::operator == (const char* rhsName) const
+bool TSortColumn::operator==(const char* rhsName) const
 {
     return *this == static_cast<TStringBuf>(rhsName);
 }
@@ -445,6 +445,13 @@ bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)
         lhs.Expression() == rhs.Expression() &&
         lhs.Aggregate() == rhs.Aggregate() &&
         lhs.Group() == rhs.Group();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool operator==(const TDeletedColumnSchema& lhs, const TDeletedColumnSchema& rhs)
+{
+    return lhs.StableName() == rhs.StableName();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

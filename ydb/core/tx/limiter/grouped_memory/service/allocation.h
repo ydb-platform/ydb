@@ -50,6 +50,8 @@ public:
         }
     }
 
+    TString DebugString() const;
+
     TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationExternalGroupId,
         const std::shared_ptr<IAllocation>& allocation, const std::shared_ptr<TStageFeatures>& stage);
 };

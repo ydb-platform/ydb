@@ -416,6 +416,10 @@ public:
         return Finished && !HasData();
     }
 
+    bool IsEarlyFinished() const override {
+        return false;
+    }
+
     ui64 Drop() override { // Drop channel data because channel was finished. Leave checkpoint because checkpoints keep going through channel after finishing channel data transfer.
         ui64 chunks = GetValuesCount();
         Data.clear();
@@ -443,6 +447,10 @@ public:
         if (Packer.IsBlock()) {
             Packer.SetMinFillPercentage(IsLocalChannel ? Nothing() : ArrayBufferMinFillPercentage);
         }
+    }
+
+    bool IsLocal() const override {
+        return IsLocalChannel;
     }
 
 private:

@@ -52,9 +52,11 @@ public:
     TCpuDuration GetElapsedCpuTime() const;
     TCpuDuration GetCurrentCpuDuration() const;
 
-    void Start();
+    //! Returns true if the state was actually changed (timer was stopped).
+    bool Start();
     void StartIfNotActive();
-    void Stop();
+    //! Returns true if the state was actually changed (timer was started).
+    bool Stop();
     void Restart();
 
     void Persist(const TStreamPersistenceContext& context);
@@ -116,15 +118,16 @@ class TTimerGuard
     : public TNonCopyable
 {
 public:
-    explicit TTimerGuard(TTimer* timer);
+    explicit TTimerGuard(TTimer* timer, NThreading::TSpinLock* lock = nullptr);
 
     TTimerGuard(TTimerGuard&& other) noexcept;
-    TTimerGuard& operator = (TTimerGuard&& other) noexcept;
+    TTimerGuard& operator=(TTimerGuard&& other) noexcept;
 
     ~TTimerGuard();
 
 private:
     TTimer* Timer_;
+    NThreading::TSpinLock* TimerLock_;
 
     void TryStopTimer() noexcept;
 };

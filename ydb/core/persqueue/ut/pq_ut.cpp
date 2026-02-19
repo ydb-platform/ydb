@@ -2898,6 +2898,131 @@ Y_UNIT_TEST(SmallMsgCompactificationWithRebootsTest) {
     });
 }
 
+Y_UNIT_TEST(Large_Message_On_The_Border_Of_The_Zones) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        tc.Runtime->SetScheduledLimit(3000);
+
+        ui32 sourceIdx = 0;
+        auto cmdWrite = [&](const TVector<size_t>& sizes) {
+            TVector<std::pair<ui64, TString>> data;
+            for (size_t k = 1; k <= sizes.size(); ++k) {
+                data.emplace_back(k, TString(sizes[k - 1], 'x'));
+            }
+            TString sourceId = "sourceid_" + ToString(sourceIdx++);
+            CmdWrite(0, sourceId, data, tc, false, {}, false, "", -1, -1, false, false, true);
+        };
+        auto cmdCompaction = [&]() {
+            CmdRunCompaction(0, tc);
+        };
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {}, tc);
+
+        cmdWrite({3500000, 3500000, 3500000, 3500001, 2900001, 2900002});
+        cmdCompaction();
+
+        // блоб с сообщениями 0 и 1, а также началом сообщения 2 удалят по retention
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(3, 6, tc);
+
+        // эмулируем, что CompactedZone.Head пустая
+        CmdRenameKey("d0000000000_00000000000000000004_00004_0000000002_00006|",
+                     "d0000000000_00000000000000000004_00004_0000000002_00006?",
+                     tc);
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(3, 6, tc);
+
+        //
+        // остались ключи:
+        // d0000000000_00000000000000000002_00002_0000000002_00014
+        // d0000000000_00000000000000000004_00004_0000000002_00006?
+        //
+
+        // проверям, что можем перейти на любое из оставшихся сообщений
+        CmdSetOffset(0, "user", 5, false, tc);
+        CmdSetOffset(0, "user", 3, false, tc);
+        CmdSetOffset(0, "user", 4, false, tc);
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(3, 6, tc);
+
+        // проверяем, что может прочитать сообщение, которое лежит между зонами
+        CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {4});
+        CmdRead(0, 3, 2, Max<i32>(), 2, false, tc, {3, 4});
+    });
+}
+
+Y_UNIT_TEST(Large_Message_On_The_Border_Of_The_Zones_2) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        tc.Runtime->SetScheduledLimit(3000);
+        //tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(100'000);
+
+        ui32 sourceIdx = 0;
+        auto cmdWrite = [&](const TVector<size_t>& sizes) {
+            TVector<std::pair<ui64, TString>> data;
+            for (size_t k = 1; k <= sizes.size(); ++k) {
+                data.emplace_back(k, TString(sizes[k - 1], 'x'));
+            }
+            TString sourceId = "sourceid_" + ToString(sourceIdx++);
+            CmdWrite(0, sourceId, data, tc, false, {}, false, "", -1, -1, false, false, true);
+        };
+        auto cmdCompaction = [&]() {
+            CmdRunCompaction(0, tc);
+        };
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {}, tc);
+
+        cmdWrite({3500000, 3500000, 3500000, 3500001, 2900001});
+        cmdCompaction();
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(3, 5, tc);
+
+        // Эмулируем, что CompactedZone.Head пустая. В отличие от предыдущего теста
+        // здесь нет сообщений в FWZ. Только "хвост" последнего сообщения из CZ
+        CmdRenameKey("d0000000000_00000000000000000004_00004_0000000001_00001|",
+                     "d0000000000_00000000000000000004_00004_0000000001_00001?",
+                     tc);
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(3, 5, tc);
+
+        //
+        // остались ключи:
+        // d0000000000_00000000000000000002_00002_0000000002_00014
+        // d0000000000_00000000000000000004_00004_0000000001_00001?
+        //
+
+        // проверям, что можем перейти на любое из оставшихся сообщений
+        CmdSetOffset(0, "user", 3, false, tc);
+        CmdSetOffset(0, "user", 4, false, tc);
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(3, 5, tc);
+
+        // проверяем, что может прочитать сообщение, которое лежит между зонами
+        CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {4});
+        CmdRead(0, 3, 2, Max<i32>(), 2, false, tc, {3, 4});
+    });
+}
+
 Y_UNIT_TEST(The_Keys_Are_Loaded_In_Several_Iterations) {
     auto observer = [](TAutoPtr<IEventHandle>& ev) {
         if (auto* e = ev->CastAsLocal<TEvKeyValue::TEvResponse>(); e) {
@@ -2953,6 +3078,94 @@ Y_UNIT_TEST(The_Keys_Are_Loaded_In_Several_Iterations) {
         tc.Runtime->SetObserverFunc(prevObserver);
 
         PQGetPartInfo(0, 315, tc);
+    });
+}
+
+Y_UNIT_TEST(TestSizeLag) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        activeZone = false;
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+
+        ui32 sourceIdx = 0;
+        auto cmdWrite = [&](size_t count, size_t size) {
+            TVector<std::pair<ui64, TString>> data;
+            for (size_t k = 1; k <= count; ++k) {
+                data.emplace_back(k, TString(size, 'x'));
+            }
+            TString sourceId = "sourceid_" + ToString(sourceIdx++);
+            CmdWrite(0, sourceId, data, tc, false, {}, false, "", -1, -1, false, false, true);
+        };
+        auto cmdCompaction = [&]() {
+            CmdRunCompaction(0, tc);
+        };
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+        // CompactZone.Body
+        cmdWrite(27, 300_KB);
+        cmdWrite(27, 300_KB);
+
+        // CompactZone.Head
+        cmdWrite(10, 300_KB);
+
+        cmdCompaction();
+
+        // FastWriteZone.Body
+        cmdWrite(10, 10_KB);
+        cmdWrite(1, 10_KB);
+        cmdWrite(1, 10_KB);
+        cmdWrite(1, 10_KB);
+        cmdWrite(1, 10_KB);
+
+        PQTabletRestart(tc);
+
+        const ui64 endOffset = 78;
+
+        PQGetPartInfo(0, endOffset, tc);
+
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000000_00000_0000000027_00000 size 8295737
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000027_00000_0000000027_00000 size 8295737
+        // SYNC INIT HEAD KEY: d0000000000_00000000000000000054_00000_0000000010_00000| size 3072490
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000064_00000_0000000010_00000? size 102562
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000074_00000_0000000001_00000? size 10301
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000075_00000_0000000001_00000? size 10301
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000076_00000_0000000001_00000? size 10301
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000077_00000_0000000001_00000? size 10301
+
+        TVector<ui64> sizeLags;
+        for (ui64 offset = 0; offset < endOffset; ++offset) {
+            sizeLags.push_back(GetSizeLag(0, offset, false, tc));
+        }
+
+        sizeLags.push_back(GetSizeLag(0, endOffset, true, tc));
+
+        for (size_t i = 0; i < endOffset; ++i) {
+            // лаг не должен увеличиваться
+            UNIT_ASSERT_GE(sizeLags[i], sizeLags[i + 1]);
+        }
+
+        // перепады на границах блобов
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[0], sizeLags[26]);
+        UNIT_ASSERT_GT(sizeLags[26], sizeLags[27]);
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[27], sizeLags[53]);
+        UNIT_ASSERT_GT(sizeLags[53], sizeLags[54]);
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[54], sizeLags[63]);
+        UNIT_ASSERT_GT(sizeLags[63], sizeLags[64]);
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[64], sizeLags[73]);
+        UNIT_ASSERT_GT(sizeLags[73], sizeLags[74]);
+        UNIT_ASSERT_GT(sizeLags[74], sizeLags[75]);
+        UNIT_ASSERT_GT(sizeLags[75], sizeLags[76]);
+        UNIT_ASSERT_GT(sizeLags[76], sizeLags[77]);
+        UNIT_ASSERT_GT(sizeLags[77], sizeLags[endOffset]);
+
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[endOffset], 0);
     });
 }
 

@@ -175,10 +175,12 @@ public:
                     "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
         }
 
-        TString error;
-        if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
-            State->Rollback();
-            State.reset();
+        bool validated = true;
+        if (updateIsSuccessful) {
+            validated = !Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags(), txc);
+        }
+        if (!updateIsSuccessful || !validated) {
+            Self->RollbackConfigUpdate(State);
         }
 
         return true;

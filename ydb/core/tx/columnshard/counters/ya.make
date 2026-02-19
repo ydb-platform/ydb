@@ -26,6 +26,7 @@ PEERDIR(
     ydb/library/signals
     ydb/core/base
     ydb/library/actors/core
+    ydb/core/kqp/compute_actor
 )
 
 GENERATE_ENUM_SERIALIZATION_WITH_HEADER(columnshard.h)

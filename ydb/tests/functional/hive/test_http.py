@@ -19,7 +19,7 @@ class TestHiveHttpInterface(object):
 
     def test_error_code_on_get_request(self):
         url = self.endpoint + '/tablets/app'
-        params = {'TabletID': 72057594037968897, 'page': 'SetDown', 'node': 7, 'down': 1}
+        params = {'TabletID': 72057594037968897, 'page': 'SetDown', 'node': 1, 'down': 1}
 
         get_request = requests.get(url, params=params)
         assert get_request.status_code == 400

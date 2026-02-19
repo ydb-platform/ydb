@@ -52,9 +52,6 @@ class TListObjectsInS3ExportTestFixture : public TS3BackupTestFixture {
 
 Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
     Y_UNIT_TEST_TWIN(ExportWithSchemaMapping, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix//");
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
@@ -101,9 +98,6 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(ExportWithoutSchemaMapping, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "");
             exportSettings
@@ -159,9 +153,6 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(ExportWithEncryption, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
             exportSettings
@@ -220,9 +211,6 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(ExportWithWrongEncryptionKey, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
             exportSettings
@@ -305,9 +293,6 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(ParametersValidation, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix//");
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();

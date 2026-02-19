@@ -11,12 +11,15 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <library/cpp/protobuf/json/util.h>
 
 #include <util/generic/hash.h>
 
@@ -421,6 +424,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
     } else if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision() && column.GetTypeInfo().HasDecimalScale()) {
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
+            newColumn->set_not_null(column.GetNotNull());
         } else {
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
@@ -436,6 +440,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         }
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
+            newColumn->set_not_null(column.GetNotNull());
         } else {
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
@@ -1816,6 +1821,33 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     return true;
 }
 
+bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
+        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    NKikimrSchemeOp::TColumnTableDescription& tableDesc = *out.MutableCreateColumnTable();
+
+    if (!FillColumnDescription(tableDesc, in.columns(), status, error)) {
+        return false;
+    }
+
+    tableDesc.MutableSchema()->MutableKeyColumnNames()->CopyFrom(in.primary_key());
+
+    // NOTICE: TTableProfiles aren't supported for column tables
+    // NOTICE: ColumnFamilies aren't supported for column tables
+
+    for (auto [key, value] : in.attributes()) {
+        auto& attr = *out.MutableAlterUserAttributes()->AddUserAttributes();
+        attr.SetKey(key);
+        attr.SetValue(value);
+    }
+
+    if (!FillCreateTableSettingsDesc(tableDesc, in, status, error)) {
+        return false;
+    }
+
+    return true;
+}
+
 template <typename TYdbProto>
 bool FillSequenceDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     THashMap<TString, NKikimrSchemeOp::TSequenceDescription> sequences;
@@ -1994,6 +2026,40 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
             }
         }
     }
+    return true;
+}
+
+bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TPathDescription& in,
+    Ydb::StatusIds_StatusCode& status, TString& error)
+{
+    if (in.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeSysView) {
+        error = TStringBuilder() << "Unexpected path type: " << in.GetSelf().GetPathType();
+        status = Ydb::StatusIds::SCHEME_ERROR;
+        return false;
+    }
+
+    Ydb::Scheme::Entry* selfEntry = out.mutable_self();
+    ConvertDirectoryEntry(in.GetSelf(), selfEntry, true);
+
+    const auto sysViewType = in.GetSysViewDescription().GetType();
+    out.set_sys_view_id(sysViewType);
+    TString sysViewTypeName = NKikimrSysView::ESysViewType_Name(sysViewType).substr(1);
+    NProtobufJson::ToSnakeCase(&sysViewTypeName);
+    out.set_sys_view_name(std::move(sysViewTypeName));
+
+    const auto& tableDescription = in.GetTable();
+    try {
+        FillColumnDescription(out, tableDescription);
+    } catch (const std::exception& ex) {
+        error = TStringBuilder() << "Unable to fill column description: " << ex.what();
+        status = Ydb::StatusIds::INTERNAL_ERROR;
+        return false;
+    }
+
+    out.mutable_primary_key()->CopyFrom(tableDescription.GetKeyColumnNames());
+    FillAttributes(out, in);
+
+    status = Ydb::StatusIds::SUCCESS;
     return true;
 }
 

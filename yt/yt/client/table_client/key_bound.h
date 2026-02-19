@@ -52,14 +52,14 @@ public:
     // They work both for owning and non-owning kinds of key bound.
     #define XX(suffix) \
         struct TBuilder ## suffix { \
-            TKeyBound operator > (const TRow& row) { return TKeyBound::FromRow ## suffix(row, false, false); } \
-            TKeyBound operator >=(const TRow& row) { return TKeyBound::FromRow ## suffix(row, true , false); } \
-            TKeyBound operator < (const TRow& row) { return TKeyBound::FromRow ## suffix(row, false, true ); } \
-            TKeyBound operator <=(const TRow& row) { return TKeyBound::FromRow ## suffix(row, true , true ); } \
-            TKeyBound operator > (TRow&& row) { return TKeyBound::FromRow ## suffix(row, false, false); } \
-            TKeyBound operator >=(TRow&& row) { return TKeyBound::FromRow ## suffix(row, true , false); } \
-            TKeyBound operator < (TRow&& row) { return TKeyBound::FromRow ## suffix(row, false, true ); } \
-            TKeyBound operator <=(TRow&& row) { return TKeyBound::FromRow ## suffix(row, true , true ); } \
+            TKeyBound operator>(const TRow& row) { return TKeyBound::FromRow ## suffix(row, false, false); } \
+            TKeyBound operator>=(const TRow& row) { return TKeyBound::FromRow ## suffix(row, true , false); } \
+            TKeyBound operator<(const TRow& row) { return TKeyBound::FromRow ## suffix(row, false, true ); } \
+            TKeyBound operator<=(const TRow& row) { return TKeyBound::FromRow ## suffix(row, true , true ); } \
+            TKeyBound operator>(TRow&& row) { return TKeyBound::FromRow ## suffix(row, false, false); } \
+            TKeyBound operator>=(TRow&& row) { return TKeyBound::FromRow ## suffix(row, true , false); } \
+            TKeyBound operator<(TRow&& row) { return TKeyBound::FromRow ## suffix(row, false, true ); } \
+            TKeyBound operator<=(TRow&& row) { return TKeyBound::FromRow ## suffix(row, true , true ); } \
         }; \
         TBuilder ## suffix static FromRow ## suffix() { return TBuilder##suffix(); }
 
@@ -139,8 +139,8 @@ void Deserialize(TOwningKeyBound& keyBound, const NYTree::INodePtr& node);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator ==(const TKeyBound& lhs, const TKeyBound& rhs);
-bool operator ==(const TOwningKeyBound& lhs, const TOwningKeyBound& rhs);
+bool operator==(const TKeyBound& lhs, const TKeyBound& rhs);
+bool operator==(const TOwningKeyBound& lhs, const TOwningKeyBound& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

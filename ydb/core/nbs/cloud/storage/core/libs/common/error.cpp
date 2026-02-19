@@ -73,11 +73,13 @@ EErrorKind GetErrorKind(const NProto::TError& e)
     }
 
     // FACILITY_SYSTEM error codes are obtained from "errno". The list of all
-    // possible errors: contrib/libs/linux-headers/asm-generic/errno-base.h
+    // possible errors: contrib/libs/linux-headers/asm-generic/errno-base.h and
+    //                  contrib/libs/linux-headers/asm-generic/errno.h
     if (FACILITY_FROM_CODE(code) == FACILITY_SYSTEM) {
         switch (STATUS_FROM_CODE(code)) {
             case EIO:
             case ENODATA:
+            case EREMOTEIO:
                 return EErrorKind::ErrorFatal;
             default:
                 // system/network errors should be retriable
@@ -141,6 +143,13 @@ EDiagnosticsErrorKind GetDiagnosticsErrorKind(const NProto::TError& e)
         e.GetMessage().StartsWith("Checkpoint reject request."))
     {
         return EDiagnosticsErrorKind::ErrorWriteRejectedByCheckpoint;
+    }
+
+    if (code == E_TRY_AGAIN &&
+        e.GetMessage().StartsWith(
+            "Unable to allocate local disk: secure erase has not finished yet"))
+    {
+        return EDiagnosticsErrorKind::ErrorSilent;
     }
 
     if (HasProtoFlag(e.GetFlags(), NProto::EF_SILENT)
@@ -222,6 +231,12 @@ TString FormatError(const NProto::TError& e)
                     break;
                 case NProto::EF_INSTANT_RETRIABLE:
                     out << " f@instant_retry";
+                    break;
+                case NProto::EF_CHECKSUM_MISMATCH:
+                    out << " f@checksum_mismatch";
+                    break;
+                case NProto::EF_OUTDATED_VOLUME:
+                    out << " f@outdated_volume";
                     break;
                 case NProto::EF_NONE:
                 case NProto::EErrorFlag_INT_MIN_SENTINEL_DO_NOT_USE_:

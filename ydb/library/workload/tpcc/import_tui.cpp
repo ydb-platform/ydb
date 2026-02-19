@@ -139,7 +139,7 @@ Component TImportTui::BuildComponent() {
         });
     } catch (const std::exception& ex) {
         LOG_E("Exception in TUI: " << ex.what());
-        RequestStop();
+        RequestStopWithError();
         return Renderer([] { return filler(); });
     }
 }

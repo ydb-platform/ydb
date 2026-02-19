@@ -150,6 +150,7 @@ private:
     TString PeerName;
 
     bool InitDone;
+    bool ReadWithoutConsumer;
 
     TString Auth;
 

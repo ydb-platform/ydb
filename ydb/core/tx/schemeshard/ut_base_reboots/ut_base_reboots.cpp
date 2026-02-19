@@ -1,6 +1,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -9,11 +10,7 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TTablesWithReboots) {
-    Y_UNIT_TEST(Fake) { //+
-    }
-
-    Y_UNIT_TEST(CreateWithRebootsAtCommit) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateWithRebootsAtCommit, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.TestEnv->ReliablePropose(runtime, CreateTableRequest(++t.TxId,
                                                                    "/MyRoot",
@@ -37,8 +34,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyWithRebootsAtCommit) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyWithRebootsAtCommit, 2, 1, true) {
         t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -75,8 +71,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropCopyWithRebootsAtCommit) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropCopyWithRebootsAtCommit, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -113,8 +108,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(TwiceRmDirWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(TwiceRmDirWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -135,8 +129,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncCreateTable(runtime, ++t.TxId, "/MyRoot/DirA",
                              "Name: \"Table1\""
@@ -154,9 +147,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-
-    Y_UNIT_TEST(ParallelCreateDrop) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ParallelCreateDrop, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                             Name: "DropMe"
@@ -181,8 +172,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(SimpleDropTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SimpleDropTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -207,8 +197,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(SimpleDropTableWithReboots2) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SimpleDropTableWithReboots2, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -233,8 +222,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -274,8 +262,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDroppedTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDroppedTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -310,8 +297,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDroppedTableAndDropWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDroppedTableAndDropWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -348,9 +334,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-
-    Y_UNIT_TEST(AlterTableSchemaWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableSchemaWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             // Prepare the table
 
@@ -408,8 +392,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterTableSchemaFreezeUnfreezeWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableSchemaFreezeUnfreezeWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -455,8 +438,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterTableFollowersWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableFollowersWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -502,8 +484,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterTableConfigWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableConfigWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 datashardTabletId = ui64(InvalidTabletId);
             {
@@ -557,8 +538,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterCopyWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterCopyWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -599,8 +579,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyAlterWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyAlterWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -643,8 +622,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterAndForceDrop) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterAndForceDrop, 2, 1, false) {
         t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
@@ -685,8 +663,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableWithReboots, 2, 1, false) {
         t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -723,8 +700,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyIndexedTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyIndexedTableWithReboots, 2, 1, false) {
         t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -782,8 +758,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyTableAndDropWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableAndDropWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -811,8 +786,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyTableAndDropWithReboots2) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableAndDropWithReboots2, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -857,8 +831,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(ChainedCopyTableAndDropWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ChainedCopyTableAndDropWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             const int maxTableIdx = 4;
 
@@ -915,8 +888,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(LostBorrowAckWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(LostBorrowAckWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -975,8 +947,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(SimultaneousDropForceDrop) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SimultaneousDropForceDrop, 2, 1, false) {
         t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(

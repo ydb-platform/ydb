@@ -2230,6 +2230,36 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath) {
+        NKikimrForcedCompaction::TForcedCompactionSettings settings;
+        settings.set_source_path(tablePath);
+        auto ev = MakeHolder<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
+        AsyncSend(runtime, schemeshardId, ev.Release());
+    }
+
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath) {
+        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath);
+    }
+
+    void TestCompact(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 id,
+        const TString& dbName,
+        const TString& tablePath,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath);
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCreateResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+    }
+
+    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, Ydb::StatusIds::StatusCode expectedStatus) {
+        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, expectedStatus);
+    }
+
     TPathId TestFindTabletSubDomainPathId(
             TTestActorRuntime& runtime, ui64 tabletId,
             NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected)

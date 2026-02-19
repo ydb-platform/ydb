@@ -23,7 +23,8 @@ ENDIF()
 
     FORK_TESTS()
     FORK_SUBTESTS()
-    SPLIT_FACTOR(5)
+    SPLIT_FACTOR(10)
+
     DEPENDS(
         yql/essentials/tools/sql2yql
         yql/essentials/tools/sql_formatter

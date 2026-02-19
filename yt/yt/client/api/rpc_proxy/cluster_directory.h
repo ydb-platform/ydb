@@ -13,6 +13,11 @@ namespace NYT::NApi::NRpcProxy {
 class TClusterDirectory
     : public NHiveClient::TClusterDirectoryBase<NApi::IConnection>
 {
+    using TBase = TClusterDirectoryBase<NApi::IConnection>;
+
+public:
+    using TBase::TBase;
+
 protected:
     IConnectionPtr CreateConnection(const std::string& name, const NYTree::INodePtr& connectionConfig) override;
 };

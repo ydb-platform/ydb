@@ -353,6 +353,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AddColumnWithDefaultForbidden) {
         TKikimrRunner kikimr(TKikimrSettings()
+            .SetEnableAddColumsWithDefaults(false)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();

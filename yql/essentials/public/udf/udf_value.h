@@ -19,8 +19,7 @@
 
 class IOutputStream;
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TUnboxedValue;
 class TUnboxedValuePod;
@@ -1119,8 +1118,7 @@ private:
 #include "udf_value_inl.h"
 #undef INCLUDE_UDF_VALUE_INL_H
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 template <>
 inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream& o, const NYql::NUdf::TUnboxedValuePod& value);
@@ -1138,8 +1136,7 @@ inline void Out<NYql::NUdf::TStringRef>(class IOutputStream& o, const NYql::NUdf
 #include <util/stream/output.h>
 #include <tuple>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
 // TBoxedValue
@@ -1393,8 +1390,7 @@ inline void TUnboxedValuePod::Dump(IOutputStream& out) const {
     }
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 template <>
 inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream& o, const NYql::NUdf::TUnboxedValuePod& value) {

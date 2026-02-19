@@ -297,6 +297,9 @@ private:
         if (Settings.HasLockNodeId()) {
             src->SetLockNodeId(Settings.GetLockNodeId());
         }
+        if (Settings.HasQuerySpanId()) {
+            src->SetQuerySpanId(Settings.GetQuerySpanId());
+        }
 
         // Level table key is parent+id
         auto ui64Type = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), "");
@@ -441,6 +444,11 @@ private:
             i64 rowSize = 0;
             auto& row = PendingRows[PendingRows.size()-1];
             auto& rowClusters = PrevClusters[PendingRows.size()-1];
+            if (!rowClusters.size()) {
+                PendingRows.pop_back();
+                PrevClusters.pop_back();
+                continue;
+            }
 
             NUdf::TUnboxedValue* rowItems = nullptr;
             // Output columns: Cluster ID + Source table PK [ + Data Columns ]

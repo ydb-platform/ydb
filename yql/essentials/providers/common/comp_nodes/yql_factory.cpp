@@ -11,8 +11,7 @@
 #include "yql_typehandle.h"
 #include "yql_typekind.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 typedef IComputationNode* (*TYqlCallableComputationNodeBuilderFunc)(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 typedef THashMap<TString, TYqlCallableComputationNodeBuilderFunc> TYqlCallableComputationNodeBuilderFuncMap;
@@ -93,5 +92,4 @@ TComputationNodeFactory GetYqlFactory() {
     };
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -7,36 +7,50 @@ namespace NKqp {
 
 using namespace NYql;
 
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKikimrPathId& pathId) {
+namespace {
+
+void AppendQuerySpanIdInfo(TStringBuilder& message, TMaybe<ui64> victimQuerySpanId) {
+    if (victimQuerySpanId && *victimQuerySpanId != 0) {
+        message << " VictimQuerySpanId: " << *victimQuerySpanId << ".";
+    }
+}
+
+} // anonymous namespace
+
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKikimrPathId& pathId,
+    TMaybe<ui64> victimQuerySpanId)
+{
     TStringBuilder message;
     message << "Transaction locks invalidated.";
 
     if (pathId.OwnerId() != 0) {
         auto table = txCtx.TableByIdMap.FindPtr(pathId);
         if (!table) {
-            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table, pathId: " << pathId.ToString() << " .");
+            message << " Unknown table, pathId: " << pathId.ToString() << ".";
+            AppendQuerySpanIdInfo(message, victimQuerySpanId);
+            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
         }
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << "`" << *table << "`");
+        message << " Table: `" << *table << "`.";
+        AppendQuerySpanIdInfo(message, victimQuerySpanId);
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     } else {
         // Olap tables don't return SchemeShard in locks, thus we use tableId here.
-        for (const auto& [pathId, table] : txCtx.TableByIdMap) {
-            if (pathId.TableId() == pathId.TableId()) {
-                return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << "`" << table << "`");
+        for (const auto& [candidatePathId, table] : txCtx.TableByIdMap) {
+            if (candidatePathId.TableId() == pathId.TableId()) {
+                message << " Table: `" << table << "`.";
+                AppendQuerySpanIdInfo(message, victimQuerySpanId);
+                return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
             }
         }
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table, pathId: " << pathId.ToString() << " .");
+        message << " Unknown table, pathId: " << pathId.ToString() << ".";
+        AppendQuerySpanIdInfo(message, victimQuerySpanId);
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     }
 }
 
-TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
-    return GetLocksInvalidatedIssue(
-        txCtx,
-        TKikimrPathId(
-            invalidatedLock.GetSchemeShard(),
-            invalidatedLock.GetPathId()));
-}
-
-NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId) {
+NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
+    TMaybe<ui64> victimQuerySpanId)
+{
     TStringBuilder message;
     message << "Transaction locks invalidated.";
 
@@ -50,13 +64,26 @@ NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableI
             }
             message << "`" << path << "`";
         }
+        message << ".";
+        AppendQuerySpanIdInfo(message, victimQuerySpanId);
         return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     } else {
-        message << " Unknown table, tabletId: " << shardId << " .";
+        message << " Unknown table, tabletId: " << shardId << ".";
+        AppendQuerySpanIdInfo(message, victimQuerySpanId);
     }
     return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
 }
 
+// Non-TxManager (obsolete) path: no QuerySpanId tracking
+TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
+    return GetLocksInvalidatedIssue(
+        txCtx,
+        TKikimrPathId(
+            invalidatedLock.GetSchemeShard(),
+            invalidatedLock.GetPathId()));
+}
+
+// Non-TxManager (obsolete) lock merge path: no QuerySpanId tracking
 std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
     TKqpTransactionContext& txCtx)
 {
@@ -270,6 +297,13 @@ bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage) {
             return settings.GetIsOlap();
         }
     }
+    for (const auto& transform : stage.GetOutputTransforms()) {
+        if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+            NKikimrKqp::TKqpTableSinkSettings settings;
+            YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+            return settings.GetIsOlap();
+        }
+    }
     return false;
 }
 
@@ -328,6 +362,14 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    return !settings.GetIsOlap();
+                }
+            }
+
+            for (const auto& transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     return !settings.GetIsOlap();
                 }
             }

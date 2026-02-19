@@ -3,8 +3,7 @@
 
 #include <util/generic/scope.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TTypePrinter1: private TStubTypeVisitor {
 public:
@@ -343,5 +342,4 @@ void TTypePrinter::Out(IOutputStream& o) const {
     p.Out(o);
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

@@ -410,6 +410,7 @@ def _create_pm(unit: NotsUnitType) -> 'PackageManager':
         nodejs_bin_path=None,
         script_path=None,
         module_path=module_path,
+        inject_peers=unit.get("_INJECT_PEERS_ARG") is not None,
     )
 
 
@@ -994,6 +995,46 @@ def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
     nm_required_for = node_modules_for.split(":") if node_modules_for else []
 
     return arc_path in nm_required_for
+
+
+@_with_report_configure_error
+def on_ts_library_configure(unit: NotsUnitType) -> None:
+    import lib.nots.package_manager.constants as constants
+
+    ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
+
+    if not ts_outputs:
+        ymake.report_configure_error(
+            "\n"
+            "Module outputs are not set.\n"
+            f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
+        )
+        return
+
+    pm = _create_pm(unit)
+    pj = pm.load_package_json_from_dir(pm.sources_path)
+    has_deps = pj.has_dependencies()
+
+    if has_deps:
+        unit.onpeerdir(pj.get_workspace_dep_paths(base_path=pm.module_path))
+        nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
+        if nm_bundle_needed:
+            nm_output = _build_directives(["hide", "output"], [constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME])
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", f"--nm-bundle yes {nm_output}"])
+
+    pj_files = set(pj.get_files())
+    missing_outputs = set(ts_outputs) - pj_files
+
+    if missing_outputs:
+        ymake.report_configure_error(
+            "\n"
+            f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
+            f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
+        )
+
+    # Code navigation
+    if unit.get("TS_YNDEXING") == "yes":
+        unit.on_do_ts_yndexing()
 
 
 @_with_report_configure_error

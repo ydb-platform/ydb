@@ -4,7 +4,7 @@
 
 #include <memory>
 
-namespace NYdb::NBS {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -13,6 +13,12 @@ using TCallContextPtr = TIntrusivePtr<TCallContext>;
 
 struct IBlockStore;
 using IBlockStorePtr = std::shared_ptr<IBlockStore>;
+
+struct ISwitchableBlockStore;
+using ISwitchableBlockStorePtr = std::shared_ptr<ISwitchableBlockStore>;
+
+struct ISessionSwitcher;
+using ISessionSwitcherWeakPtr = std::weak_ptr<ISessionSwitcher>;
 
 struct IAuthProvider;
 using IAuthProviderPtr = std::shared_ptr<IAuthProvider>;
@@ -31,4 +37,4 @@ using IDeviceHandlerFactoryPtr = std::shared_ptr<IDeviceHandlerFactory>;
 
 using TStorageBuffer = std::shared_ptr<char>;
 
-}   // namespace NYdb::NBS
+}   // namespace NYdb::NBS::NBlockStore

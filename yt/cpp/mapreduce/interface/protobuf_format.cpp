@@ -132,7 +132,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
     using EFlag = EWrapperFieldFlag;
     struct TVisitor
     {
-        EFlag::Enum operator() (EProtobufType type)
+        EFlag::Enum operator()(EProtobufType type)
         {
             switch (type) {
                 case EProtobufType::Any:
@@ -146,7 +146,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
             }
             Y_ABORT();
         }
-        EFlag::Enum operator() (EProtobufSerializationMode serializationMode)
+        EFlag::Enum operator()(EProtobufSerializationMode serializationMode)
         {
             switch (serializationMode) {
                 case EProtobufSerializationMode::Yt:
@@ -158,7 +158,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
             }
             Y_ABORT();
         }
-        EFlag::Enum operator() (EProtobufListMode listMode)
+        EFlag::Enum operator()(EProtobufListMode listMode)
         {
             switch (listMode) {
                 case EProtobufListMode::Optional:
@@ -168,7 +168,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
             }
             Y_ABORT();
         }
-        EFlag::Enum operator() (EProtobufMapMode mapMode)
+        EFlag::Enum operator()(EProtobufMapMode mapMode)
         {
             switch (mapMode) {
                 case EProtobufMapMode::ListOfStructsLegacy:
@@ -182,7 +182,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
             }
             Y_ABORT();
         }
-        EFlag::Enum operator() (EProtobufEnumWritingMode enumWritingMode)
+        EFlag::Enum operator()(EProtobufEnumWritingMode enumWritingMode)
         {
             switch (enumWritingMode) {
                 case EProtobufEnumWritingMode::SkipUnknownValues:
@@ -202,7 +202,7 @@ EWrapperMessageFlag::Enum OptionToMessageFlag(TMessageOption option)
     using EFlag = EWrapperMessageFlag;
     struct TVisitor
     {
-        EFlag::Enum operator() (EProtobufFieldSortOrder sortOrder)
+        EFlag::Enum operator()(EProtobufFieldSortOrder sortOrder)
         {
             switch (sortOrder) {
                 case EProtobufFieldSortOrder::AsInProtoFile:
@@ -222,7 +222,7 @@ EWrapperOneofFlag::Enum OptionToOneofFlag(TOneofOption option)
     using EFlag = EWrapperOneofFlag;
     struct TVisitor
     {
-        EFlag::Enum operator() (EProtobufOneofMode mode)
+        EFlag::Enum operator()(EProtobufOneofMode mode)
         {
             switch (mode) {
                 case EProtobufOneofMode::SeparateFields:
@@ -254,27 +254,27 @@ void SetOption(TMaybe<T>& option, T newOption, TOptionToFlag optionToFlag)
 class TParseProtobufFieldOptionsVisitor
 {
 public:
-    void operator() (EProtobufType type)
+    void operator()(EProtobufType type)
     {
         SetOption(Type, type);
     }
 
-    void operator() (EProtobufSerializationMode serializationMode)
+    void operator()(EProtobufSerializationMode serializationMode)
     {
         SetOption(SerializationMode, serializationMode);
     }
 
-    void operator() (EProtobufListMode listMode)
+    void operator()(EProtobufListMode listMode)
     {
         SetOption(ListMode, listMode);
     }
 
-    void operator() (EProtobufMapMode mapMode)
+    void operator()(EProtobufMapMode mapMode)
     {
         SetOption(MapMode, mapMode);
     }
 
-    void operator() (EProtobufEnumWritingMode enumWritingMode)
+    void operator()(EProtobufEnumWritingMode enumWritingMode)
     {
         SetOption(EnumWritingMode, enumWritingMode);
     }
@@ -296,7 +296,7 @@ public:
 class TParseProtobufMessageOptionsVisitor
 {
 public:
-    void operator() (EProtobufFieldSortOrder fieldSortOrder)
+    void operator()(EProtobufFieldSortOrder fieldSortOrder)
     {
         SetOption(FieldSortOrder, fieldSortOrder);
     }
@@ -314,7 +314,7 @@ public:
 class TParseProtobufOneofOptionsVisitor
 {
 public:
-    void operator() (EProtobufOneofMode mode)
+    void operator()(EProtobufOneofMode mode)
     {
         SetOption(Mode, mode);
     }

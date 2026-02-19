@@ -76,8 +76,8 @@ public:
                 if (!read.Arg(2).Ref().IsCallable({MrPartitionListName, MrPartitionListStrictName})) {
                     return node;
                 }
-                if (!read.Arg(4).Maybe<TCoNameValueTupleList>()) {
-                    return node;
+                if (!ValidateYtSettings(read.Arg(4).MutableRef(), ctx)) {
+                    return {};
                 }
                 if (HasSetting(read.Arg(4).Ref(), EYtSettingType::Pruned)) {
                     return node;
@@ -112,6 +112,10 @@ public:
                 if (discoveryMode && evaluationInProgress) {
                     ctx.AddError(YqlIssue(ctx.GetPosition(read.Pos()), TIssuesIds::YQL_NOT_ALLOWED_IN_DISCOVERY,
                         TStringBuilder() << node->Content() << " is not allowed in Discovery mode"));
+                    return {};
+                }
+
+                if (!ValidateYtSettings(read.Arg(4).MutableRef(), ctx)) {
                     return {};
                 }
 
@@ -178,7 +182,7 @@ public:
                     return {};
                 }
 
-                if (!EnsureTuple(write.Arg(4).MutableRef(), ctx)) {
+                if (!ValidateYtSettings(write.Arg(4).MutableRef(), ctx)) {
                     return {};
                 }
 
@@ -658,6 +662,26 @@ public:
     }
 
 private:
+    static bool ValidateYtSettings(TExprNode& settings, TExprContext& ctx) {
+        if (!EnsureTuple(settings, ctx)) {
+            return false;
+        }
+        for (auto& setting : settings.Children()) {
+            if (!EnsureTupleMinSize(*setting, 1, ctx)) {
+                return false;
+            }
+            if (!EnsureAtom(setting->Head(), ctx)) {
+                return false;
+            }
+            const TString settingName{setting->Head().Content()};
+            if (!TryFromString<EYtSettingType>(settingName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Unknown setting " << settingName.Quote()));
+                return false;
+            }
+        }
+        return true;
+    }
+
     static bool ValidatePartitionList(const TExprNode& partListNode, TExprContext& ctx) {
         YQL_ENSURE(partListNode.IsCallable({MrPartitionListName, MrPartitionListStrictName}));
         const size_t argCount = partListNode.ChildrenSize();

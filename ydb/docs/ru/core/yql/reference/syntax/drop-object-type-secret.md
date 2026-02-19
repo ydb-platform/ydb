@@ -1,10 +1,6 @@
 # DROP OBJECT (TYPE SECRET)
 
-{% note warning %}
-
-Текущий систаксис работы с секретами является временным, в будущих релизах {{ydb-full-name}} он будет изменен.
-
-{% endnote %}
+{% include [deprecated_secrets_warning](./_includes/deprecated_secrets_warning.md) %}
 
 Удаляет указанный [секрет](../../../concepts/datamodel/secrets.md).
 

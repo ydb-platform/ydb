@@ -29,6 +29,8 @@ public:
     virtual void Consume(NDqProto::TWatermark&& watermark) = 0;
     virtual void Finish() = 0;
     virtual void Flush() = 0;
+    virtual bool IsFinished() const = 0;
+    virtual bool IsEarlyFinished() const = 0;
     virtual TString DebugString() {
         return "";
     }

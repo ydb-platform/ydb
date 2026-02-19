@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.9.4)
+VERSION(1.9.5)
 
-ORIGINAL_SOURCE(https://github.com/google/benchmark/archive/v1.9.4.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/benchmark/archive/v1.9.5.tar.gz)
 
 LICENSE(Apache-2.0)
 
@@ -21,8 +21,7 @@ NO_UTIL()
 
 CFLAGS(
     GLOBAL -DBENCHMARK_STATIC_DEFINE
-    -DBENCHMARK_VERSION=\"v1.9.4\"
-    -DHAVE_POSIX_REGEX
+    -DBENCHMARK_VERSION=\"v1.9.5\"
     -DHAVE_PTHREAD_AFFINITY
     -DHAVE_STD_REGEX
     -DHAVE_STEADY_CLOCK

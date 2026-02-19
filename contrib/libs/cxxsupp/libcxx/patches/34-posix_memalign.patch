@@ -1,8 +1,8 @@
 diff --git a/include/__memory/aligned_alloc.h b/include/__memory/aligned_alloc.h
-index 33fe8af..cdedd7e 100644
+index fb36983..94d5fb6 100644
 --- a/include/__memory/aligned_alloc.h
 +++ b/include/__memory/aligned_alloc.h
-@@ -30,7 +30,8 @@ _LIBCPP_BEGIN_NAMESPACE_STD
+@@ -29,7 +29,8 @@ _LIBCPP_BEGIN_NAMESPACE_STD
  inline _LIBCPP_HIDE_FROM_ABI void* __libcpp_aligned_alloc(std::size_t __alignment, std::size_t __size) {
  #  if defined(_LIBCPP_MSVCRT_LIKE)
    return ::_aligned_malloc(__size, __alignment);

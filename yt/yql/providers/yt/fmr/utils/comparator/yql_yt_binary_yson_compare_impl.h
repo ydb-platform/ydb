@@ -7,6 +7,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
 
+
 #include <cstring>
 
 namespace NYql::NFmr {
@@ -20,13 +21,15 @@ struct TColumnOffsetRange {
     }
 };
 
-// Row markup: key columns ranges + last range is full row boundary [rowStart,rowEnd).
-using TRowIndexMarkup = TVector<TColumnOffsetRange>;
-
 enum class ESortOrder {
     Ascending = 0,
     Descending = 1
 };
+
+// Row markup: key columns ranges + last range is full row boundary [rowStart,rowEnd).
+using TRowIndexMarkup = std::vector<TColumnOffsetRange>;
+
+
 
 struct TYsonReader {
     TStringBuf Data;
@@ -68,7 +71,7 @@ int CompareKeyRowsAcrossYsonBlocks(
     const TRowIndexMarkup& lhsRow,
     TStringBuf rhsBlob,
     const TRowIndexMarkup& rhsRow,
-    const TVector<ESortOrder>& sortOrders
+    const std::vector<ESortOrder>& sortOrders
 );
 
 } // namespace NYql::NFmr

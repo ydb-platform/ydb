@@ -1,4 +1,5 @@
 RECURSE(
     blockstore
+    contrib
     storage
 )

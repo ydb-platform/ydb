@@ -17,9 +17,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-10-12)
+VERSION(2025-02-16)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/8f9cce0bef317076fbdce677d6d6744ebd5dc02a.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/c6d95c441a29a45782ff72d6cb82839b86fd0e4a.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -146,7 +146,6 @@ SRCS(
     src/ios.cpp
     src/ios.instantiations.cpp
     src/iostream.cpp
-    src/legacy_pointer_safety.cpp
     src/locale.cpp
     src/memory.cpp
     src/memory_resource.cpp

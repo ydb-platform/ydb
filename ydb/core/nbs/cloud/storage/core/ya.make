@@ -1,4 +1,4 @@
 RECURSE(
     libs
-    protos
+    tests
 )

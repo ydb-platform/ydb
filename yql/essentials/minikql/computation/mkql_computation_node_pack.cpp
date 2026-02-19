@@ -19,8 +19,7 @@
 
 using NYql::TChunkedBuffer;
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -1584,5 +1583,4 @@ TValuePackerBoxed::TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, con
 {
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

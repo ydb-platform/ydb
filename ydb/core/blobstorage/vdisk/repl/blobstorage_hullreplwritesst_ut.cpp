@@ -16,7 +16,7 @@ std::shared_ptr<TReplCtx> CreateReplCtx(TVector<TVDiskID>& vdisks, const TIntrus
         nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
     auto hugeBlobCtx = std::make_shared<THugeBlobCtx>("", nullptr, EBlobHeaderMode::OLD_HEADER);
     auto dsk = MakeIntrusive<TPDiskParams>(ui8(1), 1u, 0u, 128u << 20, 4096u, 0u, 1000000000u, 1000000000u, 65536u, 65536u, 65536u,
-            NPDisk::DEVICE_TYPE_UNKNOWN, false);
+            NPDisk::DEVICE_TYPE_UNKNOWN, false, 4096u);
     auto pdiskCtx = std::make_shared<TPDiskCtx>(dsk, TActorId(), TString());
     auto replCtx = std::make_shared<TReplCtx>(
         vctx,

@@ -25,8 +25,6 @@ import tempfile
 import time
 from collections import namedtuple
 
-import google.auth
-import google.auth.transport.requests
 import oauthlib.oauth2
 import urllib3
 import yaml
@@ -44,6 +42,15 @@ try:
 except ImportError:
     pass
 
+try:
+    import google.auth
+    import google.auth.transport.requests
+    google_auth_available = True
+except ImportError:
+    google_auth_available = False
+
+
+
 EXPIRY_SKEW_PREVENTION_DELAY = datetime.timedelta(minutes=5)
 KUBE_CONFIG_DEFAULT_LOCATION = os.environ.get('KUBECONFIG', '~/.kube/config')
 ENV_KUBECONFIG_PATH_SEPARATOR = ';' if platform.system() == 'Windows' else ':'
@@ -60,13 +67,13 @@ def _cleanup_temp_files():
     _temp_files = {}
 
 
-def _create_temp_file_with_content(content, temp_file_path=None):
+def _create_temp_file_with_content(content, temp_file_path=None, force_recreate=False):
     if len(_temp_files) == 0:
         atexit.register(_cleanup_temp_files)
     # Because we may change context several times, try to remember files we
     # created and reuse them at a small memory cost.
     content_key = str(content)
-    if content_key in _temp_files:
+    if not force_recreate and content_key in _temp_files:
         return _temp_files[content_key]
     if temp_file_path and not os.path.isdir(temp_file_path):
         os.makedirs(name=temp_file_path)
@@ -115,16 +122,10 @@ class FileOrData(object):
         decoded obj[%data_key_name] content otherwise obj[%file_key_name]."""
         use_data_if_no_file = not self._file and self._data
         if use_data_if_no_file:
-            if self._base64_file_content:
-                if isinstance(self._data, str):
-                    content = self._data.encode()
-                else:
-                    content = self._data
-                self._file = _create_temp_file_with_content(
-                    base64.standard_b64decode(content), self._temp_file_path)
-            else:
-                self._file = _create_temp_file_with_content(
-                    self._data, self._temp_file_path)
+            self._write_file()
+
+            if self._file and not os.path.isfile(self._file):
+                self._write_file(force_rewrite=True)
         if self._file and not os.path.isfile(self._file):
             raise ConfigException("File does not exist: %s" % self._file)
         return self._file
@@ -141,6 +142,18 @@ class FileOrData(object):
                 else:
                     self._data = f.read()
         return self._data
+
+    def _write_file(self, force_rewrite=False):
+        if self._base64_file_content:
+            if isinstance(self._data, str):
+                content = self._data.encode()
+            else:
+                content = self._data
+            self._file = _create_temp_file_with_content(
+                base64.standard_b64decode(content), self._temp_file_path, force_recreate=force_rewrite)
+        else:
+            self._file = _create_temp_file_with_content(
+                self._data, self._temp_file_path, force_recreate=force_rewrite)
 
 
 class CommandTokenSource(object):
@@ -239,15 +252,19 @@ class KubeConfigLoader(object):
                 'config' in self._user['auth-provider'] and
                     'cmd-path' in self._user['auth-provider']['config']):
                 return _refresh_credentials_with_cmd_path()
-
-            credentials, project_id = google.auth.default(scopes=[
-                'https://www.googleapis.com/auth/cloud-platform',
-                'https://www.googleapis.com/auth/userinfo.email'
-            ])
-            request = google.auth.transport.requests.Request()
-            credentials.refresh(request)
-            return credentials
-
+            
+            # Make the Google auth block optional.
+            if google_auth_available:
+                credentials, project_id = google.auth.default(scopes=[
+                    'https://www.googleapis.com/auth/cloud-platform',
+                    'https://www.googleapis.com/auth/userinfo.email'
+                ])
+                request = google.auth.transport.requests.Request()
+                credentials.refresh(request)
+                return credentials
+            else:
+                return None
+            
         if get_google_credentials:
             self._get_google_credentials = get_google_credentials
         else:

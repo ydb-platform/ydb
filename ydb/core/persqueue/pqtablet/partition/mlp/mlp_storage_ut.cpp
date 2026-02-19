@@ -1361,7 +1361,7 @@ Y_UNIT_TEST(StorageSerialization) {
 Y_UNIT_TEST(StorageSerialization_WAL_Unlocked) {
     TUtils utils;
 
-    auto writeTimestamp = utils.TimeProvider->Now() - TDuration::Seconds(13);
+    auto writeTimestamp = utils.TimeProvider->Now() - TDuration::Seconds(9);
 
     utils.Begin();
     utils.Storage.AddMessage(3, true, 5, writeTimestamp);
@@ -2549,6 +2549,41 @@ Y_UNIT_TEST(ChangeDeadLetterPolicy_Unspecified) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(SkipAddByRetentionPolicy) {
+    TUtils utils;
+
+    auto writeTimestamp = utils.TimeProvider->Now() - TDuration::Seconds(13);
+
+    utils.Begin();
+    utils.Storage.AddMessage(3, true, 5, writeTimestamp);
+    utils.End();
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it == utils.Storage.end());
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 1);
+
+    utils.TimeProvider->Tick(TDuration::Seconds(5));
 
     utils.AssertLoad();
 }

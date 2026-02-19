@@ -55,7 +55,7 @@ public:
         : Ptr_(static_cast<TByte*>(ptr))
     { }
 
-    bool operator [] (size_t index) const
+    bool operator[](size_t index) const
     {
         return Ptr_[NBitmapDetail::GetWordIndex(index)] & NBitmapDetail::GetBitMask(index);
     }
@@ -99,7 +99,7 @@ public:
         : Ptr_(static_cast<const TByte*>(ptr))
     { }
 
-    bool operator [] (size_t index) const
+    bool operator[](size_t index) const
     {
         return Ptr_[NBitmapDetail::GetWordIndex(index)] & NBitmapDetail::GetBitMask(index);
     }
@@ -255,7 +255,7 @@ public:
     void Initialize(int bitSize);
     void CopyFrom(const TCompactBitmap& other, int bitSize);
 
-    bool operator[] (size_t index) const;
+    bool operator[](size_t index) const;
 
     void Set(size_t index);
 

@@ -29,7 +29,7 @@ struct TProfileLocation
     std::vector<std::pair<std::string, std::variant<std::string, i64>>> Tags;
     std::vector<ui64> Backtrace;
 
-    bool operator == (const TProfileLocation& other) const = default;
+    bool operator==(const TProfileLocation& other) const = default;
     operator size_t() const;
 };
 

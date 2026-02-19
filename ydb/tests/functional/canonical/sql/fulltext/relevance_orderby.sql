@@ -1,4 +1,5 @@
-SELECT Key, Text
+SELECT Key, Text, FulltextScore(Text, "cats") as Relevance
 FROM FullTextTable VIEW fulltext_relevance_idx
-ORDER BY FulltextScore(Text, "cats") DESC
+WHERE FulltextScore(Text, "cats") > 0
+ORDER BY Relevance DESC
 LIMIT 10;

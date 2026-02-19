@@ -264,7 +264,10 @@ class TCongestionController
     : public TRefCounted
 {
 public:
-    TCongestionController(TServiceMethodConfigPtr methodConfig, TOverloadControllerConfigPtr config, TProfiler profiler)
+    TCongestionController(
+        TOverloadTrackedServiceMethodConfigPtr methodConfig,
+        TOverloadControllerConfigPtr config,
+        TProfiler profiler)
         : MethodConfig_(std::move(methodConfig))
         , Config_(std::move(config))
         , MaxWindow_(MethodConfig_->MaxWindow)
@@ -350,7 +353,7 @@ public:
     }
 
 private:
-    const TServiceMethodConfigPtr MethodConfig_;
+    const TOverloadTrackedServiceMethodConfigPtr MethodConfig_;
     const TOverloadControllerConfigPtr Config_;
     const int MaxWindow_;
 
@@ -583,7 +586,7 @@ private:
     {
         TMethodsCongestionControllers controllers;
 
-        THashMap<TMethodIndex, TServiceMethodConfigPtr> configIndex;
+        THashMap<TMethodIndex, TOverloadTrackedServiceMethodConfigPtr> configIndex;
         for (const auto& methodConfig : config->Methods) {
             configIndex[std::pair(methodConfig->Service, methodConfig->Method)] = methodConfig;
         }
@@ -594,7 +597,7 @@ private:
                 return it->second;
             }
 
-            auto defaultConfig = New<TServiceMethodConfig>();
+            auto defaultConfig = New<TOverloadTrackedServiceMethodConfig>();
             defaultConfig->Service = service;
             defaultConfig->Method = method;
             defaultConfig->MaxWindow = maxWindow;

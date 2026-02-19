@@ -1716,11 +1716,22 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 }
             }
 
-            // Increase Nonces to prevent collisions
-            NPrivate::TMersenne64 randGen(Seed());
             do {
+                // chances that after restart we get the same random number are very low,
+                // but not zero. We don't want to restart PDisk many times and test
+                // this part and the rest with some probability, so we force seed to get
+                // the same random number (and hence nonces) between PDisk restarts
+                ui64 randNum;
+                if (!Cfg->NonceRandNum.has_value()) {
+                    NPrivate::TMersenne64 randGen(Seed());
+                    randNum = randGen.GenRand();
+                } else {
+                    randNum = *Cfg->NonceRandNum;
+                }
+
+                // Increase Nonces to prevent collisions
                 for (ui32 i = 0; i < NonceCount; ++i) {
-                    SysLogRecord.Nonces.Value[i] += ForceLogNonceDiff.Value[i] + 1 + randGen.GenRand() % ForceLogNonceDiff.Value[i];
+                    SysLogRecord.Nonces.Value[i] += ForceLogNonceDiff.Value[i] + 1 + randNum % ForceLogNonceDiff.Value[i];
                 }
             } while (SysLogRecord.Nonces.Value[NonceLog] <= InitialPreviousNonce);
             InitSysLogger();

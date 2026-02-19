@@ -27,6 +27,14 @@ enum EErrorFlag
     // possibility of a retry storm.
     EF_INSTANT_RETRIABLE = 3;
 
+    // A flag that indicates that the checksum of the data does not match the
+    // checksum in the request.
+    EF_CHECKSUM_MISMATCH = 4;
+
+    // The flag indicates that the leadership has been transferred to another disk.
+    // Client should reconnect to new principal.
+    EF_OUTDATED_VOLUME = 5;
+
     // TODO: EF_RETRIABLE, EF_CLIENT
 }
 

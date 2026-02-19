@@ -28,3 +28,9 @@ message TChunkMapLogRecord {
     TSnapshot Snapshot = 1;
     TIncrement Increment = 2;
 }
+
+// SignaturePersistentBufferChunkMap; always contains full snapshot
+
+message TPersistentBufferChunkMapLogRecord {
+    repeated uint32 ChunkIdxs = 1;
+}

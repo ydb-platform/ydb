@@ -8,14 +8,18 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/json/yson/json2yson.h>
 
-#include <string.h>
+#include <cstring>
 
 extern char** environ;
 
 namespace NYql {
 
-static char** g_OriginalArgv = nullptr;
-static char* g_OriginalArgvLast = nullptr;
+namespace {
+
+char** g_OriginalArgv = nullptr;
+char* g_OriginalArgvLast = nullptr;
+
+} // namespace
 
 /*
  * To change the process title in Linux and Darwin we have to set argv[1]

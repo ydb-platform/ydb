@@ -39,9 +39,12 @@ namespace NPageCollection {
 
         void Describe(IOutputStream &out) const
         {
-            out
-                << "TLargeGlobId{" << Lead << " ~" << Bytes
-                << "b, grp " << Group << "}";
+            if (Bytes > 0) {
+                out << "TLargeGlobId{" << Lead << " ~" << Bytes
+                    << "b, group " << Group << "}";
+            } else {
+                out << "TLargeGlobId{}";
+            }
         }
 
         explicit operator bool() const noexcept

@@ -179,6 +179,55 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     return WriteAndRead<TProduceResponseData>(header, request);
 }
 
+void TKafkaTestClient::ProduceAsync(const TTopicPartition& topicPartition,
+                                                            const std::vector<std::pair<TString, TString>>& keyValueMessages,
+                                                            ui32 baseSequence,
+                                                            const std::optional<TProducerInstanceId>& producerInstanceId,
+                                                            const std::optional<TString>& transactionalId) {
+    Cerr << ">>>>> TProduceRequestData\n";
+
+    TKafkaRecordBatch batch;
+    batch.BaseSequence = baseSequence;
+    batch.Magic = TKafkaRecordBatch::MagicMeta::Default;
+    batch.Records.resize(keyValueMessages.size());
+    for (ui32 i = 0; i < keyValueMessages.size(); i++) {
+        auto& keyValueMessage = keyValueMessages[i];
+        batch.Records[i].Key = ToRawBytes(keyValueMessage.first);
+        batch.Records[i].Value = ToRawBytes(keyValueMessage.second);
+    }
+    if (producerInstanceId) {
+        batch.ProducerId = producerInstanceId->Id;
+        batch.ProducerEpoch = producerInstanceId->Epoch;
+    }
+    std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs;
+    msgs.emplace_back(topicPartition.PartitionId, std::move(batch));
+
+    TString topicName = topicPartition.TopicPath;
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9);
+
+    TProduceRequestData request;
+    request.Acks = -1;
+    request.TopicData.resize(1);
+    request.TopicData[0].Name = topicName;
+    request.TopicData[0].PartitionData.resize(msgs.size());
+    for(size_t i = 0 ; i < msgs.size(); ++i) {
+        request.TopicData[0].PartitionData[i].Index = msgs[i].first;
+        request.TopicData[0].PartitionData[i].Records = msgs[i].second;
+    }
+
+    if (transactionalId) {
+        request.TransactionalId = *transactionalId;
+    }
+
+    Write(So, &header, &request, false);
+}
+
+TMessagePtr<TProduceResponseData> TKafkaTestClient::ReadLastResult(i32 customCorrelationId) {
+    TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9, customCorrelationId);
+    return Read<TProduceResponseData>(Si, &header);
+}
+
 TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition& topicPartition,
                                                             const std::vector<std::pair<TString, TString>>& keyValueMessages,
                                                             ui32 baseSequence,
@@ -922,11 +971,15 @@ void TKafkaTestClient::ScramAuthenticateToKafka(const TString& userName, const T
     );
 }
 
-TRequestHeaderData TKafkaTestClient::Header(NKafka::EApiKey apiKey, TKafkaVersion version) {
+TRequestHeaderData TKafkaTestClient::Header(NKafka::EApiKey apiKey, TKafkaVersion version, i32 customCorrelationId) {
     TRequestHeaderData header;
     header.RequestApiKey = apiKey;
     header.RequestApiVersion = version;
-    header.CorrelationId = NextCorrelation();
+    if (customCorrelationId == -1) {
+        header.CorrelationId = NextCorrelation();
+    } else {
+        header.CorrelationId = customCorrelationId;
+    }
     header.ClientId = ClientName;
     return header;
 }
@@ -1017,3 +1070,6 @@ void TKafkaTestClient::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, TH
 
 template
 TMessagePtr<TProduceResponseData> TKafkaTestClient::WriteAndRead<TProduceResponseData>(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
+
+template
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Read<TProduceResponseData>(TSocketInput& si, TRequestHeaderData* requestHeader);

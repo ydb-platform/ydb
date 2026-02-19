@@ -73,6 +73,7 @@ $suites = SELECT
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_40') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction40,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_50') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction50,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_100') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction100,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.tpcc_efficiency') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS TpccEfficiency,
     Min(MIN_OF(Timestamp, CAST(RunId/1000 AS Timestamp))) AS Begin,
     Max(Timestamp) AS End,
 FROM `perfomance/olap/tests_results`
@@ -103,6 +104,7 @@ SELECT
     s.Satisfaction40 * IF(s.Satisfaction40 > 1., 1.e-6, 1.) AS Satisfaction40,
     s.Satisfaction50 * IF(s.Satisfaction50 > 1., 1.e-6, 1.) AS Satisfaction50,
     s.Satisfaction100 * IF(s.Satisfaction100 > 1., 1.e-6, 1.) AS Satisfaction100,
+    s.TpccEfficiency AS TpccEfficiency,
     s.Begin AS Begin,
     s.End AS End,
     d.DiffTests AS DiffTests,
@@ -110,6 +112,7 @@ SELECT
     CASE
         WHEN s.Db LIKE '%sas%' THEN 'sas'
         WHEN s.Db LIKE '%vla%' THEN 'vla'
+        WHEN s.Db LIKE '%klg%' THEN 'klg'
         WHEN s.Db LIKE '%etn0vb1kg3p016q1tp3t%' THEN 'cloud'
         ELSE 'other'
     END AS DbDc,
@@ -133,6 +136,15 @@ SELECT
         WHEN s.Db LIKE '%vla%' THEN 'vla_'
         WHEN s.Db LIKE '%etn0vb1kg3p016q1tp3t%b1ggceeul2pkher8vhb6/etn0vb1kg3p016q1tp3t%' THEN 'cloud_slonnn_128_'
         WHEN s.Db LIKE '%etntj9d0t8v7ud2hrqho%b1ggceeul2pkher8vhb6/etntj9d0t8v7ud2hrqho%' THEN 'cloud_slonnn_64_'
+        WHEN s.Db LIKE '%static-node-1.ydb-cluster.com/Root/db%' THEN 'ansible_'
+        WHEN s.Db LIKE '%ydb-vla-dev04-002%' THEN 'oltp-vla-perf1_'
+        WHEN s.Db LIKE '%ydb-vla-dev04-007%' THEN 'oltp-vla-perf2_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-010%' THEN 'oltp-klg-perf3_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-014%' THEN 'oltp-klg-perf4_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-018%' THEN 'oltp-klg-perf5_'
+        WHEN s.Db LIKE '%ydb-qa-01-vla-000%' THEN 'oltp-3dc-perf6_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-023%' THEN 'oltp-klg-perf7_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-032%' THEN 'oltp-klg-perf9_'
         ELSE 'new_db_'
     END || CASE
         WHEN s.Db LIKE '%load%' THEN 'column'
@@ -140,9 +152,9 @@ SELECT
         WHEN s.Db LIKE '%/row%' THEN 'row'
         ELSE 'other'
     END AS DbAlias,
-    COALESCE(SubString(CAST(s.Version AS String), 0U, FIND(CAST(s.Version AS String), '.')), 'unknown') As Branch,
-    COALESCE(SubString(CAST(s.CiVersion AS String), 0U, FIND(CAST(s.CiVersion AS String), '.')), 'unknown') As CiBranch,
-    COALESCE(SubString(CAST(s.TestToolsVersion AS String), 0U, FIND(CAST(s.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch
+    COALESCE(SubString(CAST(s.Version AS String), 0U, RFIND(CAST(s.Version AS String), '.')), 'unknown') As Branch,
+    COALESCE(SubString(CAST(s.CiVersion AS String), 0U, RFIND(CAST(s.CiVersion AS String), '.')), 'unknown') As CiBranch,
+    COALESCE(SubString(CAST(s.TestToolsVersion AS String), 0U, RFIND(CAST(s.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch
 FROM $suites AS s
 LEFT JOIN $diff_tests AS d ON s.RunId = d.RunId AND s.Db = d.Db AND s.Suite = d.Suite
 LEFT JOIN $fail_tests AS f ON s.RunId = f.RunId AND s.Db = f.Db AND s.Suite = f.Suite

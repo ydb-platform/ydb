@@ -1,8 +1,8 @@
 diff --git a/include/__string/extern_template_lists.h b/include/__string/extern_template_lists.h
-index cc536e5..ec567f8 100644
+index dc66fa5..efc6086 100644
 --- a/include/__string/extern_template_lists.h
 +++ b/include/__string/extern_template_lists.h
-@@ -61,7 +61,6 @@
+@@ -60,7 +60,6 @@
    _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::push_back(value_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(size_type, value_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::size_type basic_string<_CharType>::rfind(value_type, size_type) const) \
@@ -10,7 +10,7 @@ index cc536e5..ec567f8 100644
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::assign(size_type, value_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::erase(size_type, size_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(basic_string const&, size_type, size_type)) \
-@@ -77,7 +76,8 @@
+@@ -76,7 +75,8 @@
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, basic_string const&, size_type, size_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::iterator basic_string<_CharType>::insert(basic_string::const_iterator, value_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::resize(size_type, value_type)) \
@@ -20,7 +20,7 @@ index cc536e5..ec567f8 100644
  
  #define _LIBCPP_STRING_UNSTABLE_EXTERN_TEMPLATE_LIST(_Func, _CharType) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, value_type const*, size_type)) \
-@@ -112,7 +112,6 @@
+@@ -110,7 +110,6 @@
    _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::push_back(value_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(size_type, value_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::size_type basic_string<_CharType>::rfind(value_type, size_type) const) \
@@ -28,7 +28,7 @@ index cc536e5..ec567f8 100644
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::assign(size_type, value_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::__erase_external_with_move(size_type, size_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(basic_string const&, size_type, size_type)) \
-@@ -126,7 +125,16 @@
+@@ -124,7 +123,16 @@
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, basic_string const&, size_type, size_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::iterator basic_string<_CharType>::insert(basic_string::const_iterator, value_type)) \
    _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::resize(size_type, value_type)) \

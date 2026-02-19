@@ -713,6 +713,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
     config.MutableHttpConfig()->SetYmqEnabled(true);
     config.MutableHttpConfig()->SetSqsTopicEnabled(enableSqsTopic);
+    SqsTopicMode = enableSqsTopic;
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");
 

@@ -79,7 +79,9 @@ def install_to_destination(dest):
         try:
             os.makedirs(destdir, exist_ok=True)
         except Exception as e:
-            parser.error(f"path {destdir} does not exist and could not be created: {e}")
+            parser.error(
+                f"path {destdir} does not exist and could not be created: {e}. Please run this command using sudo, or see --help for more options."
+            )
     try:
         print(f"Installing {activator} to {dest}...", file=sys.stderr)
         shutil.copy(activator, dest)

@@ -91,4 +91,10 @@ bool TSessionsManager::HasTask(const TTask& task) const {
     return !!Storage->GetSession(task.GetDescriptionContainer().GetClassName(), task.GetIdentifier());
 }
 
+ISessionLogic::TStatus TSessionsManager::GetStatus(const TString& className, const TString& identifier) const {
+    auto session = Storage->GetSession(className, identifier);
+    AFL_VERIFY(session);
+    return session->GetStatus();
+}
+
 }

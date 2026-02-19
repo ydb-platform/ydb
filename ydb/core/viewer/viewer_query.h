@@ -33,6 +33,7 @@ class TJsonQuery : public TViewerPipeClient {
     TDuration StatsPeriod;
     TDuration KeepAlive = TDuration::MilliSeconds(10000);
     TInstant LastSendTime;
+    TInstant QueryStartTime;
     TInstant Deadline;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
 
@@ -394,6 +395,7 @@ public:
         if (Timeout || KeepAlive || Long || Action == "fetch-long-query") {
             Schedule(WakeupPeriod, new TEvents::TEvWakeup());
         }
+        QueryStartTime = TActivationContext::Now();
         LastSendTime = TActivationContext::Now();
     }
 
@@ -990,8 +992,14 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        QueryResponse.Event("StreamData");
         NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
+        if (QueryResponse.Span) {
+            QueryResponse.Span.Event("StreamData", {
+                {"result_idx", static_cast<i64>(data.GetQueryResultIndex())},
+                {"seq", static_cast<i64>(data.GetSeqNo())},
+                {"rows", static_cast<i64>(data.GetResultSet().rows_size())},
+            });
+        }
 
         if (TotalRows < LimitRows) {
             int rowsAvailable = LimitRows - TotalRows;
@@ -1012,11 +1020,17 @@ private:
 
         THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
+            if (QueryResponse.Span) {
+                QueryResponse.Span.Event("LimitReached", {
+                    {"limit_rows", static_cast<i64>(LimitRows)},
+                    {"total_rows", static_cast<i64>(TotalRows)},
+                });
+            }
             ack->Record.SetEnough(true);
         }
         Send(ev->Sender, ack.Release());
-
     }
+
     void HandleReply(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev) {
         GetOperationResponse->Set(std::move(ev));
 
@@ -1207,7 +1221,7 @@ private:
 
     void HandleWakeup() {
         auto now = TActivationContext::Now();
-        if (Timeout && (now - LastSendTime > Timeout)) {
+        if (Timeout && (now - QueryStartTime > Timeout)) {
             return ReplyWithTimeoutError();
         }
         if (KeepAlive && (now - LastSendTime > KeepAlive)) {

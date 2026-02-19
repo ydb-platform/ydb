@@ -264,11 +264,11 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTablet
 
             auto consumerGroup = DynamicCounters->GetSubgroup("consumer", metricsConsumerName);
             counters.MLPMessageLockAttemptsCounter = consumerGroup->GetExpiringNamedHistogram(
-                "name", "topic.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
+                "name", "topic.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS), true);
             counters.MLPMessageLockingDurationCounter = consumerGroup->GetExpiringNamedHistogram(
-                "name", "topic.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
+                "name", "topic.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS), true);
             counters.MLPWaitingLockingDurationCounter = consumerGroup->GetExpiringNamedHistogram(
-                "name", "topic.waiting_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
+                "name", "topic.waiting_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS), true);
 
             counters.DeletedByRetentionPolicyCounter = InitializeDeleteCounter(consumerGroup, "retention");
             counters.DeletedByDeadlinePolicyCounter = InitializeDeleteCounter(consumerGroup, "delete_policy");

@@ -1383,18 +1383,14 @@ private:
 };
 
 IThroughputThrottlerPtr CreatePrefetchingThrottler(
-    const TPrefetchingThrottlerConfigPtr& config,
-    const IThroughputThrottlerPtr& underlying,
-    const TLogger& Logger)
+    TPrefetchingThrottlerConfigPtr config,
+    IThroughputThrottlerPtr underlying,
+    TLogger Logger)
 {
-    if (config->Enable) {
-        return New<TPrefetchingThrottler>(
-            config,
-            underlying,
-            Logger);
-    } else {
-        return underlying;
-    }
+    return New<TPrefetchingThrottler>(
+        std::move(config),
+        std::move(underlying),
+        std::move(Logger));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

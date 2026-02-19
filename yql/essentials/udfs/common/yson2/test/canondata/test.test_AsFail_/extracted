@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:2:1: Error: Execution of node: Result
+    	select
+	^
+        <tmp_path>/program.sql:<main>:4:11: Error: Expected boolean, but got: entity (#)
+        	    Yson::AsBool('#'y);
+	          ^

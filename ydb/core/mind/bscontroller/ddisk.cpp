@@ -63,7 +63,7 @@ namespace NKikimr::NBsController {
                     }
                 } else if (actualNumVChunks != targetNumVChunks) {
                     if (!actualNumVChunks) { // allocate DDisks for data and for persistent buffers
-                        NKikimrBlobStorage::TDirectBlockGroupAllocation pb;
+                        NKikimrBlobStorage::NDDisk::TDirectBlockGroupAllocation pb;
                         std::vector<TDDiskId> ddiskIds;
                         if (AllocateDDiskGroup(ddiskPoolName, targetNumVChunks, &ddiskIds)) {
                             for (const auto& ddiskId : ddiskIds) {
@@ -95,7 +95,7 @@ namespace NKikimr::NBsController {
                         using T = Schema::DirectBlockGroupClaims;
                         key.Update<T::NumVChunksClaimed, T::Allocation>(actualNumVChunks, allocation);
 
-                        NKikimrBlobStorage::TDirectBlockGroupAllocation pb;
+                        NKikimrBlobStorage::NDDisk::TDirectBlockGroupAllocation pb;
                         const bool success = pb.ParseFromString(allocation);
                         Y_ABORT_UNLESS(success);
 
@@ -118,7 +118,7 @@ namespace NKikimr::NBsController {
                 item->SetDirectBlockGroupId(directBlockGroupId);
                 item->SetActualNumVChunks(actualNumVChunks);
                 if (allocation) {
-                    NKikimrBlobStorage::TDirectBlockGroupAllocation pb;
+                    NKikimrBlobStorage::NDDisk::TDirectBlockGroupAllocation pb;
                     const bool success = pb.ParseFromString(allocation);
                     Y_ABORT_UNLESS(success);
                     size_t numDDisks = pb.DDiskIdSize();

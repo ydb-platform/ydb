@@ -3,6 +3,8 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/security/ticket_parser.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
 namespace NKikimr {
@@ -40,6 +42,21 @@ private:
                 response->add_groups(group);
             }
         }
+
+        // Add permission information (always returned)
+        const auto* appData = AppData();
+        bool isAdministrationAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+        bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+        bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+        bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
+        bool isRegisterNodeAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetRegisterDynamicNodeAllowedSIDs());
+        bool isBootstrapAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetBootstrapAllowedSIDs());
+        response->set_is_administration_allowed(isAdministrationAllowed);
+        response->set_is_monitoring_allowed(isMonitoringAllowed);
+        response->set_is_viewer_allowed(isViewerAllowed);
+        response->set_is_database_allowed(isDatabaseAllowed);
+        response->set_is_register_node_allowed(isRegisterNodeAllowed);
+        response->set_is_bootstrap_allowed(isBootstrapAllowed);
 
         Request->SendResult(*response, Ydb::StatusIds::SUCCESS);
     }

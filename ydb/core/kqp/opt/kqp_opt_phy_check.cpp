@@ -11,9 +11,9 @@ using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
 
-TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer() {
+TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
     return CreateFunctorTransformer(
-        [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
+        [kqpCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
             output = input;
 
             YQL_ENSURE(TMaybeNode<TKqlQuery>(input));
@@ -88,6 +88,10 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer() {
                     const auto& stageConsumers = GetConsumers(stage, parentsMap);
                     bool stageWithResult = false;
 
+                    // Allowed stage consumers:
+                    // - Multiple DQ output channels
+                    // - Multiple sink effects
+
                     TDynBitMap usedOutputs;
                     for (auto consumer : stageConsumers) {
                         if (auto maybeOutput = TExprBase(consumer).Maybe<TDqOutput>()) {
@@ -101,26 +105,54 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer() {
                                 return false;
                             }
                             usedOutputs.Set(outputIndex);
-                        } else {
-                            // There can be also an effect with stage that has dq sinks
+                        } else if (!kqpCtx->Config->GetEnableIndexStreamWrite()) {
+                            // There can be also an effect(s) with stage that has dq sinks
                             // Check the following structure:
                             // TKqlQuery (tuple with 2 elems) - results and effects
+                            auto effectParentIt = parentsMap.find(consumer);
+                            YQL_ENSURE(effectParentIt != parentsMap.end());
+                            if (effectParentIt->second.size() != 1) {
+                                hasMultipleConsumers = true;
+                            } else {
+                                const TExprNode* queryNode = *effectParentIt->second.begin();
+                                YQL_ENSURE(queryNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple,
+                                    "Stage #" << PrintKqpStageOnly(stage, ctx) << " has unexpected consumer: "
+                                        << consumer->Content());
+                            }
+                        } else {
                             auto stageParentsIt = parentsMap.find(stage.Raw());
                             YQL_ENSURE(stageParentsIt != parentsMap.end());
                             if (stageParentsIt->second.size() != 1) {
-                                hasMultipleConsumers = true;
-                            } else {
-                                const TExprNode* effectNode = *stageParentsIt->second.begin();
-                                auto effectParentIt = parentsMap.find(effectNode);
-                                YQL_ENSURE(effectParentIt != parentsMap.end());
-                                if (effectParentIt->second.size() != 1) {
-                                    hasMultipleConsumers = true;
-                                } else {
-                                    const TExprNode* queryNode = *effectParentIt->second.begin();
-                                    YQL_ENSURE(queryNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple,
-                                        "Stage #" << PrintKqpStageOnly(stage, ctx) << " has unexpected consumer: "
-                                            << consumer->Content());
+                                bool hasOutput = false;
+                                bool hasEffect = false;
+                                for (const auto& parent : stageParentsIt->second) {
+                                    YQL_ENSURE(TExprBase(parent).Maybe<TDqOutput>()
+                                            || TExprBase(parent).Maybe<TKqpSinkEffect>());
+                                    if (TExprBase(parent).Maybe<TDqOutput>()) {
+                                        YQL_ENSURE(!hasOutput, "Stage #" << PrintKqpStageOnly(stage, ctx)
+                                            << " has multiple outputs");
+                                        hasOutput = true;
+                                    } else {
+                                        YQL_ENSURE(!hasEffect, "Stage #" << PrintKqpStageOnly(stage, ctx)
+                                            << " has multiple effects");
+                                        hasEffect = true;
+                                    }
                                 }
+                            }
+                        }
+                    }
+
+                    if (!kqpCtx->Config->GetEnableIndexStreamWrite()) {
+                        if (const auto outputs = stage.Outputs()) {
+                            for (const auto& output : outputs.Cast()) {
+                                const auto outputIndex = FromString<ui32>(output.Index().Value());
+                                if (usedOutputs.Test(outputIndex)) {
+                                    hasMultipleConsumers = true;
+                                    YQL_CLOG(ERROR, ProviderKqp) << "Stage #" << node.Ref().UniqueId()
+                                        << ", output " << outputIndex << " has multiple consumers (output used by channel and sink)";
+                                    return false;
+                                }
+                                usedOutputs.Set(outputIndex);
                             }
                         }
                     }

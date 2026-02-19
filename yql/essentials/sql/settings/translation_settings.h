@@ -136,6 +136,17 @@ struct TTranslationSettings {
     bool IsReplay = false;
 };
 
-bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);
+struct TParsedSettings {
+    bool HasSyntaxV0 = false;
+    bool HasSyntaxV1 = false;
+    bool HasAnsiLexer = false;
+    bool HasPgParser = false;
+
+    bool ApplyTo(TTranslationSettings& settings, NYql::TIssues& issues) const;
+};
+
+bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings& parsed, NYql::TIssues& issues);
+
+bool ParseTranslationSettings(const TString& query, TTranslationSettings& settings, NYql::TIssues& issues);
 
 } // namespace NSQLTranslation

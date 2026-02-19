@@ -22,7 +22,7 @@ namespace user_agent
 /**
   Name of the user-agent extracted from original. Usually refers to the browser's name.
   <p>
-  <a href="https://www.whatsmyua.info">Example</a> of extracting browser's name from original
+  <a href="https://uaparser.dev/#demo">Example</a> of extracting browser's name from original
   string. In the case of using a user-agent for non-browser products, such as microservices with
   multiple names/versions inside the @code user_agent.original @endcode, the most significant name
   SHOULD be selected. In such a scenario it should align with @code user_agent.version @endcode
@@ -66,7 +66,7 @@ static constexpr const char *kUserAgentSyntheticType = "user_agent.synthetic.typ
 /**
   Version of the user-agent extracted from original. Usually refers to the browser's version
   <p>
-  <a href="https://www.whatsmyua.info">Example</a> of extracting browser's version from original
+  <a href="https://uaparser.dev/#demo">Example</a> of extracting browser's version from original
   string. In the case of using a user-agent for non-browser products, such as microservices with
   multiple names/versions inside the @code user_agent.original @endcode, the most significant
   version SHOULD be selected. In such a scenario it should align with @code user_agent.name @endcode

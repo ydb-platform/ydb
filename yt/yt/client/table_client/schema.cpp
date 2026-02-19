@@ -93,7 +93,7 @@ ELockType GetStrongestLock(ELockType lhs, ELockType rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TLockMask& lhs, const TLockMask& rhs)
+bool operator==(const TLockMask& lhs, const TLockMask& rhs)
 {
     int lockCount = std::max(lhs.GetSize(), rhs.GetSize());
     for (int index = 0; index < lockCount; ++index) {
@@ -334,14 +334,8 @@ std::string TColumnSchema::GetDiagnosticNameString() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TDeletedColumn::TDeletedColumn(TColumnStableName stableName)
-    : StableName_(stableName)
+    : StableName_(std::move(stableName))
 { }
-
-TDeletedColumn& TDeletedColumn::SetStableName(TColumnStableName value)
-{
-    StableName_ = std::move(value);
-    return *this;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -470,7 +464,7 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
 
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema)
 {
-    schema->SetStableName(TColumnStableName{protoSchema.stable_name()});
+    schema->StableName() = TColumnStableName{protoSchema.stable_name()};
 }
 
 void PrintTo(const TColumnSchema& columnSchema, std::ostream* os)
@@ -1823,7 +1817,7 @@ std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
         throwError("expected \")\" or \",\" ");
     }
 
-    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description. Expected nested_key or nested_value");
+    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description: expected \"nested_key\" or \"nested_value\"");
 }
 
 EValueType GetNestedColumnElementType(const TLogicalType* logicalType)

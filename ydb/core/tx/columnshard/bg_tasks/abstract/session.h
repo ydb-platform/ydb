@@ -44,6 +44,11 @@ private:
     virtual TString DoSerializeToString() const = 0;
     virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const TStartContext& context) const = 0;
 public:
+    struct TStatus {
+        bool Success = true;
+        TString ErrorMessage;        
+    };
+
     using TFactory = NObjectFactory::TObjectFactory<ISessionLogic, TString>;
 
     virtual ~ISessionLogic() = default;
@@ -88,6 +93,7 @@ public:
     virtual bool IsReadyForStart() const = 0;
     virtual bool IsFinished() const = 0;
     virtual bool IsReadyForRemoveOnFinished() const = 0;
+    virtual TStatus GetStatus() const = 0;
 };
 
 template <class TProtoLogicExt, class TProtoProgressExt, class TProtoStateExt>

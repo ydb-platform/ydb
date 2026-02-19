@@ -361,6 +361,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         permission.Owner = "user";
         permission.Action = MakeAction(TAction::SHUTDOWN_HOST, "test1", 60000000);
         permission.Deadline = now - TDuration::Seconds(61);
+        permission.RequestId = "1";
         UNIT_ASSERT_VALUES_EQUAL(cluster->AddLocks(permission, nullptr), 0);
 
         permission.Action.SetHost("test2");
@@ -387,7 +388,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
 
         auto point1 = cluster->PushRollbackPoint();
         auto action1 = MakeAction(TAction::SHUTDOWN_HOST, 3, 60000000);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->AddTempLocks(action1, 0, nullptr), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->AddTempLocks(action1, 0, "request", nullptr), 1);
         UNIT_ASSERT_VALUES_EQUAL(cluster->Node(3).TempLocks.size(), 1);
 
         cluster->RollbackLocks(point1);
@@ -403,7 +404,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT_VALUES_EQUAL(cluster->AddLocks(permission, nullptr), 2);
         UNIT_ASSERT(!cluster->PDisk(NCms::TPDiskID(1, 1)).Locks.empty());
         UNIT_ASSERT(!cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).Locks.empty());
-        UNIT_ASSERT_VALUES_EQUAL(cluster->AddTempLocks(action2, 0, nullptr), 2);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->AddTempLocks(action2, 0, "request", nullptr), 2);
         UNIT_ASSERT_VALUES_EQUAL(cluster->PDisk(NCms::TPDiskID(1, 1)).TempLocks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).TempLocks.size(), 1);
         cluster->RollbackLocks(point2);

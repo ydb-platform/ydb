@@ -14,7 +14,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRefCountedTrackerStatistics::TStatistics& TRefCountedTrackerStatistics::TStatistics::operator+= (
+TRefCountedTrackerStatistics::TStatistics& TRefCountedTrackerStatistics::TStatistics::operator+=(
     const TRefCountedTrackerStatistics::TStatistics& rhs)
 {
     ObjectsAllocated += rhs.ObjectsAllocated;

@@ -53,7 +53,7 @@ private:
         i64 Priority;
         i64 Index;
 
-        bool operator < (const TEntry& other) const
+        bool operator<(const TEntry& other) const
         {
             return std::tie(Priority, Index) < std::tie(other.Priority, other.Index);
         }

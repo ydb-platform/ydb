@@ -96,6 +96,7 @@ DEFINE_ENUM(EAccessControlObject,
     (GetMasterConsistentState)
     (ExitReadOnly)
     (MasterExitReadOnly)
+    (ResetDynamicallyPropagatedMasterCells)
     (DiscombobulateNonvotingPeers)
     (SwitchLeader)
     (RequestRestart)

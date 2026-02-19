@@ -48,14 +48,14 @@ inline void TCallbackBase::Swap(TCallbackBase& other)
 }
 
 #ifndef __cpp_impl_three_way_comparison
-inline bool TCallbackBase::operator == (const TCallbackBase& other) const
+inline bool TCallbackBase::operator==(const TCallbackBase& other) const
 {
     return
         BindState == other.BindState &&
         UntypedInvoke == other.UntypedInvoke;
 }
 
-inline bool TCallbackBase::operator != (const TCallbackBase& other) const
+inline bool TCallbackBase::operator!=(const TCallbackBase& other) const
 {
     return !(*this == other);
 }

@@ -12,9 +12,11 @@ SRCS(
     defs.h
     env.h
     huge.cpp
+    compaction.cpp
 )
 
 PEERDIR(
+    contrib/libs/xxhash
     ydb/apps/version
     library/cpp/testing/unittest
     ydb/core/blobstorage/backpressure

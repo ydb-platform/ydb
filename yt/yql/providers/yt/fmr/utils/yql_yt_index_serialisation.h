@@ -8,13 +8,13 @@
 namespace NYql::NFmr {
 
 struct TSortedRowMetadata {
-    TVector<TRowIndexMarkup> Rows;
-    TVector<TString> KeyColumns;
+    std::vector<TRowIndexMarkup> Rows;
+    std::vector<TString> KeyColumns;
 
     void Save(IOutputStream* buffer) const;
-    void Load(IInputStream* buffer, TVector<TString> KeyColumns);
+    void Load(IInputStream* buffer, std::vector<TString> KeyColumns);
 
-    bool operator == (const TSortedRowMetadata&) const = default;
+    bool operator==(const TSortedRowMetadata&) const = default;
 };
 
 void WriteVarUint64(IOutputStream* out, ui64 value);

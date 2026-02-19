@@ -90,6 +90,7 @@ protected:
         NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate *whiteboardPDiskResult;
         NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate *whiteboardVDiskResult;
         TEvBlobStorage::TEvControllerUpdateDiskStatus *whiteboardDiskMetricsResult;
+        TRope Rope;
 
         TResponseData() {
             Clear();
@@ -120,6 +121,7 @@ protected:
             whiteboardPDiskResult = nullptr;
             whiteboardVDiskResult = nullptr;
             whiteboardDiskMetricsResult = nullptr;
+            Rope = {};
         }
 
         void Check() {
@@ -258,6 +260,22 @@ protected:
         ActTestFSM(ctx);
     }
 
+    void Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev, const TActorContext &ctx) {
+        auto& result = *ev->Get();
+        LastResponse.Status = result.Status;
+        LastResponse.EventType = (TEvBlobStorage::EEv)result.Type();
+        ActTestFSM(ctx);
+    }
+
+    void Handle(NPDisk::TEvChunkReadRawResult::TPtr ev, const TActorContext &ctx) {
+        auto& result = *ev->Get();
+        VERBOSE_COUT("Got " << result.ToString());
+        LastResponse.Status = result.Status;
+        LastResponse.EventType = (TEvBlobStorage::EEv)result.Type();
+        LastResponse.Rope = std::move(result.Data);
+        ActTestFSM(ctx);
+    }
+
     void Handle(NPDisk::TEvChunkReserveResult::TPtr &ev, const TActorContext &ctx) {
         NPDisk::TEvChunkReserveResult &result = *(ev->Get());
         LastResponse.Status = result.Status;
@@ -371,6 +389,8 @@ public:
             HFunc(NPDisk::TEvReadLogResult, Handle);
             HFunc(NPDisk::TEvChunkWriteResult, Handle);
             HFunc(NPDisk::TEvChunkReadResult, Handle);
+            HFunc(NPDisk::TEvChunkWriteRawResult, Handle);
+            HFunc(NPDisk::TEvChunkReadRawResult, Handle);
             HFunc(NPDisk::TEvChunkReserveResult, Handle);
             HFunc(NPDisk::TEvChunkLockResult, Handle);
             HFunc(NPDisk::TEvChunkUnlockResult, Handle);

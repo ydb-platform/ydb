@@ -45,7 +45,8 @@
 */
 
 #include "Python.h"
-#include "pycore_hashtable.h"
+#include "pycore_hashtable.h"     // export _Py_hashtable_new()
+#include "pycore_pyhash.h"        // _Py_HashPointerRaw()
 
 #define HASHTABLE_MIN_SIZE 16
 #define HASHTABLE_HIGH 0.50
@@ -224,7 +225,6 @@ _Py_hashtable_set(_Py_hashtable_t *ht, const void *key, void *value)
     entry = ht->get_entry_func(ht, key);
     assert(entry == NULL);
 #endif
-
 
     entry = ht->alloc.malloc(sizeof(_Py_hashtable_entry_t));
     if (entry == NULL) {

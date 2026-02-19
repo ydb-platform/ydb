@@ -48,13 +48,13 @@ TLegacyReadLimit::TLegacyReadLimit(TLegacyOwningKey&& key)
     SetLegacyKey(std::move(key));
 }
 
-TLegacyReadLimit& TLegacyReadLimit::operator= (const NProto::TReadLimit& protoLimit)
+TLegacyReadLimit& TLegacyReadLimit::operator=(const NProto::TReadLimit& protoLimit)
 {
     InitCopy(protoLimit);
     return *this;
 }
 
-TLegacyReadLimit& TLegacyReadLimit::operator= (NProto::TReadLimit&& protoLimit)
+TLegacyReadLimit& TLegacyReadLimit::operator=(NProto::TReadLimit&& protoLimit)
 {
     InitMove(std::move(protoLimit));
     return *this;
@@ -406,13 +406,13 @@ TLegacyReadRange::TLegacyReadRange(NProto::TReadRange&& range)
     InitMove(std::move(range));
 }
 
-TLegacyReadRange& TLegacyReadRange::operator= (const NProto::TReadRange& range)
+TLegacyReadRange& TLegacyReadRange::operator=(const NProto::TReadRange& range)
 {
     InitCopy(range);
     return *this;
 }
 
-TLegacyReadRange& TLegacyReadRange::operator= (NProto::TReadRange&& range)
+TLegacyReadRange& TLegacyReadRange::operator=(NProto::TReadRange&& range)
 {
     InitMove(std::move(range));
     return *this;
@@ -665,7 +665,7 @@ TReadLimit TReadLimit::Invert() const
     return result;
 }
 
-bool TReadLimit::operator == (const TReadLimit& other) const
+bool TReadLimit::operator==(const TReadLimit& other) const
 {
     return
         KeyBound_ == other.KeyBound_ &&
@@ -860,7 +860,7 @@ TReadRange::TReadRange(
     }
 }
 
-bool TReadRange::operator == (const TReadRange& other) const
+bool TReadRange::operator==(const TReadRange& other) const
 {
     return LowerLimit_ == other.LowerLimit_ && UpperLimit_ == other.UpperLimit_;
 }

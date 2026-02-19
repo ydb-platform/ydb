@@ -27,7 +27,7 @@ public:
 };
 
 void TImportActor::OnSessionStateSaved() {
-    AFL_VERIFY(ImportSession->IsFinished());
+    AFL_VERIFY(ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished());
     NYDBTest::TControllers::GetColumnShardController()->OnImportFinished();
     if (ImportSession->GetTxId()) {
         ExecuteTransaction(std::make_unique<TTxProposeFinish>(GetShardVerified<NColumnShard::TColumnShard>(), *ImportSession->GetTxId()));
@@ -37,17 +37,17 @@ void TImportActor::OnSessionStateSaved() {
 }
 
 void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::TPtr& ev) {
-    AFL_VERIFY(!ev->Get()->Error)("error", ev->Get()->Error);
-    
-    if (ev->Get()->IsLast) {
+    if (ev->Get()->Error) {
+        ImportSession->Abort(ev->Get()->Error);
+    } else if (ev->Get()->IsLast) {
         ImportSession->Finish();
     }
-    
-    if (!ev->Get()->Data && ev->Get()->IsLast) {
+
+    if (!ev->Get()->Data || ev->Get()->IsLast || ev->Get()->Error) {
         SaveSessionProgress();
         return;
     }
-    
+
     AFL_VERIFY(ev->Get()->Data)("error", "empty record batch");
     NArrow::TBatchSplittingContext context(48 * 1024 * 1024);
     auto blobsSplittedConclusion = NArrow::SplitByBlobSize(ev->Get()->Data, context);
@@ -102,7 +102,7 @@ TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, con
 
 void TImportActor::OnSessionProgressSaved() {
     SwitchStage(EStage::WaitData, EStage::WaitData);
-    if (ImportSession->IsFinished()) {
+    if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
         SaveSessionState();
     } else {
         AFL_VERIFY(ImportActorId);

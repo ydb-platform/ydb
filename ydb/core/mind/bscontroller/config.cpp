@@ -329,10 +329,9 @@ namespace NKikimr::NBsController {
             }
         };
 
-        bool TBlobStorageController::CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
+        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
                 bool suppressDegradedGroupsChecking, bool suppressDisintegratedGroupsChecking,
-                TTransactionContext& txc, TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
-            NIceDb::TNiceDb db(txc.DB);
+                TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
             // when bridged non-proxy groups get updated, we update parent group too
             THashSet<TGroupId> updates;
@@ -514,6 +513,41 @@ namespace NKikimr::NBsController {
                 state.PDisks.DeleteExistingEntry(pdiskId);
             }
 
+            return true;
+        }
+
+        std::optional<TString> TBlobStorageController::ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
+                TConfigTxFlags flags, TTransactionContext& txc,
+                NKikimrBlobStorage::TConfigResponse *response) {
+            if (!state || !state->Changed()) {
+                return std::nullopt;
+            }
+
+            TString error;
+            const bool suppressFailModelChecking = flags.SuppressFailModelChecking;
+            const bool suppressDegradedGroupsChecking = flags.SuppressDegradedGroupsChecking;
+            const bool suppressDisintegratedGroupsChecking = flags.SuppressDisintegratedGroupsChecking;
+
+            if (!ValidateConfigUpdates(*state, suppressFailModelChecking, suppressDegradedGroupsChecking,
+                    suppressDisintegratedGroupsChecking, &error, response)) {
+                RollbackConfigUpdate(state);
+                return error;
+            }
+
+            CommitConfigUpdates(*state, txc);
+            return std::nullopt;
+        }
+
+        void TBlobStorageController::RollbackConfigUpdate(std::optional<TConfigState>& state) {
+            if (state) {
+                state->Rollback();
+                state.reset();
+            }
+        }
+
+        void TBlobStorageController::CommitConfigUpdates(TConfigState& state, TTransactionContext& txc) {
+            NIceDb::TNiceDb db(txc.DB);
+
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
             }
@@ -636,8 +670,6 @@ namespace NKikimr::NBsController {
 
             ScheduleVSlotReadyUpdate();
             UpdateWaitingGroups(groupIds);
-
-            return true;
         }
 
         void TBlobStorageController::CommitSelfHealUpdates(TConfigState& state) {

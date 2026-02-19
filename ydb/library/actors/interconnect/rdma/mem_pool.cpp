@@ -130,10 +130,10 @@ namespace NInterconnect::NRdma {
         class TChunkUseLock {
             // Prevent reclaming just after new chunk allocation
             std::atomic<ui64> Lock = ReclaimingBitMask;
-            static constexpr ui64 ReclaimingBitMask = 1ul << 63;
+            static constexpr ui64 ReclaimingBitMask = 1ull << 63;
             static constexpr size_t GenerationBits = 46u;
             static constexpr size_t UseCountBits = 17u;
-            static constexpr ui64 UseCountMask = (1ul << UseCountBits) - 1u;
+            static constexpr ui64 UseCountMask = (1ull << UseCountBits) - 1ull;
         public:
             void Release() noexcept {
                 //TODO: remove this verify it is a bit expensive

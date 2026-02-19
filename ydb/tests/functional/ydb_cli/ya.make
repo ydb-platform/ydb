@@ -6,6 +6,7 @@ TEST_SRCS(
     test_ydb_common.py
     test_ydb_flame_graph.py
     test_ydb_impex.py
+    test_ydb_profile.py
     test_ydb_recursive_remove.py
     test_ydb_scheme.py
     test_ydb_scripting.py
@@ -30,7 +31,9 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/pexpect
     contrib/python/pyarrow
+    contrib/python/PyYAML
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/oss/canonical

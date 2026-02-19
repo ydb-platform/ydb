@@ -8,10 +8,13 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TString TStageFeatures::DebugString() const {
     TStringBuilder result;
-    result << "name=" << Name << ";limit=" << Limit << ";";
+    result << "TStageFeatures{" << Endl
+           << "  name=" << Name << Endl
+           << "  limit=" << Limit << Endl;
     if (Owner) {
-        result << "owner=" << Owner->DebugString() << ";";
+        result << "  owner=" << Owner->DebugString() << Endl;
     }
+    result << "}";
     return result;
 }
 

@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -608,5 +607,4 @@ template struct TValidate<TValidateErrorPolicyThrow, TValidateModeGreedy<TValida
 template struct TValidate<TValidateErrorPolicyFail, TValidateModeLazy<TValidateErrorPolicyFail>>;
 template struct TValidate<TValidateErrorPolicyFail, TValidateModeGreedy<TValidateErrorPolicyFail>>;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

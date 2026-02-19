@@ -13,7 +13,7 @@ namespace NKikimr {
                                ui32 chunkSize, ui32 appendBlockSize,
                                ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
                                ui64 writeBlockSize, ui64 bulkWriteBlockSize, NPDisk::EDeviceType trueMediaType,
-                               bool isTinyDisk)
+                               bool isTinyDisk, ui32 rawSectorSize)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , SlotSizeInUnits(slotSizeInUnits)
@@ -30,6 +30,7 @@ namespace NKikimr {
         , GlueRequestDistanceBytes(CalculateGlueRequestDistanceBytes(seekTimeUs, readSpeedBps))
         , TrueMediaType(trueMediaType)
         , IsTinyDisk(isTinyDisk)
+        , RawSectorSize(rawSectorSize)
     {
         Y_VERIFY_DEBUG(AppendBlockSize <= ChunkSize);
     }

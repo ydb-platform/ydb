@@ -28,7 +28,7 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
 
     if (!ModuleResolver_) {
         auto issues = ExprContext_.IssueManager.GetIssues();
-        CheckFatalIssues(issues);
+        CheckFatalIssues(issues, options.IssueReportTarget);
         ythrow TCompileError("", issues.ToString()) << "failed to compile modules";
     }
 
@@ -92,7 +92,8 @@ IPullStreamWorkerFactoryPtr TProgramFactory::MakePullStreamWorkerFactory(
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
-        Options_.InternalSettings));
+        Options_.InternalSettings,
+        Options_.IssueReportTarget));
 }
 
 IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
@@ -121,7 +122,8 @@ IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
-        Options_.InternalSettings));
+        Options_.InternalSettings,
+        Options_.IssueReportTarget));
 }
 
 IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
@@ -154,5 +156,6 @@ IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
-        Options_.InternalSettings));
+        Options_.InternalSettings,
+        Options_.IssueReportTarget));
 }

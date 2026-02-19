@@ -11,8 +11,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 ///////////////////////////////////////////////////////////////////////////////
 // TDefaultValueBuilder
@@ -110,5 +109,4 @@ private:
     mutable bool Rethrow_ = false;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

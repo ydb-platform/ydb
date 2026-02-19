@@ -4,10 +4,10 @@
 
 namespace NKikimr::NDDisk {
 
-    void TDDiskActor::Handle(TEvDDiskConnect::TPtr ev) {
+    void TDDiskActor::Handle(TEvConnect::TPtr ev) {
         const auto& record = ev->Get()->Record;
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Handle(TEvDDiskConnect)", (DDiskId, DDiskId),
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Handle(TEvConnect)", (DDiskId, DDiskId),
             (Record, record));
 
         const TQueryCredentials creds(record.GetCredentials());
@@ -17,7 +17,7 @@ namespace NKikimr::NDDisk {
         if (!inserted) {
             if (creds.Generation < connection.Generation) {
                 // this is definitely obsolete tablet trying to reach us, reject
-                SendReply(*ev, std::make_unique<TEvDDiskConnectResult>(NKikimrBlobStorage::TDDiskReplyStatus::BLOCKED));
+                SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED));
                 return;
             } else if (connection.Generation < creds.Generation) {
                 // drop connection with previous tablet
@@ -29,7 +29,7 @@ namespace NKikimr::NDDisk {
         connection.NodeId = ev->Sender.NodeId();
         connection.InterconnectSessionId = ev->InterconnectSession;
 
-        SendReply(*ev, std::make_unique<TEvDDiskConnectResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK, std::nullopt,
+        SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
             DDiskInstanceGuid));
 
         if (ev->InterconnectSession) {
@@ -37,15 +37,15 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TDDiskActor::Handle(TEvDDiskDisconnect::TPtr ev) {
-        if (!CheckQuery(*ev)) {
+    void TDDiskActor::Handle(TEvDisconnect::TPtr ev) {
+        if (!CheckQuery(*ev, nullptr)) {
             return;
         }
 
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         Connections.erase(creds.TabletId);
-        SendReply(*ev, std::make_unique<TEvDDiskDisconnectResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK));
+        SendReply(*ev, std::make_unique<TEvDisconnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
     }
 
     bool TDDiskActor::ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const {

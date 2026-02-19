@@ -11,8 +11,7 @@
 
 struct ArrowArray;
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class IArrowType;
 
@@ -412,5 +411,4 @@ public:
     }
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

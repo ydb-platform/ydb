@@ -23,6 +23,12 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     OnBeforeChangePortion(nullptr);
     Portions.emplace(info->GetPortionId(), info);
     OnAfterChangePortion(info, nullptr);
+
+    if (IntervalTree) {
+        IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
+            PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(info), true,
+            PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true), info);
+    }
 }
 
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& info) {
@@ -37,6 +43,9 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
         return false;
     } else {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
+    }
+    if (IntervalTree) {
+        IntervalTree->RemoveRanges(it->second);
     }
     DataAccessorsManager->RemovePortion(it->second);
     OnBeforeChangePortion(it->second);
@@ -145,6 +154,9 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
     ResetAccessorsManager(versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor(), mmContext);
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex, StoragesManager);
+    if (HasAppData() && AppData()->ColumnShardConfig.GetEnableIntervalTreeForMetadataSelect()) {
+        IntervalTree = std::make_unique<PortionIntervalTree::TPortionIntervalTree>();
+    }
 }
 
 void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion) {
@@ -164,6 +176,11 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
     } else {
         auto portionId = portion->GetPortionId();
         AFL_VERIFY(Portions.emplace(portionId, portion).second);
+        if (IntervalTree) {
+            IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
+                PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion), true,
+                PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
+        }
     }
 }
 

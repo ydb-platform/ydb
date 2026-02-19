@@ -23,8 +23,7 @@
 #include <util/stream/output.h>
 #include <util/memory/pool.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TComputationUpvalues::TComputationUpvalues(TComputationContext& ctx, IComputationNode* lambdaNode,
                                            const TComputationExternalNodePtrVector& argNodes) {
@@ -191,5 +190,4 @@ std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(cons
     return std::make_unique<TSimpleSecureParamsProvider>(secureParams);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

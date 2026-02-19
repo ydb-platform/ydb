@@ -36,12 +36,12 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
         // update existing force traversal
         if (existingOperation) {
-            if (existingOperation->Tables.size() == Record().TablesSize()) {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Update existing force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
-                existingOperation->ReplyToActorId = ReplyToActorId;
+            if (existingOperation->ReplyToActorId == Event->Sender) {
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Reattach to existing force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
+                existingOperation->RequestingActorReattached = true;
                 return true;
             } else {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Delete broken force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Delete broken force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
                 Self->DeleteForceTraversalOperation(operationId, db);
             }
         }
@@ -50,7 +50,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         const TString& databaseName = Record().GetDatabase();
 
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal operation"
-            << ", OperationId: `" << operationId << "'"
+            << ", OperationId: " << operationId.Quote()
             << ", DatabaseName: `" << databaseName << "'"
             << ", Types: " << types);
 
@@ -73,7 +73,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             const auto status = TForceTraversalTable::EStatus::None;
 
             SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal table"
-                << ", OperationId: `" << operationId << "'"
+                << ", OperationId: " << operationId.Quote()
                 << ", PathId: " << pathId
                 << ", ColumnTags: " << columnTagsStr);
 
@@ -101,7 +101,8 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             NIceDb::TUpdate<Schema::ForceTraversalOperations::OperationId>(operationId),
             NIceDb::TUpdate<Schema::ForceTraversalOperations::Types>(types),
             NIceDb::TUpdate<Schema::ForceTraversalOperations::CreatedAt>(createdAt.GetValue()),
-            NIceDb::TUpdate<Schema::ForceTraversalOperations::DatabaseName>(databaseName)
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::DatabaseName>(databaseName),
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::ReplyToActorId>(ReplyToActorId)
         );
 
         return true;

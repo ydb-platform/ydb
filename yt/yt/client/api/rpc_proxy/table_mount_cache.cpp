@@ -104,11 +104,23 @@ private:
                         .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
                         .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
                         .Predicate = YT_OPTIONAL_FROM_PROTO(protoIndexInfo, predicate),
-                        .UnfoldedColumn = YT_OPTIONAL_FROM_PROTO(protoIndexInfo, unfolded_column),
                         .Correspondence = protoIndexInfo.has_index_correspondence()
                             ? FromProto<ETableToIndexCorrespondence>(protoIndexInfo.index_correspondence())
                             : ETableToIndexCorrespondence::Unknown,
                     };
+
+                    if (protoIndexInfo.has_unfolded_columns()) {
+                        indexInfo.UnfoldedColumns = {
+                            .TableColumn = protoIndexInfo.unfolded_columns().table_column(),
+                            .IndexColumn = protoIndexInfo.unfolded_columns().index_column(),
+                        };
+                    } else if (protoIndexInfo.has_unfolded_column()) {
+                        // COMPAT(sabdenovch)
+                        indexInfo.UnfoldedColumns = {
+                            .TableColumn = protoIndexInfo.unfolded_column(),
+                            .IndexColumn = protoIndexInfo.unfolded_column(),
+                        };
+                    }
 
                     if (protoIndexInfo.has_evaluated_columns_schema()) {
                         indexInfo.EvaluatedColumnsSchema = New<TTableSchema>(

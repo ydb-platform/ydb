@@ -6,8 +6,7 @@
 #include <type_traits>
 #include <limits>
 
-namespace NYql {
-namespace NDecimal {
+namespace NYql::NDecimal {
 
 #ifdef _win_
     #ifndef DONT_USE_NATIVE_INT128
@@ -150,9 +149,11 @@ inline TInt128 FromHalfs(ui64 lo, i64 hi) {
 }
 
 inline std::pair<ui64, ui64> MakePair(const TInt128 v) {
-    std::pair<ui64, ui64> r;
-    std::memcpy(&r, &v, sizeof(v));
-    return r;
+    struct TPair {
+        ui64 FirstHalf;
+        ui64 SecondHalf;
+    } r = std::bit_cast<TPair>(v);
+    return std::make_pair(r.FirstHalf, r.SecondHalf);
     static_assert(sizeof(r) == sizeof(v), "Bad pair size.");
 }
 
@@ -363,5 +364,4 @@ public:
     }
 };
 
-} // namespace NDecimal
-} // namespace NYql
+} // namespace NYql::NDecimal

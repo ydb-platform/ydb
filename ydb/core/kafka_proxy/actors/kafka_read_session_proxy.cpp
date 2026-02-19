@@ -174,7 +174,6 @@ void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotif
 void KafkaReadSessionProxyActor::ProcessPendingRequestIfPossible() {
     if (!PendingRequest.has_value()) {
         KAFKA_LOG_D("Pending request is not set");
-        Y_VERIFY_DEBUG(PendingRequest.has_value());
         return;
     }
 

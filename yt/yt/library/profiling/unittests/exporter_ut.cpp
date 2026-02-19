@@ -114,7 +114,9 @@ TEST(TSolomonExporterTest, SplitRateHistogramIntoGauges)
     hist.Record(TDuration::MilliSeconds(500));
     hist.Record(TDuration::MilliSeconds(500));
     hist.Record(TDuration::MilliSeconds(500));
-    Sleep(TDuration::Seconds(6));
+    auto alignedNow = TInstant::Seconds((TInstant::Now().Seconds() / 5) * 5);
+    // Wait one second after the next tick to ensure the value is ready.
+    SleepUntil(alignedNow + TDuration::Seconds(6));
 
     auto options = TReadOptions{
         .ConvertCountersToRateGauge = true,

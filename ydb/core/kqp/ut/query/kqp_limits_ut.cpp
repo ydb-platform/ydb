@@ -251,6 +251,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+        app.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
+        app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
 
         app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
 
@@ -1456,18 +1459,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST(BigSortingLimitInParam) {
-        return; // TODO: remove
         SetRandomSeed(42);
 
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetLogSettings(TTestLogSettings()
-                .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPILE_ACTOR, NLog::EPriority::PRI_DEBUG)
-                .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_NODE, NLog::EPriority::PRI_DEBUG)
-                .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPILE_SERVICE, NLog::EPriority::PRI_DEBUG))
-            .SetLogStream(&Cerr);
-        // This line will fix the test: // TODO: remove
-        //settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_SCALAR);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         auto db = kikimr.GetQueryClient();

@@ -235,6 +235,7 @@ public:
             ->GetSubgroup("cloud_id", cfg.GetCloudId())
             ->GetSubgroup("folder_id", cfg.GetFolderId())
             ->GetSubgroup("database_id", cfg.GetResourceId())
+            ->GetSubgroup("database", cfg.GetDatabase())
             ->GetSubgroup("category", *category);
         Limit = Counters->GetExpiringNamedCounter("name", "resources.request_units.limit", false);
         Consumed = Counters->GetExpiringNamedCounter("name", "resources.request_units.consumed", true);

@@ -40,6 +40,7 @@ public:
     EDiscoveryMode GetDiscoveryMode() const override { return DiscoveryMode; }
     size_t GetMaxQueuedRequests() const override { return MaxQueuedRequests; }
     TTcpKeepAliveSettings GetTcpKeepAliveSettings() const override { return TcpKeepAliveSettings; }
+    bool GetTcpNoDelay() const override { return TcpNoDelay; }
     bool GetDrinOnDtors() const override { return DrainOnDtors; }
     TBalancingPolicy::TImpl GetBalancingSettings() const override { return BalancingSettings; }
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
@@ -69,6 +70,7 @@ public:
             TCP_KEEPALIVE_COUNT,
             TCP_KEEPALIVE_INTERVAL
         };
+    bool TcpNoDelay = true;
     bool DrainOnDtors = true;
     TBalancingPolicy::TImpl BalancingSettings = TBalancingPolicy::TImpl::UsePreferableLocation(std::nullopt);
     TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
@@ -167,6 +169,11 @@ TDriverConfig& TDriverConfig::SetTcpKeepAliveSettings(bool enable, size_t idle, 
     Impl_->TcpKeepAliveSettings.Idle = idle;
     Impl_->TcpKeepAliveSettings.Count = count;
     Impl_->TcpKeepAliveSettings.Interval = interval;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetTcpNoDelay(bool enable) {
+    Impl_->TcpNoDelay = enable;
     return *this;
 }
 
@@ -271,6 +278,7 @@ TDriverConfig TDriver::GetConfig() const {
         Impl_->TcpKeepAliveSettings_.Count,
         Impl_->TcpKeepAliveSettings_.Interval
     );
+    config.SetTcpNoDelay(Impl_->TcpNoDelay_);
     config.SetDrainOnDtors(Impl_->DrainOnDtors_);
     config.SetBalancingPolicy(std::make_unique<TBalancingPolicy::TImpl>(Impl_->BalancingSettings_));
     config.SetGRpcKeepAliveTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->GRpcKeepAliveTimeout_));

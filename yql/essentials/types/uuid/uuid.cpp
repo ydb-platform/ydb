@@ -2,10 +2,11 @@
 
 #include <util/stream/str.h>
 
-namespace NKikimr {
-namespace NUuid {
+namespace NKikimr::NUuid {
 
-static void WriteHexDigit(ui8 digit, IOutputStream& out) {
+namespace {
+
+void WriteHexDigit(ui8 digit, IOutputStream& out) {
     if (digit <= 9) {
         out << char('0' + digit);
     } else {
@@ -13,7 +14,7 @@ static void WriteHexDigit(ui8 digit, IOutputStream& out) {
     }
 }
 
-static void WriteHex(ui16 bytes, IOutputStream& out, bool reverseBytes = false) {
+void WriteHex(ui16 bytes, IOutputStream& out, bool reverseBytes = false) {
     if (reverseBytes) {
         WriteHexDigit((bytes >> 4) & 0x0f, out);
         WriteHexDigit(bytes & 0x0f, out);
@@ -26,6 +27,8 @@ static void WriteHex(ui16 bytes, IOutputStream& out, bool reverseBytes = false) 
         WriteHexDigit(bytes & 0x0f, out);
     }
 }
+
+} // namespace
 
 TString UuidBytesToString(const TString& in) {
     TStringStream ss;
@@ -76,5 +79,4 @@ void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
     out.Write(buf.Bytes, 16);
 }
 
-} // namespace NUuid
-} // namespace NKikimr
+} // namespace NKikimr::NUuid

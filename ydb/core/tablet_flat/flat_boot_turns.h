@@ -60,6 +60,12 @@ namespace NBoot {
             if (index != TCookie::EIdx::TurnLz4) {
                 Apply(entry, body);
             } else {
+                size_t decompressedSize = Codec->DecompressedLength(body);
+                Y_ENSURE(decompressedSize <= MaxDecompressedBlobSize,
+                    "Switch entry " << NFmt::Do(entry.LargeGlobId)
+                    << " has an unexpected decompressed size of " << decompressedSize << " bytes"
+                    << ", possible data corruption");
+
                 Apply(entry, Codec->Decode(body));
             }
         }

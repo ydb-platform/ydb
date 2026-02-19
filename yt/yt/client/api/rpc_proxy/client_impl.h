@@ -432,6 +432,9 @@ public:
     TFuture<void> MasterExitReadOnly(
         const TMasterExitReadOnlyOptions& options) override;
 
+    TFuture<void> ResetDynamicallyPropagatedMasterCells(
+        const TResetDynamicallyPropagatedMasterCellsOptions& options) override;
+
     TFuture<void> DiscombobulateNonvotingPeers(
         NHydra::TCellId cellId,
         const TDiscombobulateNonvotingPeersOptions& options) override;

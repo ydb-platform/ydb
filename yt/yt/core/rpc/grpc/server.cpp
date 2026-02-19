@@ -1115,7 +1115,7 @@ private:
             ops.back().op = GRPC_OP_SEND_STATUS_FROM_SERVER;
             ops.back().flags = 0;
             ops.back().reserved = nullptr;
-            ops.back().data.send_status_from_server.status = error.IsOK() ? GRPC_STATUS_OK : grpc_status_code(GenericErrorStatusCode);
+            ops.back().data.send_status_from_server.status = error.IsOK() ? GRPC_STATUS_OK : GRPC_STATUS_UNKNOWN;
             ops.back().data.send_status_from_server.status_details = error.IsOK() ? nullptr : ErrorMessageSlice_.Unwrap();
             ops.back().data.send_status_from_server.trailing_metadata_count = TrailingMetadataBuilder_.GetSize();
             ops.back().data.send_status_from_server.trailing_metadata = TrailingMetadataBuilder_.Unwrap();

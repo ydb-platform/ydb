@@ -56,6 +56,12 @@ namespace NBoot {
                 auto gen = head->LargeGlobId.Lead.Generation();
                 auto step = head->LargeGlobId.Lead.Step();
 
+                size_t decompressedSize = Codec->DecompressedLength(head->Body);
+                Y_ENSURE(decompressedSize <= MaxDecompressedBlobSize,
+                    "GC entry " << NFmt::Do(head->LargeGlobId)
+                    << " has an unexpected decompressed size of " << decompressedSize << " bytes"
+                    << ", possible data corruption");
+
                 Apply(gen, step, Codec->Decode(head->Body));
 
                 ++Skip, Queue.pop_front();

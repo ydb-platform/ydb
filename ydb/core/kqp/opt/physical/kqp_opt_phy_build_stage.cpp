@@ -88,7 +88,7 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
 
 bool IsLiteralNothing(TExprBase node) {
     if (node.Maybe<TCoNothing>()) {
-        auto* type = node.Raw()->GetTypeAnn();
+        auto type = node.Raw()->GetTypeAnn();
         switch (type->GetKind()) {
             case ETypeAnnotationKind::Optional: {
                 type = type->Cast<TOptionalExprType>()->GetItemType();
@@ -636,7 +636,7 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
 }
 
 NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NYql::TExprContext& ctx) {
-    auto* type = param.Raw()->GetTypeAnn();
+    auto type = param.Raw()->GetTypeAnn();
     YQL_ENSURE(type);
     if (type->GetKind() == ETypeAnnotationKind::Optional) {
         param = Build<TCoUnwrap>(ctx, param.Pos())

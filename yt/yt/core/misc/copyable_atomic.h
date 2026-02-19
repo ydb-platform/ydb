@@ -30,7 +30,7 @@ public:
         : T_(other.T_.load())
     { }
 
-    TCopyableAtomic& operator = (const TCopyableAtomic& other)
+    TCopyableAtomic& operator=(const TCopyableAtomic& other)
     {
         T_ = other.T_.load();
         return *this;
@@ -40,7 +40,7 @@ public:
         : T_(other.T_.load())
     { }
 
-    TCopyableAtomic& operator = (TCopyableAtomic&& other)
+    TCopyableAtomic& operator=(TCopyableAtomic&& other)
     {
         T_ = other.T_.load();
         return *this;

@@ -4,6 +4,7 @@
 #include "read_iterator.h"
 
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/test_tli.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
@@ -745,7 +746,7 @@ struct TTestHelper {
         if(isEvWrite)
             WriteRow(tableName, values);
         else
-            ExecSQL(Server, Sender, TStringBuilder() 
+            ExecSQL(Server, Sender, TStringBuilder()
                 << "UPSERT INTO `/Root/" << tableName << "`\n"
                 << "(" << JoinSeq(",", MakeMappedRange(Tables[tableName].Columns, [](const auto& col) { return col.Name; })) << ")\n"
                 << "VALUES\n(" << JoinSeq(",", values) << ");");
@@ -3279,7 +3280,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         Cerr << "===== Commit locks on table 1" << Endl;
         {
-            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, 
+            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId,
                 Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
@@ -3299,7 +3300,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         Cerr << "===== Write and commit locks on table 2" << Endl;
         {
-            auto writeRequest = helper.MakeWriteRequest(tableName2, helper.TxId, {1, 1, 1, 1001}, 
+            auto writeRequest = helper.MakeWriteRequest(tableName2, helper.TxId, {1, 1, 1, 1001},
                 Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
@@ -3327,7 +3328,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         Cerr << "========= Wait for completed transactions" << Endl;
         for (ui8 i = 0; i < 1; ++i)
         {
-            auto expectedStatus = BreakLocks ? 
+            auto expectedStatus = BreakLocks ?
                 NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN :
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
 
@@ -3397,7 +3398,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // Read in separate transaction. No dirty-read.
         helper.TestReadOneKey(tableName, {1, 1, 1}, 100);
 
-        // Commit locks in first transaction. 
+        // Commit locks in first transaction.
         auto writeRequest2 = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         NKikimrDataEvents::TKqpLocks& kqpLocks2 = *writeRequest2->Record.MutableLocks();
         kqpLocks2.MutableLocks()->CopyFrom(writeResult.GetTxLocks());
@@ -3457,7 +3458,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         // Read origin data.
         helper.TestReadOneKey(tableName, {1, 1, 1}, 100);
-    }    
+    }
 
     Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenWriteInSeparateTransactions, EvWrite) {
         TTestHelper helper;
@@ -3972,6 +3973,51 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
     Y_UNIT_TEST(HandleMvccGoneInContinue) {
         // TODO
+    }
+
+
+    Y_UNIT_TEST(TliReadIteratorLocksBroken) {
+        // This test verifies TLI logging when read iterator operations break locks
+        TStringStream ss;
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetLogBackend(new TStreamLogBackend(&ss));
+
+        TTestHelper helper(serverSettings);
+
+        auto runtime = helper.Server->GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime->SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
+
+        const TString tableName = "table-1";
+        const ui64 lockTxId = 1011121314;
+        const ui64 nodeId = runtime->GetNodeId();
+        const ui64 querySpanId = 12345;
+
+        // Create a read lock
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
+
+        auto readRequest1 = helper.GetBaseReadRequest(tableName, 1);
+        readRequest1->Record.SetLockTxId(lockTxId);
+        readRequest1->Record.SetLockNodeId(nodeId);
+        readRequest1->Record.SetQuerySpanId(querySpanId);
+        AddKeyQuery(*readRequest1, {1});
+
+        auto readResult1 = helper.SendRead(tableName, readRequest1.release());
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
+
+        // Write to break the lock
+        helper.WriteRow(tableName, {1, 1, 1, 999});
+
+        // The TLI logging should have occurred when the lock was broken
+        // Check for the TLI log entry (the write broke the read lock)
+        TVector<std::pair<TString, ui64>> regexToMatchCount{
+            {NTestTli::ConstructRegexToCheckLogs("INFO", "DataShard", "broke.*?locks"), 1},
+        };
+
+        NKikimr::NTestTli::CheckRegexMatch(ss.Str(), regexToMatchCount);
     }
 }
 
@@ -5414,17 +5460,17 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         }
         runtime.SimulateSleep(TDuration::Seconds(1));
 
-        // Commit the 1st transaction
+        // Commit the 1st transaction (it must abort, lock removal is migrated)
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleCommit(runtime, session1, tx1, R"(SELECT 1)"),
-            "{ items { int32_value: 1 } }");
+            "ERROR: ABORTED");
 
         // Commit the 2nd transaction writing to the same index
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleCommit(runtime, session2, tx2, R"(
                 UPSERT INTO `/Root/table` (key, index, value) VALUES (1, 2, 4003);
                 )"),
-            "ERROR: ABORTED");
+            "<empty>");
     }
 
     Y_UNIT_TEST(ReadLockConflictUncommittedBreakMigration) {
@@ -5534,17 +5580,294 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         }
         runtime.SimulateSleep(TDuration::Seconds(1));
 
-        // Commit the 1st transaction (it must succeed)
+        // Commit the 1st transaction (it must abort, lock break is migrated)
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleCommit(runtime, session1, tx1, R"(SELECT 1)"),
-            "{ items { int32_value: 1 } }");
+            "ERROR: ABORTED");
 
         // Commit the 2nd transaction writing to the same index
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleCommit(runtime, session2, tx2, R"(
                 UPSERT INTO `/Root/table` (key, index, value) VALUES (1, 2, 4003);
                 )"),
+            "<empty>");
+    }
+
+    Y_UNIT_TEST(ReadLockUncommittedRemoveThenNewConflictMigration) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(1)
+            .SetUseRealThreads(false);
+
+        // This test requires in-memory state migration to work
+        serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, index int, value int, PRIMARY KEY (key, index))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // Populate tables with initial values
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, index, value) VALUES
+                (1, 0, 1001),
+                (1, 1, 1002),
+                (11, 0, 2001);
+        )");
+
+        ui64 tx1lockId = 0;
+        ui32 tx1lockNode = 0;
+        auto shard1actor = ResolveTablet(runtime, shards.at(0));
+        auto lockStatusObserver = runtime.AddObserver<TEvLongTxService::TEvLockStatus>(
+            [&](auto& ev) {
+                if (ev->GetRecipientRewrite() == shard1actor) {
+                    auto* msg = ev->Get();
+                    tx1lockId = msg->Record.GetLockId();
+                    tx1lockNode = msg->Record.GetLockNode();
+                }
+            });
+
+        // Begin the 1st transaction appending to key 1
+        TString session1, tx1;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, session1, tx1, R"(
+                SELECT key, index, value FROM `/Root/table` WHERE key = 1 ORDER BY key, index;
+                UPSERT INTO `/Root/table` (key, index, value) VALUES (1, 2, 3003);
+                SELECT key, index, value FROM `/Root/table` WHERE key = 2 ORDER BY key, index;
+                SELECT key, index, value FROM `/Root/table` WHERE key = 11 ORDER BY key, index;
+                )"),
+            "{ items { int32_value: 1 } items { int32_value: 0 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 1 } items { int32_value: 1 } items { int32_value: 1002 } }"
+            "\n"
+            // empty result set
+            "\n"
+            "{ items { int32_value: 11 } items { int32_value: 0 } items { int32_value: 2001 } }");
+
+        runtime.WaitFor("subscribed lock", [&]{ return tx1lockId != 0; });
+        lockStatusObserver.Remove();
+
+        // Begin the 2nd transaction reading key 1
+        TString session2, tx2;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, session2, tx2, R"(
+                SELECT key, index, value FROM `/Root/table` WHERE key = 1 ORDER BY key, index;
+                )"),
+            "{ items { int32_value: 1 } items { int32_value: 0 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 1 } items { int32_value: 1 } items { int32_value: 1002 } }");
+
+        // Block reads, so the next tx uses the current snapshot, but executes much later
+        TBlockEvents<TEvDataShard::TEvRead> blockedReads(runtime);
+
+        // Begin the 3rd transaction reading key 1
+        TString session3, tx3;
+        auto readFuture = KqpSimpleBeginSend(runtime, session3, R"(
+                SELECT key, index, value FROM `/Root/table` WHERE key = 1 ORDER BY key, index;
+            )");
+        runtime.WaitFor("blocked read", [&]{ return blockedReads.size() >= 1; });
+        blockedReads.Stop();
+
+        // Make sure everything settles down
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Block commits and try to simulate a lock timeout which starts a rollback
+        TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime, [&](auto& ev) {
+            auto* msg = ev->Get();
+            if (msg->Id.Channel() == 0 && msg->Id.TabletID() == shards.at(0)) {
+                Cerr << "... blocking commit " << msg->Id << Endl;
+                return true;
+            }
+            return false;
+        });
+        runtime.Send(
+            new IEventHandle(shard1actor, {},
+                new TEvLongTxService::TEvLockStatus(tx1lockId, tx1lockNode, NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE)),
+            0, true);
+        runtime.WaitFor("blocked commits", [&]{ return blockedCommits.size() >= 1; });
+
+        // Unblock the 3rd transaction and ensure the read succeeds
+        blockedReads.Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBeginWait(runtime, tx3, std::move(readFuture)),
+            "{ items { int32_value: 1 } items { int32_value: 0 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 1 } items { int32_value: 1 } items { int32_value: 1002 } }");
+
+        // Stop blocking commits and make them fail (will cause shards to restart)
+        blockedCommits.Stop();
+        for (auto& ev : blockedCommits) {
+            auto proxy = ev->Recipient;
+            ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
+            auto response = ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
+            runtime.Send(new IEventHandle(ev->Sender, proxy, response.release()), 0, true);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Commit the 1st transaction (it must abort, lock removal is migrated)
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, session1, tx1, R"(SELECT 1)"),
             "ERROR: ABORTED");
+
+        // Commit the 3rd transaction writing to the same index
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, session3, tx3, R"(
+                UPSERT INTO `/Root/table` (key, index, value) VALUES (1, 2, 4003);
+                )"),
+            "<empty>");
+    }
+
+    Y_UNIT_TEST(ReadLockUncommittedBreakThenNewConflictMigration) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(1)
+            .SetUseRealThreads(false);
+
+        // This test requires in-memory state migration to work
+        serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, index int, value int, PRIMARY KEY (key, index))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // Populate tables with initial values
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, index, value) VALUES
+                (1, 0, 1001),
+                (1, 1, 1002),
+                (11, 0, 2001);
+        )");
+
+        ui64 tx1lockId = 0;
+        ui32 tx1lockNode = 0;
+        auto shard1actor = ResolveTablet(runtime, shards.at(0));
+        auto lockStatusObserver = runtime.AddObserver<TEvLongTxService::TEvLockStatus>(
+            [&](auto& ev) {
+                if (ev->GetRecipientRewrite() == shard1actor) {
+                    auto* msg = ev->Get();
+                    tx1lockId = msg->Record.GetLockId();
+                    tx1lockNode = msg->Record.GetLockNode();
+                }
+            });
+
+        // Begin the 1st transaction appending to key 1
+        TString session1, tx1;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, session1, tx1, R"(
+                SELECT key, index, value FROM `/Root/table` WHERE key = 1 ORDER BY key, index;
+                UPSERT INTO `/Root/table` (key, index, value) VALUES (1, 2, 3003);
+                SELECT key, index, value FROM `/Root/table` WHERE key = 2 ORDER BY key, index;
+                SELECT key, index, value FROM `/Root/table` WHERE key = 11 ORDER BY key, index;
+                )"),
+            "{ items { int32_value: 1 } items { int32_value: 0 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 1 } items { int32_value: 1 } items { int32_value: 1002 } }"
+            "\n"
+            // empty result set
+            "\n"
+            "{ items { int32_value: 11 } items { int32_value: 0 } items { int32_value: 2001 } }");
+
+        runtime.WaitFor("subscribed lock", [&]{ return tx1lockId != 0; });
+        lockStatusObserver.Remove();
+
+        // Begin the 2nd transaction reading key 1
+        TString session2, tx2;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, session2, tx2, R"(
+                SELECT key, index, value FROM `/Root/table` WHERE key = 1 ORDER BY key, index;
+                )"),
+            "{ items { int32_value: 1 } items { int32_value: 0 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 1 } items { int32_value: 1 } items { int32_value: 1002 } }");
+
+        // Block reads, so the next tx uses the current snapshot, but executes much later
+        TBlockEvents<TEvDataShard::TEvRead> blockedReads(runtime);
+
+        // Begin the 3rd transaction reading key 1
+        TString session3, tx3;
+        auto readFuture = KqpSimpleBeginSend(runtime, session3, R"(
+                SELECT key, index, value FROM `/Root/table` WHERE key = 1 ORDER BY key, index;
+            )");
+        runtime.WaitFor("blocked read", [&]{ return blockedReads.size() >= 1; });
+        blockedReads.Stop();
+
+        // Make sure everything settles down
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Block commits and try to break the first transaction by a blind upsert
+        TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime, [&](auto& ev) {
+            auto* msg = ev->Get();
+            if (msg->Id.Channel() == 0 && msg->Id.TabletID() == shards.at(0)) {
+                Cerr << "... blocking commit " << msg->Id << Endl;
+                return true;
+            }
+            return false;
+        });
+        KqpSimpleSend(runtime, R"(
+                UPSERT INTO `/Root/table` (key, index, value) VALUES (2, 0, 4001);
+            )");
+        runtime.WaitFor("blocked commits", [&]{ return blockedCommits.size() >= 1; });
+
+        // Unblock the 3rd transaction and ensure the read succeeds
+        blockedReads.Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBeginWait(runtime, tx3, std::move(readFuture)),
+            "{ items { int32_value: 1 } items { int32_value: 0 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 1 } items { int32_value: 1 } items { int32_value: 1002 } }");
+
+        // Stop blocking commits and make them fail (will cause shards to restart)
+        blockedCommits.Stop();
+        for (auto& ev : blockedCommits) {
+            auto proxy = ev->Recipient;
+            ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
+            auto response = ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
+            runtime.Send(new IEventHandle(ev->Sender, proxy, response.release()), 0, true);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Commit the 1st transaction (it must abort, lock break is migrated)
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, session1, tx1, R"(SELECT 1)"),
+            "ERROR: ABORTED");
+
+        // Commit the 3rd transaction writing to the same index
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, session3, tx3, R"(
+                UPSERT INTO `/Root/table` (key, index, value) VALUES (1, 2, 4003);
+                )"),
+            "<empty>");
     }
 
 }

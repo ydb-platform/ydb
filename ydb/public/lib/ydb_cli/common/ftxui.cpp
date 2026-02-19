@@ -359,7 +359,7 @@ std::optional<TString> RunFtxuiInput(const TString& title, const TString& initia
         ftxui::Component inputWithEvents = ftxui::CatchEvent(input, [&, exit](const ftxui::Event& event) mutable {
             if (event == ftxui::Event::Return) {
                 TString errorMessage;
-                if (validator(TString(value), errorMessage)) {
+                if (!validator || validator(TString(value), errorMessage)) {
                     result = TString(value);
                     exit();
                     return true;
@@ -416,6 +416,7 @@ bool AskYesNoFtxui(const TString& question, bool defaultAnswer) {
 
         // Use custom menu option for consistent styling
         auto menuOption = ftxui::MenuOption::Vertical();
+        menuOption.focused_entry = selected;
         menuOption.entries_option.transform = [](const ftxui::EntryState& state) {
             auto element = ftxui::text(state.label);
             if (state.focused) {
@@ -498,7 +499,7 @@ std::optional<TString> RunFtxuiInputWithSuffix(
         ftxui::Component inputWithEvents = ftxui::CatchEvent(input, [&, exit](const ftxui::Event& event) mutable {
             if (event == ftxui::Event::Return) {
                 TString errorMessage;
-                if (validator(TString(value), errorMessage)) {
+                if (!validator || validator(TString(value), errorMessage)) {
                     result = TString(value);
                     exit();
                     return true;
@@ -544,6 +545,64 @@ std::optional<TString> RunFtxuiInputWithSuffix(
         screen.Loop(component);
     } catch (const std::exception& e) {
         Cerr << "FTXUI input failed: " << e.what() << Endl;
+        return std::nullopt;
+    }
+
+    FlushStdin();
+    return result;
+}
+
+std::optional<TString> RunFtxuiPasswordInput(const TString& title) {
+    std::string password;
+    std::string masked;
+    std::optional<TString> result;
+
+    try {
+        auto screen = ftxui::ScreenInteractive::FitComponent();
+        screen.TrackMouse(false);
+        auto exit = screen.ExitLoopClosure();
+
+        // We'll handle input manually to show asterisks
+        auto component = ftxui::CatchEvent(
+            ftxui::Renderer([&]() {
+                return ApplyBorder(ftxui::vbox({
+                    ftxui::text(std::string(title)) | ftxui::bold,
+                    ApplySeparator(),
+                    ftxui::hbox({ftxui::text("> "), ftxui::text(masked + "_")}),
+                    ApplySeparator(),
+                    ftxui::text("Enter to confirm, Esc to cancel"),
+                })) | ftxui::center;
+            }),
+            [&](const ftxui::Event& event) {
+                if (event == ftxui::Event::Return) {
+                    result = TString(password);
+                    exit();
+                    return true;
+                }
+                if (event == ftxui::Event::Escape || event == ftxui::Event::CtrlC) {
+                    exit();
+                    return true;
+                }
+                if (event == ftxui::Event::Backspace) {
+                    if (!password.empty()) {
+                        password.pop_back();
+                        masked.pop_back();
+                    }
+                    return true;
+                }
+                // Handle character input
+                if (event.is_character()) {
+                    password += event.character();
+                    masked += '*';
+                    return true;
+                }
+                return false;
+            }
+        );
+
+        screen.Loop(component);
+    } catch (const std::exception& e) {
+        Cerr << "FTXUI password input failed: " << e.what() << Endl;
         return std::nullopt;
     }
 

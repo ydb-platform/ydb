@@ -72,7 +72,7 @@ TCpuProfilerTagGuard::TCpuProfilerTagGuard(TCpuProfilerTagGuard&& other)
     other.TagIndex_ = -1;
 }
 
-TCpuProfilerTagGuard& TCpuProfilerTagGuard::operator = (TCpuProfilerTagGuard&& other)
+TCpuProfilerTagGuard& TCpuProfilerTagGuard::operator=(TCpuProfilerTagGuard&& other)
 {
     if (this == &other) {
         return *this;

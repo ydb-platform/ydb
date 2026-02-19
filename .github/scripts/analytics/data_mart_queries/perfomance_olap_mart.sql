@@ -2,14 +2,15 @@ $start_timestamp = (CurrentUtcDate() - 30 * Interval("P1D"));
 
 $all_suites = (
     SELECT 
-        Suite, Test 
+        Suite, Test, Db
     FROM (
         SELECT
+            Db,
             Suite,
             ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
         FROM `perfomance/olap/tests_results`
-        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
-        GROUP BY Suite 
+        WHERE Timestamp >= $start_timestamp
+        GROUP BY Suite, Db
     ) 
     FLATTEN LIST BY Tests AS Test
 );
@@ -17,11 +18,14 @@ $all_suites = (
 $launch_times = (
     SELECT 
         launch_times_raw.*,
-        all_suites.*,
-        COALESCE(SubString(CAST(launch_times_raw.Version AS String), 0U, FIND(CAST(launch_times_raw.Version AS String), '.')), 'unknown') As Branch,
-        COALESCE(SubString(CAST(launch_times_raw.CiVersion AS String), 0U, FIND(CAST(launch_times_raw.CiVersion AS String), '.')), 'unknown') As CiBranch,
-        COALESCE(SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, FIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch,
-    FROM (
+        all_suites.Suite as Suite,
+        all_suites.Test as Test,
+        COALESCE(SubString(CAST(launch_times_raw.Version AS String), 0U, RFIND(CAST(launch_times_raw.Version AS String), '.')), 'unknown') As Branch,
+        COALESCE(SubString(CAST(launch_times_raw.CiVersion AS String), 0U, RFIND(CAST(launch_times_raw.CiVersion AS String), '.')), 'unknown') As CiBranch,
+        COALESCE(SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, RFIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch,
+    FROM
+    $all_suites AS all_suites 
+    LEFT JOIN (
         SELECT
             Db,
             Version,
@@ -31,13 +35,12 @@ $launch_times = (
             JSON_VALUE(MAX_BY(Info, RunId), "$.ci_version") AS CiVersion,
             JSON_VALUE(MAX_BY(Info, RunId), "$.test_tools_version") AS TestToolsVersion,
         FROM `perfomance/olap/tests_results`
-        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
+        WHERE Timestamp >= $start_timestamp
         GROUP BY
             Db,
             JSON_VALUE(Info, "$.cluster.version") AS Version,
-            JSON_VALUE(Info, "$.ci_launch_id") AS LunchId
-    ) AS launch_times_raw
-    CROSS JOIN $all_suites AS all_suites
+            COALESCE(JSON_VALUE(tests_results.Info, "$.ci_launch_id"), CAST(RunId AS String)) AS LunchId
+    ) AS launch_times_raw ON all_suites.Db == launch_times_raw.Db
 );
 
 $all_tests_raw =
@@ -47,7 +50,7 @@ $all_tests_raw =
         JSON_VALUE(tests_results.Info, "$.cluster.version") AS Version_n,
         JSON_VALUE(Info, "$.ci_version") AS CiVersion_n,
         JSON_VALUE(Info, "$.test_tools_version") AS TestToolsVersion_n,
-        JSON_VALUE(tests_results.Info, "$.ci_launch_id") AS LunchId_n,
+        COALESCE(JSON_VALUE(tests_results.Info, "$.ci_launch_id"), CAST(RunId AS String)) AS LunchId_n,
         CAST(JSON_VALUE(Stats, '$.DiffsCount') AS INT) AS diff_response,
         IF(Success > 0, CAST(CAST(JSON_VALUE(Stats, '$.CompilationAvg') AS Double) AS Uint64)) AS CompilationAvg,
         IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,
@@ -65,7 +68,7 @@ $all_tests_raw =
             )
         ) AS Color
     FROM `perfomance/olap/tests_results` AS tests_results
-    WHERE Timestamp >= $start_timestamp  and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'));
+    WHERE Timestamp >= $start_timestamp;
 
 SELECT 
     Db,
@@ -100,6 +103,7 @@ SELECT
     CASE
         WHEN Db LIKE '%sas%' THEN 'sas'
         WHEN Db LIKE '%vla%' THEN 'vla'
+        WHEN Db LIKE '%klg%' THEN 'klg'
         WHEN Db LIKE '%etn0vb1kg3p016q1tp3t%' THEN 'cloud'
         ELSE 'other'
     END AS DbDc,
@@ -123,6 +127,15 @@ SELECT
         WHEN Db LIKE '%vla%' THEN 'vla_'
         WHEN Db LIKE '%etn0vb1kg3p016q1tp3t%b1ggceeul2pkher8vhb6/etn0vb1kg3p016q1tp3t%' THEN 'cloud_slonnn_128_'
         WHEN Db LIKE '%etntj9d0t8v7ud2hrqho%b1ggceeul2pkher8vhb6/etntj9d0t8v7ud2hrqho%' THEN 'cloud_slonnn_64_'
+        WHEN Db LIKE '%static-node-1.ydb-cluster.com/Root/db%' THEN 'ansible_'
+        WHEN Db LIKE '%ydb-vla-dev04-002%' THEN 'oltp-vla-perf1_'
+        WHEN Db LIKE '%ydb-vla-dev04-007%' THEN 'oltp-vla-perf2_'
+        WHEN Db LIKE '%ydb-qa-01-klg-010%' THEN 'oltp-klg-perf3_'
+        WHEN Db LIKE '%ydb-qa-01-klg-014%' THEN 'oltp-klg-perf4_'
+        WHEN Db LIKE '%ydb-qa-01-klg-018%' THEN 'oltp-klg-perf5_'
+        WHEN Db LIKE '%ydb-qa-01-vla-000%' THEN 'oltp-3dc-perf6_'
+        WHEN Db LIKE '%ydb-qa-01-klg-023%' THEN 'oltp-klg-perf7_'
+        WHEN Db LIKE '%ydb-qa-01-klg-032%' THEN 'oltp-klg-perf9_'
         ELSE 'new_db_'
     END || CASE
         WHEN Db LIKE '%load%' THEN 'column'

@@ -9,6 +9,7 @@ SRCS(
     kqp_rbo_physical_filter_builder.cpp
     kqp_rbo_physical_source_builder.cpp
     kqp_rbo_physical_convertion_utils.cpp
+    kqp_rbo_physical_query_builder.cpp
 )
 
 PEERDIR(

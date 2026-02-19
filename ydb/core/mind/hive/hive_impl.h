@@ -1056,6 +1056,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return static_cast<i64>(CurrentConfig.GetMaxDeleteTabletInProgress());
     }
 
+    TDuration GetDataCenterChangeReactionPeriod() const {
+        return TDuration::Seconds(CurrentConfig.GetDataCenterChangeReactionPeriod());
+    }
+
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static ui64 GetRestartsPerPeriod(const google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static bool IsSystemTablet(TTabletTypes::EType type);

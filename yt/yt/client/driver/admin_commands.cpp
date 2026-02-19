@@ -170,6 +170,19 @@ void TMasterExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TResetDynamicallyPropagatedMasterCellsCommand::Register(TRegistrar /*registrar*/)
+{ }
+
+void TResetDynamicallyPropagatedMasterCellsCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->ResetDynamicallyPropagatedMasterCells(Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TDiscombobulateNonvotingPeersCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("cell_id", &TThis::CellId_);

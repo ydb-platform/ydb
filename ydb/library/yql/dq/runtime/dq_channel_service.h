@@ -26,11 +26,12 @@ struct TChannelInfo {
 };
 
 struct TChannelFullInfo : public TChannelInfo {
-    TChannelFullInfo(ui64 channelId, NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui32 srcStageId, ui32 dstStageId)
-        : TChannelInfo(channelId, outputActorId, inputActorId), SrcStageId(srcStageId), DstStageId(dstStageId)
+    TChannelFullInfo(ui64 channelId, NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui32 srcStageId, ui32 dstStageId, TCollectStatsLevel level)
+        : TChannelInfo(channelId, outputActorId, inputActorId), SrcStageId(srcStageId), DstStageId(dstStageId), Level(level)
     {}
     ui32 SrcStageId;
     ui32 DstStageId;
+    TCollectStatsLevel Level;
 };
 
 class TDataChunk {
@@ -86,6 +87,7 @@ public:
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
     virtual void Push(TDataChunk&& data) = 0;
     virtual bool IsFinished() = 0;
+    virtual bool IsEarlyFinished() = 0;
     virtual void UpdatePopStats() {}
 
     virtual bool IsEmpty() = 0;

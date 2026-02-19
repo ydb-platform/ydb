@@ -155,51 +155,51 @@ inline void TLockMask::Reserve(int size)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr bool operator < (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator<(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return static_cast<int>(lhs) < static_cast<int>(rhs);
 }
 
-constexpr bool operator > (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator>(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return rhs < lhs;
 }
 
-constexpr bool operator <= (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator<=(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return !(rhs < lhs);
 }
 
-constexpr bool operator >= (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator>=(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return !(lhs < rhs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline size_t TTableSchemaHash::operator() (const TTableSchema& schema) const
+inline size_t TTableSchemaHash::operator()(const TTableSchema& schema) const
 {
     return THash<TTableSchema>()(schema);
 }
 
-inline size_t TTableSchemaHash::operator() (const TTableSchemaPtr& schema) const
+inline size_t TTableSchemaHash::operator()(const TTableSchemaPtr& schema) const
 {
     return THash<TTableSchema>()(*schema);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline bool TTableSchemaEquals::operator() (const TTableSchema& lhs, const TTableSchema& rhs) const
+inline bool TTableSchemaEquals::operator()(const TTableSchema& lhs, const TTableSchema& rhs) const
 {
     return lhs == rhs;
 }
 
-inline bool TTableSchemaEquals::operator() (const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const
+inline bool TTableSchemaEquals::operator()(const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const
 {
     return *lhs == *rhs;
 }
 
-inline bool TTableSchemaEquals::operator() (const TTableSchemaPtr& lhs, const TTableSchema& rhs) const
+inline bool TTableSchemaEquals::operator()(const TTableSchemaPtr& lhs, const TTableSchema& rhs) const
 {
     return *lhs == rhs;
 }

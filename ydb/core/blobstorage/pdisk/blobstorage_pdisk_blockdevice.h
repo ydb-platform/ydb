@@ -6,10 +6,13 @@
 #include "blobstorage_pdisk_util_devicemode.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/sector_map.h>
+
+#include <util/system/file.h>
 
 namespace NKikimr {
 
@@ -58,6 +61,11 @@ public:
     virtual void SetWriteCache(bool isEnable) = 0;
     virtual void Stop() = 0;
     virtual TString DebugInfo() = 0;
+
+    // Returns a duplicated file descriptor for the underlying block device.
+    // The caller owns the returned TFileHandle and is responsible for closing it.
+    // Returns an invalid (not open) TFileHandle if the device does not support fd duplication (e.g. SectorMap).
+    virtual TFileHandle DuplicateFd() = 0;
 };
 
 class TPDisk;

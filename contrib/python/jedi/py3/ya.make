@@ -8,7 +8,6 @@ LICENSE(MIT)
 
 PEERDIR(
     contrib/python/parso
-    contrib/python/setuptools
 )
 
 NO_LINT()

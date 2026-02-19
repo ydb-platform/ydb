@@ -3,8 +3,7 @@
 #include <util/generic/fwd.h>
 #include <util/system/types.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 #define CURRENT_UDF_ABI_VERSION_MAJOR 2
 #define CURRENT_UDF_ABI_VERSION_MINOR 45
@@ -34,6 +33,7 @@ inline const char* CurrentAbiVersionStr()
 #define UDF_ABI_COMPATIBILITY_VERSION(MAJOR, MINOR) ((MAJOR) * 100 + (MINOR))
 #define UDF_ABI_COMPATIBILITY_VERSION_CURRENT UDF_ABI_COMPATIBILITY_VERSION(UDF_ABI_VERSION_MAJOR, UDF_ABI_VERSION_MINOR)
 
+// NOLINTNEXTLINE(misc-redundant-expression)
 static_assert(UDF_ABI_COMPATIBILITY_VERSION_CURRENT <=
                   UDF_ABI_COMPATIBILITY_VERSION(CURRENT_UDF_ABI_VERSION_MAJOR, CURRENT_UDF_ABI_VERSION_MINOR),
               "UDF ABI version " Y_STRINGIZE(UDF_ABI_VERSION_MAJOR) "." Y_STRINGIZE(UDF_ABI_VERSION_MINOR) " is above " Y_STRINGIZE(CURRENT_UDF_ABI_VERSION_MAJOR) "." Y_STRINGIZE(CURRENT_UDF_ABI_VERSION_MINOR));
@@ -67,8 +67,7 @@ constexpr bool IsAbiCompatible(ui32 version)
 
 TString AbiVersionToStr(ui32 version);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 namespace NKikimr {
 namespace NUdf = ::NYql::NUdf;

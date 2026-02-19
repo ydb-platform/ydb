@@ -212,6 +212,11 @@ static constexpr const char *kGenAiOutputType = "gen_ai.output.type";
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiPrompt = "gen_ai.prompt";
 
 /**
+  The name of the prompt that uniquely identifies it.
+ */
+static constexpr const char *kGenAiPromptName = "gen_ai.prompt.name";
+
+/**
   The Generative AI provider as identified by the client or server instrumentation.
   <p>
   The attribute SHOULD be set based on the instrumentation's best

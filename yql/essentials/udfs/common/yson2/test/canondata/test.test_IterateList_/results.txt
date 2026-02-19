@@ -1,0 +1,268 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "TupleType";
+                                        [
+                                            [
+                                                "DataType";
+                                                "Utf8"
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ]
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "PreValue";
+                                #;
+                                [
+                                    [
+                                        {
+                                            "$type" = "int64";
+                                            "$value" = "1"
+                                        };
+                                        [
+                                            {
+                                                "$type" = "int64";
+                                                "$value" = "2"
+                                            };
+                                            {
+                                                "$type" = "int64";
+                                                "$value" = "3"
+                                            }
+                                        ];
+                                        {
+                                            "$type" = "int64";
+                                            "$value" = "4"
+                                        }
+                                    ]
+                                ];
+                                #;
+                                #
+                            ];
+                            [
+                                "BeginList";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Item";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "int64";
+                                        "$value" = "1"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "Item";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "PreValue";
+                                #;
+                                [
+                                    [
+                                        {
+                                            "$type" = "int64";
+                                            "$value" = "2"
+                                        };
+                                        {
+                                            "$type" = "int64";
+                                            "$value" = "3"
+                                        }
+                                    ]
+                                ];
+                                #;
+                                #
+                            ];
+                            [
+                                "BeginList";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Item";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "int64";
+                                        "$value" = "2"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "Item";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "int64";
+                                        "$value" = "3"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "EndList";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "PostValue";
+                                #;
+                                #;
+                                #;
+                                [
+                                    [
+                                        {
+                                            "$type" = "int64";
+                                            "$value" = "2"
+                                        };
+                                        {
+                                            "$type" = "int64";
+                                            "$value" = "3"
+                                        }
+                                    ]
+                                ]
+                            ];
+                            [
+                                "Item";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "int64";
+                                        "$value" = "4"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "EndList";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "PostValue";
+                                #;
+                                #;
+                                #;
+                                [
+                                    [
+                                        {
+                                            "$type" = "int64";
+                                            "$value" = "1"
+                                        };
+                                        [
+                                            {
+                                                "$type" = "int64";
+                                                "$value" = "2"
+                                            };
+                                            {
+                                                "$type" = "int64";
+                                                "$value" = "3"
+                                            }
+                                        ];
+                                        {
+                                            "$type" = "int64";
+                                            "$value" = "4"
+                                        }
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

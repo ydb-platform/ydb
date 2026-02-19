@@ -1,15 +1,23 @@
 #include "actor.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/limiter/grouped_memory/tracing/probes.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 LWTRACE_USING(YDB_GROUPED_MEMORY_PROVIDER);
 
 void TMemoryLimiterActor::Bootstrap() {
+    TMon* mon = AppData()->Mon;
+    if (mon) {
+        mon->RegisterActorPage(nullptr, "grouped_memory_limiter_" + Name, "Grouped Memory Limiter: " + Name, false, TActivationContext::ActorSystem(), SelfId());
+    }
+
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_GROUPED_MEMORY_PROVIDER));
     for (ui64 i = 0; i < Config.GetCountBuckets(); i++) {
         LoadQueue.Add(i);
@@ -112,6 +120,28 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
     for (auto& manager: Managers) {
         manager->UpdateMemoryLimits(limitBytes, hardLimitBytes);
     }
+}
+
+void TMemoryLimiterActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
+    TStringStream html;
+    html << "<h2>Common</h2>";
+    html << "<b>Name:</b> " << Name << "<br \\>";
+    html << "<b>Config:</b> " << Config.DebugString() << "<br \\>";
+    html << "<b>Total processes count:</b> " << ProcessMapping.size() << "<br \\>";
+
+    html << "<h2>Load Balancer</h2>";
+    for (size_t i = 0; i < Managers.size(); ++i) {
+        html << "Manager " << i << ", load " << LoadQueue.GetLoad(i) << "<br \\>";
+    }
+
+    html << "<h2>Managers</h2>";
+    for (size_t i = 0; i < Managers.size(); ++i) {
+        html << "<pre>";
+        html << "Manager " << i << ", " << Managers[i]->DebugString();
+        html << "</pre>";
+    }
+
+    Send(ev->Sender, new NMon::TEvHttpInfoRes(html.Str()));
 }
 
 size_t TMemoryLimiterActor::AcquireManager(ui64 externalProcessId, int delta) {

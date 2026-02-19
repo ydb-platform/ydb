@@ -19,6 +19,8 @@ TPqConfiguration::TPqConfiguration() {
     REGISTER_SETTING(*this, Consumer);
     REGISTER_SETTING(*this, Database);
     REGISTER_SETTING(*this, PqReadByRtmrCluster_);
+    REGISTER_SETTING(*this, MaxPartitionReadSkew);
+    REGISTER_SETTING(*this, ReadSessionBufferBytes);
 }
 
 TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {
@@ -90,6 +92,8 @@ void TPqConfiguration::AddCluster(
         const TString& password = properties.Value("password", "");
         const TString& passwordReference = properties.Value("passwordReference", "");
         structuredTokenJson = ComposeStructuredTokenJsonForBasicAuthWithSecret(login, passwordReference, password);
+    } else if (const auto it = properties.find("transient_token"); it != properties.end()) {
+        structuredTokenJson = ComposeStructuredTokenJsonForTransientTokenAuth(it->second);
     } else {
         structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
     }

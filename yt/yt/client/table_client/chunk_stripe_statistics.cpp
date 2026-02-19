@@ -6,7 +6,7 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TChunkStripeStatistics operator + (
+TChunkStripeStatistics operator+(
     const TChunkStripeStatistics& lhs,
     const TChunkStripeStatistics& rhs)
 {
@@ -20,7 +20,7 @@ TChunkStripeStatistics operator + (
     return result;
 }
 
-TChunkStripeStatistics& operator += (
+TChunkStripeStatistics& operator+=(
     TChunkStripeStatistics& lhs,
     const TChunkStripeStatistics& rhs)
 {

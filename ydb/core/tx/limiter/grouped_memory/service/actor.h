@@ -132,6 +132,7 @@ public:
     void Handle(NEvents::TEvExternal::TEvFinishProcessScope::TPtr& ev);
     void Handle(NMemory::TEvConsumerRegistered::TPtr& ev);
     void Handle(NMemory::TEvConsumerLimit::TPtr& ev);
+    void Handle(NMon::TEvHttpInfo::TPtr& ev);
 
     void Bootstrap();
 
@@ -148,6 +149,7 @@ public:
             hFunc(NEvents::TEvExternal::TEvFinishProcessScope, Handle);
             hFunc(NMemory::TEvConsumerRegistered, Handle);
             hFunc(NMemory::TEvConsumerLimit, Handle);
+            hFunc(NMon::TEvHttpInfo, Handle);
             default:
                 AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }

@@ -198,4 +198,62 @@ void TManager::UpdateWaitingProcesses(TProcessMemory* process) {
     WaitingProcesses.erase(processUsageAddress);
 }
 
+TString TManager::DebugString() const {
+    TStringBuilder sb;
+    sb << "TManager{" << Endl
+       << "  Name=" << Name << Endl
+       << "  OwnerActorId=" << OwnerActorId.ToString() << Endl
+       << "  Config=" << Config.DebugString() << Endl
+       << "  ProcessesCount=" << Processes.size() << Endl
+       << "  ProcessesOrderedCount=" << ProcessesOrdered.size() << Endl
+       << "  WaitingProcessesCount=" << WaitingProcesses.size() << Endl
+       << "  DefaultStage=" << (DefaultStage ? DefaultStage->DebugString() : "null") << Endl
+       << "  ProcessIds={" << Endl
+       << "    Size=" << ProcessIds.GetSize() << Endl
+       << "    MinInternalId=" << (ProcessIds.GetMinInternalIdOptional().has_value()
+                                  ? ToString(ProcessIds.GetMinInternalIdOptional().value())
+                                  : "null") << Endl
+       << "    MinExternalId=" << (ProcessIds.GetMinExternalIdOptional().has_value()
+                                 ? ToString(ProcessIds.GetMinExternalIdOptional().value())
+                                 : "null") << Endl
+       << "  }" << Endl
+       << "  Processes=[" << Endl;
+    
+    bool first = true;
+    for (const auto& [internalId, process] : Processes) {
+        if (!first) {
+            sb << "," << Endl;
+        }
+        first = false;
+        sb << "    {InternalId=" << internalId << ";Process=" << process.DebugString() << "}";
+    }
+    
+    sb << Endl << "  ]" << Endl
+       << "  ProcessesOrdered=[" << Endl;
+    
+    first = true;
+    for (const auto& [usage, processPtr] : ProcessesOrdered) {
+        if (!first) {
+            sb << "," << Endl;
+        }
+        first = false;
+        sb << "    {Usage=" << usage.DebugString() << ";ProcessPtr=" << (processPtr ? "exists" : "null") << "}";
+    }
+    
+    sb << Endl << "  ]" << Endl
+       << "  WaitingProcesses=[" << Endl;
+    
+    first = true;
+    for (const auto& usage : WaitingProcesses) {
+        if (!first) {
+            sb << "," << Endl;
+        }
+        first = false;
+        sb << "    " << usage.DebugString();
+    }
+    
+    sb << Endl << "  ]" << Endl << "}";
+    return sb;
+}
+
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

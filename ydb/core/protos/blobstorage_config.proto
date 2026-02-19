@@ -218,7 +218,7 @@ message TDeleteDDiskPool {
 message TMoveDDisk {
     uint64 BoxId = 1;
     string Name = 2;
-    NKikimrBlobStorage.TDDiskId DDiskId = 3;
+    NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 3;
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 4;
 }
 

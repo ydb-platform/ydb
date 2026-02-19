@@ -19,6 +19,8 @@ SRCS(
     merger.h
     mvp_log.h
     mvp_mem_profiler.cpp
+    mvp_security_printer.cpp
+    mvp_startup_options.cpp
     mvp_swagger.h
     mvp_test_runtime.cpp
     mvp_test_runtime.h
@@ -40,9 +42,11 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/api/client/yc_private/accessservice
     ydb/public/api/client/yc_private/ydb/v1
     ydb/public/api/client/yc_private/resourcemanager
     ydb/public/api/client/yc_private/iam
+    ydb/public/api/client/nc_private
     ydb/public/api/client/nc_private/iam/v1
     contrib/libs/googleapis-common-protos
     contrib/libs/jwt-cpp
@@ -55,6 +59,7 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/actors/protos
     ydb/library/security
+    ydb/library/protobuf_printer
     library/cpp/lwtrace/protos
     library/cpp/lfalloc/alloc_profiler
     ydb/core/viewer/json

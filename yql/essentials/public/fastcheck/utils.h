@@ -2,12 +2,14 @@
 
 #include "linter.h"
 
+#include <yql/essentials/sql/settings/translation_settings.h>
+
 #include <library/cpp/json/json_reader.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 TUdfFilter ParseUdfFilter(const NJson::TJsonValue& json);
 
-} // namespace NFastCheck
-} // namespace NYql
+void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSettings& settings);
+
+} // namespace NYql::NFastCheck

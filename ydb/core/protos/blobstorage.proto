@@ -1602,8 +1602,8 @@ message TEvControllerAllocateDDiskBlockGroup {
 message TEvControllerAllocateDDiskBlockGroupResult {
     message TResponse {
         message TNode {
-            optional NKikimrBlobStorage.TDDiskId DDiskId = 1; // DDisk to store data
-            optional NKikimrBlobStorage.TDDiskId PersistentBufferDDiskId = 2; // DDisk containing persistent buffer
+            optional NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1; // DDisk to store data
+            optional NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2; // DDisk containing persistent buffer
         }
 
         optional uint64 DirectBlockGroupId = 1;

@@ -21,7 +21,7 @@ using namespace NYT::NApi;
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::Return;
-using ::testing::ReturnRef;
+using ::testing::ReturnRefOfCopy;
 using ::testing::StrictMock;
 
 using TStrictMockClient = StrictMock<NApi::TMockClient>;
@@ -176,7 +176,7 @@ TEST(TFederatedClientTest, CheckHealth)
     auto mockConnectionVla = New<TStrictMockConnection>();
     std::optional<std::string> clusterName("vla-cluster");
     EXPECT_CALL(*mockConnectionVla, GetClusterName())
-        .WillRepeatedly(ReturnRef(clusterName));
+        .WillRepeatedly(ReturnRefOfCopy(clusterName));
 
     auto mockClientVla = New<TStrictMockClient>();
     EXPECT_CALL(*mockClientVla, GetConnection())
@@ -470,7 +470,7 @@ TEST(TFederatedClientTest, AttachTransaction)
         .WillRepeatedly(Return(NObjectClient::TCellTag(123)));
     std::optional<std::string> clusterNameSas = "cluster-sas";
     EXPECT_CALL(*mockConnectionSas, GetClusterName())
-        .WillRepeatedly(ReturnRef(clusterNameSas));
+        .WillRepeatedly(ReturnRefOfCopy(clusterNameSas));
     EXPECT_CALL(*mockClientSas, GetConnection())
         .WillRepeatedly(Return(mockConnectionSas));
 
@@ -479,7 +479,7 @@ TEST(TFederatedClientTest, AttachTransaction)
         .WillRepeatedly(Return(NObjectClient::TCellTag(456)));
     std::optional<std::string> clusterNameVla = "cluster-vla";
     EXPECT_CALL(*mockConnectionVla, GetClusterName())
-        .WillRepeatedly(ReturnRef(clusterNameVla));
+        .WillRepeatedly(ReturnRefOfCopy(clusterNameVla));
     EXPECT_CALL(*mockClientVla, GetConnection())
         .WillRepeatedly(Return(mockConnectionVla));
 

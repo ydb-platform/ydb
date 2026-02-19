@@ -41,29 +41,39 @@ public:
     {}
 
     TSession::TImpl* TrySharedOwning() noexcept {
-        auto old = Semaphore.fetch_add(1); 
-        if (old == 0) {
-            OwnerThread.store(std::this_thread::get_id());
+        // Try to acquire by changing semaphore from 0 to 1
+        uint32_t expected = 0;
+        if (Semaphore.compare_exchange_strong(expected, 1, 
+            std::memory_order_acquire, std::memory_order_acquire)) {
+            // Successfully acquired - set owner thread
+            OwnerThread.store(std::this_thread::get_id(), std::memory_order_release);
             return Ptr;
-        } else {
-            return nullptr;
         }
+        
+        // Failed to acquire - check if this is a recursive call
+        if (OwnerThread.load(std::memory_order_acquire) == std::this_thread::get_id()) {
+            // Recursive lock - already owned by this thread
+            return Ptr;
+        }
+        
+        // Failed - another thread owns the lock
+        return nullptr;
     }
 
     void Release() noexcept {
-        OwnerThread.store(std::thread::id());
-        Semaphore.store(0);
+        OwnerThread.store(std::thread::id(), std::memory_order_release);
+        Semaphore.store(0, std::memory_order_release);
     }
 
     void WaitAndLock() noexcept {
-        if (OwnerThread.load() == std::this_thread::get_id()) {
+        if (OwnerThread.load(std::memory_order_acquire) == std::this_thread::get_id()) {
             return;
         }
 
         uint32_t cur = 0;
         uint32_t newVal = 1;
         while (!Semaphore.compare_exchange_weak(cur, newVal,
-            std::memory_order_release, std::memory_order_relaxed)) {
+            std::memory_order_acquire, std::memory_order_acquire)) {
                 std::this_thread::yield();
                 cur = 0;
         }

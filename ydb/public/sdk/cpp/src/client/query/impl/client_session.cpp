@@ -61,6 +61,9 @@ public:
     }
 
     void Release() noexcept {
+        // Clear owner thread first, then release the semaphore
+        // The order matters to ensure recursive lock checks in other threads
+        // see the cleared owner before seeing semaphore == 0
         OwnerThread.store(std::thread::id(), std::memory_order_release);
         Semaphore.store(0, std::memory_order_release);
     }

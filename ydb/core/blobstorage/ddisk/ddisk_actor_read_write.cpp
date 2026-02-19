@@ -271,6 +271,7 @@ namespace NKikimr::NDDisk {
             data = ev->Get()->GetPayload(*instr.PayloadId);
         }
 
+        // TODO: should we check page size? And for large writes and huge pages properly page align?
         auto iter = data.Begin();
         if (iter.ContiguousSize() == data.size() &&
                 reinterpret_cast<uintptr_t>(iter.ContiguousData()) % BlockSize == 0) {

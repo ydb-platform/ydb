@@ -1684,11 +1684,13 @@ TExprBase DqBuildHashJoin(
         }
     }
 
+    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
+
     TExprNode::TPtr hashJoin;
     switch (mode) {
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
-            if (useBlockHashJoin) {
+            if (useBlockHashJoin && blockHashJoinSupportedTypes.contains(joinType)) {
                 // Create TDqPhyBlockHashJoin node with structured inputs - peephole will handle conversion
                 // Pass the original structured inputs, not wide flows
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())

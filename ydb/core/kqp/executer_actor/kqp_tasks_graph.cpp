@@ -562,8 +562,6 @@ void TKqpTasksGraph::BuildTransformChannels(const TTransform& transform, const T
 void TKqpTasksGraph::BuildSequencerChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo, ui32 outputIndex,
     const NKqpProto::TKqpPhyCnSequencer& sequencer, bool enableSpilling, const TChannelLogFunc& logFunc)
 {
-    YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
-
     NKikimrKqp::TKqpSequencerSettings* settings = GetMeta().Allocate<NKikimrKqp::TKqpSequencerSettings>();
     settings->MutableTable()->CopyFrom(sequencer.GetTable());
     settings->SetDatabase(GetMeta().Database);
@@ -575,8 +573,31 @@ void TKqpTasksGraph::BuildSequencerChannels(const TStageInfo& stageInfo, ui32 in
     transform.OutputType = sequencer.GetOutputType();
     TTaskInputMeta meta;
     meta.SequencerSettings = settings;
-    BuildTransformChannels(transform, meta, "Sequencer/Map", stageInfo, inputIndex,
-        inputStageInfo, outputIndex, enableSpilling, logFunc);
+
+    if (stageInfo.Tasks.size() == inputStageInfo.Tasks.size()) {
+        BuildTransformChannels(transform, meta, "Sequencer/Map", stageInfo, inputIndex,
+            inputStageInfo, outputIndex, enableSpilling, logFunc);
+        return;
+    }
+
+    // Different task counts: distribute input tasks to stage tasks in round-robin (e.g. UPSERT INTO ... SELECT without LIMIT)
+    const ui64 inputStageTasksSize = inputStageInfo.Tasks.size();
+    const ui64 originStageTasksSize = stageInfo.Tasks.size();
+    Y_ENSURE(originStageTasksSize, "Sequencer target stage must have at least one task");
+
+    ui64 nextOriginTaskId = 0;
+    for (ui64 i = 0; i < inputStageTasksSize; ++i) {
+        const auto originTaskId = inputStageInfo.Tasks[i];
+        const auto targetTaskId = stageInfo.Tasks[nextOriginTaskId];
+        BuildChannelBetweenTasks(stageInfo, inputStageInfo, originTaskId, targetTaskId, inputIndex, outputIndex, enableSpilling,
+            [&logFunc](ui64 channelId, ui64 src, ui64 dst, const TString&, bool inMemory) { logFunc(channelId, src, dst, "Sequencer/Map", inMemory); });
+
+        auto& targetTask = GetTask(targetTaskId);
+        targetTask.Inputs[inputIndex].Meta = meta;
+        targetTask.Inputs[inputIndex].Transform = transform;
+
+        nextOriginTaskId = (nextOriginTaskId + 1) % originStageTasksSize;
+    }
 }
 
 void TKqpTasksGraph::BuildChannelBetweenTasks(const TStageInfo& stageInfo, const TStageInfo& inputStageInfo, ui64 originTaskId,

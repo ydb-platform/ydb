@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: tenacity
-Version: 9.1.2
+Version: 9.1.3
 Summary: Retry code until it succeeds
 Home-page: https://github.com/jd/tenacity
 Author: Julien Danjou
@@ -11,13 +11,13 @@ Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Topic :: Utilities
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 License-File: LICENSE
 Provides-Extra: doc
 Requires-Dist: reno; extra == "doc"

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pip
-Version: 26.0
+Version: 26.0.1
 Summary: The PyPA recommended tool for installing Python packages.
 Author-email: The pip developers <distutils-sig@python.org>
 Requires-Python: >=3.9

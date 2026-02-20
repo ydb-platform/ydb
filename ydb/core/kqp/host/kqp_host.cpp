@@ -1950,7 +1950,7 @@ private:
             if (FederatedQuerySetup->PqGateway) {
                 InitPqProvider();
             }
-            TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
+            TypesCtx->StreamLookupJoin = Config->EnableDqSourceStreamLookupJoin;
         }
 
         InitPgProvider();

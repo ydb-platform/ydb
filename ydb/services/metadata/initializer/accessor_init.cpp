@@ -10,6 +10,8 @@
 
 namespace NKikimr::NMetadata::NInitializer {
 
+constexpr auto RETRY_AFTER_DURATION = TDuration::Seconds(1);
+
 void TDSAccessorInitialized::DoNextModifier(const bool doPop) {
     if (InitializationSnapshotOwner->HasInitializationSnapshot() && !doPop) {
         while (Modifiers.size() && Modifiers.front()->GetSupportDbCache() && !doPop) {
@@ -85,7 +87,7 @@ void TDSAccessorInitialized::OnPreparationProblem(const TString& errorMessage) c
     AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnPreparationProblem")("error", errorMessage);
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
         self->InitializationBehaviour->Prepare(self); 
-    }, TDuration::Seconds(1));
+    }, RETRY_AFTER_DURATION);
 }
 
 void TDSAccessorInitialized::OnAlteringProblem(const TString& errorMessage) {
@@ -93,7 +95,7 @@ void TDSAccessorInitialized::OnAlteringProblem(const TString& errorMessage) {
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
         Y_ABORT_UNLESS(self->Modifiers.size());
         self->OnModificationFinished(self->Modifiers.front()->GetModificationId());
-    }, TDuration::Seconds(1));
+    }, RETRY_AFTER_DURATION);
 }
 
 void TDSAccessorInitialized::OnModificationFailed(Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage, const TString& modificationId) {
@@ -101,7 +103,7 @@ void TDSAccessorInitialized::OnModificationFailed(Ydb::StatusIds::StatusCode /*s
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
         Y_ABORT_UNLESS(self->Modifiers.size());
         self->DoNextModifier(false);
-    }, TDuration::Seconds(1));
+    }, RETRY_AFTER_DURATION);
 }
 
 void TDSAccessorInitialized::OnAlteringFinished() {

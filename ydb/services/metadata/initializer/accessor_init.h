@@ -14,7 +14,7 @@
 
 namespace NKikimr::NMetadata::NInitializer {
 
-class TDSAccessorInitialized: public IInitializerInput,
+class TDSAccessorInitialized final : public IInitializerInput,
     public std::enable_shared_from_this<TDSAccessorInitialized>,
     public NModifications::IAlterController,
     public NMetadata::NInitializer::IModifierExternalController
@@ -42,7 +42,7 @@ class TDSAccessorInitialized: public IInitializerInput,
     }
 
 public:
-    virtual ~TDSAccessorInitialized();
+    ~TDSAccessorInitialized();
 
     static void Execute(const NRequest::TConfig& config,
         const TString& componentId,

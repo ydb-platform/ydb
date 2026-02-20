@@ -505,6 +505,29 @@ message TMovePDisk {
     TPDisk DestinationPDisk = 2;
 }
 
+// Populate target PDisk with selected VDisks in a single atomic config transaction.
+// If any VDisk cannot be moved, no changes are applied.
+message TPopulatePDisk {
+    message TPDisk {
+        oneof PDisk {
+            NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+            TPDiskLocation TargetPDiskLocation = 2;
+        }
+    }
+
+    // keep field number to avoid accidental reuse
+    reserved 1;
+    TPDisk DestinationPDisk = 2;
+
+    // Exactly one mode must be provided:
+    // 1) explicit VDisk list
+    repeated NKikimrBlobStorage.TVDiskID VDiskId = 3;
+    // 2) automatically pick this many VDisks from the whole cluster
+    uint32 ExpectedVDiskCount = 4;
+
+    bool SuppressDonorMode = 5;
+}
+
 message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
@@ -716,6 +739,7 @@ message TConfigRequest {
             TReadDDiskPool ReadDDiskPool = 58;
             TDeleteDDiskPool DeleteDDiskPool = 59;
             TMoveDDisk MoveDDisk = 60;
+            TPopulatePDisk PopulatePDisk = 61;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

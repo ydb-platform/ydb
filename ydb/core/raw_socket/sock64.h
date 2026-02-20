@@ -164,7 +164,11 @@ public:
         BIO_set_nbio(Bio.get(), 1);
         Ssl = TSslHelpers::ConstructSsl(ctx, Bio.get());
         if (AppData()->KafkaProxyConfig.GetMtlsEnable()) {
+            Cerr << "Mtls enabled" << Endl;
             SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, &TInet64SecureStreamSocket::Verify);
+            SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
+            SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+            SSL_CTX_set_timeout(ctx, 0);
             auto readFile = [](std::optional<TString> path, const char *name) {
                 if (path) {
                     try {
@@ -193,8 +197,13 @@ public:
             if (retPrivateKey != 1) { return false; }
             int retCA = SSL_CTX_load_verify_locations(ctx, kafkaCAFilePath.data(), nullptr);
             if (retCA != 1) { return false; }
+            SSL_CTX_set_verify_depth(ctx, 9);
+
+            SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256");
         }
         SSL_set_accept_state(Ssl.get());
+        Cout << "Verify mode: " << SSL_CTX_get_verify_mode(ctx) << "SSL_VERIFY_PEER: " << SSL_VERIFY_PEER << Endl;
+
         return true;
     }
 
@@ -311,41 +320,49 @@ public:
         return preverify;
     }
 
+    int GetSslHandshakeResult() {
+        if (!Ssl) {
+            return -1;
+        }
+        int ret = SSL_do_handshake(Ssl.get());
+        Cout << "SSL handshake result: " << ret << Endl;
+        Cout << "Verify result:" << SSL_get_verify_result(Ssl.get()) << Endl;
+        int ssl_err = SSL_get_error(Ssl.get(), ret);
+        switch(ssl_err) {
+            case SSL_ERROR_NONE:
+                Cout << "Error: SSL_ERROR_NONE " << ssl_err << Endl;
+                break;
+            case SSL_ERROR_ZERO_RETURN:
+                Cout << "Error: SSL_ERROR_ZERO_RETURN " << ssl_err << Endl;
+                break;
+            case SSL_ERROR_WANT_READ:
+                Cout << "Error: SSL_ERROR_WANT_READ " << ssl_err << Endl;
+                break;
+            case SSL_ERROR_WANT_WRITE:
+                Cout << "Error: SSL_ERROR_WANT_WRITE " << ssl_err << Endl;
+                break;
+            case SSL_ERROR_WANT_CONNECT:
+                Cout << "Error: SSL_ERROR_WANT_CONNECT " << ssl_err << Endl;
+                break;
+            case SSL_ERROR_WANT_ACCEPT:
+                Cout << "Error: SSL_ERROR_WANT_ACCEPT " << ssl_err << Endl;
+                break;
+            default:
+                Cout << "Error: " << ssl_err << Endl;
+        }
+        return ret;
+    }
+
     TSslHolder<X509> GetSslClientCert() {
         if (!Ssl) {
             return nullptr;
         }
-        int ret = SSL_do_handshake(Ssl.get());
-        Cout << "SSL handshake result: " << ret << Endl;
-        if (ret != 1) {
-            int ssl_err = SSL_get_error(Ssl.get(), ret);
-            switch(ssl_err) {
-                case SSL_ERROR_NONE:
-                    Cout << "Error: SSL_ERROR_NONE " << ssl_err << Endl;
-                    break;
-                case SSL_ERROR_ZERO_RETURN:
-                    Cout << "Error: SSL_ERROR_ZERO_RETURN " << ssl_err << Endl;
-                    break;
-                case SSL_ERROR_WANT_READ:
-                    Cout << "Error: SSL_ERROR_WANT_READ " << ssl_err << Endl;
-                    break;
-                case SSL_ERROR_WANT_WRITE:
-                    Cout << "Error: SSL_ERROR_WANT_WRITE " << ssl_err << Endl;
-                    break;
-                case SSL_ERROR_WANT_CONNECT:
-                    Cout << "Error: SSL_ERROR_WANT_CONNECT " << ssl_err << Endl;
-                    break;
-                case SSL_ERROR_WANT_ACCEPT:
-                    Cout << "Error: SSL_ERROR_WANT_ACCEPT " << ssl_err << Endl;
-                    break;
-                default:
-                    Cout << "Error: " << ssl_err << Endl;
-            }
-            if (ssl_err == SSL_ERROR_NONE) {
-
-            }
-        }
         return TSslHolder<X509>(SSL_get_peer_certificate(Ssl.get()));
+    }
+
+    void PollClientCertAfterHandshake() {
+        int res = SSL_verify_client_post_handshake(Ssl.get());
+        Cout << "SSL_verify_client_post_handshake res = " << res << Endl;
     }
 
     ssize_t Send(const void* msg, size_t len, int flags = 0) override {

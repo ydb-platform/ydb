@@ -90,7 +90,17 @@ public:
 
     TSslHelpers::TSslHolder<X509> GetSslClientCert() {
         auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
-        return socket->GetSslClientCert();;
+        return socket->GetSslClientCert();
+    }
+
+    int GetSslHandshakeResult() {
+        auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+        return socket->GetSslHandshakeResult();
+    }
+
+    void PollClientCertAfterHandshake() {
+        auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+        socket->PollClientCertAfterHandshake();;
     }
 
     TString GetStringClientCert(X509* cert) {

@@ -56,8 +56,6 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
             StartPlainAuth(ctx);
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             StartScramAuth();
-        } else if (Context->SaslMechanism == "MTLS") {
-            KAFKA_LOG_D("here");
         } else {
             SendResponseAndDie(EKafkaErrors::UNSUPPORTED_SASL_MECHANISM,
                                 "Does not support the requested SASL mechanism.",
@@ -74,6 +72,17 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
     }
 }
 
+ void TKafkaSaslAuthActor::HandleMtlsAuthRequest(TEvKafka::TEvMtlsAuthRequest::TPtr& ev, const NActors::TActorContext&) {
+    auto& mtlsRequest = *ev->Get();
+    ClientCert = mtlsRequest.ClientCertificate;
+    KAFKA_LOG_D("Recieved client cert in auth actor: " << ClientCert);
+    if (CurrentStateFunc() == &TThis::StateWork) {
+        StartMtlsAuth();
+        SendDescribeRequest();
+        Become(&TKafkaSaslAuthActor::StateResolveDatabase);
+    }
+ }
+
 void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
     if (!TryParseAuthDataTo(ClientAuthData, ctx)) {
         return;
@@ -81,6 +90,10 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 }
 
 void TKafkaSaslAuthActor::StartScramAuth() {
+    DatabasePath = AppData()->TenantName;
+}
+
+void TKafkaSaslAuthActor::StartMtlsAuth() {
     DatabasePath = AppData()->TenantName;
 }
 
@@ -322,6 +335,11 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
     }
 }
 
+void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(ClientCert));
+    Become(&TKafkaSaslAuthActor::StateTicketResolve);
+}
+
 void TKafkaSaslAuthActor::SendDescribeRequest() {
     auto schemeCacheRequest = std::make_unique<NKikimr::NSchemeCache::TSchemeCacheNavigate>();
     NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry entry;
@@ -416,7 +434,7 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
             // Scram Login/Password authentication
             SendScramLoginRequest(ctx);
         } else if (Context->SaslMechanism == "MTLS") {
-
+            SendMtlsAuthRequest(ctx);
         }
     }
 }

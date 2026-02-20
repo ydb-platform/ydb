@@ -81,6 +81,10 @@ namespace NKikimr::NDDisk {
                 return;
             }
 
+            if (Y_UNLIKELY(op->Result == 0 && remaining > 0)) {
+                op->Result = -EIO;
+            }
+
             std::unique_ptr<IEventBase> reply;
             if (op->Result >= 0) {
                 if (op->IsRead) {

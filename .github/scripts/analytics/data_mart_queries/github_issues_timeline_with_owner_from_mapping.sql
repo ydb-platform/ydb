@@ -1,4 +1,4 @@
--- Timeline with owner_team from area_to_owner_mapping at read time (type 2: no materialized owner).
+-- Query for DataLens dataset (with_owner etc). Timeline with owner_team from area_to_owner_mapping at read time (type 2: no materialized owner).
 -- Use this in BI so that changing owner_area_mapping.json + sync is enough; no need to re-export timeline.
 --
 -- Variant: distinct areas from vitrina -> join with mapping (StartsWith prefix match) -> join back.
@@ -70,21 +70,3 @@ LEFT JOIN (
     )
     WHERE rn = 1
 ) AS o ON t.area = o.area;
-
--- ---------------------------------------------------------------------------
--- Exact-match variant (only equality join, no prefix): use if query above fails.
--- Then keep all areas in owner_area_mapping.json (area/cs, area/cs/tiering, ...).
--- ---------------------------------------------------------------------------
--- SELECT
---     t.date, t.project_item_id, t.issue_id, t.issue_number, t.title, t.url,
---     t.state, t.state_reason, t.created_at, t.updated_at, t.closed_at,
---     t.created_date, t.updated_date, t.author_login, t.author_url,
---     t.repository_name, t.repository_url, t.project_status, t.project_owner,
---     t.project_priority, t.is_in_project, t.days_since_created, t.days_since_updated,
---     t.time_to_close_hours, t.assignees, t.labels, t.milestone, t.project_fields,
---     t.info, t.issue_type, t.exported_at, t.labels_list, t.max_branch, t.env,
---     t.priority, t.branch, t.area,
---     CASE WHEN t.area = 'area/-' THEN 'unknown' WHEN om.owner_team IS NOT NULL THEN om.owner_team ELSE 'team_unmatched:' || t.area END AS owner_team,
---     t.is_open_at_end_of_day, t.closed_on_this_day
--- FROM `test_results/analytics/github_issues_timeline` AS t
--- LEFT JOIN `test_results/analytics/area_to_owner_mapping` AS om ON t.area = om.area;

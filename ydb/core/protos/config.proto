@@ -2981,7 +2981,7 @@ message TClusterDiagnosticsConfig {
 
 message TNbsConfig {
     optional bool Enabled = 1;
-    required NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
+    optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
 }
 
 message TAppConfig {

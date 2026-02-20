@@ -599,6 +599,31 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         }
     }
 
+    Y_UNIT_TEST(Explain) {
+        auto kikimr = DefaultKikimrRunner();
+        auto queries = std::vector{"EXPLAIN SELECT 1;", 
+                                   "EXPLAIN SELECT 1; SELECT 2;", 
+                                   "SELECT 1; EXPLAIN SELECT 2;",
+                                   "EXPLAIN DROP TABLE IF EXISTS test;"};
+        
+        for (const auto& query : queries) {
+            {
+                auto db = kikimr.GetQueryClient();
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EXPLAIN is not supported");
+            }
+            {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EXPLAIN is not supported");
+            }
+        }
+    }
     Y_UNIT_TEST(AnsiIn) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

@@ -47,8 +47,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         request.SetSnapshotTxId(snapshot.TxId);
         request.SetSnapshotStep(snapshot.Step);
 
+        request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextPlain);
+
         FulltextIndexSettings settings;
-        settings.set_layout(FulltextIndexSettings::FLAT);
         auto column = settings.add_columns();
         column->set_column("text");
         column->mutable_analyzers()->set_tokenizer(FulltextIndexSettings::WHITESPACE);
@@ -214,7 +215,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         }, "{ <main>: Error: Empty index table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-            request.MutableSettings()->set_layout(FulltextIndexSettings::FLAT_RELEVANCE);
+            request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
             request.ClearDocsTableName();
         }, "{ <main>: Error: Empty index documents table name }");
 
@@ -406,7 +407,7 @@ __ydb_token = yellow, key = 3, text = yellow apple, subkey = 33, data = three
         CreateDocsTable(server, sender);
 
         auto reply = DoBuildRaw(server, sender, [](auto& request) {
-            request.MutableSettings()->set_layout(FulltextIndexSettings::FLAT_RELEVANCE);
+            request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
         });
         auto& record = reply->Get()->Record;
 

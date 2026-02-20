@@ -167,29 +167,14 @@ void DoDescribePartitionRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikim
     f.RegisterActor(new NGRpcProxy::V1::TDescribePartitionActor(p));
 }
 
-void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
-     auto p = dynamic_cast<TEvCommitOffsetRequest*>(ctx.release());
+void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider&) {
+    std::unique_ptr<TEvCommitOffsetRequest> p;
+    p.reset(dynamic_cast<TEvCommitOffsetRequest*>(ctx.release()));
 
-    EnsureReq(p);
+    EnsureReq(p.get());
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Commit Offset request");
-
-    class TForwarder : public TActorBootstrapped<TForwarder> {
-    public:
-        TForwarder(TEvCommitOffsetRequest* ev)
-            : Ev(ev)
-        {
-        }
-
-        void Bootstrap(const TActorContext& ctx) {
-            ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), Ev.release());
-            PassAway();
-        }
-
-        std::unique_ptr<TEvCommitOffsetRequest> Ev;
-    };
-
-    f.RegisterActor(new TForwarder(p));
+    TActivationContext::Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), std::move(p));
 }
 
 void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {

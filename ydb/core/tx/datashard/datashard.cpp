@@ -903,8 +903,8 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         
         auto userCtx = record.GetUserCtx();
         if (userCtx!=nullptr) {
-            userSID = userCtx->UserSID;
-            userTraceId = userCtx->UserTraceId;
+            userSID = userCtx->GetUserSID();
+            userTraceId = userCtx->GetUserTraceId();
         } else {
             userSID = BUILTIN_ACL_CDC_WITHOUT_USER_SID;
         }
@@ -998,8 +998,8 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userCtx!=nullptr?userCtx->UserSID:BUILTIN_ACL_CDC_WITHOUT_USER_SID),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userCtx!=nullptr?userCtx->UserTraceId:""));
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userCtx!=nullptr?userCtx->GetUserSID():BUILTIN_ACL_CDC_WITHOUT_USER_SID),
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userCtx!=nullptr?userCtx->GetUserTraceId():""));
     }
 }
 

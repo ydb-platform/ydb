@@ -59,8 +59,8 @@ namespace NKikimr::NEvWrite {
     void TShardWriter::SendWriteRequest() {
         auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         if (UserCtx != nullptr) {
-            ev->SetUserSID(UserCtx->UserSID);
-            ev->SetUserTraceId(UserCtx->UserTraceId);
+            ev->SetUserSID(UserCtx->GetUserSID());
+            ev->SetUserTraceId(UserCtx->GetUserTraceId());
         }
         DataForShard->Serialize(*ev, TableId, SchemaVersion);
         if (Timeout) {

@@ -1787,8 +1787,8 @@ private:
                     flags));
             }
             if (userCtx != nullptr) {
-                evData->Record.SetUserSID(userCtx->UserSID);
-                evData->Record.SetUserTraceId(userCtx->UserTraceId);
+                evData->Record.SetUserSID(userCtx->GetUserSID());
+                evData->Record.SetUserTraceId(userCtx->GetUserTraceId());
             }
 
             NDataIntegrity::LogIntegrityTrails("DatashardTx", dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString(),
@@ -1823,8 +1823,8 @@ private:
 
         auto userCtx = GetUserCtx();
         if (userCtx != nullptr) {
-            evWriteTransaction->Record.SetUserSID(userCtx->UserSID);
-            evWriteTransaction->Record.SetUserTraceId(userCtx->UserTraceId);
+            evWriteTransaction->Record.SetUserSID(userCtx->GetUserSID());
+            evWriteTransaction->Record.SetUserTraceId(userCtx->GetUserTraceId());
         }
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
@@ -2411,8 +2411,8 @@ private:
                     auto ev = TasksGraph.GetMeta().Allocate<NKikimrDataEvents::TEvWrite>();
                     auto userCtx = GetUserCtx();
                     if (userCtx!=nullptr) {
-                        ev->SetUserSID(userCtx->UserSID);
-                        ev->SetUserTraceId(userCtx->UserTraceId);
+                        ev->SetUserSID(userCtx->GetUserSID());
+                        ev->SetUserTraceId(userCtx->GetUserTraceId());
                     }
                     auto [eIt, success] = evWriteTxs.emplace(shardId, ev);
                     locks = eIt->second->MutableLocks();

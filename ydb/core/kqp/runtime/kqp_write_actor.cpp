@@ -1179,8 +1179,8 @@ public:
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         if (UserCtx != nullptr) {
-            evWrite->Record.SetUserSID(UserCtx->UserSID);
-            evWrite->Record.SetUserTraceId(UserCtx->UserTraceId);
+            evWrite->Record.SetUserSID(UserCtx->GetUserSID());
+            evWrite->Record.SetUserTraceId(UserCtx->GetUserTraceId());
         }
 
         if (isImmediateCommit) {
@@ -3753,8 +3753,8 @@ public:
                 ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
                 : NKikimrDataEvents::TEvWrite::MODE_PREPARE));
         if (UserCtx != nullptr) {                
-            evWrite->Record.SetUserSID(UserCtx->UserSID);
-            evWrite->Record.SetUserTraceId(UserCtx->UserTraceId);
+            evWrite->Record.SetUserSID(UserCtx->GetUserSID());
+            evWrite->Record.SetUserTraceId(UserCtx->GetUserTraceId());
         }
 
         if (isRollback) {

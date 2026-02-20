@@ -193,13 +193,22 @@ class TUserContext : public TThrRefBase
 public:
     using TPtr = TIntrusivePtr<TUserContext>;
 
-    const TString UserSID;
-    const TString UserTraceId;
-
     TUserContext(const TString& userSID, const TString& userTraceId):
         UserSID(userSID), 
         UserTraceId(userTraceId) 
     {}
+
+    const TString& GetUserSID() const {
+        return UserSID;
+    }
+
+    const TString& GetUserTraceId() const {
+        return UserTraceId;
+    }
+
+protected:    
+    TString UserSID;
+    TString UserTraceId;
 };
 
 class TUserContextBuilder

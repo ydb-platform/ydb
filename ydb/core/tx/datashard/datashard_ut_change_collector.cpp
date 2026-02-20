@@ -202,11 +202,11 @@ struct TStructRecordBase {
     }
 
     TString GetUserSID() const {
-        return UserCtx != nullptr ? UserCtx->UserSID : BUILTIN_ACL_NO_USER_SID;
+        return UserCtx != nullptr ? UserCtx->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
     }
 
     TString GetUserTraceId() const {
-        return UserCtx != nullptr ? UserCtx->UserTraceId : "";
+        return UserCtx != nullptr ? UserCtx->GetUserTraceId() : "";
     }
 
     bool operator==(const TStructRecordBase<SK>& rhs) const {
@@ -228,11 +228,11 @@ struct TStructRecordBase {
             << " OldImage: " << OldImage
             << " NewImage: " << NewImage;
         if (UserCtx != nullptr) {
-            if (!UserCtx->UserSID.empty()) {
-                out << " UserSID: " << UserCtx->UserSID;
+            if (!UserCtx->GetUserSID().empty()) {
+                out << " UserSID: " << UserCtx->GetUserSID();
             }
-            if (!UserCtx->UserTraceId.empty()) {
-                out << " UserTraceId: " << UserCtx->UserTraceId;
+            if (!UserCtx->GetUserTraceId().empty()) {
+                out << " UserTraceId: " << UserCtx->GetUserTraceId();
             }
         }
         out << " }";

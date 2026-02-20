@@ -1480,11 +1480,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     .WriteKey("ts_ms").WriteString("***")
                     .WriteKey("snapshot").WriteBool(snapshot);
         if (userCtx != nullptr) {
-            if (!userCtx->UserSID.empty()) {
-                payload.WriteKey("user").WriteString(userCtx->UserSID);
+            if (!userCtx->GetUserSID().empty()) {
+                payload.WriteKey("user").WriteString(userCtx->GetUserSID());
             }
-            if (!userCtx->UserTraceId.empty()) {
-                payload.WriteKey("user_trace_id").WriteString(userCtx->UserTraceId);
+            if (!userCtx->GetUserTraceId().empty()) {
+                payload.WriteKey("user_trace_id").WriteString(userCtx->GetUserTraceId());
             }
         }
         payload.EndObject();
@@ -1938,7 +1938,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"eventVersion", "1.0"},
                 {"userIdentity", NJson::TJsonMap({
                     {"type", "User"},
-                    {"principalId", userCtx->UserSID}})
+                    {"principalId", userCtx->GetUserSID()}})
                 },
             }), false),
         }, false /* do not check key */, userCtx);

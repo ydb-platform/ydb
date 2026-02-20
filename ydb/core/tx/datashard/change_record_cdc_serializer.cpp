@@ -329,11 +329,11 @@ protected:
 
         auto userCtx = record.GetUserCtx();
         if (userCtx != nullptr) {
-            if (Opts.UserSIDs && !userCtx->UserSID.empty() ) {
-                json["user"] = userCtx->UserSID;
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty() ) {
+                json["user"] = userCtx->GetUserSID();
             }
-            if (!userCtx->UserTraceId.empty()) {
-                json["trace_id"] = userCtx->UserTraceId;
+            if (!userCtx->GetUserTraceId().empty()) {
+                json["trace_id"] = userCtx->GetUserTraceId();
             }
         }
 
@@ -542,18 +542,18 @@ protected:
 
         auto userCtx = record.GetUserCtx();
         if (userCtx!=nullptr) {
-            if (Opts.UserSIDs && !userCtx->UserSID.empty()) {
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
                 auto& userIdentityJson = json["userIdentity"];
-                if (userCtx->UserSID == BUILTIN_ACL_CDC_TTL) {
+                if (userCtx->GetUserSID() == BUILTIN_ACL_CDC_TTL) {
                     userIdentityJson["type"] = "Service";   
                     userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
                 } else {
                     userIdentityJson["type"] = "User";
-                    userIdentityJson["principalId"] = userCtx->UserSID;
+                    userIdentityJson["principalId"] = userCtx->GetUserSID();
                 }
             }
-            if (!userCtx->UserTraceId.empty()) {
-                json["trace_id"] = userCtx->UserTraceId;
+            if (!userCtx->GetUserTraceId().empty()) {
+                json["trace_id"] = userCtx->GetUserTraceId();
             }
         }
     }
@@ -621,11 +621,11 @@ protected:
 
         auto userCtx = record.GetUserCtx();
         if (userCtx!=nullptr) {
-            if (Opts.UserSIDs && !userCtx->UserSID.empty()) {
-                sourceJson["user"] = userCtx->UserSID;
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
+                sourceJson["user"] = userCtx->GetUserSID();
             }
-            if (!userCtx->UserTraceId.empty()) {
-                sourceJson["trace_id"] = userCtx->UserTraceId;
+            if (!userCtx->GetUserTraceId().empty()) {
+                sourceJson["trace_id"] = userCtx->GetUserTraceId();
             }
         }
     }

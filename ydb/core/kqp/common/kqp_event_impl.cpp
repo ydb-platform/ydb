@@ -53,7 +53,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(const NACLib::TUserContext::TPtr& userC
     UserCtx = userCtx;
     if (userCtx != nullptr) {
         NACLib::TUserToken::TUserTokenInitFields fields {
-            .UserSID = userCtx->UserSID
+            .UserSID = userCtx->GetUserSID()
         };
         Token_ = new NACLib::TUserToken(fields);
     }

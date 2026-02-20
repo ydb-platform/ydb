@@ -948,12 +948,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             NKikimrBlobStorage::TConfigRequest request;
             env.DefineBox(1, "box", {{"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
             env.DefineStoragePool(1, 1, "storage pool", numGroups, NKikimrBlobStorage::ROT, {}, request);
+            const size_t baseConfigIndex = request.CommandSize();
             request.AddCommand()->MutableQueryBaseConfig();
 
             NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            UNIT_ASSERT_C(response.GetStatus(baseConfigIndex).GetSuccess(), response.GetStatus(baseConfigIndex).GetErrorDescription());
 
-            const auto& baseConfig = response.GetStatus(2).GetBaseConfig();
+            const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
             UNIT_ASSERT_C(baseConfig.VSlotSize() >= 2, TStringBuilder() << "vslot count# " << baseConfig.VSlotSize());
 
             const auto& firstVSlot = baseConfig.GetVSlot(0);

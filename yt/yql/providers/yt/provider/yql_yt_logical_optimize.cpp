@@ -1157,6 +1157,11 @@ protected:
             return node;
         }
 
+        auto outerLambdaArg = outerFlatmap.Lambda().Args().Arg(0).Raw();
+        if (outerLambdaArg->IsUsedInDependsOn()) {
+            return node;
+        }
+
         auto innerFlatmap = outerFlatmap.Input().Cast<TCoFlatMapBase>();
         if (!IsYtProviderInput(innerFlatmap.Input())) {
             return node;

@@ -479,4 +479,14 @@ message TTableServiceConfig {
 
     optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
+
+    message TCompileCacheWarmupConfig {
+        optional uint32 SoftDeadlineSeconds = 1 [default = 10];        // Soft deadline: stops new compilations, waits for in-flight ones to finish
+        optional uint32 MaxConcurrentCompilations = 2 [default = 5];
+        optional uint32 HardDeadlineSeconds = 3 [default = 20];       // Hard deadline: forcefully terminates warmup, must be >= SoftDeadlineSeconds
+        optional uint32 MaxQueriesToLoad = 4 [default = 1000];
+        optional uint32 MaxNodesToRequest = 5 [default = 5];            // Max nodes to query for warmup (0 = all nodes, only affects warmup queries)
+    }
+
+    optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 122 [(InvalidateCompileCache) = false];
 };

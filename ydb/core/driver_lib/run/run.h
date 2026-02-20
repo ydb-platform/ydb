@@ -83,6 +83,7 @@ protected:
 
     std::shared_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TActorId GRpcServersManager;
+    TDuration GRpcWarmupTimeout;
 
     virtual ~TKikimrRunner();
 

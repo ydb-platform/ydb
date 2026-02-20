@@ -169,6 +169,7 @@ message TQueryRequest {
     optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
     optional Ydb.ResultSet.Format ResultSetFormat = 39;
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
+    optional bool IsWarmupCompilation = 41;
 }
 
 message TVectorIndexKmeansTreeDescription {
@@ -334,6 +335,8 @@ message TCompileCacheQueryInfo {
     optional string Warnings = 8;
     optional google.protobuf.Duration CompilationDuration = 9;
     optional string MetaInfo = 10;
+    optional bool IsTruncated = 11;
+    optional string Database = 12;
 }
 
 message TSessionInfo {

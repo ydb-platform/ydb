@@ -28,11 +28,14 @@ void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std:
         if (Query->Text.size() > QUERY_TEXT_LIMIT) {
             TString truncatedText = Query->Text.substr(0, QUERY_TEXT_LIMIT);
             to->SetQuery(truncatedText);
+            to->SetIsTruncated(true);
         } else {
             to->SetQuery(Query->Text);
+            to->SetIsTruncated(false);
         }
 
         to->SetUserSID(Query->UserSid);
+        to->SetDatabase(Query->Database);
     }
 
 }

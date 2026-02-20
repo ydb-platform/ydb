@@ -5,6 +5,8 @@
 #include <util/system/getpid.h>
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 namespace NKikimr {
 namespace NKqp {
 
@@ -739,7 +741,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         ::Sleep(TDuration::MilliSeconds(100));
 
         auto result = session.ExecuteQuery(R"(--!syntax_v1
-            SELECT NodeId, QueryId, Query, CompilationDuration
+            SELECT NodeId, QueryId, Query, CompilationDurationMs
             FROM `/Root/.sys/compile_cache_queries`
             ORDER BY NodeId DESC, QueryId DESC
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
@@ -1174,7 +1176,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         NYdb::TResultSetParser parser(resultSet);
         while(parser.TryNextRow()) {
-            auto maybeDuration = parser.ColumnParser("CompilationDuration").GetOptionalUint64();
+            auto maybeDuration = parser.ColumnParser("CompilationDurationMs").GetOptionalUint64();
             UNIT_ASSERT(maybeDuration);
             auto duration = maybeDuration.value();
             UNIT_ASSERT_C(duration > 0, "duration is " << duration);
@@ -1219,7 +1221,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 11);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
 
         NYdb::TResultSetParser parser(resultSet);
@@ -1228,6 +1230,142 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT(value);
         UNIT_ASSERT_VALUES_EQUAL_C(value, compileResult.GetIssues().ToOneLineString(), "one the one side we have: " << value << " on the other " << compileResult.GetIssues().ToOneLineString());
 
+    }
+
+    Y_UNIT_TEST(CompileCacheTenantMismatchReturnsEmpty) {
+        auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        TKikimrRunner kikimr(serverSettings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto prepareResult = session.PrepareDataQuery(
+            R"(DECLARE $k AS Uint64; SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;)"
+        ).GetValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+
+        ui64 count = SelectCompileCacheCount(tableClient);
+        UNIT_ASSERT_C(count > 0, "Compile cache must not be empty after preparing a query");
+
+        auto edgeActor = runtime.AllocateEdgeActor(0);
+        auto compileServiceId = NKqp::MakeKqpCompileServiceID(runtime.GetNodeId(0));
+
+        auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListQueryCacheQueriesRequest>();
+        req->Record.SetTenantName("/Root/some-db");
+        req->Record.SetFreeSpace(1024 * 1024);
+
+        runtime.Send(new IEventHandle(compileServiceId, edgeActor, req.release()), 0);
+
+        auto response = runtime.GrabEdgeEvent<NKikimr::NKqp::TEvKqp::TEvListQueryCacheQueriesResponse>(
+            edgeActor, TDuration::Seconds(5));
+
+        UNIT_ASSERT_C(response, "Compile service did not respond in time");
+        UNIT_ASSERT_C(response->Get()->Record.GetFinished(),
+            "Response for a serverless database must be marked Finished immediately");
+        UNIT_ASSERT_EQUAL_C(response->Get()->Record.GetCacheCacheQueries().size(), 0,
+            "Tenant mismatch must produce an empty compile cache response, got "
+            << response->Get()->Record.GetCacheCacheQueries().size() << " entries");
+    }
+
+    Y_UNIT_TEST(CompileCacheUserIsolation) {
+        TKikimrSettings settings;
+        settings.SetAuthToken("root@builtin");
+        TKikimrRunner kikimr(settings);
+
+        // Grant user1 and user2 permissions to access tables and sys views
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+            for (const auto& user : {"user1@builtin", "user2@builtin"}) {
+                TPermissions permissions(user,
+                    {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"}
+                );
+                auto result = schemeClient.ModifyPermissions("/Root",
+                    TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                ).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        // User1 compiles a query -> cache entry with UserSid="user1@builtin"
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("user1@builtin");
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.PrepareDataQuery(
+                R"(DECLARE $k AS Uint64; SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;)"
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            driver.Stop(true);
+        }
+
+        // User2 compiles the same query -> separate cache entry with UserSid="user2@builtin"
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("user2@builtin");
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.PrepareDataQuery(
+                R"(DECLARE $k AS Uint64; SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;)"
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            driver.Stop(true);
+        }
+
+        // User1 queries compile_cache -> should see only their own entries
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("user1@builtin");
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(
+                R"(SELECT UserSID FROM `/Root/.sys/compile_cache_queries`;)",
+                TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSet(0);
+            NYdb::TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                auto userSid = parser.ColumnParser("UserSID").GetOptionalUtf8();
+                UNIT_ASSERT_C(userSid && *userSid == "user1@builtin",
+                    "user1 must see only their own queries, but saw UserSID=" << (userSid ? *userSid : "null"));
+            }
+            driver.Stop(true);
+        }
+
+        // Admin queries compile_cache -> should see entries from both users
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(
+                R"(SELECT UserSID FROM `/Root/.sys/compile_cache_queries`;)",
+                TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSet(0);
+            std::unordered_set<std::string> seenUsers;
+            NYdb::TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                auto userSid = parser.ColumnParser("UserSID").GetOptionalUtf8();
+                if (userSid) {
+                    seenUsers.insert(*userSid);
+                }
+            }
+            UNIT_ASSERT_C(seenUsers.contains("user1@builtin"),
+                "Admin must see user1's queries");
+            UNIT_ASSERT_C(seenUsers.contains("user2@builtin"),
+                "Admin must see user2's queries");
+        }
     }
 }
 

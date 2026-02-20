@@ -291,6 +291,11 @@ public:
         return RequestCtx ? RequestCtx->IsInternalCall() : Record.GetRequest().GetIsInternalCall();
     }
 
+    bool GetIsWarmupCompilation() const {
+        // RequestCtx is set only if request came from grpc, warmup is internal operation
+        return RequestCtx ? false : Record.GetRequest().GetIsWarmupCompilation();
+    }
+
     ui64 GetParametersSize() const {
         if (ParametersSize > 0) {
             return ParametersSize;

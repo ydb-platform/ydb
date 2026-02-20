@@ -292,7 +292,7 @@ private:
 
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
-    std::vector<TStatisticsItem> StatisticsToSave;
+    std::deque<TStatisticsItem> StatisticsToSave;
     bool PendingDeleteStatistics = false;
 
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -370,6 +370,7 @@ private: // stored in local db
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
     TActorId AnalyzeActorId;
+    TActorId SaveQueryActorId;
 
     size_t GlobalTraversalRound = 1;
 

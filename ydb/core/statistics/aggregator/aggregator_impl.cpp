@@ -543,8 +543,14 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& e
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev) {
+    SaveQueryActorId = {};
+
     if (ev->Get()->Success) {
-        DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        if (!StatisticsToSave.empty()) {
+            SaveStatisticsToTable();
+        } else {
+            DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        }
     } else {
         NYql::TIssue error(TStringBuilder() << "Could not save statistics for "
             "table id: " << TraversalPathId.LocalPathId);
@@ -643,6 +649,10 @@ void TStatisticsAggregator::ScanNextDatashardRange() {
     Y_FAIL();
 
     if (DatashardRanges.empty()) {
+        for (auto& [tag, sketch] : CountMinSketches) {
+            TString strSketch(sketch->AsStringBuf());
+            StatisticsToSave.emplace_back(tag, EStatType::COUNT_MIN_SKETCH, std::move(strSketch));
+        }
         SaveStatisticsToTable();
         return;
     }
@@ -661,30 +671,45 @@ void TStatisticsAggregator::ScanNextDatashardRange() {
 }
 
 void TStatisticsAggregator::SaveStatisticsToTable() {
+    constexpr ui64 MAX_BATCH_SIZE = 30_MB;
+
     if (!IsStatisticsTableCreated) {
         PendingSaveStatistics = true;
+        return;
+    }
+    if (SaveQueryActorId) {
+        // Next query will be dispatched when the current SaveQuery actor finishes.
         return;
     }
 
     PendingSaveStatistics = false;
 
-    std::vector<TStatisticsItem> items = std::exchange(StatisticsToSave, {});
-
-    for (auto& [tag, sketch] : CountMinSketches) {
-        if (!ColumnNames.contains(tag)) {
-            continue;
+    size_t dataSize = 0;
+    std::vector<TStatisticsItem> items;
+    while (!StatisticsToSave.empty()) {
+        auto& item = StatisticsToSave.front();
+        if (!items.empty() && dataSize + item.Data.size() > MAX_BATCH_SIZE) {
+            break;
         }
-        TString strSketch(sketch->AsStringBuf());
-        items.emplace_back(tag, EStatType::COUNT_MIN_SKETCH, std::move(strSketch));
-    }
+        dataSize += item.Data.size();
+        items.push_back(std::move(item));
+        StatisticsToSave.pop_front();
+    };
 
     if (items.empty()) {
         Send(SelfId(), new TEvStatistics::TEvSaveStatisticsQueryResponse(
             Ydb::StatusIds::SUCCESS, {}, TraversalPathId));
         return;
     }
+    size_t itemsSize = items.size();
 
-    Register(CreateSaveStatisticsQuery(SelfId(), Database, TraversalPathId, std::move(items)));
+    SaveQueryActorId = Register(
+        CreateSaveStatisticsQuery(SelfId(), Database, TraversalPathId, std::move(items)));
+    SA_LOG_D("[" << TabletID() << "] Dispatched SaveStatisticsQuery"
+        << ", actor id: " << SaveQueryActorId
+        << ", items size: " << itemsSize
+        << ", data size: " << HumanReadableSize(dataSize, ESizeFormat::SF_BYTES)
+        << ", items left: " << StatisticsToSave.size());
 }
 
 void TStatisticsAggregator::DeleteStatisticsFromTable() {
@@ -966,10 +991,13 @@ void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
         Send(AnalyzeActorId, new TEvents::TEvPoison());
         AnalyzeActorId = {};
     }
+    SaveQueryActorId = {};
     PersistTraversal(db);
 
     TraversalStartKey = TSerializedCellVec();
     PersistStartKey(db);
+
+    StatisticsToSave.clear();
 
     for (auto& [tag, _] : CountMinSketches) {
         db.Table<Schema::ColumnStatistics>().Key(tag).Delete();

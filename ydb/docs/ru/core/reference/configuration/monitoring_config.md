@@ -4,12 +4,12 @@
 
 ```yaml
 monitoring_config:
-  # настройки требования аутентификация на отдельных страницах YDB Monitoring
+  # настройки требования аутентификации на отдельных страницах YDB Monitoring
   require_counters_authentication: false
   require_healthcheck_authentication: false
 ```
 
-## Настройки требования аутентификация на отдельных страницах YDB Monitoring {#authentication}
+## Настройки требования аутентификации на отдельных страницах YDB Monitoring {#authentication}
 
 #|
 || Параметр | Описание ||
@@ -21,7 +21,7 @@ monitoring_config:
 
     Значение `true` допустимо только при включенном режиме обязательной [аутентификации](../../security/authentication.md) в разделе [security_config](./security_config.md) файла конфигурации YDB.
 
-- `false` —  аутентификация на страницах `/counters` и `/counters/hosts` опциональна, запросы к ним могут не сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token).
+- `false` — аутентификация на страницах `/counters` и `/counters/hosts` опциональна, запросы к ним могут не сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token).
 
 Значение по умолчанию: `false`.
 
@@ -29,7 +29,7 @@ monitoring_config:
 
 || `require_healthcheck_authentication` | Режим обязательной [аутентификации](../../security/authentication.md) для всех форматов ответа страницы `/healthcheck`.
 
-- `true` — аутентификация на странице `/healthcheck` обязательна, запросы  к ней обязаны сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token). Запросы проходят аутентификацию и проверку прав.
+- `true` — аутентификация на странице `/healthcheck` обязательна, запросы к ней обязаны сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token). Запросы проходят аутентификацию и проверку прав.
 
     Значение `true` допустимо только при включенном режиме обязательной [аутентификации](../../security/authentication.md) в разделе [security_config](./security_config.md) файла конфигурации YDB.
 
@@ -39,4 +39,3 @@ monitoring_config:
 
 ||
 |#
-

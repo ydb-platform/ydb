@@ -1271,7 +1271,10 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT(!response.GetSuccess());
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
             UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).GetFailReason(), NKikimrBlobStorage::TConfigResponse::TStatus::kGroupNotFound);
+            UNIT_ASSERT_C(
+                response.GetStatus(0).GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kGroupNotFound,
+                TStringBuilder() << "unexpected fail reason# " << static_cast<ui32>(response.GetStatus(0).GetFailReason())
+                    << " description# " << response.GetStatus(0).GetErrorDescription());
 
             request.Clear();
             request.AddCommand()->MutableQueryBaseConfig();
@@ -1372,7 +1375,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded
                     || failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData
                     || failReason == NKikimrBlobStorage::TConfigResponse::TStatus::kReassignNotViable,
-                TStringBuilder() << "unexpected fail reason# " << failReason
+                TStringBuilder() << "unexpected fail reason# " << static_cast<ui32>(failReason)
                     << " description# " << response.GetStatus(0).GetErrorDescription());
 
             request.Clear();

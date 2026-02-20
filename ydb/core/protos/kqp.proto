@@ -916,6 +916,7 @@ message TKqpFullTextSourceSettings {
     optional double BFactor = 13;
     optional string DefaultOperator = 14;
     optional string MinimumShouldMatch = 15;
+    optional string Mode = 16;
 };
 
 message TKqpSequencerSettings {

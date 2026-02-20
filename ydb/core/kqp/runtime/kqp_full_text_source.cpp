@@ -19,7 +19,6 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
-#include <library/cpp/regex/pire/pire.h>
 #include <library/cpp/threading/hot_swap/hot_swap.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -52,28 +51,6 @@ constexpr i32 RELEVANCE_COLUMN_MARKER = -1;
 constexpr double NGRAM_IMBALANCE_FACTOR = 10;
 
 class TDocId;
-
-namespace {
-
-TString WildcardToRegex(const TStringBuf wildcardPattern) {
-    static const TStringBuf special = R"(^$.\+*?()|{}[])";
-    TStringBuilder builder;
-    for (char c : wildcardPattern) {
-        if (c == '%') {
-            builder << ".*";
-            continue;
-        } else if (c == '_') {
-            builder << ".";
-            continue;
-        } else if (special.find(c) != TStringBuf::npos) {
-            builder << '\\';
-        }
-        builder << c;
-    }
-    return builder;
-}
-
-}
 
 template <typename T>
 class TTableReader : public TAtomicRefCount<T> {
@@ -1799,7 +1776,6 @@ private:
     bool PendingNotify = false;
 
     i32 SearchColumnIdx = -1;
-    TVector<std::function<bool(TStringBuf)>> PostfilterMatchers;
     ui64 ProducedItemsCount = 0;
     std::deque<TDocumentInfo::TPtr> ResultQueue;
     std::deque<TDocumentInfo::TPtr> L1MergedDocuments;
@@ -1829,32 +1805,6 @@ private:
         return TGuard<NMiniKQL::TScopedAlloc>(*Alloc);
     }
 
-    void GeneratePostfilterMatchers(const Ydb::Table::FulltextIndexSettings::Analyzers& analyzers, const TStringBuf query) {
-        if (!analyzers.use_filter_ngram() && !analyzers.use_filter_edge_ngram()) {
-            return;
-        }
-        IsNgram = true;
-
-        const auto analyzersForQuery = NFulltext::GetAnalyzersForQuery(analyzers);
-
-        for (const TString& queryToken : NFulltext::Analyze(TString(query), analyzersForQuery, {'%', '_'})) {
-            const TString pattern = WildcardToRegex(queryToken);
-            TVector<wchar32> ucs4Pattern;
-            NPire::NEncodings::Utf8().FromLocal(
-                pattern.data(),
-                pattern.data() + pattern.size(),
-                std::back_inserter(ucs4Pattern));
-
-            auto regex = NPire::TLexer(ucs4Pattern.begin(), ucs4Pattern.end())
-                .SetEncoding(NPire::NEncodings::Utf8())
-                .Parse().Compile<NPire::TScanner>();
-
-            PostfilterMatchers.push_back([regex=std::move(regex)](const TStringBuf str) {
-                return Pire::Matches(regex, str);
-            });
-        }
-    }
-
     bool ExtractAndTokenizeExpression() {
         YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
 
@@ -1865,6 +1815,9 @@ private:
         for(const auto& column : Settings->GetQuerySettings().GetColumns()) {
 
             for(const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
+                if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
+                    IsNgram = true;
+                }
 
                 if (analyzer.column() == column.GetName()) {
                     size_t wordIndex = 0;
@@ -1873,7 +1826,7 @@ private:
                         Words.emplace_back(MakeIntrusive<TWordReadState>(wordIndex++, query, IndexTableReader));
                     }
 
-                    GeneratePostfilterMatchers(analyzer.analyzers(), expr);
+                    IsNgram = true;
                 }
             }
         }
@@ -1904,11 +1857,8 @@ private:
         }
 
         if (MainTableCovered) {
-            const bool skipPostfilter = PostfilterMatchers.empty();
             for(auto& doc: docInfos) {
-                if (skipPostfilter || Postfilter(doc->GetKeyCell(SearchColumnIdx).AsBuf())) {
-                    ResultQueue.emplace_back(std::move(doc));
-                }
+                ResultQueue.emplace_back(std::move(doc));
             }
             NotifyCA();
             return;
@@ -2413,31 +2363,6 @@ public:
         ReadsState.SendEvRead(shardId, request, TReadInfo{.ReadKind = EReadKind_TotalStats, .Cookie = readId, .ShardId = shardId});
     }
 
-    bool Postfilter(const TStringBuf value) const {
-        auto analyzers = IndexDescription.GetSettings().columns(0).analyzers();
-        // Prevent splitting tokens into ngrams
-        analyzers.set_use_filter_ngram(false);
-        analyzers.set_use_filter_edge_ngram(false);
-
-        for (const auto& matcher : PostfilterMatchers) {
-            const TString searchColumnValue(value); // TODO: don't copy
-
-            bool found = false;
-            for (const auto& valueToken : NFulltext::Analyze(searchColumnValue, analyzers)) {
-                if (matcher(valueToken)) {
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     void DocumentDetailsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
         auto& readItems = DocsReadingQueue.GetReadItems(readId);
 
@@ -2451,10 +2376,7 @@ public:
             auto& doc = readItems.GetItem();
             YQL_ENSURE(NKikimr::TCellVectorsEquals{}(doc->GetDocumentId(), GetDocumentId(row)), "detected out of order document reading");
             doc->AddRow(row);
-            if (PostfilterMatchers.empty() || Postfilter(doc->GetResultCell(SearchColumnIdx).AsBuf())) {
-                ResultQueue.push_back(std::move(doc));
-            }
-
+            ResultQueue.push_back(std::move(doc));
             readItems.PopItem();
         }
 

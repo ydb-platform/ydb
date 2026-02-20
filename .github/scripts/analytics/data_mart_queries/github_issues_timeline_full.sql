@@ -1,4 +1,6 @@
--- Issues on a daily timeline: for each date, which issues are open at end of day and which were closed that day.
+-- For full reload via data_mart_executor_by_month.py. Issues on a daily timeline: for each date, which issues are open at end of day and which were closed that day.
+-- Run: python3 .github/scripts/analytics/data_mart_executor_by_month.py --query_path .github/scripts/analytics/data_mart_queries/github_issues_timeline_full.sql --table_path test_results/analytics/github_issues_timeline --store_type column --partition_keys date --primary_keys date issue_number project_item_id
+-- Optional: --by_month 12 (default)
 -- FULL WINDOW: use with data_mart_executor (full 365-day window) or data_mart_executor_by_month (per-month).
 -- Dates come from tests_monitor (date_window), no ListFromRange/FLATTEN BY.
 -- In BI: filter by date, owner_team; for issue list per day — filter by date; for counts — GROUP BY date, SUM(is_open_at_end_of_day), SUM(closed_on_this_day).

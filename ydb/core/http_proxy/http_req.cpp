@@ -1385,10 +1385,17 @@ namespace NKikimr::NHttpProxy {
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
                 ReportInputCounters(ctx);
-                if (HttpContext.IamToken.empty() && Signature) {
+                if (!HttpContext.IamToken.empty() || Signature) {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {
+                    if (AppData(ctx)->EnforceUserTokenRequirement) {
+                        return ReplyWithMessageQueueError(
+                            ctx,
+                            NSQS::NErrors::INCOMPLETE_SIGNATURE.HttpStatusCode,
+                            NSQS::NErrors::INCOMPLETE_SIGNATURE.ErrorCode,
+                            NSQS::NErrors::INCOMPLETE_SIGNATURE.DefaultMessage);
+                    }
                     SendGrpcRequestNoDriver(ctx);
                 }
 

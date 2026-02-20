@@ -149,21 +149,27 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        FS_LOG_D("TFsOperationActor: cleaning up"
-            << ": active MPU sessions# " << ActiveUploads.size());
+        if (TlsActivationContext) {
+            FS_LOG_D("TFsOperationActor: cleaning up"
+                << ": active MPU sessions# " << ActiveUploads.size());
+        }
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
                 const TString filePath = session.Key;
                 NFs::Remove(filePath);
                 session.File.Close();
 
-                FS_LOG_T("TFsOperationActor: closed and deleted incomplete file"
-                    << ": uploadId# " << uploadId
-                    << ", file# " << filePath);
+                if (TlsActivationContext) {
+                    FS_LOG_T("TFsOperationActor: closed and deleted incomplete file"
+                        << ": uploadId# " << uploadId
+                        << ", file# " << filePath);
+                }
             } catch (const std::exception& ex) {
-                FS_LOG_W("Failed to cleanup MPU session"
-                    << ": uploadId# " << uploadId
-                    << ", error# " << ex.what());
+                if (TlsActivationContext) {
+                    FS_LOG_W("Failed to cleanup MPU session"
+                        << ": uploadId# " << uploadId
+                        << ", error# " << ex.what());
+                }
             }
         }
         ActiveUploads.clear();

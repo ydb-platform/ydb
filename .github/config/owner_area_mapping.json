@@ -1,15 +1,23 @@
 {
   "qp": "area/queryprocessor",
   "Topics": "area/topics",
-  "topics": "area/topics", 
-  "cs": "area/cs",
+  "topics": "area/topics",
+  "cs": [
+    "area/cs"
+  ],
   "datashard": "area/datashard",
   "system-infra": "area/system-infra",
   "yql": "area/yql",
   "docs": "area/docs",
-  "core": "area/core",
+  "core": [
+    "area/core",
+    "area/hive"
+  ],
   "fq": "area/fq",
-  "blobstorage": "area/blobstorage",
+  "blobstorage": [
+    "area/blobstorage",
+    "area/actorsystem"
+  ],
   "ci": "area/ci",
   "cli": "area/cli",
   "cpp-sdk": "area/sdk",

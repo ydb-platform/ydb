@@ -1,10 +1,15 @@
 -- Issues on a daily timeline: for each date, which issues are open at end of day and which were closed that day.
--- RECENT DAYS: updates only the last $recent_days days (default 2). Use with data_mart_executor for quick refresh.
+-- FULL WINDOW: use with data_mart_executor (full 365-day window) or data_mart_executor_by_month (per-month).
 -- Dates come from tests_monitor (date_window), no ListFromRange/FLATTEN BY.
 -- In BI: filter by date, owner_team; for issue list per day — filter by date; for counts — GROUP BY date, SUM(is_open_at_end_of_day), SUM(closed_on_this_day).
 --
+-- Windows (change here or override via script):
+--   $timeline_days   — date dimension and "open in window": include issues open on at least one day in [now - timeline_days, now].
+--   Include: created_date <= today and (still open or closed within window: closed_at >= now - timeline_days).
 $timeline_days = 365;
-$recent_days = 2;  -- only these days are selected (today and $recent_days-1 days back)
+-- For by_month wrapper: script overwrites these to restrict to one month (avoids connection timeouts)
+$month_start = Date("1970-01-01");
+$month_end = Date("2100-01-01");
 
 SELECT
     dt.d AS date,
@@ -102,5 +107,4 @@ CROSS JOIN (
       AND (t.closed_at IS NULL OR Cast(t.closed_at AS Date) >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
 ) AS i
 WHERE i.created_date <= dt.d
-  AND dt.d >= CurrentUtcDate() - $recent_days * Interval("P1D")
-  AND dt.d < CurrentUtcDate() + Interval("P1D");
+  AND dt.d >= $month_start AND dt.d < $month_end;

@@ -16,6 +16,7 @@ ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 PROJECT_ID = None #'45'  # Optional: set to None to skip project data
 
+
 # YDB configuration is now handled by ydb_wrapper
 
 def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
@@ -121,6 +122,9 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
             participants(first: 10) {
               totalCount
             }
+            issueType {
+              name
+            }
           }
         }
       }
@@ -217,6 +221,9 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               }
               participants(first: 10) {
                 totalCount
+              }
+              issueType {
+                name
               }
             }
             pageInfo {
@@ -411,7 +418,7 @@ def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
 # --- branch version helpers ---
 def parse_branch(label):
     if label == 'main':
-        return (0, 0, 0, 0, 0)  # main — всегда минимальный
+        return (0, 0, 0, 0, 0)  # main — always minimum
     if label.startswith('prestable-'):
         parts = label.split('-')
         nums = [int(x) for x in parts[1:] if x.isdigit()]
@@ -430,21 +437,22 @@ def parse_branch(label):
         while len(nums) < 3:
             nums.append(0)
         if analytics:
-            # analytics-лейбл: всегда меньше любого stable с числовым патчем, но больше prestable
+            # analytics label: always less than any stable with numeric patch, but greater than prestable
             return (2, *nums, 0)  # analytics = 2
         else:
-            return (3, *nums, 1)  # обычный stable = 3, всегда больше analytics
-    return (-1, 0, 0, 0, 0)  # некорректные/другие — минимальные
+            return (3, *nums, 1)  # regular stable = 3, always greater than analytics
+    return (-1, 0, 0, 0, 0)  # invalid/other — minimum
 
 def get_max_branch(branch_labels):
     best = None
-    best_key = (-2, 0, 0, 0, 0)  # всегда меньше любого корректного branch
+    best_key = (-2, 0, 0, 0, 0)  # always less than any valid branch
     for label in branch_labels:
         key = parse_branch(label)
         if key > best_key:
             best = label
             best_key = key
     return best
+
 
 def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optional[Dict[int, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     """Transform GitHub issues data for YDB storage"""
@@ -489,8 +497,14 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         branch = ';'.join(branch_labels) if branch_labels else None
         max_branch = get_max_branch(branch_labels) if branch_labels else None
         info = {'branch': branch, 'max_branch': max_branch, 'env': env, 'priority': priority, 'area': area}
-        # Issue type from project fields
-        issue_type = issue_project_fields.get('type') or issue_project_fields.get('Type')
+        # Issue type: GraphQL issueType.name (Bug/Feature/Task), then project field, then label "bug"
+        issue_type = (issue.get('issueType') or {}).get('name')
+        if issue_type is None:
+            issue_type = issue_project_fields.get('type') or issue_project_fields.get('Type')
+        if issue_type is None:
+            label_names = [lb.get('name', '') for lb in issue.get('labels', {}).get('nodes', [])]
+            if any(n and n.lower() == 'bug' for n in label_names):
+                issue_type = 'Bug'
         
         # Extract state reason (e.g., COMPLETED, DUPLICATE, NOT_PLANNED)
         state_reason = issue.get('stateReason')
@@ -794,7 +808,7 @@ def main():
             elif args.issue:
                 print(f"\n=== DEBUG: Issue #{debug_issue_number} not found in transformed_issues ===\n")
             
-            # Подготавливаем column_types один раз
+            # Prepare column_types once
             column_types = (
                 ydb.BulkUpsertColumns()
                 # Primary identifiers

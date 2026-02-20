@@ -347,12 +347,21 @@ namespace NKikimr::NBsController {
 
         const bool hasExplicitVDisks = cmd.VDiskIdSize() != 0;
         const bool hasExpectedCount = cmd.GetExpectedVDiskCount() != 0;
-        if (hasExplicitVDisks == hasExpectedCount) {
-            throw TExError() << "Specify exactly one of VDiskId list or ExpectedVDiskCount";
+        if (!hasExplicitVDisks && !hasExpectedCount) {
+            throw TExError() << "Specify at least one of VDiskId list or ExpectedVDiskCount";
+        }
+
+        if (hasExpectedCount && cmd.VDuskIdSize() > cmd.GetExpectedVDiskCount()) {
+            throw TExError() << "Explicit VDiskId count# " << explicitCount
+                << " exceeds ExpectedVDiskCount# " << expected;
         }
 
         TVector<const TVSlotInfo*> selected;
         THashSet<TVSlotId> selectedIds;
+
+        const ui32 expected = Max(cmd.GetExpectedVDiskCount(), cmd.VDiskIdSize();
+        selected.reserve(expected);
+        ui32 explicitCount = 0;
 
         if (hasExplicitVDisks) {
             selected.reserve(cmd.VDiskIdSize());
@@ -383,15 +392,21 @@ namespace NKikimr::NBsController {
                 if (!selectedIds.insert(slot->VSlotId).second) {
                     throw TExError() << "Duplicate VDiskId# " << vdiskId;
                 }
+
+                ++explicitCount;
                 if (slot->VSlotId.ComprisingPDiskId() != destinationPDiskId) {
                     selected.push_back(slot);
                 }
             }
-        } else {
-            const ui32 expected = cmd.GetExpectedVDiskCount();
+        }
+
+        if (hasExpectedCount) {
+            const ui32 need = expected - explicitCount;
             selected.reserve(expected);
+
+            ui32 added = 0;
             VSlots.ForEach([&](TVSlotId, const TVSlotInfo& slot) {
-                if (selected.size() == expected) {
+                if (added == need) {
                     return;
                 }
                 if (!slot.Group || slot.IsBeingDeleted() || slot.Mood == TMood::Donor) {
@@ -402,12 +417,13 @@ namespace NKikimr::NBsController {
                 }
                 if (selectedIds.insert(slot.VSlotId).second) {
                     selected.push_back(&slot);
+                    ++added;
                 }
             });
 
-            if (selected.size() != expected) {
-                throw TExReassignNotViable() << "Cluster has only " << selected.size()
-                    << " movable VDisks, expected# " << expected;
+            if (added != need) {
+                throw TExReassignNotViable() << "Cluster has only " << explicitCount + added
+                    << " movable VDisks including explicit list, expected# " << expected;
             }
         }
 

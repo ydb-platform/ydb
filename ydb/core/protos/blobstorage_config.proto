@@ -516,16 +516,19 @@ message TPopulatePDisk {
     }
 
     // keep field number to avoid accidental reuse
-    reserved 1;
-    TPDisk DestinationPDisk = 2;
+    TPDisk DestinationPDisk = 1;
 
-    // Exactly one mode must be provided:
-    // 1) explicit VDisk list
-    repeated NKikimrBlobStorage.TVDiskID VDiskId = 3;
-    // 2) automatically pick this many VDisks from the whole cluster
-    uint32 ExpectedVDiskCount = 4;
+    // Explicit VDisks to process first.
+    repeated NKikimrBlobStorage.TVDiskID VDiskId = 2;
+    // Optional target amount of movable VDisks in total.
+    // If both fields are set:
+    //  - explicit VDisks are validated first;
+    //  - explicit VDisks that are already on DestinationPDisk also count towards ExpectedVDiskCount;
+    //  - if VDiskId.size() > ExpectedVDiskCount, request fails;
+    //  - otherwise the controller auto-selects additional movable VDisks to reach ExpectedVDiskCount.
+    uint32 ExpectedVDiskCount = 3;
 
-    bool SuppressDonorMode = 5;
+    bool SuppressDonorMode = 4;
 }
 
 message TSetScrubPeriodicity {

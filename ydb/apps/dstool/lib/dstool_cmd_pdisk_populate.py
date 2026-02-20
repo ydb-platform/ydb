@@ -122,46 +122,49 @@ def make_vdisk_ids_for_populate(args, base_config):
     has_current_pdisk = args.current_vdisks_from_pdisk is not None
     has_expected_count = args.expected_vdisk_count is not None
 
-    mode_count = sum((
+    source_count = sum((
         has_vdisk_ids,
         has_snapshot_file,
         has_current_pdisk,
-        has_expected_count,
     ))
-    if mode_count != 1:
-        raise Exception('Populate mode requires exactly one source: --vdisk-ids, --snapshot-file, --current-vdisks-from-pdisk, or --expected-vdisk-count')
+    if source_count > 1:
+        raise Exception('Populate mode requires at most one source: --vdisk-ids, --snapshot-file, or --current-vdisks-from-pdisk')
 
     if has_expected_count:
         if args.expected_vdisk_count <= 0:
             raise Exception('--expected-vdisk-count must be positive')
-        return None, args.expected_vdisk_count
+        if has_snapshot_file or has_current_pdisk:
+            raise Exception('--expected-vdisk-count can be combined only with --vdisk-ids in populate mode')
+
+    if source_count == 0 and not has_expected_count:
+        raise Exception('Populate mode requires source (--vdisk-ids, --snapshot-file, or --current-vdisks-from-pdisk) and/or --expected-vdisk-count')
 
     if has_vdisk_ids:
         vdisk_ids = flatten_vdisk_ids(args.vdisk_ids)
     elif has_snapshot_file:
         vdisk_ids = read_snapshot(args.snapshot_file)
-    else:
+    elif has_current_pdisk:
         source_pdisk_id = parse_pdisk_id(args.current_vdisks_from_pdisk)
         vslots_on_pdisk = VSlotsOnPDisk.from_base_config(base_config, source_pdisk_id)
         vdisk_ids = vslots_on_pdisk.active_vdisk_ids()
         skipped_donor_vdisk_ids = vslots_on_pdisk.donor_vdisk_ids()
         warn_skipped_donors(args, source_pdisk_id, skipped_donor_vdisk_ids)
+    else:
+        vdisk_ids = None
 
-    if not vdisk_ids:
+    if vdisk_ids is not None and not vdisk_ids:
         raise Exception('VDisk list is empty')
 
-    return vdisk_ids, None
+    return vdisk_ids, args.expected_vdisk_count if has_expected_count else None
 
 
-def create_populate_request(destination_pdisk_id, vdisk_ids, expected_vdisk_count):
+def create_populate_request(args, base_config, destination_pdisk_id, vdisk_ids, expected_vdisk_count):
     request = common.create_bsc_request(args)
     cmd = request.Command.add().PopulatePDisk
     cmd.DestinationPDisk.TargetPDiskId.NodeId = destination_pdisk_id[0]
     cmd.DestinationPDisk.TargetPDiskId.PDiskId = destination_pdisk_id[1]
 
-    if expected_vdisk_count is not None:
-        cmd.ExpectedVDiskCount = expected_vdisk_count
-    else:
+    if vdisk_ids is not None:
         vslots = common.get_vslots_by_vdisk_ids(base_config, vdisk_ids)
         for vslot in vslots:
             item = cmd.VDiskId.add()
@@ -170,6 +173,9 @@ def create_populate_request(destination_pdisk_id, vdisk_ids, expected_vdisk_coun
             item.Ring = vslot.FailRealmIdx
             item.Domain = vslot.FailDomainIdx
             item.VDisk = vslot.VDiskIdx
+
+    if expected_vdisk_count is not None:
+        cmd.ExpectedVDiskCount = expected_vdisk_count
 
     if args.suppress_donor_mode:
         cmd.SuppressDonorMode = True
@@ -222,7 +228,7 @@ def run_populate_mode(args):
     destination_pdisk_id = parse_pdisk_id(args.destination_pdisk)
     vdisk_ids, expected_vdisk_count = make_vdisk_ids_for_populate(args, base_config)
 
-    request = create_populate_request(destination_pdisk_id, vdisk_ids, expected_vdisk_count)
+    request = create_populate_request(args, base_config, destination_pdisk_id, vdisk_ids, expected_vdisk_count)
     response = common.invoke_bsc_request(request)
     common.print_request_result(args, request, response)
     if not common.is_successful_bsc_response(response):

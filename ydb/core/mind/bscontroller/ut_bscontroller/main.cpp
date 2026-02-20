@@ -937,6 +937,85 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         });
     }
 
+    Y_UNIT_TEST(PopulatePDiskCombinedMode) {
+        const ui32 numNodes = 10;
+        const ui32 numGroups = 10;
+        TEnvironmentSetup env(numNodes, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            env.DefineBox(1, "box", {{"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
+            env.DefineStoragePool(1, 1, "storage pool", numGroups, NKikimrBlobStorage::ROT, {}, request);
+            request.AddCommand()->MutableQueryBaseConfig();
+
+            NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+            const auto& baseConfig = response.GetStatus(2).GetBaseConfig();
+            UNIT_ASSERT_C(baseConfig.VSlotSize() >= 2, TStringBuilder() << "vslot count# " << baseConfig.VSlotSize());
+
+            const auto& firstVSlot = baseConfig.GetVSlot(0);
+            const auto& secondVSlot = baseConfig.GetVSlot(1);
+            UNIT_ASSERT(firstVSlot.HasVSlotId());
+            UNIT_ASSERT(secondVSlot.HasVSlotId());
+
+            auto fillDestination = [](NKikimrBlobStorage::TPopulatePDisk::TPDisk *pdisk, const NKikimrBlobStorage::TBaseConfig::TVSlot& sourceVSlot) {
+                auto *target = pdisk->MutableTargetPDiskId();
+                target->SetNodeId(sourceVSlot.GetVSlotId().GetNodeId());
+                target->SetPDiskId(sourceVSlot.GetVSlotId().GetPDiskId());
+            };
+
+            auto addVDiskId = [](NKikimrBlobStorage::TPopulatePDisk *cmd, const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
+                auto *item = cmd->AddVDiskId();
+                item->SetGroupID(vslot.GetGroupId());
+                item->SetGroupGeneration(vslot.GetGroupGeneration());
+                item->SetRing(vslot.GetFailRealmIdx());
+                item->SetDomain(vslot.GetFailDomainIdx());
+                item->SetVDisk(vslot.GetVDiskIdx());
+            };
+
+            // Scenario A: explicit + expected with equal counts should succeed.
+            request.Clear();
+            auto *populate = request.AddCommand()->MutablePopulatePDisk();
+            fillDestination(populate->MutableDestinationPDisk(), firstVSlot);
+            addVDiskId(populate, firstVSlot);
+            populate->SetExpectedVDiskCount(1);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT(response.GetStatus(0).GetSuccess());
+
+            // Scenario B: explicit count is greater than expected and should fail.
+            request.Clear();
+            populate = request.AddCommand()->MutablePopulatePDisk();
+            fillDestination(populate->MutableDestinationPDisk(), firstVSlot);
+            addVDiskId(populate, firstVSlot);
+            addVDiskId(populate, secondVSlot);
+            populate->SetExpectedVDiskCount(1);
+            response = env.Invoke(request);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
+            UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("exceeds ExpectedVDiskCount"),
+                response.GetStatus(0).GetErrorDescription());
+
+            // Scenario C: explicit + expected top-up path fails when not enough additional VDisks exist.
+            request.Clear();
+            populate = request.AddCommand()->MutablePopulatePDisk();
+            fillDestination(populate->MutableDestinationPDisk(), firstVSlot);
+            addVDiskId(populate, firstVSlot);
+            populate->SetExpectedVDiskCount(baseConfig.VSlotSize() + 1);
+            response = env.Invoke(request);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
+            UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("Cluster has only"),
+                response.GetStatus(0).GetErrorDescription());
+        });
+    }
+
     Y_UNIT_TEST(SelectAllGroups) {
         const int numGroups = 80;
         TEnvironmentSetup env(10, 1);

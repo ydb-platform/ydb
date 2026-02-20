@@ -1,5 +1,6 @@
 #include "index_info.h"
 
+#include <ydb/core/tx/columnshard/common/print_debug.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
@@ -14,7 +15,6 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <util/string/join.h>
-
 namespace NKikimr::NOlap {
 
 TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {

@@ -63,7 +63,11 @@ public:
         Equals,
         StartsWith,
         EndsWith,
-        Contains
+        Contains,
+        Less,
+        Greater,
+        LessOrEqual,
+        GreaterOrEqual,
     };
 
 private:

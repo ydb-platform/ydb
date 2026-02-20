@@ -1707,7 +1707,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
             << " compactOffset " << key.GetOffset() << "," << key.GetCount()
             << " HeadOffset " << BlobEncoder.Head.Offset << " endOffset " << BlobEncoder.EndOffset << " curOffset "
             << BlobEncoder.NewHead.GetNextOffset() << " " << key.ToString()
-            << " size " << res.second << " WTime " << ctx.Now()
+            << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
     );
     AddNewFastWriteBlob(res, request, ctx);
 

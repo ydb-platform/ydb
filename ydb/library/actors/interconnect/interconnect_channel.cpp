@@ -2,6 +2,7 @@
 #include "interconnect_zc_processor.h"
 #include "rdma/mem_pool.h"
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/log.h>
@@ -377,7 +378,8 @@ namespace NActors {
         ui32* checksum, ssize_t rdmaDeviceIndex)
     {
         if (!event.Buffer && event.Event) {
-            std::optional<TRope> rope = event.Event->SerializeToRope(RdmaMemPool.get());
+            TRdmaAllocatorWithFallback allocator(RdmaMemPool);
+            std::optional<TRope> rope = event.Event->SerializeToRope(&allocator);
             if (!rope) {
                 return false; // serialization failed
             }

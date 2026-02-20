@@ -1,9 +1,7 @@
 #include "grpc_pq_schema.h"
 
 #include "actors/schema_actors.h"
-#include "actors/commit_offset_actor.h"
 #include "actors/read_session_actor.h"
-#include "actors/events.h"
 
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 

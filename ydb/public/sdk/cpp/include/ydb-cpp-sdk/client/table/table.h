@@ -230,6 +230,14 @@ private:
 };
 
 struct TGlobalIndexSettings {
+    static constexpr const int VectorKMeansTreeLevelTablePosition = 0;
+    static constexpr const int VectorKMeansTreePostingTablePosition = 1;
+    static constexpr const int VectorKMeansTreePrefixTablePosition = 2;
+    static constexpr const int FulltextRelevanceDictTablePosition = 0;
+    static constexpr const int FulltextRelevanceDocsTablePosition = 1;
+    static constexpr const int FulltextRelevanceStatsTablePosition = 2;
+    static constexpr const int FulltextRelevancePostingTablePosition = 3;
+
     using TUniformOrExplicitPartitions = std::variant<std::monostate, uint64_t, TExplicitPartitions>;
 
     TPartitioningSettings PartitioningSettings;

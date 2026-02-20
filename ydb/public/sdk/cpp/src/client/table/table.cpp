@@ -2788,11 +2788,15 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     case TProto::kGlobalVectorKmeansTreeIndex: {
         type = EIndexType::GlobalVectorKMeansTree;
         const auto &vectorProto = proto.global_vector_kmeans_tree_index();
-        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.level_table_settings()));
-        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.posting_table_settings()));
         const bool prefixVectorIndex = indexColumns.size() > 1;
+        globalIndexSettings.resize(prefixVectorIndex ? 3 : 2);
+        globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreeLevelTablePosition] =
+            TGlobalIndexSettings::FromProto(vectorProto.level_table_settings());
+        globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreePostingTablePosition] =
+            TGlobalIndexSettings::FromProto(vectorProto.posting_table_settings());
         if (prefixVectorIndex) {
-            globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.prefix_table_settings()));
+            globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreePrefixTablePosition] =
+                TGlobalIndexSettings::FromProto(vectorProto.prefix_table_settings());
         }
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
@@ -2807,7 +2811,15 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     case TProto::kGlobalFulltextRelevanceIndex: {
         type = EIndexType::GlobalFulltextRelevance;
         const auto& fulltextProto = proto.global_fulltext_relevance_index();
-        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(fulltextProto.settings()));
+        globalIndexSettings.resize(4);
+        globalIndexSettings[TGlobalIndexSettings::FulltextRelevanceDictTablePosition] =
+            TGlobalIndexSettings::FromProto(fulltextProto.dict_table_settings());
+        globalIndexSettings[TGlobalIndexSettings::FulltextRelevanceDocsTablePosition] =
+            TGlobalIndexSettings::FromProto(fulltextProto.docs_table_settings());
+        globalIndexSettings[TGlobalIndexSettings::FulltextRelevanceStatsTablePosition] =
+            TGlobalIndexSettings::FromProto(fulltextProto.stats_table_settings());
+        globalIndexSettings[TGlobalIndexSettings::FulltextRelevancePostingTablePosition] =
+            TGlobalIndexSettings::FromProto(fulltextProto.posting_table_settings());
         specializedIndexSettings = TFulltextIndexSettings::FromProto(fulltextProto.fulltext_settings());
         break;
     }
@@ -2837,19 +2849,19 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
     case EIndexType::GlobalSync: {
         auto& settings = *proto.mutable_global_index()->mutable_settings();
         if (GlobalIndexSettings_.size() == 1)
-            GlobalIndexSettings_[0].SerializeTo(settings);
+            GlobalIndexSettings_.at(0).SerializeTo(settings);
         break;
     }
     case EIndexType::GlobalAsync: {
         auto& settings = *proto.mutable_global_async_index()->mutable_settings();
         if (GlobalIndexSettings_.size() == 1)
-            GlobalIndexSettings_[0].SerializeTo(settings);
+            GlobalIndexSettings_.at(0).SerializeTo(settings);
         break;
     }
     case EIndexType::GlobalUnique: {
         auto& settings = *proto.mutable_global_unique_index()->mutable_settings();
         if (GlobalIndexSettings_.size() == 1)
-            GlobalIndexSettings_[0].SerializeTo(settings);
+            GlobalIndexSettings_.at(0).SerializeTo(settings);
         break;
     }
     case EIndexType::GlobalVectorKMeansTree: {
@@ -2857,9 +2869,14 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         auto& level_settings = *global_vector_kmeans_tree_index->mutable_level_table_settings();
         auto& posting_settings = *global_vector_kmeans_tree_index->mutable_posting_table_settings();
         auto& vector_settings = *global_vector_kmeans_tree_index->mutable_vector_settings();
-        if (GlobalIndexSettings_.size() == 2) {
-            GlobalIndexSettings_[0].SerializeTo(level_settings);
-            GlobalIndexSettings_[1].SerializeTo(posting_settings);
+        const bool is_prefixed = IndexColumns_.size() > 1;
+        if (GlobalIndexSettings_.size() == (is_prefixed ? 3 : 2)) {
+            GlobalIndexSettings_.at(TGlobalIndexSettings::VectorKMeansTreeLevelTablePosition).SerializeTo(level_settings);
+            GlobalIndexSettings_.at(TGlobalIndexSettings::VectorKMeansTreePostingTablePosition).SerializeTo(posting_settings);
+            if (is_prefixed) {
+                auto& prefix_settings = *global_vector_kmeans_tree_index->mutable_prefix_table_settings();
+                GlobalIndexSettings_.at(TGlobalIndexSettings::VectorKMeansTreePrefixTablePosition).SerializeTo(prefix_settings);
+            }
         }
         if (const auto* settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
             settings->SerializeTo(vector_settings);
@@ -2871,7 +2888,7 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         auto& settings = *global_fulltext_index->mutable_settings();
         auto& fulltext_settings = *global_fulltext_index->mutable_fulltext_settings();
         if (GlobalIndexSettings_.size() == 1) {
-            GlobalIndexSettings_[0].SerializeTo(settings);
+            GlobalIndexSettings_.at(0).SerializeTo(settings);
         }
         if (const auto* ftSettings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
             ftSettings->SerializeTo(fulltext_settings);
@@ -2880,10 +2897,16 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
     }
     case EIndexType::GlobalFulltextRelevance: {
         auto* global_fulltext_index = proto.mutable_global_fulltext_relevance_index();
-        auto& settings = *global_fulltext_index->mutable_settings();
+        auto& dict_settings = *global_fulltext_index->mutable_dict_table_settings();
+        auto& docs_settings = *global_fulltext_index->mutable_docs_table_settings();
+        auto& stats_settings = *global_fulltext_index->mutable_stats_table_settings();
+        auto& posting_settings = *global_fulltext_index->mutable_posting_table_settings();
         auto& fulltext_settings = *global_fulltext_index->mutable_fulltext_settings();
-        if (GlobalIndexSettings_.size() == 1) {
-            GlobalIndexSettings_[0].SerializeTo(settings);
+        if (GlobalIndexSettings_.size() == 4) {
+            GlobalIndexSettings_.at(TGlobalIndexSettings::FulltextRelevanceDictTablePosition).SerializeTo(dict_settings);
+            GlobalIndexSettings_.at(TGlobalIndexSettings::FulltextRelevanceDocsTablePosition).SerializeTo(docs_settings);
+            GlobalIndexSettings_.at(TGlobalIndexSettings::FulltextRelevanceStatsTablePosition).SerializeTo(stats_settings);
+            GlobalIndexSettings_.at(TGlobalIndexSettings::FulltextRelevancePostingTablePosition).SerializeTo(posting_settings);
         }
         if (const auto* ftSettings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
             ftSettings->SerializeTo(fulltext_settings);

@@ -1141,9 +1141,12 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             ? TVector<TString>{"prefix", "embedding"}
             : TVector<TString>{"embedding"};
         const TVector<TString> dataColumns = { "covered" };
+        const TVector<NYdb::NTable::TGlobalIndexSettings> partitionSettings = prefixed
+            ? TVector<NYdb::NTable::TGlobalIndexSettings>{ globalIndexSettings, globalIndexSettings, globalIndexSettings }
+            : TVector<NYdb::NTable::TGlobalIndexSettings>{ globalIndexSettings, globalIndexSettings };
         TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
             "by_embedding", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, indexColumns, dataColumns,
-            { globalIndexSettings, globalIndexSettings, globalIndexSettings }, std::move(kmeansTreeSettings)
+            partitionSettings, std::move(kmeansTreeSettings)
         });
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -1173,13 +1176,13 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             NLs::SplitBoundaries<ui64>({12345, 54321})
         });
         if (prefixed) {
-        TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PrefixTable), true, true), {
-            NLs::IsTable,
-            NLs::PartitionCount(3),
-            NLs::MinPartitionsCountEqual(3),
-            NLs::MaxPartitionsCountEqual(3),
-            NLs::SplitBoundaries<ui64>({12345, 54321})
-        });
+            TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PrefixTable), true, true), {
+                NLs::IsTable,
+                NLs::PartitionCount(3),
+                NLs::MinPartitionsCountEqual(3),
+                NLs::MaxPartitionsCountEqual(3),
+                NLs::SplitBoundaries<ui64>({12345, 54321})
+            });
         }
 
         for (size_t i = 0; i != 3; ++i) {

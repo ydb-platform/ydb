@@ -318,8 +318,11 @@ message GlobalFulltextPlainIndex {
 }
 
 message GlobalFulltextRelevanceIndex {
-    GlobalIndexSettings settings = 1;
+    GlobalIndexSettings posting_table_settings = 1;
     FulltextIndexSettings fulltext_settings = 2;
+    GlobalIndexSettings dict_table_settings = 3;
+    GlobalIndexSettings docs_table_settings = 4;
+    GlobalIndexSettings stats_table_settings = 5;
 }
 
 // Represent table index

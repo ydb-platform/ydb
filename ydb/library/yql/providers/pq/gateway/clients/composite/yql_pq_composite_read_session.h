@@ -11,8 +11,9 @@ namespace NYql {
 struct TCompositeTopicReadSessionSettings {
     NDq::TTxId TxId;
     ui64 TaskId = 0;
+    TString Cluster;
     ui64 AmountPartitionsCount = 0;
-    ::NMonitoring::TDynamicCounterPtr Counters;
+    NMonitoring::TDynamicCounterPtr Counters;
     NYdb::NTopic::TReadSessionSettings BaseSettings;
     TDuration IdleTimeout;
     TDuration MaxPartitionReadSkew;

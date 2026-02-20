@@ -314,6 +314,7 @@ message TEvUpdateCounterValue {
 
     // Each CounterId creates own aggregated value (all events for one CounterId should have same settings and same Action case)
     optional string CounterId = 1;
+    optional uint64 SeqNo = 5;
     optional TSettings Settings = 2;
 
     oneof Action {
@@ -324,6 +325,7 @@ message TEvUpdateCounterValue {
 
 message TEvOnAggregatedValueUpdated {
     optional string CounterId = 1;
+    optional uint64 SeqNo = 3;
 
     oneof Update {
         int64 Scalar = 2;

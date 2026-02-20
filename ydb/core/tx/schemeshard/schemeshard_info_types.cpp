@@ -2897,5 +2897,9 @@ void TForcedCompactionInfo::AddNotifySubscriber(const TActorId& actorId) {
     Subscribers.insert(actorId);
 }
 
+float TForcedCompactionInfo::CalcProgress() const {
+    return TotalShardCount > 0 ? (100.f * DoneShardCount / TotalShardCount) : 0;
+}
+
 } // namespace NSchemeShard
 } // namespace NKikimr

@@ -4,6 +4,7 @@
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/forced_compaction.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -25,6 +26,8 @@ enum class EAlterOperationKind {
     DropChangefeed,
     // rename index
     RenameIndex,
+    // compact table, possibly with indices
+    Compact,
 };
 
 struct TPathId;
@@ -48,6 +51,9 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
 
 bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NKikimrIndexBuilder::TIndexBuildSettings* settings,
     ui64 flags,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
+bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
     Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out

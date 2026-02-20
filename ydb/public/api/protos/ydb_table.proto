@@ -938,6 +938,31 @@ message RenameIndexItem {
     bool replace_destination = 3;
 }
 
+// State of compact operation
+message CompactState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_IN_PROGRESS = 1;
+        STATE_DONE = 2;
+        STATE_CANCELLED = 3;
+    }
+}
+
+message CompactItem {
+    // Compact table with all indices
+    optional bool cascade = 1;
+    // Max shards in flight per operation
+    optional uint32 max_shards_in_flight = 2;
+}
+
+message CompactMetadata {
+    optional string path = 1;
+    optional bool cascade = 2;
+    optional uint32 max_shards_in_flight = 3;
+    optional CompactState.State state = 4;
+    optional float progress = 5;
+}
+
 // Alter table with given path
 message AlterTableRequest {
     // Session identifier
@@ -984,6 +1009,8 @@ message AlterTableRequest {
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
     reserved 22, 23;
+    // Start compaction for table
+    CompactItem compact = 24;
 }
 
 message AlterTableResponse {

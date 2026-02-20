@@ -315,6 +315,10 @@ private:
             buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
             break;
         }
+        case Ydb::Table::TableIndex::TypeCase::kLocalBloomFilterIndex:
+        case Ydb::Table::TableIndex::TypeCase::kLocalBloomNgramFilterIndex:
+            explain = "Local bloom indexes are not supported by index build operation";
+            return false;
         };
 
         buildInfo.IndexName = index.name();

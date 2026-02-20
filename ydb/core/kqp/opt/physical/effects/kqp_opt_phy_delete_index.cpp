@@ -137,6 +137,9 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 }
                 break;
             }
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+                break;
         }
 
         auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())

@@ -149,6 +149,9 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                     result.emplace_back(indexTable, &index);
                     break;
                 }
+                case TIndexDescription::EType::LocalBloomFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter:
+                    break;
             }
         }
     }

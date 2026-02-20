@@ -256,4 +256,6 @@ message TFeatureFlags {
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
     optional bool EnablePDiskDataEncryption = 230 [default = true];
     optional bool EnableForcedCompactions = 231 [default = false];
+    optional bool EnableLocalBloomFilterIndex = 232 [default = false];
+    optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
 }

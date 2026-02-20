@@ -251,9 +251,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     }
 
     if (isRightPKJoin) {
-        //selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        selectivity = leftStats.Selectivity * rightStats.Selectivity;
         //selectivity = rightStats.Selectivity;
-        selectivity = std::cbrt(leftStats.Selectivity * rightStats.Selectivity);
 
         switch (joinKind) {
             case EJoinKind::LeftJoin:
@@ -295,9 +294,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             outputType = leftStats.Type;
         }
     } else if (isLeftPKJoin) {
-        //selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        selectivity = leftStats.Selectivity * rightStats.Selectivity;
         //selectivity = leftStats.Selectivity;
-        selectivity = std::cbrt(leftStats.Selectivity * rightStats.Selectivity);
 
         switch (joinKind) {
             case EJoinKind::RightJoin:
@@ -380,6 +378,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
 
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
                                        leftKeyColumns ? leftStats.KeyColumns : (rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));
+    //result.Selectivity = std::pow(selectivity, 0.7);
     result.Selectivity = selectivity;
     return result;
 }

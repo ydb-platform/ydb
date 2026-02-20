@@ -76,7 +76,7 @@ namespace {
         return Nothing();
     }
 
-    double DefaultSelectivity(const std::shared_ptr<TOptimizerStatistics>& stats, const TString& attributeName) {
+    double DefaultEqualitySelectivity(const std::shared_ptr<TOptimizerStatistics>& stats, const TString& attributeName) {
         if (stats == nullptr) {
             return 1.0;
         }
@@ -90,6 +90,16 @@ namespace {
 
             return 1.0;
         }
+    }
+
+    double DefaultInequalitySelectivity(const std::shared_ptr<TOptimizerStatistics>& stats, const TString& attributeName) {
+        Y_UNUSED(attributeName);
+
+        if (stats == nullptr) {
+            return 1.0;
+        }
+
+        return 0.3;
     }
 
     // Estimates number of rows based on histogram and predicate type.
@@ -259,7 +269,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(co
         } else if (IsConstantExprWithParams(right.Ptr())) {
             const TString attributeName = attribute.value();
             if (!IsConstantExpr(right.Ptr())) {
-                return DefaultSelectivity(Stats, attributeName);
+                return DefaultInequalitySelectivity(Stats, attributeName);
             }
 
             if (!Stats || !Stats->ColumnStatistics) {
@@ -269,20 +279,21 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(co
                     }
                 }
 
-                return DefaultSelectivity(Stats, attributeName);
+                return DefaultInequalitySelectivity(Stats, attributeName);
             }
 
             if (auto histogramEstimator = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
                 const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
                 std::optional<ui64> estimation = EstimateInequalityPredicateByHistogram(right, columnType, histogramEstimator, predicate);
                 if (!estimation.has_value()) {
-                    return DefaultSelectivity(Stats, attributeName);
+                    return DefaultInequalitySelectivity(Stats, attributeName);
                 }
                 // Should we compare the number of rows in histogram against `Nrows` and adjust `value` based on that.
                 Y_ASSERT(Stats->Nrows);
                 return estimation.value() / Stats->Nrows;
             }
-            return 0.5;
+
+            return DefaultInequalitySelectivity(Stats, attributeName);
         }
     }
 
@@ -316,7 +327,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
         else if (IsConstantExprWithParams(right.Ptr())) {
             TString attributeName = attribute.value();
             if (!IsConstantExpr(right.Ptr())) {
-                return DefaultSelectivity(Stats, attributeName);
+                return DefaultEqualitySelectivity(Stats, attributeName);
             }
 
             if (collectMembers) {
@@ -332,19 +343,19 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                         ColumnStatsUsedMembers.AddEquality(*maybeMember.Get());
                     }
                 }
-                return DefaultSelectivity(Stats, attributeName);
+                return DefaultEqualitySelectivity(Stats, attributeName);
             }
 
             if (auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch; countMinSketch != nullptr) {
                 auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
                 std::optional<ui32> countMinEstimation = EstimateCountMin(right, columnType, countMinSketch);
                 if (!countMinEstimation.has_value()) {
-                    return DefaultSelectivity(Stats, attributeName);
+                    return DefaultEqualitySelectivity(Stats, attributeName);
                 }
                 return countMinEstimation.value() / Stats->Nrows;
             }
 
-            return DefaultSelectivity(Stats, attributeName);
+            return DefaultEqualitySelectivity(Stats, attributeName);
         }
     }
 

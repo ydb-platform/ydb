@@ -3200,9 +3200,12 @@ public:
             const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             FillColumnsMeta(phyQuery, response);
         } else {
-            if (compileResult->Status == Ydb::StatusIds::TIMEOUT && QueryState->QueryDeadlines.CancelAt) {
-                // The compile timeout cause cancelation execution of request.
-                // So in case of cancel after we can reply with canceled status
+            if (compileResult->Status == Ydb::StatusIds::TIMEOUT
+                && QueryState->QueryDeadlines.CancelAt
+                && QueryState->QueryDeadlines.CancelAt <= QueryState->QueryDeadlines.TimeoutAt)
+            {
+                // The compile timeout was caused by the CancelAfter deadline,
+                // not the OperationTimeout, so reply with cancelled status.
                 ev.SetYdbStatus(Ydb::StatusIds::CANCELLED);
             }
 

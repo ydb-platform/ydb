@@ -130,7 +130,7 @@ class Workload(object):
         self.run_query_ignore_errors(callee)
 
     def get_planner_row_count_estimate(self, table_name):
-        with ydb.InstrumentedQuerySessionPool(self.driver) as session_pool:
+        with InstrumentedQuerySessionPool(self.driver) as session_pool:
             res = session_pool.explain_with_retries(f"SELECT count(*) FROM {table_name}")
             logger.debug(f"SELECT count explain: {res}")
             explain = json.loads(res)

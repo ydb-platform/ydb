@@ -822,7 +822,14 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_autocomplete(cls):
-        return cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result = {}
+        result['empty'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result['root'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root'})
+        result['dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'dedicated_db'})
+        result['root_dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root/dedicated_db'})
+        result['tab'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'tab'})
+        result['table1'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'table1'})
+        return result
 
     @classmethod
     def test_viewer_check_access(cls):

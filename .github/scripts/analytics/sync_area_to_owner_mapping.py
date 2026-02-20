@@ -13,17 +13,18 @@ from ydb_wrapper import YDBWrapper
 
 
 def load_area_to_owner(config_dir: str) -> List[Tuple[str, str]]:
-    """Build (area, owner_team) from owner_area_mapping.json (owner -> area). Prefer lowercase owner when same area."""
+    """Build (area, owner_team) from owner_area_mapping.json (owner -> area or list of areas). owner_team stored lowercase for consistency (Topics -> topics)."""
     path = os.path.join(config_dir, 'owner_area_mapping.json')
     area_to_owner = {}
     with open(path, 'r', encoding='utf-8') as f:
         owner_to_area = json.load(f)
-    for owner_team, area in owner_to_area.items():
-        if not area:
-            continue
-        if area not in area_to_owner or (owner_team.islower() and not area_to_owner[area].islower()):
-            area_to_owner[area] = owner_team
-    return [(a, o) for a, o in area_to_owner.items()]
+    for owner_team, area_or_list in owner_to_area.items():
+        areas = [area_or_list] if isinstance(area_or_list, str) else area_or_list
+        owner_lower = owner_team.lower()
+        for area in areas:
+            if area:
+                area_to_owner[area] = owner_lower
+    return list(area_to_owner.items())
 
 
 def create_table(ydb_wrapper, table_path: str):

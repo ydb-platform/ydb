@@ -136,7 +136,7 @@ class TTestActorSystem {
     TSingleThreadInterconnectMock InterconnectMock;
     std::unordered_map<ui32, TPerNodeInfo> PerNodeInfo;
     std::set<TActorId> LoggerActorIds;
-    std::thread::id OwnerThreadId;
+    std::atomic<std::thread::id> OwnerThreadId;
 
     struct TQueuedSendItem {
         std::unique_ptr<IEventHandle> Event;

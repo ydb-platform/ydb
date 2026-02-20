@@ -85,9 +85,10 @@ void TPQReadService::Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, cons
         e->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
         return;
     } else {
-        auto e = dynamic_cast<TEvCommitOffsetRequest*>(ev->Release().Release());
+        std::unique_ptr<TEvCommitOffsetRequest> e;
+        e.reset(dynamic_cast<TEvCommitOffsetRequest*>(ev->Release().Release()));
         Y_ENSURE(e);
-        ctx.Register(new TCommitOffsetActor(e, *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
+        ctx.Register(new TCommitOffsetActor(e.release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
     }
 }
 

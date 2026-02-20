@@ -47,15 +47,15 @@ namespace NKikimr {
     };
 
     ////////////////////////////////////////////////////////////////////////////
-    // TEvStartDefragCompaction
+    // TEvStartCompactionFromDefrag
     ////////////////////////////////////////////////////////////////////////////
-    struct TEvStartDefragCompaction :
-        public TEventLocal<TEvStartDefragCompaction, TEvBlobStorage::EvStartDefragCompaction>
+    struct TEvStartCompactionFromDefrag :
+        public TEventLocal<TEvStartCompactionFromDefrag, TEvBlobStorage::TEvStartCompactionFromDefrag>
     {
         ui64 SpaceCouldBeFreedViaCompaction;
         ui64 GarbageThresholdToRunCompaction;
 
-        TEvStartDefragCompaction(ui64 spaceCouldBeFreedViaCompaction, ui64 garbageThresholdToRunCompaction)
+        TEvStartCompactionFromDefrag(ui64 spaceCouldBeFreedViaCompaction, ui64 garbageThresholdToRunCompaction)
             : SpaceCouldBeFreedViaCompaction(spaceCouldBeFreedViaCompaction)
             , GarbageThresholdToRunCompaction(garbageThresholdToRunCompaction)
         {}
@@ -120,8 +120,6 @@ namespace NKikimr {
         class TDefragCompactionManager : public TActorBootstrapped<TDefragCompactionManager> {
             std::shared_ptr<TDefragCtx> DCtx;
             bool CompInProgress = false;
-            ui64 LastSpaceCouldBeFreedViaCompaction = 0;
-            ui64 LastGarbageThresholdToRunCompaction = 0;
 
         public:
             TDefragCompactionManager(std::shared_ptr<TDefragCtx> dctx)
@@ -130,25 +128,20 @@ namespace NKikimr {
 
             void StartFullCompaction() {
                 if (CompInProgress) {
-                    STLOG(PRI_DEBUG, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager can't start new compaction because previous compaction is still in progress"),
-                        (SpaceCouldBeFreedViaCompaction, LastSpaceCouldBeFreedViaCompaction),
-                        (GarbageThresholdToRunCompaction, LastGarbageThresholdToRunCompaction));
+                    STLOG(PRI_DEBUG, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager can't start new compaction because previous compaction is still in progress"));
                     return;
                 }
-                STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager starts new compaction"),
-                        (SpaceCouldBeFreedViaCompaction, LastSpaceCouldBeFreedViaCompaction),
-                        (GarbageThresholdToRunCompaction, LastGarbageThresholdToRunCompaction));
+                STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager starts new compaction"));
                 CompInProgress = true;
                 Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FULL, false));
             }
 
             void Handle(TEvCompactVDiskResult::TPtr&) {
+                STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager full compaction has finished"));
                 CompInProgress = false;
             }
 
-            void Handle(TEvStartDefragCompaction::TPtr& ev) {
-                LastSpaceCouldBeFreedViaCompaction = ev->Get()->SpaceCouldBeFreedViaCompaction;
-                LastGarbageThresholdToRunCompaction = ev->Get()->GarbageThresholdToRunCompaction;
+            void Handle(TEvStartCompactionFromDefrag::TPtr&) {
                 StartFullCompaction();
             }
 
@@ -162,7 +155,7 @@ namespace NKikimr {
 
             STRICT_STFUNC(StateFunc,
                 hFunc(TEvCompactVDiskResult, Handle);
-                hFunc(TEvStartDefragCompaction, Handle);
+                hFunc(TEvStartCompactionFromDefrag, Handle);
                 cFunc(TEvents::TSystem::Poison, PassAway);
             )
         };
@@ -213,10 +206,10 @@ namespace NKikimr {
 
                     // check if we need to run compaction
                     if (garbageThresholdToRunCompaction > 0 && spaceCouldBeFreedViaCompaction > garbageThresholdToRunCompaction) {
-                        STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragPlannerActor decided to compact"),
+                        STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "DefragPlannerActor finished scan and trying to run a full compaction"),
                             (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction),
                             (GarbageThresholdToRunCompaction, garbageThresholdToRunCompaction));
-                        Send(CompactionManagerId, new TEvStartDefragCompaction(spaceCouldBeFreedViaCompaction, garbageThresholdToRunCompaction));
+                        Send(CompactionManagerId, new TEvStartCompactionFromDefrag(spaceCouldBeFreedViaCompaction, garbageThresholdToRunCompaction));
                     }
 
                     // check if we need to run defragmentation

@@ -556,9 +556,9 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         ui32 totalHugeChunks = env.GetMetrics().HugeUsedChunks;
 
         // disable compaction to test defrag without compaction
-        TVector<IEventHandle*> compactions;
+        TVector<std::unique_ptr<IEventHandle>> compactions;
         auto oldCompFilter = env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            compactions.push_back(ev.release());
+            compactions.push_back(std::move(ev));
             return false; // skip compaction events
         });
 
@@ -576,7 +576,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         env.CompactionsPerNode.clear();
         env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, std::move(oldCompFilter));
         for (auto& ev : compactions) {
-            env.Env.Runtime->Send(ev, ev->Recipient.NodeId());
+            auto nodeId = ev->Recipient.NodeId();
+            env.Env.Runtime->Send(ev.release(), nodeId);
         }
         env.Env.Sim(TDuration::Minutes(10));
 
@@ -601,9 +602,9 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         ui32 totalHugeChunks = env.GetMetrics().HugeUsedChunks;
 
         // disable compaction to test defrag without compaction
-        TVector<IEventHandle*> compactions;
+         TVector<std::unique_ptr<IEventHandle>> compactions;
         auto oldCompFilter = env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            compactions.push_back(ev.release());
+            compactions.push_back(std::move(ev));
             return false; // skip compaction events
         });
 
@@ -637,7 +638,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
 
         UNIT_ASSERT_VALUES_EQUAL(compactions.size(), env.GroupInfo->GetTotalVDisksNum());
         for (auto& ev : compactions) {
-            env.Env.Runtime->Send(ev, ev->Recipient.NodeId());
+            auto nodeId = ev->Recipient.NodeId();
+            env.Env.Runtime->Send(ev.release(), nodeId);
         }
 
         for (ui32 i = 0; i < 60; ++i) {

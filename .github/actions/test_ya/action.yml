@@ -383,9 +383,6 @@ runs:
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
-        MUTED_YAML_PATH="$PUBLIC_DIR/muted_tests.yaml"
-        python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml .github/config/muted_ya.txt > $MUTED_YAML_PATH
-
         BUILD_FAILED=0
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
@@ -411,7 +408,7 @@ runs:
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
-              RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
+              RERUN_FAILED_OPT="-X --build-only-test-deps"
             else
               RERUN_FAILED_OPT=""
             fi

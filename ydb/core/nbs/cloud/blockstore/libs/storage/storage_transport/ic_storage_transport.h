@@ -83,16 +83,16 @@ class TICStorageTransportActor
 private:
     ui64 RequestIdGenerator = 0;
 
-    TMap<ui64, TEvICStorageTransportPrivate::TEvConnect>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvConnect>
         ConnectEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvWritePersistentBuffer>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvWritePersistentBuffer>
         WritePersistentBufferEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvErasePersistentBuffer>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvErasePersistentBuffer>
         ErasePersistentBufferEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvReadPersistentBuffer>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvReadPersistentBuffer>
         ReadPersistentBufferEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvRead> ReadEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvRead> ReadEventsByRequestId;
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer>
         SyncEventsByRequestId;
 
 public:

@@ -1,5 +1,7 @@
 #include "ic_storage_transport.h"
 
+#include <ydb/library/actors/util/rope.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 using namespace NActors;
@@ -271,7 +273,10 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
 
     if (auto guard = it->second.Data.Acquire()) {
         const auto& sglist = guard.Get();
-        request->AddPayload(TRope(TString(sglist[0].Data(), sglist[0].Size())));
+        auto data = sglist[0].AsStringBuf();
+        TRope rope = TRope::Uninitialized(data.Size());
+        memcpy(const_cast<char*>(rope.Begin().ContiguousData()), data.begin(), data.length());
+        request->AddPayload(std::move(rope));
     } else {
         Y_ABORT_UNLESS(false);
     }
@@ -430,13 +435,7 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
         auto& data = requestHandler->Data;
         if (auto guard = data.Acquire()) {
             const auto& sglist = guard.Get();
-            const auto& block = sglist[0];
-            // Bad perf method
-            const TString payload = ev->Get()->GetPayload(0).ConvertToString();
-            memcpy(
-                const_cast<char*>(block.Data()),
-                payload.data(),
-                block.Size());
+            SgListCopy(TBlockDataRef::Create(ev->Get()->GetPayload(0)), sglist);
         } else {
             Y_ABORT_UNLESS(false);
         }
@@ -501,13 +500,7 @@ void TICStorageTransportActor::HandleReadResult(
     if (auto* requestHandler = ReadEventsByRequestId.FindPtr(requestId)) {
         if (auto guard = requestHandler->Data.Acquire()) {
             const auto& sglist = guard.Get();
-            const auto& block = sglist[0];
-            // Bad perf method
-            const TString payload = ev->Get()->GetPayload(0).ConvertToString();
-            memcpy(
-                const_cast<char*>(block.Data()),
-                payload.data(),
-                block.Size());
+            SgListCopy(TBlockDataRef::Create(ev->Get()->GetPayload(0)), sglist);
         } else {
             Y_ABORT_UNLESS(false);
         }

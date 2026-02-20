@@ -93,6 +93,8 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
     ui64 Erase_RequestsSent = 0;
     ui64 Write_OK = 0;
     ui64 Write_Error = 0;
+    ui64 Erase_OK = 0;
+    ui64 Erase_Error = 0;
 
     // Monitoring
     TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
@@ -231,6 +233,7 @@ public:
             return;
         }
         Finished = true;
+        Report->Size /= Write_RequestsSent;
         ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, status));
         Die(ctx);
     }
@@ -372,6 +375,11 @@ public:
 
         if (request.IsErase) {
             WriteSizeBytes -= request.Size;
+            if (ok) {
+                ++Erase_OK;
+            } else {
+                ++Erase_Error;
+            }
         } else {
             if (ok) {
                 ++Write_OK;
@@ -431,6 +439,8 @@ public:
                     PARAM("Elapsed time / Duration", (TAppData::TimeProvider->Now() - TestStartTime).Seconds() << "s / "
                             << DurationSeconds << "s");
                     PARAM("TEvErasePersistentBuffer msgs sent", Erase_RequestsSent);
+                    PARAM("TEvErasePersistentBufferResult msgs received, OK", Erase_OK);
+                    PARAM("TEvErasePersistentBufferResult msgs received, not OK", Erase_Error);
                     PARAM("TEvWritePersistentBuffer msgs sent", Write_RequestsSent);
                     PARAM("TEvWritePersistentBufferResult msgs received, OK", Write_OK);
                     PARAM("TEvWritePersistentBufferResult msgs received, not OK", Write_Error);

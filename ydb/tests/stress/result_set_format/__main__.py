@@ -21,8 +21,5 @@ if __name__ == "__main__":
     logging.basicConfig(level=args.log_level)
     client = YdbClient(args.endpoint, args.database, True, sessions=3000)
     client.wait_connection()
-    try:
-        with WorkloadRunner(client, args.path, args.duration, args.format) as runner:
-            runner.run()
-    finally:
-        client.close()
+    with WorkloadRunner(client, args.path, args.duration, args.format) as runner:
+        runner.run()

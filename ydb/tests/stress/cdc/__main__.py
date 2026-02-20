@@ -15,8 +15,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     client = InstrumentedYdbClient(args.endpoint, args.database, True)
     client.wait_connection()
-    try:
-        with WorkloadRunner(client, args.duration) as runner:
-            runner.run()
-    finally:
-        client.close()
+    with WorkloadRunner(client, args.duration) as runner:
+        runner.run()

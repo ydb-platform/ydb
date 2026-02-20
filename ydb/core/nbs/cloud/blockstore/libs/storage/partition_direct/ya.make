@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/config
     ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
+    ydb/core/nbs/cloud/storage/core/libs/coroutine
 
     ydb/core/protos
     ydb/library/services

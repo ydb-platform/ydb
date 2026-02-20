@@ -2,8 +2,6 @@
 name: Automerge for muted_ya (main)
 
 on:
-  schedule:
-    - cron: "0 8 * * *"
   workflow_dispatch:
 
 jobs:

@@ -25,7 +25,7 @@ class IDirectBlockGroup
 public:
     virtual ~IDirectBlockGroup() = default;
 
-    virtual void EstablishConnections() = 0;
+    virtual void EstablishConnections(NWilson::TTraceId traceId) = 0;
 
     virtual NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -80,7 +80,6 @@ private:
     ui64 StorageRequestId = 0;
 
     class TDirtyMap;
-    struct TPendingRequests;
     std::unique_ptr<TDirtyMap> DirtyMap;
     TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
 
@@ -98,7 +97,7 @@ public:
 
     ~TDirectBlockGroup() override;
 
-    void EstablishConnections() override;
+    void EstablishConnections(NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -112,12 +111,12 @@ public:
 
 private:
     void DoEstablishPersistentBufferConnection(
-        size_t i, std::shared_ptr<TPendingRequests> connectionsPending);
+        size_t i, std::shared_ptr<TOverallAckRequestHandler> requestHandler);
 
     void HandlePersistentBufferConnected(
         size_t index,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
-        std::shared_ptr<TPendingRequests> connectionsPending);
+        std::shared_ptr<TOverallAckRequestHandler> requestHandler);
 
     void DoEstablishDDiskConnection(size_t i);
 
@@ -157,12 +156,14 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
 
-    void RestoreFromPersistentBuffer();
+    void RestoreFromPersistentBuffer(NWilson::TTraceId traceId);
+    void DoRestoreFromPersistentBuffer(
+        std::shared_ptr<TOverallAckRequestHandler> requestHandler);
     void HandleListPersistentBufferResultOnRestore(
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
         size_t persistentBufferIndex,
-        std::shared_ptr<TPendingRequests> requestsPending);
+        std::shared_ptr<TOverallAckRequestHandler> requestHandler);
     void RestoreFromPersistentBufferFinised();
 };
 

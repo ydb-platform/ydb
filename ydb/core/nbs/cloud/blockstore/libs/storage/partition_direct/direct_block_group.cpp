@@ -49,16 +49,6 @@ struct TBlockMeta {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TDirectBlockGroup::TPendingRequests
-{
-    explicit TPendingRequests(ui32 responsesExpected)
-        : ResponsesExpected(responsesExpected)
-    {}
-
-    ui32 ResponsesHandled = 0;
-    const ui32 ResponsesExpected;
-};
-
 class TDirectBlockGroup::TDirtyMap
 {
 private:
@@ -182,16 +172,20 @@ TDirectBlockGroup::~TDirectBlockGroup()
 }
 
 
-void TDirectBlockGroup::EstablishConnections()
+void TDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId)
 {
-    auto connectionsPending = std::make_shared<TPendingRequests>(
+    auto requestHandler = std::make_shared<TOverallAckRequestHandler>(
+        ActorSystem,
+        std::move(traceId),
+        "NbsPartition.EstablishConnections",
+        TabletId,
         PersistentBufferConnections.size());
     for (size_t i = 0; i < PersistentBufferConnections.size(); i++) {
         Executor->ExecuteSimple(
-            [weakSelf = weak_from_this(), i, connectionsPending = connectionsPending]()
+            [weakSelf = weak_from_this(), i, requestHandler = requestHandler]()
             {
                 if (auto self = weakSelf.lock()) {
-                    self->DoEstablishPersistentBufferConnection(i, connectionsPending);
+                    self->DoEstablishPersistentBufferConnection(i, requestHandler);
                 }
             });
     }
@@ -208,7 +202,7 @@ void TDirectBlockGroup::EstablishConnections()
 }
 
 void TDirectBlockGroup::DoEstablishPersistentBufferConnection(
-    size_t i, std::shared_ptr<TPendingRequests> connectionsPending)
+    size_t i, std::shared_ptr<TOverallAckRequestHandler> requestHandler)
 {
     auto future =
         StorageTransport->Connect(PersistentBufferConnections[i].GetServiceId(),
@@ -216,7 +210,7 @@ void TDirectBlockGroup::DoEstablishPersistentBufferConnection(
 
     const auto& resultOrError = Executor->ResultOrError(std::move(future));
     if (!HasError(resultOrError)) {
-        HandlePersistentBufferConnected(i, resultOrError.GetResult(), connectionsPending);
+        HandlePersistentBufferConnected(i, resultOrError.GetResult(), requestHandler);
     }
     // TODO: add error handling
 }
@@ -237,48 +231,81 @@ void TDirectBlockGroup::DoEstablishDDiskConnection(size_t i)
 void TDirectBlockGroup::HandlePersistentBufferConnected(
     size_t index,
     const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
-    std::shared_ptr<TPendingRequests> connectionsPending)
+    std::shared_ptr<TOverallAckRequestHandler> requestHandler)
 {
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         PersistentBufferConnections[index].Credentials.DDiskInstanceGuid =
             result.GetDDiskInstanceGuid();
 
-        connectionsPending->ResponsesHandled += 1;
+        requestHandler->RegisterCompetedRequest();
     } else {
         Y_ABORT("TDirectBlockGroup::HandlePersistentBufferConnected: connection failed - unhandled error");
     }
 
-    bool allConnectionsEstablised =
-        connectionsPending->ResponsesHandled ==
-        connectionsPending->ResponsesExpected;
-    if (allConnectionsEstablised) {
-        RestoreFromPersistentBuffer();
+    if (requestHandler->IsCompleted()) {
+        LOG_DEBUG_S(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TDirectBlockGroup::HandlePersistentBufferConnected finished");
+        RestoreFromPersistentBuffer(requestHandler->Span.GetTraceId());
     }
 }
 
-// TODO заблокировать IO до полного восстановления (где-то раньше)
-void TDirectBlockGroup::RestoreFromPersistentBuffer()
+void TDirectBlockGroup::RestoreFromPersistentBuffer(NWilson::TTraceId traceId)
 {
-    size_t numberOfRequests = PersistentBufferConnections.size();
-    auto requestsPending =
-        std::make_shared<TPendingRequests>(numberOfRequests);
-    for (size_t i = 0; i < numberOfRequests; i++) {
+    auto requestHandler = std::make_shared<TOverallAckRequestHandler>(
+        ActorSystem,
+        std::move(traceId),
+        "NbsPartition.RestoreFromPersistentBuffer",
+        TabletId,
+        PersistentBufferConnections.size()
+    );
+
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), requestHandler]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->DoRestoreFromPersistentBuffer(requestHandler);
+            }
+        });
+}
+
+// TODO заблокировать IO до полного восстановления (где-то раньше)
+void TDirectBlockGroup::DoRestoreFromPersistentBuffer(
+    std::shared_ptr<TOverallAckRequestHandler> requestHandler
+)
+{
+    using TEvListPersistentBufferResult =
+        TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>;
+
+    TVector<TEvListPersistentBufferResult> futures;
+    TVector<ui64> storageRequestIds;
+
+    for (size_t i = 0; i < requestHandler->GetRequiredAckCount(); i++) {
         const auto& ddiskConnection = PersistentBufferConnections[i];
         ++StorageRequestId;
+        storageRequestIds.push_back(StorageRequestId);
 
         auto future = StorageTransport->ListPersistentBuffer(
             ddiskConnection.GetServiceId(), ddiskConnection.Credentials,
             StorageRequestId);
 
-        future.Subscribe(
-            [this, requestId = StorageRequestId,
-             requestsPending = requestsPending,
-             persistentBufferIndex = i](const auto& f)
-            {
-                const auto& result = f.GetValue();
-                HandleListPersistentBufferResultOnRestore(
-                    requestId, result, persistentBufferIndex, requestsPending);
-            });
+        futures.push_back(std::move(future));
+    }
+
+    for (size_t i = 0; i < requestHandler->GetRequiredAckCount(); i++) {
+        const auto& resultOrError =
+            Executor->ResultOrError(std::move(futures[i]));
+
+        if (!HasError(resultOrError)) {
+            HandleListPersistentBufferResultOnRestore(
+                storageRequestIds[i],
+                resultOrError.GetResult(),
+                i,
+                requestHandler);
+        } else {
+            Y_ABORT("TDirectBlockGroup::DoRestoreFromPersistentBuffer: connection failed - unhandled error");
+        }
     }
 }
 
@@ -286,10 +313,16 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
     ui64 storageRequestId,
     const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
     size_t persistentBufferIndex,
-    std::shared_ptr<TPendingRequests> requestsPending)
+    std::shared_ptr<TOverallAckRequestHandler> requestHandler)
 {
+    LOG_DEBUG_S(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TDirectBlockGroup::HandleListPersistentBufferResultOnRestore " << persistentBufferIndex
+    );
+
     Y_UNUSED(storageRequestId);
-    ++requestsPending->ResponsesHandled;
+    requestHandler->RegisterCompetedRequest();
 
     Y_ABORT_UNLESS(result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
 
@@ -308,7 +341,7 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
         }
     }
 
-    if (requestsPending->ResponsesHandled == requestsPending->ResponsesExpected) {
+    if (requestHandler->IsCompleted()) {
         RestoreFromPersistentBufferFinised(); // finish actor bootstrap
     }
 }
@@ -316,6 +349,11 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
 void TDirectBlockGroup::RestoreFromPersistentBufferFinised()
 {
     // function's body will be writen a bit later
+    LOG_DEBUG_S(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TDirectBlockGroup::RestoreFromPersistentBufferFinised"
+    );
 }
 
 void TDirectBlockGroup::HandleDDiskBufferConnected(

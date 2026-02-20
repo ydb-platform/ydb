@@ -32,8 +32,10 @@ TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
         NPDisk::NSectorMap::DM_NONE);
 }
 
-void TInMemoryDirectBlockGroup::EstablishConnections()
-{}
+void TInMemoryDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId)
+{
+    Y_UNUSED(traceId);
+}
 
 
 NThreading::TFuture<TWriteBlocksLocalResponse>

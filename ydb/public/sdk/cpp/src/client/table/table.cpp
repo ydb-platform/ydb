@@ -792,19 +792,11 @@ void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, c
     Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, indexSettings);
 }
 
-void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
-    EIndexType indexType = EIndexType::GlobalFulltextPlain;
-    if (indexSettings.Layout.has_value() && indexSettings.Layout.value() == TFulltextIndexSettings::ELayout::FlatRelevance) {
-        indexType = EIndexType::GlobalFulltextRelevance;
-    }
+void TTableDescription::AddFulltextIndex(const std::string& indexName, EIndexType indexType, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
     Impl_->AddFulltextIndex(indexName, indexType, indexColumns, indexSettings);
 }
 
-void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
-    EIndexType indexType = EIndexType::GlobalFulltextPlain;
-    if (indexSettings.Layout.has_value() && indexSettings.Layout.value() == TFulltextIndexSettings::ELayout::FlatRelevance) {
-        indexType = EIndexType::GlobalFulltextRelevance;
-    }
+void TTableDescription::AddFulltextIndex(const std::string& indexName, EIndexType indexType, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
     Impl_->AddFulltextIndex(indexName, indexType, indexColumns, dataColumns, indexSettings);
 }
 
@@ -1298,12 +1290,22 @@ TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexN
 }
 
 TTableBuilder& TTableBuilder::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
-    TableDescription_.AddFulltextIndex(indexName, indexColumns, dataColumns, indexSettings);
+    TableDescription_.AddFulltextIndex(indexName, EIndexType::GlobalFulltextPlain, indexColumns, dataColumns, indexSettings);
     return *this;
 }
 
 TTableBuilder& TTableBuilder::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
-    TableDescription_.AddFulltextIndex(indexName, indexColumns, indexSettings);
+    TableDescription_.AddFulltextIndex(indexName, EIndexType::GlobalFulltextPlain, indexColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddFulltextRelevanceIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
+    TableDescription_.AddFulltextIndex(indexName, EIndexType::GlobalFulltextRelevance, indexColumns, dataColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddFulltextRelevanceIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
+    TableDescription_.AddFulltextIndex(indexName, EIndexType::GlobalFulltextRelevance, indexColumns, indexSettings);
     return *this;
 }
 
@@ -2715,43 +2717,14 @@ Ydb::Table::FulltextIndexSettings::ColumnAnalyzers ToProto(const TFulltextIndexS
 }
 
 TFulltextIndexSettings TFulltextIndexSettings::FromProto(const Ydb::Table::FulltextIndexSettings& proto) {
-    auto convertLayout = [&] {
-        switch (proto.layout()) {
-        case Ydb::Table::FulltextIndexSettings::FLAT:
-            return ELayout::Flat;
-        case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
-            return ELayout::FlatRelevance;
-        default:
-            return ELayout::Unspecified;
-        }
-    };
-
     TFulltextIndexSettings result;
-    result.Layout = convertLayout();
     for (const auto& columnProto : proto.columns()) {
         result.Columns.push_back(NTable::FromProto(columnProto));
     }
-
     return result;
 }
 
 void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& settings) const {
-    auto convertLayout = [&] {
-        switch (*Layout) {
-        case ELayout::Flat:
-            return Ydb::Table::FulltextIndexSettings::FLAT;
-        case ELayout::FlatRelevance:
-            return Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-        case ELayout::Unspecified:
-            return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
-        }
-        return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
-    };
-
-    if (Layout.has_value()) {
-        settings.set_layout(convertLayout());
-    }
-
     for (const auto& column : Columns) {
         *settings.add_columns() = ToProto(column);
     }

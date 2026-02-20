@@ -95,6 +95,11 @@ struct TCountingOp : TUringOperation {
         } \
     } while (false)
 
+void AssertSuccess(const std::expected<void, int>& result) {
+    UNIT_ASSERT_C(result.has_value(),
+        TStringBuilder() << "operation failed with errno=" << result.error());
+}
+
 void DoCreateAndDestroy(TUringRouterConfig config) {
     SKIP_IF_NO_URING(config);
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
@@ -112,7 +117,7 @@ void DoWriteAndReadBack(TUringRouterConfig config, bool registerFile = true) {
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
     if (registerFile) {
-        UNIT_ASSERT(router.RegisterFile());
+        AssertSuccess(router.RegisterFile());
         UNIT_ASSERT(router.IsFileRegistered());
     }
     router.Start();
@@ -157,7 +162,7 @@ void DoMultipleConcurrentOps(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr int N = 8;
@@ -229,7 +234,7 @@ void DoSubmitQueueFull(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;
@@ -275,14 +280,14 @@ void DoRegisterBuffersAndFixedIO(TUringRouterConfig config) {
     memset(readBuf.Data(), 0, size);
 
     // Register file and buffers before Start()
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
 
     struct iovec iovs[2];
     iovs[0].iov_base = writeBuf.Data();
     iovs[0].iov_len = size;
     iovs[1].iov_base = readBuf.Data();
     iovs[1].iov_len = size;
-    UNIT_ASSERT(router.RegisterBuffers(iovs, 2));
+    AssertSuccess(router.RegisterBuffers(iovs, 2));
 
     router.Start();
 
@@ -321,7 +326,7 @@ void DoSubmitItemsLeft(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     // Initially all slots should be available
@@ -366,7 +371,7 @@ void DoLargeMultiPageIO(TUringRouterConfig config) {
     constexpr ui32 size = 256 * 1024; // 256 KB
     f.Resize(size);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     // Write 256K of a pattern
@@ -409,7 +414,7 @@ void DoNonZeroOffsets(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;
@@ -462,7 +467,7 @@ void DoDoubleStop(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     // Explicit stop, then destructor calls Stop() again -- must not crash
@@ -477,7 +482,7 @@ void DoFlushWithNothingPending(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     // Flush on an empty ring must not crash or hang
@@ -511,7 +516,7 @@ void DoErrorResultPropagation(TUringRouterConfig config) {
     f.Resize(fileSize);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 ioSize = 4096;
@@ -544,7 +549,7 @@ void DoStopAfterFlush(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;
@@ -573,7 +578,7 @@ void DoStopWithoutFlush(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;
@@ -615,7 +620,7 @@ void DoStopWhileCallbackRunning(TUringRouterConfig config) {
     f.Resize(1 << 20);
 
     TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    AssertSuccess(router.RegisterFile());
     router.Start();
 
     constexpr ui32 size = 4096;

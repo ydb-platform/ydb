@@ -5,6 +5,7 @@
 #include <sys/uio.h>
 
 #include <atomic>
+#include <expected>
 #include <memory>
 
 struct io_uring;
@@ -35,6 +36,11 @@ struct TUringOperation {
     // After OnComplete returns, the caller is free to return this object to its pool.
     void (*OnComplete)(TUringOperation* op, NActors::TActorSystem* actorSystem) noexcept = nullptr;
 
+    // Optional cleanup callback called by TUringRouter::Stop() for CQEs drained
+    // after shutdown without invoking OnComplete. Use this to release operation-
+    // owned memory/resources for in-flight requests that are no longer delivered.
+    void (*OnDrop)(TUringOperation* op) noexcept = nullptr;
+
     // Scratch space for the iovec used by readv/writev submissions.
     // Populated by TUringRouter and must remain valid until OnComplete is called.
     struct iovec Iov = {};
@@ -58,13 +64,14 @@ public:
     // Therefore all Register* calls must happen before Start().
 
     // Register the fd as a fixed file.  After this, all I/O uses the registered
-    // index, avoiding per-I/O fget()/fput() overhead.  Returns true on success.
-    bool RegisterFile();
+    // index, avoiding per-I/O fget()/fput() overhead.
+    // Returns an error code in std::unexpected on failure.
+    std::expected<void, int> RegisterFile();
 
     // Register a set of pre-allocated aligned buffers for fixed-buffer I/O.
     // iovs[i].iov_base must be aligned to device sector size (typically 4096).
-    // Returns true on success.
-    bool RegisterBuffers(const struct iovec* iovs, unsigned count);
+    // Returns an error code in std::unexpected on failure.
+    std::expected<void, int> RegisterBuffers(const struct iovec* iovs, unsigned count);
 
     // Start the completion poller thread.  Must be called after all Register*
     // calls and before any I/O submissions.
@@ -91,7 +98,8 @@ public:
     // --- Lifecycle ---
 
     // Stop the completion thread and tear down the io_uring instance.
-    // Outstanding operations OnComplete will NOT be called.
+    // Outstanding operations OnComplete will NOT be called. If TUringOperation::OnDrop
+    // is set, it is called for CQEs drained during shutdown.
     void Stop();
 
     // Returns the number of SQEs still available in the ring.

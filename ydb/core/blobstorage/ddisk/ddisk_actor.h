@@ -12,6 +12,11 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#if defined(__linux__)
+#include <ydb/library/pdisk_io/uring_router.h>
+#endif
+
+#include <atomic>
 #include <queue>
 
 namespace NKikimrBlobStorage::NDDisk::NInternal {
@@ -68,30 +73,40 @@ namespace NKikimr::NDDisk {
 
         static constexpr ui32 BlockSize = 4096;
 
+#if defined(__linux__)
+        std::unique_ptr<NPDisk::TUringRouter> UringRouter;
+        std::atomic<ui32> InFlightCount{0};
+        static constexpr ui32 MaxInFlight = 128; // TODO: make configurable
+#endif
+
+        NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
+
     private:
-        struct {
+        struct TInterfaceOpCounters {
+            NMonitoring::TDynamicCounters::TCounterPtr Requests;
+            NMonitoring::TDynamicCounters::TCounterPtr ReplyOk;
+            NMonitoring::TDynamicCounters::TCounterPtr ReplyErr;
+            NMonitoring::TDynamicCounters::TCounterPtr Bytes;
+
+            void Request(ui32 bytes = 0) {
+                ++*Requests;
+                if (bytes) {
+                    *Bytes += bytes;
+                }
+            }
+
+            void Reply(bool ok, ui32 bytes = 0) {
+                ++*(ok ? ReplyOk : ReplyErr);
+                if (bytes) {
+                    *Bytes += bytes;
+                }
+            }
+        };
+
+        struct TCounters {
             struct {
 #define DECLARE_COUNTERS_INTERFACE(NAME) \
-                struct { \
-                    NMonitoring::TDynamicCounters::TCounterPtr Requests; \
-                    NMonitoring::TDynamicCounters::TCounterPtr ReplyOk; \
-                    NMonitoring::TDynamicCounters::TCounterPtr ReplyErr; \
-                    NMonitoring::TDynamicCounters::TCounterPtr Bytes; \
-                    \
-                    void Request(ui32 bytes = 0) { \
-                        ++*Requests; \
-                        if (bytes) { \
-                            *Bytes += bytes; \
-                        } \
-                    } \
-                    \
-                    void Reply(bool ok, ui32 bytes = 0) { \
-                        ++*(ok ? ReplyOk : ReplyErr); \
-                        if (bytes) { \
-                            *Bytes += bytes; \
-                        } \
-                    } \
-                } NAME;
+                TInterfaceOpCounters NAME;
 
                 LIST_COUNTERS_INTERFACE_OPS(DECLARE_COUNTERS_INTERFACE)
 
@@ -111,7 +126,19 @@ namespace NKikimr::NDDisk {
             struct {
                 NMonitoring::TDynamicCounters::TCounterPtr ChunksOwned;
             } Chunks;
-        } Counters;
+
+            struct {
+                NMonitoring::TDynamicCounters::TCounterPtr ShortReads;
+                NMonitoring::TDynamicCounters::TCounterPtr ShortWrites;
+            } DirectIO;
+        };
+
+        TCounters Counters;
+
+    public:
+#if defined(__linux__)
+        struct TDirectIoOp;
+#endif
 
     private:
         struct TEvPrivate {
@@ -119,6 +146,7 @@ namespace NKikimr::NDDisk {
                 EvHandleSingleQuery = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvHandleEventForChunk,
                 EvHandlePersistentBufferEventForChunk,
+                EvShortIO,
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -138,6 +166,14 @@ namespace NKikimr::NDDisk {
                     : ChunkIndex(chunkIndex)
                 {}
             };
+
+#if defined(__linux__)
+            struct TEvShortIO : TEventLocal<TEvShortIO, EvShortIO> {
+                std::unique_ptr<TDirectIoOp> Op;
+                explicit TEvShortIO(std::unique_ptr<TDirectIoOp> op);
+                ~TEvShortIO();
+            };
+#endif
         };
 
     public:
@@ -314,6 +350,7 @@ namespace NKikimr::NDDisk {
                         const TRope& data = ev.Get()->GetPayload(*instruction.PayloadId);
                         size = data.size();
                     }
+                    // this check is crucial for the code submitting IO
                     if (size != selector.Size) {
                         SendReply(ev, std::make_unique<typename TEvent::TResult>(
                             NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
@@ -333,15 +370,22 @@ namespace NKikimr::NDDisk {
 
         void SendInternalWrite(
             TChunkRef& chunkRef,
-            const TQueryCredentials &creds,
             const TBlockSelector &selector,
-            NWilson::TTraceId &&traceId,
+            NWilson::TSpan&& span,
             TRope &&data,
             std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> callback
         );
 
         void Handle(TEvWrite::TPtr ev);
         void Handle(TEvRead::TPtr ev);
+
+#if defined(__linux__)
+        void DirectWrite(TEvWrite::TPtr ev, const TBlockSelector& selector, const TWriteInstruction& instr,
+            TChunkRef& chunkRef, NWilson::TSpan span);
+        void DirectRead(TEvRead::TPtr ev, const TBlockSelector& selector, TChunkRef& chunkRef,
+            NWilson::TSpan span);
+        void HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev);
+#endif
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Sync

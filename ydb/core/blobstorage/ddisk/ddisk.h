@@ -466,7 +466,7 @@ namespace NKikimr::NDDisk {
             selector.Serialize(segment->MutableSelector());
         }
     };
-    
+
     DECLARE_DDISK_EVENT(SyncWithDDiskResult) {
         TEvSyncWithDDiskResult() = default;
 

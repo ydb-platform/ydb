@@ -25,6 +25,9 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
 struct TPDiskMon;
 namespace NPDisk {
 
+struct TDiskFormat;
+using TDiskFormatPtr = std::unique_ptr<TDiskFormat, void(*)(TDiskFormat*)>;
+
 struct TCommitRecord {
     ui64 FirstLsnToKeep = 0; // 0 == not set
     TVector<TChunkIdx> CommitChunks;
@@ -191,6 +194,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
     TString ErrorReason;
     TFileHandle DiskFd; // A duplicated fd for direct disk access
+    TDiskFormatPtr DiskFormat{nullptr, nullptr}; // On-device format for direct disk access offset calculations
 
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)
@@ -257,6 +261,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
         }
         str << "}";
         str << " DiskFd# " << static_cast<FHANDLE>(record.DiskFd);
+        str << " DiskFormat# " << (record.DiskFormat ? "set" : "null");
         str << "}";
         return str.Str();
     }

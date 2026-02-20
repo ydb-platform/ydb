@@ -410,11 +410,14 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
                     (History, GetImpl.PrintHistory()));
         }
 
-        STLOG(GetImpl.WasNotOkResponses() && AllowToReport(handleClass) ? PRI_NOTICE : PRI_DEBUG, \
-                BS_PROXY_GET, BPG72, "Query history",                                             \
-                (GroupId, Info->GroupID),                                                         \
-                (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),             \
+        auto resultStatusPriority = PriorityForStatusResult(evResult->Status);
+        if (IS_LOG_PRIORITY_ENABLED(resultStatusPriority, LogCtx.LogComponent) && AllowToReport(handleClass)) {
+            STLOG(resultStatusPriority,
+                BS_PROXY_GET, BPG72, "Query history",
+                (GroupId, Info->GroupID),
+                (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
                 (History, GetImpl.PrintHistory()));
+        }
 
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));
     }

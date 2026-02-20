@@ -290,6 +290,27 @@ public:
     TDataCenterId GetDataCenter() const {
         return Location.GetDataCenterId();
     }
+
+    // For balancing, only nodes in the same "segment" are compared
+    // This function defines which parameters are used to define segments
+    auto GetSegment() const {
+        return std::forward_as_tuple(GetServicedDomain(), BridgePileId);
+    }
+
+    struct TEqualSegment {
+        bool operator()(const TNodeInfo* lhs, const TNodeInfo* rhs) const {
+            return lhs->GetSegment() == rhs->GetSegment();
+        }
+    };
+
+    struct THashSegment {
+        size_t operator()(const TNodeInfo* node) const {
+            return std::hash<decltype(node->GetSegment())>{}(node->GetSegment());
+        }
+    };
+
+    using TSegments = std::unordered_multiset<const TNodeInfo*, THashSegment, TEqualSegment>;
+    TSegments::const_iterator Segment;
 };
 
 } // NHive

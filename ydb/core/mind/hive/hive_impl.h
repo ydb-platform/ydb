@@ -110,15 +110,6 @@ inline IOutputStream& operator <<(IOutputStream& out, NKikimr::NHive::TSequencer
     return out << sq.Next << "@[" << sq.Begin << ".." << sq.End << ')';
 }
 
-namespace std {
-    template <>
-    struct hash<NKikimr::TSubDomainKey> {
-        std::size_t operator()(const NKikimr::TSubDomainKey& key) const {
-            return key.Hash();
-        }
-    };
-}
-
 namespace NKikimr {
 namespace NHive {
 
@@ -342,6 +333,7 @@ protected:
     TPipeTracker PipeTracker;
     NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
+    TNodeInfo::TSegments NodeSegments;
     std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
@@ -1106,6 +1098,8 @@ protected:
     THiveStats GetStats() const;
     template<std::forward_iterator TIter>
     THiveStats GetStats(TIter begin, TIter end) const;
+    void RemoveNodeFromSegments(TNodeId nodeId);
+    void UpdateNodeSegments(TNodeInfo* node);
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
     void WaitToMoveTablets(TActorId actor);

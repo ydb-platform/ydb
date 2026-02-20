@@ -1,5 +1,5 @@
 #include "yql_co.h"
-#include "yql_co_pgselect.h"
+#include "yql_co_sqlselect.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_csee.h>
@@ -1079,8 +1079,8 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["PgGrouping"] = ExpandPgGrouping;
-    map["YqlGrouping"] = ExpandPgGrouping;
+    map["PgGrouping"] = ExpandSqlGrouping;
+    map["YqlGrouping"] = ExpandSqlGrouping;
 
     map["PruneKeys"] = map["PruneAdjacentKeys"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext&) {
         TCoPruneKeysBase pruneKeys(node);

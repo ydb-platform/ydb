@@ -14765,14 +14765,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlProjectItem"] = &SqlProjectItemWrapper;
         Functions["SqlProjectStarItem"] = &SqlProjectItemWrapper;
         Functions["PgSelf"] = &PgSelfWrapper;
-        Functions["PgStar"] = &PgStarWrapper;
+        Functions["PgStar"] = &SqlStarWrapper;
         Functions["PgQualifiedStar"] = &PgQualifiedStarWrapper;
-        Functions["PgColumnRef"] = &PgColumnRefWrapper;
-        Functions["PgResultItem"] = &PgResultItemWrapper;
-        Functions["PgReplaceUnknown"] = &PgReplaceUnknownWrapper;
-        Functions["PgWhere"] = &PgWhereWrapper;
-        Functions["PgSort"] = &PgSortWrapper;
-        Functions["PgGroup"] = &PgWhereWrapper;
+        Functions["PgColumnRef"] = &SqlColumnRefWrapper;
+        Functions["PgResultItem"] = &SqlResultItemWrapper;
+        Functions["PgReplaceUnknown"] = &SqlReplaceUnknownWrapper;
+        Functions["PgWhere"] = &SqlWhereWrapper;
+        Functions["PgSort"] = &SqlSortWrapper;
+        Functions["PgGroup"] = &SqlWhereWrapper;
         Functions["PgWindow"] = &PgWindowWrapper;
         Functions["PgAnonWindow"] = &PgAnonWindowWrapper;
         Functions["PgConst"] = &PgConstWrapper;
@@ -14797,10 +14797,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgIn"] = &PgInWrapper;
         Functions["PgBetween"] = &PgBetweenWrapper;
         Functions["PgBetweenSym"] = &PgBetweenWrapper;
-        Functions["PgSubLink"] = &PgSubLinkWrapper;
-        Functions["PgGroupRef"] = &PgGroupRefWrapper;
-        Functions["PgGrouping"] = &PgGroupingWrapper;
-        Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
+        Functions["PgSubLink"] = &SqlSubLinkWrapper;
+        Functions["PgGroupRef"] = &SqlGroupRefWrapper;
+        Functions["PgGrouping"] = &SqlGroupingWrapper;
+        Functions["PgGroupingSet"] = &SqlGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
         Functions["PgIterate"] = &PgIterateWrapper;
         Functions["PgIterateAll"] = &PgIterateWrapper;
@@ -15040,9 +15040,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["PgAllOp"] = &PgArrayOpWrapper;
         ExtFunctions["PgAnyResolvedOp"] = &PgArrayOpWrapper;
         ExtFunctions["PgAllResolvedOp"] = &PgArrayOpWrapper;
-        ExtFunctions["PgSelect"] = &PgSelectWrapper;
-        ExtFunctions["PgSetItem"] = &PgSetItemWrapper;
-        ExtFunctions["PgValuesList"] = &PgValuesListWrapper;
+        ExtFunctions["PgSelect"] = &SqlSelectWrapper;
+        ExtFunctions["PgSetItem"] = &SqlSetItemWrapper;
+        ExtFunctions["PgValuesList"] = &SqlValuesListWrapper;
         ExtFunctions["TablePath"] = &TablePathWrapper;
         ExtFunctions["TableRecord"] = &TableRecordWrapper;
         ExtFunctions["Random"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Double>;
@@ -15130,22 +15130,22 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ColumnOrderFunctions["AssumeSorted"] = ColumnOrderFunctions["Unordered"] =
             ColumnOrderFunctions["UnorderedSubquery"] = ColumnOrderFunctions["AssumeUniq"] = &OrderFromFirst;
 
-        ExtFunctions["YqlSelect"] = &PgSelectWrapper;
-        ExtFunctions["YqlSetItem"] = &PgSetItemWrapper;
-        ExtFunctions["YqlResultItem"] = &PgResultItemWrapper;
-        ExtFunctions["YqlValuesList"] = &PgValuesListWrapper;
-        Functions["YqlColumnRef"] = &PgColumnRefWrapper;
-        Functions["YqlSubLink"] = &PgSubLinkWrapper;
-        Functions["YqlStar"] = &PgStarWrapper;
-        Functions["YqlWhere"] = &PgWhereWrapper;
-        Functions["YqlSort"] = &PgSortWrapper;
-        Functions["YqlGroup"] = &PgWhereWrapper;
-        Functions["YqlGroupRef"] = &PgGroupRefWrapper;
-        Functions["YqlGrouping"] = &PgGroupingWrapper;
-        Functions["YqlGroupingSet"] = &PgGroupingSetWrapper;
+        ExtFunctions["YqlSelect"] = &SqlSelectWrapper;
+        ExtFunctions["YqlSetItem"] = &SqlSetItemWrapper;
+        ExtFunctions["YqlResultItem"] = &SqlResultItemWrapper;
+        ExtFunctions["YqlValuesList"] = &SqlValuesListWrapper;
+        Functions["YqlColumnRef"] = &SqlColumnRefWrapper;
+        Functions["YqlSubLink"] = &SqlSubLinkWrapper;
+        Functions["YqlStar"] = &SqlStarWrapper;
+        Functions["YqlWhere"] = &SqlWhereWrapper;
+        Functions["YqlSort"] = &SqlSortWrapper;
+        Functions["YqlGroup"] = &SqlWhereWrapper;
+        Functions["YqlGroupRef"] = &SqlGroupRefWrapper;
+        Functions["YqlGrouping"] = &SqlGroupingWrapper;
+        Functions["YqlGroupingSet"] = &SqlGroupingSetWrapper;
         ExtFunctions["YqlAggFactory"] = &YqlAggFactoryWrapper;
         ExtFunctions["YqlAgg"] = &YqlAggWrapper;
-        Functions["YqlReplaceUnknown"] = &PgReplaceUnknownWrapper;
+        Functions["YqlReplaceUnknown"] = &SqlReplaceUnknownWrapper;
 
         for (ui32 i = 0; i < NKikimr::NUdf::DataSlotCount; ++i) {
             auto name = TString(NKikimr::NUdf::GetDataTypeInfo((EDataSlot)i).Name);

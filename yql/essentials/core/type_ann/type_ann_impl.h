@@ -46,4 +46,3 @@ namespace NYql::NTypeAnnImpl {
 
     TExprNode::TPtr MakeNothingData(TExprContext& ctx, TPositionHandle pos, TStringBuf data);
 } // namespace NYql::NTypeAnnImpl
-

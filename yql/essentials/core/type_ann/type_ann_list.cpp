@@ -8679,4 +8679,3 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 } // namespace NYql::NTypeAnnImpl
-

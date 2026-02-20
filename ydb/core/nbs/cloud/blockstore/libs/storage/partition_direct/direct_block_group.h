@@ -5,7 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
-#include <ydb/core/nbs/cloud/storage/core/libs/corutine/public.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>

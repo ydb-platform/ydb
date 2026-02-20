@@ -1,7 +1,7 @@
 #include "direct_block_group.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
-#include <ydb/core/nbs/cloud/storage/core/libs/corutine/executor.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -27,7 +27,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
 {
-    Executor = NYdb::NBS::TExecutor::Create("DirectBlockGroup");
+    Executor = TExecutor::Create("DirectBlockGroup");
     Executor->Start();
 
     Y_UNUSED(TabletId);
@@ -99,7 +99,7 @@ void TDirectBlockGroup::DoEstablishPersistentBufferConnection(size_t i)
         PersistentBufferConnections[i].Credentials);
 
     const auto& resultOrError = Executor->ResultOrError(std::move(future));
-    if (!NYdb::NBS::HasError(resultOrError)) {
+    if (!HasError(resultOrError)) {
         HandlePersistentBufferConnected(i, resultOrError.GetResult());
     }
     // TODO: add error handling
@@ -112,7 +112,7 @@ void TDirectBlockGroup::DoEstablishDDiskConnection(size_t i)
         DDiskConnections[i].Credentials);
 
     const auto& resultOrError = Executor->ResultOrError(std::move(future));
-    if (!NYdb::NBS::HasError(resultOrError)) {
+    if (!HasError(resultOrError)) {
         HandleDDiskBufferConnected(i, resultOrError.GetResult());
     }
     // TODO: add error handling
@@ -215,7 +215,7 @@ void TDirectBlockGroup::DoWriteBlocksLocal(
         const auto& resultOrError =
             Executor->ResultOrError(std::move(futures[i]));
 
-        if (!NYdb::NBS::HasError(resultOrError)) {
+        if (!HasError(resultOrError)) {
             HandleWritePersistentBufferResult(
                 requestHandler,
                 storageRequestIds[i],
@@ -323,7 +323,7 @@ void TDirectBlockGroup::ProcessSyncQueue()
 
     const auto& resultOrError =
         Executor->ResultOrError(std::move(future));
-    if (!NYdb::NBS::HasError(resultOrError)) {
+    if (!HasError(resultOrError)) {
         HandleSyncWithPersistentBufferResult(
             std::move(syncRequestHandler),
             resultOrError.GetResult());
@@ -385,7 +385,7 @@ void TDirectBlockGroup::RequestBlockErase(
 
 
     const auto& resultOrError = Executor->ResultOrError(std::move(future));
-    if (!NYdb::NBS::HasError(resultOrError)) {
+    if (!HasError(resultOrError)) {
         HandleErasePersistentBufferResult(
             std::move(eraseRequestHandler),
             resultOrError.GetResult());
@@ -493,7 +493,7 @@ void TDirectBlockGroup::DoReadBlocksLocal(
         execSpan.EndOk();
 
         const auto& resultOrError = Executor->ResultOrError(std::move(future));
-        if (!NYdb::NBS::HasError(resultOrError)) {
+        if (!HasError(resultOrError)) {
             HandleReadResult(
                 std::move(requestHandler),
                 storageRequestId,
@@ -518,7 +518,7 @@ void TDirectBlockGroup::DoReadBlocksLocal(
         execSpan.EndOk();
 
         const auto& resultOrError = Executor->ResultOrError(std::move(future));
-        if (!NYdb::NBS::HasError(resultOrError)) {
+        if (!HasError(resultOrError)) {
             HandleReadResult(
                 std::move(requestHandler),
                 storageRequestId,

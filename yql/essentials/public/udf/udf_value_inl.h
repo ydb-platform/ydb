@@ -768,7 +768,7 @@ inline TUnboxedValuePod::TUnboxedValuePod(bool value)
 
 inline NYql::NDecimal::TInt128 TUnboxedValuePod::GetInt128() const {
     UDF_VERIFY(EMarkers::Empty != Raw.GetMarkers(), "Value is empty.");
-    auto v = *reinterpret_cast<const NYql::NDecimal::TInt128*>(&Raw);
+    auto v = ReadUnaligned<NYql::NDecimal::TInt128>(&Raw);
     const auto p = reinterpret_cast<ui8*>(&v);
     p[0xF] = (p[0xE] & 0x80) ? 0xFF : 0x00;
     return v;
@@ -776,7 +776,7 @@ inline NYql::NDecimal::TInt128 TUnboxedValuePod::GetInt128() const {
 
 inline NYql::NDecimal::TUint128 TUnboxedValuePod::GetUint128() const {
     UDF_VERIFY(EMarkers::Empty != Raw.GetMarkers(), "Value is empty.");
-    auto v = *reinterpret_cast<const NYql::NDecimal::TUint128*>(&Raw);
+    auto v = ReadUnaligned<NYql::NDecimal::TUint128>(&Raw);
     const auto p = reinterpret_cast<ui8*>(&v);
     p[0xF] = (p[0xE] & 0x80) ? 0xFF : 0x00;
     return v;
@@ -784,13 +784,13 @@ inline NYql::NDecimal::TUint128 TUnboxedValuePod::GetUint128() const {
 
 inline TUnboxedValuePod::TUnboxedValuePod(NYql::NDecimal::TInt128 value)
 {
-    *reinterpret_cast<NYql::NDecimal::TInt128*>(&Raw) = value;
+    WriteUnaligned<NYql::NDecimal::TInt128>(&Raw, value);
     Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
 }
 
 inline TUnboxedValuePod::TUnboxedValuePod(NYql::NDecimal::TUint128 value)
 {
-    *reinterpret_cast<NYql::NDecimal::TUint128*>(&Raw) = value;
+    WriteUnaligned<NYql::NDecimal::TUint128>(&Raw, value);
     Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
 }
 

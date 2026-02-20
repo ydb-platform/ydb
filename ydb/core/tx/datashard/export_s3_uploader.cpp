@@ -754,18 +754,18 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
-            return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
-        } else if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>) {
-            return NKikimrServices::TActivity::EXPORT_FS_UPLOADER_ACTOR;
-        }
-
-        static_assert(std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>
-             || std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>);
+        return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
     static constexpr TStringBuf LogPrefix() {
-        return "s3"sv;
+        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
+            return "s3"sv;
+        } else if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>) {
+            return "fs"sv;
+        }
+
+        static_assert(std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>
+            || std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>);
     }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(

@@ -52,14 +52,7 @@ protected:
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
-            return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
-        } else if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>) {
-            return NKikimrServices::TActivity::EXPORT_FS_UPLOADER_ACTOR;
-        }
-
-        static_assert(std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>
-            || std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>);
+        return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
     // Adds a file to queue.

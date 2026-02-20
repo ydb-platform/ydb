@@ -93,6 +93,12 @@ enum class EYqlSelectMode {
     Force,
 };
 
+enum class EFlattenAndAggrExprsPersistence {
+    Disable,
+    Auto,
+    Force,
+};
+
 class TContext {
 public:
     TContext(const TLexers& lexers,
@@ -414,7 +420,8 @@ public:
     bool FailOnGroupByExprOverride = false;
     bool EmitUnionMerge = false;
     bool OptimizeSimpleIlike = false;
-    bool PersistableFlattenAndAggrExprs = false;
+    EFlattenAndAggrExprsPersistence FlattenAndAggrExprsPersistence =
+        EFlattenAndAggrExprsPersistence::Disable;
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
     bool StrictWarningAsError = false;

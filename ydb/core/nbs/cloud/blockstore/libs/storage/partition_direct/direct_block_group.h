@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
@@ -67,7 +68,7 @@ private:
         }
     };
 
-    TMutex Lock;
+    TExecutorPtr Executor;
     NActors::TActorSystem* const ActorSystem = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PersistentBufferConnections;
@@ -94,7 +95,8 @@ public:
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
         ui32 blockSize,
         ui64 blocksCount);
-    ~TDirectBlockGroup();
+
+    ~TDirectBlockGroup() override;
 
     void EstablishConnections() override;
 
@@ -109,13 +111,21 @@ public:
         NWilson::TTraceId traceId) override;
 
 private:
+    void DoEstablishPersistentBufferConnection(
+        size_t i, std::shared_ptr<TPendingRequests> connectionsPending);
+
     void HandlePersistentBufferConnected(
         size_t index,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
         std::shared_ptr<TPendingRequests> connectionsPending);
+
+    void DoEstablishDDiskConnection(size_t i);
+
     void HandleDDiskBufferConnected(
         size_t index,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+
+    void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestHandler> requestHandler);
 
     void HandleWritePersistentBufferResult(
         std::shared_ptr<TWriteRequestHandler> requestHandler,
@@ -133,6 +143,8 @@ private:
         std::shared_ptr<TEraseRequestHandler> requestHandler,
         const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult&
             result);
+
+    void DoReadBlocksLocal(std::shared_ptr<TReadRequestHandler> requestHandler);
 
     template <typename TEvent>
     void HandleReadResult(

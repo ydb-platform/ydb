@@ -105,7 +105,7 @@ class THolderFactory;
 struct TComputationContextLLVM {
     const THolderFactory& HolderFactory;
     IStatsRegistry* const Stats;
-    const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues;
+    const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues; // NOLINT(modernize-avoid-c-arrays)
     const NUdf::IValueBuilder* const Builder;
     float UsageAdjustor = 1.f;
     ui32 RssCounter = 0U;

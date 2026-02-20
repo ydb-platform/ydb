@@ -15,13 +15,14 @@ const TString UdfResolver_LoadMetadataImports = "UdfResolver_LoadMetadataImports
 const TString UdfResolver_LoadMetadata = "UdfResolver_LoadMetadata";
 const TString UdfResolver_ContainsModule = "UdfResolver_ContainsModule";
 
+// TODO(vitya-smirnov): Copy-pasted from core/qplayer/url_lister/qplayer_url_lister_manager.
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
     SHA256_Init(&sha);
     SHA256_Update(&sha, str.data(), str.size());
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_Final(hash, &sha);
-    return TString((const char*)hash, sizeof(hash));
+    std::array<unsigned char, SHA256_DIGEST_LENGTH> hash;
+    SHA256_Final(hash.data(), &sha);
+    return TString((const char*)hash.data(), sizeof(hash));
 }
 
 class TResolver: public IUdfResolver {

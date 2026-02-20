@@ -6,6 +6,7 @@
 #include <tuple>
 #include <cmath>
 #include <compare>
+#include <array>
 
 namespace NYql {
 
@@ -424,13 +425,13 @@ public:
 
 private:
     static constexpr TWide Mul(const TWide& lhs, const TWide& rhs) {
-        const TPart lq[] = {GetLowerQuarter(lhs.Lo_), GetUpperQuarter(lhs.Lo_), GetLowerQuarter(lhs.Hi_), GetUpperQuarter(lhs.Hi_)};
-        const TPart rq[] = {GetLowerQuarter(rhs.Lo_), GetUpperQuarter(rhs.Lo_), GetLowerQuarter(rhs.Hi_), GetUpperQuarter(rhs.Hi_)};
+        const auto lq = std::to_array<TPart>({GetLowerQuarter(lhs.Lo_), GetUpperQuarter(lhs.Lo_), GetLowerQuarter(lhs.Hi_), GetUpperQuarter(lhs.Hi_)});
+        const auto rq = std::to_array<TPart>({GetLowerQuarter(rhs.Lo_), GetUpperQuarter(rhs.Lo_), GetLowerQuarter(rhs.Hi_), GetUpperQuarter(rhs.Hi_)});
 
-        const TPart prod0[] = {TPart(lq[0] * rq[0])};
-        const TPart prod1[] = {TPart(lq[0] * rq[1]), TPart(lq[1] * rq[0])};
-        const TPart prod2[] = {TPart(lq[0] * rq[2]), TPart(lq[1] * rq[1]), TPart(lq[2] * rq[0])};
-        const TPart prod3[] = {TPart(lq[0] * rq[3]), TPart(lq[1] * rq[2]), TPart(lq[2] * rq[1]), TPart(lq[3] * rq[0])};
+        const auto prod0 = std::to_array<TPart>({TPart(lq[0] * rq[0])});
+        const auto prod1 = std::to_array<TPart>({TPart(lq[0] * rq[1]), TPart(lq[1] * rq[0])});
+        const auto prod2 = std::to_array<TPart>({TPart(lq[0] * rq[2]), TPart(lq[1] * rq[1]), TPart(lq[2] * rq[0])});
+        const auto prod3 = std::to_array<TPart>({TPart(lq[0] * rq[3]), TPart(lq[1] * rq[2]), TPart(lq[2] * rq[1]), TPart(lq[3] * rq[0])});
 
         const TPart fourthQ = GetLowerQuarter(prod0[0]);
         const TPart thirdQ = GetUpperQuarter(prod0[0]) + GetLowerQuarter(prod1[0]) + GetLowerQuarter(prod1[1]);

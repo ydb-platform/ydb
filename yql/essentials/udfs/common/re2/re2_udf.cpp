@@ -79,7 +79,7 @@ enum EOptionsField: ui32 {
 
 struct TOptionsSchema {
     TType* StructType;
-    ui32 Indices[EOptionsField::Count];
+    std::array<ui32, EOptionsField::Count> Indices;
 };
 
 RE2::Options ExtractOptions(std::string_view pattern, TUnboxedValuePod optionsValue, const TOptionsSchema& schema, bool posix) {
@@ -210,6 +210,7 @@ public:
             }
 
             if (mode == EMode::CAPTURE) {
+                // NOLINTNEXTLINE(modernize-avoid-c-arrays)
                 Captured_ = std::make_unique<StringPiece[]>(Regexp_->NumberOfCapturingGroups() + 1);
             }
 
@@ -300,7 +301,7 @@ private:
     std::unique_ptr<RE2> Regexp_;
     const TRegexpGroups RegexpGroups_;
     EMode Mode_;
-    std::unique_ptr<StringPiece[]> Captured_;
+    std::unique_ptr<StringPiece[]> Captured_; // NOLINT(modernize-avoid-c-arrays)
     const TOptionsSchema OptionsSchema_;
     TSourcePosition Pos_;
     NYql::TLangVersion CurrentLangVersion_;

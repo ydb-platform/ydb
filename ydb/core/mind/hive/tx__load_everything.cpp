@@ -23,6 +23,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         Self->Nodes.clear();
+        Self->NodeSegments.clear();
         Self->TabletCategories.clear();
         Self->Tablets.clear();
         Self->OwnerToTablet.clear();
@@ -351,6 +352,7 @@ public:
                 node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
                 node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
+                node.Segment = Self->NodeSegments.end();
                 if (node.BecomeUpOnRestart) {
                     // If a node must become up on restart, it must have been down
                     // That was not persisted to avoid issues with downgrades
@@ -479,6 +481,7 @@ public:
                     if (it == Self->Nodes.end()) {
                         // Tablet was locked to a node that had no local service
                         it = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first;
+                        it->second.Segment = Self->NodeSegments.end();
                     }
                     it->second.LockedTablets.insert(&tablet);
                     if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
@@ -830,6 +833,11 @@ public:
             }
         }
         BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
+
+        Self->NodeSegments.clear();
+        for (auto& [_, node] : Self->Nodes) {
+            Self->UpdateNodeSegments(&node);
+        }
 
         TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
 

@@ -2453,6 +2453,25 @@ Y_UNIT_TEST(DeclareDecimalParameter) {
     UNIT_ASSERT(res.Root);
 }
 
+Y_UNIT_TEST(OptionalDecimal) {
+    const auto optionality = [](TStringBuf query) -> size_t {
+        NYql::TAstParseResult res = SqlToYql(TString(query));
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive stat = {"OptionalType"};
+        VerifyProgram(res, stat, {});
+        return stat["OptionalType"];
+    };
+
+    UNIT_ASSERT_EQUAL(0, optionality(R"sql(SELECT FormatType(Decimal(15, 6)))sql"));
+    UNIT_ASSERT_EQUAL(1, optionality(R"sql(SELECT FormatType(Decimal(15, 6)?))sql"));
+    UNIT_ASSERT_EQUAL(2, optionality(R"sql(SELECT FormatType(Decimal(15, 6)??))sql"));
+    UNIT_ASSERT_EQUAL(3, optionality(R"sql(SELECT FormatType(Decimal(15, 6)???))sql"));
+    UNIT_ASSERT_EQUAL(1, optionality(R"sql(SELECT FormatType(Optional<Decimal(15, 6)>))sql"));
+    UNIT_ASSERT_EQUAL(2, optionality(R"sql(SELECT FormatType(Optional<Decimal(15, 6)>?))sql"));
+    UNIT_ASSERT_EQUAL(3, optionality(R"sql(SELECT FormatType(Optional<Decimal(15, 6)>??))sql"));
+}
+
 Y_UNIT_TEST(SimpleGroupBy) {
     NYql::TAstParseResult res = SqlToYql("select count(1),z from plato.Input group by key as z order by z;");
     UNIT_ASSERT(res.Root);
@@ -11900,6 +11919,57 @@ Y_UNIT_TEST(LangVerBefore202504) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(InsideLambda) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res;
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> { RETURN (SELECT * FROM $name); };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Reading a table in a pure context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> { RETURN 1 + (SELECT * FROM $name); };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Reading a table in a pure context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> {
+            $x = 1 + (SELECT * FROM $name);
+            RETURN 1 + $x;
+        };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Reading a table in a pure context");
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> {
+            $x = 1 + (SELECT $name);
+            RETURN 1 + $x;
+        };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $f = ($name) -> { RETURN (SELECT $name); };
+        SELECT $f('1');
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 } // Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery)
 
 Y_UNIT_TEST_SUITE(YqlSelect) {
@@ -12724,6 +12794,57 @@ Y_UNIT_TEST(NamedNodeSubqueryReuse) {
     TWordCountHive stat = {"YqlSelect"};
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 1);
+}
+
+Y_UNIT_TEST(SelectOpUnion) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        (SELECT 1 AS a) UNION (SELECT 2 AS a);
+        (SELECT 1 AS a) UNION DISTINCT (SELECT 2 AS a);
+        (SELECT 1 AS a) UNION ALL (SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
+Y_UNIT_TEST(SelectOpExcept) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        (SELECT 1 AS a) EXCEPT (SELECT 2 AS a);
+        (SELECT 1 AS a) EXCEPT DISTINCT (SELECT 2 AS a);
+        (SELECT 1 AS a) EXCEPT ALL (SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
+Y_UNIT_TEST(SelectOpIntersect) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        (SELECT 1 AS a) INTERSECT (SELECT 2 AS a);
+        (SELECT 1 AS a) INTERSECT DISTINCT (SELECT 2 AS a);
+        (SELECT 1 AS a) INTERSECT ALL (SELECT 2 AS a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

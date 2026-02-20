@@ -157,7 +157,7 @@ void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
 
 void InitSignals()
 {
-    TSignalHandlerDesc handlerDescs[] = {
+    auto handlerDescs = std::to_array<TSignalHandlerDesc>({
         {SIGTERM, SignalHandler},
         {SIGINT, SignalHandler},
         {SIGQUIT, SignalHandler},
@@ -167,14 +167,15 @@ void InitSignals()
         {SIGUSR1, SignalHandler},
         {SIGCHLD, SignalHandler},
 #endif
-        {-1, nullptr}};
+        {-1, nullptr},
+    });
 
-    SetSignalHandlers(handlerDescs);
+    SetSignalHandlers(handlerDescs.data());
 }
 
 void InitSignalsWithSelfPipe()
 {
-    TSignalHandlerDesc handlerDescs[] = {
+    auto handlerDescs = std::to_array<TSignalHandlerDesc>({
         {SIGTERM, SignalHandlerWithSelfPipe},
         {SIGINT, SignalHandlerWithSelfPipe},
         {SIGQUIT, SignalHandlerWithSelfPipe},
@@ -184,13 +185,14 @@ void InitSignalsWithSelfPipe()
         {SIGUSR1, SignalHandlerWithSelfPipe},
         {SIGCHLD, SignalHandlerWithSelfPipe},
 #endif
-        {-1, nullptr}};
+        {-1, nullptr},
+    });
 
     TPipe::Pipe(SignalPipeR, SignalPipeW);
     SetNonBlock(SignalPipeR.GetHandle());
     SetNonBlock(SignalPipeW.GetHandle());
 
-    SetSignalHandlers(handlerDescs);
+    SetSignalHandlers(handlerDescs.data());
 }
 
 void CatchInterruptSignal(bool doCatch) {

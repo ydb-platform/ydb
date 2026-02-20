@@ -4111,6 +4111,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
             return YqlSelectOrLegacy(
                 [&]() -> TNodeResult {
                     TSqlExpression expr(Ctx_, Mode_);
+                    expr.SetPure(IsPure_);
                     expr.SetYqlSelectProduced(true);
 
                     TNodeResult node = expr.Build(alt);
@@ -4126,6 +4127,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
                 },
                 [&]() -> TNodePtr {
                     TSqlExpression expr(Ctx_, Mode_);
+                    expr.SetPure(IsPure_);
                     expr.SetYqlSelectProduced(false);
 
                     TNodePtr result = Unwrap(expr.BuildSourceOrNode(alt));
@@ -4150,6 +4152,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
                 },
                 [&]() -> TNodePtr {
                     TSqlSelect select(Ctx_, Mode_);
+                    select.SetPure(IsPure_);
 
                     TPosition pos;
                     TSourcePtr source = select.Build(alt, pos);

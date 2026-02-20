@@ -114,20 +114,14 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             .WithBody(details.template GetValue<typename TDetailsTable::Body>())
             .WithSource(source);
 
-        TMaybe<TString> userSID;
-        TMaybe<TString> userTraceId;
+        NACLib::TUserContextBuilder userCtxBuilder;
         if (details.template HaveValue<typename TDetailsTable::UserSID>()) {
-            userSID = details.template GetValue<typename TDetailsTable::UserSID>();
+            userCtxBuilder.WithUserSID(details.template GetValue<typename TDetailsTable::UserSID>());
         }
         if (details.template HaveValue<typename TDetailsTable::UserTraceId>()) {
-            userTraceId = details.template GetValue<typename TDetailsTable::UserTraceId>();
+            userCtxBuilder.WithUserTraceId(details.template GetValue<typename TDetailsTable::UserTraceId>());
         }
-
-        if (userSID.Defined() || userTraceId.Defined()) {
-            auto userCtx = new NACLib::TUserContext(
-                userSID.GetOrEmplace(BUILTIN_ACL_CDC_WITHOUT_USER_SID), userTraceId.GetOrEmplace(""));
-            builder.WithUserCtx(userCtx);
-        }
+        builder.WithUserCtx(userCtxBuilder.Build());
 
         if constexpr (HaveLock) {
             Y_ENSURE(commited);

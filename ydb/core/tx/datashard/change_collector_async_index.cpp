@@ -270,7 +270,7 @@ void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId&
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
     Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body, 
-        new NACLib::TUserContext(BUILTIN_ACL_CDC_WITHOUT_USER_SID, ""));
+        NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build());
 }
 
 void TAsyncIndexChangeCollector::Clear() {

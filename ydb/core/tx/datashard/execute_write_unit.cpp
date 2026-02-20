@@ -253,7 +253,10 @@ public:
         const auto operationType = validatedOperation.GetOperationType();
         const auto userSID = validatedOperation.GetUserSID();
         const auto userTraceId = validatedOperation.GetUserTraceId();
-        const auto userCtx = new NACLib::TUserContext(userSID, userTraceId);
+        const auto userCtx = NACLib::TUserContextBuilder()
+                        .WithUserSID(userSID)
+                        .WithUserTraceId(userTraceId)
+                        .Build();
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;

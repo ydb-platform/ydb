@@ -186,7 +186,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                 .WithPathId(streamPathId)
                 .WithTableId(tableId)
                 .WithSchemaVersion(newInfo->GetTableSchemaVersion())
-                .WithUserCtx(new NACLib::TUserContext(BUILTIN_ACL_CDC_WITHOUT_USER_SID,""))
+                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build())
                 .Build();
 
             const auto& record = *recordPtr;

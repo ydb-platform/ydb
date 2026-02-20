@@ -3363,7 +3363,10 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
             datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
         }
 
-        auto userCtx = new NACLib::TUserContext(ev->Get()->Record.GetUserSID(), ev->Get()->Record.GetUserTraceId());
+        auto userCtx = NACLib::TUserContextBuilder()
+            .WithUserSID(ev->Get()->Record.GetUserSID())
+            .WithUserTraceId(ev->Get()->Record.GetUserTraceId())
+            .Build();
         Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), userCtx), 
             ctx );
     }
@@ -3458,9 +3461,11 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                         datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
                     }
 
-                    auto userCtx = new NACLib::TUserContext(event->Get()->Record.GetUserSID(), event->Get()->Record.GetUserTraceId());
-                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), 
-                        userCtx), ctx);
+                    auto userCtx = NACLib::TUserContextBuilder()
+                        .WithUserSID(event->Get()->Record.GetUserSID())
+                        .WithUserTraceId(event->Get()->Record.GetUserTraceId())
+                        .Build();
+                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), userCtx), ctx);
                     return;
                 }
                 case NEvents::TDataEvents::TEvWrite::EventType: {

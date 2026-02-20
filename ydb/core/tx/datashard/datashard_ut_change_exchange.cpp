@@ -1624,7 +1624,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"user":"user@test","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
             R"({"user":"user@test","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
             R"({"user":"user@test","erase":{},"key":[1],"oldImage":{"value":100}})",
-        }, true, new NACLib::TUserContext("user@test", ""));
+        }, true, NACLib::TUserContextBuilder().WithUserSID("user@test").Build());
     }
 
      Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserDisabled, PqRunner, YdsRunner, TopicRunner) {
@@ -1648,7 +1648,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
             R"({"update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
             R"({"erase":{},"key":[1],"oldImage":{"value":100}})",
-        }, true, new NACLib::TUserContext("user@test", ""));
+        }, true, NACLib::TUserContextBuilder().WithUserSID("user@test").Build());
     }
 
     Y_UNIT_TEST(NewAndOldImagesLogDebezium) {
@@ -1676,7 +1676,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST(NewAndOldImagesLogDebeziumUser) {
-        auto userCtx = new NACLib::TUserContext("user@test", "");
+        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("user@test").Build();
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1701,7 +1701,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserDisabled) {
-        auto userCtx = new NACLib::TUserContext("user@test", "");
+        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("user@test").Build();
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "Stream", false), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1915,7 +1915,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST_TRIPLET(DocApiUser, PqRunner, YdsRunner, TopicRunner) {
-        auto userCtx = new NACLib::TUserContext("user@test","");
+        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("user@test").Build();
         TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson), {R"(
             UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
                 1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
@@ -1945,7 +1945,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST_TRIPLET(DocApiUserDisabled, PqRunner, YdsRunner, TopicRunner) {
-        auto userCtx = new NACLib::TUserContext("user@test","");
+        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("user@test").Build();
         TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson, "Stream", false), {R"(
             UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
                 1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')

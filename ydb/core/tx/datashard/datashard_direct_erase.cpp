@@ -146,7 +146,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         if (auto collector = params.GetChangeCollector()) {
-            auto userCtx = new NACLib::TUserContext(BUILTIN_ACL_CDC_TTL, "");
+            auto userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_TTL).Build();
             if (!volatileDependencies.empty()) {
                 if (!params.GlobalTxId) {
                     throw TNeedGlobalTxId();

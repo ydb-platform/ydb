@@ -137,7 +137,7 @@ public:
 
     NACLib::TUserContext::TPtr GetUserCtx() const {
         TString userSID = (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
-        return new NACLib::TUserContext(userSID, "");
+        return NACLib::TUserContextBuilder().WithUserSID(userSID).Build();
     }
 
     bool CheckExecutionComplete() {

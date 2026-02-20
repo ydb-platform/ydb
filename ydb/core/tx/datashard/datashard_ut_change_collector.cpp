@@ -102,7 +102,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
                 .WithPathId(std::get<4>(record))
                 .WithSchemaVersion(std::get<5>(record))
                 .WithBody(std::get<2>(detail))
-                .WithUserCtx(new NACLib::TUserContext(std::get<3>(detail),""))
+                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(std::get<3>(detail)).Build())
                 .Build()
         );
     }
@@ -857,7 +857,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
-        Run(sharedCacheConfig, path, opts, new NACLib::TUserContext(BUILTIN_ACL_CDC_WITHOUT_USER_SID, ""), streams, queries, expectedRecords);
+        Run(sharedCacheConfig, path, opts, NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build(), streams, queries, expectedRecords);
     }
 
     const NSharedCache::TSharedCacheConfig DefaultCacheParams() {
@@ -1034,7 +1034,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(PassUserSID) {
-        NACLib::TUserContext::TPtr userCtx = new NACLib::TUserContext("cdcuser@test","");
+        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("cdcuser@test").Build();
         Run("/Root/path", SimpleTable(), userCtx, TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 20);",

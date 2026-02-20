@@ -47,10 +47,10 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     }
 
     if (RequestCtx!=nullptr && RequestCtx->GetInternalToken()!=nullptr) {
-        UserCtx = new NACLib::TUserContext(RequestCtx->GetInternalToken()->GetUserSID(), "");
+        UserCtx = NACLib::TUserContextBuilder().WithUserSID(RequestCtx->GetInternalToken()->GetUserSID()).Build();
     }
     else {
-        UserCtx = new NACLib::TUserContext(BUILTIN_ACL_CDC_WITHOUT_USER_SID, "");
+        UserCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build();
     }
 }
 

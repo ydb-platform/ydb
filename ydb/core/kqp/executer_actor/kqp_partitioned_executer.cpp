@@ -587,7 +587,7 @@ private:
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc),
-            .UserCtx = new NACLib::TUserContext(UserToken->GetUserSID(), "")
+            .UserCtx = NACLib::TUserContextBuilder().WithUserSID(UserToken->GetUserSID()).Build()
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));

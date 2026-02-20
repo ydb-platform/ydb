@@ -333,8 +333,7 @@ public:
                 .WithSchemaVersion(table->GetTableSchemaVersion())
                 .WithBody(body.SerializeAsString())
                 .WithSource(TChangeRecord::ESource::InitialScan)
-                .WithUserCtx(new NACLib::TUserContext(BUILTIN_ACL_CDC_INITIAL_SCAN, ""))
-                .Build();
+                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_INITIAL_SCAN).Build()).Build();
 
             const auto& record = *recordPtr;
             Self->PersistChangeRecord(db, record);

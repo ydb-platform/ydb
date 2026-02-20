@@ -59,10 +59,13 @@ private:
         return RequiresKey<TEvResponse>::value;
     }
 
-    static void FsyncParentDir(const TString& filePath) {
-        TFsPath parent = TFsPath(filePath).Parent();
-        TFile dirFd(parent.GetPath(), RdOnly | Seq);
+    static void FsyncParentDir(const TFsPath& fsPath) {
+        TFile dirFd(fsPath.Parent().GetPath(), RdOnly | Seq);
         dirFd.Flush();
+    }
+
+    static void FsyncParentDir(const TString& filePath) {
+        FsyncParentDir(TFsPath(filePath));
     }
 
     template<typename TEvResponse>
@@ -211,7 +214,7 @@ public:
             TMultipartUploadSession session(key);
             session.File.Write(body.data(), body.size());
             session.File.Flush();
-            FsyncParentDir(key);
+            FsyncParentDir(fsPath);
             session.File.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {

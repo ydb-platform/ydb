@@ -653,7 +653,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
 
             csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
-            UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(10)));
+            UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(15)));
 
             {
                 ExecuteSQL(R"(

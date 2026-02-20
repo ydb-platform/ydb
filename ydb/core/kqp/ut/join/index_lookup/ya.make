@@ -1,9 +1,9 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(200)
+SPLIT_FACTOR(60)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -19,11 +19,10 @@ IF(SANITIZER_TYPE == "memory")
 ENDIF()
 
 SRCS(
-    kqp_block_hash_join_ut.cpp
-    kqp_join_order_ut.cpp
-    kqp_join_topology_generator.cpp
-    kqp_join_topology_ut.cpp
-    kqp_benches_ut.cpp
+    kqp_complex_join_query_ut.cpp
+    kqp_flip_join_ut.cpp
+    kqp_index_lookup_join_ut.cpp
+    kqp_join_ut.cpp
 )
 
 PEERDIR(
@@ -33,17 +32,6 @@ PEERDIR(
     yql/essentials/udfs/common/digest
 )
 
-
-DATA (
-    arcadia/ydb/core/kqp/ut/join
-    arcadia/ydb/library/benchmarks/queries
-    arcadia/ydb/library/benchmarks/gen_queries/consts.yql
-)
-
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE_FOR_TESTS(
-    index_lookup
-)

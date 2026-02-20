@@ -53,11 +53,8 @@ namespace NYdb::NConsoleClient {
     void TSqsWorkloadScenario::InitSqsClient() {
         Aws::Client::ClientConfiguration sqsClientConfiguration;
 
-        if (Endpoint.Defined()) {
-            sqsClientConfiguration.endpointOverride =
-                Aws::String(Endpoint->c_str(), Endpoint->size());
-        }
-
+        sqsClientConfiguration.endpointOverride =
+            Aws::String(Endpoint.c_str(), Endpoint.size());
         sqsClientConfiguration.scheme = Aws::Http::Scheme::HTTP;
         sqsClientConfiguration.httpRequestTimeoutMs = RequestTimeoutMs;
         sqsClientConfiguration.executor =

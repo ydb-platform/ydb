@@ -16,6 +16,9 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         // Common params
+        config.Opts->AddLongOption("http-endpoint", "HTTP endpoint.")
+            .Required()
+            .StoreResult(&Scenario.Endpoint);
         config.Opts->AddLongOption("queue-name", "Queue URL.")
             .Hidden()
             .StoreResult(&Scenario.QueueName);
@@ -25,9 +28,6 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("consumer", "YDB consumer name.")
             .DefaultValue("sqs-workload-consumer")
             .StoreResult(&Scenario.Consumer);
-        config.Opts->AddLongOption("http-endpoint", "HTTP endpoint.")
-            .DefaultValue("http://localhost:8773/Root/db1")
-            .StoreResult(&Scenario.Endpoint);
         config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
             .DefaultValue(60)
             .StoreResult(&Scenario.TotalSec);

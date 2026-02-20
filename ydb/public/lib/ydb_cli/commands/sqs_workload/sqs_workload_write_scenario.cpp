@@ -59,7 +59,7 @@ namespace NYdb::NConsoleClient {
 
         DestroySqsClient();
 
-        if (AnyErrors()) {
+        if (AnyErrors() || params.StatsCollector->GetTotalWriteMessages() == 0) {
             return EXIT_FAILURE;
         }
 

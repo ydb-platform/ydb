@@ -23,6 +23,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/core/mon/mon.h>
@@ -355,6 +356,10 @@ public:
                 TActivationContext::ActorSystem(), SelfId());
         }
 
+        KqpQueryTextCacheService = TActivationContext::Register(CreateKqpQueryTextCacheService());
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            MakeKqpQueryTextCacheServiceId(SelfId().NodeId()), KqpQueryTextCacheService);
+
         KqpRmServiceActor = MakeKqpRmServiceID(SelfId().NodeId());
 
         KqpTempTablesAgentActor = Register(new TKqpTempTablesAgentActor());
@@ -447,6 +452,7 @@ public:
 
         Send(KqpWorkloadService, new TEvents::TEvPoison());
         Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
+        Send(KqpQueryTextCacheService, new TEvents::TEvPoison());
         if (RowDispatcherService) {
             Send(RowDispatcherService, new TEvents::TEvPoison());
         }
@@ -497,6 +503,8 @@ public:
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+        InitSharedReading();
+        InitCheckpointStorage();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -1822,7 +1830,7 @@ private:
 
     void InitSharedReading() {
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-        if (!AppData()->FeatureFlags.GetEnableStreamingQueries() || !FederatedQuerySetup) {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || RowDispatcherService) {
             return;
         }
 
@@ -1838,7 +1846,7 @@ private:
             AppData()->Mon,
             Counters->GetKqpCounters(),
             {},
-            AppData()->FeatureFlags.GetEnableStreamingQueriesCounters());
+            FeatureFlags.GetEnableStreamingQueriesCounters());
 
         RowDispatcherService = TActivationContext::Register(rowDispatcher.release());
         TActivationContext::ActorSystem()->RegisterLocalService(
@@ -1846,7 +1854,7 @@ private:
     }
 
     void InitCheckpointStorage() {
-        if (!FederatedQuerySetup || !AppData()->FeatureFlags.GetEnableStreamingQueries()) {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || CheckpointStorageService) {
             return;
         }
 
@@ -1909,6 +1917,7 @@ private:
     TActorId WhiteBoardService;
     TActorId KqpWorkloadService;
     TActorId KqpComputeSchedulerService;
+    TActorId KqpQueryTextCacheService;
     TActorId RowDispatcherService;
     TActorId CheckpointStorageService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;

@@ -15,6 +15,7 @@ namespace NPython {
 
 namespace {
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 PyMethodDef ModuleMethods[] = {
     {nullptr, nullptr, 0, nullptr} /* sentinel */
 };

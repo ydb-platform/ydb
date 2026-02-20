@@ -2967,7 +2967,7 @@ private:
                     case 'b': {
                         static constexpr size_t Size = 3;
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            static constexpr std::string_view Mp[]{
+                            static constexpr auto Mp = std::to_array<std::string_view>({
                                 "Jan",
                                 "Feb",
                                 "Mar",
@@ -2979,7 +2979,8 @@ private:
                                 "Sep",
                                 "Oct",
                                 "Nov",
-                                "Dec"};
+                                "Dec",
+                            });
                             auto month = GetMonth<TM64ResourceName>(value);
                             Y_ENSURE(month > 0 && month <= sizeof(Mp) / sizeof(Mp[0]), "Invalid month value");
                             std::memcpy(out, Mp[month - 1].data(), Size);
@@ -2990,7 +2991,7 @@ private:
                     }
                     case 'B': {
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            static constexpr std::string_view Mp[]{
+                            static constexpr auto Mp = std::to_array<std::string_view>({
                                 "January",
                                 "February",
                                 "March",
@@ -3002,7 +3003,8 @@ private:
                                 "September",
                                 "October",
                                 "November",
-                                "December"};
+                                "December",
+                            });
                             auto month = GetMonth<TM64ResourceName>(value);
                             Y_ENSURE(month > 0 && month <= sizeof(Mp) / sizeof(Mp[0]), "Invalid month value");
                             const std::string_view monthFullName = Mp[month - 1];

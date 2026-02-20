@@ -34,7 +34,7 @@ public:
     void AdjustLimit(i64 /*adjustedLimit*/) override
     { }
 
-    i64 GetLimit()  const override
+    i64 GetLimit() const override
     {
         return std::numeric_limits<i64>::max();
     }

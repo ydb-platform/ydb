@@ -1904,14 +1904,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                                    0);
 
         std::atomic<bool> ready = true;
+        std::atomic<bool> abandoned = false;
 
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready);
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
 
         TDeferredActions actions;
 

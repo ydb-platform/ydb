@@ -1,0 +1,86 @@
+diff --git a/tcmalloc/tcmalloc.cc b/tcmalloc/tcmalloc.cc
+index 4335459..7332d4f 100644
+--- a/tcmalloc/tcmalloc.cc
++++ b/tcmalloc/tcmalloc.cc
+@@ -352,6 +352,7 @@ void TCMallocPreFork() {
+     Static::cpu_cache().AcquireInternalLocks();
+   }
+   Static::transfer_cache().AcquireInternalLocks();
++  Static::sharded_transfer_cache().AcquireInternalLocks();
+   Static::guardedpage_allocator().AcquireInternalLocks();
+   release_lock.Lock();
+   pageheap_lock.Lock();
+@@ -385,6 +386,7 @@ void TCMallocPostFork() {
+   Static::guardedpage_allocator().ReleaseInternalLocks();
+   release_lock.Unlock();
+   Static::transfer_cache().ReleaseInternalLocks();
++  Static::sharded_transfer_cache().ReleaseInternalLocks();
+   if (Static::CpuCacheActive()) {
+     Static::cpu_cache().ReleaseInternalLocks();
+   }
+diff --git a/tcmalloc/transfer_cache.h b/tcmalloc/transfer_cache.h
+index 8bc9eee..dac6327 100644
+--- a/tcmalloc/transfer_cache.h
++++ b/tcmalloc/transfer_cache.h
+@@ -112,6 +112,8 @@ class BackingTransferCache {
+   void InsertRange(absl::Span<void *> batch) const;
+   [[nodiscard]] int RemoveRange(absl::Span<void *> batch) const;
+   int size_class() const { return size_class_; }
++  void AcquireInternalLocks() {}
++  void ReleaseInternalLocks() {}
+ 
+  private:
+   int size_class_ = -1;
+@@ -163,6 +165,23 @@ class ShardedTransferCacheManagerBase {
+     }
+   }
+ 
++  void AcquireInternalLocks() {
++    for (int shard = 0; shard < num_shards_; ++shard) {
++      // We can't lock or unlock uninitialized shards, so we ensure they all exist.
++      // We do it the exact same way get_cache does.
++      Shard& sh = shards_[shard];
++      absl::base_internal::LowLevelCallOnce(
++        &sh.once_flag, [this, &sh]() { InitShard(sh); });
++      sh.AcquireInternalLocks();
++    }
++  }
++
++  void ReleaseInternalLocks() {
++    for (int shard = 0; shard < num_shards_; ++shard) {
++      shards_[shard].ReleaseInternalLocks();
++    }
++  }
++
+   bool should_use(int size_class) const {
+     return active_for_class_[size_class];
+   }
+@@ -330,6 +349,19 @@ class ShardedTransferCacheManagerBase {
+       // explicitly and atomically here.
+       initialized.store(false, std::memory_order_release);
+     }
++
++    void AcquireInternalLocks() {
++      for (int size_class = 0; size_class < kNumClasses; ++size_class) {
++        transfer_caches[size_class].AcquireInternalLocks();
++      }
++    }
++
++    void ReleaseInternalLocks() {
++      for (int size_class = 0; size_class < kNumClasses; ++size_class) {
++        transfer_caches[size_class].ReleaseInternalLocks();
++      }
++    }
++
+     TransferCache *transfer_caches = nullptr;
+     absl::once_flag once_flag;
+     // We need to be able to tell whether a given shard is initialized, which
+@@ -604,6 +636,8 @@ class TransferCacheManager {
+ struct ShardedTransferCacheManager {
+   constexpr ShardedTransferCacheManager(std::nullptr_t, std::nullptr_t) {}
+   static constexpr void Init() {}
++  void AcquireInternalLocks() {}
++  void ReleaseInternalLocks() {}
+   static constexpr bool should_use(int size_class) { return false; }
+   [[nodiscard]] static constexpr void* Pop(int size_class) { return nullptr; }
+   static constexpr void Push(int size_class, void* ptr) {}

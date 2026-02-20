@@ -32,7 +32,7 @@ namespace NKikimr {
 namespace NKqp {
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
-std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(ctx);
     Y_UNUSED(props);
@@ -113,7 +113,7 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
 
     if (pushLeft.size()) {
         auto leftExpr = MakeConjunction(pushLeft, props.PgSyntax);
-        leftInput = std::make_shared<TOpFilter>(leftInput, input->Pos, leftExpr);
+        leftInput = MakeIntrusive<TOpFilter>(leftInput, input->Pos, leftExpr);
     }
 
     if (pushRight.size()) {
@@ -128,14 +128,14 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
             }
             if (predicatesForRightSide.size()) {
                 auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
-                rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightExpr);
+                rightInput = MakeIntrusive<TOpFilter>(rightInput, input->Pos, rightExpr);
                 join->JoinKind = "Inner";
             } else if (!pushLeft.size()) {
                 return input;
             }
         } else {
             auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
-            rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightExpr);
+            rightInput = MakeIntrusive<TOpFilter>(rightInput, input->Pos, rightExpr);
         }
     }
 
@@ -144,7 +144,7 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
 
     if (topLevelPreds.size()) {
         auto topFilterExpr = MakeConjunction(topLevelPreds, props.PgSyntax);
-        output =  std::make_shared<TOpFilter>(join, input->Pos, topFilterExpr);
+        output =  MakeIntrusive<TOpFilter>(join, input->Pos, topFilterExpr);
     } else {
         output = join;
     }

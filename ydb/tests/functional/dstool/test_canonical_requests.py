@@ -218,6 +218,24 @@ class Test(TestBase):
             self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
         ]
 
+    def test_group_take_snapshot(self):
+        retry_assertions(self.check_vdisks_state_ok)
+
+        def check_vdisk_state_error():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            vslots = [vslot for vslot in base_config.VSlot if vslot.VSlotId.NodeId == 1 and vslot.VSlotId.PDiskId == 1]
+            assert len(vslots) == 1
+            vslot = vslots[0]
+            assert vslot.GroupId == 0
+            assert vslot.VDiskMetrics.State == EVDiskState.PDiskError
+
+        return [
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_1.bin'),
+            self._trace('pdisk', 'stop', '--node-id=1', '--pdisk-id=1'),
+            retry_assertions(check_vdisk_state_error, timeout_seconds=20),
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_2.bin'),
+        ]
+
     def test_infer_pdisk_slot_count(self):
         dynconfig_client = DynConfigClient(self.host, self.grpc_port)
 

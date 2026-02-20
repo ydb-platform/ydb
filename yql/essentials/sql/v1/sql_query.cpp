@@ -3757,6 +3757,26 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         return TNodePtr();
     }),
 
+    TableElemExt("FailOnNonPersistableFlattenAndAggrExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+
+        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                ctx.Pos(),
+                "FailOnNonPersistableFlattenAndAggrExprs",
+                MakeLangVersion(2025, 03)))
+        {
+            return Nothing();
+        }
+
+        if (!values.empty()) {
+            query.Error() << "Expected no pragma arguments";
+            return Nothing();
+        }
+
+        ctx.FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Force;
+        return TNodePtr();
+    }),
+
     // TMaybe<bool> fields.
     PAIRED_TABLE_ELEM("AnsiInForEmptyOrNullableItemsCollections", AnsiInForEmptyOrNullableItemsCollections),
     PAIRED_TABLE_ELEM("AnsiRankForNullableKeys", AnsiRankForNullableKeys),
@@ -4290,11 +4310,31 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     if (query.Alt_case() == TRule_sql_query::kAltSqlQuery1) {
         size_t statementNumber = 0;
         const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
-        if (!Statement(blocks, statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2(), statementNumber++)) {
+        auto checkExplainToken = [&](const auto& stmt) -> bool {
+            if (stmt.HasBlock1()) {
+                auto const& provider = Ctx_.Scoped->CurrService;
+                if (provider == YdbProviderName || provider == KikimrProviderName) {
+                    Ctx_.Error() << "EXPLAIN is not supported by " << Ctx_.Scoped->CurrService << " provider.";
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        const auto& firstStmt = statements.GetRule_sql_stmt2();
+        if (!checkExplainToken(firstStmt)) {
+            return nullptr;
+        }
+
+        if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), statementNumber++)) {
             return nullptr;
         }
         for (auto block : statements.GetBlock3()) {
-            if (!Statement(blocks, block.GetRule_sql_stmt2().GetRule_sql_stmt_core2(), statementNumber++)) {
+            const auto& stmt = block.GetRule_sql_stmt2();
+            if (!checkExplainToken(stmt)) {
+                return nullptr;
+            }
+            if (!Statement(blocks, stmt.GetRule_sql_stmt_core2(), statementNumber++)) {
                 return nullptr;
             }
         }

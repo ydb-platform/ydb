@@ -8,9 +8,7 @@
 
 #include <arrow/compute/kernel.h>
 
-namespace NKikimr {
-
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using TFunctionPtr = NUdf::TUnboxedValuePod (*)(const NUdf::TUnboxedValuePod* args);
 
@@ -154,5 +152,4 @@ public:
     virtual TVector<std::pair<TString, const TKernelFamily*>> GetAllKernelFamilies() const = 0;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

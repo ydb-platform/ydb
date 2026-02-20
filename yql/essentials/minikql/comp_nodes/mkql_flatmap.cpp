@@ -966,11 +966,13 @@ public:
 
     private:
         bool Next(NUdf::TUnboxedValue& value) final {
+            NUdf::TUnboxedValue item;
             for (;;) {
-                if (!Iter.Next(Item->RefValue(CompCtx))) {
+                if (!Iter.Next(item)) {
                     return false;
                 }
 
+                Item->SetValue(CompCtx, std::move(item));
                 if (auto newItem = NewItem->GetValue(CompCtx)) {
                     value = newItem.Release().template GetOptionalValueIf<MultiOptional>();
                     return true;
@@ -1251,16 +1253,20 @@ protected:
         const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
+        const auto itemPtr = new AllocaInst(valueType, 0U, "items_ptr", block);
+        new StoreInst(ConstantInt::get(valueType, 0), itemPtr, block);
+
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
         const auto status = IsInputStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
 
         const auto icmp = IsInputStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
         BranchInst::Create(good, done, icmp, block);
         block = good;
+
+        codegenItem->CreateSetValue(ctx, block, itemPtr);
 
         const auto resItem = GetNodeValue(NewItem, ctx, block);
 

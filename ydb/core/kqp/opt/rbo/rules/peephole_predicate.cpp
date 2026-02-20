@@ -6,7 +6,7 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-bool IsSuitableToApplyPeephole(const std::shared_ptr<IOperator>& input) {
+bool IsSuitableToApplyPeephole(const TIntrusivePtr<IOperator>& input) {
     if (input->Kind != EOperator::Filter) {
         return false;
     }
@@ -29,7 +29,7 @@ bool IsSuitableToApplyPeephole(const std::shared_ptr<IOperator>& input) {
 namespace NKikimr {
 namespace NKqp {
 
-std::shared_ptr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+TIntrusivePtr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
     if (!IsSuitableToApplyPeephole(input)) {
         return input;
@@ -77,7 +77,7 @@ std::shared_ptr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const std::sh
     // clang-format on
 
     auto newFilterExpr = TExpression(newLambda, filter->FilterExpr.Ctx, filter->FilterExpr.PlanProps);
-    return std::make_shared<TOpFilter>(filter->GetInput(), input->Pos, newFilterExpr);
+    return MakeIntrusive<TOpFilter>(filter->GetInput(), input->Pos, newFilterExpr);
 }
 }
 }

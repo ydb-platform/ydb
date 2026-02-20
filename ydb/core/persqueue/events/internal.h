@@ -226,7 +226,8 @@ struct TEvPQ {
         EvMLPPurgeRequest,
         EvMLPPurgeResponse,
         EvMLPConsumerStatus,
-        EvEnd
+        EvUpdateReadMetrics,
+        EvEnd,
     };
 
     struct TEvHandleWriteResponse : TEventLocal<TEvHandleWriteResponse, EvHandleWriteResponse> {
@@ -715,6 +716,16 @@ struct TEvPQ {
         {}
 
         TActorId Sender;
+    };
+
+    struct TEvUpdateReadMetrics : TEventLocal<TEvUpdateReadMetrics, EvUpdateReadMetrics> {
+        TEvUpdateReadMetrics(const TString& clientId, TDuration inFlightLimitReachedDuration)
+            : ClientId(clientId)
+            , InFlightLimitReachedDuration(inFlightLimitReachedDuration)
+        {}
+
+        TString ClientId;
+        TDuration InFlightLimitReachedDuration;
     };
 
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {
@@ -1414,12 +1425,12 @@ struct TEvPQ {
     struct TEvMLPReadRequest : TEventPB<TEvMLPReadRequest, NKikimrPQ::TEvMLPReadRequest, EvMLPReadRequest> {
         TEvMLPReadRequest() = default;
 
-        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant waitDeadline, TInstant visibilityDeadline, ui32 maxNumberOfMessages) {
+        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant waitDeadline, TDuration processingTimeout, ui32 maxNumberOfMessages) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
             Record.SetWaitDeadlineMilliseconds(waitDeadline.MilliSeconds());
-            Record.SetVisibilityDeadlineMilliseconds(visibilityDeadline.MilliSeconds());
+            Record.SetProcessingTimeoutMilliseconds(processingTimeout.MilliSeconds());
             Record.SetMaxNumberOfMessages(maxNumberOfMessages);
         }
 
@@ -1439,8 +1450,8 @@ struct TEvPQ {
             return TInstant::MilliSeconds(Record.GetWaitDeadlineMilliseconds());
         }
 
-        TInstant GetVisibilityDeadline() const {
-            return TInstant::MilliSeconds(Record.GetVisibilityDeadlineMilliseconds());
+        TDuration GetProcessingTimeout() const {
+            return TDuration::MilliSeconds(Record.GetProcessingTimeoutMilliseconds());
         }
 
         // The maximum number of messages to return.

@@ -91,9 +91,9 @@ struct TCoCallableRules {
     };
 
     // rules that don't make a flow fork - e.g. False || x -> x
-    TCallableOptimizerMap SimpleCallables[SIMPLE_STEPS];
+    std::array<TCallableOptimizerMap, SIMPLE_STEPS> SimpleCallables;
     // rules that make a flow fork - Join pushdown if Join has multiple usage
-    TCallableOptimizerMap FlowCallables[FLOW_STEPS];
+    std::array<TCallableOptimizerMap, FLOW_STEPS> FlowCallables;
 
     TFinalizingOptimizerMap Finalizers;
 

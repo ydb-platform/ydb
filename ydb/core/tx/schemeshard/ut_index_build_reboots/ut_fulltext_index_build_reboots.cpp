@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
     // Without killOnCommit, the schemeshard doesn't get rebooted on TEvDataShard::BuildFulltext**Response's,
     // and thus the fulltext index build process is never interrupted at all because there are no other
     // events to reboot on.
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCase, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, true /*killOnCommit*/) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCase, 4 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, true /*killOnCommit*/) {
         // speed up the test:
         // only check scheme shard reboots
         t.TabletIds.clear();

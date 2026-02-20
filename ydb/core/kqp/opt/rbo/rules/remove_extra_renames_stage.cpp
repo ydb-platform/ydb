@@ -16,7 +16,7 @@ struct Scope {
     bool TopScope = false;
     bool MultipleConsumers = false;
     TVector<TInfoUnit> OutputIUs;
-    TVector<std::shared_ptr<IOperator>> Operators;
+    TVector<TIntrusivePtr<IOperator>> Operators;
 
     TString ToString(TExprContext &ctx) {
         auto res = TStringBuilder() << "{parents: [";
@@ -36,27 +36,23 @@ struct Scope {
     }
 };
 
-struct TIOperatorSharedPtrHash {
-    size_t operator()(const std::shared_ptr<IOperator> &p) const { return p ? THash<int64_t>{}((int64_t)p.get()) : 0; }
-};
-
 class Scopes {
-  public:
-    void ComputeScopesRec(std::shared_ptr<IOperator> &op, int &currScope);
-    void ComputeScopes(std::shared_ptr<IOperator> &op);
+public:
+    void ComputeScopesRec(TIntrusivePtr<IOperator> &op, ui32 &currScope);
+    void ComputeScopes(TIntrusivePtr<IOperator> &op);
 
-    THashMap<int, Scope> ScopeMap;
-    THashMap<std::shared_ptr<IOperator>, int, TIOperatorSharedPtrHash> RevScopeMap;
+    THashMap<ui32, Scope> ScopeMap;
+    THashMap<IOperator*, ui32> RevScopeMap;
 };
 
-void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> &op, int &currScope) {
-    if (RevScopeMap.contains(op)) {
+void Scopes::ComputeScopesRec(TIntrusivePtr<IOperator>& op, ui32& currScope) {
+    if (RevScopeMap.contains(op.get())) {
         return;
     }
     // We create a new scope for projection operators: map, project and group-by
     // Also we create a new scope for Read, beacause of current limitation that it cannot rename output vars
 
-    bool makeNewScope =
+    const bool makeNewScope =
         (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) || 
         (op->Kind == EOperator::Project) || 
         (op->Kind == EOperator::Aggregate) ||
@@ -78,27 +74,27 @@ void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> &op, int &currScope) {
     }
 
     ScopeMap.at(currScope).Operators.push_back(op);
-    RevScopeMap[op] = currScope;
+    RevScopeMap[op.get()] = currScope;
     for (auto c : op->Children) {
         ComputeScopesRec(c, currScope);
     }
 }
 
-void Scopes::ComputeScopes(std::shared_ptr<IOperator> &op) {
-    int currScope = 0;
+void Scopes::ComputeScopes(TIntrusivePtr<IOperator>& op) {
+    ui32 currScope = 0;
     ScopeMap[0] = Scope();
     ComputeScopesRec(op, currScope);
     for (auto &[id, sc] : ScopeMap) {
         auto topOp = sc.Operators[0];
         for (auto &p : topOp->Parents) {
-            auto parentScopeId = RevScopeMap.at(p.first.lock());
+            const auto parentScopeId = RevScopeMap.at(p.first);
             sc.ParentScopes.push_back(parentScopeId);
         }
     }
 }
 
 struct TIntTUnitPairHash {
-    size_t operator()(const std::pair<int, TInfoUnit> &p) const { return THash<int>{}(p.first) ^ TInfoUnit::THashFunction{}(p.second); }
+    size_t operator()(const std::pair<ui32, TInfoUnit> &p) const { return THash<ui32>{}(p.first) ^ TInfoUnit::THashFunction{}(p.second); }
 };
 
 
@@ -124,18 +120,18 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     // Follow the parent scopes as far as possible and pick the top-most mapping
     // If at any point there are multiple parent scopes - stop
 
-    THashMap<std::pair<int, TInfoUnit>, THashSet<std::pair<int, TInfoUnit>, TIntTUnitPairHash>, TIntTUnitPairHash> renameMap;
+    THashMap<std::pair<ui32, TInfoUnit>, THashSet<std::pair<ui32, TInfoUnit>, TIntTUnitPairHash>, TIntTUnitPairHash> renameMap;
 
     // We record specific IUs with their scope that are "poisoned"
     // They arrise when an operator has multiple consumers or when a single column is mapped into multiple ones
     // This column cannot be renamed, and we need to propagate the poison through all the scopes where this column
     // is live.
-    THashSet<std::pair<int, TInfoUnit>, TIntTUnitPairHash> poison;
+    THashSet<std::pair<ui32, TInfoUnit>, TIntTUnitPairHash> poison;
 
     for (auto iter : root) {
         // FIXME: If there is no scope for this operator, that means it from a subplan that we didn't process
         // while building the scope map. We skip them for now
-        if (!scopes.RevScopeMap.contains(iter.Current)) {
+        if (!scopes.RevScopeMap.contains(iter.Current.get())) {
             continue;
         }
 
@@ -177,7 +173,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
 
         for (const auto& to : mapsTo) {
-            auto scopeId = scopes.RevScopeMap.at(iter.Current);
+            auto scopeId = scopes.RevScopeMap.at(iter.Current.get());
             auto scope = scopes.ScopeMap.at(scopeId);
             auto parentScopes = scope.ParentScopes;
 
@@ -225,13 +221,13 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
 
     // Closed map is a closure of the renaming map
-    THashMap<std::pair<int, TInfoUnit>, std::pair<int, TInfoUnit>, TIntTUnitPairHash> closedMap;
+    THashMap<std::pair<ui32, TInfoUnit>, std::pair<ui32, TInfoUnit>, TIntTUnitPairHash> closedMap;
 
     // We also record a stop list where we avoid renaming rvalues (use values), but we can always
     // rename rvalues (defines)
     // Initially stop list contains all the references in the plan, we then remove the ones that
     // are unnecessary
-    THashSet<std::pair<int, TInfoUnit>, TIntTUnitPairHash> stopList;
+    THashSet<std::pair<ui32, TInfoUnit>, TIntTUnitPairHash> stopList;
 
     for (auto &[k, v] : renameMap) {
         stopList.insert(k);
@@ -245,7 +241,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         // Otherwise, we don't add it to the closure and add the destination of the mapping to the
         // poison list
         else {
-            for (auto deadEnd : v) {
+            for (const auto& deadEnd : v) {
                 poison.insert(deadEnd);
                 stopList.insert(deadEnd);
             }
@@ -311,12 +307,12 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     for (auto it : root) {
         // FIXME: If there is no scope for this operator, that means it from a subplan that we didn't process
         // while building the scope map. We skip them for now
-        if (!scopes.RevScopeMap.contains(it.Current)) {
+        if (!scopes.RevScopeMap.contains(it.Current.get())) {
             continue;
         }
 
         // Build a subset of the map for the current scope only
-        auto scopeId = scopes.RevScopeMap.at(it.Current);
+        auto scopeId = scopes.RevScopeMap.at(it.Current.get());
 
         auto scopedRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>();
         auto scopedStopList = THashSet<TInfoUnit, TInfoUnit::THashFunction>();

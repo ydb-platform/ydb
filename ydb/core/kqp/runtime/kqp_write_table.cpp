@@ -28,7 +28,7 @@ class TOffloadedPoolAllocator : public IAllocator {
 public:
     TOffloadedPoolAllocator(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> scopedAlloc)
         : Alloc(TDefaultAllocator::Instance())
-        , ScopedAlloc(std::move(scopedAlloc)) 
+        , ScopedAlloc(std::move(scopedAlloc))
         , AllocatedSize(0) {
     }
 
@@ -166,7 +166,7 @@ public:
     }
 
     explicit TColumnBatch(const TRecordBatchPtr& data, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr)
-        : Alloc(alloc) 
+        : Alloc(alloc)
         , Data(data)
         , SerializedMemory(NArrow::GetBatchDataSize(Data))
         , Memory(NArrow::GetBatchMemorySize(Data)) {
@@ -435,7 +435,7 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
 
     struct TUnpreparedBatch {
         ui64 TotalDataSize = 0;
-        std::deque<TRecordBatchPtr> Batches; 
+        std::deque<TRecordBatchPtr> Batches;
     };
 
 public:
@@ -690,7 +690,7 @@ class TRowsBatcher {
             return MakeIntrusive<TRowBatch>(Extract(), std::move(Alloc));
         }
     };
-    
+
 public:
     explicit TRowsBatcher(
             ui16 columnCount,
@@ -747,7 +747,7 @@ private:
 
 class TRowsBatcherProxy : public IRowsBatcher {
 public:
-    TRowsBatcherProxy(const size_t columnsCount, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) 
+    TRowsBatcherProxy(const size_t columnsCount, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : ColumnsCount(columnsCount)
         , RowBatcher(columnsCount, std::nullopt, alloc) {
         CurrentRow.reserve(columnsCount);
@@ -1201,7 +1201,7 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
     const auto iterPrimary = PrimaryToSecondary.find(primaryKey);
 
     // In case on unique indexes NULL != NULL,
-    // so we don't need to check if rows with NULLs are unique. 
+    // so we don't need to check if rows with NULLs are unique.
     const bool secondaryKeyHasNull = std::any_of(
         secondaryKey.begin(),
         secondaryKey.end(),
@@ -1293,6 +1293,8 @@ struct TBatchWithMetadata {
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
     IDataBatchPtr Data = nullptr;
     bool HasRead = false;
+    // QuerySpanId of the query that created this batch (for TLI lock-break attribution).
+    ui64 QuerySpanId = 0;
 
     bool IsCoveringBatch() const {
         return Data == nullptr;
@@ -1490,6 +1492,7 @@ public:
     void Clear() {
         ShardsInfo = {};
         Memory = 0;
+        PendingBatches = 0;
         Closed = false;
     }
 
@@ -1644,6 +1647,22 @@ public:
         FlushSerializer(token);
     }
 
+    void SetTokenQuerySpanId(TWriteToken token, ui64 querySpanId) override {
+        auto it = WriteInfos.find(token);
+        if (it != WriteInfos.end()) {
+            it->second.QuerySpanId = querySpanId;
+        }
+    }
+
+    ui64 GetFirstBatchQuerySpanId(ui64 shardId) const override {
+        const auto& shards = ShardsInfo.GetShards();
+        auto it = shards.find(shardId);
+        if (it != shards.end() && !it->second.IsEmpty()) {
+            return it->second.GetBatch(0).QuerySpanId;
+        }
+        return 0;
+    }
+
     void FlushBuffers() override {
         TVector<TWriteToken> writeTokensFoFlush;
         for (const auto& [token, writeInfo] : WriteInfos) {
@@ -1660,7 +1679,7 @@ public:
                 const auto& rightWriteInfo = WriteInfos.at(rhs);
                 return leftWriteInfo.Metadata.Priority < rightWriteInfo.Metadata.Priority;
             });
-        
+
         for (const TWriteToken token : writeTokensFoFlush) {
             FlushSerializer(token);
         }
@@ -1728,15 +1747,18 @@ public:
                 const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(evWrite)
                         .AddDataToPayload(inFlightBatch.Data->SerializeToString());
                 const auto& writeInfo = WriteInfos.at(inFlightBatch.Token);
-                evWrite.AddOperation(
+                auto& operation = evWrite.AddOperation(
                     inFlightBatch.OperationType,
                     writeInfo.Metadata.TableId,
                     writeInfo.Serializer->GetWriteColumnIds(),
                     payloadIndex,
                     writeInfo.Serializer->GetDataFormat(),
                     writeInfo.Metadata.DefaultColumnsCount);
+                if (inFlightBatch.QuerySpanId != 0) {
+                    operation.SetQuerySpanId(inFlightBatch.QuerySpanId);
+                }
             } else {
-                AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());   
+                AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());
             }
         }
 
@@ -1849,10 +1871,12 @@ private:
                         .OperationType = writeInfo.Metadata.OperationType,
                         .Data = std::move(batch),
                         .HasRead = hasRead,
+                        .QuerySpanId = writeInfo.QuerySpanId,
                     });
                     ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
                         .ShardId = shardId,
                         .HasRead = hasRead,
+                        .QuerySpanId = writeInfo.QuerySpanId,
                     });
                 }
             }
@@ -1892,6 +1916,8 @@ private:
         TMetadata Metadata;
         IPayloadSerializerPtr Serializer = nullptr;
         bool Closed = false;
+        // QuerySpanId of the query that opened this token (for TLI lock-break attribution).
+        ui64 QuerySpanId = 0;
     };
 
     std::map<TWriteToken, TWriteInfo> WriteInfos;

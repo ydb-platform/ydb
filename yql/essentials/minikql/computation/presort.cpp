@@ -11,8 +11,7 @@
 #include <util/system/unaligned_mem.h>
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace NDetail {
 
@@ -660,5 +659,4 @@ NUdf::TUnboxedValue TGenericPresortEncoder::Decode(TStringBuf buf, bool desc, co
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

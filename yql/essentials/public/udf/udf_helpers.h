@@ -14,8 +14,7 @@
 #include <util/generic/strbuf.h>
 #include <util/string/builder.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 template <class T>
 concept CUDF = requires(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -82,8 +81,7 @@ inline void SetIRImplementation(IFunctionTypeInfoBuilder& builder, TStringBuf re
     Y_UNUSED(functionName);
 #endif
 }
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 17)
     #define APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_) sb << valueBuilder->WithCalleePosition(Pos_) << " ";
@@ -278,8 +276,7 @@ inline void SetIRImplementation(IFunctionTypeInfoBuilder& builder, TStringBuf re
         return ::NYql::NUdf::TUnboxedValue(); \
     }
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 template <bool CheckOptional, bool CheckBlock, const char* TFuncName, template <class> class TFunc, typename... TUserTypes>
 class TUserDataTypeFuncFactory: public ::NYql::NUdf::TBoxedValue {
@@ -480,5 +477,4 @@ public:
     }
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

@@ -19,8 +19,7 @@
 
 class IOutputStream;
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TUnboxedValue;
 class TUnboxedValuePod;
@@ -764,14 +763,14 @@ UDF_ASSERT_TYPE_SIZE(TBoxedValue, 32);
 ///////////////////////////////////////////////////////////////////////////////
 
 struct TRawEmbeddedValue {
-    char Buffer[0xE];
+    char Buffer[0xE]; // NOLINT(modernize-avoid-c-arrays)
     ui8 Size;
     ui8 Meta;
 };
 
 struct TRawBoxedValue {
     IBoxedValue* Value;
-    ui8 Reserved[7];
+    ui8 Reserved[7]; // NOLINT(modernize-avoid-c-arrays)
     ui8 Meta;
 };
 
@@ -782,7 +781,7 @@ struct TRawStringValue {
     ui32 Size;
     union {
         struct {
-            ui8 Skip[3];
+            ui8 Skip[3]; // NOLINT(modernize-avoid-c-arrays)
             ui8 Meta;
         };
         ui32 Offset;
@@ -954,7 +953,7 @@ public:
 
 protected:
     union TRaw {
-        ui64 Halfs[2] = {0, 0};
+        ui64 Halfs[2] = {0, 0}; // NOLINT(modernize-avoid-c-arrays)
 
         TRawEmbeddedValue Embedded;
 
@@ -974,7 +973,7 @@ protected:
                 ui64 FullMeta;
                 struct {
                     ui16 TimezoneId;
-                    ui8 Reserved[4];
+                    ui8 Reserved[4]; // NOLINT(modernize-avoid-c-arrays)
                     ui8 Size;
                     ui8 Meta;
                 };
@@ -1119,8 +1118,7 @@ private:
 #include "udf_value_inl.h"
 #undef INCLUDE_UDF_VALUE_INL_H
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 template <>
 inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream& o, const NYql::NUdf::TUnboxedValuePod& value);
@@ -1138,8 +1136,7 @@ inline void Out<NYql::NUdf::TStringRef>(class IOutputStream& o, const NYql::NUdf
 #include <util/stream/output.h>
 #include <tuple>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
 // TBoxedValue
@@ -1393,8 +1390,7 @@ inline void TUnboxedValuePod::Dump(IOutputStream& out) const {
     }
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 template <>
 inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream& o, const NYql::NUdf::TUnboxedValuePod& value) {

@@ -941,14 +941,18 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
         auto optionalIf = newLambda.Body().Cast<TCoOptionalIf>();
         auto oldValue = optionalIf.Value().Maybe<TCoAsStruct>();
         if (!oldValue) {
+            // SELECT *
+            prefixInResult = true;
             return newLambda.Ptr();
         }
+        // SELECT specific fields
         auto args = newLambda.Args();
         mainLambda = NewLambdaFrom(ctx, pos, replaces, args.Ref(), oldValue.Cast());
+        auto arg0 = mainLambda.Cast().Args().Arg(0).Raw();
         VisitExpr(mainLambda.Cast().Ptr(), [&](const TExprNode::TPtr& node) {
             if (const auto maybeMember = TMaybeNode<TCoMember>(node)) {
                 const auto member = maybeMember.Cast();
-                if (member.Struct().Raw() == args.Arg(0).Raw() &&
+                if (member.Struct().Raw() == arg0 &&
                     prefixColumnSet.contains(member.Name().Value())) {
                     prefixInResult = true;
                     return false;

@@ -1238,6 +1238,8 @@ private:
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
+        } else if (auto maybeBlockHashJoin = TMaybeNode<TDqBlockHashJoinCore>(node)) {
+            operatorId = Visit(maybeBlockHashJoin.Cast(), planNode);
         } else if (auto lookupJoin = TMaybeNode<TKqpIndexLookupJoin>(node)) {
             operatorId = Visit(lookupJoin.Cast(), planNode);
         } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
@@ -1787,6 +1789,18 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+
+        return AddOperator(planNode, name, std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TDqBlockHashJoinCore& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (BlockHash)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
+
+        AddOptimizerEstimates(op, join);
 
         return AddOperator(planNode, name, std::move(op));
     }
@@ -2355,16 +2369,26 @@ public:
     NJson::TJsonValue Reconstruct(
         const NJson::TJsonValue& plan
     ) {
-        auto reconstructed = ReconstructImpl(plan, 0);
+        auto reconstructed = ReconstructImpl(plan, 0, 0, false);
         return reconstructed;
     }
 
 private:
     NJson::TJsonValue ReconstructImpl(
         const NJson::TJsonValue& plan,
-        int operatorIndex
+        int operatorIndex,
+        int parentTaskCount,
+        bool fromBroadcast
     ) {
         int currentNodeId = NodeIDCounter++;
+
+        int taskCount = parentTaskCount;
+        if (plan.GetMapSafe().contains("Stats")) {
+            const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
+            if (stats.contains("Tasks")) {
+                taskCount = stats.at("Tasks").GetIntegerSafe();
+            }
+        }
 
         NJson::TJsonValue result;
         result["PlanNodeId"] = currentNodeId;
@@ -2417,7 +2441,7 @@ private:
             lookupPlan["Operators"] = std::move(lookupOps);
 
 	        if (plan.GetMapSafe().contains("Plans")) {
-                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0));
+                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0, taskCount, false));
             }
 
             newPlans.AppendValue(std::move(lookupPlan));
@@ -2445,7 +2469,7 @@ private:
             if (plan.GetMapSafe().contains("CTE Name")) {
                 auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
                 if (Precomputes.contains(precompute)) {
-                    planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0));
+                    planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false));
                 }
             }
 
@@ -2483,10 +2507,10 @@ private:
                 if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
                     auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
                     if (Precomputes.contains(precompute)) {
-                        planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0));
+                        planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false));
                     }
                 } else if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
-                    planInputs.AppendValue(ReconstructImpl(p, 0));
+                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast));
                 }
             }
             result["Plans"] = planInputs;
@@ -2500,7 +2524,7 @@ private:
                 return result;
             }
 
-            return ReconstructImpl(Precomputes.at(precompute), 0);
+            return ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false);
         }
 
         auto ops = plan.GetMapSafe().at("Operators").GetArraySafe();
@@ -2523,7 +2547,7 @@ private:
                 processedExternalOperators.insert(inputPlanKey);
 
                 auto inputPlan = PlanIndex.at(inputPlanKey);
-                planInputs.push_back( ReconstructImpl(inputPlan, 0) );
+                planInputs.push_back( ReconstructImpl(inputPlan, 0, taskCount, inputPlan.GetMapSafe().at("Node Type").GetStringSafe() == "Broadcast") );
             } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
                 auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
 
@@ -2532,7 +2556,7 @@ private:
                 }
                 processedInternalOperators.insert(inputPlanId);
 
-                planInputs.push_back( ReconstructImpl(plan, inputPlanId) );
+                planInputs.push_back( ReconstructImpl(plan, inputPlanId, taskCount, false) );
             }
         }
 
@@ -2565,7 +2589,7 @@ private:
             }
 
             if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
-                planInputs.push_back(ReconstructImpl(Precomputes.at(maybePrecompute), 0));
+                planInputs.push_back(ReconstructImpl(Precomputes.at(maybePrecompute), 0, taskCount, false));
             }
         }
 
@@ -2672,12 +2696,16 @@ private:
                 }
             }
 
-            if (operatorIndex == 0) {
+            if (operatorIndex == 0 && !op.GetMapSafe().contains("A-Rows")) {
 
                 // top level rows/size have to match stage output
                 if (!operatorRows && stats.contains("OutputRows")) {
                     auto outputRows = stats.at("OutputRows");
-                    op["A-Rows"] = outputRows.IsMap() ? outputRows.GetMapSafe().at("Sum").GetDouble() : outputRows.GetDouble();
+                    int aRows = outputRows.IsMap() ? outputRows.GetMapSafe().at("Sum").GetIntegerSafe() : outputRows.GetIntegerSafe();
+                    if (fromBroadcast && parentTaskCount && (aRows % parentTaskCount == 0)) {
+                        aRows /= parentTaskCount;
+                    }
+                    op["A-Rows"] = aRows;
                 }
                 if (!operatorSize && stats.contains("OutputBytes")) {
                     auto outputBytes = stats.at("OutputBytes");

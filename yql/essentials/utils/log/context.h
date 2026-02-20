@@ -44,8 +44,7 @@
 
 class TLogElement;
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 namespace NImpl {
 
@@ -275,5 +274,4 @@ private:
     TSourceLocation Location_;
 };
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

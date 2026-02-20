@@ -1,8 +1,8 @@
 diff --git a/include/string b/include/string
-index d016d41..428bfa4 100644
+index f0d7288..de042ec 100644
 --- a/include/string
 +++ b/include/string
-@@ -835,7 +835,10 @@ public:
+@@ -796,7 +796,10 @@ public:
                  "Allocator::value_type must be same type as value_type");
    static_assert(__check_valid_allocator<allocator_type>::value, "");
  
@@ -14,7 +14,7 @@ index d016d41..428bfa4 100644
    // Users might provide custom allocators, and prior to C++20 we have no existing way to detect whether the allocator's
    // pointer type is contiguous (though it has to be by the Standard). Using the wrapper type ensures the iterator is
    // considered contiguous.
-@@ -1265,6 +1268,7 @@ public:
+@@ -1228,6 +1231,7 @@ public:
  #  endif
    _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(value_type __c);
  
@@ -22,7 +22,7 @@ index d016d41..428bfa4 100644
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 iterator begin() _NOEXCEPT {
      return __make_iterator(__get_pointer());
    }
-@@ -1277,6 +1281,20 @@ public:
+@@ -1240,6 +1244,20 @@ public:
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 const_iterator end() const _NOEXCEPT {
      return __make_const_iterator(__get_pointer() + size());
    }

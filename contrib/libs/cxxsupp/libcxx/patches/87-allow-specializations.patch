@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index c0d1010..016041c 100644
+index 4169f6d..112012f 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1171,7 +1171,7 @@ typedef __char32_t char32_t;
+@@ -1174,7 +1174,7 @@ typedef __char32_t char32_t;
  #    define _LIBCPP_NOESCAPE
  #  endif
  

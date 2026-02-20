@@ -12,9 +12,13 @@
 
 #include <library/cpp/yt/misc/hash.h>
 
+#include <library/cpp/iterator/concatenate.h>
+#include <library/cpp/iterator/zip.h>
+
 namespace NYT::NTabletClient {
 
 using namespace NConcurrency;
+using namespace NHydra;
 using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -233,15 +237,30 @@ TTabletInfoPtr TTableMountCacheBase::FindTabletInfo(TTabletId tabletId)
     return result;
 }
 
-auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
+void TTableMountCacheBase::SetTableInfos(std::vector<TTableMountInfoPtr> clonedTableInfos)
+{
+    for (const auto& tableInfo : clonedTableInfos) {
+        for (const auto& tabletInfo : tableInfo->Tablets) {
+            TabletInfoOwnerCache_.Insert(tabletInfo->TabletId, MakeWeak(tableInfo));
+        }
+
+        TAsyncExpiringCache::Set(tableInfo->Path, tableInfo);
+    }
+}
+
+auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
     -> std::optional<TInvalidationResult>
 {
-    auto servantNotActiveError = error.FindMatching(NTabletClient::EErrorCode::TabletServantIsNotActive);
-    if (!servantNotActiveError) {
+    auto expectedError = error.FindMatching({
+        NTabletClient::EErrorCode::TabletServantIsNotActive,
+        NTabletClient::EErrorCode::TabletResharded,
+    });
+
+    if (!expectedError) {
         return {};
     }
 
-    const auto& attributes = servantNotActiveError->Attributes();
+    const auto& attributes = expectedError->Attributes();
     auto tabletId = attributes.Find<TTabletId>("tablet_id");
     if (!tabletId) {
         return {};
@@ -257,34 +276,51 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
         return {};
     }
 
-    if (!redirectionHint->PreviousMountRevision ||
-        !redirectionHint->MountRevision ||
-        !redirectionHint->CellId ||
-        !redirectionHint->CellDescriptor)
+    switch (static_cast<NTabletClient::EErrorCode>(expectedError->GetCode())) {
+        case NTabletClient::EErrorCode::TabletResharded:
+            return TryHandleTabletReshardedError(redirectionHint->ReshardRedirectionHint, tabletInfo);
+
+        case NTabletClient::EErrorCode::TabletServantIsNotActive:
+            return TryHandleServantNotActiveError(redirectionHint->SmoothMovementRedirectionHint, tabletInfo);
+
+        default:
+            return {};
+    }
+}
+
+auto TTableMountCacheBase::TryHandleServantNotActiveError(
+    const TSmoothMovementRedirectionHint& smoothMovementHint,
+    const TTabletInfoPtr& tabletInfo)
+    -> std::optional<TInvalidationResult>
+{
+    if (!smoothMovementHint.NewMountRevision ||
+        !smoothMovementHint.OldMountRevision ||
+        !smoothMovementHint.CellId ||
+        !smoothMovementHint.CellDescriptor)
     {
         return {};
     }
 
-    if (tabletInfo->MountRevision != redirectionHint->PreviousMountRevision) {
+    if (tabletInfo->MountRevision != smoothMovementHint.OldMountRevision) {
         return {};
     }
 
-    RegisterCell(std::move(redirectionHint->CellDescriptor));
+    RegisterCell(std::move(smoothMovementHint.CellDescriptor));
 
     auto newTabletInfo = tabletInfo->Clone();
-    newTabletInfo->CellId = redirectionHint->CellId;
-    newTabletInfo->MountRevision = redirectionHint->MountRevision;
+    newTabletInfo->CellId = smoothMovementHint.CellId;
+    newTabletInfo->MountRevision = smoothMovementHint.NewMountRevision;
 
-    auto owners = TabletInfoOwnerCache_.GetOwners(*tabletId);
+    auto owners = TabletInfoOwnerCache_.GetOwners(tabletInfo->TableId);
 
     YT_LOG_DEBUG("Switching tablet servant in table mount cache "
         "(TabletId: %v, PreviousCellId: %v, PreviousMountRevision: %x, "
         "NewCellId: %v, NewMountRevision: %x, Owners: %v)",
-        tabletId,
+        tabletInfo->TableId,
         tabletInfo->CellId,
         tabletInfo->MountRevision,
-        redirectionHint->CellId,
-        redirectionHint->MountRevision,
+        smoothMovementHint.CellId,
+        smoothMovementHint.NewMountRevision,
         MakeFormattableView(owners, [] (auto* builder, const auto& weakOwner) {
             if (auto owner = weakOwner.Lock()) {
                 builder->AppendString(owner->Path);
@@ -293,7 +329,7 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
 
     std::vector<TTableMountInfoPtr> clonedTableInfos;
 
-    for (auto weakOwner : TabletInfoOwnerCache_.GetOwners(*tabletId)) {
+    for (auto weakOwner : TabletInfoOwnerCache_.GetOwners(tabletInfo->TabletId)) {
         auto owner = weakOwner.Lock();
         if (!owner) {
             continue;
@@ -301,15 +337,7 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
 
         auto clone = owner->Clone();
 
-        for (auto& tableTabletInfo : clone->Tablets) {
-            if (tableTabletInfo->TabletId == tabletInfo->TabletId &&
-                tableTabletInfo->MountRevision == tabletInfo->MountRevision)
-            {
-                tableTabletInfo = newTabletInfo;
-            }
-        }
-
-        for (auto& tableTabletInfo : clone->MountedTablets) {
+        for (auto& tableTabletInfo : Concatenate(clone->Tablets, clone->MountedTablets)) {
             if (tableTabletInfo->TabletId == tabletInfo->TabletId &&
                 tableTabletInfo->MountRevision == tabletInfo->MountRevision)
             {
@@ -320,18 +348,148 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
         clonedTableInfos.push_back(std::move(clone));
     }
 
-    for (const auto& tableInfo : clonedTableInfos) {
-        for (const auto& tabletInfo : tableInfo->Tablets) {
-            TabletInfoOwnerCache_.Insert(tabletInfo->TabletId, MakeWeak(tableInfo));
-        }
-
-        TAsyncExpiringCache::Set(tableInfo->Path, tableInfo);
-    }
+    SetTableInfos(std::move(clonedTableInfos));
 
     return {{
         .Retryable = true,
         .ErrorCode = NTabletClient::EErrorCode::TabletServantIsNotActive,
         .TabletInfo = newTabletInfo,
+        .TableInfoUpdatedFromError = true,
+    }};
+}
+
+auto TTableMountCacheBase::TryHandleTabletReshardedError(
+    const TReshardRedirectionHintPtr& reshardHint,
+    const TTabletInfoPtr& tabletInfo)
+    -> std::optional<TInvalidationResult>
+{
+    if (!reshardHint) {
+        return {};
+    }
+
+    auto owners = TabletInfoOwnerCache_.GetOwners(tabletInfo->TabletId);
+
+    const auto& oldTabletIds = reshardHint->OldTabletIds;
+    const auto& oldTabletMountRevisions = reshardHint->OldTabletMountRevisions;
+    const auto& newTabletIds = reshardHint->NewTabletIds;
+    const auto& newTabletPivotKeys = reshardHint->NewTabletPivotKeys;
+    const auto& newTabletsMountRevision = reshardHint->NewTabletsMountRevision;
+
+    YT_VERIFY(oldTabletIds.size() == oldTabletMountRevisions.size());
+    YT_VERIFY(newTabletIds.size() == newTabletPivotKeys.size());
+    if (oldTabletIds.empty() ||
+        newTabletIds.empty() ||
+        !newTabletsMountRevision)
+    {
+        return {};
+    }
+
+    YT_LOG_DEBUG("Updating info of tablets in table mount cache after reshard "
+        "(OldTabletIds: %v, OldTabletMountRevisions: %llx, CellId: %v, "
+        "NewTabletIds: %v, NewTabletsMountRevision: %llx, Owners: %v)",
+        oldTabletIds,
+        oldTabletMountRevisions,
+        tabletInfo->CellId,
+        newTabletIds,
+        newTabletsMountRevision,
+        MakeFormattableView(owners, [] (auto* builder, const auto& weakOwner) {
+            if (auto owner = weakOwner.Lock()) {
+                builder->AppendString(owner->Path);
+            }
+        }));
+
+    THashSet<TTabletId> ReshardedTabletIds(oldTabletIds.begin(), oldTabletIds.end());
+
+    std::vector<TTabletInfoPtr> newTabletInfos;
+    std::vector<TTableMountInfoPtr> clonedTableInfos;
+    for (auto weakOwner : owners) {
+        auto owner = weakOwner.Lock();
+        if (!owner) {
+            continue;
+        }
+
+        int relativeOldTabletIndex = 0;
+        int firstTabletInfoOffset = 0;
+
+        for (auto tabletInfoIt = owner->Tablets.begin(); tabletInfoIt != owner->Tablets.end(); ++tabletInfoIt) {
+            if (relativeOldTabletIndex < std::ssize(oldTabletIds) &&
+                oldTabletIds[relativeOldTabletIndex] == (*tabletInfoIt)->TabletId &&
+                oldTabletMountRevisions[relativeOldTabletIndex] == (*tabletInfoIt)->MountRevision)
+            {
+                ++relativeOldTabletIndex;
+                if (relativeOldTabletIndex == 1) {
+                    firstTabletInfoOffset = std::distance(owner->Tablets.begin(), tabletInfoIt);
+                }
+            } else if (relativeOldTabletIndex > 0) {
+                break;
+            }
+        }
+
+        if (relativeOldTabletIndex != std::ssize(oldTabletIds)) {
+            continue;
+        }
+
+        auto clone = owner->Clone();
+        auto firstTabletInfoIt = clone->Tablets.begin() + firstTabletInfoOffset;
+
+        if (newTabletInfos.empty()) {
+            newTabletInfos.reserve(std::ssize(newTabletIds));
+
+            for (const auto& [tabletId, pivotKey] : Zip(newTabletIds, newTabletPivotKeys)) {
+                auto newTabletInfo = New<TTabletInfo>();
+                newTabletInfo->TabletId = tabletId;
+                newTabletInfo->MountRevision = newTabletsMountRevision;
+                // Typically, tablets have the same state.
+                newTabletInfo->State = tabletInfo->State;
+                newTabletInfo->InMemoryMode = tabletInfo->InMemoryMode;
+                newTabletInfo->PivotKey = pivotKey;
+                newTabletInfo->CellId = tabletInfo->CellId;
+                newTabletInfo->TableId = tabletInfo->TableId;
+                newTabletInfo->UpdateTime = Now();
+
+                newTabletInfos.push_back(newTabletInfo);
+            }
+        }
+
+        clone->Tablets.erase(
+            firstTabletInfoIt,
+            firstTabletInfoIt + std::ssize(oldTabletIds));
+
+        clone->Tablets.insert(
+            firstTabletInfoIt,
+            newTabletInfos.begin(),
+            newTabletInfos.end());
+
+        auto endIt = std::remove_if(
+            clone->MountedTablets.begin(),
+            clone->MountedTablets.end(),
+            [&] (const TTabletInfoPtr& tabletInfo) {
+                return ReshardedTabletIds.contains(tabletInfo->TabletId);
+            });
+        bool allTabletsPresentInMountedTablets = clone->MountedTablets.end() - endIt == ssize(oldTabletIds);
+        clone->MountedTablets.erase(endIt, clone->MountedTablets.end());
+
+        if (allTabletsPresentInMountedTablets && tabletInfo->State == ETabletState::Mounted) {
+            auto targetIt = std::find_if(
+                clone->MountedTablets.begin(),
+                clone->MountedTablets.end(),
+                [&] (const TTabletInfoPtr& tabletInfo) {
+                    return tabletInfo->PivotKey >= *newTabletPivotKeys.begin();
+            });
+            clone->MountedTablets.insert(
+                targetIt,
+                newTabletInfos.begin(),
+                newTabletInfos.end());
+        }
+
+        clonedTableInfos.push_back(std::move(clone));
+    }
+
+    SetTableInfos(std::move(clonedTableInfos));
+
+    return {{
+        .Retryable = true,
+        .ErrorCode = NTabletClient::EErrorCode::TabletResharded,
         .TableInfoUpdatedFromError = true,
     }};
 }
@@ -344,6 +502,7 @@ auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetr
         NTabletClient::EErrorCode::TabletNotMounted,
         NTabletClient::EErrorCode::InvalidMountRevision,
         NTabletClient::EErrorCode::TabletServantIsNotActive,
+        NTabletClient::EErrorCode::TabletResharded,
         NYTree::EErrorCode::ResolveError
     };
 
@@ -351,7 +510,7 @@ auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetr
         return {};
     }
 
-    if (auto result = TryHandleServantNotActiveError(error)) {
+    if (auto result = TryHandleRedirectionError(error)) {
         return *result;
     }
 

@@ -122,6 +122,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_neq_subexpr& node, const TTraili
     //   ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?;
     YQL_ENSURE(tailExternal.Count == 0);
     MaybeUnnamedSmartParenOnTop_ = MaybeUnnamedSmartParenOnTop_ && !node.HasBlock3();
+
     TTrailingQuestions tail;
     if (node.HasBlock3() && node.GetBlock3().Alt_case() == TRule_neq_subexpr::TBlock3::kAlt2) {
         auto& questions = node.GetBlock3().GetAlt2();
@@ -137,16 +138,25 @@ TNodeResult TSqlExpression::SubExpr(const TRule_neq_subexpr& node, const TTraili
     }
     if (node.HasBlock3()) {
         auto& block = node.GetBlock3();
-        if (block.Alt_case() == TRule_neq_subexpr::TBlock3::kAlt1) {
-            TSqlExpression altExpr(Ctx_, Mode_);
-            TNodeResult altResult = SubExpr(block.GetAlt1().GetRule_neq_subexpr2(), {});
-            if (!altResult) {
-                return std::unexpected(altResult.error());
+        switch (block.Alt_case()) {
+            case TRule_neq_subexpr::TBlock3::kAlt1: {
+                TSqlExpression altExpr(Ctx_, Mode_);
+                altExpr.SetPure(IsPure_);
+                TNodeResult altResult = SubExpr(block.GetAlt1().GetRule_neq_subexpr2(), {});
+                if (!altResult) {
+                    return std::unexpected(altResult.error());
+                }
+                const TVector<TNodePtr> args({std::move(*result), std::move(*altResult)});
+                Token(block.GetAlt1().GetRule_double_question1().GetToken1());
+                result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "Coalesce", args,
+                                          /*isYqlSelect=*/IsYqlSelectProduced_);
+                break;
             }
-            const TVector<TNodePtr> args({std::move(*result), std::move(*altResult)});
-            Token(block.GetAlt1().GetRule_double_question1().GetToken1());
-            result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "Coalesce", args,
-                                      /*isYqlSelect=*/IsYqlSelectProduced_);
+            case TRule_neq_subexpr::TBlock3::kAlt2: {
+                break; // It is handled higher
+            }
+            case TRule_neq_subexpr::TBlock3::ALT_NOT_SET:
+                Y_UNREACHABLE();
         }
     }
     return result;
@@ -1190,6 +1200,9 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
 
                 if (auto result = call.BuildCall()) {
                     lastExpr = std::move(*result);
+                    if (auto* call = lastExpr->GetCallNode(); call && call->GetOpName() == "DataType") {
+                        lastExpr = AddOptionals(std::move(lastExpr), tail.Count);
+                    }
                 } else {
                     return std::unexpected(result.error());
                 }
@@ -1305,6 +1318,7 @@ TNodeResult TSqlExpression::LambdaRule(const TRule_lambda& rule) {
         // we allow column reference here to postpone error and report it with better description in SqlLambdaParams
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         TSqlExpression expr(Ctx_, Mode_);
+        expr.SetPure(IsPure_);
         expr.SetSmartParenthesisMode(ESmartParenthesis::SqlLambdaParams);
         parenthesis = Unwrap(expr.SmartParenthesis(alt.GetRule_smart_parenthesis1()));
     }
@@ -1360,6 +1374,7 @@ TNodeResult TSqlExpression::CastRule(const TRule_cast_expr& rule) {
     TPosition pos(Ctx_.Pos());
 
     TSqlExpression expr(Ctx_, Mode_);
+    expr.SetPure(IsPure_);
     expr.SetYqlSelectProduced(IsYqlSelectProduced_);
     TNodeResult exprNode = expr.Build(rule.GetRule_expr3());
     if (!exprNode) {
@@ -1380,6 +1395,7 @@ TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
     Token(alt.GetToken1());
     TPosition pos(Ctx_.Pos());
     TSqlExpression expr(Ctx_, Mode_);
+    expr.SetPure(IsPure_);
     auto exprNode = Unwrap(expr.Build(rule.GetRule_expr3()));
     if (!exprNode) {
         return {};
@@ -1445,6 +1461,7 @@ TNodeResult TSqlExpression::CaseRule(const TRule_case_expr& rule) {
     Token(alt.GetBlock4().GetToken1());
     TNodeResult elseExpr = [&] {
         TSqlExpression expr(Ctx_, Mode_);
+        expr.SetPure(IsPure_);
         expr.SetYqlSelectProduced(IsYqlSelectProduced_);
         return expr.Build(alt.GetBlock4().GetRule_expr2());
     }();
@@ -1452,6 +1469,7 @@ TNodeResult TSqlExpression::CaseRule(const TRule_case_expr& rule) {
     TNodePtr caseExpr;
     if (alt.HasBlock2()) {
         TSqlExpression expr(Ctx_, Mode_);
+        expr.SetPure(IsPure_);
         expr.SetYqlSelectProduced(IsYqlSelectProduced_);
         if (auto result = expr.Build(alt.GetBlock2().GetRule_expr1())) {
             caseExpr = std::move(*result);
@@ -1467,6 +1485,7 @@ TNodeResult TSqlExpression::CaseRule(const TRule_case_expr& rule) {
 
         Token(block.GetToken1());
         TSqlExpression condExpr(Ctx_, Mode_);
+        condExpr.SetPure(IsPure_);
         condExpr.SetYqlSelectProduced(IsYqlSelectProduced_);
         if (auto result = condExpr.Build(block.GetRule_expr2())) {
             branches.back().Pred = std::move(*result);
@@ -1483,6 +1502,7 @@ TNodeResult TSqlExpression::CaseRule(const TRule_case_expr& rule) {
 
         Token(block.GetToken3());
         TSqlExpression thenExpr(Ctx_, Mode_);
+        thenExpr.SetPure(IsPure_);
         thenExpr.SetYqlSelectProduced(IsYqlSelectProduced_);
         if (auto result = thenExpr.Build(block.GetRule_expr4())) {
             branches.back().Value = std::move(*result);
@@ -1750,6 +1770,7 @@ bool TSqlExpression::SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWi
 
 bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_expr& node, TVector<TNodePtr>& exprSeq) {
     TSqlExpression expr(ctx, ctx.Settings.Mode);
+    expr.SetPure(IsPure_);
     TNodePtr nodeExpr = Unwrap(expr.Build(node));
     if (!nodeExpr) {
         return false;
@@ -1760,6 +1781,7 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_expr& node, TV
 
 bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& node, TVector<TNodePtr>& exprSeq) {
     TSqlExpression expr(ctx, ctx.Settings.Mode);
+    expr.SetPure(true);
     TVector<TString> localNames;
     bool hasError = false;
     for (auto& block : node.GetBlock2()) {
@@ -1767,7 +1789,7 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& n
         switch (rule.Alt_case()) {
             case TRule_lambda_stmt::kAltLambdaStmt1: {
                 TVector<TSymbolNameWithPos> names;
-                auto nodeExpr = NamedNode(rule.GetAlt_lambda_stmt1().GetRule_named_nodes_stmt1(), names);
+                auto nodeExpr = expr.NamedNode(rule.GetAlt_lambda_stmt1().GetRule_named_nodes_stmt1(), names);
                 if (!nodeExpr) {
                     hasError = true;
                     continue;
@@ -2104,6 +2126,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTraili
                     hints = BuildTuple(pos, {sizeHint});
                 }
                 TSqlExpression inSubexpr(Ctx_, Mode_);
+                inSubexpr.SetPure(IsPure_);
                 auto inRight = inSubexpr.SqlInExpr(altInExpr.GetRule_in_expr4(), tail);
                 auto isIn = Unwrap(BuildBuiltinFunc(Ctx_, pos, "In", {*res, inRight, hints}, /*isYqlSelect=*/false));
                 Ctx_.IncrementMonCounter("sql_features", notIn ? "NotIn" : "In");
@@ -2225,6 +2248,7 @@ TNodeResult TSqlExpression::YqlXorSubExpr(
 
     TNodeResult rhs = [&]() {
         TSqlExpression expr(Ctx_, Mode_);
+        expr.SetPure(IsPure_);
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::InStatement);
         expr.SetYqlSelectProduced(true);
 
@@ -2593,6 +2617,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode get
 
 TNodePtr TSqlExpression::SqlInExpr(const TRule_in_expr& node, const TTrailingQuestions& tail) {
     TSqlExpression expr(Ctx_, Mode_);
+    expr.SetPure(IsPure_);
     expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::InStatement);
     TNodePtr result = Unwrap(expr.UnaryExpr(node.GetRule_in_unary_subexpr1(), tail));
 
@@ -2637,7 +2662,8 @@ TNodePtr TSqlExpression::ToSubSelectNode(TSourcePtr source) {
         source,
         /*checkExist=*/false,
         /*withTables=*/false,
-        /*isInlineScalar=*/true);
+        /*isInlineScalar=*/true,
+        /*isPure=*/IsPure_);
 }
 
 TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {

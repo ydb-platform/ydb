@@ -881,6 +881,7 @@ index_setting_value:
     | STRING_VALUE
     | integer
     | bool_value
+    | real
 ;
 
 with_compact_settings: WITH LPAREN compact_setting_entry (COMMA compact_setting_entry)* COMMA? RPAREN;

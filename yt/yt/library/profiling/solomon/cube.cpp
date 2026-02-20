@@ -701,13 +701,35 @@ int TCube<T>::ReadSensorValues(
     TFluentAny fluent) const
 {
     int valuesRead = 0;
+
+    auto readHistogramValue = [&valuesRead] (TFluentAny fluent, const auto& value) {
+        std::vector<std::pair<double, i64>> hist;
+        size_t n = value.Bounds.size();
+        hist.reserve(n + 1);
+        for (size_t i = 0; i != n; ++i) {
+            auto bucketValue = i < value.Values.size() ? value.Values[i] : 0;
+            hist.emplace_back(value.Bounds[i], bucketValue);
+        }
+        hist.emplace_back(Max<double>(), n < value.Values.size() ? value.Values[n] : 0u);
+
+        fluent.DoListFor(hist, [] (TFluentList fluent, const auto& bar) {
+            fluent
+                .Item().BeginMap()
+                    .Item("bound").Value(bar.first)
+                    .Item("count").Value(bar.second)
+                .EndMap();
+        });
+        ++valuesRead;
+    };
+
     auto doReadValueForProjection = [&] (TFluentAny fluent, const TProjection& projection, const T& value) {
         if constexpr (std::is_same_v<T, i64> || std::is_same_v<T, TDuration>) {
             // NB(eshcherbin): Not much sense in returning rate here.
+            auto rollup = Rollup(projection, index);
             if constexpr (std::is_same_v<T, i64>) {
-                fluent.Value(Rollup(projection, index));
+                fluent.Value(rollup);
             } else {
-                fluent.Value(Rollup(projection, index).SecondsFloat());
+                fluent.Value(rollup.SecondsFloat());
             }
             ++valuesRead;
         } else if constexpr (std::is_same_v<T, double>) {
@@ -761,24 +783,11 @@ int TCube<T>::ReadSensorValues(
                     .EndMap();
             }
             ++valuesRead;
-        } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TGaugeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
-            std::vector<std::pair<double, i64>> hist;
-            size_t n = value.Bounds.size();
-            hist.reserve(n + 1);
-            for (size_t i = 0; i != n; ++i) {
-                auto bucketValue = i < value.Values.size() ? value.Values[i] : 0;
-                hist.emplace_back(value.Bounds[i], bucketValue);
-            }
-            hist.emplace_back(Max<double>(), n < value.Values.size() ? value.Values[n] : 0u);
-
-            fluent.DoListFor(hist, [] (TFluentList fluent, const auto& bar) {
-                fluent
-                    .Item().BeginMap()
-                        .Item("bound").Value(bar.first)
-                        .Item("count").Value(bar.second)
-                    .EndMap();
-            });
-            ++valuesRead;
+        } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
+            // NB(eshcherbin): Not much sense in returning rate here.
+            readHistogramValue(fluent, Rollup(projection, index));
+        } else if (std::is_same_v<T, TGaugeHistogramSnapshot>) {
+            readHistogramValue(fluent, value);
         } else {
             THROW_ERROR_EXCEPTION("Unexpected cube type");
         }

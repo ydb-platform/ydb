@@ -60,16 +60,17 @@ Y_UNIT_TEST(PrintAstTest) {
 }
 
 Y_UNIT_TEST(PrettyPrintAst) {
-    const ui32 testFlags[] = {
+    const auto testFlags = std::to_array<ui32>({
         TAstPrintFlags::Default,
         TAstPrintFlags::PerLine,
         // TAstPrintFlags::ShortQuote, //-- generates invalid AST
-        TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote};
+        TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote,
+    });
 
     TAstParseResult ast = ParseAst(TEST_PROGRAM);
     UNIT_ASSERT(ast.IsOk());
 
-    for (ui32 i = 0; i < Y_ARRAY_SIZE(testFlags); ++i) {
+    for (ui32 i = 0; i < testFlags.size(); ++i) {
         ui32 prettyFlags = testFlags[i];
 
         TString printedProgram1 = ast.Root->ToString(prettyFlags);
@@ -137,34 +138,34 @@ Y_UNIT_TEST(GoodArbitraryAtom) {
     TestGoodArbitraryAtom("(\"\")", TStringBuf());
     TestGoodArbitraryAtom("(\" 1 a 3 b \")", TStringBuf(" 1 a 3 b "));
 
-    ui8 expectedHex[] = {0xab, 'c', 'd', 0x00};
-    TestGoodArbitraryAtom("(\"\\xabcd\")", TBasicStringBuf<ui8>(expectedHex));
+    auto expectedHex = std::to_array<ui8>({0xab, 'c', 'd', 0x00});
+    TestGoodArbitraryAtom("(\"\\xabcd\")", TBasicStringBuf<ui8>(expectedHex.data()));
     TestGoodArbitraryAtom("(\" \\x3d \")", TStringBuf(" \x3d "));
 
-    ui8 expectedOctal[] = {056, '7', '8', 0x00};
-    TestGoodArbitraryAtom("(\"\\05678\")", TBasicStringBuf<ui8>(expectedOctal));
+    auto expectedOctal = std::to_array<ui8>({056, '7', '8', 0x00});
+    TestGoodArbitraryAtom("(\"\\05678\")", TBasicStringBuf<ui8>(expectedOctal.data()));
     TestGoodArbitraryAtom("(\" \\056 \")", TStringBuf(" \056 "));
     TestGoodArbitraryAtom("(\" \\177 \")", TStringBuf(" \177 "));
     TestGoodArbitraryAtom("(\" \\377 \")", TStringBuf(" \377 "));
     TestGoodArbitraryAtom("(\" \\477 \")", TStringBuf(" 477 "));
 
     {
-        ui8 expected1[] = {0x01, 0x00};
-        TestGoodArbitraryAtom("(\"\\u0001\")", TBasicStringBuf<ui8>(expected1));
+        auto expected1 = std::to_array<ui8>({0x01, 0x00});
+        TestGoodArbitraryAtom("(\"\\u0001\")", TBasicStringBuf<ui8>(expected1.data()));
 
-        ui8 expected2[] = {0xE1, 0x88, 0xB4, 0x00};
-        TestGoodArbitraryAtom("(\"\\u1234\")", TBasicStringBuf<ui8>(expected2));
+        auto expected2 = std::to_array<ui8>({0xE1, 0x88, 0xB4, 0x00});
+        TestGoodArbitraryAtom("(\"\\u1234\")", TBasicStringBuf<ui8>(expected2.data()));
 
-        ui8 expected3[] = {0xef, 0xbf, 0xbf, 0x00};
-        TestGoodArbitraryAtom("(\"\\uffff\")", TBasicStringBuf<ui8>(expected3));
+        auto expected3 = std::to_array<ui8>({0xef, 0xbf, 0xbf, 0x00});
+        TestGoodArbitraryAtom("(\"\\uffff\")", TBasicStringBuf<ui8>(expected3.data()));
     }
 
     {
-        ui8 expected1[] = {0x01, 0x00};
-        TestGoodArbitraryAtom("(\"\\U00000001\")", TBasicStringBuf<ui8>(expected1));
+        auto expected1 = std::to_array<ui8>({0x01, 0x00});
+        TestGoodArbitraryAtom("(\"\\U00000001\")", TBasicStringBuf<ui8>(expected1.data()));
 
-        ui8 expected2[] = {0xf4, 0x8f, 0xbf, 0xbf, 0x00};
-        TestGoodArbitraryAtom("(\"\\U0010ffff\")", TBasicStringBuf<ui8>(expected2));
+        auto expected2 = std::to_array<ui8>({0xf4, 0x8f, 0xbf, 0xbf, 0x00});
+        TestGoodArbitraryAtom("(\"\\U0010ffff\")", TBasicStringBuf<ui8>(expected2.data()));
     }
 
     TestGoodArbitraryAtom("(\"\\t\")", TStringBuf("\t"));

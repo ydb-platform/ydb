@@ -1342,7 +1342,7 @@ message TEvMLPReadRequest {
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
     optional uint64 WaitDeadlineMilliseconds = 4;
-    optional uint64 VisibilityDeadlineMilliseconds = 5; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
+    optional uint64 ProcessingTimeoutMilliseconds = 5;
     // The maximum number of messages to return.
     optional uint32 MaxNumberOfMessages = 6;
 }

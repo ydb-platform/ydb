@@ -49,7 +49,9 @@ TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& t
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    return client.CreateTopic(topicName, settings).GetValueSync();
+    auto result = client.CreateTopic(topicName, settings).GetValueSync();
+    driver.Stop(true);
+    return result;
 }
 
 TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount,
@@ -84,7 +86,9 @@ TStatus AlterTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& to
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    return client.AlterTopic(topicName, settings).GetValueSync();
+    auto result = client.AlterTopic(topicName, settings).GetValueSync();
+    driver.Stop(true);
+    return result;
 }
 
 TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings) {

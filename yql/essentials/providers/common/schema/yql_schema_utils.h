@@ -5,11 +5,9 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TVector<TString> ExtractColumnOrderFromYsonStructType(const NYT::TNode& node);
 bool EqualsYsonTypesIgnoreStructOrder(const NYT::TNode& left, const NYT::TNode& right);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

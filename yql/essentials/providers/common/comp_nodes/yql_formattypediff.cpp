@@ -7,8 +7,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <bool Pretty>
 class TFormatTypeDiffWrapper: public TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>> {
@@ -54,5 +53,4 @@ IComputationNode* WrapFormatTypeDiff(TCallable& callable, const TComputationNode
     return new TFormatTypeDiffWrapper<false>(ctx.Mutables, handle_left, handle_right);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

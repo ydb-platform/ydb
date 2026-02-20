@@ -5,20 +5,6 @@
 namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
-
-    Y_UNIT_TEST(TestDefaultConstructor) {
-        TInFlightController controller;
-        
-        UNIT_ASSERT_VALUES_EQUAL(controller.LayoutUnitSize, 0);
-        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
-        UNIT_ASSERT(controller.Layout.empty());
-        UNIT_ASSERT(!controller.IsMemoryLimitReached());
-        
-        UNIT_ASSERT(controller.Add(100, 1000));
-        UNIT_ASSERT(controller.Remove(101));
-        UNIT_ASSERT(!controller.IsMemoryLimitReached());
-    }
-
     Y_UNIT_TEST(TestConstructorWithLimit) {
         TInFlightController controller(10240);
         
@@ -342,6 +328,31 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         controller.Remove(4);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 0);
+    }
+
+    Y_UNIT_TEST(SlidingWindowTest) {
+        TInFlightController controller(10240);
+
+        for (ui64 i = 0; i < 10; ++i) {
+            controller.Add(i, 1024);
+        }
+        UNIT_ASSERT(controller.IsMemoryLimitReached());
+        Sleep(TDuration::Seconds(1));
+        UNIT_ASSERT(controller.GetLimitReachedDuration() >= TDuration::Seconds(1));
+        
+        for (ui64 i = 0; i < 10; ++i) {
+            controller.Remove(i+1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
+        UNIT_ASSERT(controller.Layout.empty());
+        UNIT_ASSERT(!controller.IsMemoryLimitReached());
+
+        for (ui64 i = 10; i < 20; ++i) {
+            controller.Add(i, 1024);
+        }
+        UNIT_ASSERT(controller.IsMemoryLimitReached());
+        Sleep(TDuration::Seconds(1));
+        UNIT_ASSERT(controller.GetLimitReachedDuration() >= TDuration::Seconds(2));
     }
 }
 

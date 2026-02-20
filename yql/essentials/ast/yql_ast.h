@@ -132,7 +132,7 @@ struct TAstNode {
 
     inline TArrayRef<TAstNode* const> GetChildren() const {
         Y_ABORT_UNLESS(IsList());
-        return {ListCount_ <= SmallListCount ? Data_.S.Children : Data_.L.Children, ListCount_};
+        return {ListCount_ <= SmallListCount ? Data_.S.Children.data() : Data_.L.Children, ListCount_};
     }
 
     static inline TAstNode* NewAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
@@ -171,8 +171,8 @@ struct TAstNode {
 
     template <typename... TNodes>
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool, TNodes... nodes) {
-        TAstNode* children[] = {nodes...};
-        return NewList(position, children, sizeof...(nodes), pool);
+        std::array<TAstNode*, sizeof...(TNodes)> children = {nodes...};
+        return NewList(position, children.data(), sizeof...(nodes), pool);
     }
 
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool) {
@@ -232,7 +232,7 @@ private:
     };
 
     struct TSmallList {
-        TAstNode* Children[SmallListCount];
+        std::array<TAstNode*, SmallListCount> Children;
     };
 
     union {

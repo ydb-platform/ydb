@@ -120,7 +120,7 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
     }
 
     if (settings.LangVer >= MakeLangVersion(2025, 3)) {
-        PersistableFlattenAndAggrExprs = true;
+        FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Auto;
     }
 
     if (settings.LangVer >= MakeLangVersion(2025, 4)) {

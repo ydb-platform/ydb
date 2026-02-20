@@ -70,6 +70,9 @@ jobs:
     - name: Upload PR with test failures (any failures, 1 day)
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/pr_with_test_failures.sql --table_path test_results/analytics/pr_blocked_by_tests --store_type column --partition_keys last_run_timestamp --primary_keys last_run_timestamp full_name pr_number job_id
+    - name: Upload PR failed in attempt but not run in next data mart
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/pr_failed_in_attempt_but_not_run_in_next.sql --table_path test_results/analytics/pr_failed_in_attempt_but_not_run_in_next --store_type column --partition_keys last_run_timestamp --primary_keys last_run_timestamp full_name pr_number job_id gap_type
     - name: Upload Nemesis aggregate data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/stability_aggregate_mart.sql --table_path nemesis/aggregated_mart --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite Test --ttl_min 43200 --ttl_key RunTs

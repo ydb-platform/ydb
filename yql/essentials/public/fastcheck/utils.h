@@ -6,12 +6,10 @@
 
 #include <library/cpp/json/json_reader.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 TUdfFilter ParseUdfFilter(const NJson::TJsonValue& json);
 
 void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSettings& settings);
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

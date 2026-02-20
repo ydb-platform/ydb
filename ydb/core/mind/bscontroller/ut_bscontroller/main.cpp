@@ -1106,6 +1106,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
 
             request.Clear();
+            request.SetIgnoreGroupFailModelChecks(true);
             auto *populate = request.AddCommand()->MutablePopulatePDisk();
             auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
             target->SetNodeId(destinationPDisk.first);
@@ -1241,6 +1242,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
 
             request.Clear();
+            request.SetIgnoreGroupFailModelChecks(true);
             auto *populate = request.AddCommand()->MutablePopulatePDisk();
             auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
             target->SetNodeId(destinationPDisk.first);

@@ -274,7 +274,7 @@ void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
     runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1), 1);
 
     std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
-    UNIT_ASSERT(ev->Type == TEvKeyValue::EvReadResponse);
+    UNIT_ASSERT_C(ev->Type == static_cast<ui64>(TEvKeyValue::EvReadResponse), "Type# " << ev->GetTypeName());
     TEvKeyValue::TEvReadResponse *response = ev->Get<TEvKeyValue::TEvReadResponse>();
     NKikimrKeyValue::ReadResult &record = response->Record;
 

@@ -255,8 +255,8 @@ public:
                     (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
                     (ErrorReason, result->ErrorReason));
             // kill the key value tablet due to it's obsolete generation
-            Send(IntermediateResult->KeyValueActorId, new TKikimrEvents::TEvPoisonPill);
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_BLOCKED);
+            Send(IntermediateResult->KeyValueActorId, new TKikimrEvents::TEvPoisonPill);
             return;
         }
 

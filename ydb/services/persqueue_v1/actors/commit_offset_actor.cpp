@@ -38,15 +38,6 @@ TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ct
 {
 }
 
-TCommitOffsetActor::TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request)
-    : TBase(request)
-    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
-    , NewSchemeCache(MakeSchemeCacheID())
-    , AuthInitActor()
-    , Counters(nullptr)
-{
-}
-
 TCommitOffsetActor::~TCommitOffsetActor() = default;
 
 

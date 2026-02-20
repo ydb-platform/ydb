@@ -36,8 +36,6 @@ public:
 
      TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx* ctx);
 
-     TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request);
-     
     ~TCommitOffsetActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);

@@ -4,6 +4,10 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/stlog.h>
 
+#if defined(__linux__)
+#include <unistd.h>
+#endif
+
 namespace NKikimr::NDDisk {
 
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
@@ -154,6 +158,9 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::PassAway() {
 #if defined(__linux__)
         if (UringRouter) {
+            for (int i = 0; i < 1000 && InFlightCount.load(std::memory_order_acquire) > 0; ++i) {
+                usleep(1000);
+            }
             UringRouter->Stop();
             UringRouter.reset();
         }

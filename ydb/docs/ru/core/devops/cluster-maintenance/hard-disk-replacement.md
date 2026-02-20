@@ -10,11 +10,27 @@
 
 - на сервере кластера установлен жесткий диск на замену старому.
 
-скриншот! диск горит красным
+![_](_assets/step-0-1.png)
 
 ### Определите `label` заменяемого диска
 
 {% list tabs %}
+
+- UI
+
+  {% cut "Перейдите в UI-интерфейс {{ ydb-short-name }}" %}
+  
+  `https://ваш_ip_адрес:8765/monitoring/`
+
+      {% cut "**Storage** → **Nodes** → **PDisks**" %}
+
+      ![_](_assets/step-1-1.png)
+
+      {% endcut %}
+
+  {% endcut %}
+  
+  ![_](_assets/step-1.png)
 
 - Командная строка
 
@@ -23,14 +39,8 @@
   ```bash
   root@static-node-1:/opt/ydb# ls /dev/disk/by-partlabel/
   ydb_disk_1 ydb_disk_2 ydb_disk_3 ydb_disk_4
-  ```
-
-- UI
-
-  ...
-  Скриншот! метка дика выделена
-  ...
-
+  ```  
+  
 {% endlist %}
 
 Этот `label` потребуется для выполнения следующего шага.
@@ -49,6 +59,7 @@ ansible-playbook ydb_platform.ydb.prepare_drives -l static-node.ydb-cluster.com
 Замените значения параметров:
 
 - `static-node.ydb-cluster.com` на адрес ноды, на которой будет происходить замена диска;
+
 - `ydb_disk_prepare` на значение `label` заменяемого диска.
 
 ### Обновите конфигурацию на узлах
@@ -57,6 +68,10 @@ ansible-playbook ydb_platform.ydb.prepare_drives -l static-node.ydb-cluster.com
 ansible-playbook ydb_platform.ydb.update_config
 ```
 
-Индикация состояния замененного диска зеленого цвета.
+{% cut "Индикация состояния замененного диска зеленого цвета" %}
 
-скриншот! диск горит зеленым
+![_](_assets/step-2.png)
+
+![_](_assets/step-2-1.png)
+
+{% endcut %}

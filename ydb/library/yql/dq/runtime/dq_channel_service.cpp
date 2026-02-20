@@ -966,8 +966,8 @@ void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 coo
 void TNodeState::SendAckWithError(ui64 cookie, const TString& message) {
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-    evAck->Record.SetGenMajor(PeerGenMajor);
-    evAck->Record.SetGenMinor(PeerGenMinor);
+    evAck->Record.SetGenMajor(PeerGenMajor.load());
+    evAck->Record.SetGenMinor(PeerGenMinor.load());
     evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::ERROR);
     evAck->Record.SetSeqNo(ConfirmedSeqNo);
     evAck->Record.SetMessage(message);
@@ -995,18 +995,18 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     }
 
     if (descriptor->PeerGenMajor) {
-        if (descriptor->PeerActorId != PeerActorId || descriptor->PeerGenMajor != PeerGenMajor) {
+        if (descriptor->PeerActorId != PeerActorId || descriptor->PeerGenMajor != PeerGenMajor.load()) {
             descriptor->Terminate();
             InputDescriptors.erase(info);
             SendAckWithError(ev->Cookie,
                 TStringBuilder() << "Generation mismatch: " << descriptor->PeerActorId << " vs "
-                << PeerActorId << " (actual), " << descriptor->PeerGenMajor << " vs " << PeerGenMajor << " (actual)"
+                << PeerActorId << " (actual), " << descriptor->PeerGenMajor << " vs " << PeerGenMajor.load() << " (actual)"
             );
             return;
         }
     } else {
         descriptor->PeerActorId = PeerActorId;
-        descriptor->PeerGenMajor = PeerGenMajor;
+        descriptor->PeerGenMajor = PeerGenMajor.load();
     }
 
     TDataChunk data(TChunkedBuffer(), record.GetRows(), record.GetTransportVersion(),
@@ -1023,8 +1023,8 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-    evAck->Record.SetGenMajor(PeerGenMajor);
-    evAck->Record.SetGenMinor(PeerGenMinor);
+    evAck->Record.SetGenMajor(PeerGenMajor.load());
+    evAck->Record.SetGenMinor(PeerGenMinor.load());
     evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::OK);
     evAck->Record.SetSeqNo(ConfirmedSeqNo);
 
@@ -1072,16 +1072,16 @@ void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor) {
     std::lock_guard lock(Mutex);
     if (!Connected) {
         PeerActorId = sender;
-        PeerGenMajor = genMajor;
-        PeerGenMinor = 0;
+        PeerGenMajor.store(genMajor);
+        PeerGenMinor.store(0);
         Connected = true;
-        LOG_D("NODE CONNECTED, PeerGenMajor=" << PeerGenMajor << ", " << NodeActorId << " to " << PeerActorId);
-    } else if (PeerActorId != sender || PeerGenMajor != genMajor) {
+        LOG_D("NODE CONNECTED, PeerGenMajor=" << PeerGenMajor.load() << ", " << NodeActorId << " to " << PeerActorId);
+    } else if (PeerActorId != sender || PeerGenMajor.load() != genMajor) {
         PeerActorId = sender;
-        PeerGenMajor = genMajor;
-        PeerGenMinor = 0;
-        FailInputs(PeerActorId, PeerGenMajor);
-        LOG_W("NODE RECONNECTED, PeerGenMajor=" << PeerGenMajor << ", " << NodeActorId << " to " << PeerActorId);
+        PeerGenMajor.store(genMajor);
+        PeerGenMinor.store(0);
+        FailInputs(PeerActorId, PeerGenMajor.load());
+        LOG_W("NODE RECONNECTED, PeerGenMajor=" << PeerGenMajor.load() << ", " << NodeActorId << " to " << PeerActorId);
         ConfirmedSeqNo = 0;
     }
 }
@@ -1093,8 +1093,8 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-    evAck->Record.SetGenMajor(PeerGenMajor);
-    evAck->Record.SetGenMinor(PeerGenMinor);
+    evAck->Record.SetGenMajor(PeerGenMajor.load());
+    evAck->Record.SetGenMinor(PeerGenMinor.load());
     evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::OK);
     evAck->Record.SetSeqNo(ConfirmedSeqNo);
 
@@ -1111,7 +1111,7 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     auto& record = ev->Get()->Record;
     ConnectSession(ev->Sender, record.GetGenMajor());
 
-    PeerGenMinor = std::max<ui64>(record.GetGenMinor(), PeerGenMinor);
+    PeerGenMinor.store(std::max<ui64>(record.GetGenMinor(), PeerGenMinor.load()));
 
     auto seqNo = record.GetSeqNo();
 
@@ -1134,8 +1134,8 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
             LOG_W("DATA ASK RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << "(+1), " << NodeActorId << " from " << PeerActorId);
             auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-            evAck->Record.SetGenMajor(PeerGenMajor);
-            evAck->Record.SetGenMinor(PeerGenMinor);
+            evAck->Record.SetGenMajor(PeerGenMajor.load());
+            evAck->Record.SetGenMinor(PeerGenMinor.load());
             evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::RESEND);
             evAck->Record.SetSeqNo(ConfirmedSeqNo + 1);
 
@@ -1424,8 +1424,8 @@ void TNodeState::HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr&) {
 void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
     auto evUpdate = MakeHolder<TEvDqCompute::TEvChannelUpdateV2>();
 
-    evUpdate->Record.SetGenMajor(PeerGenMajor);
-    evUpdate->Record.SetGenMinor(PeerGenMinor);
+    evUpdate->Record.SetGenMajor(PeerGenMajor.load());
+    evUpdate->Record.SetGenMinor(PeerGenMinor.load());
     // evUpdate->Record.SetSeqNo(ConfirmedSeqNo);
 
     NActors::ActorIdToProto(descriptor->Info.OutputActorId, evUpdate->Record.MutableSrcActorId());
@@ -1671,7 +1671,7 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     auto& record = ev->Get()->Record;
     ConnectSession(ev->Sender, record.GetGenMajor());
 
-    PeerGenMinor = std::max<ui64>(record.GetGenMinor(), PeerGenMinor);
+    PeerGenMinor.store(std::max<ui64>(record.GetGenMinor(), PeerGenMinor.load()));
 
     auto seqNo = record.GetSeqNo();
 
@@ -1692,8 +1692,8 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-    evAck->Record.SetGenMajor(PeerGenMajor);
-    evAck->Record.SetGenMinor(PeerGenMinor);
+    evAck->Record.SetGenMajor(PeerGenMajor.load());
+    evAck->Record.SetGenMinor(PeerGenMinor.load());
     evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::OK);
     evAck->Record.SetSeqNo(ConfirmedSeqNo);
 
@@ -2048,8 +2048,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                             TABLED() {str << state->InflightBytes;}
                             TABLED() {str << state->WaitersQueue.size();}
                             TABLED() {str << state->WaiterMessages.load();}
-                            TABLED() {str << state->PeerGenMajor;}
-                            TABLED() {str << state->PeerGenMinor;}
+                            TABLED() {str << state->PeerGenMajor.load();}
+                            TABLED() {str << state->PeerGenMinor.load();}
                             TABLED() {str << state->ConfirmedSeqNo;}
                         }
                     }

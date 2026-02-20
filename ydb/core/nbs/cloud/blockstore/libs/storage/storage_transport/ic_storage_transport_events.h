@@ -69,8 +69,8 @@ struct TEvICStorageTransportPrivate
     {
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        const NKikimr::NDDisk::TBlockSelector Selector;
-        const ui64 Lsn;
+        const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
+        const TVector<ui64> Lsns;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<
             NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
@@ -79,16 +79,16 @@ struct TEvICStorageTransportPrivate
         TErasePersistentBuffer(
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials credentials,
-            const NKikimr::NDDisk::TBlockSelector selector,
-            const ui64 lsn,
+            TVector<NKikimr::NDDisk::TBlockSelector> selectors,
+            TVector<ui64> lsns,
             NWilson::TTraceId traceId,
             NThreading::TPromise<
                 NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
                 promise)
             : ServiceId(serviceId)
             , Credentials(credentials)
-            , Selector(selector)
-            , Lsn(lsn)
+            , Selectors(std::move(selectors))
+            , Lsns(std::move(lsns))
             , TraceId(std::move(traceId))
             , Promise(std::move(promise))
         {}
@@ -162,8 +162,8 @@ struct TEvICStorageTransportPrivate
     {
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        const NKikimr::NDDisk::TBlockSelector Selector;
-        const ui64 Lsn;
+        const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
+        const TVector<ui64> Lsns;
         const std::tuple<ui32, ui32, ui32> DDiskId;
         const ui64 DDiskInstanceGuid;
         NWilson::TTraceId TraceId;
@@ -174,8 +174,8 @@ struct TEvICStorageTransportPrivate
         TSyncWithPersistentBuffer(
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials credentials,
-            const NKikimr::NDDisk::TBlockSelector selector,
-            const ui64 lsn,
+            TVector<NKikimr::NDDisk::TBlockSelector> selectors,
+            TVector<ui64> lsns,
             const std::tuple<ui32, ui32, ui32> ddiskId,
             const ui64 ddiskInstanceGuid,
             NWilson::TTraceId traceId,
@@ -184,8 +184,8 @@ struct TEvICStorageTransportPrivate
                 promise)
             : ServiceId(serviceId)
             , Credentials(credentials)
-            , Selector(selector)
-            , Lsn(lsn)
+            , Selectors(std::move(selectors))
+            , Lsns(std::move(lsns))
             , DDiskId(ddiskId)
             , DDiskInstanceGuid(ddiskInstanceGuid)
             , TraceId(std::move(traceId))

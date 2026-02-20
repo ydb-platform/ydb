@@ -395,6 +395,11 @@ message TKqpPhyConnection {
     };
 }
 
+enum EKqpFullTextIndexType {
+    EKqpFullTextPlain = 0;
+    EKqpFullTextRelevance = 1;
+}
+
 message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
@@ -426,6 +431,8 @@ message TKqpFullTextSource {
     TKqpPhyValue DefaultOperator = 12;
     TKqpPhyValue MinimumShouldMatch = 13;
     TKqpPhyValue Mode = 14;
+
+    optional EKqpFullTextIndexType IndexType = 15;
 }
 
 message TKqpReadRangesSource {

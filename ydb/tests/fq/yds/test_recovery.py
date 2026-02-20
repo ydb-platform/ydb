@@ -273,6 +273,10 @@ class TestRecovery(TestYdsBase):
 
         assert len(d) == 20
 
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
+
         logging.debug("Restart Master node {}".format(master_node_index))
 
         kikimr.compute_plane.kikimr_cluster.nodes[master_node_index].stop()

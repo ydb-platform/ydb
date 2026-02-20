@@ -118,7 +118,6 @@ public:
             auto& featureFlags = *AppConfig->MutableFeatureFlags();
             featureFlags.SetEnableStreamingQueries(true);
             featureFlags.SetEnableSchemaSecrets(true);
-            featureFlags.SetEnableStreamingQueriesPqSinkDeduplication(true);
 
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);
@@ -1661,7 +1660,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
-            PRAGMA pq.EnableDeduplication = "TRUE";
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
                 STREAMING = "TRUE",

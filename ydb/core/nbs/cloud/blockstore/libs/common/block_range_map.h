@@ -24,7 +24,8 @@ public:
         TBlockRange64 Range;
         TValue Value = {};
 
-        TValue& AccessValue() const {
+        TValue& AccessValue() const
+        {
             return const_cast<TValue&>(Value);
         }
     };

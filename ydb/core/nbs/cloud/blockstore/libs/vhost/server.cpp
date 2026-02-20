@@ -522,8 +522,8 @@ private:
         IStoragePtr storage)
     {
         if (options.CreateOverlappedRequestsGuard) {
-            storage = std::make_shared<TOverlappedRequestsGuardStorageWrapper>(
-                std::move(storage));
+            storage =
+                CreateOverlappedRequestsGuardStorageWrapper(std::move(storage));
         }
         return storage;
     }

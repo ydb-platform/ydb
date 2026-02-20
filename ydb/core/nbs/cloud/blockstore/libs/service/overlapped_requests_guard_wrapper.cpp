@@ -1,5 +1,6 @@
 #include "overlapped_requests_guard_wrapper.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 
@@ -11,7 +12,46 @@ namespace NYdb::NBS::NBlockStore {
 
 using namespace NThreading;
 
+namespace {
+
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TInflight;
+
+class TOverlappedRequestsGuardStorageWrapper final
+    : public IStorage
+    , public std::enable_shared_from_this<
+          TOverlappedRequestsGuardStorageWrapper>
+{
+private:
+    const IStoragePtr Storage;
+
+    TAdaptiveLock Lock;
+    ui64 RequestIdGenerator = 0;
+    TBlockRangeMap<ui64, std::unique_ptr<TInflight>> InflightRequests;
+
+public:
+    explicit TOverlappedRequestsGuardStorageWrapper(IStoragePtr storage);
+    ~TOverlappedRequestsGuardStorageWrapper() override;
+
+    // implements IStorage
+    NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
+        TCallContextPtr callContext,
+        std::shared_ptr<TReadBlocksLocalRequest> request) override;
+
+    NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
+        TCallContextPtr callContext,
+        std::shared_ptr<TWriteBlocksLocalRequest> request) override;
+
+    NThreading::TFuture<TZeroBlocksLocalResponse> ZeroBlocksLocal(
+        TCallContextPtr callContext,
+        std::shared_ptr<TZeroBlocksLocalRequest> request) override;
+
+    void ReportIOError() override;
+
+private:
+    void OnRequestFinished(ui64 requestId, const NProto::TError& error);
+};
 
 template <typename TRequest, typename TResponse>
 struct TCoveredRequest
@@ -40,7 +80,7 @@ using TDelayedWriteRequest =
 using TDelayedZeroRequest =
     TDelayedRequest<TZeroBlocksLocalRequest, TZeroBlocksLocalResponse>;
 
-struct TOverlappedRequestsGuardStorageWrapper::TInflight
+struct TInflight
 {
     TVector<TCoveredWriteRequest> CoveredWrites;
     TVector<TCoveredZeroRequest> CoveredZeroes;
@@ -50,7 +90,9 @@ struct TOverlappedRequestsGuardStorageWrapper::TInflight
     void OnRequestExecuted(IStorage* storage, const NProto::TError& error);
 };
 
-void TOverlappedRequestsGuardStorageWrapper::TInflight::OnRequestExecuted(
+////////////////////////////////////////////////////////////////////////////////
+
+void TInflight::OnRequestExecuted(
     IStorage* storage,
     const NProto::TError& error)
 {
@@ -152,7 +194,8 @@ TOverlappedRequestsGuardStorageWrapper::WriteBlocksLocal(
         return inflightPtr->CoveredWrites.back().Promise;
     }
 
-    inflightPtr->DelayedWrites.push_back({.Request = std::move(request)});
+    inflightPtr->DelayedWrites.push_back(
+        {.CallContext = std::move(callContext), .Request = std::move(request)});
     return inflightPtr->DelayedWrites.back().Promise;
 }
 
@@ -200,7 +243,8 @@ TOverlappedRequestsGuardStorageWrapper::ZeroBlocksLocal(
         return inflightPtr->CoveredZeroes.back().Promise;
     }
 
-    inflightPtr->DelayedZeroes.push_back({.Request = std::move(request)});
+    inflightPtr->DelayedZeroes.push_back(
+        {.CallContext = std::move(callContext), .Request = std::move(request)});
     return inflightPtr->DelayedZeroes.back().Promise;
 }
 
@@ -221,5 +265,16 @@ void TOverlappedRequestsGuardStorageWrapper::OnRequestFinished(
         inflight->Value->OnRequestExecuted(this, error);
     }
 }
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+IStoragePtr CreateOverlappedRequestsGuardStorageWrapper(IStoragePtr storage)
+{
+    return std::make_shared<TOverlappedRequestsGuardStorageWrapper>(storage);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

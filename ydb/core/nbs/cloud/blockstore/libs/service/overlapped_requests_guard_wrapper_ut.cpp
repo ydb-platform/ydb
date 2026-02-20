@@ -33,8 +33,7 @@ struct TTestEnvironment
     TTestEnvironment()
     {
         Storage = std::make_shared<TTestStorage>();
-        Wrapper =
-            std::make_shared<TOverlappedRequestsGuardStorageWrapper>(Storage);
+        Wrapper = CreateOverlappedRequestsGuardStorageWrapper(Storage);
 
         Storage->ReadBlocksLocalHandler =
             [&](TCallContextPtr callContext,

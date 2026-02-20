@@ -1033,7 +1033,7 @@ private:
             }
         }
 
-        if (meta->TableType == ETableType::Table || meta->TableType == ETableType::TableStore) {
+        if (meta->TableType == ETableType::Table) {
             for (auto&& setting : create.TableSettings()) {
                 if (setting.Name().Value() == "storeType") {
                     const TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());

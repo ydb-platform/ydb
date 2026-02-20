@@ -499,7 +499,6 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         schema.AddKeyColumnNames(keyColumn);
     }
 
-    schema.SetNextColumnId(nextColumnId);
     return true;
 }
 

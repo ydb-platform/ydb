@@ -289,6 +289,8 @@ public:
         const std::vector<IClientPtr>& underlyingClients,
         TFederationConfigPtr config);
 
+    void Initialize() const;
+
     TFuture<TUnversionedLookupRowsResult> LookupRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
@@ -649,7 +651,10 @@ TClient::TClient(const std::vector<IClientPtr>& underlyingClients, TFederationCo
     }
     ActiveClient_ = UnderlyingClients_[0]->Client;
     ActiveClientIndex_ = 0;
+}
 
+void TClient::Initialize() const
+{
     Executor_->Start();
 }
 
@@ -864,9 +869,12 @@ IClientPtr CreateClient(
     std::vector<NApi::IClientPtr> clients,
     TFederationConfigPtr config)
 {
-    return New<TClient>(
+    auto federatedClient = New<TClient>(
         std::move(clients),
         std::move(config));
+    federatedClient->Initialize();
+
+    return federatedClient;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

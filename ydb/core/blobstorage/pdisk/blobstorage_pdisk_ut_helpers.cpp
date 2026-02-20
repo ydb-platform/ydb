@@ -64,7 +64,7 @@ TString CreateFile(const char *baseDir, ui32 dataSize) {
 
 void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization, bool plainDataChunks,
-        bool enableFormatEncryption, std::optional<bool> enableSectorEncryption,
+        bool enableFormatAndMetadataEncryption, std::optional<bool> enableSectorEncryption,
         std::optional<bool> forceRandomizeMagic) {
     if (!diskSize) {
         diskSize = (ui64)chunkSize * 1000;
@@ -82,7 +82,7 @@ void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize,
     options.SectorMap = sectorMap;
     options.EnableSmallDiskOptimization = enableSmallDiskOptimization;
     options.PlainDataChunks = plainDataChunks;
-    options.EnableFormatEncryption = enableFormatEncryption;
+    options.EnableFormatAndMetadataEncryption = enableFormatAndMetadataEncryption;
     options.EnableSectorEncryption = enableSectorEncryption;
     options.ForceRandomizeMagic = forceRandomizeMagic;
 

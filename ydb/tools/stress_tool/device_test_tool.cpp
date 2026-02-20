@@ -40,6 +40,7 @@ R"__(
 int main(int argc, char **argv) {
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
+    bool disablePDiskDataEncryption = false;
     opts.AddLongOption("path", "path to device").RequiredArgument("FILE");
     opts.AddLongOption("cfg", "path to config file").RequiredArgument().DefaultValue("cfg.txt");
     opts.AddLongOption("name", "device name").DefaultValue("Name");
@@ -51,6 +52,7 @@ int main(int argc, char **argv) {
     opts.AddLongOption("inflight-to", "override InFlight ending value (PDisk/DDisk/UringRouter tests)").DefaultValue("0");
     opts.AddLongOption("no-logo", "disable logo printing on start").NoArgument();
     opts.AddLongOption("disable-file-lock", "disable file locking before test").NoArgument().DefaultValue("0");
+    opts.AddLongOption("disable-pdisk-encryption", "disable PDisk data encryption").StoreTrue(&disablePDiskDataEncryption);
     TOptsParseResult res(&opts, argc, argv);
 
     if (!res.Has("no-logo") && res.Get("output-format") != TString("json")) {
@@ -59,7 +61,7 @@ int main(int argc, char **argv) {
 
     NKikimr::TPerfTestConfig config(res.Get("path"), res.Get("name"), res.Get("type"),
             res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
-            res.Get("run-count"), res.Get("inflight-from"), res.Get("inflight-to"));
+            res.Get("run-count"), res.Get("inflight-from"), res.Get("inflight-to"), disablePDiskDataEncryption);
     NDevicePerfTest::TPerfTests protoTests;
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
 

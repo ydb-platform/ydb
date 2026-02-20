@@ -325,7 +325,6 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , LastNonce(lastNonce)
     , LastDataNonce(lastNonce)
     , OnEndOfSplice(false)
-    , Cypher(pDisk->Cfg->EnableSectorEncryption)
     , OffsetInSector(0)
     , SetLastGoodToWritePosition(true)
     , ChunkIdx(0)
@@ -352,7 +351,6 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     Y_VERIFY_DEBUG_S(PCtx->ActorSystem == actorSystem, PCtx->PDiskLogPrefix);
     Y_VERIFY_S(PDisk->PDiskThread.Id() == TThread::CurrentThreadId(),
             PCtx->PDiskLogPrefix << "Constructor of TLogReader must be called from PDiskThread");
-    Cypher.SetKey(PDisk->Format.LogKey);
     AtomicIncrement(PDisk->InFlightLogRead);
 
     // If there was no log chunks when SysLog was written FirstLogChunkToParseCommits is equals to LogHeadChunkIdx
@@ -879,8 +877,10 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
 
         ui8 *data = rawSector;
         // Decrypt data
-        Cypher.StartMessage(sectorFooter->Nonce);
-        Cypher.InplaceEncrypt(data, format.SectorSize - ui32(sizeof(TDataSectorFooter)));
+        TPDiskStreamCypher cypher(sectorFooter->IsEncrypted());
+        cypher.SetKey(PDisk->Format.LogKey);
+        cypher.StartMessage(sectorFooter->Nonce);
+        cypher.InplaceEncrypt(data, format.SectorSize - ui32(sizeof(TDataSectorFooter)));
         PDisk->CheckLogCanary(rawSector, ChunkIdx, SectorIdx);
 
         ui32 maxOffsetInSector = format.SectorPayloadSize() - ui32(sizeof(TFirstLogPageHeader));
@@ -1222,8 +1222,10 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
         }
 
         // Decrypt data
-        Cypher.StartMessage(sectorFooter->Nonce);
-        Cypher.InplaceEncrypt(rawSector, ui32(format.SectorSize - sizeof(TDataSectorFooter)));
+        TPDiskStreamCypher cypher(sectorFooter->IsEncrypted());
+        cypher.SetKey(PDisk->Format.LogKey);
+        cypher.StartMessage(sectorFooter->Nonce);
+        cypher.InplaceEncrypt(rawSector, ui32(format.SectorSize - sizeof(TDataSectorFooter)));
         PDisk->CheckLogCanary(rawSector);
 
         TNextLogChunkReference2 *nextLogChunkReference = (TNextLogChunkReference2*)rawSector;

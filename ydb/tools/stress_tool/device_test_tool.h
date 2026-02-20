@@ -592,6 +592,7 @@ struct TPerfTestConfig {
     ui32 InFlightFrom = 0; // 0 means not specified
     ui32 InFlightTo = 0;   // 0 means not specified
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
+    bool DisablePDiskDataEncryption;
 
     TMap<const TString, NPDisk::EDeviceType> DeviceStrToType {
         {"ROT",  NPDisk::DEVICE_TYPE_ROT},
@@ -606,7 +607,8 @@ struct TPerfTestConfig {
 
     TPerfTestConfig(const TString path, const TString name, const TString type, const TString outputFormatName,
             const TString monPort, bool doLockFile, const TString runCountStr = "1",
-            const TString inFlightFromStr = "0", const TString inFlightToStr = "0")
+            const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
+            bool disablePDiskDataEncryption = false)
         : Path(path)
         , Name(name)
         , MonPort(std::strtol(monPort.c_str(), nullptr, 10))
@@ -614,6 +616,7 @@ struct TPerfTestConfig {
         , RunCount(std::max(1, static_cast<int>(std::strtol(runCountStr.c_str(), nullptr, 10))))
         , InFlightFrom(std::strtol(inFlightFromStr.c_str(), nullptr, 10))
         , InFlightTo(std::strtol(inFlightToStr.c_str(), nullptr, 10))
+        , DisablePDiskDataEncryption(disablePDiskDataEncryption)
     {
         auto it_type = DeviceStrToType.find(type);
         if (it_type != DeviceStrToType.end()) {

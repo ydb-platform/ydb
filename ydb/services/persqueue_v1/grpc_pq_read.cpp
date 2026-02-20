@@ -73,6 +73,23 @@ ui64 TPQReadService::NextCookie() {
     return ++LastCookie;
 }
 
+void TPQReadService::Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new commit offset request");
+
+    if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new commit offset request failed - cluster is not known yet");
+
+        auto e = dynamic_cast<TEvCommitOffsetRequest*>(ev->Get());
+        Y_ENSURE(e);
+        e->RaiseIssue(FillIssue("cluster initializing", PersQueue::ErrorCode::INITIALIZING));
+        e->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
+        return;
+    } else {
+        auto e = dynamic_cast<TEvCommitOffsetRequest*>(ev->Release().Release());
+        Y_ENSURE(e);
+        ctx.Register(new TCommitOffsetActor(e, *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
+    }
+}
 
 void TPQReadService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx) {
     if (!DatacenterClassifier) {

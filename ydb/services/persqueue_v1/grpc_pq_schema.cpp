@@ -2,6 +2,7 @@
 
 #include "actors/schema_actors.h"
 #include "actors/commit_offset_actor.h"
+#include "actors/read_session_actor.h"
 #include "actors/events.h"
 
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
@@ -174,7 +175,22 @@ void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NG
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Commit Offset request");
-    f.RegisterActor(new NKikimr::NGRpcProxy::V1::TCommitOffsetActor(p));
+
+    class TForwarder : public TActorBootstrapped<TForwarder> {
+    public:
+        TForwarder(TEvCommitOffsetRequest* ev)
+            : Ev(ev)
+        {
+        }
+
+        void Bootstrap(const TActorContext& ctx) {
+            ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), Ev.release());
+        }
+
+        std::unique_ptr<TEvCommitOffsetRequest> Ev;
+    };
+
+    f.RegisterActor(new TForwarder(p));
 }
 
 void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {

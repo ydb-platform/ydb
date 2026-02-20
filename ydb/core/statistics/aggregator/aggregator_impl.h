@@ -163,6 +163,10 @@ private:
     void SaveStatisticsToTable();
     void DeleteStatisticsFromTable();
 
+    void DispatchFinishTraversalTx(
+        NKikimrStat::TEvAnalyzeResponse::EStatus status,
+        NYql::TIssues issues = NYql::TIssues());
+
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
     void PersistTraversal(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);

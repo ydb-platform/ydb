@@ -338,10 +338,10 @@ struct TIndexDescription {
     }
 };
 
-bool FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription& desc,
+void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription& desc,
     const TString& name, const TString& value, TString& error);
 
-bool FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterDescription& desc,
+void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterDescription& desc,
     const TString& name, const TString& value, TString& error);
 
 struct TColumnFamily {

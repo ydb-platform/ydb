@@ -2352,17 +2352,15 @@ public:
                                         break;
                                     }
                                     case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
-                                        if (!FillLocalBloomFilterSetting(localBloomFilterDesc, name.StringValue(), value.StringValue(), error)) {
-                                            // error already set
-                                        }
-
+                                        FillLocalBloomFilterSetting(
+                                            localBloomFilterDesc,
+                                            name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
                                     case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
-                                        if (!FillLocalBloomNgramFilterSetting(localBloomNgramFilterDesc, name.StringValue(), value.StringValue(), error)) {
-                                            // error already set
-                                        }
-
+                                        FillLocalBloomNgramFilterSetting(
+                                            localBloomNgramFilterDesc,
+                                            name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
                                     default:

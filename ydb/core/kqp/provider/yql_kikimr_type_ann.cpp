@@ -1148,17 +1148,15 @@ private:
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomFilter: {
-                        if (!FillLocalBloomFilterSetting(localBloomFilterDescription, name.StringValue(), value.StringValue(), error)) {
-                            // error already set
-                        }
-
+                        FillLocalBloomFilterSetting(
+                            localBloomFilterDescription,
+                            name.StringValue(), value.StringValue(), error);   
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomNgramFilter: {
-                        if (!FillLocalBloomNgramFilterSetting(localBloomNgramFilterDescription, name.StringValue(), value.StringValue(), error)) {
-                            // error already set
-                        }
-
+                        FillLocalBloomNgramFilterSetting(
+                            localBloomNgramFilterDescription,
+                            name.StringValue(), value.StringValue(), error);
                         break;
                     }
                     default:

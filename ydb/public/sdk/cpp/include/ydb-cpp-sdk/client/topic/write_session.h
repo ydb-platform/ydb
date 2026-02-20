@@ -227,6 +227,13 @@ public:
     std::optional<std::string_view> GetSerializedData() const {
         return DataHolder.has_value() ? std::make_optional(std::string_view(*DataHolder)) : std::nullopt;
     }
+
+    std::string_view GetData() const {
+        if (DataHolder.has_value()) {
+            return std::string_view(*DataHolder);
+        }
+        return Data;
+    }
  
     //! Message body.
     std::string_view Data;

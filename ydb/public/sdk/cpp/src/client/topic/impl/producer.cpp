@@ -47,7 +47,7 @@ bool TProducer::TPartitionInfo::IsSplitted() const {
 
 TProducer::TMessageInfo::TMessageInfo(const std::string& key, TWriteMessage&& message, std::uint32_t partition)
     : Key(key)
-    , Data(message.Data)
+    , Data(message.GetData())
     , Codec(message.Codec)
     , OriginalSize(message.OriginalSize)
     , SeqNo(message.SeqNo_)
@@ -967,7 +967,7 @@ bool TProducer::TMessagesWorker::IsMemoryUsageOK() const {
 }
 
 void TProducer::TMessagesWorker::AddMessage(const std::string& key, TWriteMessage&& message, std::uint32_t partition) {
-    MemoryUsage += message.Data.size();
+    MemoryUsage += message.GetData().size();
     PushInFlightMessage(partition, TMessageInfo(key, std::move(message), partition));
 }
 

@@ -1888,6 +1888,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             std::string Serialize() const { return Payload; }
         };
 
+        constexpr ui64 messageCount = 100;
+
         auto settings = TTopicSdkTestSetup::MakeServerSettings();
         settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
         TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
@@ -1905,25 +1907,45 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto producer = client.CreateTypedProducer<TExample>(writeSettings);
 
-        for (ui64 i = 0; i < 100; ++i) {
-            UNIT_ASSERT(producer->Write(TExample{.Payload = CreateGuidAsString()}).IsSuccess());
+        std::vector<std::string> sentPayloads;
+        sentPayloads.reserve(messageCount);
+        for (ui64 i = 0; i < messageCount; ++i) {
+            auto payload = CreateGuidAsString();
+            sentPayloads.push_back(payload);
+            UNIT_ASSERT(producer->Write(TExample{.Payload = payload}).IsSuccess());
         }
 
         UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
-
-        auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
-        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 10);
-
-        ui64 messagesWritten = 0;
-        for (const auto& partition : describe.GetTopicDescription().GetPartitions()) {
-            auto stats = partition.GetPartitionStats();
-            UNIT_ASSERT(stats);
-            messagesWritten += stats->GetEndOffset() - stats->GetStartOffset();
-        }
-
-        UNIT_ASSERT_EQUAL(messagesWritten, 100);
-        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, 100);
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, messageCount);
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(1)).IsSuccess(), "Failed to close producer");
+
+        std::vector<std::string> receivedPayloads;
+        receivedPayloads.reserve(messageCount);
+        NThreading::TPromise<void> allReadPromise = NThreading::NewPromise<void>();
+
+        auto readSettings = TReadSessionSettings()
+            .ConsumerName(setup.GetConsumerName())
+            .AppendTopics(setup.GetTopicPath(TEST_TOPIC));
+
+        readSettings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) {
+            for (auto& msg : ev.GetMessages()) {
+                receivedPayloads.push_back(std::string(msg.GetData()));
+                msg.Commit();
+            }
+            if (receivedPayloads.size() >= messageCount) {
+                allReadPromise.SetValue();
+            }
+        });
+
+        auto readSession = client.CreateReadSession(readSettings);
+        UNIT_ASSERT(allReadPromise.GetFuture().Wait(TDuration::Seconds(30)));
+        readSession->Close(TDuration::Seconds(5));
+
+        UNIT_ASSERT_VALUES_EQUAL(receivedPayloads.size(), messageCount);
+
+        std::sort(sentPayloads.begin(), sentPayloads.end());
+        std::sort(receivedPayloads.begin(), receivedPayloads.end());
+        UNIT_ASSERT_VALUES_EQUAL(sentPayloads, receivedPayloads);
     }
 
     Y_UNIT_TEST(Producer_SmallSessionIdleTimeout) {

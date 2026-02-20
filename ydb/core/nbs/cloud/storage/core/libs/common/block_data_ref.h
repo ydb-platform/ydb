@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <ydb/library/actors/util/rope.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
@@ -47,6 +49,11 @@ public:
     static TBlockDataRef Create(const TVector<ui8>& data)
     {
         return {reinterpret_cast<const char*>(data.data()), data.size()};
+    }
+
+    static TBlockDataRef Create(const TRope& data)
+    {
+        return {data.Begin().ContiguousData(), data.GetSize()};
     }
 
     static TBlockDataRef CreateZeroBlock(size_t len)

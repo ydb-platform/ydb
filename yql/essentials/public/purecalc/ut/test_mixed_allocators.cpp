@@ -9,6 +9,9 @@
 using namespace NYql::NPureCalc;
 
 namespace {
+
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 class TStatelessInputSpec: public TInputSpecBase {
 public:
     TStatelessInputSpec()

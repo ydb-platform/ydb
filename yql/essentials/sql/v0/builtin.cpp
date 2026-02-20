@@ -1681,6 +1681,8 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         const TVector<EAggregateMode>& validModes = {}) {
 
     const TString realFunctionName = functionNameOverride.empty() ? functionName : functionNameOverride;
+    // TODO(YQL-20095): Explore real problem to fix this.
+    // NOLINTNEXTLINE(bugprone-exception-escape)
     return [functionName, realFunctionName, factoryName, type, validModes] (TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory) -> INode::TPtr {
         if (!validModes.empty()) {
             if (!IsIn(validModes, aggMode)) {

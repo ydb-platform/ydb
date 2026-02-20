@@ -7,6 +7,8 @@ SRCS(
     chunked_buffer.h
     debug_info.cpp
     debug_info.h
+    exception_utils.cpp
+    exception_utils.h
     future_action.cpp
     future_action.h
     hash.cpp

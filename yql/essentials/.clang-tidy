@@ -8,6 +8,7 @@ Checks: >
   bugprone-bad-signal-to-kill-thread,
   bugprone-copy-constructor-init,
   bugprone-dangling-handle,
+  bugprone-exception-escape,
   bugprone-fold-init-type,
   bugprone-forward-declaration-namespace,
   bugprone-forwarding-reference-overload,

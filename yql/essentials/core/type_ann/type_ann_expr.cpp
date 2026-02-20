@@ -8,7 +8,9 @@
 #include <yql/essentials/core/yql_func_stack.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/utils/exception_utils.h>
 #include <yql/essentials/utils/log/log.h>
+
 #include <util/datetime/cputimer.h>
 #include <util/generic/scope.h>
 
@@ -29,20 +31,23 @@ public:
     }
 
     ~TTypeAnnotationTransformer() override {
-        if (PrintCallableTimes) {
+        if (!PrintCallableTimes) {
+            return;
+        }
+        NYql::WithAbortOnException([&] {
             std::vector<std::pair<TStringBuf, std::pair<ui64, ui64>>> pairs;
             pairs.reserve(CallableTimes_.size());
             for (auto& x : CallableTimes_) {
                 pairs.emplace_back(x.first, x.second);
             }
 
-            Sort(pairs.begin(), pairs.end(), [](auto a,auto b) { return a.second.first > b.second.first; });
+            Sort(pairs.begin(), pairs.end(), [](auto a, auto b) { return a.second.first > b.second.first; });
             Cerr << "=============\n";
             for (auto& x : pairs) {
                 Cerr << x.first << " : " << CyclesToDuration(x.second.first) << " # " << x.second.second << Endl;
             }
             Cerr << "=============\n";
-        }
+        }, "TTypeAnnotationTransformer");
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {

@@ -337,6 +337,8 @@ TSortedConstraintNode::TContainerType TSortedConstraintNode::NodeToContainer(TEx
     return sorted;
 }
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 TSortedConstraintNode::TSortedConstraintNode(TSortedConstraintNode&&) = default;
 
 bool TSortedConstraintNode::Equals(const TConstraintNode& node) const {

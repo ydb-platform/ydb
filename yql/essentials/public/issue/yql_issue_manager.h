@@ -3,6 +3,8 @@
 #include "yql_issue.h"
 #include "yql_warning.h"
 
+#include <yql/essentials/utils/exception_utils.h>
+
 #include <util/generic/maybe.h>
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
@@ -75,9 +77,12 @@ public:
         Manager_.RaiseIssueForEmptyScope();
     }
 
+    // TODO(YQL-20903): Fix exception handling in destructor.
     ~TIssueScopeGuard()
     {
-        Manager_.LeaveScope();
+        NYql::WithAbortOnException([&] {
+            Manager_.LeaveScope();
+        }, "TIssueScopeGuard");
     }
 };
 

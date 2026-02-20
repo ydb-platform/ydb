@@ -351,17 +351,16 @@ namespace NKikimr::NBsController {
             throw TExError() << "Specify at least one of VDiskId list or ExpectedVDiskCount";
         }
 
-        if (hasExpectedCount && cmd.VDuskIdSize() > cmd.GetExpectedVDiskCount()) {
-            throw TExError() << "Explicit VDiskId count# " << explicitCount
-                << " exceeds ExpectedVDiskCount# " << expected;
+        if (hasExpectedCount && cmd.VDiskIdSize() > cmd.GetExpectedVDiskCount()) {
+            throw TExError() << "Explicit VDiskId count# " << cmd.VDiskIdSize()
+                             << " exceeds ExpectedVDiskCount# " << cmd.GetExpectedVDiskCount();
         }
 
         TVector<const TVSlotInfo*> selected;
         THashSet<TVSlotId> selectedIds;
 
-        const ui32 expected = Max(cmd.GetExpectedVDiskCount(), cmd.VDiskIdSize();
+        const ui32 expected = Max<ui32>(cmd.GetExpectedVDiskCount(), cmd.VDiskIdSize());
         selected.reserve(expected);
-        ui32 explicitCount = 0;
 
         if (hasExplicitVDisks) {
             selected.reserve(cmd.VDiskIdSize());
@@ -393,7 +392,6 @@ namespace NKikimr::NBsController {
                     throw TExError() << "Duplicate VDiskId# " << vdiskId;
                 }
 
-                ++explicitCount;
                 if (slot->VSlotId.ComprisingPDiskId() != destinationPDiskId) {
                     selected.push_back(slot);
                 }
@@ -401,8 +399,7 @@ namespace NKikimr::NBsController {
         }
 
         if (hasExpectedCount) {
-            const ui32 need = expected - explicitCount;
-            selected.reserve(expected);
+            const ui32 need = expected - cmd.VDiskIdSize();
 
             ui32 added = 0;
             VSlots.ForEach([&](TVSlotId, const TVSlotInfo& slot) {
@@ -422,7 +419,7 @@ namespace NKikimr::NBsController {
             });
 
             if (added != need) {
-                throw TExReassignNotViable() << "Cluster has only " << explicitCount + added
+                throw TExReassignNotViable() << "Cluster has only " << cmd.VDiskIdSize() + added
                     << " movable VDisks including explicit list, expected# " << expected;
             }
         }

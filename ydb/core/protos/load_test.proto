@@ -197,10 +197,10 @@ message TEvLoadTestRequest {
         optional uint32 DelayBeforeMeasurementsSeconds = 4 [default = 15];
         optional uint32 InFlightWrites = 5;
 
-        repeated TWriteInfo WriteInfos = 7;
+        repeated TWriteInfo WriteInfos = 6;
 
         // Percentage of PB fill average (0-100)
-        optional uint32 FillRatio = 8 [default = 50];
+        optional uint32 FillRatio = 7 [default = 50];
     }
 
     message TVDiskLoad {

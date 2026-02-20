@@ -24,12 +24,9 @@ namespace {
 
 class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersistentBufferWriterLoadTestActor> {
     static constexpr ui32 SectorSize = 4096;
-    static constexpr ui32 ChunkSize = 32768 * SectorSize;
-    static constexpr ui32 PBSize = 128 * ChunkSize;
-
 
     struct TWriteInfo {
-        ui32 Size = SectorSize;
+        ui32 Size;
         ui32 Weight = 1;
         ui32 AccumWeight = 0;
         TRope Data;
@@ -80,6 +77,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
 
     std::map<ui64, ui64> Lsns;
     ui64 WriteSizeBytes = 0;
+    double FreeSpace = 0;
 
 
     TReallyFastRng32 Rng;
@@ -106,7 +104,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
 
 public:
     static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::BS_LOAD_DDISK_WRITE;
+        return NKikimrServices::TActivity::BS_LOAD_PERSISTENT_BUFFER_WRITE;
     }
 
     TPersistentBufferWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad& cmd, const TActorId& parent,
@@ -138,7 +136,7 @@ public:
         Credentials.TabletId = Tag ? Tag : 1;
         Credentials.Generation = 1;
 
-        VERIFY_PARAM(DDiskId);
+        VERIFY_PARAM(FillRatio);
         FillRatio = cmd.GetFillRatio();
         Y_ABORT_UNLESS(FillRatio <= 100, "FillRatio percentage should be less than or equal to 100");
 
@@ -178,7 +176,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPersistentBufferWriterLoadTestActor::StateFunc);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
-        AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PersistentBufferriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
+        AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PersistentBufferWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         SendRequest(ctx, std::make_unique<NDDisk::TEvConnect>(Credentials));
     }
 
@@ -286,7 +284,10 @@ public:
     TWriteInfo& PickWriteByWeight() {
         Y_DEBUG_ABORT_UNLESS(TotalWeight, "TotalWeight must be non-zero");
         const ui32 w = Rng() % TotalWeight;
-        auto it = std::prev(std::upper_bound(WriteInfos.begin(), WriteInfos.end(), w, TWriteInfo::TFindByWeight()));
+        auto it = std::upper_bound(WriteInfos.begin(), WriteInfos.end(), w, TWriteInfo::TFindByWeight());
+        if (it == WriteInfos.end()) {
+            it = std::prev(it);
+        }
         return *it;
     }
 
@@ -304,17 +305,16 @@ public:
 
         while (InFlight < MaxInFlight) {
             bool doWrite = Rng() % 2;
-            if (Lsns.empty() || doWrite || FillRatio < (double)WriteSizeBytes / PBSize * 100) {
+            if (Lsns.empty() || doWrite || FillRatio < FreeSpace * 100) {
                 TWriteInfo& write = PickWriteByWeight();
-                // ???
-                Report->Size = write.Size;
+                Report->Size += write.Size;
                 const TInstant now = TAppData::TimeProvider->Now();
                 const ui64 requestIdx = NewTRequestInfo(write.Size, now, false);
 
                 auto ev = std::make_unique<NDDisk::TEvWritePersistentBuffer>(Credentials,
                     NDDisk::TBlockSelector(1, 0, write.Size),
                     requestIdx, NDDisk::TWriteInstruction(0));
-                ev->AddPayload(TRope(write.Data));
+                ev->AddPayload(BuildPayload(write.Size));
                 SendRequest(ctx, std::move(ev), requestIdx);
                 ++Write_RequestsSent;
                 ++InFlight;
@@ -342,6 +342,7 @@ public:
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
         const ui64 requestIdx = ev->Cookie;
+        FreeSpace = msg.GetFreeSpace();
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);
     }
@@ -350,6 +351,7 @@ public:
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
         const ui64 requestIdx = ev->Cookie;
+        FreeSpace = msg.GetFreeSpace();
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);
     }
@@ -428,6 +430,7 @@ public:
                 TABLEBODY() {
                     PARAM("Elapsed time / Duration", (TAppData::TimeProvider->Now() - TestStartTime).Seconds() << "s / "
                             << DurationSeconds << "s");
+                    PARAM("TEvErasePersistentBuffer msgs sent", Erase_RequestsSent);
                     PARAM("TEvWritePersistentBuffer msgs sent", Write_RequestsSent);
                     PARAM("TEvWritePersistentBufferResult msgs received, OK", Write_OK);
                     PARAM("TEvWritePersistentBufferResult msgs received, not OK", Write_Error);

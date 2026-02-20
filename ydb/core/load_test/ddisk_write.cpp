@@ -474,7 +474,10 @@ public:
     TAreaInfo& PickAreaByWeight() {
         Y_DEBUG_ABORT_UNLESS(TotalWeight, "TotalWeight must be non-zero");
         const ui64 w = (ui64(Rng()) << 32 | Rng()) % TotalWeight;
-        auto it = std::prev(std::upper_bound(Areas.begin(), Areas.end(), w, TAreaInfo::TFindByWeight()));
+        auto it = std::upper_bound(Areas.begin(), Areas.end(), w, TAreaInfo::TFindByWeight());
+        if (it == Areas.end()) {
+            it = std::prev(Areas.end());
+        }
         return *it;
     }
 

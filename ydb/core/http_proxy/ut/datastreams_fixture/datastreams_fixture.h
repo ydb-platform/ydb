@@ -77,7 +77,10 @@ public:
 
     void InitAll(bool yandexCloudMode = true, bool enableMetering = false, bool extendedQueueUrl = false);
 
-    static TString FormAuthorizationStr(const TString& region);
+    TString FormAuthorizationStr(const TString& region) const;
+
+    void EnableAuthorization();
+    void DisableAuthorization();
 
     static NJson::TJsonValue CreateCreateStreamRequest();
 
@@ -251,21 +254,25 @@ public:
     ui16 MonPort = 0;
     ui16 KikimrGrpcPort = 0;
     bool SqsTopicMode = false;
+    bool SendAuthorizationStr = true;
 };
 
 class THttpProxyTestMockForSQS : public THttpProxyTestMock {
+    public:
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(false);
     }
 };
 
 class THttpProxyTestMockWithMetering : public THttpProxyTestMock {
+    public:
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(true, true);
     }
 };
 
 class THttpProxyTestMockForSQSTopic : public THttpProxyTestMock {
+    public:
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(true, false, true);
     }

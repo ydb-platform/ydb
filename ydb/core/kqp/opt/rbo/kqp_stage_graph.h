@@ -21,7 +21,7 @@ struct TSortElement {
  * Connection structs for the Stage graph
  * We make a special case for a Source connection that is required due to the limitation of the Data shard sources
  */
-struct TConnection {
+struct TConnection : TSimpleRefCount<TConnection> {
     TConnection(TString type, NYql::EStorageType fromSourceStageStorageType, ui32 outputIndex)
         : Type(type)
         , FromSourceStageStorageType(fromSourceStageStorageType)
@@ -111,24 +111,24 @@ struct TStageGraph {
         NYql::EStorageType StorageType;
     };
 
-    TVector<int> StageIds;
-    THashMap<int, TSourceStageTraits> SourceStageRenames;
-    THashMap<int, TVector<int>> StageInputs;
-    THashMap<int, TVector<int>> StageOutputs;
-    THashMap<std::pair<int, int>, TVector<std::shared_ptr<TConnection>>> Connections;
-    THashMap<int, int> StageOutputIndices;
+    TVector<ui32> StageIds;
+    THashMap<ui32, TSourceStageTraits> SourceStageRenames;
+    THashMap<ui32, TVector<ui32>> StageInputs;
+    THashMap<ui32, TVector<ui32>> StageOutputs;
+    THashMap<std::pair<ui32, ui32>, TVector<TIntrusivePtr<TConnection>>> Connections;
+    THashMap<ui32, ui32> StageOutputIndices;
 
-    int AddStage() {
-        int newStageId = StageIds.size();
+    ui32 AddStage() {
+        ui32 newStageId = StageIds.size();
         StageIds.push_back(newStageId);
-        StageInputs[newStageId] = TVector<int>();
-        StageOutputs[newStageId] = TVector<int>();
+        StageInputs[newStageId] = TVector<ui32>();
+        StageOutputs[newStageId] = TVector<ui32>();
         return newStageId;
     }
 
-    int AddSourceStage(const TVector<TString>& columns, const TVector<TInfoUnit>& renames, const NYql::EStorageType& storageType,
+    ui32 AddSourceStage(const TVector<TString>& columns, const TVector<TInfoUnit>& renames, const NYql::EStorageType& storageType,
                        bool needsMap = true) {
-        int res = AddStage();
+        ui32 res = AddStage();
         TVector<std::pair<TString, TInfoUnit>> renamePairs;
         if (needsMap) {
             for (size_t i = 0; i < columns.size(); i++) {
@@ -140,19 +140,19 @@ struct TStageGraph {
         return res;
     }
 
-    bool IsSourceStage(const int id) const {
+    bool IsSourceStage(const ui32 id) const {
         return SourceStageRenames.contains(id);
     }
 
-    bool IsSourceStageRowType(const int id) const {
+    bool IsSourceStageRowType(const ui32 id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::RowStorage);
     }
 
-    bool IsSourceStageColumnType(const int id) const {
+    bool IsSourceStageColumnType(const ui32 id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::ColumnStorage);
     }
 
-    NYql::EStorageType GetStorageType(const int id) const {
+    NYql::EStorageType GetStorageType(const ui32 id) const {
         auto it = SourceStageRenames.find(id);
         if (it != SourceStageRenames.end()) {
             return it->second.StorageType;
@@ -160,7 +160,7 @@ struct TStageGraph {
         return NYql::EStorageType::NA;
     }
 
-    void Connect(int from, int to, std::shared_ptr<TConnection> connection) {
+    void Connect(ui32 from, ui32 to, TIntrusivePtr<TConnection> connection) {
         auto &outputs = StageOutputs.at(from);
         outputs.push_back(to);
         auto &inputs = StageInputs.at(to);
@@ -168,14 +168,14 @@ struct TStageGraph {
         Connections[std::make_pair(from, to)].push_back(connection);
     }
 
-    TVector<std::shared_ptr<TConnection>> GetConnections(int from, int to) { return Connections.at(std::make_pair(from, to)); }
+    TVector<TIntrusivePtr<TConnection>> GetConnections(ui32 from, ui32 to) { return Connections.at(std::make_pair(from, to)); }
 
     /**
      * Generate an expression for stage inputs
      * The complication is the special handling of Source stage due to limitation of data shard reader
      */
-    std::pair<TExprNode::TPtr, TExprNode::TPtr> GenerateStageInput(int &stageInputCounter, TExprNode::TPtr &node, TExprContext &ctx,
-                                                                   int fromStage);
+    std::pair<TExprNode::TPtr, TExprNode::TPtr> GenerateStageInput(ui32 &stageInputCounter, TExprNode::TPtr &node, TExprContext &ctx,
+                                                                   ui32 fromStage);
 
     ui32 GetOutputIndex(ui32 stageIndex) {
         ui32 outputIndex{0};
@@ -192,7 +192,7 @@ struct TStageGraph {
     void TopologicalSort();
 private:
 
-    bool IsSourceStageTypeImpl(const int id, const NYql::EStorageType tableStorageType) const {
+    bool IsSourceStageTypeImpl(const ui32 id, const NYql::EStorageType tableStorageType) const {
         auto it = SourceStageRenames.find(id);
         if (it != SourceStageRenames.end()) {
             return it->second.StorageType == tableStorageType;

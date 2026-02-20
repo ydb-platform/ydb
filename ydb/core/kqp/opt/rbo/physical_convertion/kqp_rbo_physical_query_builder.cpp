@@ -23,12 +23,12 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
     const auto& stageInputIds = Graph.StageInputs;
     auto& ctx = RBOCtx.ExprCtx;
 
-    THashMap<int, TExprNode::TPtr> finalizedStages;
+    THashMap<ui32, TExprNode::TPtr> finalizedStages;
     for (const auto id : stageIds) {
         YQL_CLOG(TRACE, CoreDq) << "Finalizing stage " << id;
 
         TVector<TExprNode::TPtr> inputConnections;
-        THashSet<int> processedInputsIds;
+        THashSet<ui32> processedInputsIds;
         for (const auto inputStageId : stageInputIds.at(id)) {
             if (processedInputsIds.contains(inputStageId)) {
                 continue;

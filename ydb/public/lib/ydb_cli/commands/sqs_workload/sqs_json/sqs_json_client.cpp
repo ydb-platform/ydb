@@ -25,6 +25,7 @@ namespace NYdb::NConsoleClient {
         constexpr auto kAmzSdkRequestHeader = "amz-sdk-request";
         constexpr auto kAmzSdkRequestValue = "attempt=1";
         constexpr auto kXAmzAPIVersionHeader = "x-amz-api-version";
+        constexpr auto kXAmzCloudIamTokenHeader = "x-yacloud-subjecttoken";
         constexpr auto kXAmzAPIVersionValue = "2012-11-05";
         constexpr auto kAmzSdkInvocationIdHeader = "amz-sdk-invocation-id";
         constexpr auto kServiceName = "sqs";
@@ -110,12 +111,15 @@ namespace NYdb::NConsoleClient {
 
     TSQSJsonClient::TSQSJsonClient(
         const Aws::Auth::AWSCredentials& credentials,
-        const Aws::Client::ClientConfiguration& clientConfiguration)
+        const Aws::Client::ClientConfiguration& clientConfiguration,
+        const Aws::String& cloudIamToken)
         : SQSClient(credentials, clientConfiguration)
         ,
         HttpClient(Aws::Http::CreateHttpClient(clientConfiguration))
         ,
         EndpointOverride(clientConfiguration.endpointOverride)
+        ,
+        CloudIamToken(cloudIamToken)
     {
         auto credentialsProvider =
             Aws::MakeShared<Aws::Auth::SimpleAWSCredentialsProvider>(
@@ -140,6 +144,9 @@ namespace NYdb::NConsoleClient {
         request->SetHeaderValue(kContentTypeHeader, kContentTypeValue);
         request->SetHeaderValue(kAmzSdkRequestHeader, kAmzSdkRequestValue);
         request->SetHeaderValue(kXAmzAPIVersionHeader, kXAmzAPIVersionValue);
+        if (!CloudIamToken.empty()) {
+            request->SetHeaderValue(kXAmzCloudIamTokenHeader, CloudIamToken);
+        }
         const TString invocationId = CreateGuidAsString();
         request->SetHeaderValue(
             kAmzSdkInvocationIdHeader,

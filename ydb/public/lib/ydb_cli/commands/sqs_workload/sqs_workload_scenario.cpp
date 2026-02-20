@@ -53,9 +53,9 @@ namespace NYdb::NConsoleClient {
     void TSqsWorkloadScenario::InitSqsClient() {
         Aws::Client::ClientConfiguration sqsClientConfiguration;
 
-        if (QueueEndpoint.Defined()) {
+        if (Endpoint.Defined()) {
             sqsClientConfiguration.endpointOverride =
-                Aws::String(QueueEndpoint->c_str(), QueueEndpoint->size());
+                Aws::String(Endpoint->c_str(), Endpoint->size());
         }
 
         sqsClientConfiguration.scheme = Aws::Http::Scheme::HTTP;
@@ -90,20 +90,30 @@ namespace NYdb::NConsoleClient {
                     "sqs-client", credentials, sqsClientConfiguration), StatsCollector, ValidateFifo);
         } else {
             auto jsonSqsClient = Aws::MakeShared<TSQSJsonClient>(
-                "json-sqs-client", credentials, sqsClientConfiguration);
+                "json-sqs-client",
+                credentials,
+                sqsClientConfiguration,
+                CloudIamToken.Defined() ? Aws::String(CloudIamToken.GetRef().c_str(), CloudIamToken.GetRef().size()) : Aws::String());
             SqsClient = Aws::MakeShared<TSQSClientWrapper>(
                 "sqs-client-wrapper", credentials, sqsClientConfiguration, jsonSqsClient, StatsCollector, ValidateFifo);
         }
     }
 
-    TString TSqsWorkloadScenario::GetQueueUrl() const {
+    TString TSqsWorkloadScenario::BuildQueueName(TString topic, TString consumer, TMaybe<TString> queueName) const {
+        if (queueName.Defined()) {
+            return queueName.GetRef();
+        }
+        return topic + "@" + consumer;
+    }
+
+    TString TSqsWorkloadScenario::GetQueueUrl(TString topic, TString consumer, TMaybe<TString> queueName) const {
         Aws::SQS::Model::GetQueueUrlRequest request;
-        request.SetQueueName(QueueName);
+        request.SetQueueName(BuildQueueName(topic, consumer, queueName));
         auto outcome = SqsClient->GetQueueUrl(request);
         if (outcome.IsSuccess()) {
             return outcome.GetResult().GetQueueUrl().c_str();
         } else {
-            Cerr << "got error: " << outcome.GetError().GetMessage() << Endl;
+            Log->Write(ELogPriority::TLOG_ERR, "got error: " + outcome.GetError().GetMessage());
             return "";
         }
     }

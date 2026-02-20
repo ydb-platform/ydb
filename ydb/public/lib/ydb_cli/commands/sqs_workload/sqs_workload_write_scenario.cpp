@@ -17,7 +17,7 @@ namespace NYdb::NConsoleClient {
         InitSqsClient();
 
         auto finishedFlag = std::make_shared<std::atomic_bool>(false);
-        auto queueUrl = GetQueueUrl();
+        auto queueUrl = GetQueueUrl(Topic, Consumer, QueueName);
         if (queueUrl.empty()) {
             DestroySqsClient();
             return EXIT_FAILURE;
@@ -40,7 +40,6 @@ namespace NYdb::NConsoleClient {
             .WorkersCount = WorkersCount,
             .GroupsAmount = GroupsAmount,
             .MessageSize = MessageSize,
-            .SetSubjectToken = SetSubjectToken,
         };
 
         auto f = std::async([&params, finishedFlag]() {

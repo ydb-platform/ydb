@@ -26,7 +26,6 @@ namespace NYdb::NConsoleClient {
         ui32 WorkersCount;
         ui32 GroupsAmount;
         ui32 MessageSize;
-        bool SetSubjectToken;
     };
 
     class TSqsWorkloadWriter {

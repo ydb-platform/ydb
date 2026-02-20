@@ -17,11 +17,17 @@ namespace NYdb::NConsoleClient {
 
         // Common params
         config.Opts->AddLongOption("queue-name", "Queue URL.")
-            .Required()
+            .Hidden()
             .StoreResult(&Scenario.QueueName);
-        config.Opts->AddLongOption("queue-endpoint", "Queue endpoint.")
-            .Optional()
-            .StoreResult(&Scenario.QueueEndpoint);
+        config.Opts->AddLongOption("topic", "YDB topic name.")
+            .DefaultValue("sqs-workload-topic")
+            .StoreResult(&Scenario.Topic);
+        config.Opts->AddLongOption("consumer", "YDB consumer name.")
+            .DefaultValue("sqs-workload-consumer")
+            .StoreResult(&Scenario.Consumer);
+        config.Opts->AddLongOption("http-endpoint", "HTTP endpoint.")
+            .DefaultValue("http://localhost:8773/Root/db1")
+            .StoreResult(&Scenario.Endpoint);
         config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
             .DefaultValue(60)
             .StoreResult(&Scenario.TotalSec);
@@ -52,16 +58,20 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Scenario.Account);
         config.Opts->AddLongOption("aws-session-token", "AWS session token.")
             .StoreResult(&Scenario.Token);
+        config.Opts->AddLongOption("cloud-iam-token", "Cloud IAM token.")
+            .StoreResult(&Scenario.CloudIamToken);
         config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
             .StoreResult(&Scenario.SecretKey);
-        config.Opts->AddLongOption("error-messages-rate", "Error messages rate.")
-            .Optional()
-            .ManualDefaultValueDescription(
-                "This parameter means that every Nth will not be removed from the queue.")
+        config.Opts->AddLongOption("keep-error-every", "Keep every Nth error message in the queue (do not delete it). 0 = delete all error messages; 1 = keep all error messages")
             .StoreResult(&Scenario.ErrorMessagesRate);
         config.Opts
-            ->AddLongOption("error-messages-destiny",
+            ->AddLongOption("error-policy",
                             "Error messages destiny (fatal, success-after-retry).")
+            .ManualDefaultValueDescription(
+                "How to treat errors:\n"
+                            "  - fatal - stop immediately and return non-zero exit code\n"
+                            "  - success-after-retry - retry; if retry succeeds, exit with 0 (errors are not fatal)\n"
+                            "(default: fatal)")
             .DefaultValue("fatal")
             .StoreResult(&Scenario.ErrorMessagesDestiny);
         config.Opts
@@ -77,7 +87,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("batch-size", "Batch size.")
             .DefaultValue(1)
             .StoreResult(&Scenario.BatchSize);
-        config.Opts->AddLongOption("validate-fifo", "Validate FIFO queue.")
+        config.Opts->AddLongOption("validate-messages-order", "Validate messages order.")
             .DefaultValue(false)
             .StoreTrue(&Scenario.ValidateFifo);
         config.Opts->AddLongOption("use-xml-api", "Use XML API.")
@@ -88,12 +98,7 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(2000)
             .StoreResult(&Scenario.RequestTimeoutMs);
         config.Opts->AddLongOption("region", "AWS region.")
-            .Optional()
             .StoreResult(&Scenario.Region);
-        config.Opts->AddLongOption("set-subject-token", "Set subject token.")
-            .DefaultValue(false)
-            .Hidden()
-            .StoreTrue(&Scenario.SetSubjectToken);
     }
 
     void TCommandWorkloadSqsRunRead::Parse(TConfig& config) {

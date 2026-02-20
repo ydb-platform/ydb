@@ -11,7 +11,8 @@ namespace NYdb::NConsoleClient {
     public:
         explicit TSQSJsonClient(
             const Aws::Auth::AWSCredentials& credentials,
-            const Aws::Client::ClientConfiguration& clientConfiguration);
+            const Aws::Client::ClientConfiguration& clientConfiguration,
+            const Aws::String& cloudIamToken);
         ~TSQSJsonClient() = default;
 
         SendMessageBatchOutcome SendMessageBatch(
@@ -29,6 +30,7 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<Aws::Http::HttpClient> HttpClient;
         std::shared_ptr<Aws::Client::AWSAuthV4Signer> Signer;
         Aws::String EndpointOverride;
+        Aws::String CloudIamToken;
 
         void AddHeaders(const Aws::Http::HeaderValueCollection&,
                         std::shared_ptr<Aws::Http::HttpRequest>&) const;

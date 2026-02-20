@@ -9,7 +9,9 @@
 
 namespace NYdb::NConsoleClient {
 
-    int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
+    int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig& config) {
+        TString database = config.Database;
+        
         InitAwsSdk();
         auto result = RunScenario();
         DestroyAwsSdk();
@@ -22,7 +24,11 @@ namespace NYdb::NConsoleClient {
         InitSqsClient();
 
         auto finishedFlag = std::make_shared<std::atomic_bool>(false);
-        auto queueUrl = GetQueueUrl();
+        auto queueUrl = GetQueueUrl(Topic, Consumer, QueueName);
+        if (queueUrl.empty()) {
+            DestroySqsClient();
+            return EXIT_FAILURE;
+        }
 
         TSqsWorkloadReaderParams params{
             .TotalSec = TotalSec,
@@ -41,7 +47,6 @@ namespace NYdb::NConsoleClient {
             .ErrorMessagesDestiny = ErrorMessagesDestiny,
             .HandleMessageDelay = TDuration::MilliSeconds(HandleMessageDelayMs),
             .VisibilityTimeout = TDuration::MilliSeconds(VisibilityTimeoutMs),
-            .SetSubjectToken = SetSubjectToken,
             .ValidateFifo = ValidateFifo,
             .HashMapMutex = std::make_shared<std::mutex>(),
             .LastReceivedMessageInGroup =

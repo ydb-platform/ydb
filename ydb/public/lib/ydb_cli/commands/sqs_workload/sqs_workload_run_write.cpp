@@ -17,12 +17,18 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         // Common params
+        config.Opts->AddLongOption("topic", "YDB topic name.")
+            .DefaultValue("sqs-workload-topic")
+            .StoreResult(&Scenario.Topic);
+        config.Opts->AddLongOption("consumer", "YDB consumer name.")
+            .DefaultValue("sqs-workload-consumer")
+            .StoreResult(&Scenario.Consumer);
         config.Opts->AddLongOption("queue-name", "AWS queue name.")
-            .Required()
+            .Hidden()
             .StoreResult(&Scenario.QueueName);
-        config.Opts->AddLongOption("queue-endpoint", "Queue endpoint.")
-            .Optional()
-            .StoreResult(&Scenario.QueueEndpoint);
+        config.Opts->AddLongOption("http-endpoint", "HTTP endpoint.")
+            .DefaultValue("http://localhost:8773/Root/db1")
+            .StoreResult(&Scenario.Endpoint);
         config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
             .DefaultValue(60)
             .StoreResult(&Scenario.TotalSec);
@@ -49,6 +55,8 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Scenario.Account);
         config.Opts->AddLongOption("aws-session-token", "AWS session token.")
             .StoreResult(&Scenario.Token);
+        config.Opts->AddLongOption("cloud-iam-token", "Cloud IAM token.")
+            .StoreResult(&Scenario.CloudIamToken);
         config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
             .StoreResult(&Scenario.SecretKey);
         config.Opts->AddLongOption('b', "batch-size", "AWS batch size.")
@@ -74,11 +82,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("region", "AWS region.")
             .Optional()
             .StoreResult(&Scenario.Region);
-        config.Opts->AddLongOption("set-subject-token", "Set subject token.")
-            .DefaultValue(false)
-            .Hidden()
-            .StoreTrue(&Scenario.SetSubjectToken);
-        config.Opts->AddLongOption("validate-fifo", "Validate FIFO.")
+        config.Opts->AddLongOption("with-messages-order", "Write messages with order (validation can be enabled in run read command).")
             .DefaultValue(false)
             .StoreTrue(&Scenario.ValidateFifo);
         config.Opts->AddLongOption("max-unique-messages", "Max unique messages. If set to 0, content based deduplication is used.")

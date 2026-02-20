@@ -408,8 +408,7 @@ public:
                 }
 
                 if (auto maybeEnableDeduplication = State_->Configuration->EnableDeduplication.Get()) {
-                    maybeEnableDeduplication->to_lower();
-                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication == "true"sv);
+                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication);
                 }
 
                 protoSettings.PackFrom(sinkDesc);

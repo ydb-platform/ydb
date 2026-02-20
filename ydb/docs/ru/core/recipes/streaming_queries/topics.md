@@ -39,7 +39,7 @@
     -v $(pwd)/ydb_certs:/ydb_certs \
     -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
     -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries \
-    ydbplatform/local-ydb:trunk
+    ydbplatform/local-ydb:25.4
   ```
 
 - local_ydb

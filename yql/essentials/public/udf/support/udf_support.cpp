@@ -58,8 +58,7 @@ extern "C" void BindSymbols(const NYql::NUdf::TStaticSymbols& symbols) {
 }
 #endif
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 namespace {
 
@@ -77,5 +76,4 @@ void SetBackTraceCallbackImpl(TBackTraceCallback callback) {
     SetFormatBackTraceFn(UdfBackTraceFn);
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

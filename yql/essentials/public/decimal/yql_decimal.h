@@ -6,8 +6,7 @@
 #include <type_traits>
 #include <limits>
 
-namespace NYql {
-namespace NDecimal {
+namespace NYql::NDecimal {
 
 #ifdef _win_
     #ifndef DONT_USE_NATIVE_INT128
@@ -94,9 +93,9 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale);
 
 template <typename TMkqlProto>
 inline TInt128 FromProto(const TMkqlProto& val) {
-    ui64 half[2] = {val.GetLow128(), val.GetHi128()};
+    std::array<ui64, 2> half = {val.GetLow128(), val.GetHi128()};
     TInt128 val128;
-    std::memcpy(&val128, half, sizeof(val128));
+    std::memcpy(&val128, half.data(), sizeof(val128));
     return val128;
 }
 
@@ -143,9 +142,9 @@ inline TValue ToYtDecimal(TInt128 val) {
 }
 
 inline TInt128 FromHalfs(ui64 lo, i64 hi) {
-    ui64 half[2] = {lo, static_cast<ui64>(hi)};
+    std::array<ui64, 2> half = {lo, static_cast<ui64>(hi)};
     TInt128 val128;
-    std::memcpy(&val128, half, sizeof(val128));
+    std::memcpy(&val128, half.data(), sizeof(val128));
     return val128;
 }
 
@@ -365,5 +364,4 @@ public:
     }
 };
 
-} // namespace NDecimal
-} // namespace NYql
+} // namespace NYql::NDecimal

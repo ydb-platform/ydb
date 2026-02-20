@@ -12,7 +12,7 @@
 (let $11 '('"UseSsl" '"1"))
 (let $12 '('('"Consumer" '"test_client") $9 $10 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") $11))
 (let $13 (SecureParam '"cluster:default_pq"))
-(let $14 (DqPqTopicSource $3 $8 '('"value") $12 $13 '"" $7))
+(let $14 (DqPqTopicSource $3 $8 '('"value") $12 $13 '"" $7 '""))
 (let $15 (DataSink '"pq" '"pq"))
 (let $16 (PqTopic '"pq" '"local" '"test_topic_output" $5 '() (StructType '('"Data" $6))))
 (let $17 (DqPqTopicSink $16 '($9 $11) $13))

@@ -174,6 +174,7 @@ public:
     bool IsHeadRead;
     ui64 LockId = 0;
     ui32 LockNodeId = 0;
+    ui64 QuerySpanId = 0;
     NKikimrDataEvents::ELockMode LockMode = NKikimrDataEvents::OPTIMISTIC;
     TLockInfo::TPtr Lock;
     bool LockInconsistent = false;

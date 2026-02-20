@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnViewsAndTables, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnViewsAndTables, 4, 1, false) {
         CancelS3(t, {
             {
                 EPathTypeView,

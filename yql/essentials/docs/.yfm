@@ -19,3 +19,4 @@ docs-viewer:
   startrek:
     queue: YQLSUPPORT
     components: [docs]
+  favicon-src: https://yql.yandex-team.ru/fav-new-yql-prod.png

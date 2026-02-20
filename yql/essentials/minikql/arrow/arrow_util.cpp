@@ -31,6 +31,7 @@ std::shared_ptr<arrow::Scalar> UnwrapScalar(std::shared_ptr<arrow::Scalar> scala
 }
 
 std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     static constexpr ui8 Data alignas(ArrowAlignment)[1]{};
     return std::make_shared<arrow::Buffer>(Data, 0);
 }

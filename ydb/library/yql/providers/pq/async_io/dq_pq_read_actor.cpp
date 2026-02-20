@@ -142,6 +142,7 @@ struct TEvPrivate {
 
 class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr bool STATIC_DISCOVERY = true;
+    static constexpr TDuration CHECK_HANGING_PERIOD = TDuration::Minutes(1);
 
     struct TMetrics {
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -345,11 +346,17 @@ public:
                     amountPartitions += cluster.PartitionsCount;
                 }
 
+                auto counters = Metrics.Task;
+                if (!clusterState.Info.Name.empty()) {
+                    counters = counters->GetSubgroup("federated_pq_cluster", TString(clusterState.Info.Name));
+                }
+
                 std::tie(clusterState.ReadSession, clusterState.ReadSessionControl) = CreateCompositeTopicReadSession(ActorContext(), GetTopicClient(clusterState), {
                     .TxId = TxId,
                     .TaskId = TaskId,
+                    .Cluster = TString(clusterState.Info.Name),
                     .AmountPartitionsCount = amountPartitions,
-                    .Counters = Metrics.Task,
+                    .Counters = counters,
                     .BaseSettings = GetReadSessionSettings(clusterState),
                     .IdleTimeout = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetIdleTimeoutUs()),
                     .MaxPartitionReadSkew = maxPartitionReadSkew,
@@ -403,6 +410,7 @@ private:
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
+        hFunc(TEvents::TEvWakeup, Handle);
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
@@ -592,6 +600,29 @@ private:
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
     }
 
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        WakeupScheduled = false;
+        ScheduleWakeup();
+
+        if (TInstant::Now() - LastActiveTime <= CHECK_HANGING_PERIOD) {
+            return;
+        }
+        LastActiveTime = TInstant::Now();
+
+        for (const auto& clusterState : Clusters) {
+            if (const auto& readSession = clusterState.ReadSession) {
+                SRC_LOG_D("Check Read Session, cluster: " << clusterState.Info.Name << ", is ready: " << readSession->WaitEvent().IsReady());
+            }
+        }
+    }
+
+    void ScheduleWakeup() {
+        if (!WakeupScheduled) {
+            WakeupScheduled = true;
+            Schedule(CHECK_HANGING_PERIOD, new TEvents::TEvWakeup());
+        }
+    }
+
     i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
         // called with bound allocator
         Metrics.InFlyAsyncInputData->Set(0);
@@ -656,6 +687,9 @@ private:
         }
 
         if (recheckBatch) {
+            LastActiveTime = TInstant::Now();
+            ScheduleWakeup();
+
             usedSpace = 0;
             if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
                 return usedSpace;
@@ -967,6 +1001,8 @@ private:
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;
     bool WithoutConsumer = false;
+    bool WakeupScheduled = false;
+    TInstant LastActiveTime = TInstant::Now();
 };
 
 ui32 ExtractPartitionsFromParams(

@@ -868,16 +868,17 @@ struct Schema : NIceDb::Schema {
     };
 
     struct CompileCacheQueries : Table<25> {
-        struct NodeId              : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct QueryId             : Column<2, NScheme::NTypeIds::Utf8> {};
-        struct Query               : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct AccessCount         : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct CompiledAt          : Column<5, NScheme::NTypeIds::Timestamp> {};
-        struct UserSID             : Column<6, NScheme::NTypeIds::Utf8> {};
-        struct LastAccessedAt      : Column<7, NScheme::NTypeIds::Timestamp> {};
-        struct CompilationDuration : Column<8, NScheme::NTypeIds::Uint64> {};
-        struct Warnings            : Column<9, NScheme::NTypeIds::Utf8> {};
-        struct Metadata            : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct NodeId                : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct QueryId               : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Query                 : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct AccessCount           : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct CompiledAt            : Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct UserSID               : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct LastAccessedAt        : Column<7, NScheme::NTypeIds::Timestamp> {};
+        struct CompilationDurationMs : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct Warnings              : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct Metadata              : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct IsTruncated           : Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<NodeId, QueryId>;
         using TColumns = TableColumns<
@@ -888,9 +889,10 @@ struct Schema : NIceDb::Schema {
             CompiledAt,
             UserSID,
             LastAccessedAt,
-            CompilationDuration,
+            CompilationDurationMs,
             Warnings,
-            Metadata>;
+            Metadata,
+            IsTruncated>;
     };
 
     struct StreamingQueries : Table<26> {

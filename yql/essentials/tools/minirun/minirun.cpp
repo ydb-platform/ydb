@@ -37,7 +37,7 @@ public:
 
 } // namespace NYql
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char** argv) {
     try {
         return NYql::TMiniRunTool().Main(argc, argv);
     } catch (...) {

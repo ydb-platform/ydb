@@ -20,8 +20,7 @@
 #include <arrow/compute/exec_internal.h>
 #include <arrow/util/bitmap_ops.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 using TExec = arrow::Status (*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
 
@@ -665,8 +664,7 @@ public:
     }
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 #define BEGIN_ARROW_UDF_IMPL(udfNameBlocks, signatureFunc, optArgc, isStrict)                           \
     class udfNameBlocks {                                                                               \

@@ -27,12 +27,14 @@ namespace NKikimr {
         ui64 HugeKeeperLsnToKeep = 0;
         ui64 ScrubLsnToKeep = 0;
         ui64 MetadataLsnToKeep = 0;
+        ui64 ChunkKeeperLsnToKeep = 0;
         TInstant HullLastTime;
         TInstant SyncLogLastTime;
         TInstant SyncerLastTime;
         TInstant HugeKeeperLastTime;
         TInstant ScrubLastTime;
         TInstant MetadataLastTime;
+        TInstant ChunkKeeperLastTime;
 
         TInstant LastCutTime;
         TDeque<ui64> FreeUpToLsn;
@@ -99,6 +101,9 @@ namespace NKikimr {
                 case TEvVDiskCutLog::Metadata:
                     update(MetadataLsnToKeep, MetadataLastTime, "Metadata");
                     break;
+                case TEvVDiskCutLog::ChunkKeeper:
+                    update(ChunkKeeperLsnToKeep, ChunkKeeperLastTime, "ChunkKeeper");
+                    break;
                 default:
                     Y_ABORT("Unexpected case: %d", msg->Component);
             }
@@ -121,7 +126,7 @@ namespace NKikimr {
                 return;
 
             ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep,
-                HugeKeeperLsnToKeep, ScrubLsnToKeep);
+                HugeKeeperLsnToKeep, ScrubLsnToKeep, ChunkKeeperLsnToKeep);
 
             if (AppData(ctx)->FeatureFlags.GetEnableTinyDisks()) {
                 curLsn = Min(curLsn, MetadataLsnToKeep);

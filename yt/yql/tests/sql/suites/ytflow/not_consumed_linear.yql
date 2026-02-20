@@ -12,4 +12,4 @@ select
         ToDynamicLinear(ToMutDict({string_field: int64_field}, 1)),
         ToDynamicLinear(ToMutDict({string_field: int64_field}, 2))
     ])[0]))) as dict_field
-from Input
+from Input;

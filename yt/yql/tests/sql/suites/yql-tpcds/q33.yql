@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: (union_op select_stmt_intersect)* */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -23,7 +22,7 @@ $ss = (
             FROM
                 plato.item
             WHERE
-                i_category IN ('Books')
+                i_category IN ('Books',)
         )
         AND ss_item_sk == i_item_sk
         AND ss_sold_date_sk == d_date_sk
@@ -54,7 +53,7 @@ $cs = (
             FROM
                 plato.item
             WHERE
-                i_category IN ('Books')
+                i_category IN ('Books',)
         )
         AND cs_item_sk == i_item_sk
         AND cs_sold_date_sk == d_date_sk
@@ -85,7 +84,7 @@ $ws = (
             FROM
                 plato.item
             WHERE
-                i_category IN ('Books')
+                i_category IN ('Books',)
         )
         AND ws_item_sk == i_item_sk
         AND ws_sold_date_sk == d_date_sk

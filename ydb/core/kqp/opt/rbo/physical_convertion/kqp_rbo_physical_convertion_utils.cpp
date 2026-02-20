@@ -15,7 +15,7 @@ TString GetFullName(const TInfoUnit& name) {
     return name.GetFullName();
 }
 
-bool IsMultiConsumerHandlerNeeded(const std::shared_ptr<IOperator>& op) {
+bool IsMultiConsumerHandlerNeeded(const TIntrusivePtr<IOperator>& op) {
     return op->Props.NumOfConsumers.has_value() && op->Props.NumOfConsumers.value() > 1;
 }
 

@@ -107,8 +107,8 @@ private:
 
 struct TPersonStruct {
     static const size_t MEMBERS_COUNT = 3;
-    static ui32 MetaIndexes[MEMBERS_COUNT];
-    static ui32 MetaBackIndexes[MEMBERS_COUNT];
+    static std::array<ui32, MEMBERS_COUNT> MetaIndexes;
+    static std::array<ui32, MEMBERS_COUNT> MetaBackIndexes;
 
     TString FirstName;
     TString LastName;
@@ -128,13 +128,13 @@ struct TPersonStruct {
     }
 };
 
-ui32 TPersonStruct::MetaIndexes[MEMBERS_COUNT];
-ui32 TPersonStruct::MetaBackIndexes[MEMBERS_COUNT];
+std::array<ui32, TPersonStruct::MEMBERS_COUNT> TPersonStruct::MetaIndexes;
+std::array<ui32, TPersonStruct::MEMBERS_COUNT> TPersonStruct::MetaBackIndexes;
 
 struct TPersonStructWithOptList {
     static const size_t MEMBERS_COUNT = 4;
-    static ui32 MetaIndexes[MEMBERS_COUNT];
-    static ui32 MetaBackIndexes[MEMBERS_COUNT];
+    static std::array<ui32, MEMBERS_COUNT> MetaIndexes;
+    static std::array<ui32, MEMBERS_COUNT> MetaBackIndexes;
 
     TString FirstName;
     TString LastName;
@@ -158,8 +158,8 @@ struct TPersonStructWithOptList {
     }
 };
 
-ui32 TPersonStructWithOptList::MetaIndexes[MEMBERS_COUNT];
-ui32 TPersonStructWithOptList::MetaBackIndexes[MEMBERS_COUNT];
+std::array<ui32, TPersonStructWithOptList::MEMBERS_COUNT> TPersonStructWithOptList::MetaIndexes;
+std::array<ui32, TPersonStructWithOptList::MEMBERS_COUNT> TPersonStructWithOptList::MetaBackIndexes;
 
 struct TCallableOneUi32Arg {
 };
@@ -176,7 +176,7 @@ struct TTypeBuilderHelper<NUdf::TPersonStruct> {
         auto structType = structBuilder->Build();
         for (const auto& index : TPersonStruct::MetaIndexes) {
             Y_ABORT_UNLESS(index < NUdf::TPersonStruct::MEMBERS_COUNT);
-            NUdf::TPersonStruct::MetaBackIndexes[index] = &index - TPersonStruct::MetaIndexes;
+            NUdf::TPersonStruct::MetaBackIndexes[index] = &index - TPersonStruct::MetaIndexes.data();
             Y_ABORT_UNLESS(NUdf::TPersonStruct::MetaBackIndexes[index] < NUdf::TPersonStruct::MEMBERS_COUNT);
         }
         return structType;
@@ -196,7 +196,7 @@ struct TTypeBuilderHelper<NUdf::TPersonStructWithOptList> {
         auto structType = structBuilder->Build();
         for (const auto& index : TPersonStructWithOptList::MetaIndexes) {
             Y_ABORT_UNLESS(index < NUdf::TPersonStructWithOptList::MEMBERS_COUNT);
-            NUdf::TPersonStructWithOptList::MetaBackIndexes[index] = &index - TPersonStructWithOptList::MetaIndexes;
+            NUdf::TPersonStructWithOptList::MetaBackIndexes[index] = &index - TPersonStructWithOptList::MetaIndexes.data();
             Y_ABORT_UNLESS(NUdf::TPersonStructWithOptList::MetaBackIndexes[index] < NUdf::TPersonStructWithOptList::MEMBERS_COUNT);
         }
         return structType;
@@ -595,7 +595,7 @@ SIMPLE_UDF(TListOfPersonStructWithBrokenIndexToDict, NUdf::TListType<NUdf::TPers
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-static const NUdf::TPersonStruct* DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[] = {
+static std::array<const NUdf::TPersonStruct*, 3> DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX = {
     &STRUCT_PERSON_HITHCOCK, &STRUCT_PERSON_JONNIE, &STRUCT_PERSON_LOVECRAFT};
 const ui32 DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX = 1;
 const ui32 DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX = 2;

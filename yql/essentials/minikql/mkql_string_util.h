@@ -2,8 +2,7 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 NUdf::TUnboxedValuePod AppendString(const NUdf::TUnboxedValuePod value, const NUdf::TStringRef ref);
 NUdf::TUnboxedValuePod PrependString(const NUdf::TStringRef ref, const NUdf::TUnboxedValuePod value);
@@ -12,5 +11,4 @@ NUdf::TUnboxedValuePod SubString(const NUdf::TUnboxedValuePod value, ui32 offset
 NUdf::TUnboxedValuePod MakeString(const NUdf::TStringRef ref);
 NUdf::TUnboxedValuePod MakeStringNotFilled(ui32 size, ui32 pad = 0U);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

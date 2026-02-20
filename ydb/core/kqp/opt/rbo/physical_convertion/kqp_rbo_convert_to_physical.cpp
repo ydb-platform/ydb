@@ -26,15 +26,15 @@ namespace NKqp {
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
 
-    THashMap<int, TExprNode::TPtr> stages;
-    THashMap<int, TVector<TExprNode::TPtr>> stageArgs;
-    THashMap<int, TPositionHandle> stagePos;
+    THashMap<ui32, TExprNode::TPtr> stages;
+    THashMap<ui32, TVector<TExprNode::TPtr>> stageArgs;
+    THashMap<ui32, TPositionHandle> stagePos;
     auto &graph = root.PlanProps.StageGraph;
     for (auto id : graph.StageIds) {
         stageArgs[id] = TVector<TExprNode::TPtr>();
     }
 
-    int stageInputCounter = 0;
+    ui32 stageInputCounter = 0;
     for (const auto& iter : root) {
         auto op = iter.Current;
         auto opStageId = *(op->Props.StageId);

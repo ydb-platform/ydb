@@ -1,10 +1,8 @@
 Failed to execute query, invalid final status FAILED, issues:
-<main>: Fatal: Query failed with code ABORTED at ISOTIME
-    <main>: Fatal: Run query failed: Error
-        <main>: Error: Type annotation (repeat), code: 1030
-            <main>:4:1: Error: At function: ExtractMembers
-                <main>:6:6: Error: At function: DqSourceWrap, At function: DqPqTopicSource
+<main>: Error: Query failed with code ABORTED at ISOTIME
+    <main>: Error: Run query failed: Error
+        <main>: Error: Type annotation, code: 1030
+            <main>:4:1: Error: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: PersistableRepr, At function: SqlProject
+                <main>:6:6: Error: At function: PqReadTopic!
                     <main>:12:5: Error: Bad watermark expression
-        <main>: Fatal: Detected a type error after initial validation, code: 1
-        <main>: Fatal: An abnormal situation found, so consider opening a bug report, because more detailed information is only available in server side logs and/or coredumps., code: 1
 

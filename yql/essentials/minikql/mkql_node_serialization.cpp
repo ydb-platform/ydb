@@ -11,8 +11,7 @@
 #include <util/generic/algorithm.h>
 #include <util/system/unaligned_mem.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
@@ -1030,13 +1029,13 @@ private:
     }
 
     Y_FORCE_INLINE void WriteVar32(ui32 value) {
-        char buf[MAX_PACKED32_SIZE];
-        Out_.AppendNoAlias(buf, Pack32(value, buf));
+        std::array<char, MAX_PACKED32_SIZE> buf;
+        Out_.AppendNoAlias(buf.data(), Pack32(value, buf.data()));
     }
 
     Y_FORCE_INLINE void WriteVar64(ui64 value) {
-        char buf[MAX_PACKED64_SIZE];
-        Out_.AppendNoAlias(buf, Pack64(value, buf));
+        std::array<char, MAX_PACKED64_SIZE> buf;
+        Out_.AppendNoAlias(buf.data(), Pack64(value, buf.data()));
     }
 
 private:
@@ -2290,5 +2289,4 @@ TRuntimeNode DeserializeRuntimeNode(const TStringBuf& buffer, const TTypeEnviron
     return reader.Deserialize();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

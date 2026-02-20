@@ -137,6 +137,7 @@ namespace NKikimr::NDDisk {
         ui64 lsn, ui32 offsetInBytes, ui32 sizeInBytes, TRope&& payload, const std::vector<TPersistentBufferSectorInfo>& sectors) {
         auto headerData = TRcBuf::Uninitialized(SectorSize);
         TPersistentBufferHeader *header = (TPersistentBufferHeader*)headerData.GetDataMut();
+        memset(header, 0, SectorSize);
         memcpy(header->Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
         header->TabletId = tabletId;
         header->VChunkIndex = vchunkIndex;
@@ -365,7 +366,7 @@ namespace NKikimr::NDDisk {
         auto [_, inserted] = PersistentBufferDiskOperationInflight.try_emplace(operationCookie, TPersistentBufferDiskOperationInFlight{.Span = std::move(span)});
         Y_ABORT_UNLESS(inserted);
 
-        GetPersistentBufferRecordData(pr, [this, selector, operationCookie, ev = ev.Release()](TRope data) {
+        GetPersistentBufferRecordData(pr, [this, selector, operationCookie, ev = std::move(ev)](TRope data) {
             Counters.Interface.ReadPersistentBuffer.Reply(true, selector.Size);
             auto it = PersistentBufferDiskOperationInflight.find(operationCookie);
             Y_ABORT_UNLESS(it != PersistentBufferDiskOperationInflight.end());
@@ -603,7 +604,7 @@ namespace NKikimr::NDDisk {
         auto [_, inserted] = PersistentBufferDiskOperationInflight.try_emplace(eraseCookie, TPersistentBufferDiskOperationInFlight{.Span = std::move(span)});
         Y_ABORT_UNLESS(inserted);
 
-        WriteCallbacks.try_emplace(cookie, [this, eraseCookie, ev = ev.Release()](NPDisk::TEvChunkWriteRawResult& /*ev*/) {
+        WriteCallbacks.try_emplace(cookie, [this, eraseCookie, ev = std::move(ev)](NPDisk::TEvChunkWriteRawResult& /*ev*/) {
             auto it = PersistentBufferDiskOperationInflight.find(eraseCookie);
             Y_ABORT_UNLESS(it != PersistentBufferDiskOperationInflight.end());
             Counters.Interface.ErasePersistentBuffer.Reply(true);

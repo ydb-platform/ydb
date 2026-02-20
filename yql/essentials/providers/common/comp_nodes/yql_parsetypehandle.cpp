@@ -10,8 +10,7 @@
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TParseTypeHandleWrapper: public TMutableComputationNode<TParseTypeHandleWrapper> {
     typedef TMutableComputationNode<TParseTypeHandleWrapper> TBaseComputation;
@@ -72,5 +71,4 @@ IComputationNode* WrapParseTypeHandle(TCallable& callable, const TComputationNod
     return new TParseTypeHandleWrapper(ctx.Mutables, str, exprCtxMutableIndex, pos);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

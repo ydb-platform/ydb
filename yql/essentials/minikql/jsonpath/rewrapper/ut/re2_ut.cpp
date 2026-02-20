@@ -3,8 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NReWrapper {
-namespace NDispatcher {
+namespace NReWrapper::NDispatcher {
 
 Y_UNIT_TEST_SUITE(ReWrapperDispatcherRe2) {
 Y_UNIT_TEST(Serialization) {
@@ -19,5 +18,4 @@ Y_UNIT_TEST(Serialization) {
 }
 } // Y_UNIT_TEST_SUITE(ReWrapperDispatcherRe2)
 
-} // namespace NDispatcher
-} // namespace NReWrapper
+} // namespace NReWrapper::NDispatcher

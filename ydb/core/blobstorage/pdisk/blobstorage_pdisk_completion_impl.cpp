@@ -168,8 +168,6 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
 
     ui8* source = Buffer->Data();
 
-    TPDiskStreamCypher cypher(PDisk->Cfg->EnableSectorEncryption);
-    cypher.SetKey(format.ChunkKey);
     ui64 sectorIdx = firstSector;
 
     ui32 sectorPayloadSize;
@@ -235,6 +233,8 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
                 endBadUserOffset = beginUserOffset + userSectorSize;
                 memset(Destination, 0, sectorPayloadSize);
             } else {
+                TPDiskStreamCypher cypher(footer->IsEncrypted());
+                cypher.SetKey(format.ChunkKey);
                 cypher.StartMessage(footer->Nonce);
                 if (sectorOffset > 0 || intptr_t(Destination) % 32) {
                     cypher.InplaceEncrypt(source, sectorOffset + sectorPayloadSize);

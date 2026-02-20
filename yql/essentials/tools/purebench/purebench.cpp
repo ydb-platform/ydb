@@ -359,7 +359,7 @@ double RunBenchmarks(
     return std::exp(sum / times.size());
 }
 
-int Main(int argc, const char* argv[])
+int Main(int argc, const char** argv)
 {
     Y_UNUSED(NUdf::GetStaticSymbols());
     using namespace NLastGetopt;
@@ -501,7 +501,7 @@ int Main(int argc, const char* argv[])
     return 0;
 }
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char** argv) {
     if (argc > 1 && TString(argv[1]) != TStringBuf("--ndebug")) {
         Cerr << "purebench ABI version: " << NKikimr::NUdf::CurrentAbiVersionStr() << Endl;
     }

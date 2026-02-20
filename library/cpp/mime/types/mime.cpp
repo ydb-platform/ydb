@@ -104,6 +104,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_VIDEO_MP4, "video/mp4\0", "mp4\0"},
     {MIME_VIDEO_AVI, "video/x-msvideo\0", "avi\0"},
     {MIME_IMAGE_AVIF, "image/avif\0", "avif\0"},
+    {MIME_IMAGE_HEIC, "image/heic\0image/heif\0", "heic\0"},
     {MIME_MAX, nullptr, nullptr},
 
     // Additional records
@@ -260,4 +261,5 @@ const char* MimeNames[MIME_MAX] = {
     "mp4",     // MIME_VIDEO_MP4       // 49
     "avi",     // MIME_VIDEO_AVI       // 50
     "avif",    // MIME_IMAGE_AVIF      // 51
+    "heic",    // MIME_IMAGE_HEIC      // 52
 };

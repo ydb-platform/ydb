@@ -184,7 +184,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 customMonitoringSettings["monitoring_project_id"] = monitoringProjectId;
             }
             if (customMonitoringSettings.IsDefined()) { // at least one attribute is set
-                consumersAdvancedMonitoringSettings[consumer.GetName()] = std::move(customMonitoringSettings);
+                consumersAdvancedMonitoringSettings[consumerName] = std::move(customMonitoringSettings);
             }
         }
         if (consumersAdvancedMonitoringSettings.IsDefined()) { // at least one consumer has custom monitoring settings

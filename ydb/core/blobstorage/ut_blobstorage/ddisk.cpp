@@ -70,7 +70,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(Edge);
             auto& rr = response->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(rr.ResponsesSize(), 8);
-            return rr.GetResponses();
+            auto responses = rr.GetResponses();
+            return responses;
         }
 
         void GreetDDisks() {
@@ -513,7 +514,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
         const ui32 maxChunks = 128;
         const ui32 sectorInChunk = 32768;
         TDDiskTestContext f(1_MB);
-        auto& node = f.AllocateDDiskBlockGroup().begin()->GetNodes(0);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
         for (ui32 i = 0; i < 10; ++i) {
             f.WritePB(0, RandomNumber(127u) + 1);

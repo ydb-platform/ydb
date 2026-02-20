@@ -10,11 +10,7 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TTablesWithReboots) {
-    Y_UNIT_TEST(Fake) { //+
-    }
-
-    Y_UNIT_TEST(CreateWithRebootsAtCommit) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateWithRebootsAtCommit, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.TestEnv->ReliablePropose(runtime, CreateTableRequest(++t.TxId,
                                                                    "/MyRoot",
@@ -38,12 +34,14 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyWithRebootsAtCommit) { //+
-        TTestWithReboots t(true);
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyWithRebootsAtCommit, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
             {
                 TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
                 t.TestEnv->ReliablePropose(runtime, CreateTableRequest(++t.TxId,
                                                                        "/MyRoot",
                                                                        "Name: \"Table\""
@@ -55,29 +53,30 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                                                                        "UniformPartitionsCount: 2"),
                                            {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                expectedDomainPaths += 1;
             }
 
             t.TestEnv->ReliablePropose(runtime, CopyTableRequest(++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table"),
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            expectedDomainPaths += 1;
 
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(3)});
+                                   {NLs::ChildrenCount(4)});
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/NewTable", true),
                                    {NLs::Finished,
                                     NLs::IsTable,
                                     NLs::PartitionCount(2),
                                     NLs::ShardsInsideDomain(4),
-                                    NLs::PathsInsideDomain(3)});
+                                    NLs::PathsInsideDomain(expectedDomainPaths)});
             }
         });
     }
 
-    Y_UNIT_TEST(DropCopyWithRebootsAtCommit) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropCopyWithRebootsAtCommit, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -114,8 +113,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(TwiceRmDirWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(TwiceRmDirWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -136,8 +134,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncCreateTable(runtime, ++t.TxId, "/MyRoot/DirA",
                              "Name: \"Table1\""
@@ -155,9 +152,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-
-    Y_UNIT_TEST(ParallelCreateDrop) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ParallelCreateDrop, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                             Name: "DropMe"
@@ -182,8 +177,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(SimpleDropTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SimpleDropTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -208,8 +202,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(SimpleDropTableWithReboots2) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SimpleDropTableWithReboots2, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -274,8 +267,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDroppedTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDroppedTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -310,8 +302,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDroppedTableAndDropWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDroppedTableAndDropWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -347,7 +338,6 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 7));
         });
     }
-
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableSchemaWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -407,8 +397,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterTableSchemaFreezeUnfreezeWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableSchemaFreezeUnfreezeWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -454,8 +443,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterTableFollowersWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableFollowersWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -501,8 +489,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterTableConfigWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableConfigWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 datashardTabletId = ui64(InvalidTabletId);
             {
@@ -556,8 +543,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterCopyWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterCopyWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -641,9 +627,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterAndForceDrop) { //+
-        TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterAndForceDrop, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -678,14 +662,12 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 TInactiveZone inactive(activeZone);
                 t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1));
                 TestDescribeResult(DescribePath(runtime, "/MyRoot")
-                                       , {NLs::NoChildren});
+                                       , {NLs::ChildrenCount(1)});
             }
         });
     }
 
-    Y_UNIT_TEST(CopyTableWithReboots) { //+
-        TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -710,7 +692,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "MyRoot"),
-                                   {NLs::ChildrenCount(4)});
+                                   {NLs::ChildrenCount(5)});
                 TestDescribeResult(DescribePath(runtime, "MyRoot/Table"),
                                    {NLs::PathExist});
                 TestDescribeResult(DescribePath(runtime, "MyRoot/NewTable1"),
@@ -721,9 +703,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyIndexedTableWithReboots) { //+
-        TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyIndexedTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -769,7 +749,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "MyRoot"),
-                                   {NLs::ChildrenCount(4)});
+                                   {NLs::ChildrenCount(5)});
                 TestDescribeResult(DescribePath(runtime, "MyRoot/Table"),
                                    {NLs::PathExist, NLs::IndexesCount(1)});
                 TestDescribeResult(DescribePath(runtime, "MyRoot/NewTable1"),
@@ -808,7 +788,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableAndDropWithReboots2, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableAndDropWithReboots2, 4, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -853,8 +833,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(ChainedCopyTableAndDropWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ChainedCopyTableAndDropWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             const int maxTableIdx = 4;
 
@@ -970,10 +949,15 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(SimultaneousDropForceDrop) { //+
-        TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SimultaneousDropForceDrop, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+            }
+
             TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                 Name: "Table1"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -981,10 +965,11 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 KeyColumnNames: ["key"]
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            expectedDomainPaths += 1;
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
-                                NLs::ChildrenCount(2)});
+                                NLs::ChildrenCount(3)});
             auto pathVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                                               {NLs::PathExist,
                                                NLs::PathVersionEqual(3)});
@@ -994,6 +979,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
             AsyncForceDropUnsafe(runtime, ++t.TxId,  pathVer.PathId.LocalPathId);
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
+            expectedDomainPaths -= 1;
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 2));
 
             {
@@ -1001,8 +987,8 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(1),
-                                    NLs::PathsInsideDomain(1),
+                                   {NLs::ChildrenCount(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomainOneOf({0,1})});
             }
         });

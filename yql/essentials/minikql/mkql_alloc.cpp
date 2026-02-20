@@ -13,6 +13,7 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 ui8 ZeroSizeObject alignas(ArrowAlignment)[0];
 
 } // namespace

@@ -20,7 +20,7 @@ using namespace NYTree;
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TSerializableColumnSchema
-    : public TMaybeDeletedColumnSchema
+    : public TConstrainedColumnSchema
     , public NYTree::TYsonStructLite
 {
     REGISTER_YSON_STRUCT_LITE(TSerializableColumnSchema);
@@ -51,8 +51,6 @@ struct TSerializableColumnSchema
             .Default();
         registrar.BaseClassParameter("max_inline_hunk_size", &TThis::MaxInlineHunkSize_)
             .Default();
-        registrar.BaseClassParameter("deleted", &TThis::Deleted_)
-            .Default();
         registrar.BaseClassParameter("constraint", &TThis::Constraint_)
             .Default();
 
@@ -63,14 +61,6 @@ struct TSerializableColumnSchema
 
     void RunPostprocessor()
     {
-        if (Deleted() && *Deleted()) {
-            if (!SerializedStableName_) {
-                THROW_ERROR_EXCEPTION("Stable name should be set for a deleted column");
-            }
-            SetStableName(*SerializedStableName_);
-            return;
-        }
-
         // Name.
         if (Name().empty()) {
             THROW_ERROR_EXCEPTION("Column name cannot be empty");
@@ -146,47 +136,44 @@ public:
         cursor->ParseMap([&] (TYsonPullParserCursor* cursor) {
             EnsureYsonToken("column schema attribute key", *cursor, EYsonItemType::StringValue);
             auto key = (*cursor)->UncheckedAsString();
-            if (key == TStringBuf("name")) {
+            if (key == "name") {
                 cursor->Next();
                 SetName(ExtractTo<TString>(cursor));
-            } else if (key == TStringBuf("required")) {
+            } else if (key == "required") {
                 cursor->Next();
                 RequiredV1_ = ExtractTo<bool>(cursor);
-            } else if (key == TStringBuf("type")) {
+            } else if (key == "type") {
                 cursor->Next();
                 LogicalTypeV1_ = ExtractTo<ESimpleLogicalValueType>(cursor);
-            } else if (key == TStringBuf("type_v3")) {
+            } else if (key == "type_v3") {
                 cursor->Next();
                 LogicalTypeV3_ = TTypeV3LogicalTypeWrapper();
                 Deserialize(*LogicalTypeV3_, cursor);
-            } else if (key == TStringBuf("lock")) {
+            } else if (key == "lock") {
                 cursor->Next();
                 SetLock(ExtractTo<std::optional<std::string>>(cursor));
-            } else if (key == TStringBuf("expression")) {
+            } else if (key == "expression") {
                 cursor->Next();
                 SetExpression(ExtractTo<std::optional<std::string>>(cursor));
-            } else if (key == TStringBuf("materialized")) {
+            } else if (key == "materialized") {
                 cursor->Next();
                 SetMaterialized(ExtractTo<std::optional<bool>>(cursor));
-            } else if (key == TStringBuf("aggregate")) {
+            } else if (key == "aggregate") {
                 cursor->Next();
                 SetAggregate(ExtractTo<std::optional<std::string>>(cursor));
-            } else if (key == TStringBuf("sort_order")) {
+            } else if (key == "sort_order") {
                 cursor->Next();
                 SetSortOrder(ExtractTo<std::optional<ESortOrder>>(cursor));
-            } else if (key == TStringBuf("group")) {
+            } else if (key == "group") {
                 cursor->Next();
                 SetGroup(ExtractTo<std::optional<std::string>>(cursor));
-            } else if (key == TStringBuf("max_inline_hunk_size")) {
+            } else if (key == "max_inline_hunk_size") {
                 cursor->Next();
                 SetMaxInlineHunkSize(ExtractTo<std::optional<i64>>(cursor));
-            } else if (key == TStringBuf("stable_name")) {
+            } else if (key == "stable_name") {
                 cursor->Next();
                 SerializedStableName_ = ExtractTo<TColumnStableName>(cursor);
-            } else if (key == TStringBuf("deleted")) {
-                cursor->Next();
-                Deleted_ = ExtractTo<bool>(cursor);
-            } else if (key == TStringBuf("constraint")) {
+            } else if (key == "constraint") {
                 cursor->Next();
                 Constraint_ = ExtractTo<std::optional<std::string>>(cursor);
             } else {
@@ -208,12 +195,6 @@ public:
         RequiredV1_ = columnSchema.Required();
         LogicalTypeV3_ = TTypeV3LogicalTypeWrapper{columnSchema.LogicalType()};
         Constraint_ = std::move(constraint);
-    }
-
-    void SetDeletedColumnSchema(const TDeletedColumn& deletedColumnSchema)
-    {
-        Deleted_ = true;
-        StableName_ = deletedColumnSchema.StableName();
     }
 
 private:
@@ -241,62 +222,59 @@ void ThrowDuplicateConstraintsForColumn(
 
 void Serialize(const TTableSchema& schema, const TColumnNameToConstraintMap& columnNameToConstraint, IYsonConsumer* consumer)
 {
-    auto position = BuildYsonFluently(consumer)
+    BuildYsonFluently(consumer)
         .BeginAttributes()
             .Item("strict").Value(schema.IsStrict())
             .Item("unique_keys").Value(schema.IsUniqueKeys())
             .DoIf(schema.HasNontrivialSchemaModification(), [&] (TFluentMap fluent) {
                 fluent.Item("schema_modification").Value(schema.GetSchemaModification());
             })
+            .DoIf(!schema.DeletedColumns().empty(), [&] (TFluentMap fluent) {
+                fluent.Item("deleted_columns").Value(schema.DeletedColumns());
+            })
         .EndAttributes()
-        .BeginList();
-
-    for (const auto& column : schema.Columns()) {
-        std::optional<std::string> constraint;
-        auto it = columnNameToConstraint.find(column.Name());
-        if (it != columnNameToConstraint.end()) {
-            constraint = it->second;
-        }
-        Serialize(column, constraint, position.Item().GetConsumer());
-    }
-    for (const auto& deletedColumn : schema.DeletedColumns()) {
-        Serialize(deletedColumn, position.Item().GetConsumer());
-    }
-
-    position.EndList();
+        .DoListFor(schema.Columns(), [&] (TFluentList fluent, const auto& column) {
+            std::optional<std::string> constraint;
+            auto it = columnNameToConstraint.find(column.Name());
+            if (it != columnNameToConstraint.end()) {
+                constraint = it->second;
+            }
+            Serialize(column, constraint, fluent.Item().GetConsumer());
+        });
 }
 
 void Deserialize(TTableSchema& schema, TColumnNameToConstraintMap& columnNameToConstraint, INodePtr node)
 {
     auto childNodes = node->AsList()->GetChildren();
+    const auto& attributes = node->Attributes();
 
     std::vector<TColumnSchema> columns;
-    std::vector<TDeletedColumn> deletedColumns;
-
+    columns.reserve(childNodes.size());
     for (auto childNode : childNodes) {
         TSerializableColumnSchema wrapper;
         Deserialize(static_cast<TYsonStructLite&>(wrapper), childNode);
-        if (wrapper.Deleted() && *wrapper.Deleted()) {
-            deletedColumns.push_back(TDeletedColumn(wrapper.StableName()));
-        } else {
-            columns.push_back(wrapper);
-        }
         if (wrapper.Constraint()) {
             auto [it, emplaced] = columnNameToConstraint.emplace(wrapper.Name(), *wrapper.Constraint());
             if (!emplaced) {
                 ThrowDuplicateConstraintsForColumn(wrapper.Name(), *wrapper.Constraint(), it->second);
             }
         }
+        columns.push_back(std::move(wrapper));
+    }
+
+    std::vector<TDeletedColumn> deletedColumns;
+    if (auto deletedColumsYson = attributes.FindYson("deleted_columns")) {
+        deletedColumns = ConvertTo<std::vector<TDeletedColumn>>(deletedColumsYson);
     }
 
     schema = TTableSchema(
-        columns,
-        node->Attributes().Get<bool>("strict", true),
-        node->Attributes().Get<bool>("unique_keys", false),
-        node->Attributes().Get<ETableSchemaModification>(
+        std::move(columns),
+        attributes.Get<bool>("strict", true),
+        attributes.Get<bool>("unique_keys", false),
+        attributes.Get<ETableSchemaModification>(
             "schema_modification",
             ETableSchemaModification::None),
-        deletedColumns);
+        std::move(deletedColumns));
 }
 
 void Deserialize(TTableSchema& schema, TColumnNameToConstraintMap& columnNameToConstraint, TYsonPullParserCursor* cursor)
@@ -304,20 +282,24 @@ void Deserialize(TTableSchema& schema, TColumnNameToConstraintMap& columnNameToC
     auto strict = true;
     auto uniqueKeys = false;
     auto modification = ETableSchemaModification::None;
+    std::vector<TDeletedColumn> deletedColumns;
 
     if ((*cursor)->GetType() == EYsonItemType::BeginAttributes) {
         cursor->ParseAttributes([&] (TYsonPullParserCursor* cursor) {
-            EnsureYsonToken(TStringBuf("table schema attribute key"), *cursor, EYsonItemType::StringValue);
+            EnsureYsonToken("table schema attribute key", *cursor, EYsonItemType::StringValue);
             auto key = (*cursor)->UncheckedAsString();
-            if (key == TStringBuf("strict")) {
+            if (key == "strict") {
                 cursor->Next();
                 strict = ExtractTo<bool>(cursor);
-            } else if (key == TStringBuf("unique_keys")) {
+            } else if (key == "unique_keys") {
                 cursor->Next();
                 uniqueKeys = ExtractTo<bool>(cursor);
-            } else if (key == TStringBuf("schema_modification")) {
+            } else if (key == "schema_modification") {
                 cursor->Next();
                 modification = ExtractTo<ETableSchemaModification>(cursor);
+            } else if (key == "deleted_columns") {
+                cursor->Next();
+                deletedColumns = ExtractTo<std::vector<TDeletedColumn>>(cursor);
             } else {
                 cursor->Next();
                 cursor->SkipComplexValue();
@@ -325,53 +307,39 @@ void Deserialize(TTableSchema& schema, TColumnNameToConstraintMap& columnNameToC
         });
     }
 
-    EnsureYsonToken(TStringBuf("table schema"), *cursor, EYsonItemType::BeginList);
+    EnsureYsonToken("table schema", *cursor, EYsonItemType::BeginList);
 
-    auto maybeDeletedColumns = ExtractTo<std::vector<TMaybeDeletedColumnSchema>>(cursor);
-
+    auto constraintedColumns = ExtractTo<std::vector<TConstrainedColumnSchema>>(cursor);
     std::vector<TColumnSchema> columns;
-    std::vector<TDeletedColumn> deletedColumns;
-
-    for (const auto& maybeDeletedColumn : maybeDeletedColumns) {
-        if (maybeDeletedColumn.Deleted() && *maybeDeletedColumn.Deleted()) {
-            deletedColumns.push_back(maybeDeletedColumn.GetDeletedColumnSchema());
-        } else {
-            columns.push_back(static_cast<TColumnSchema>(maybeDeletedColumn));
-            if (maybeDeletedColumn.Constraint()) {
-                auto [it, emplaced] = columnNameToConstraint.emplace(maybeDeletedColumn.Name(), *maybeDeletedColumn.Constraint());
-                if (!emplaced) {
-                    ThrowDuplicateConstraintsForColumn(maybeDeletedColumn.Name(), *maybeDeletedColumn.Constraint(), it->second);
-                }
+    for (auto& constrainedColumn : constraintedColumns) {
+        if (constrainedColumn.Constraint()) {
+            auto [it, emplaced] = columnNameToConstraint.emplace(constrainedColumn.Name(), *constrainedColumn.Constraint());
+            if (!emplaced) {
+                ThrowDuplicateConstraintsForColumn(constrainedColumn.Name(), *constrainedColumn.Constraint(), it->second);
             }
         }
+        columns.push_back(std::move(constrainedColumn));
     }
 
-    schema = TTableSchema(columns, strict, uniqueKeys, modification, deletedColumns);
+    schema = TTableSchema(std::move(columns), strict, uniqueKeys, modification, std::move(deletedColumns));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 
-TDeletedColumn TMaybeDeletedColumnSchema::GetDeletedColumnSchema() const
-{
-    return TDeletedColumn(StableName());
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void Deserialize(TMaybeDeletedColumnSchema& schema, TYsonPullParserCursor* cursor)
+void Deserialize(TConstrainedColumnSchema& schema, TYsonPullParserCursor* cursor)
 {
     TSerializableColumnSchema wrapper;
     wrapper.DeserializeFromCursor(cursor);
     schema = wrapper;
 }
 
-void Deserialize(TMaybeDeletedColumnSchema& schema, INodePtr node)
+void Deserialize(TConstrainedColumnSchema& schema, INodePtr node)
 {
     TSerializableColumnSchema wrapper;
     Deserialize(static_cast<TYsonStructLite&>(wrapper), node);
-    schema = static_cast<TMaybeDeletedColumnSchema>(wrapper);
+    schema = static_cast<TConstrainedColumnSchema>(wrapper);
 }
 
 void Serialize(const TColumnSchema& schema, IYsonConsumer* consumer)
@@ -390,12 +358,42 @@ void Serialize(const TColumnSchema& schema, std::optional<std::string> constrain
 
 void Serialize(const TDeletedColumn& schema, IYsonConsumer* consumer)
 {
-    consumer->OnBeginMap();
-    consumer->OnKeyedItem("stable_name");
-    consumer->OnStringScalar(schema.StableName().Underlying());
-    consumer->OnKeyedItem("deleted");
-    consumer->OnBooleanScalar(true);
-    consumer->OnEndMap();
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("stable_name").Value(schema.StableName().Underlying())
+        .EndMap();
+}
+
+void Deserialize(TDeletedColumn& schema, INodePtr node)
+{
+    auto stableName = node->AsMap()->FindChildValue<std::string>("stable_name");
+    THROW_ERROR_EXCEPTION_UNLESS(
+        stableName.has_value(),
+        "Stable name should be set for deleted column");
+
+    schema.StableName() = TColumnStableName(std::move(*stableName));
+}
+
+void Deserialize(TDeletedColumn& schema, TYsonPullParserCursor* cursor)
+{
+    std::optional<std::string> stableName;
+    cursor->ParseMap([&] (TYsonPullParserCursor* cursor) {
+        EnsureYsonToken("deleted column schema key", *cursor, EYsonItemType::StringValue);
+        if ((*cursor)->UncheckedAsString() == "stable_name") {
+            cursor->Next();
+            stableName = ExtractTo<std::string>(cursor);
+            ValidateColumnName(*stableName);
+        } else {
+            cursor->Next();
+            cursor->SkipComplexValue();
+        }
+    });
+
+    THROW_ERROR_EXCEPTION_UNLESS(
+        stableName.has_value(),
+        "Stable name should be set for deleted column");
+
+    schema.StableName() = TColumnStableName(std::move(*stableName));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

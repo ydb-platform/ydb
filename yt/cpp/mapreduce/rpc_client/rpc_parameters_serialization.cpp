@@ -400,6 +400,7 @@ NApi::TCreateNodeOptions SerializeOptionsForCreate(
             NYson::TYsonString(NodeToYsonString(*options.Attributes_, NYson::EYsonFormat::Binary)));
     }
     result.IgnoreExisting = options.IgnoreExisting_;
+    result.IgnoreTypeMismatch = options.IgnoreTypeMismatch_;
     result.Recursive = options.Recursive_;
     return result;
 }

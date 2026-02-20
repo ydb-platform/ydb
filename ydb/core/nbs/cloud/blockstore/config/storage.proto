@@ -13,3 +13,35 @@ message TStorageConfig
     // Period (in milliseconds) for sampling traces.
     uint32 TraceSamplePeriod = 3;
 }
+
+message TStorageServiceConfig
+{
+    // Schemeshard directory for volumes.
+    optional string SchemeShardDir = 1;
+
+    // Channel configuration.
+    optional string SsdSystemChannelPoolKind = 2;
+    optional string SsdLogChannelPoolKind = 3;
+    optional string SsdIndexChannelPoolKind = 4;
+
+    // FolderId of this NBS instance. Used for authorization.
+    optional string FolderId = 5;
+
+    // Number of reties before pipe client reports failure.
+    optional uint32 PipeClientRetryCount = 6;
+
+    // Mimimum timeout before pipe client reconnect attempt.
+    optional uint32 PipeClientMinRetryTime = 7;
+
+    // Maximum timeout before pipe client reconnect attempt.
+    optional uint32 PipeClientMaxRetryTime = 8;
+
+    // DDisk pool name for direct storage.
+    optional string DDiskPoolName = 9;
+
+    // DDisk pool name for persistent buffer.
+    optional string PersistentBufferDDiskPoolName = 10;
+
+    // Period (in milliseconds) for sampling traces.
+    optional uint32 TraceSamplePeriod = 11;
+}

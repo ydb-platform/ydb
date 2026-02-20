@@ -117,6 +117,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         {
             ++txId;
+            auto op = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/NoSuchDir/Moved1");
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, op);
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusPathDoesNotExist);
+        }
+
+        {
+            ++txId;
             auto first = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Moved1");
             auto second = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Moved2");
             auto combination = CombineSchemeTransactions({first, second});
@@ -485,6 +492,269 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
     }
+
+    Y_UNIT_TEST(Replace2) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Src"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value1" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Sync"
+              KeyColumnNames: ["value0"]
+            }
+            IndexDescription {
+              Name: "Async"
+              KeyColumnNames: ["value1"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths += 5;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Dst"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value1" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths += 1;
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(4)});
+
+        TLocalPathId movedTablePathId = GetNextLocalPathId(runtime, txId);
+        {
+            ++txId;
+            auto first = DropTableRequest(txId,  "/MyRoot", "Dst");
+            auto second = MoveTableRequest(txId,  "/MyRoot/Src", "/MyRoot/Dst");
+            auto combination = CombineSchemeTransactions({first, second});
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, combination);
+            TestModificationResult(runtime, txId);
+            env.TestWaitNotification(runtime, txId);
+
+            expectedDomainPaths -= 1;
+        }
+
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 3);
+
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
+                           {NLs::IsTable,
+                            NLs::PathIdEqual(movedTablePathId),
+                            NLs::PathVersionEqual(5),
+                            NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
+                            NLs::IndexesCount(2)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst/Sync", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                            NLs::IndexKeys({"value0"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst/Async", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+                            NLs::IndexKeys({"value1"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(3)});
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Src"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value1" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Sync"
+              KeyColumnNames: ["value0"]
+            }
+            IndexDescription {
+              Name: "Async"
+              KeyColumnNames: ["value1"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths += 5;
+
+        movedTablePathId = GetNextLocalPathId(runtime, txId);
+        {
+            ++txId;
+            auto first = DropTableRequest(txId,  "/MyRoot", "Dst");
+            auto second = MoveTableRequest(txId,  "/MyRoot/Src", "/MyRoot/Dst");
+            auto combination = CombineSchemeTransactions({first, second});
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, combination);
+            TestModificationResult(runtime, txId);
+            env.TestWaitNotification(runtime, txId);
+
+            expectedDomainPaths -= 5;
+        }
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+3));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
+                           {NLs::IsTable,
+                            NLs::PathIdEqual(movedTablePathId),
+                            NLs::PathVersionEqual(5),
+                            NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
+                            NLs::IndexesCount(2)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst/Sync", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                            NLs::IndexKeys({"value0"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst/Async", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+                            NLs::IndexKeys({"value1"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(3)});
+    }
+
+    Y_UNIT_TEST(ReplaceWithDifferentIndexNames) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Src"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value1" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "SrcSync"
+              KeyColumnNames: ["value0"]
+            }
+            IndexDescription {
+              Name: "SrcAsync"
+              KeyColumnNames: ["value1"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths += 5;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Dst"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value1" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "DstSync"
+              KeyColumnNames: ["value0"]
+            }
+            IndexDescription {
+              Name: "DstAsync"
+              KeyColumnNames: ["value1"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths += 5;
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(6)});
+
+        TLocalPathId movedTablePathId = GetNextLocalPathId(runtime, txId);
+        {
+            ++txId;
+            auto first = DropTableRequest(txId, "/MyRoot", "Dst");
+            auto second = MoveTableRequest(txId, "/MyRoot/Src", "/MyRoot/Dst");
+            auto combination = CombineSchemeTransactions({first, second});
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, combination);
+            TestModificationResult(runtime, txId);
+            env.TestWaitNotification(runtime, txId);
+
+            expectedDomainPaths -= 5;
+        }
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets + 3, TTestTxConfig::FakeHiveTablets + 6));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
+                           {NLs::IsTable,
+                            NLs::PathIdEqual(movedTablePathId),
+                            NLs::PathVersionEqual(5),
+                            NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
+                            NLs::IndexesCount(2)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst/SrcSync", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                            NLs::IndexKeys({"value0"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst/SrcAsync", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+                            NLs::IndexKeys({"value1"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst/DstSync", true, true, true),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst/DstAsync", true, true, true),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(3)});
+    }
+
 
     Y_UNIT_TEST(Chain) {
         TTestBasicRuntime runtime;

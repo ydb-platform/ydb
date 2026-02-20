@@ -23,8 +23,7 @@
 #include <util/stream/output.h>
 #include <util/memory/pool.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TComputationUpvalues::TComputationUpvalues(TComputationContext& ctx, IComputationNode* lambdaNode,
                                            const TComputationExternalNodePtrVector& argNodes) {
@@ -88,6 +87,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
                                          const TComputationMutables& mutables,
                                          arrow::MemoryPool& arrowMemoryPool,
                                          TMaybe<NUdf::TSourcePosition>& notConsumedLinear)
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder}
     , RandomProvider(opts.RandomProvider)
     , TimeProvider(opts.TimeProvider)
@@ -191,5 +191,4 @@ std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(cons
     return std::make_unique<TSimpleSecureParamsProvider>(secureParams);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -50,7 +50,9 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistBuildIndexForget(db, indexBuildInfo);
+        if (!Self->PersistBuildIndexForget(db, indexBuildInfo)) {
+            return false;
+        }
 
         EraseBuildInfo(indexBuildInfo);
 

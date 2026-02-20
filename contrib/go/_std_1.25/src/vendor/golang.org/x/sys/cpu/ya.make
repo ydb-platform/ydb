@@ -88,5 +88,15 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         runtime_auxv.go
         runtime_auxv_go121.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        byteorder.go
+        cpu.go
+        cpu_wasm.go
+        endian_little.go
+        parse.go
+        runtime_auxv.go
+        runtime_auxv_go121.go
+    )
 ENDIF()
 END()

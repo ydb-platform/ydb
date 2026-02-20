@@ -38,5 +38,16 @@ ELSEIF (OS_LINUX AND ARCH_ARM6 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM
         unaligned.go
         xchg8.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        atomic_andor_generic.go
+        atomic_wasm.go
+        atomic_wasm.s
+        doc.go
+        types.go
+        types_64bit.go
+        unaligned.go
+        xchg8.go
+    )
 ENDIF()
 END()

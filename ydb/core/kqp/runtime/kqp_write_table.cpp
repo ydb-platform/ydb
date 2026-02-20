@@ -1361,6 +1361,7 @@ public:
     void Clear() {
         ShardsInfo = {};
         Memory = 0;
+        PendingBatches = 0;
         Closed = false;
     }
 

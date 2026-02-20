@@ -185,6 +185,7 @@ void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NG
 
         void Bootstrap(const TActorContext& ctx) {
             ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), Ev.release());
+            PassAway();
         }
 
         std::unique_ptr<TEvCommitOffsetRequest> Ev;

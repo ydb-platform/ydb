@@ -2536,7 +2536,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }, /* sort  */ true);
     }
 
-    Y_UNIT_TEST_TWIN_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, TStreamingTestFixture) {
+#define TCurrentTestCase TStreamingTestFixture // BACKPORT SPECIFIC ONLY workaround for missing Y_UNIT_TEST_TWIN_F
+    Y_UNIT_TEST_TWIN(StreamingQueryWithStreamLookupJoin, WithFeatureFlag) {
+#undef TCurrentTestCase // BACKPORT SPECIFIC ONLY
         {
             auto& setupAppConfig = SetupAppConfig();
             setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);

@@ -1882,6 +1882,50 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(1)).IsSuccess(), "Failed to close producer");
     }
 
+    Y_UNIT_TEST(TypedProducer_BasicWrite) {
+        struct TExample {
+            std::string Payload;
+            std::string Serialize() const { return Payload; }
+        };
+
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("producer_basic_write");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.KeyProducer([](const TWriteMessage& message) -> std::string {
+            return ToString(MurmurHash<std::uint64_t>(message.Data.data(), message.Data.size()));
+        });
+
+        auto producer = client.CreateTypedProducer<TExample>(writeSettings);
+
+        for (ui64 i = 0; i < 100; ++i) {
+            UNIT_ASSERT(producer->Write(TExample{.Payload = CreateGuidAsString()}).IsSuccess());
+        }
+
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+
+        auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 10);
+
+        ui64 messagesWritten = 0;
+        for (const auto& partition : describe.GetTopicDescription().GetPartitions()) {
+            auto stats = partition.GetPartitionStats();
+            UNIT_ASSERT(stats);
+            messagesWritten += stats->GetEndOffset() - stats->GetStartOffset();
+        }
+
+        UNIT_ASSERT_EQUAL(messagesWritten, 100);
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, 100);
+        UNIT_ASSERT_C(producer->Close(TDuration::Seconds(1)).IsSuccess(), "Failed to close producer");
+    }
+
     Y_UNIT_TEST(Producer_SmallSessionIdleTimeout) {
         auto settings = TTopicSdkTestSetup::MakeServerSettings();
         settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);

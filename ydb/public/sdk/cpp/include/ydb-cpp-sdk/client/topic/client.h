@@ -56,6 +56,12 @@ public:
     //! Create producer. Experimental feature. DO NOT USE IN PRODUCTION.
     std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
 
+    //! Create typed producer.
+    template<typename T>
+    std::shared_ptr<TTypedProducer<T>> CreateTypedProducer(const TProducerSettings& settings) {
+        return std::make_shared<TTypedProducer<T>>(CreateProducer(settings));
+    }
+
     //! Create write session.
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 

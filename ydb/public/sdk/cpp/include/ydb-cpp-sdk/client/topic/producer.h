@@ -3,6 +3,9 @@
 #include "write_session.h"
 #include "control_plane.h"
 
+#include <memory>
+#include <utility>
+
 namespace NYdb::NTopic {
 
 //! Write status.
@@ -95,8 +98,6 @@ struct TWriteStats {
     std::uint64_t MessagesWritten;
 };
 
-//! Result of write operation.
-
 //! Producer is an abstraction that can write messages to the topic.
 //! It has three versions of Write method:
 //! - Write without key and partition (partition is chosen randomly by uniform distribution)
@@ -135,18 +136,34 @@ public:
     virtual ~IProducer() = default;
 };
 
-//! Typed producer.
-//! Typed producer is a producer that can write messages of a specific type.
-//! It has the same interface as IProducer, but the messages are typed.
-//! It is more efficient than IProducer because it does not need to serialize and deserialize messages.
-//! Derived class must override Write(TWriteMessage&&) from IProducer.
+//! Typed producer — inherits from IProducer; adds only Write(T&&).
+//! Type T is implicitly converted to TWriteMessage (e.g. via TWriteMessage's template constructor).
 template<typename T>
-class ITypedProducer : public IProducer {
+class TTypedProducer {
 public:
-    //! Write single message. Forwards to IProducer::Write (virtual call to derived class).
+    explicit TTypedProducer(std::shared_ptr<IProducer> impl)
+        : Impl_(impl)
+    {}
+
+    //! Write single message. T converts to TWriteMessage, then IProducer::Write is called.
     [[nodiscard]] TWriteResult Write(T&& message) {
-        return this->Write(std::move(message));
+        return Impl_->Write(TWriteMessage(std::forward<T>(message)));
     }
+
+    [[nodiscard]] NThreading::TFuture<TFlushResult> Flush() {
+        return Impl_->Flush();
+    }
+
+    [[nodiscard]] TCloseResult Close(TDuration closeTimeout = TDuration::Max()) {
+        return Impl_->Close(closeTimeout);
+    }
+
+    TWriteStats GetWriteStats() {
+        return Impl_->GetWriteStats();
+    }
+
+private:
+    std::shared_ptr<IProducer> Impl_;
 };
 
 } // namespace NYdb::NTopic

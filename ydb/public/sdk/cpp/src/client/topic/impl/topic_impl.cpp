@@ -113,6 +113,12 @@ std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TProducerSe
     );
 }
 
+template<typename T>
+std::shared_ptr<TTypedProducer<T>> TTopicClient::TImpl::CreateTypedProducer(const TProducerSettings& settings) {
+    auto producer = CreateProducer(settings);
+    return std::make_shared<TTypedProducer<T>>(producer);
+}
+
 std::shared_ptr<TTopicClient::TImpl::IReadSessionConnectionProcessorFactory> TTopicClient::TImpl::CreateReadSessionConnectionProcessorFactory() {
     using TService = Ydb::Topic::V1::TopicService;
     using TRequest = Ydb::Topic::StreamReadMessage::FromClient;

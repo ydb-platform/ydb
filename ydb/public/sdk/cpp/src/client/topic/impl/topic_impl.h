@@ -319,6 +319,8 @@ public:
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleWriteSession(const TWriteSessionSettings& settings);
     std::shared_ptr<IKeyedWriteSession> CreateKeyedWriteSession(const TProducerSettings& settings);
     std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
+    template<typename T>
+    std::shared_ptr<TTypedProducer<T>> CreateTypedProducer(const TProducerSettings& settings);
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 
     using IReadSessionConnectionProcessorFactory =

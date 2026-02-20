@@ -9,6 +9,7 @@
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
@@ -101,7 +102,7 @@ public:
             TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme);
     }
 
-    void StartBuildOperation() {
+    void StartAlterOperation() {
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
@@ -377,7 +378,7 @@ public:
             }
 
             case NKqpProto::TKqpSchemeOperation::kBuildOperation: {
-                return StartBuildOperation();
+                return StartAlterOperation();
             }
 
             case NKqpProto::TKqpSchemeOperation::kCreateUser: {
@@ -649,6 +650,10 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCompactTable: {
+                return StartAlterOperation();
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());
@@ -773,9 +778,11 @@ public:
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(NSchemeShard::TEvIndexBuilder::TEvCreateResponse, Handle);
+                hFunc(NSchemeShard::TEvForcedCompaction::TEvCreateResponse, Handle);
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
                 hFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
+                hFunc(NSchemeShard::TEvForcedCompaction::TEvGetResponse, Handle);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
                 default:
@@ -836,8 +843,24 @@ public:
 
     void Navigate(const TActorId& schemeCache) {
         const auto& schemeOp = PhyTx->GetSchemeOperation();
-        const auto& buildOp = schemeOp.GetBuildOperation();
-        const auto& path = buildOp.source_path();
+    
+        TString path;
+        switch (schemeOp.GetOperationCase()) {
+            case NKqpProto::TKqpSchemeOperation::kBuildOperation: {
+                const auto& buildOp = schemeOp.GetBuildOperation();
+                path = buildOp.source_path();
+                break;
+            }
+            case NKqpProto::TKqpSchemeOperation::kCompactTable: {
+                const auto& compactOp = schemeOp.GetCompactTable();
+                path = compactOp.source_path();
+                break;
+            }
+            default:
+                InternalError(TStringBuilder() << "Unexpected scheme operation when Navigate: "
+                    << (ui32) schemeOp.GetOperationCase());
+                break;
+        }
 
         const auto paths = NKikimr::SplitPath(path);
         if (paths.empty()) {
@@ -908,14 +931,33 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssue("empty domain info"));
         }
 
-        const auto& schemeOp = PhyTx->GetSchemeOperation();
-        const auto& buildOp = schemeOp.GetBuildOperation();
         SetSchemeShardId(domainInfo->ExtractSchemeShard());
-        auto req = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>(TxId, Database, buildOp);
-        if (UserToken) {
-            req->Record.SetUserSID(UserToken->GetUserSID());
+
+        const auto& schemeOp = PhyTx->GetSchemeOperation();
+        switch (schemeOp.GetOperationCase()) {
+            case NKqpProto::TKqpSchemeOperation::kBuildOperation: {
+                const auto& buildOp = schemeOp.GetBuildOperation();
+                auto req = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>(TxId, Database, buildOp);
+                if (UserToken) {
+                    req->Record.SetUserSID(UserToken->GetUserSID());
+                }
+                ForwardToSchemeShard(std::move(req));
+                break;
+            }
+            case NKqpProto::TKqpSchemeOperation::kCompactTable: {
+                const auto& compactOp = schemeOp.GetCompactTable();
+                auto req = std::make_unique<NSchemeShard::TEvForcedCompaction::TEvCreateRequest>(TxId, Database, compactOp);
+                if (UserToken) {
+                    req->Record.SetUserSID(UserToken->GetUserSID());
+                }
+                ForwardToSchemeShard(std::move(req));
+                break;
+            }
+            default:
+                InternalError(TStringBuilder() << "Unexpected scheme operation when handle TEvNavigateKeySetResult: "
+                    << (ui32) schemeOp.GetOperationCase());
+                break;
         }
-        ForwardToSchemeShard(std::move(req));
     }
 
     void PassAway() override {
@@ -949,6 +991,21 @@ public:
         }
     }
 
+    void Handle(NSchemeShard::TEvForcedCompaction::TEvCreateResponse::TPtr& ev) {
+        const auto& response = ev->Get()->Record;
+        const auto status = response.GetStatus();
+        auto issuesProto = response.GetIssues();
+
+        KQP_STLOG_D(KQPSCHEME, "Handle TEvForcedCompaction::TEvCreateResponse",
+            (response, response.ShortUtf8DebugString()));
+
+        if (status == Ydb::StatusIds::SUCCESS) {
+            DoSubscribe();
+        } else {
+            ReplyErrorAndDie(status, &issuesProto);
+        }
+    }
+
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             NYql::TIssues issues;
@@ -970,13 +1027,30 @@ public:
         ForwardToSchemeShard(std::move(request));
     }
 
+    void GetCompactionStatus() {
+        auto request = std::make_unique<NSchemeShard::TEvForcedCompaction::TEvGetRequest>(Database, TxId);
+        ForwardToSchemeShard(std::move(request));
+    }
+
     void DoSubscribe() {
         auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
         ForwardToSchemeShard(std::move(request));
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
-        GetIndexStatus();
+        const auto& schemeOp = PhyTx->GetSchemeOperation();
+        switch (schemeOp.GetOperationCase()) {
+            case NKqpProto::TKqpSchemeOperation::kBuildOperation: {
+                return GetIndexStatus();
+            }
+            case NKqpProto::TKqpSchemeOperation::kCompactTable: {
+                return GetCompactionStatus();
+            }
+            default: {
+                return InternalError(TStringBuilder() << "Unexpected scheme operation when handle TEvNotifyTxCompletionResult: "
+                    << (ui32) schemeOp.GetOperationCase());
+            }
+        }
     }
 
     void SetSchemeShardId(ui64 schemeShardTabletId) {
@@ -1006,6 +1080,34 @@ public:
         const Ydb::Table::IndexBuildState::State state = indexBuildResult.GetState();
         const Ydb::StatusIds::StatusCode buildStatus = state == Ydb::Table::IndexBuildState::STATE_DONE ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::PRECONDITION_FAILED;
         return ReplyErrorAndDie(buildStatus, indexBuildResult.MutableIssues());
+    }
+
+    void Handle(NSchemeShard::TEvForcedCompaction::TEvGetResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        KQP_STLOG_D(KQPSCHEME, "Handle TEvForcedCompaction::TEvGetResponse",
+            (record, record.ShortDebugString()));
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            // Internal error: we made incorrect request to get status of compaction operation
+            NYql::TIssues responseIssues;
+            NYql::IssuesFromMessage(record.GetIssues(), responseIssues);
+
+            NYql::TIssue issue(TStringBuilder() << "Failed to get compaction status. Status: " << record.GetStatus());
+            for (const NYql::TIssue& i : responseIssues) {
+                issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+            }
+
+            NYql::TIssues issues;
+            issues.AddIssue(std::move(issue));
+            return InternalError(issues);
+        }
+
+        auto& compaction = *record.MutableForcedCompaction();
+        const Ydb::Table::CompactState::State state = compaction.GetState();
+        if (state == Ydb::Table::CompactState::STATE_DONE) {
+            return ReplyErrorAndDie(Ydb::StatusIds::SUCCESS, NYql::TIssues{});
+        } else {
+            return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Unexpected state: " << state);
+        }
     }
 
     template<typename TEv>
@@ -1057,6 +1159,12 @@ private:
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
         IssueToMessage(issue, issues.Add());
+        ReplyErrorAndDie(status, &issues);
+    }
+
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const TString& message) {
+        google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
+        IssueToMessage(NYql::TIssue(message), issues.Add());
         ReplyErrorAndDie(status, &issues);
     }
 

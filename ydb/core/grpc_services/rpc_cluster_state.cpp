@@ -108,7 +108,7 @@ public:
         {{ "Path", "Sid" }, ".sys/auth_owners", true },
         {{ "Path", "Sid", "Permission" }, ".sys/auth_permissions", true },
         {{ "Sid", "IsEnabled", "IsLockedOut", "CreatedAt", "LastSuccessfulAttemptAt", "LastFailedAttemptAt", "FailedAttemptCount", "PasswordHash" }, ".sys/auth_users", true },
-        {{ "NodeId", "QueryId", {"Query", true}, "AccessCount", "CompiledAt", "UserSID", "LastAccessedAt", "CompilationDuration", "Warnings", "Metadata" }, ".sys/compile_cache_queries" },
+        {{ "NodeId", "QueryId", {"Query", true}, "AccessCount", "CompiledAt", "UserSID", "LastAccessedAt", "CompilationDurationMs", "Warnings", "Metadata" }, ".sys/compile_cache_queries" },
         {{ "BridgeSyncRunning", "GroupId", "Generation", "ErasureSpecies", "BoxId", "StoragePoolId", "EncryptionMode", "LifeCyclePhase", "AllocatedSize", "AvailableSize", "SeenOperational", "PutTabletLogLatency", "PutUserDataLatency", "GetFastLatency", "LayoutCorrect", "OperatingStatus", "ExpectedStatus", "ProxyGroupId", "BridgePileId", "GroupSizeInUnits", "BridgeSyncStage", "BridgeDataSyncProgress", "BridgeDataSyncErrors", "BridgeSyncLastError", "BridgeSyncLastErrorTimestamp", "BridgeSyncFirstErrorTimestamp", "BridgeSyncErrorCount" }, ".sys/ds_groups" },
         {{ "NodeId", "PDiskId", "Type", "Kind", "Path", "Guid", "BoxId", "SharedWithOS", "ReadCentric", "AvailableSize", "TotalSize", "Status", "StatusChangeTimestamp", "ExpectedSlotCount", "NumActiveSlots", "DecommitStatus", "State", "SlotSizeInUnits" }, ".sys/ds_pdisks" },
         {{ "BoxId", "StoragePoolId", "Name", "Generation", "ErasureSpecies", "VDiskKind", "Kind", "NumGroups", "EncryptionMode", "SchemeshardId", "PathId", "DefaultGroupSizeInUnits" }, ".sys/ds_storage_pools" },

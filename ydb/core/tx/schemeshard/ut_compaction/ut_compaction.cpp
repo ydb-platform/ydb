@@ -1981,6 +1981,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().cascade(), false);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().max_shards_in_flight(), 3);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 0.0, 1e-7);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_IN_PROGRESS);
         }
 
         block.Stop().Unblock();
@@ -1992,6 +1993,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().cascade(), false);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetSettings().max_shards_in_flight(), 3);
             UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 100.0, 1e-7);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
         }
     }
 

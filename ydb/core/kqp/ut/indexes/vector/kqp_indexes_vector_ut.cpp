@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestOrderByCosine(3, F_OVERLAP);
     }
 
-    Y_UNIT_TEST(BadFormat) {
+    Y_UNIT_TEST_TWIN(BadFormat, OnBuild) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -527,27 +527,39 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             const TString createTableSql(R"(
                 --!syntax_v1
-                CREATE TABLE TestVector2 (id Uint64, embedding String, embedding_bit String, PRIMARY KEY (id));
+                CREATE TABLE TestVector2 (id Uint64, embedding String, embedding_bit String, PRIMARY KEY (id))
+                WITH (PARTITION_AT_KEYS = (9));
             )");
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        {
+        auto create = [&]() {
             const TString createIndex(Q_(R"(
                 ALTER TABLE `/Root/TestVector2` ADD INDEX idx_vector_3_200 GLOBAL USING vector_kmeans_tree
-                ON (embedding) WITH (distance=cosine, vector_type="uint8", vector_dimension=200, levels=3, clusters=2);
+                ON (embedding) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
             )"));
             auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        };
 
-        {
-            const TString query1(Q_(R"(UPSERT INTO TestVector2 (id, embedding) VALUES (1, "00"), (2, "01"), (3, "10"), (4, "11"),
-                (5, "00"), (6, "01"), (7, "10"), (8, "11");)"));
+        auto insert = [&]() {
+            const TString query1(Q_(R"(UPSERT INTO TestVector2 (id, embedding) VALUES
+                (1, ""), (2, "1"), (3, "40"), (4, "abcd"),
+                (5, "00\x02"), (6, "01\x02"), (7, "10\x02"), (8, "11\x02"),
+                (9, ""), (10, "1"), (11, "40"), (12, "abcd"),
+                (13, "00\x02"), (14, "01\x02"), (15, "10"), (16, "11\x02");)"));
             auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        if (OnBuild) {
+            insert();
+            create();
+        } else {
+            create();
+            insert();
         }
     }
 

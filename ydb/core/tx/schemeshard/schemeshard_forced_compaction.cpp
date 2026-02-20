@@ -77,9 +77,24 @@ void TSchemeShard::FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedComp
     compaction.MutableSettings()->set_cascade(info.Cascade);
     compaction.MutableSettings()->set_max_shards_in_flight(info.MaxShardsInFlight);
 
-    float progress = info.TotalShardCount > 0 ? (100.f * info.DoneShardCount / info.TotalShardCount) : 0;
-
-    compaction.SetProgress(progress);
+    switch (info.State) {
+        case TForcedCompactionInfo::EState::InProgress:
+            compaction.SetState(Ydb::Table::CompactState::STATE_IN_PROGRESS);
+            compaction.SetProgress(info.CalcProgress());
+            break;
+        case TForcedCompactionInfo::EState::Done:
+            compaction.SetState(Ydb::Table::CompactState::STATE_DONE);
+            compaction.SetProgress(100.0);
+            break;
+        case TForcedCompactionInfo::EState::Cancelled:
+            compaction.SetState(Ydb::Table::CompactState::STATE_CANCELLED);
+            compaction.SetProgress(info.CalcProgress());
+            break;
+        case TForcedCompactionInfo::EState::Invalid:
+            compaction.SetState(Ydb::Table::CompactState::STATE_UNSPECIFIED);
+            compaction.SetProgress(0.0);
+            break;
+    }
 }
 
 void TSchemeShard::CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx) {

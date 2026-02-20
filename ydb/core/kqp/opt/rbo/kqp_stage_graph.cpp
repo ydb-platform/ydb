@@ -6,7 +6,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-void DFS(int vertex, TVector<int> &sortedStages, THashSet<int> &visited, const THashMap<int, TVector<int>> &stageInputs) {
+void DFS(ui32 vertex, TVector<ui32> &sortedStages, THashSet<ui32> &visited, const THashMap<ui32, TVector<ui32>> &stageInputs) {
     visited.emplace(vertex);
 
     for (auto u : stageInputs.at(vertex)) {
@@ -175,8 +175,8 @@ TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, T
     return inputStage;
 }
 
-std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(int& stageInputCounter, TExprNode::TPtr& node,
-                                                                            TExprContext& ctx, int fromStage) {
+std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32& stageInputCounter, TExprNode::TPtr& node,
+                                                                            TExprContext& ctx, ui32 fromStage) {
     TString inputName = "input_arg" + std::to_string(stageInputCounter++);
     YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
     auto arg = Build<TCoArgument>(ctx, node->Pos()).Name(inputName).Done().Ptr();
@@ -190,8 +190,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(int&
 }
 
 void TStageGraph::TopologicalSort() {
-    TVector<int> sortedStages;
-    THashSet<int> visited;
+    TVector<ui32> sortedStages;
+    THashSet<ui32> visited;
 
     for (auto id : StageIds) {
         if (!visited.contains(id)) {

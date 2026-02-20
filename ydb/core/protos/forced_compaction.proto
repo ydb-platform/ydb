@@ -1,6 +1,7 @@
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "google/protobuf/timestamp.proto";
 
 package NKikimrForcedCompaction;
@@ -19,6 +20,7 @@ message TForcedCompaction {
     optional google.protobuf.Timestamp StartTime = 4;
     optional google.protobuf.Timestamp EndTime = 5;
     optional string UserSID = 6;
+    optional Ydb.Table.CompactState.State State = 7;
 }
 
 message TEvCreateRequest {

@@ -504,7 +504,7 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
         TDuration::Minutes(9999)); //Disable dead peer detection to parallel activity
 
-    std::vector<NInterconnect::NRdma::TMemRegionPtr> regions;
+    std::vector<TRcBuf> occupiedBuffers;
 
     // Create reciever
     ui32 index = 0;
@@ -529,10 +529,16 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
         UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
     }
 
-    // Allocate all rdma memory to trigger an error during the next transmissions
-    for (size_t i = 0; i < 7; i++) {
-        regions.emplace_back(pool->Alloc(32u << 20, 0));
+    // Exhaust the same allocation class (5KB) that receiver uses for RDMA sections.
+    // This makes the "undelivered due to no RDMA memory on receiver" check deterministic.
+    for (;;) {
+        auto buf = pool->AllocRcBuf(5000, 0);
+        if (!buf) {
+            break;
+        }
+        occupiedBuffers.emplace_back(std::move(*buf));
     }
+    UNIT_ASSERT(!occupiedBuffers.empty());
 
     // Send more
     {
@@ -571,7 +577,7 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     }
     UNIT_ASSERT(recieverPtr->WhaitForRecieve(2, 20));
     // Free memory
-    regions.clear();
+    occupiedBuffers.clear();
     // Whait for the pending hendshake timer
     Sleep(TDuration::MilliSeconds(5000));
 
@@ -673,7 +679,8 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
 }
 
 TEST_F(XdcRdmaTest, SendMixBigShuffle) {
-    TTestICCluster cluster(2);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TDuration::Minutes(1), 50u << 20);
     TEventsForTest events(1000, true);
 
     auto recieverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {

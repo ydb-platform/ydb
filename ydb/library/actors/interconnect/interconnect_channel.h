@@ -148,6 +148,8 @@ namespace NActors {
         bool IsPartInline = false;
         bool IsPartRdma = false;
         NActorsInterconnect::TRdmaCreds RdmaCredsBuffer;
+        ui32 RdmaCredPartPos = 0;
+        float RdmaCredsPerByteAvg = 1.0f;
         size_t PartLenRemain = 0;
         size_t SectionIndex = 0;
         std::vector<char> XdcData;

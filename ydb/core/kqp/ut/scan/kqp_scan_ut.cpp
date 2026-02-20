@@ -1524,13 +1524,15 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT 42
-            UNION ALL
-            (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1);
+            SELECT * FROM (
+                SELECT 42
+                UNION ALL
+                (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1)
+            ) ORDER BY Key;
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        CompareYson(R"([[[42];#];[#;[101u]]])", res);
+        CompareYson(R"([[#;[42]];[[101u];#]])", res);
     }
 
     Y_UNIT_TEST(UnionThree) {

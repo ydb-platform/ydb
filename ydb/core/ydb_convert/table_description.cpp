@@ -367,6 +367,10 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
                 column->SetFamilyName(alter.family());
             }
             switch (alter.default_value_case()) {
+                case Ydb::Table::ColumnMeta::kFromLiteral: {
+                    *column->MutableDefaultFromLiteral() = alter.from_literal();
+                    break;
+                }
                 case Ydb::Table::ColumnMeta::kFromSequence: {
                     auto fromSequence = column->MutableDefaultFromSequence();
                     TString sequenceName = alter.from_sequence().name();

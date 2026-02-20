@@ -5460,6 +5460,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         // namespace NForcedCompaction {
         HFuncTraced(TEvForcedCompaction::TEvCreateRequest, Handle);
         HFuncTraced(TEvForcedCompaction::TEvGetRequest, Handle);
+        HFuncTraced(TEvForcedCompaction::TEvCancelRequest, Handle);
+        HFuncTraced(TEvForcedCompaction::TEvForgetRequest, Handle);
+        HFuncTraced(TEvForcedCompaction::TEvListRequest, Handle);
         // } // NForcedCompaction
 
         //namespace NCdcStreamScan {
@@ -5984,8 +5987,10 @@ TString TSchemeShard::FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TB
 
 void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
     switch (static_cast<ECompactionType>(ev->Cookie)) {
-    case ECompactionType::Unspecified: // backward compatibility for 0, handle like both Background and Forced
+    case ECompactionType::Unspecified: // Backward compatibility for 0, handle like both Background and Forced.
+        // For background compaction, it doesn't matter who started compaction.
         HandleBackgroundCompactionResult(ev, ctx);
+        // For forced compaction, shards without a known compact operation will be ignored.
         HandleForcedCompactionResult(ev, ctx);
         break;
     case ECompactionType::Background:

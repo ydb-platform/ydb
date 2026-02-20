@@ -2283,7 +2283,7 @@ namespace NSchemeShardUT_Private {
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvGetResponse>(handle);
 
-        UNIT_ASSERT_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
 
         return ev->Record;
     }
@@ -2295,6 +2295,90 @@ namespace NSchemeShardUT_Private {
         Ydb::StatusIds::StatusCode expectedStatus)
     {
         return TestGetCompaction(runtime, TTestTxConfig::SchemeShard, id, dbName, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvCancelRequest(txId, dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCancelResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestCancelCompaction(runtime, TTestTxConfig::SchemeShard, txId, dbName, id, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvForgetRequest(txId, dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvForgetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestForgetCompaction(runtime, TTestTxConfig::SchemeShard, txId, dbName, id, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        const TString& dbName,
+        ui64 pageSize,
+        const TString& pageToken,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvListRequest(dbName, pageSize, pageToken));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvListResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(
+        TTestActorRuntime& runtime,
+        const TString& dbName,
+        ui64 pageSize,
+        const TString& pageToken,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestListCompactions(runtime, TTestTxConfig::SchemeShard, dbName, pageSize, pageToken, expectedStatus);
     }
 
     TPathId TestFindTabletSubDomainPathId(

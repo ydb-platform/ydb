@@ -462,6 +462,20 @@ namespace NSchemeShardUT_Private {
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& dbName,
+            ui64 pageSize, const TString& pageToken,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(TTestActorRuntime& runtime, const TString& dbName,
+            ui64 pageSize, const TString& pageToken,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
     ////////// export
     TVector<TString> GetExportTargetPaths(const TString& requestStr);

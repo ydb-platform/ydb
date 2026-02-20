@@ -48,3 +48,40 @@ message TEvGetResponse {
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional TForcedCompaction ForcedCompaction = 3;
 }
+
+message TEvCancelRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional uint64 ForcedCompactionId = 3;
+}
+
+message TEvCancelResponse {
+    optional uint64 TxId = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+}
+
+message TEvForgetRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional uint64 ForcedCompactionId = 3;
+}
+
+message TEvForgetResponse {
+    optional uint64 TxId = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+}
+
+message TEvListRequest {
+    optional string DatabaseName = 1;
+    optional uint64 PageSize = 2;
+    optional string PageToken = 3;
+}
+
+message TEvListResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    repeated TForcedCompaction Entries = 3;
+    optional string NextPageToken = 4;
+}

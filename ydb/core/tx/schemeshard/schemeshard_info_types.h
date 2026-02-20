@@ -3855,6 +3855,7 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
         InProgress = 1,
         Done = 2,
         Cancelled = 3,
+        Cancelling = 4,
     };
 
     ui64 Id;  // TxId from the original TEvCreateRequest

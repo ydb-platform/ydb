@@ -72,7 +72,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         info->SubdomainPathId = subdomainPath.Base()->PathId;
         info->Cascade = settings.cascade();
         info->MaxShardsInFlight = settings.max_shards_in_flight();
-        info->StartTime = TAppData::TimeProvider->Now();
+        info->StartTime = ctx.Now();
         if (request.HasUserSID()) {
             info->UserSID = request.GetUserSID();
         }

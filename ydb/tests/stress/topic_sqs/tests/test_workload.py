@@ -26,5 +26,5 @@ class TestYdbTopicSqsWorkload(StressFixture):
             "--endpoint", self.endpoint,
             "--database", self.database,
             "--duration", self.base_duration,
-            "--sqs-endpoint", self.http_proxy_endpoint,
+            "--sqs-endpoint", self.http_proxy_endpoint + '/Root',
         ])

@@ -14,6 +14,7 @@ import stat
 class Workload:
     def __init__(self, endpoint, database, duration, sqs_endpoint):
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
+        self.database = database
         self.endpoint = endpoint
         self.sqs_endpoint = sqs_endpoint
         self.duration = duration
@@ -64,9 +65,10 @@ class Workload:
         return (
             [
                 self.cli_path,
+                "-vvv",
                 "--verbose",
                 "--endpoint", self.endpoint,
-                "--database", "/Root",
+                "--database", self.database,
                 "workload",
                 "sqs",
                 "run",
@@ -77,17 +79,13 @@ class Workload:
         logging.info(f"Writing to topic for {duration} seconds. SQS endpoint: {self.sqs_endpoint}")
         subcmds = [
             'write',
-            '-s', duration,
-            '-a', 'account',
-            '-t', 'token1',
-            '--endpoint-override', self.sqs_endpoint,
-            '--queue-url', '/v1/5//Root/' + str(len(self.topic_name)) + '/' + self.topic_name + '/15/shared_consumer',
-            '--producers', '10',
-            '--use-json-api',
+            '-s', str(duration),
+            '--workers', '50',
+            '--queue-endpoint',  self.sqs_endpoint,
+            '--queue-url', '/v1/' + str(len(self.database)) + '/' + self.database + '/' + str(len(self.topic_name)) + '/' + self.topic_name + '/15/shared_consumer',
             '--percentile', '99',
-            '--set-subject-token',
-            '--message-groups-amount', '10000',
-            '--max-unique-messages', '10000',
+            '--message-groups-amount', '0',
+            '--max-unique-messages', '0',
         ]
         self.cmd_run(self.get_command(subcmds=subcmds))
 
@@ -104,12 +102,15 @@ class Workload:
             ]
 
             logging.info("Waiting for workload task")
-            for nn, runner in enumerate(concurrent.futures.as_completed(runners)):
+
+            for future in concurrent.futures.as_completed(runners):
                 try:
-                    runner.result()
-                    logging.info("Workload task #%d completed, ", nn)
+                    future.result()
+                    logging.info("Workload task completed")
                 except Exception:
-                    logging.exception("Workload task #%d failed, ", nn)
+                    logging.exception("Workload task failed")
+                    pass
+
             logging.info("Checking results")
             for runner in runners:
                 runner.result()

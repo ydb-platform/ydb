@@ -325,6 +325,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseNativeDescSort;
     NCommon::TConfSetting<bool, Static> UseIntermediateSchema;
     NCommon::TConfSetting<bool, Static> UseIntermediateStreams;
+    NCommon::TConfSetting<bool, Static> PassSqlFlagsForViewTranslation;
     NCommon::TConfSetting<bool, Static> UseFlow;
     NCommon::TConfSetting<ui16, Static> WideFlowLimit;
     NCommon::TConfSetting<bool, Static> UseSystemColumns;

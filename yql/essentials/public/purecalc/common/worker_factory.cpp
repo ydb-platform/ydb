@@ -43,6 +43,24 @@
 using namespace NYql;
 using namespace NYql::NPureCalc;
 
+namespace {
+
+NSQLTranslation::TSqlFlags GetSqlFlags(EBlockEngineMode blockEngineMode) {
+    NSQLTranslation::TSqlFlags flags = {
+        "AnsiOrderByLimitInUnionAll",
+        "AnsiRankForNullableKeys",
+        "DisableAnsiOptionalAs",
+        "DisableCoalesceJoinKeysOnQualifiedAll",
+        "DisableUnorderedSubqueries",
+        "FlexibleTypes"};
+    if (blockEngineMode != EBlockEngineMode::Disable) {
+        flags.insert("EmitAggApply");
+    }
+    return flags;
+}
+
+} // namespace
+
 template <typename TBase>
 TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorMode processorMode)
     : Factory_(std::move(options.Factory))
@@ -173,6 +191,7 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
     auto configProvider = CreateConfigProvider(*typeContext, nullptr, "");
     typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);
+    typeContext->SqlFlags = GetSqlFlags(BlockEngineMode_);
 
     if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
         modules->AttachUserData(typeContext->UserDataStorage);
@@ -226,16 +245,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.ModuleMapping = modules;
         settings.EnableGenericUdfs = true;
         settings.File = "generated.sql";
-        settings.Flags = {
-            "AnsiOrderByLimitInUnionAll",
-            "AnsiRankForNullableKeys",
-            "DisableAnsiOptionalAs",
-            "DisableCoalesceJoinKeysOnQualifiedAll",
-            "DisableUnorderedSubqueries",
-            "FlexibleTypes"};
-        if (BlockEngineMode_ != EBlockEngineMode::Disable) {
-            settings.Flags.insert("EmitAggApply");
-        }
+        settings.Flags = GetSqlFlags(BlockEngineMode_);
         for (const auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());
             if (block.Usage.Test(EUserDataBlockUsage::Library) && !alias.StartsWith("/lib")) {

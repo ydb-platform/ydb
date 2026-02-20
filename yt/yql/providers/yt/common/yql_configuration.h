@@ -55,6 +55,8 @@ constexpr ui64 DEFAULT_MAX_CHUNKS_FOR_DQ_READ = 500;
 
 constexpr bool DEFAULT_USE_KEY_BOUND_API = true;
 
+constexpr bool DEFAULT_PASS_SQL_FLAGS_FOR_VIEW_TRANSLATION = false;
+
 constexpr ui32 DEFAULT_MAX_OPERATION_FILES = 1000;
 
 constexpr bool DEFAULT_JOIN_COMMON_USE_MULTI_OUT = false;

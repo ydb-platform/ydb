@@ -938,6 +938,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
         HandleTranslationSettings(loadedSettings, currentSettings);
     }
 
+    SqlFlags_ = currentSettings->Flags;
     currentSettings->EmitReadsForExists = true;
     currentSettings->LangVer = LangVer_;
 
@@ -2127,6 +2128,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->FileStorage = FileStorage_;
     typeAnnotationContext->QContext = QContext_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
+    typeAnnotationContext->SqlFlags = SqlFlags_;
     for (auto& [alias, provider] : RemoteLayersProviders_) {
         typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
     }

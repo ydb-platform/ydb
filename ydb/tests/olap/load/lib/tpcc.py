@@ -72,7 +72,7 @@ class TpccSuiteBase(LoadSuiteBase):
     def test(self):
         assert len(self.get_users()) == 1, 'multiuser TPC-C not supported'
         result = YdbCliHelper.run_tpcc(
-            remote_cli_path = self._remote_cli_path,
+            remote_cli_path=self._remote_cli_path,
             users=self.get_users(),
             path=self.get_tpcc_path(),
             bench_time=self.time_s,

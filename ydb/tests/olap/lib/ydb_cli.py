@@ -458,7 +458,7 @@ class YdbCliHelper:
     @classmethod
     @allure.step
     def create_tpcc_executions(cls, remote_cli_path: str, path: str, bench_time: float, warehouses: int = 10, threads: int = 0, warmup: float = 0.,
-                 tx_mode: TxMode = TxMode.SerializableRW, users=['']) -> list[tuple[str, remote_execution.LongRemoteExecution]]:
+                               tx_mode: TxMode = TxMode.SerializableRW, users=['']) -> list[tuple[str, remote_execution.LongRemoteExecution]]:
         executions = []
         for user in users:
             cmd = cls.get_cli_command(remote_cli_path)

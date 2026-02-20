@@ -48,7 +48,14 @@ SELECT
         ELSE 'team_unmatched:' || t.area
     END AS owner_team,
     t.is_open_at_end_of_day AS is_open_at_end_of_day,
-    t.closed_on_this_day AS closed_on_this_day
+    t.closed_on_this_day AS closed_on_this_day,
+    CAST(
+        CASE
+            WHEN t.priority LIKE '%low%' THEN DateTime::ToDays(Cast(t.date AS Date) - Cast(t.created_date AS Date)) < 30
+            WHEN t.priority LIKE '%med%' OR t.priority LIKE '%high%' THEN DateTime::ToDays(Cast(t.date AS Date) - Cast(t.created_date AS Date)) < 7
+            ELSE DateTime::ToDays(Cast(t.date AS Date) - Cast(t.created_date AS Date)) < 7
+        END AS Uint8
+    ) AS in_sla
 FROM `test_results/analytics/github_issues_timeline` AS t
 LEFT JOIN (
     SELECT area AS area, owner_team AS owner_team

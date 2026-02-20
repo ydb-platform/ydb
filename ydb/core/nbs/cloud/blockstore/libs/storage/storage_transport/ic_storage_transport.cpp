@@ -185,21 +185,19 @@ TICStorageTransport::SyncWithPersistentBuffer(
     return future;
 }
 
-TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult> TICStorageTransport::ListPersistentBuffer(
+TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>
+TICStorageTransport::ListPersistentBuffer(
     const NActors::TActorId serviceId,
-    const NKikimr::NDDisk::TQueryCredentials credentials,
-    const ui64 requestId)
+    const NKikimr::NDDisk::TQueryCredentials credentials, const ui64 requestId)
 {
-    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>();
+    auto promise =
+        NewPromise<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>();
     auto future = promise.GetFuture();
 
-    NActors::TActivationContext::AsActorContext().Send(
+    ActorSystem->Send(
         ICStorageTransportActorId,
         new TEvICStorageTransportPrivate::TEvListPersistentBuffer(
-            serviceId,
-            credentials,
-            requestId,
-            std::move(promise)));
+            serviceId, credentials, requestId, std::move(promise)));
 
     return future;
 }

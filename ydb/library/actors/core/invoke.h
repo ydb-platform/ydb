@@ -129,16 +129,14 @@ namespace NActors {
     };
 
     template<class TInvokeExecutor>
-    void ScheduleInvokeActivity(TInvokeExecutor&& executor, const TDuration d) {
-        auto deadline = TActivationContext::Monotonic() + d;
+    void ScheduleInvokeActivity(TInvokeExecutor&& executor, const TMonotonic timestamp) {
         auto actorId = TActivationContext::Register(new TScheduledInvokeActivity<TInvokeExecutor>(std::move(executor)));
-        TActivationContext::Schedule(deadline, new IEventHandle(actorId, actorId, new TEvents::TEvWakeup()));
+        TActivationContext::Schedule(timestamp, new IEventHandle(TEvents::TSystem::Wakeup, 0, actorId, actorId, nullptr, 0));
     }
 
     template<class TInvokeExecutor>
-    void ScheduleInvokeActivity(TInvokeExecutor&& executor, const TMonotonic timestamp) {
-        auto actorId = TActivationContext::Register(new TScheduledInvokeActivity<TInvokeExecutor>(std::move(executor)));
-        TActivationContext::Schedule(timestamp, new IEventHandle(actorId, actorId, new TEvents::TEvWakeup()));
+    void ScheduleInvokeActivity(TInvokeExecutor&& executor, const TDuration d) {
+        ScheduleInvokeActivity(std::move(executor), TActivationContext::Monotonic() + d);
     }
 
 } // NActors

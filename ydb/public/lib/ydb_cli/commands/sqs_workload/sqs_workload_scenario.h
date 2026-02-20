@@ -24,13 +24,13 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<TLog> Log;
         std::shared_ptr<std::atomic_bool> ErrorFlag;
         std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
-        TMaybe<TString> Token;
-        TMaybe<TString> SecretKey;
+        TMaybe<TString> AwsSessionToken;
+        TMaybe<TString> AwsSecretKey;
         TString Topic;
         TString Consumer;
         TMaybe<TString> QueueName;
-        TMaybe<TString> Account;
-        TMaybe<TString> Region;
+        TMaybe<TString> AwsAccessKeyId;
+        TMaybe<TString> AwsRegion;
         TString Endpoint;
         ui64 MaxUniqueMessages;
         ui32 BatchSize;
@@ -40,7 +40,7 @@ namespace NYdb::NConsoleClient {
         ui32 RequestTimeoutMs;
         bool UseXmlAPI;
         TMaybe<TString> CloudIamToken;
-        bool ValidateFifo;
+        bool ValidateMessagesOrder;
 
         void InitAwsSdk();
         void DestroyAwsSdk();

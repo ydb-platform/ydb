@@ -108,7 +108,7 @@ namespace NYdb::NConsoleClient {
             return false;
         }
 
-        return (params.ErrorMessagesDestiny == ERROR_MESSAGES_DESTINY_FATAL) ||
+        return (params.ErrorMessagesPolicy == ERROR_MESSAGES_DESTINY_FATAL) ||
                (std::rand() % 3 == 0);
     }
 

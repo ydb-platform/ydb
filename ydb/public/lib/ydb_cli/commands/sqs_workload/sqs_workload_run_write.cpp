@@ -52,13 +52,13 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(1)
             .StoreResult(&Scenario.WorkersCount);
         config.Opts->AddLongOption("aws-access-key-id", "AWS access key id.")
-            .StoreResult(&Scenario.Account);
+            .StoreResult(&Scenario.AwsAccessKeyId);
         config.Opts->AddLongOption("aws-session-token", "AWS session token.")
-            .StoreResult(&Scenario.Token);
-        config.Opts->AddLongOption("cloud-iam-token", "Cloud IAM token.")
+            .StoreResult(&Scenario.AwsSessionToken);
+        config.Opts->AddLongOption("cloud-iam-token", "Cloud IAM token. This parameter will be set to X-YaCloud-SubjectToken header")
             .StoreResult(&Scenario.CloudIamToken);
         config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
-            .StoreResult(&Scenario.SecretKey);
+            .StoreResult(&Scenario.AwsSecretKey);
         config.Opts->AddLongOption('b', "batch-size", "AWS batch size.")
             .DefaultValue(1)
             .StoreResult(&Scenario.BatchSize);
@@ -79,12 +79,12 @@ namespace NYdb::NConsoleClient {
             ->AddLongOption("request-timeout", "Request timeout in milliseconds.")
             .DefaultValue(2000)
             .StoreResult(&Scenario.RequestTimeoutMs);
-        config.Opts->AddLongOption("region", "AWS region.")
+        config.Opts->AddLongOption("aws-region", "AWS region.")
             .Optional()
-            .StoreResult(&Scenario.Region);
+            .StoreResult(&Scenario.AwsRegion);
         config.Opts->AddLongOption("with-messages-order", "Write messages with order (validation can be enabled in run read command).")
             .DefaultValue(false)
-            .StoreTrue(&Scenario.ValidateFifo);
+            .StoreTrue(&Scenario.ValidateMessagesOrder);
         config.Opts->AddLongOption("max-unique-messages", "Max unique messages. If set to 0, content based deduplication is used.")
             .DefaultValue(0)
             .StoreResult(&Scenario.MaxUniqueMessages);
@@ -94,8 +94,8 @@ namespace NYdb::NConsoleClient {
         TClientCommand::Parse(config);
     }
 
-    int TCommandWorkloadSqsRunWrite::Run(TConfig& config) {
-        return Scenario.Run(config);
+    int TCommandWorkloadSqsRunWrite::Run(TConfig&) {
+        return Scenario.Run();
     }
 
 } // namespace NYdb::NConsoleClient

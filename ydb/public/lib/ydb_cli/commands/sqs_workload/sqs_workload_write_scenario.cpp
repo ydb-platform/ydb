@@ -4,7 +4,7 @@
 
 namespace NYdb::NConsoleClient {
 
-    int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
+    int TSqsWorkloadWriteScenario::Run() {
         InitAwsSdk();
         auto result = RunScenario();
         DestroyAwsSdk();
@@ -26,8 +26,9 @@ namespace NYdb::NConsoleClient {
         TSqsWorkloadWriterParams params{
             .TotalSec = TotalSec,
             .QueueUrl = queueUrl,
-            .Account = Account,
-            .Token = Token,
+            .AwsAccessKeyId = AwsAccessKeyId,
+            .AwsSessionToken = AwsSessionToken,
+            .AwsSecretKey = AwsSecretKey,
             .Log = Log,
             .Mutex = Mutex,
             .FinishedCond = FinishedCond,

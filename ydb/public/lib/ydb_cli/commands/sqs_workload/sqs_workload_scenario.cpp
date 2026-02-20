@@ -61,30 +61,30 @@ namespace NYdb::NConsoleClient {
             Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>(
                 "pooled-thread-executor", WorkersCount);
 
-        if (Region.Defined()) {
-            sqsClientConfiguration.region = Aws::String(Region->c_str(), Region->size());
+        if (AwsRegion.Defined()) {
+            sqsClientConfiguration.region = Aws::String(AwsRegion->c_str(), AwsRegion->size());
         }
 
         Aws::Auth::AWSCredentials credentials;
-        if (Account.Defined()) {
-            Aws::String accountStr(Account->c_str(), Account->size());
-            credentials.SetAWSAccessKeyId(accountStr.c_str());
+        if (AwsAccessKeyId.Defined()) {
+            Aws::String accessKeyIdStr(AwsAccessKeyId->c_str(), AwsAccessKeyId->size());
+            credentials.SetAWSAccessKeyId(accessKeyIdStr.c_str());
         }
 
-        if (Token.Defined()) {
-            Aws::String tokenStr(Token->c_str(), Token->size());
-            credentials.SetSessionToken(tokenStr.c_str());
+        if (AwsSessionToken.Defined()) {
+            Aws::String sessionTokenStr(AwsSessionToken->c_str(), AwsSessionToken->size());
+            credentials.SetSessionToken(sessionTokenStr.c_str());
         }
 
-        if (SecretKey.Defined()) {
-            Aws::String secretKeyStr(SecretKey->c_str(), SecretKey->size());
+        if (AwsSecretKey.Defined()) {
+            Aws::String secretKeyStr(AwsSecretKey->c_str(), AwsSecretKey->size());
             credentials.SetAWSSecretKey(secretKeyStr.c_str());
         }
 
         if (UseXmlAPI) {
             SqsClient = Aws::MakeShared<TSQSClientWrapper>(
                 "sqs-client-wrapper", credentials, sqsClientConfiguration, Aws::MakeShared<Aws::SQS::SQSClient>(
-                    "sqs-client", credentials, sqsClientConfiguration), StatsCollector, ValidateFifo);
+                    "sqs-client", credentials, sqsClientConfiguration), StatsCollector, ValidateMessagesOrder);
         } else {
             auto jsonSqsClient = Aws::MakeShared<TSQSJsonClient>(
                 "json-sqs-client",
@@ -92,7 +92,7 @@ namespace NYdb::NConsoleClient {
                 sqsClientConfiguration,
                 CloudIamToken.Defined() ? Aws::String(CloudIamToken.GetRef().c_str(), CloudIamToken.GetRef().size()) : Aws::String());
             SqsClient = Aws::MakeShared<TSQSClientWrapper>(
-                "sqs-client-wrapper", credentials, sqsClientConfiguration, jsonSqsClient, StatsCollector, ValidateFifo);
+                "sqs-client-wrapper", credentials, sqsClientConfiguration, jsonSqsClient, StatsCollector, ValidateMessagesOrder);
         }
     }
 

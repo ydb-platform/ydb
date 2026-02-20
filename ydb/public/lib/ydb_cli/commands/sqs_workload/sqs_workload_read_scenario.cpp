@@ -9,9 +9,7 @@
 
 namespace NYdb::NConsoleClient {
 
-    int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig& config) {
-        TString database = config.Database;
-        
+    int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {        
         InitAwsSdk();
         auto result = RunScenario();
         DestroyAwsSdk();
@@ -33,8 +31,8 @@ namespace NYdb::NConsoleClient {
         TSqsWorkloadReaderParams params{
             .TotalSec = TotalSec,
             .QueueUrl = queueUrl,
-            .Account = Account,
-            .Token = Token,
+            .AwsAccessKeyId = AwsAccessKeyId,
+            .AwsSessionToken = AwsSessionToken,
             .Log = Log,
             .ErrorFlag = ErrorFlag,
             .SqsClient = SqsClient,
@@ -44,10 +42,10 @@ namespace NYdb::NConsoleClient {
             .WorkersCount = WorkersCount,
             .BatchSize = BatchSize,
             .ErrorMessagesRate = ErrorMessagesRate,
-            .ErrorMessagesDestiny = ErrorMessagesDestiny,
+            .ErrorMessagesPolicy = ErrorMessagesPolicy,
             .HandleMessageDelay = TDuration::MilliSeconds(HandleMessageDelayMs),
             .VisibilityTimeout = TDuration::MilliSeconds(VisibilityTimeoutMs),
-            .ValidateFifo = ValidateFifo,
+            .ValidateMessagesOrder = ValidateMessagesOrder,
             .HashMapMutex = std::make_shared<std::mutex>(),
             .LastReceivedMessageInGroup =
                 std::make_shared<THashMap<TString, ui64>>(),

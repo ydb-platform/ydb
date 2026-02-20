@@ -857,12 +857,11 @@ protected:
                         KAFKA_LOG_D("Start processing request");
                         if (AppData()->KafkaProxyConfig.GetMtlsEnable() && !MtlsAuthenticationSuccessful) {
                             MtlsQueuedRequests.push_back(Request);
-                            //Request = nullptr;
                             // RequestPoller();
                             auto cert = Socket->GetSslClientCert();
-                            if (Socket->GetSslHandshakeResult() == 1 && cert == nullptr) {
-                                 Socket->PollClientCertAfterHandshake();
-                            }
+                            // if (Socket->GetSslHandshakeResult() == 1 && cert == nullptr) {
+                            //      Socket->PollClientCertAfterHandshake();
+                            // }
                         } else if (!ProcessRequest(ctx)) {
                             return false;
                         }

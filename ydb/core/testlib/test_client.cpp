@@ -576,6 +576,7 @@ namespace Tests {
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
+            MERGE_CFG_FROM_APP_CFG(TliConfig);
 #undef MERGE_CFG_FROM_SETTINGS
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG

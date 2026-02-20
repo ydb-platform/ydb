@@ -258,8 +258,21 @@ struct TGraphMeta {
         return QuerySpanId;  // Fall back to global QuerySpanId
     }
 
+    ui64 GetEffectiveQuerySpanId(ui64 spanId, const TString& tablePath) const {
+        if (spanId == 0) {
+            return 0;
+        }
+        for (const auto& path : IgnoredTablePaths) {
+            if (tablePath == path) {
+                return 0;
+            }
+        }
+        return spanId;
+    }
+
     ui64 QuerySpanId = 0;
     THashMap<ui32, ui64> TxQuerySpanIds;  // Per-transaction QuerySpanIds (for deferred effects)
+    TVector<TString> IgnoredTablePaths;
 };
 
 struct TTaskInputMeta {
@@ -269,6 +282,8 @@ struct TTaskInputMeta {
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
     NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
+    // Fully-qualified table path for TLI filtering; populated for stream lookup and vector resolve inputs.
+    TString TablePath;
 };
 
 struct TTaskOutputMeta {

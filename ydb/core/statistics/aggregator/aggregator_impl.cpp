@@ -547,8 +547,11 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse
 
     if (ev->Get()->Success) {
         if (!StatisticsToSave.empty()) {
+            // There are some more pending statistics items to save.
             SaveStatisticsToTable();
-        } else {
+        } else if (!AnalyzeActorId) {
+            // If we saved everything and the analyze actor has already finished,
+            // finish the traversal.
             DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
         }
     } else {
@@ -564,12 +567,16 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryRespon
     DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, {error});
 }
 
-void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev) {
+void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& ev) {
     if (ev->Sender != AnalyzeActorId) {
         return;
     }
 
-    using EStatus = TEvStatistics::TEvFinishTraversal::EStatus;
+    if (ev->Get()->Final) {
+        AnalyzeActorId = {};
+    }
+
+    using EStatus = TEvStatistics::TEvAnalyzeActorResult::EStatus;
     switch (ev->Get()->Status) {
     case EStatus::Success:
         std::move(

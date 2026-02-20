@@ -106,21 +106,21 @@ void TAnalyzeActor::Bootstrap() {
 }
 
 void TAnalyzeActor::FinishWithFailure(
-        TEvStatistics::TEvFinishTraversal::EStatus status,
+        TEvStatistics::TEvAnalyzeActorResult::EStatus status,
         NYql::TIssue issue) {
-    auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(status);
-    if (status != TEvStatistics::TEvFinishTraversal::EStatus::Success) {
-        TStringBuilder errMsg;
-        errMsg << "Analyzing table ";
-        if (!TableName.empty()) {
-            errMsg << TableName;
-        } else {
-            errMsg << "id: " << PathId.LocalPathId;
-        }
-        NYql::TIssue error(errMsg);
-        error.AddSubIssue(MakeIntrusive<NYql::TIssue>(std::move(issue)));
-        response->Issues.AddIssue(std::move(error));
+    auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(status);
+
+    TStringBuilder errMsg;
+    errMsg << "Analyzing table ";
+    if (!TableName.empty()) {
+        errMsg << TableName;
+    } else {
+        errMsg << "id: " << PathId.LocalPathId;
     }
+    NYql::TIssue error(errMsg);
+    error.AddSubIssue(MakeIntrusive<NYql::TIssue>(std::move(issue)));
+    response->Issues.AddIssue(std::move(error));
+
     Send(Parent, response.release());
     PassAway();
 }
@@ -138,8 +138,8 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
         FinishWithFailure(
             entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown
-            ? TEvStatistics::TEvFinishTraversal::EStatus::TableNotFound
-            : TEvStatistics::TEvFinishTraversal::EStatus::InternalError,
+            ? TEvStatistics::TEvAnalyzeActorResult::EStatus::TableNotFound
+            : TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
             NYql::TIssue(TStringBuilder() << "Navigate request failed with " << entry.Status));
         return;
     }
@@ -170,14 +170,6 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         }
     }
 
-    if (Columns.empty()) {
-        // All requested columns were already dropped. Send empty response right away.
-        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(Results));
-        Send(Parent, response.release());
-        PassAway();
-        return;
-    }
-
     // Add tasks to calculate simple column statistics.
     for (size_t i = 0; i < Columns.size(); ++i) {
         const auto& col = Columns[i];
@@ -188,6 +180,15 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         });
     }
 
+    if (PendingTasks.empty()) {
+        // All requested columns were already dropped. Send empty response right away.
+        auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(
+            std::vector<TStatisticsItem>{}, /*final=*/ true);
+        Send(Parent, response.release());
+        PassAway();
+        return;
+    }
+
     Become(&TThis::StateQuery);
     DispatchScanActor();
 }
@@ -195,6 +196,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 void TAnalyzeActor::DispatchScanActor() {
     Y_ENSURE(!ScanActorId);
     Y_ENSURE(InProgressTasks.empty());
+    Y_ENSURE(!PendingTasks.empty());
 
     TSelectBuilder selectBuilder;
     size_t totalSize = 0;
@@ -225,14 +227,6 @@ void TAnalyzeActor::DispatchScanActor() {
         PendingTasks.pop();
     }
 
-    if (selectBuilder.ColumnCount() == 0) {
-        // All done, return results right away.
-        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(Results));
-        Send(Parent, response.release());
-        PassAway();
-        return;
-    }
-
     auto actor = std::make_unique<TScanActor>(
         SelfId(), DatabaseName, selectBuilder.Build(TableName), selectBuilder.ColumnCount());
     ScanActorId = Register(actor.release());
@@ -244,10 +238,12 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         NYql::TIssue error(TStringBuilder() << "Statistics calculation query failed with " << result.Status);
         FinishWithFailure(
-            TEvStatistics::TEvFinishTraversal::EStatus::InternalError,
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
             std::move(error));
         return;
     }
+
+    std::vector<TStatisticsItem> resultItems;
 
     if (!RowCount) {
         NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
@@ -255,7 +251,8 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 
         NKikimrStat::TTableSummaryStatistics tableSummary;
         tableSummary.SetRowCount(*RowCount);
-        Results.emplace_back(std::nullopt, EStatType::TABLE_SUMMARY, tableSummary.SerializeAsString());
+        resultItems.emplace_back(
+            std::nullopt, EStatType::TABLE_SUMMARY, tableSummary.SerializeAsString());
     }
 
     auto supportedStatTypes = IStage2ColumnStatisticEval::SupportedTypes();
@@ -266,7 +263,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 
         if (task.SimpleStatEval) {
             auto simpleStats = task.SimpleStatEval->Extract(*RowCount, result.AggColumns);
-            Results.emplace_back(
+            resultItems.emplace_back(
                 col.Tag,
                 task.SimpleStatEval->GetType(),
                 simpleStats.SerializeAsString());
@@ -285,7 +282,7 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 });
             }
         } else if (task.Stage2StatEval) {
-            Results.emplace_back(
+            resultItems.emplace_back(
                 col.Tag,
                 task.Stage2StatEval->GetType(),
                 task.Stage2StatEval->ExtractData(result.AggColumns));
@@ -293,7 +290,16 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     }
     InProgressTasks.clear();
 
-    DispatchScanActor();
+    const bool isFinalResult = PendingTasks.empty();
+    auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(
+        std::move(resultItems), isFinalResult);
+    Send(Parent, response.release());
+
+    if (isFinalResult) {
+        PassAway();
+    } else {
+        DispatchScanActor();
+    }
 }
 
 void TAnalyzeActor::Handle(TEvents::TEvPoison::TPtr&) {

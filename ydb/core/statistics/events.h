@@ -124,7 +124,7 @@ struct TEvStatistics {
         EvAggregateKeepAlive,
         EvAggregateKeepAliveAck,
 
-        EvFinishTraversal,
+        EvAnalyzeActorResult,
 
         EvAnalyzeCancel,
 
@@ -320,8 +320,8 @@ struct TEvStatistics {
         EvStatisticsResponse>
     {};
 
-    struct TEvFinishTraversal : public TEventLocal<
-        TEvFinishTraversal, EvFinishTraversal>
+    struct TEvAnalyzeActorResult : public TEventLocal<
+        TEvAnalyzeActorResult, EvAnalyzeActorResult>
     {
         enum class EStatus {
             Success,
@@ -331,13 +331,15 @@ struct TEvStatistics {
         EStatus Status;
         NYql::TIssues Issues;
         std::vector<TStatisticsItem> Statistics;
+        bool Final; // Indicates that the actor has finished.
 
-        explicit TEvFinishTraversal(std::vector<TStatisticsItem> statistics)
+        TEvAnalyzeActorResult(std::vector<TStatisticsItem> statistics, bool final)
             : Status(EStatus::Success)
             , Statistics(std::move(statistics))
+            , Final(final)
         {}
 
-        explicit TEvFinishTraversal(EStatus status) : Status(status) {}
+        explicit TEvAnalyzeActorResult(EStatus status) : Status(status), Final(true) {}
     };
 };
 

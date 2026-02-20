@@ -18,7 +18,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TPathId PathId;
     TVector<ui32> RequestedColumnTags;
 
-    void FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus, NYql::TIssue);
+    void FinishWithFailure(TEvStatistics::TEvAnalyzeActorResult::EStatus, NYql::TIssue);
 
     // StateNavigate
 
@@ -60,7 +60,6 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TActorId ScanActorId;
 
     std::optional<ui64> RowCount;
-    TVector<TStatisticsItem> Results;
 
     struct TEvPrivate {
         enum EEv {

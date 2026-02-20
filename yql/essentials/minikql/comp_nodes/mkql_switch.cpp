@@ -332,11 +332,7 @@ private:
 
         const auto pos = new LoadInst(indexType, posPtr, "pos", block);
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowState::Get>());
-
-        const auto getType = FunctionType::get(valueType, {stateArg->getType(), pos->getType()}, false);
-        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
-        const auto input = CallInst::Create(getType, getPtr, {stateArg, pos}, "input", block);
+        const auto input = EmitFunctionCall<&TFlowState::Get>(valueType, {stateArg, pos}, ctx, block);
 
         const auto special = SwitchInst::Create(input, good, 2U, block);
         special->addCase(GetYield(context), back);
@@ -398,10 +394,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSwitchFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TSwitchFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -469,11 +462,7 @@ public:
 
             block = good;
 
-            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowState::Add>());
-            const auto addArg = item;
-            const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), addArg->getType()}, false);
-            const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "add", block);
-            CallInst::Create(addType, addPtr, {stateArg, addArg}, "", block);
+            EmitFunctionCall<&TFlowState::Add>(Type::getVoidTy(context), {stateArg, item}, ctx, block);
 
             const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, used, ctx, block);
             BranchInst::Create(done, loop, check, block);
@@ -481,11 +470,7 @@ public:
             block = done;
             new StoreInst(ConstantInt::get(indexType, 0), indexPtr, block);
 
-            const auto stat = ctx.GetStat();
-            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowState::PushStat>());
-            const auto statType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), stat->getType()}, false);
-            const auto statPtr = CastInst::Create(Instruction::IntToPtr, statFunc, PointerType::getUnqual(statType), "stat", block);
-            CallInst::Create(statType, statPtr, {stateArg, stat}, "", block);
+            EmitFunctionCall<&TFlowState::PushStat>(Type::getVoidTy(context), {stateArg, ctx.GetStat()}, ctx, block);
 
             BranchInst::Create(more, block);
         }
@@ -538,10 +523,7 @@ public:
 
             block = drop;
 
-            const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowState::Clear>());
-            const auto clearType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
-            const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
-            CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
+            EmitFunctionCall<&TFlowState::Clear>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
             BranchInst::Create(more, block);
 
@@ -911,20 +893,14 @@ private:
 
             block = good;
 
-            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TValueBase::Add>());
-            const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), itemPtr->getType()}, false);
-            const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "add", block);
-            CallInst::Create(addType, addPtr, {stateArg, itemPtr}, "", block);
+            EmitFunctionCall<&TValueBase::Add>(Type::getVoidTy(context), {stateArg, itemPtr}, ctx, block);
 
             const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, used, ctx, block);
             BranchInst::Create(done, loop, check, block);
 
             block = done;
 
-            const auto resetFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TValueBase::Reset>());
-            const auto resetType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
-            const auto resetPtr = CastInst::Create(Instruction::IntToPtr, resetFunc, PointerType::getUnqual(resetType), "reset", block);
-            CallInst::Create(resetType, resetPtr, {stateArg}, "", block);
+            EmitFunctionCall<&TValueBase::Reset>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
             BranchInst::Create(more, block);
         }
@@ -939,10 +915,7 @@ private:
             ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), exit);
             new UnreachableInst(context, stub);
 
-            const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TValueBase::Get>());
-            const auto nextType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), valuePtr->getType()}, false);
-            const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(nextType), "next", block);
-            const auto has = CallInst::Create(nextType, nextPtr, {stateArg, valuePtr}, "has", block);
+            const auto has = EmitFunctionCall<&TValueBase::Get>(Type::getInt1Ty(context), {stateArg, valuePtr}, ctx, block);
 
             BranchInst::Create(good, more, has, block);
 

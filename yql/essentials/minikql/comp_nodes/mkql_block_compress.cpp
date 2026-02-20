@@ -202,10 +202,7 @@ public:
 
         block = fill;
 
-        const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&MakeBlockCount>());
-        const auto makeCountType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), pops->getType()}, false);
-        const auto makeCountPtr = CastInst::Create(Instruction::IntToPtr, makeCountFunc, PointerType::getUnqual(makeCountType), "make_count_func", block);
-        const auto slice = CallInst::Create(makeCountType, makeCountPtr, {ctx.GetFactory(), pops}, "slice", block);
+        const auto slice = EmitFunctionCall<&MakeBlockCount>(valueType, {ctx.GetFactory(), pops}, ctx, block);
         new StoreInst(slice, sizePtr, block);
 
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
@@ -443,10 +440,6 @@ public:
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::Get>());
-        const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);
-        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", atTop);
-
         const auto heightPtr = new AllocaInst(indexType, 0U, "height_ptr", atTop);
         const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", atTop);
 
@@ -472,10 +465,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TCompressBlocksFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -506,10 +496,7 @@ public:
 
         block = read;
 
-        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::ClearValues>());
-        const auto clearType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-        const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
-        CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TCompressBlocksState::ClearValues>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         const auto getres = GetNodeValues(Flow_, ctx, block);
 
@@ -533,10 +520,7 @@ public:
         const auto bitmapArg = bitmap;
 
         const auto stepType = Type::getInt8Ty(context);
-        const auto checkFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::Check>());
-        const auto checkType = FunctionType::get(stepType, {statePtrType, bitmapArg->getType()}, false);
-        const auto checkPtr = CastInst::Create(Instruction::IntToPtr, checkFunc, PointerType::getUnqual(checkType), "check_func", block);
-        const auto check = CallInst::Create(checkType, checkPtr, {stateArg, bitmapArg}, "check", block);
+        const auto check = EmitFunctionCall<&TCompressBlocksState::Check>(stepType, {stateArg, bitmapArg}, ctx, block);
 
         ValueCleanup(EValueRepresentation::Any, bitmap, ctx, block);
 
@@ -561,10 +545,7 @@ public:
 
         block = work;
 
-        const auto sparseFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::Sparse>());
-        const auto sparseType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
-        const auto sparsePtr = CastInst::Create(Instruction::IntToPtr, sparseFunc, PointerType::getUnqual(sparseType), "sparse_func", block);
-        const auto sparse = CallInst::Create(sparseType, sparsePtr, {stateArg}, "sparse", block);
+        const auto sparse = EmitFunctionCall<&TCompressBlocksState::Sparse>(Type::getInt1Ty(context), {stateArg}, ctx, block);
 
         BranchInst::Create(loop, tail, sparse, block);
 
@@ -580,19 +561,13 @@ public:
 
         block = done;
 
-        const auto flushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::FlushBuffers>());
-        const auto flushType = FunctionType::get(Type::getVoidTy(context), {statePtrType, ctx.GetFactory()->getType()}, false);
-        const auto flushPtr = CastInst::Create(Instruction::IntToPtr, flushFunc, PointerType::getUnqual(flushType), "flush_func", block);
-        CallInst::Create(flushType, flushPtr, {stateArg, ctx.GetFactory()}, "", block);
+        EmitFunctionCall<&TCompressBlocksState::FlushBuffers>(Type::getVoidTy(context), {stateArg, ctx.GetFactory()}, ctx, block);
 
         BranchInst::Create(fill, block);
 
         block = fill;
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::Slice>());
-        const auto sliceType = FunctionType::get(indexType, {statePtrType}, false);
-        const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice_func", block);
-        const auto slice = CallInst::Create(sliceType, slicePtr, {stateArg}, "slice", block);
+        const auto slice = EmitFunctionCall<&TCompressBlocksState::Slice>(indexType, {stateArg}, ctx, block);
         new StoreInst(slice, heightPtr, block);
         new StoreInst(stateArg, stateOnStack, block);
 
@@ -604,7 +579,7 @@ public:
 
         ICodegeneratorInlineWideNode::TGettersList getters(width);
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
-            getters[idx] = [idx, getType, getPtr, heightPtr, indexType, valueType, statePtrType, stateOnStack, getter = getres.second[idx < BitmapIndex_ ? idx : idx + 1U]](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[idx] = [idx, heightPtr, indexType, valueType, statePtrType, stateOnStack, getter = getres.second[idx < BitmapIndex_ ? idx : idx + 1U]](const TCodegenContext& ctx, BasicBlock*& block) {
                 auto& context = ctx.Codegen.GetContext();
                 const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
                 const auto call = BasicBlock::Create(context, "call", ctx.Func);
@@ -626,7 +601,7 @@ public:
                 block = call;
 
                 const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
-                const auto value = CallInst::Create(getType, getPtr, {stateArg, height, ctx.GetFactory(), ConstantInt::get(indexType, idx)}, "value", block);
+                const auto value = EmitFunctionCall<&TCompressBlocksState::Get>(valueType, {stateArg, height, ctx.GetFactory(), ConstantInt::get(indexType, idx)}, ctx, block);
                 result->addIncoming(value, block);
                 BranchInst::Create(done, block);
 

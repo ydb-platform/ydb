@@ -77,10 +77,6 @@ public:
         const auto offsetPtr = new AllocaInst(indexType, 0U, "offset_ptr", atTop);
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&SliceSkipBlock>());
-        const auto sliceType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), valueType, indexType}, false);
-        const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice", atTop);
-
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
         const auto getCountType = FunctionType::get(indexType, {valueType}, false);
@@ -183,10 +179,7 @@ public:
 
             block = calc;
 
-            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&MakeBlockCount>());
-            const auto makeCountType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), indexType}, false);
-            const auto makeCountPtr = CastInst::Create(Instruction::IntToPtr, makeCountFunc, PointerType::getUnqual(makeCountType), "make_count_func", block);
-            const auto slice = CallInst::Create(makeCountType, makeCountPtr, {ctx.GetFactory(), count}, "slice", block);
+            const auto slice = EmitFunctionCall<&MakeBlockCount>(valueType, {ctx.GetFactory(), count}, ctx, block);
 
             height->addIncoming(slice, block);
             BranchInst::Create(exit, block);
@@ -201,7 +194,7 @@ public:
             return height;
         };
         for (auto idx = 0U; idx < Width; ++idx) {
-            getters[idx] = [offsetPtr, indexType, valueType, sliceType, slicePtr, getBlock = getres.second[idx]](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[idx] = [offsetPtr, indexType, valueType, getBlock = getres.second[idx]](const TCodegenContext& ctx, BasicBlock*& block) {
                 auto& context = ctx.Codegen.GetContext();
 
                 const auto calc = BasicBlock::Create(context, "calc", ctx.Func);
@@ -219,7 +212,7 @@ public:
 
                 block = calc;
 
-                const auto slice = CallInst::Create(sliceType, slicePtr, {ctx.GetFactory(), value, offset}, "slice", block);
+                const auto slice = EmitFunctionCall<&SliceSkipBlock>(valueType, {ctx.GetFactory(), value, offset}, ctx, block);
 
                 ValueCleanup(EValueRepresentation::Any, value, ctx, block);
 
@@ -295,10 +288,6 @@ public:
 
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
         new StoreInst(ConstantInt::get(indexType, 0), sizePtr, atTop);
-
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&SliceTakeBlock>());
-        const auto sliceType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), valueType, indexType}, false);
-        const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice", atTop);
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
@@ -382,10 +371,7 @@ public:
 
             block = calc;
 
-            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&MakeBlockCount>());
-            const auto makeCountType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), indexType}, false);
-            const auto makeCountPtr = CastInst::Create(Instruction::IntToPtr, makeCountFunc, PointerType::getUnqual(makeCountType), "make_count_func", block);
-            const auto slice = CallInst::Create(makeCountType, makeCountPtr, {ctx.GetFactory(), count}, "slice", block);
+            const auto slice = EmitFunctionCall<&MakeBlockCount>(valueType, {ctx.GetFactory(), count}, ctx, block);
 
             height->addIncoming(slice, block);
             BranchInst::Create(exit, block);
@@ -400,7 +386,7 @@ public:
             return height;
         };
         for (auto idx = 0U; idx < Width; ++idx) {
-            getters[idx] = [sizePtr, indexType, valueType, sliceType, slicePtr, getBlock = getres.second[idx]](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[idx] = [sizePtr, indexType, valueType, getBlock = getres.second[idx]](const TCodegenContext& ctx, BasicBlock*& block) {
                 auto& context = ctx.Codegen.GetContext();
 
                 const auto calc = BasicBlock::Create(context, "calc", ctx.Func);
@@ -418,7 +404,7 @@ public:
 
                 block = calc;
 
-                const auto slice = CallInst::Create(sliceType, slicePtr, {ctx.GetFactory(), value, size}, "slice", block);
+                const auto slice = EmitFunctionCall<&SliceTakeBlock>(valueType, {ctx.GetFactory(), value, size}, ctx, block);
 
                 ValueCleanup(EValueRepresentation::Any, value, ctx, block);
 

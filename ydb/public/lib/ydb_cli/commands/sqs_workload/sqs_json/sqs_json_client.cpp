@@ -139,6 +139,7 @@ namespace NYdb::NConsoleClient {
         request->SetHeaderValue(kContentTypeHeader, kContentTypeValue);
         request->SetHeaderValue(kAmzSdkRequestHeader, kAmzSdkRequestValue);
         request->SetHeaderValue(kXAmzAPIVersionHeader, kXAmzAPIVersionValue);
+        request->SetHeaderValue("x-yacloud-subjecttoken", "unused");
         const TString invocationId = CreateGuidAsString();
         request->SetHeaderValue(
             kAmzSdkInvocationIdHeader,

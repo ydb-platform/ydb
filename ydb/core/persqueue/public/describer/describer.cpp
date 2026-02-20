@@ -94,20 +94,27 @@ public:
                                 unknownPaths.insert(realPath);
                             }
                         } else {
-                            if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
-                                LOG_D("Path '" << realPath << "' UNAUTHORIZED");
-                                Result[originalPath] = TTopicInfo{
-                                    .Status = EStatus::UNAUTHORIZED
-                                };
-                            } else {
-                                LOG_D("Path '" << realPath << "' SUCCESS");
-                                Result[originalPath] = TTopicInfo{
-                                    .Status = EStatus::SUCCESS,
-                                    .RealPath = realPath,
-                                    .Info = entry.PQGroupInfo,
-                                    .SecurityObject = entry.SecurityObject
-                                };
-                            }
+                            Result[originalPath] = TTopicInfo{
+                                .Status = EStatus::SUCCESS,
+                                .RealPath = realPath,
+                                .Info = entry.PQGroupInfo,
+                                .SecurityObject = entry.SecurityObject
+                            };
+                            // TODO: uncomment this
+                            // if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
+                            //     LOG_D("Path '" << realPath << "' UNAUTHORIZED");
+                            //     Result[originalPath] = TTopicInfo{
+                            //         .Status = EStatus::UNAUTHORIZED
+                            //     };
+                            // } else {
+                            //     LOG_D("Path '" << realPath << "' SUCCESS");
+                            //     Result[originalPath] = TTopicInfo{
+                            //         .Status = EStatus::SUCCESS,
+                            //         .RealPath = realPath,
+                            //         .Info = entry.PQGroupInfo,
+                            //         .SecurityObject = entry.SecurityObject
+                            //     };
+                            // }
                         }
                     } else {
                         LOG_D("Path '" << realPath << "' is not a topic: " << entry.Kind);

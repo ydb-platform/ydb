@@ -68,6 +68,15 @@ ansible-playbook ydb_platform.ydb.prepare_drives -l static-node.ydb-cluster.com
 ansible-playbook ydb_platform.ydb.update_config
 ```
 
+Результат работы команды:
+
+```bash
+PLAY RECAP *************************************************************************************************************
+static-node-andrei-1.ydb-cluster.com : ok=46   changed=6    unreachable=0    failed=0    skipped=46   rescued=0    ignored=0
+static-node-andrei-2.ydb-cluster.com : ok=33   changed=6    unreachable=0    failed=0    skipped=18   rescued=0    ignored=0
+static-node-andrei-3.ydb-cluster.com : ok=33   changed=6    unreachable=0    failed=0    skipped=18   rescued=0    ignored=0
+```
+
 {% cut "Индикация состояния замененного диска зеленого цвета" %}
 
 ![_](_assets/step-2.png)

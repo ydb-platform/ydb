@@ -427,18 +427,14 @@ class YdbCliHelper:
         return {q: YdbCliHelper.WorkloadRunResult().merge(*[r.get(q) for r in results_by_q]) for q in extended_query_names}
 
     @classmethod
-    def get_remote_cli_path(cls, host: str = ''):
-        if not host:
-            host = YdbCluster.get_client_host()
-        return remote_execution.get_remote_tmp_path(host, 'ydb_cli', os.path.basename(cls.get_cli_path()))
-
-    @classmethod
     @allure.step
-    def deploy_remote_cli(cls, host: str = ''):
+    def deploy_remote_cli(cls, host: str = '') -> str:
         if not host:
             host = YdbCluster.get_client_host()
-        result = remote_execution.deploy_binary(cls.get_cli_path(), host, os.path.dirname(cls.get_remote_cli_path()))
+        remote_path = remote_execution.get_remote_tmp_path(host, 'ydb_cli', str(time()) , os.path.basename(cls.get_cli_path()))
+        result = remote_execution.deploy_binary(cls.get_cli_path(), host, os.path.dirname(remote_path))
         assert result.get('success', False), f"host: {host}, bin: {cls.get_cli_path()}, path: {result.get('path')}, error: {result.get('error')}"
+        return remote_path
 
     @classmethod
     @allure.step
@@ -452,8 +448,8 @@ class YdbCliHelper:
 
     @classmethod
     @allure.step
-    def import_data_tpcc(cls, path: str, warehouses: int):
-        cmd = cls.get_cli_command(cls.get_remote_cli_path()) + ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(path), 'import', '--no-tui', '--warehouses', str(warehouses)]
+    def import_data_tpcc(cls, remote_cli_path: str, path: str, warehouses: int):
+        cmd = cls.get_cli_command(remote_cli_path) + ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(path), 'import', '--no-tui', '--warehouses', str(warehouses)]
         with remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd) as exec:
             while exec.is_running():
                 sleep(10)
@@ -461,11 +457,11 @@ class YdbCliHelper:
 
     @classmethod
     @allure.step
-    def run_tpcc(cls, path: str, bench_time: float, warehouses: int = 10, threads: int = 0, warmup: float = 0.,
-                 tx_mode: TxMode = TxMode.SerializableRW, users=['']) -> dict[str, YdbCliHelper.WorkloadRunResult]:
+    def create_tpcc_executions(cls, remote_cli_path: str, path: str, bench_time: float, warehouses: int = 10, threads: int = 0, warmup: float = 0.,
+                               tx_mode: TxMode = TxMode.SerializableRW, users=['']) -> list[tuple[str, remote_execution.LongRemoteExecution]]:
         executions = []
         for user in users:
-            cmd = cls.get_cli_command(cls.get_remote_cli_path())
+            cmd = cls.get_cli_command(remote_cli_path)
             if user:
                 cmd += ['--user', user, '--no-password']
             cmd += ['workload', 'tpcc', '--path', YdbCluster.get_tables_path(path), 'run', '--no-tui', '--format', 'Json', '--tx-mode', str(tx_mode), '--highres-histogram']
@@ -476,7 +472,11 @@ class YdbCliHelper:
                 cmd += ['--threads', str(threads)]
 
             executions.append((user, remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd)))
+        return executions
 
+    @classmethod
+    @allure.step
+    def exec_tpcc(cls, executions: list[tuple[str, remote_execution.LongRemoteExecution]]) -> dict[str, YdbCliHelper.WorkloadRunResult]:
         start_time = time()
         with ExitStack() as stack:
             for _, exec in executions:
@@ -512,3 +512,8 @@ class YdbCliHelper:
             results[user] = res
 
         return results
+
+    @classmethod
+    @allure.step
+    def run_tpcc(cls, *args, **kwargs):
+        return cls.exec_tpcc(cls.create_tpcc_executions(*args, **kwargs))

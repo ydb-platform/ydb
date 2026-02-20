@@ -443,7 +443,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             if re.is_localhost(node.host):
                 tmpdir = os.getenv('TMP') or os.getenv('TMPDIR') or yatest.common.work_path()
                 break
-        return os.path.join(tmpdir, 'scripts', 'tpcc')
+        return os.path.join(tmpdir, cls.__name__, 'scripts', 'tpcc')
 
     @classmethod
     def do_setup_class(cls) -> None:

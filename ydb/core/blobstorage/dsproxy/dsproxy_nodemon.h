@@ -10,6 +10,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/group_stat.h>
 #include <ydb/core/util/throughput_meter.h>
+#include <ydb/core/util/max_tracker.h>
 #include <ydb/core/mon/mon.h>
 
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile.h>
@@ -35,30 +36,42 @@ struct TDsProxyNodeMon : public TThrRefBase {
 
     static constexpr ui32 KnownDeviceTypesCount = 4;
     using THistoPtrForDeviceType = std::array<NMonitoring::THistogramPtr, KnownDeviceTypesCount>;
+    using TMaxTrackerForDeviceType = std::array<TMaxTracker, KnownDeviceTypesCount>;
     THistoPtrForDeviceType PutTabletLogResponseTimeHist256Ki;
+    TMaxTrackerForDeviceType PutTabletLogResponseTimeMax256Ki;
     THistoPtrForDeviceType PutTabletLogResponseTimeHistInf;
+    TMaxTrackerForDeviceType PutTabletLogResponseTimeMaxInf;
 
     NMonitoring::TPercentileTracker<4, 512, 15> PutAsyncBlobResponseTime;
     THistoPtrForDeviceType PutAsyncBlobResponseTimeHist;
+    TMaxTrackerForDeviceType PutAsyncBlobResponseTimeMax;
     NMonitoring::TPercentileTracker<4, 512, 15> PutUserDataResponseTime;
     THistoPtrForDeviceType PutUserDataResponseTimeHist;
+    TMaxTrackerForDeviceType PutUserDataResponseTimeMax;
 
     NMonitoring::TPercentileTracker<16, 512, 15> GetResponseTime;
     NMonitoring::TPercentileTracker<16, 512, 15> GetAsyncReadResponseTime;
     THistoPtrForDeviceType GetAsyncReadResponseTimeHist;
+    TMaxTrackerForDeviceType GetAsyncReadResponseTimeMax;
     NMonitoring::TPercentileTracker<16, 512, 15> GetFastReadResponseTime256Ki;
     THistoPtrForDeviceType GetFastReadResponseTimeHist256Ki;
+    TMaxTrackerForDeviceType GetFastReadResponseTimeMax256Ki;
     NMonitoring::TPercentileTracker<16, 512, 15> GetFastReadResponseTimeInf;
     THistoPtrForDeviceType GetFastReadResponseTimeHistInf;
+    TMaxTrackerForDeviceType GetFastReadResponseTimeMaxInf;
     NMonitoring::TPercentileTracker<16, 512, 15> GetDiscoverResponseTime;
     THistoPtrForDeviceType GetDiscoverResponseTimeHist;
+    TMaxTrackerForDeviceType GetDiscoverResponseTimeMax;
     NMonitoring::TPercentileTracker<16, 512, 15> GetLowReadResponseTime;
     THistoPtrForDeviceType GetLowReadResponseTimeHist;
+    TMaxTrackerForDeviceType GetLowReadResponseTimeMax;
     NMonitoring::TPercentileTracker<16, 512, 15> GetBlockResponseTime;
     THistoPtrForDeviceType GetBlockResponseTimeHist;
+    TMaxTrackerForDeviceType GetBlockResponseTimeMax;
 
     NMonitoring::TPercentileTracker<16, 512, 15> PatchResponseTime;
     THistoPtrForDeviceType PatchResponseTimeHist;
+    TMaxTrackerForDeviceType PatchResponseTimeMax;
 
     NMonitoring::TPercentileTracker<16, 512, 15> BlockResponseTime;
     NMonitoring::TPercentileTracker<16, 512, 15> DiscoverResponseTime;
@@ -110,6 +123,7 @@ struct TDsProxyNodeMon : public TThrRefBase {
             TDuration duration);
     void CountGetBlockResponseTime(NPDisk::EDeviceType type, TDuration duration);
     void CountPatchResponseTime(NPDisk::EDeviceType type, TDuration duration);
+    void Update();
 
     // Called only from NodeWarder
     void CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type);

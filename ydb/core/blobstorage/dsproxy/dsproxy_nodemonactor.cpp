@@ -52,22 +52,7 @@ public:
 
     void HandleWakeup() {
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
-        Mon->PutResponseTime.Update();
-
-        Mon->PutTabletLogResponseTime.Update();
-        Mon->PutTabletLogResponseTime256.Update();
-        Mon->PutTabletLogResponseTime512.Update();
-
-        Mon->PutAsyncBlobResponseTime.Update();
-        Mon->PutUserDataResponseTime.Update();
-
-        Mon->GetResponseTime.Update();
-
-        Mon->BlockResponseTime.Update();
-        Mon->DiscoverResponseTime.Update();
-        Mon->IndexRestoreGetResponseTime.Update();
-        Mon->RangeResponseTime.Update();
-        Mon->PatchResponseTime.Update();
+        Mon->Update();
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev) {

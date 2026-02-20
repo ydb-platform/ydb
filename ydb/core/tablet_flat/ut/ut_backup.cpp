@@ -794,12 +794,12 @@ struct TEnv : public TMyEnvBase {
         Env.DispatchEvents(options);
     }
 
-    void RestoreBackup(const TString& backupPath, ui32 TestTabletFlags) {
+    void RestoreBackup(const TString& backupPath, ui32 TestTabletFlags, bool skipChecksumValidation = false) {
         Cerr << "...restarting dummy tablet in recovery mode" << Endl;
         RestartTabletInRecoveryMode();
 
         Cerr << "...restoring backup" << Endl;
-        SendAsync(new NRecovery::TEvRestoreBackup(backupPath));
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation));
 
         TAutoPtr<IEventHandle> handle;
         auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
@@ -831,7 +831,9 @@ struct TEnv : public TMyEnvBase {
         return genDirs.back();
     }
 
-    void RestoreBackupExpectFailure(const TFsPath& backupPath) {
+    void RestoreLastBackupExpectFail() {
+        auto backupPath = GetLastBackupPath();
+
         Cerr << "...restarting dummy tablet in recovery mode" << Endl;
         RestartTabletInRecoveryMode();
 
@@ -1835,7 +1837,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         // Corrupt schema.json with invalid JSON
         WriteFileContent(snapshotDir.Child("schema.json"), "this is not valid json{{{");
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSchemaExtraTable) {
@@ -1859,7 +1861,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         // Rename Data.json to FakeTable.json - table not in schema
         snapshotDir.Child("Data.json").RenameTo(snapshotDir.Child("FakeTable.json"));
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSchemaExtraColumn) {
@@ -1884,7 +1886,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         WriteFileContent(snapshotDir.Child("Data.json"),
             R"({"Key":1,"Value":10,"BinaryValue":"aGVsbG8=","DefaultValue":null,"FakeColumn":42})""\n");
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSchemaRemoved) {
@@ -1923,7 +1925,7 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         WriteFileContent(schemaPath, NJson::WriteJson(schema, false));
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSnapshotInvalidJSON) {
@@ -1947,7 +1949,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         // Write invalid JSON to Data.json
         WriteFileContent(snapshotDir.Child("Data.json"), "this is not valid json{{{");
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSnapshotMissingKey) {
@@ -1972,7 +1974,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         WriteFileContent(snapshotDir.Child("Data.json"),
             R"({"Value":10,"BinaryValue":"aGVsbG8=","DefaultValue":null})""\n");
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSnapshotWrongType) {
@@ -1997,7 +1999,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         WriteFileContent(snapshotDir.Child("Data.json"),
             R"({"Key":1,"Value":"not_a_number","BinaryValue":"aGVsbG8=","DefaultValue":null})""\n");
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSnapshotExtraField) {
@@ -2022,7 +2024,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         WriteFileContent(snapshotDir.Child("Data.json"),
             R"({"Key":1,"Value":10,"BinaryValue":"aGVsbG8=","DefaultValue":null,"UnknownField":42})" "\n");
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSnapshotInvalidBase64) {
@@ -2047,7 +2049,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         WriteFileContent(snapshotDir.Child("Data.json"),
             R"({"Key":1,"Value":10,"BinaryValue":"!!!not-valid-base64!!!","DefaultValue":null})" "\n");
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSnapshotNullKey) {
@@ -2072,7 +2074,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         WriteFileContent(snapshotDir.Child("Data.json"),
             R"({"Key":null,"Value":10,"BinaryValue":"aGVsbG8=","DefaultValue":null})" "\n");
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(CorruptedSnapshotRemoved) {
@@ -2096,7 +2098,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         // Remove a row from the snapshot (truncate the file)
         WriteFileContent(snapshotDir.Child("Data.json"), "");
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(MissingSnapshotDir) {
@@ -2118,7 +2120,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         // Remove the snapshot directory
         backupPath.Child("snapshot").ForceDelete();
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(MissingSchemaFile) {
@@ -2141,7 +2143,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         // Remove schema.json from the snapshot dir
         snapshotDir.Child("schema.json").DeleteIfExists();
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(MissingTableFile) {
@@ -2165,7 +2167,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         // Remove a table data file from the snapshot
         snapshotDir.Child("Data.json").DeleteIfExists();
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(MissingChangelogFile) {
@@ -2187,7 +2189,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         // Remove changelog.json
         backupPath.Child("changelog.json").DeleteIfExists();
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(WrongFilePermissions) {
@@ -2210,7 +2212,124 @@ Y_UNIT_TEST_SUITE(Backup) {
         // Remove read permissions from manifest.json
         chmod(snapshotDir.Child("manifest.json").c_str(), 0);
 
-        env.RestoreBackupExpectFailure(backupPath);
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedManifestContent) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        WriteFileContent(snapshotDir.Child("manifest.json"), "this is not valid json{{{");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedManifestChecksum) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        WriteFileContent(snapshotDir.Child("manifest.json.sha256"), "0000000000000000000000000000000000000000000000000000000000000000");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(SkipChecksumValidation) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema and writing data" << Endl;
+        env.InitSchema();
+        env.WriteTwoColumns(1, 10, "hello");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        WriteFileContent(snapshotDir.Child("manifest.json.sha256"), "0000000000000000000000000000000000000000000000000000000000000000");
+
+        env.RestoreBackup(backupPath, TestTabletFlags, true);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(1), "hello");
+    }
+
+    Y_UNIT_TEST(MissingManifestFile) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        snapshotDir.Child("manifest.json").DeleteIfExists();
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(MissingManifestChecksumFile) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto backupPath = env.GetLastBackupPath();
+        auto snapshotDir = backupPath.Child("snapshot");
+
+        snapshotDir.Child("manifest.json.sha256").DeleteIfExists();
+
+        env.RestoreLastBackupExpectFail();
     }
 
     Y_UNIT_TEST(NewSnapshotChangelogSize) {

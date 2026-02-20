@@ -16,6 +16,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
@@ -269,7 +270,7 @@ public:
 
     void Handle(TEvRestoreBackup::TPtr& ev) {
         if (RestoreState == ERestoreState::NotStarted) {
-            StartRestore(ev->Get()->BackupPath, ev->Sender);
+            StartRestore(ev->Get()->BackupPath, ev->Sender, ev->Get()->SkipChecksumValidation);
         }
     }
 
@@ -297,13 +298,13 @@ public:
         Execute(CreateTxUploadChangelog(ev));
     }
 
-    void StartRestore(const TString& backupPath, TActorId subscriber = {}) {
+    void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false) {
         RestoreState = ERestoreState::InProgress;
 
         BackupPath = backupPath;
         RestoreSubscriber = subscriber;
 
-        BackupReader = Register(CreateBackupReader(SelfId(), backupPath), TMailboxType::HTSwap, AppData()->IOPoolId);
+        BackupReader = Register(CreateBackupReader(SelfId(), backupPath, TabletType(), TabletID(), skipChecksumValidation), TMailboxType::HTSwap, AppData()->IOPoolId);
     }
 
     void CompleteRestore(bool success, const TString& error) {
@@ -402,7 +403,8 @@ public:
         auto cgi = ev->Get()->Cgi();
         if (const auto& path = cgi.Get("restoreBackup")) {
             if (RestoreState == ERestoreState::NotStarted) {
-                StartRestore(path);
+                bool skipChecksum = cgi.Has("skipChecksumValidation");
+                StartRestore(path, {}, skipChecksum);
             }
         }
 
@@ -418,6 +420,15 @@ public:
                             DIV_CLASS("col-sm-10") {
                                 str << "<input type='text' id='restoreBackup' name='restoreBackup' class='form-control' "
                                     << "placeholder='/tmp/backup/gen_312' required>";
+                            }
+                        }
+
+                        DIV_CLASS("form-group") {
+                            DIV_CLASS("col-sm-offset-2 col-sm-10") {
+                                str << "<div class='checkbox'><label>"
+                                    << "<input type='checkbox' id='skipChecksumValidation' name='skipChecksumValidation'>"
+                                    << " Skip Checksum Validation"
+                                    << "</label></div>";
                             }
                         }
 
@@ -797,12 +808,17 @@ ITransaction* TRecoveryShard::CreateTxUploadChangelog(TEvChangelogData::TPtr ev,
 
 class TBackupReader : public TActorBootstrapped<TBackupReader> {
 public:
-    TBackupReader(TActorId owner, const TString& backupPath)
+    TBackupReader(TActorId owner, const TString& backupPath,
+                  TTabletTypes::EType tabletType, ui64 tabletId,
+                  bool skipChecksumValidation)
         : Owner(owner)
         , BackupPath(backupPath)
         , SnapshotDirPath(BackupPath.Child("snapshot"))
         , SchemaFilePath(SnapshotDirPath.Child("schema.json"))
         , ChangelogFilePath(BackupPath.Child("changelog.json"))
+        , ExpectedTabletType(tabletType)
+        , ExpectedTabletId(tabletId)
+        , SkipChecksumValidation(skipChecksumValidation)
     {}
 
     void Bootstrap() {
@@ -934,31 +950,33 @@ public:
         try {
             manifestStr = TFileInput(manifestFile).ReadAll();
         } catch (const TIoException& e) {
-            SendResultAndDie(false, TStringBuilder() << "Failed to read manifest" << manifestFile << ": " << e.what());
+            SendResultAndDie(false, TStringBuilder() << "Failed to read manifest " << manifestFile << ": " << e.what());
             return false;
         }
 
-        auto manifestChecksumFile = snapshotDir.Child("manifest.json.sha256");
-        if (!manifestChecksumFile.Exists()) {
-            SendResultAndDie(false, TStringBuilder() << "Manifest checksum file doesn't exist: " << manifestChecksumFile);
-            return false;
-        }
+        if (!SkipChecksumValidation) {
+            auto manifestChecksumFile = snapshotDir.Child("manifest.json.sha256");
+            if (!manifestChecksumFile.Exists()) {
+                SendResultAndDie(false, TStringBuilder() << "Manifest checksum file doesn't exist: " << manifestChecksumFile);
+                return false;
+            }
 
-        TString expectedManifestChecksum;
-        try {
-            expectedManifestChecksum = TFileInput(manifestChecksumFile).ReadAll();
-        } catch (const TIoException& e) {
-            SendResultAndDie(false, TStringBuilder() << "Failed to read manifest checksum: " << manifestChecksumFile << ": " << e.what());
-            return false;
-        }
+            TString expectedManifestChecksum;
+            try {
+                expectedManifestChecksum = TFileInput(manifestChecksumFile).ReadAll();
+            } catch (const TIoException& e) {
+                SendResultAndDie(false, TStringBuilder() << "Failed to read manifest checksum: " << manifestChecksumFile << ": " << e.what());
+                return false;
+            }
 
-        auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
-        TString actualManifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
-        if (actualManifestChecksum != expectedManifestChecksum) {
-            SendResultAndDie(false, TStringBuilder() << "Manifest checksum mismatch: "
-                                                     << "expected " << expectedManifestChecksum
-                                                     << ", got " << actualManifestChecksum);
-            return false;
+            auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
+            TString actualManifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+            if (actualManifestChecksum != expectedManifestChecksum) {
+                SendResultAndDie(false, TStringBuilder() << "Manifest checksum mismatch: "
+                                                         << "expected " << expectedManifestChecksum
+                                                         << ", got " << actualManifestChecksum);
+                return false;
+            }
         }
 
         NJson::TJsonValue manifest;
@@ -969,19 +987,47 @@ public:
             return false;
         }
 
-        for (const auto& fileEntry : manifest["files"].GetArray()) {
+        if (!manifest.Has("tablet_type") || !manifest["tablet_type"].IsString()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'tablet_type' field or it is not a string: " << manifest);
+            return false;
+        }
+
+        TString actualTypeName = manifest["tablet_type"].GetString();
+        TString expectedTypeName = TTabletTypes::EType_Name(ExpectedTabletType);
+        NProtobufJson::ToSnakeCaseDense(&expectedTypeName);
+        if (actualTypeName != expectedTypeName) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Manifest tablet type mismatch: expected " << expectedTypeName
+                << ", got " << actualTypeName);
+            return false;
+        }
+
+        if (!manifest.Has("tablet_id") || !manifest["tablet_id"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'tablet_id' field or it is not an unsigned integer: " << manifest);
+            return false;
+        }
+
+        ui64 actualTabletId = manifest["tablet_id"].GetUInteger();
+        if (actualTabletId != ExpectedTabletId) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Manifest tablet id mismatch: expected " << ExpectedTabletId
+                << ", got " << actualTabletId);
+            return false;
+        }
+
+        if (!manifest.Has("files") || !manifest["files"].IsArray()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'files' array or it is not an array: " << manifest);
+            return false;
+        }
+
+        const auto& files = manifest["files"].GetArray();
+        for (const auto& fileEntry : files) {
             if (!fileEntry.Has("name") || !fileEntry["name"].IsString()) {
                 SendResultAndDie(false, TStringBuilder() << "Manifest file entry is missing 'name' field: " << fileEntry);
                 return false;
             }
 
-            if (!fileEntry.Has("sha256") || !fileEntry["sha256"].IsString()) {
-                SendResultAndDie(false, TStringBuilder() << "Manifest file entry is missing 'sha256' field: " << fileEntry);
-                return false;
-            }
-
             TString name = fileEntry["name"].GetString();
-            TString expectedFileSha256 = fileEntry["sha256"].GetString();
 
             auto filePath = snapshotDir.Child(name);
             if (!filePath.Exists()) {
@@ -994,26 +1040,35 @@ public:
                 SnapshotFiles.push_back(filePath);
             }
 
-            NOpenSsl::NSha256::TCalcer calcer;
-            try {
-                TFileInput input(filePath, 1_MB);
-                char buf[64_KB];
-                size_t bytesRead;
-                while ((bytesRead = input.Read(buf, sizeof(buf))) > 0) {
-                    calcer.Update(buf, bytesRead);
+            if (!SkipChecksumValidation) {
+                if (!fileEntry.Has("sha256") || !fileEntry["sha256"].IsString()) {
+                    SendResultAndDie(false, TStringBuilder() << "Manifest file entry is missing 'sha256' field: " << fileEntry);
+                    return false;
                 }
-            } catch (const TIoException& e) {
-                SendResultAndDie(false, TStringBuilder() << "Failed to read file " << filePath << " for checksum validation: " << e.what());
-                return false;
-            }
 
-            auto fileDigest = calcer.Final();
-            TString actualFileSha256 = to_lower(HexEncode(fileDigest.data(), fileDigest.size()));
-            if (actualFileSha256 != expectedFileSha256) {
-                SendResultAndDie(false, TStringBuilder() << "Checksum mismatch for " << filePath
-                                         << ": expected " << expectedFileSha256
-                                         << ", got " << actualFileSha256);
-                return false;
+                TString expectedFileSha256 = fileEntry["sha256"].GetString();
+
+                NOpenSsl::NSha256::TCalcer calcer;
+                try {
+                    TFileInput input(filePath, 1_MB);
+                    char buf[64_KB];
+                    size_t bytesRead;
+                    while ((bytesRead = input.Read(buf, sizeof(buf))) > 0) {
+                        calcer.Update(buf, bytesRead);
+                    }
+                } catch (const TIoException& e) {
+                    SendResultAndDie(false, TStringBuilder() << "Failed to read file " << filePath << " for checksum validation: " << e.what());
+                    return false;
+                }
+
+                auto fileDigest = calcer.Final();
+                TString actualFileSha256 = to_lower(HexEncode(fileDigest.data(), fileDigest.size()));
+                if (actualFileSha256 != expectedFileSha256) {
+                    SendResultAndDie(false, TStringBuilder() << "Checksum mismatch for " << filePath
+                                             << ": expected " << expectedFileSha256
+                                             << ", got " << actualFileSha256);
+                    return false;
+                }
             }
         }
 
@@ -1048,6 +1103,10 @@ private:
     const TFsPath SchemaFilePath;
     const TFsPath ChangelogFilePath;
 
+    const TTabletTypes::EType ExpectedTabletType;
+    const ui64 ExpectedTabletId;
+    const bool SkipChecksumValidation;
+
     TDeque<TFsPath> SnapshotFiles;
 
     TFsPath CurrentFilePath;
@@ -1060,8 +1119,10 @@ IActor* CreateRecoveryShard(const TActorId &tablet, TTabletStorageInfo *info) {
     return new TRecoveryShard(tablet, info);
 }
 
-IActor* CreateBackupReader(TActorId owner, const TString& backupPath) {
-    return new TBackupReader(owner, backupPath);
+IActor* CreateBackupReader(TActorId owner, const TString& backupPath,
+                           TTabletTypes::EType tabletType, ui64 tabletId,
+                           bool skipChecksumValidation) {
+    return new TBackupReader(owner, backupPath, tabletType, tabletId, skipChecksumValidation);
 }
 
 } //namespace NKikimr::NTabletFlatExecutor::NRecovery

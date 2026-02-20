@@ -371,7 +371,7 @@ public:
             TFile snapshotDir(SnapshotPath, EOpenModeFlag::RdOnly);
             snapshotDir.Flush();
         } catch (const TIoException& e) {
-            return ReplyAndDie(false, TStringBuilder() << "Failed to fsync snapshot dir " << SnapshotPath << ": " << e.what());
+            return ReplyAndDie(false, TStringBuilder() << "Failed to fsync temporary snapshot dir " << SnapshotPath << ": " << e.what());
         }
 
         try {

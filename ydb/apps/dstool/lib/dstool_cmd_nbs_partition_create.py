@@ -6,6 +6,7 @@ description = 'Create NBS 2.0 partition'
 
 
 def add_options(p):
+    p.add_argument('--disk-id', type=str, required=True, help='disk id')
     p.add_argument('--pool', type=str, required=True, help='DDisk pool name')
     p.add_argument('--block-size', type=int, default=4096, help='Block size in bytes')
     p.add_argument('--blocks-count', type=int, default=262144, help='Count of blocks in partition')
@@ -21,7 +22,8 @@ def do(args):
         args.type = nbs.StorageMediaKind.STORAGE_MEDIA_MEMORY
     else:
         args.type = nbs.StorageMediaKind.STORAGE_MEDIA_DEFAULT
-    request = nbs.CreatePartitionRequest(BlockSize=args.block_size,
+    request = nbs.CreatePartitionRequest(DiskId=args.disk_id,
+                                         BlockSize=args.block_size,
                                          BlocksCount=args.blocks_count,
                                          StoragePoolName=args.pool,
                                          StorageMedia=args.type)

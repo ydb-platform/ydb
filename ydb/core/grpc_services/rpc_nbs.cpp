@@ -70,7 +70,7 @@ public:
         volumeConfig.SetBlockSize(blockSize);
 
         // volume identifier
-        volumeConfig.SetDiskId("testDiskId");
+        volumeConfig.SetDiskId(request->GetDiskId());
         // user folder Id, used for billing
         volumeConfig.SetFolderId("testFolderId");
         // owner information
@@ -102,12 +102,25 @@ private:
     }
 
     void Handle(TEvSSProxy::TEvCreateVolumeResponse::TPtr& ev) {
+        const auto& response = *ev->Get();
+        
         LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-            "Grpc service: received TEvCreateVolumeResponse from ss proxy: %s",
-            ev->Sender.ToString().data());
+            "Grpc service: received TEvCreateVolumeResponse from ss proxy: %s, status: %d, reason: %s",
+            ev->Sender.ToString().data(),
+            static_cast<int>(response.Status),
+            response.Reason.data());
 
         Ydb::Nbs::CreatePartitionResult result;
-        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
+
+        if (response.Status == NKikimrScheme::StatusSuccess) {
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
+        } else {
+            if (!response.Reason.empty()) {
+                auto issue = NYql::TIssue(response.Reason);
+                Request_->RaiseIssue(issue);
+            }
+            Reply(Ydb::StatusIds::GENERIC_ERROR, ActorContext());
+        }
     }
 };
 

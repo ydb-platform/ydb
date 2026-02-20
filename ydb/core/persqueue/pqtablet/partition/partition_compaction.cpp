@@ -630,7 +630,7 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
             << " compactOffset " << key.GetOffset() << "," << key.GetCount()
             << " HeadOffset " << CompactionBlobEncoder.Head.Offset << " endOffset " << CompactionBlobEncoder.EndOffset << " curOffset "
             << CompactionBlobEncoder.NewHead.GetNextOffset() << " " << key.ToString()
-            << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
+            << " size " << res.second << " WTime " << ctx.Now()
     );
     AddNewCompactionWriteBlob(res, request, blobCreationUnixTime, ctx);
 

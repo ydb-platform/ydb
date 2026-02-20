@@ -335,7 +335,7 @@ struct TUserTable : public TThrRefBase {
         TDuration ResolvedTimestampsInterval;
         bool SchemaChanges = false;
         TMaybe<TString> AwsRegion;
-        bool UserSIDs;
+        bool UserSIDs = false;
 
         TCdcStream() = default;
 

@@ -2032,9 +2032,14 @@ public:
                 .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
-                .Alloc = std::move(alloc),
-                .UserCtx = UserCtx
+                .Alloc = std::move(alloc)
             };
+
+            if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
+                settings.UserCtx = NACLib::TUserContextBuilder().WithUserSID(QueryState->UserToken->GetUserSID()).Build();
+            } else {
+                settings.UserCtx = UserCtx;
+            }
 
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);

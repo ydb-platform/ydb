@@ -89,9 +89,7 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
-    TEvQueryRequest(const NACLib::TUserContext::TPtr& userCtx) : TEvQueryRequest() {
-        UserCtx = userCtx;
-    }
+    TEvQueryRequest(const NACLib::TUserContext::TPtr& userCtx);
 
     bool IsSerializable() const override {
         return true;
@@ -103,9 +101,7 @@ public:
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
 
-    NACLib::TUserContext::TPtr GetUserCtx() const {
-        return UserCtx;
-    }
+    NACLib::TUserContext::TPtr GetUserCtx();
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
         return RequestCtx;

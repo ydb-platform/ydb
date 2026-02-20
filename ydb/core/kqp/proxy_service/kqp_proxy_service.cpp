@@ -656,7 +656,7 @@ public:
             TProcessResult<TKqpSessionInfo*> result;
             auto userCtx = ev->Get()->GetUserCtx();
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, false, "", userCtx != nullptr ? userCtx->UserSID : BUILTIN_ACL_CDC_WITHOUT_USER_SID, "", "", "", "", Nothing(), result))
+                database, false, false, "", "", "", "", "", "", Nothing(), result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;

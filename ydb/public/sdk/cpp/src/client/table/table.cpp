@@ -3137,6 +3137,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     if (proto.schema_changes()) {
         ret.WithSchemaChanges();
     }
+    if (proto.user_sids()) {
+        ret.WithUserSIDs();
+    }
     if (proto.has_resolved_timestamps_interval()) {
         ret.WithResolvedTimestamps(TDuration::MilliSeconds(
             ::google::protobuf::util::TimeUtil::DurationToMilliseconds(proto.resolved_timestamps_interval())));

@@ -955,11 +955,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(baseConfigIndex).GetSuccess(), response.GetStatus(baseConfigIndex).GetErrorDescription());
 
-            const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+            const auto baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
             UNIT_ASSERT_C(baseConfig.VSlotSize() >= 2, TStringBuilder() << "vslot count# " << baseConfig.VSlotSize());
 
-            const auto& firstVSlot = baseConfig.GetVSlot(0);
-            const auto& secondVSlot = baseConfig.GetVSlot(1);
+            const auto firstVSlot = baseConfig.GetVSlot(0);
+            const auto secondVSlot = baseConfig.GetVSlot(1);
             UNIT_ASSERT(firstVSlot.HasVSlotId());
             UNIT_ASSERT(secondVSlot.HasVSlotId());
 
@@ -1036,28 +1036,66 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(baseConfigIndex).GetSuccess(), response.GetStatus(baseConfigIndex).GetErrorDescription());
 
-            const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+            const auto baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
             UNIT_ASSERT_C(baseConfig.VSlotSize() >= 2, TStringBuilder() << "vslot count# " << baseConfig.VSlotSize());
 
-            auto sameVDisk = [](const NKikimrBlobStorage::TVDiskID& vdiskId, const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
-                return vdiskId.GetGroupID() == vslot.GetGroupId()
-                    && vdiskId.GetRing() == vslot.GetFailRealmIdx()
-                    && vdiskId.GetDomain() == vslot.GetFailDomainIdx()
-                    && vdiskId.GetVDisk() == vslot.GetVDiskIdx();
+            struct TVDiskRef {
+                ui32 GroupId = 0;
+                ui32 GroupGeneration = 0;
+                ui32 Ring = 0;
+                ui32 Domain = 0;
+                ui32 VDisk = 0;
+                ui32 NodeId = 0;
+                ui32 PDiskId = 0;
             };
 
-            const auto& sourceVSlot = baseConfig.GetVSlot(0);
-            const auto* destinationVSlot = [&]() -> const NKikimrBlobStorage::TBaseConfig::TVSlot* {
-                for (const auto& vslot : baseConfig.GetVSlot()) {
-                    if (vslot.GetGroupId() != sourceVSlot.GetGroupId()
-                            && (vslot.GetVSlotId().GetNodeId() != sourceVSlot.GetVSlotId().GetNodeId()
-                            || vslot.GetVSlotId().GetPDiskId() != sourceVSlot.GetVSlotId().GetPDiskId())) {
-                        return &vslot;
-                    }
+            auto makeRef = [](const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
+                TVDiskRef ref;
+                ref.GroupId = vslot.GetGroupId();
+                ref.GroupGeneration = vslot.GetGroupGeneration();
+                ref.Ring = vslot.GetFailRealmIdx();
+                ref.Domain = vslot.GetFailDomainIdx();
+                ref.VDisk = vslot.GetVDiskIdx();
+                ref.NodeId = vslot.GetVSlotId().GetNodeId();
+                ref.PDiskId = vslot.GetVSlotId().GetPDiskId();
+                return ref;
+            };
+
+            auto sameVDisk = [](const NKikimrBlobStorage::TVDiskID& vdiskId, const TVDiskRef& ref) {
+                return vdiskId.GetGroupID() == ref.GroupId
+                    && vdiskId.GetRing() == ref.Ring
+                    && vdiskId.GetDomain() == ref.Domain
+                    && vdiskId.GetVDisk() == ref.VDisk;
+            };
+
+            auto addVDiskId = [](NKikimrBlobStorage::TPopulatePDisk *cmd, const TVDiskRef& ref) {
+                auto *item = cmd->AddVDiskId();
+                item->SetGroupID(ref.GroupId);
+                item->SetGroupGeneration(ref.GroupGeneration);
+                item->SetRing(ref.Ring);
+                item->SetDomain(ref.Domain);
+                item->SetVDisk(ref.VDisk);
+            };
+
+            const TVDiskRef source = makeRef(baseConfig.GetVSlot(0));
+            TSet<std::pair<ui32, ui32>> usedPDisks;
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == source.GroupId) {
+                    usedPDisks.emplace(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
                 }
-                return nullptr;
-            }();
-            UNIT_ASSERT(destinationVSlot);
+            }
+
+            std::pair<ui32, ui32> destinationPDisk = {};
+            bool foundDestination = false;
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                const std::pair<ui32, ui32> pdisk(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
+                if (usedPDisks.find(pdisk) == usedPDisks.end()) {
+                    destinationPDisk = pdisk;
+                    foundDestination = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundDestination, "Expected destination PDisk outside source group");
 
             request.Clear();
             auto *enableDonorMode = request.AddCommand()->MutableEnableDonorMode();
@@ -1070,14 +1108,9 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             request.Clear();
             auto *populate = request.AddCommand()->MutablePopulatePDisk();
             auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
-            target->SetNodeId(destinationVSlot->GetVSlotId().GetNodeId());
-            target->SetPDiskId(destinationVSlot->GetVSlotId().GetPDiskId());
-            auto *item = populate->AddVDiskId();
-            item->SetGroupID(sourceVSlot.GetGroupId());
-            item->SetGroupGeneration(sourceVSlot.GetGroupGeneration());
-            item->SetRing(sourceVSlot.GetFailRealmIdx());
-            item->SetDomain(sourceVSlot.GetFailDomainIdx());
-            item->SetVDisk(sourceVSlot.GetVDiskIdx());
+            target->SetNodeId(destinationPDisk.first);
+            target->SetPDiskId(destinationPDisk.second);
+            addVDiskId(populate, source);
 
             response = env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
@@ -1086,14 +1119,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
             bool reassigned = false;
             for (const auto& reassignedItem : response.GetStatus(0).GetReassignedItem()) {
-                if (!sameVDisk(reassignedItem.GetVDiskId(), sourceVSlot)) {
+                if (!sameVDisk(reassignedItem.GetVDiskId(), source)) {
                     continue;
                 }
                 reassigned = true;
-                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetFrom().GetNodeId(), sourceVSlot.GetVSlotId().GetNodeId());
-                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetFrom().GetPDiskId(), sourceVSlot.GetVSlotId().GetPDiskId());
-                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetTo().GetNodeId(), destinationVSlot->GetVSlotId().GetNodeId());
-                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetTo().GetPDiskId(), destinationVSlot->GetVSlotId().GetPDiskId());
+                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetFrom().GetNodeId(), source.NodeId);
+                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetFrom().GetPDiskId(), source.PDiskId);
+                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetTo().GetNodeId(), destinationPDisk.first);
+                UNIT_ASSERT_VALUES_EQUAL(reassignedItem.GetTo().GetPDiskId(), destinationPDisk.second);
             }
             UNIT_ASSERT_C(reassigned, "Expected reassignment record for explicit VDisk");
 
@@ -1103,18 +1136,17 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
 
-            const auto& updatedConfig = response.GetStatus(0).GetBaseConfig();
             bool donorFound = false;
-            for (const auto& vslot : updatedConfig.GetVSlot()) {
+            for (const auto& vslot : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
                 for (const auto& donor : vslot.GetDonors()) {
-                    if (!sameVDisk(donor.GetVDiskId(), sourceVSlot)) {
+                    if (!sameVDisk(donor.GetVDiskId(), source)) {
                         continue;
                     }
                     donorFound = true;
-                    UNIT_ASSERT_VALUES_EQUAL(vslot.GetVSlotId().GetNodeId(), destinationVSlot->GetVSlotId().GetNodeId());
-                    UNIT_ASSERT_VALUES_EQUAL(vslot.GetVSlotId().GetPDiskId(), destinationVSlot->GetVSlotId().GetPDiskId());
-                    UNIT_ASSERT_VALUES_EQUAL(donor.GetVSlotId().GetNodeId(), sourceVSlot.GetVSlotId().GetNodeId());
-                    UNIT_ASSERT_VALUES_EQUAL(donor.GetVSlotId().GetPDiskId(), sourceVSlot.GetVSlotId().GetPDiskId());
+                    UNIT_ASSERT_VALUES_EQUAL(vslot.GetVSlotId().GetNodeId(), destinationPDisk.first);
+                    UNIT_ASSERT_VALUES_EQUAL(vslot.GetVSlotId().GetPDiskId(), destinationPDisk.second);
+                    UNIT_ASSERT_VALUES_EQUAL(donor.GetVSlotId().GetNodeId(), source.NodeId);
+                    UNIT_ASSERT_VALUES_EQUAL(donor.GetVSlotId().GetPDiskId(), source.PDiskId);
                 }
             }
             UNIT_ASSERT_C(donorFound, "Expected donor entry for moved explicit VDisk");
@@ -1139,28 +1171,66 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(baseConfigIndex).GetSuccess(), response.GetStatus(baseConfigIndex).GetErrorDescription());
 
-            const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+            const auto baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
             UNIT_ASSERT_C(baseConfig.VSlotSize() >= 2, TStringBuilder() << "vslot count# " << baseConfig.VSlotSize());
 
-            auto sameVDisk = [](const NKikimrBlobStorage::TVDiskID& vdiskId, const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
-                return vdiskId.GetGroupID() == vslot.GetGroupId()
-                    && vdiskId.GetRing() == vslot.GetFailRealmIdx()
-                    && vdiskId.GetDomain() == vslot.GetFailDomainIdx()
-                    && vdiskId.GetVDisk() == vslot.GetVDiskIdx();
+            struct TVDiskRef {
+                ui32 GroupId = 0;
+                ui32 GroupGeneration = 0;
+                ui32 Ring = 0;
+                ui32 Domain = 0;
+                ui32 VDisk = 0;
+                ui32 NodeId = 0;
+                ui32 PDiskId = 0;
             };
 
-            const auto& sourceVSlot = baseConfig.GetVSlot(0);
-            const auto* destinationVSlot = [&]() -> const NKikimrBlobStorage::TBaseConfig::TVSlot* {
-                for (const auto& vslot : baseConfig.GetVSlot()) {
-                    if (vslot.GetGroupId() != sourceVSlot.GetGroupId()
-                            && (vslot.GetVSlotId().GetNodeId() != sourceVSlot.GetVSlotId().GetNodeId()
-                            || vslot.GetVSlotId().GetPDiskId() != sourceVSlot.GetVSlotId().GetPDiskId())) {
-                        return &vslot;
-                    }
+            auto makeRef = [](const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
+                TVDiskRef ref;
+                ref.GroupId = vslot.GetGroupId();
+                ref.GroupGeneration = vslot.GetGroupGeneration();
+                ref.Ring = vslot.GetFailRealmIdx();
+                ref.Domain = vslot.GetFailDomainIdx();
+                ref.VDisk = vslot.GetVDiskIdx();
+                ref.NodeId = vslot.GetVSlotId().GetNodeId();
+                ref.PDiskId = vslot.GetVSlotId().GetPDiskId();
+                return ref;
+            };
+
+            auto sameVDisk = [](const NKikimrBlobStorage::TVDiskID& vdiskId, const TVDiskRef& ref) {
+                return vdiskId.GetGroupID() == ref.GroupId
+                    && vdiskId.GetRing() == ref.Ring
+                    && vdiskId.GetDomain() == ref.Domain
+                    && vdiskId.GetVDisk() == ref.VDisk;
+            };
+
+            auto addVDiskId = [](NKikimrBlobStorage::TPopulatePDisk *cmd, const TVDiskRef& ref) {
+                auto *item = cmd->AddVDiskId();
+                item->SetGroupID(ref.GroupId);
+                item->SetGroupGeneration(ref.GroupGeneration);
+                item->SetRing(ref.Ring);
+                item->SetDomain(ref.Domain);
+                item->SetVDisk(ref.VDisk);
+            };
+
+            const TVDiskRef source = makeRef(baseConfig.GetVSlot(0));
+            TSet<std::pair<ui32, ui32>> usedPDisks;
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == source.GroupId) {
+                    usedPDisks.emplace(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
                 }
-                return nullptr;
-            }();
-            UNIT_ASSERT(destinationVSlot);
+            }
+
+            std::pair<ui32, ui32> destinationPDisk = {};
+            bool foundDestination = false;
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                const std::pair<ui32, ui32> pdisk(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
+                if (usedPDisks.find(pdisk) == usedPDisks.end()) {
+                    destinationPDisk = pdisk;
+                    foundDestination = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundDestination, "Expected destination PDisk outside source group");
 
             request.Clear();
             auto *enableDonorMode = request.AddCommand()->MutableEnableDonorMode();
@@ -1173,14 +1243,9 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             request.Clear();
             auto *populate = request.AddCommand()->MutablePopulatePDisk();
             auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
-            target->SetNodeId(destinationVSlot->GetVSlotId().GetNodeId());
-            target->SetPDiskId(destinationVSlot->GetVSlotId().GetPDiskId());
-            auto *item = populate->AddVDiskId();
-            item->SetGroupID(sourceVSlot.GetGroupId());
-            item->SetGroupGeneration(sourceVSlot.GetGroupGeneration());
-            item->SetRing(sourceVSlot.GetFailRealmIdx());
-            item->SetDomain(sourceVSlot.GetFailDomainIdx());
-            item->SetVDisk(sourceVSlot.GetVDiskIdx());
+            target->SetNodeId(destinationPDisk.first);
+            target->SetPDiskId(destinationPDisk.second);
+            addVDiskId(populate, source);
             populate->SetSuppressDonorMode(true);
 
             response = env.Invoke(request);
@@ -1190,7 +1255,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
             bool reassigned = false;
             for (const auto& reassignedItem : response.GetStatus(0).GetReassignedItem()) {
-                if (sameVDisk(reassignedItem.GetVDiskId(), sourceVSlot)) {
+                if (sameVDisk(reassignedItem.GetVDiskId(), source)) {
                     reassigned = true;
                     break;
                 }
@@ -1203,11 +1268,10 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
 
-            const auto& updatedConfig = response.GetStatus(0).GetBaseConfig();
             bool donorFound = false;
-            for (const auto& vslot : updatedConfig.GetVSlot()) {
+            for (const auto& vslot : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
                 for (const auto& donor : vslot.GetDonors()) {
-                    if (sameVDisk(donor.GetVDiskId(), sourceVSlot)) {
+                    if (sameVDisk(donor.GetVDiskId(), source)) {
                         donorFound = true;
                     }
                 }
@@ -1234,34 +1298,82 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(baseConfigIndex).GetSuccess(), response.GetStatus(baseConfigIndex).GetErrorDescription());
 
-            const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+            const auto baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
             UNIT_ASSERT_C(baseConfig.VSlotSize() >= 2, TStringBuilder() << "vslot count# " << baseConfig.VSlotSize());
 
-            const auto& sourceVSlot = baseConfig.GetVSlot(0);
-            const auto* destinationVSlot = [&]() -> const NKikimrBlobStorage::TBaseConfig::TVSlot* {
-                for (const auto& vslot : baseConfig.GetVSlot()) {
-                    if (vslot.GetGroupId() != sourceVSlot.GetGroupId()
-                            && (vslot.GetVSlotId().GetNodeId() != sourceVSlot.GetVSlotId().GetNodeId()
-                            || vslot.GetVSlotId().GetPDiskId() != sourceVSlot.GetVSlotId().GetPDiskId())) {
-                        return &vslot;
-                    }
+            struct TVDiskRef {
+                ui32 GroupId = 0;
+                ui32 GroupGeneration = 0;
+                ui32 Ring = 0;
+                ui32 Domain = 0;
+                ui32 VDisk = 0;
+                ui32 NodeId = 0;
+                ui32 PDiskId = 0;
+            };
+
+            auto makeRef = [](const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
+                TVDiskRef ref;
+                ref.GroupId = vslot.GetGroupId();
+                ref.GroupGeneration = vslot.GetGroupGeneration();
+                ref.Ring = vslot.GetFailRealmIdx();
+                ref.Domain = vslot.GetFailDomainIdx();
+                ref.VDisk = vslot.GetVDiskIdx();
+                ref.NodeId = vslot.GetVSlotId().GetNodeId();
+                ref.PDiskId = vslot.GetVSlotId().GetPDiskId();
+                return ref;
+            };
+
+            auto addVDiskId = [](NKikimrBlobStorage::TPopulatePDisk *cmd, const TVDiskRef& ref) {
+                auto *item = cmd->AddVDiskId();
+                item->SetGroupID(ref.GroupId);
+                item->SetGroupGeneration(ref.GroupGeneration);
+                item->SetRing(ref.Ring);
+                item->SetDomain(ref.Domain);
+                item->SetVDisk(ref.VDisk);
+            };
+
+            auto makeSignature = [](const NKikimrBlobStorage::TBaseConfig& config) {
+                TSet<std::tuple<ui32, ui32, ui32, ui32, ui32, ui32>> signature;
+                for (const auto& vslot : config.GetVSlot()) {
+                    signature.emplace(
+                        vslot.GetGroupId(),
+                        vslot.GetFailRealmIdx(),
+                        vslot.GetFailDomainIdx(),
+                        vslot.GetVDiskIdx(),
+                        vslot.GetVSlotId().GetNodeId(),
+                        vslot.GetVSlotId().GetPDiskId());
                 }
-                return nullptr;
-            }();
-            UNIT_ASSERT(destinationVSlot);
+                return signature;
+            };
+
+            const TVDiskRef source = makeRef(baseConfig.GetVSlot(0));
+            const auto beforeSignature = makeSignature(baseConfig);
+
+            TSet<std::pair<ui32, ui32>> usedPDisks;
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == source.GroupId) {
+                    usedPDisks.emplace(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
+                }
+            }
+
+            std::pair<ui32, ui32> destinationPDisk = {};
+            bool foundDestination = false;
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                const std::pair<ui32, ui32> pdisk(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
+                if (usedPDisks.find(pdisk) == usedPDisks.end()) {
+                    destinationPDisk = pdisk;
+                    foundDestination = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundDestination, "Expected destination PDisk outside source group");
 
             request.Clear();
             auto *populate = request.AddCommand()->MutablePopulatePDisk();
             auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
-            target->SetNodeId(destinationVSlot->GetVSlotId().GetNodeId());
-            target->SetPDiskId(destinationVSlot->GetVSlotId().GetPDiskId());
-
-            auto *valid = populate->AddVDiskId();
-            valid->SetGroupID(sourceVSlot.GetGroupId());
-            valid->SetGroupGeneration(sourceVSlot.GetGroupGeneration());
-            valid->SetRing(sourceVSlot.GetFailRealmIdx());
-            valid->SetDomain(sourceVSlot.GetFailDomainIdx());
-            valid->SetVDisk(sourceVSlot.GetVDiskIdx());
+            target->SetNodeId(destinationPDisk.first);
+            target->SetPDiskId(destinationPDisk.second);
+            addVDiskId(populate, source);
 
             auto *invalid = populate->AddVDiskId();
             invalid->SetGroupID(Max<ui32>());
@@ -1285,21 +1397,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
 
-            auto makeSignature = [](const NKikimrBlobStorage::TBaseConfig& config) {
-                TSet<std::tuple<ui32, ui32, ui32, ui32, ui32, ui32>> signature;
-                for (const auto& vslot : config.GetVSlot()) {
-                    signature.emplace(
-                        vslot.GetGroupId(),
-                        vslot.GetFailRealmIdx(),
-                        vslot.GetFailDomainIdx(),
-                        vslot.GetVDiskIdx(),
-                        vslot.GetVSlotId().GetNodeId(),
-                        vslot.GetVSlotId().GetPDiskId());
-                }
-                return signature;
-            };
-
-            const auto beforeSignature = makeSignature(baseConfig);
             const auto afterSignature = makeSignature(response.GetStatus(0).GetBaseConfig());
             UNIT_ASSERT_C(beforeSignature == afterSignature,
                 "Expected no placement changes after failed PopulatePDisk request");
@@ -1324,43 +1421,82 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(baseConfigIndex).GetSuccess(), response.GetStatus(baseConfigIndex).GetErrorDescription());
 
-            const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+            const auto baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
             UNIT_ASSERT_C(baseConfig.VSlotSize() >= 2, TStringBuilder() << "vslot count# " << baseConfig.VSlotSize());
 
-            THashMap<ui32, const NKikimrBlobStorage::TBaseConfig::TVSlot*> firstByGroup;
-            const NKikimrBlobStorage::TBaseConfig::TVSlot *destinationVSlot = nullptr;
-            const NKikimrBlobStorage::TBaseConfig::TVSlot *slotToMove = nullptr;
+            struct TVDiskRef {
+                ui32 GroupId = 0;
+                ui32 GroupGeneration = 0;
+                ui32 Ring = 0;
+                ui32 Domain = 0;
+                ui32 VDisk = 0;
+                ui32 NodeId = 0;
+                ui32 PDiskId = 0;
+            };
+
+            auto makeRef = [](const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
+                TVDiskRef ref;
+                ref.GroupId = vslot.GetGroupId();
+                ref.GroupGeneration = vslot.GetGroupGeneration();
+                ref.Ring = vslot.GetFailRealmIdx();
+                ref.Domain = vslot.GetFailDomainIdx();
+                ref.VDisk = vslot.GetVDiskIdx();
+                ref.NodeId = vslot.GetVSlotId().GetNodeId();
+                ref.PDiskId = vslot.GetVSlotId().GetPDiskId();
+                return ref;
+            };
+
+            auto addVDiskId = [](NKikimrBlobStorage::TPopulatePDisk *cmd, const TVDiskRef& ref) {
+                auto *item = cmd->AddVDiskId();
+                item->SetGroupID(ref.GroupId);
+                item->SetGroupGeneration(ref.GroupGeneration);
+                item->SetRing(ref.Ring);
+                item->SetDomain(ref.Domain);
+                item->SetVDisk(ref.VDisk);
+            };
+
+            auto makeSignature = [](const NKikimrBlobStorage::TBaseConfig& config) {
+                TSet<std::tuple<ui32, ui32, ui32, ui32, ui32, ui32>> signature;
+                for (const auto& vslot : config.GetVSlot()) {
+                    signature.emplace(
+                        vslot.GetGroupId(),
+                        vslot.GetFailRealmIdx(),
+                        vslot.GetFailDomainIdx(),
+                        vslot.GetVDiskIdx(),
+                        vslot.GetVSlotId().GetNodeId(),
+                        vslot.GetVSlotId().GetPDiskId());
+                }
+                return signature;
+            };
+
+            THashMap<ui32, TVector<TVDiskRef>> byGroup;
             for (const auto& vslot : baseConfig.GetVSlot()) {
-                if (const auto it = firstByGroup.find(vslot.GetGroupId()); it != firstByGroup.end()) {
-                    const auto *first = it->second;
-                    if (first->GetVSlotId().GetNodeId() != vslot.GetVSlotId().GetNodeId()
-                            || first->GetVSlotId().GetPDiskId() != vslot.GetVSlotId().GetPDiskId()) {
-                        destinationVSlot = first;
-                        slotToMove = &vslot;
-                        break;
-                    }
-                } else {
-                    firstByGroup.emplace(vslot.GetGroupId(), &vslot);
+                byGroup[vslot.GetGroupId()].push_back(makeRef(vslot));
+            }
+
+            TVDiskRef destinationRef;
+            TVDiskRef slotToMoveRef;
+            bool found = false;
+            for (const auto& [groupId, slots] : byGroup) {
+                Y_UNUSED(groupId);
+                if (slots.size() >= 2) {
+                    destinationRef = slots[0];
+                    slotToMoveRef = slots[1];
+                    found = true;
+                    break;
                 }
             }
-            UNIT_ASSERT_C(destinationVSlot && slotToMove, "Expected two VSlots from one group on different PDisks");
+            UNIT_ASSERT_C(found, "Expected a group with at least two VSlots");
+
+            const auto beforeSignature = makeSignature(baseConfig);
 
             request.Clear();
             auto *populate = request.AddCommand()->MutablePopulatePDisk();
             auto *target = populate->MutableDestinationPDisk()->MutableTargetPDiskId();
-            target->SetNodeId(destinationVSlot->GetVSlotId().GetNodeId());
-            target->SetPDiskId(destinationVSlot->GetVSlotId().GetPDiskId());
-
-            auto addVDiskId = [](NKikimrBlobStorage::TPopulatePDisk *cmd, const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
-                auto *item = cmd->AddVDiskId();
-                item->SetGroupID(vslot.GetGroupId());
-                item->SetGroupGeneration(vslot.GetGroupGeneration());
-                item->SetRing(vslot.GetFailRealmIdx());
-                item->SetDomain(vslot.GetFailDomainIdx());
-                item->SetVDisk(vslot.GetVDiskIdx());
-            };
-            addVDiskId(populate, *destinationVSlot);
-            addVDiskId(populate, *slotToMove);
+            target->SetNodeId(destinationRef.NodeId);
+            target->SetPDiskId(destinationRef.PDiskId);
+            addVDiskId(populate, destinationRef);
+            addVDiskId(populate, slotToMoveRef);
 
             response = env.Invoke(request);
             UNIT_ASSERT(!response.GetSuccess());
@@ -1382,19 +1518,9 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.GetStatus(0).GetErrorDescription());
 
-            const auto& updatedConfig = response.GetStatus(0).GetBaseConfig();
-            bool sourceStayedInPlace = false;
-            for (const auto& vslot : updatedConfig.GetVSlot()) {
-                if (vslot.GetGroupId() == slotToMove->GetGroupId()
-                        && vslot.GetFailRealmIdx() == slotToMove->GetFailRealmIdx()
-                        && vslot.GetFailDomainIdx() == slotToMove->GetFailDomainIdx()
-                        && vslot.GetVDiskIdx() == slotToMove->GetVDiskIdx()
-                        && vslot.GetVSlotId().GetNodeId() == slotToMove->GetVSlotId().GetNodeId()
-                        && vslot.GetVSlotId().GetPDiskId() == slotToMove->GetVSlotId().GetPDiskId()) {
-                    sourceStayedInPlace = true;
-                }
-            }
-            UNIT_ASSERT_C(sourceStayedInPlace, "Expected unsafe placement attempt to keep source VDisk in place");
+            const auto afterSignature = makeSignature(response.GetStatus(0).GetBaseConfig());
+            UNIT_ASSERT_C(beforeSignature == afterSignature,
+                "Expected unsafe placement attempt to keep placement unchanged");
         });
     }
 

@@ -1,6 +1,4 @@
-ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
-ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
@@ -19,8 +17,6 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysVi
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
-ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec+UseSink
-ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec-UseSink
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/persqueue/ut TPQTest.SmallMsgCompactificationWithRebootsTest
 ydb/core/persqueue/ut unittest.[*/*] chunk
@@ -29,9 +25,9 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
+ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
-ydb/core/transfer/ut/functional Transfer.CheckCommittedOffset_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffset_Remote
 ydb/core/transfer/ut/functional Transfer.CreateAndDropConsumer
 ydb/core/transfer/ut/functional Transfer.CustomConsumer_NotExists_Local
@@ -50,7 +46,6 @@ ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Ma
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[PipeResetsBucket0]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[PipeResetsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[PipeResetsBucket0]
@@ -72,13 +67,12 @@ ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHidd
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcIsDisabledByDefault
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
-ydb/services/persqueue_v1/ut TPersQueueTest.LOGBROKER_7820
 ydb/services/persqueue_v1/ut TPersQueueTest.SchemeOperationsTest
-ydb/services/persqueue_v1/ut unittest.[*/*] chunk
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility py3test.[test_kafka_topic.py */*] chunk
@@ -94,7 +88,6 @@ ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_prestable-25-3-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3_and_stable-25-2-1-row]
-ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_prestable-25-3_to_current]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/datashard/vector_index/large test_vector_index.py.TestVectorIndex.test_vector_index
@@ -116,8 +109,8 @@ ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenari
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
+ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
 ydb/tests/olap py3test.[*/*] chunk

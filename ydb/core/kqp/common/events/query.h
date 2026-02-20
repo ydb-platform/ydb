@@ -89,9 +89,7 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
-    TEvQueryRequest(const TString& userSID) : TEvQueryRequest() {
-        UserSID = userSID;
-    }
+    TEvQueryRequest(const TString& userSID);
 
     bool IsSerializable() const override {
         return true;
@@ -103,8 +101,9 @@ public:
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
 
-    const TString& GetUserSID() const {
-        return UserSID;
+    TString GetUserSID() const {
+        auto token = GetUserToken();
+        return token ? token->GetUserSID() : "";
     }
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
@@ -458,7 +457,6 @@ private:
     TString Database;
     TString DatabaseId;
     TString SessionId;
-    TString UserSID;
     TString YqlText;
     TString QueryId;
     TString PoolId;

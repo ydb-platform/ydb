@@ -2032,9 +2032,14 @@ public:
                 .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
-                .Alloc = std::move(alloc),
-                .UserSID = UserSID
+                .Alloc = std::move(alloc)
             };
+
+            if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
+                settings.UserSID = QueryState->UserToken->GetUserSID();
+            } else {
+                settings.UserSID = UserSID;
+            }
 
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);

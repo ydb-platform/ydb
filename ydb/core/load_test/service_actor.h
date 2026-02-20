@@ -40,6 +40,10 @@ namespace NKikimr {
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 
+    NActors::IActor *CreatePersistentBufferWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad& cmd,
+            const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+            ui64 index, ui64 tag);
+
     NActors::IActor *CreatePDiskLogWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPDiskLogLoad& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);

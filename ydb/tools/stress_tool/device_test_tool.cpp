@@ -7,6 +7,7 @@
 #include "device_test_tool_aio_test.h"
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_driveestimator.h"
+#include "device_test_tool_pb_test.h"
 #include "device_test_tool_pdisk_test.h"
 #include "device_test_tool_trim_test.h"
 #include "device_test_tool_uring_router_test.h"
@@ -225,6 +226,14 @@ int main(int argc, char **argv) {
                 test->RunTest();
             }
         }
+    }
+    printer->EndTest();
+
+    for (ui32 i = 0; i < protoTests.PersistentBufferTestListSize(); ++i) {
+        NDevicePerfTest::TPersistentBufferTest testProto = protoTests.GetPersistentBufferTestList(i);
+        THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
+        test->SetPrinter(printer);
+        test->RunTest();
     }
     printer->EndTest();
 

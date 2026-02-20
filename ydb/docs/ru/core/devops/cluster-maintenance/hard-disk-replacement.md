@@ -22,11 +22,11 @@
   
   `https://ваш_ip_адрес:8765/monitoring/`
 
-      {% cut "**Storage** → **Nodes** → **PDisks**" %}
+    {% cut "**Storage** → **Nodes** → **PDisks**" %}
 
-      ![_](_assets/step-1-1.png)
+    ![_](_assets/step-1-1.png)
 
-      {% endcut %}
+    {% endcut %}
 
   {% endcut %}
   

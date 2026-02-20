@@ -683,7 +683,6 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
     streamLookupTransform.OutputType = streamLookup.GetResultType();
     TTaskInputMeta meta;
     meta.StreamLookupSettings = settings;
-    meta.TablePath = stageInfo.Meta.TablePath;
     BuildTransformChannels(streamLookupTransform, meta, "StreamLookup/Map", stageInfo, inputIndex,
         inputStageInfo, outputIndex, enableSpilling, logFunc);
 }
@@ -1429,7 +1428,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
 
             if (!isTableImmutable) {
                 const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
-                    GetMeta().QuerySpanId, input.Meta.TablePath);
+                    GetMeta().QuerySpanId, input.Meta.StreamLookupSettings->GetTable().GetPath());
                 if (effectiveSpanId) {
                     input.Meta.StreamLookupSettings->SetQuerySpanId(effectiveSpanId);
                 }

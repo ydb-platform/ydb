@@ -259,20 +259,18 @@ struct TGraphMeta {
     }
 
     ui64 GetEffectiveQuerySpanId(ui64 spanId, const TString& tablePath) const {
-        if (spanId == 0) {
-            return 0;
+        if (spanId == 0 || tablePath.empty()) {
+            return spanId;
         }
-        for (const auto& path : IgnoredTablePaths) {
-            if (tablePath == path) {
-                return 0;
-            }
+        if (IgnoredTablePaths.contains(tablePath)) {
+            return 0;
         }
         return spanId;
     }
 
     ui64 QuerySpanId = 0;
     THashMap<ui32, ui64> TxQuerySpanIds;  // Per-transaction QuerySpanIds (for deferred effects)
-    TVector<TString> IgnoredTablePaths;
+    THashSet<TString> IgnoredTablePaths;
 };
 
 struct TTaskInputMeta {
@@ -282,7 +280,8 @@ struct TTaskInputMeta {
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
     NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
-    // Fully-qualified table path for TLI filtering; populated for stream lookup and vector resolve inputs.
+    // Fully-qualified table path for TLI filtering (vector resolve only;
+    // stream lookup reads path from its proto settings directly).
     TString TablePath;
 };
 

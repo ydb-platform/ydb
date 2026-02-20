@@ -853,10 +853,8 @@ protected:
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
         TasksGraph.GetMeta().SetQuerySpanId(Request.QuerySpanId);
-        if (AppData()) {
-            for (const auto& path : AppData()->TliConfig.GetIgnoredTablePaths()) {
-                TasksGraph.GetMeta().IgnoredTablePaths.push_back(path);
-            }
+        for (const auto& path : AppData()->TliConfig.GetIgnoredTablePaths()) {
+            TasksGraph.GetMeta().IgnoredTablePaths.insert(path);
         }
 
         switch (Request.IsolationLevel) {

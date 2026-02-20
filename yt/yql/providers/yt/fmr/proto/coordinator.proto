@@ -104,7 +104,3 @@ message TListSessionsRequest {
 message TListSessionsResponse {
     repeated string SessionIds = 1;
 }
-
-message TErrorResponse {
-    string ErrorMessage = 1;
-}

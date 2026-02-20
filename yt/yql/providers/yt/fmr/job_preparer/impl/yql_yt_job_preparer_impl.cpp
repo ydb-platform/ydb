@@ -19,7 +19,13 @@ namespace {
 
 class TFmrJobPreparer: public IFmrJobPreparer {
 public:
-    TFmrJobPreparer(TFileStoragePtr fileStorage, const TString& tableDataServiceDiscoveryFilePath, const TFmrJobPreparerSettings& settings)
+    TFmrJobPreparer(
+        TFileStoragePtr fileStorage,
+        const TString& tableDataServiceDiscoveryFilePath,
+        const TFmrJobPreparerSettings& settings,
+        IFmrTvmClient::TPtr tvmClient,
+        TTvmId destinationTvmId
+    )
         : FileStorage_(fileStorage)
         , NumThreads_(settings.NumThreads)
     {
@@ -27,7 +33,7 @@ public:
         ThreadPool_ = CreateThreadPool(NumThreads_, 0, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
         YtJobService_ = MakeYtJobSerivce();
         auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
-        TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery);
+        TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery, tvmClient, destinationTvmId);
     }
 
     ~TFmrJobPreparer() {
@@ -148,8 +154,14 @@ private:
 
 } // namespace
 
-IFmrJobPreparer::TPtr MakeFmrJobPreparer(TFileStoragePtr fileStorage, const TString& tableDataServiceDiscoveryFilePath, const TFmrJobPreparerSettings& settings) {
-    return MakeIntrusive<TFmrJobPreparer>(fileStorage, tableDataServiceDiscoveryFilePath, settings);
+IFmrJobPreparer::TPtr MakeFmrJobPreparer(
+    TFileStoragePtr fileStorage,
+    const TString& tableDataServiceDiscoveryFilePath,
+    const TFmrJobPreparerSettings& settings,
+    IFmrTvmClient::TPtr tvmClient,
+    TTvmId destinationTvmId
+) {
+    return MakeIntrusive<TFmrJobPreparer>(fileStorage, tableDataServiceDiscoveryFilePath, settings, tvmClient, destinationTvmId);
 }
 
 } // namespace NYql::NFmr

@@ -65,6 +65,10 @@ public:
         Settings_ = settings;
     }
 
+    void SetTvmSettings(const TMaybe<TFmrTvmJobSettings>& tvmSettings) {
+        TvmSettings_ = tvmSettings;
+    }
+
     void Save(IOutputStream& s) const override;
     void Load(IInputStream& s) override;
 
@@ -92,6 +96,7 @@ private:
     TString YtJobServiceType_; // file or native
     bool IsOrdered_ = false;
     TFmrUserJobSettings Settings_ = TFmrUserJobSettings();
+    TMaybe<TFmrTvmJobSettings> TvmSettings_ = Nothing();
     // End of serializable part
 
     TFmrRawTableQueue::TPtr UnionInputTablesQueue_; // Queue which represents union of all input streams

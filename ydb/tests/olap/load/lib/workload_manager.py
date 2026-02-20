@@ -434,6 +434,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     tpcc_started: bool = False
     tpcc_warehouses: int = 4500
     tpcc_threads: int = 4
+    verify_data: bool = False
     __static_nodes: list[YdbCluster.Node] = []
 
     @classmethod

@@ -44,6 +44,8 @@ ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.UniqueIndex
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTable
+ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.DropIndexedTableWithReboots
+ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleTableWithUniqueIndex
 ydb/core/tx/schemeshard/ut_restore TRestoreWithRebootsTests.CancelShouldSucceed[Zstd]

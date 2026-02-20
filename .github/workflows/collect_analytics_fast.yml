@@ -52,6 +52,9 @@ jobs:
     - name: Sync area to owner mapping (from owner_area_mapping.json)
       continue-on-error: true
       run: python3 .github/scripts/analytics/sync_area_to_owner_mapping.py
+    - name: Upload GitHub issues timeline data mart (after issues + area_to_owner_mapping)
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/monitoring_queries/github_issues_timeline.sql --table_path test_results/analytics/github_issues_timeline --store_type column --partition_keys date --primary_keys date issue_number project_item_id
     - name: Upload MUTED test monitor data mart with GitHub issue links
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_muted_monitor_mart_with_issue.sql --table_path test_results/analytics/test_muted_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window

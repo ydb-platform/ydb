@@ -708,6 +708,8 @@ protected:
             }
             IsSslActive = true;
         }
+        TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
+        Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
         return true;
     }
 
@@ -859,9 +861,9 @@ protected:
                             MtlsQueuedRequests.push_back(Request);
                             // RequestPoller();
                             auto cert = Socket->GetSslClientCert();
-                            // if (Socket->GetSslHandshakeResult() == 1 && cert == nullptr) {
-                            //      Socket->PollClientCertAfterHandshake();
-                            // }
+                            if (Socket->GetSslHandshakeResult() == 1 && cert == nullptr) {
+                                 Socket->PollClientCertAfterHandshake();
+                            }
                         } else if (!ProcessRequest(ctx)) {
                             return false;
                         }

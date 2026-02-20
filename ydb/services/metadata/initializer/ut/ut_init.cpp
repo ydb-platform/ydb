@@ -26,20 +26,21 @@
 #include <util/system/type_name.h>
 
 namespace NKikimr {
+
 namespace {
 
-class TTestInitializer: public NMetadata::NInitializer::IInitializationBehaviour {
+class TTestInitializer : public NMetadata::NInitializer::IInitializationBehaviour {
 public:
     bool IsObjectLeaked() const {
         return !LifetimeTracker.expired();
     }
 
 protected:
-    virtual void DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const override {
+    void DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const override {
         LifetimeTracker = controller;
 
         TVector<NMetadata::NInitializer::ITableModifier::TPtr> result;
-        const TString tablePath = "/Root/.metadata/test";
+        constexpr char tablePath[] = "/Root/.metadata/test";
         {
             Ydb::Table::CreateTableRequest request;
             request.set_session_id("");
@@ -55,6 +56,7 @@ protected:
         result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(tablePath, "acl"));
         controller->OnPreparationFinished(result);
     }
+
 private:
     mutable std::weak_ptr<NMetadata::NInitializer::IInitializerInput> LifetimeTracker;
 };
@@ -129,31 +131,34 @@ protected:
             controller->OnPreparationFinished(result);
         }
     }
+
 private:
     mutable std::weak_ptr<NMetadata::NInitializer::IInitializerInput> LifetimeTracker;
     mutable bool FailedOnce = false;
 };
 
 template<typename TInitializer>
-class TInitBehaviourTest: public NMetadata::IClassBehaviour {
+class TInitBehaviourTest : public NMetadata::IClassBehaviour {
 public:
     explicit TInitBehaviourTest(std::shared_ptr<TInitializer> init)
         : Initializer(std::move(init))
     {}
 
 protected:
-    virtual TString GetInternalStorageTablePath() const override { return "test"; }
+    TString GetInternalStorageTablePath() const override {
+        return "test";
+    }
     
-    virtual std::shared_ptr<NMetadata::NInitializer::IInitializationBehaviour> ConstructInitializer() const override {
+    std::shared_ptr<NMetadata::NInitializer::IInitializationBehaviour> ConstructInitializer() const override {
         return Initializer;
     }
     
-    virtual std::shared_ptr<NMetadata::NModifications::IOperationsManager> GetOperationsManager() const override {
+    std::shared_ptr<NMetadata::NModifications::IOperationsManager> GetOperationsManager() const override {
         return nullptr;
     }
 
 public:
-    virtual TString GetTypeId() const override {
+    TString GetTypeId() const override {
         return TypeName<TInitBehaviourTest<TInitializer>>();
     }
 
@@ -161,7 +166,7 @@ private:
     std::shared_ptr<TInitializer> Initializer;
 };
 
-class TInitUserEmulator: public NActors::TActorBootstrapped<TInitUserEmulator> {
+class TInitUserEmulator : public NActors::TActorBootstrapped<TInitUserEmulator> {
 private:
     using TBase = NActors::TActorBootstrapped<TInitUserEmulator>;
     using TThis = TInitUserEmulator;
@@ -278,4 +283,5 @@ Y_UNIT_TEST_SUITE(Initializer) {
             "Memory Leak detected: TDSAccessorInitialized instance is still alive!");
     }
 }
+
 } // NKikimr

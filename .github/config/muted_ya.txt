@@ -8,6 +8,9 @@ ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
+ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
+ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
+ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.WrongJson
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
@@ -26,6 +29,7 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle_WithRestart
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CopyAlterWithReboots
+ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CreateDroppedTableWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
@@ -42,7 +46,6 @@ ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTable
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleTableWithUniqueIndex
 ydb/core/tx/schemeshard/ut_restore TRestoreWithRebootsTests.CancelShouldSucceed[Zstd]
-ydb/core/tx/schemeshard/ut_restore TRestoreWithRebootsTests.ShouldSucceedOnMultiShardTable[Zstd]
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
@@ -65,9 +68,6 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboot
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
-ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-22
-ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-BuiltinUser-CreateUser-19
-ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-BuiltinUser-CreateUser-23
 ydb/core/viewer/tests test.py.test_scheme_directory
 ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_topic_data_cdc

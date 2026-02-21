@@ -235,13 +235,9 @@ public:
     );
     ~TDataDecompressionInfo();
 
-<<<<<<< HEAD
-    i64 StartDecompressionTasks(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor,
-=======
     void Cleanup();
 
-    i64 StartDecompressionTasks(const typename IExecutor::TPtr& executor,
->>>>>>> 9c0a1bceb7d (LOGBROKER-7430 fixed partition reading hanging in topic sdk (#34362))
+    i64 StartDecompressionTasks(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor,
                                 i64 availableMemory,
                                 TDeferredActions<UseMigrationProtocol>& deferred);
     void PlanDecompressionTasks(double averageCompressionRatio,

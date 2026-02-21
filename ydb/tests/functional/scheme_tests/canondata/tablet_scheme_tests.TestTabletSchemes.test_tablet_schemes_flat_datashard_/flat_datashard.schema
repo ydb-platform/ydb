@@ -1142,6 +1142,11 @@
                 "ColumnId": 4,
                 "ColumnName": "Source",
                 "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -1151,7 +1156,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2251,6 +2257,11 @@
                 "ColumnId": 5,
                 "ColumnName": "Source",
                 "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -2261,7 +2272,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

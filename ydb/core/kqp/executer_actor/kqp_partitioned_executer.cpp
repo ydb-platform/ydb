@@ -586,7 +586,8 @@ private:
             .QuerySpanId = QuerySpanId,
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
-            .Alloc = std::move(alloc)
+            .Alloc = std::move(alloc),
+            .UserSID = UserToken->GetUserSID()
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));

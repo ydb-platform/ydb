@@ -162,12 +162,21 @@ const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
     return TEvBulkUpsertRequest::GetProtoRequest(req);
 }
 
+static TString GetUserSID(const IRequestOpCtx* request) {
+    if (request == nullptr ) {
+        return BUILTIN_ACL_NO_USER_SID;
+    }
+    return (request->GetInternalToken() != nullptr) ? request->GetInternalToken()->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
+}
+
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
-        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
-                NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
+            GetUserSID(request),
+            GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
+            NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
     {
@@ -323,7 +332,9 @@ class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
-        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(), 
+            GetUserSID(request),
+            GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
     {

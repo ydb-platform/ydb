@@ -251,6 +251,7 @@ public:
 
         const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
         const auto operationType = validatedOperation.GetOperationType();
+        const auto userSID = validatedOperation.GetUserSID();
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
@@ -265,36 +266,36 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount);
+                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.ReplaceRow(fullTableId, key, ops);
+                    userDb.ReplaceRow(fullTableId, key, ops, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {
-                    userDb.EraseRow(fullTableId, key);
+                    userDb.EraseRow(fullTableId, key, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.InsertRow(fullTableId, key, ops);
+                    userDb.InsertRow(fullTableId, key, ops, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpdateRow(fullTableId, key, ops);
+                    userDb.UpdateRow(fullTableId, key, ops, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/);
+                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/);
+                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/, userSID);
                     break;
                 }
                 default:

@@ -363,7 +363,8 @@ public:
 };
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
-                                                      bool dml = true);
+                                                      bool dml = true,
+                                                      const TString& userSID = TString());
 
 class TLambdaActor : public IActorCallback {
 public:
@@ -452,6 +453,7 @@ struct TShardedTableOptions {
         TMaybe<TString> AwsRegion;
         bool TopicAutoPartitioning = false;
         bool SchemaChanges = false;
+        bool UserSIDs = true;
     };
 
     struct TFamily {
@@ -818,7 +820,14 @@ void ExecSQL(Tests::TServer::TPtr server,
              const TString &sql,
              bool dml = true,
              Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
-             NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext());
+             NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext(),
+             const TString &userSID = TString());
+
+void ExecSQL(Tests::TServer::TPtr server,
+             TActorId sender,
+             const TString &sql,
+             bool dml,
+             const TString &userSID);
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex = 0);
 

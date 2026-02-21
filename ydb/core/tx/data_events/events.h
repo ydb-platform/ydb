@@ -46,7 +46,6 @@ struct TDataEvents {
     public:
         TEvWrite() = default;
 
-
         TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
             Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
@@ -66,6 +65,11 @@ struct TDataEvents {
         TEvWrite& SetLockId(const ui64 lockTxId, const ui64 lockNodeId) {
             Record.SetLockTxId(lockTxId);
             Record.SetLockNodeId(lockNodeId);
+            return *this;
+        }
+
+        TEvWrite& SetUserSID(const TString& userSID) {
+            Record.SetUserSID(userSID);
             return *this;
         }
 

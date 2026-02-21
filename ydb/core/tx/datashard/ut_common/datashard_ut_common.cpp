@@ -1109,9 +1109,10 @@ bool TDatashardInitialEventsFilter::operator()(TTestActorRuntimeBase& runtime, T
 }
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
-                                                      bool dml)
+                                                      bool dml,
+                                                      const TString& userSID /*= TString()*/)
 {
-    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(userSID);
     if (dml) {
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
@@ -1843,6 +1844,7 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetFormat(streamDesc.Format);
     desc.MutableStreamDescription()->SetVirtualTimestamps(streamDesc.VirtualTimestamps);
     desc.MutableStreamDescription()->SetSchemaChanges(streamDesc.SchemaChanges);
+    desc.MutableStreamDescription()->SetUserSIDs(streamDesc.UserSIDs);
     if (streamDesc.ResolvedTimestamps) {
         desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
     }
@@ -2114,10 +2116,11 @@ void ExecSQL(Tests::TServer::TPtr server,
              const TString &sql,
              bool dml,
              Ydb::StatusIds::StatusCode code,
-             NYdb::NUt::TTestContext testCtx)
+             NYdb::NUt::TTestContext testCtx,
+             const TString& userSID)
 {
     auto &runtime = *server->GetRuntime();
-    auto request = MakeSQLRequest(sql, dml);
+    auto request = MakeSQLRequest(sql, dml, userSID);
     runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     auto& response = ev->Get()->Record;
@@ -2126,6 +2129,15 @@ void ExecSQL(Tests::TServer::TPtr server,
                                    code,
                                    issues.empty() ? response.DebugString() : issues.Get(0).DebugString()
     );
+}
+
+void ExecSQL(Tests::TServer::TPtr server,
+             TActorId sender,
+             const TString &sql,
+             bool dml,
+             const TString &userSID)
+{
+    ExecSQL(server, sender, sql, dml, Ydb::StatusIds::SUCCESS, NYdb::NUt::TTestContext(), userSID);
 }
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex) {

@@ -7,6 +7,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <util/generic/bitmap.h>
 #include <util/string/printf.h>
@@ -390,6 +391,121 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
     Y_UNIT_TEST(EraseRowsShouldSuccess) {
         EraseRowsShouldSuccess(Nothing());
+    }
+
+    Y_UNIT_TEST(EraseRowsCdc) {
+        TPortManager pm;
+        
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnabled(true);
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        pqConfig.SetMaxReadCookies(10);
+        pqConfig.AddClientServiceType()->SetName("data-streams");
+        pqConfig.SetCheckACL(false);
+        pqConfig.SetRequireCredentialsInNewProtocol(false);
+        pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+
+        const TString databaseName{"Root"};
+        const TString tableName{"table-1"};
+
+        TServerSettings serverSettings(pm.GetPort(2134), {}, pqConfig);
+        serverSettings.SetUseRealThreads(true)
+            .SetDomainName(databaseName)
+            .SetGrpcPort(pm.GetPort(2135));
+        
+        TServer::TPtr server = new TServer(serverSettings);
+        server->EnableGRpc(serverSettings.GrpcPort);
+        auto& runtime = *server->GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        InitRoot(server, sender);
+
+        const auto tablePath = JoinPath({databaseName, tableName});
+        CreateTable(server, sender, databaseName, tableName);
+
+        // fill table
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES
+            (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
+            (2, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
+            (3, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
+        )");
+
+        // configure cdc
+        const TString streamName("stream");
+        TShardedTableOptions::TCdcStream streamDesc{
+            .Name = streamName,
+            .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            .Format = NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson,
+        };
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, databaseName, tableName, streamDesc));
+
+        // emulate ttl erase rows
+        auto tableId = ResolveTableId(server, sender, tablePath);
+        auto testTableId = TTableId(tableId.PathId, tableId.SchemaVersion);
+        EraseRows(server, sender, tablePath, testTableId, {1}, SerializeKeys({1, 2}));
+
+        // check table content
+        auto content = ReadShardedTable(server, tablePath);
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, value = 2020-04-15T00:00:00.000000Z");
+
+        // open client
+        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(server->GetDriver(), NYdb::NPersQueue::TPersQueueClientSettings().Database(databaseName));
+
+        // add consumer
+        const TString consumerName{"user"};
+        {
+            auto res = client->AddReadRule(JoinPath({tableName, streamName}),
+                NYdb::NPersQueue::TAddReadRuleSettings().ReadRule(
+                    NYdb::NPersQueue::TReadRuleSettings().ConsumerName(consumerName))).ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // get records
+        auto reader = client->CreateReadSession(NYdb::NPersQueue::TReadSessionSettings()
+            .AppendTopics(std::string(JoinPath({databaseName, tableName, streamName})))
+            .ConsumerName(consumerName)
+            .DisableClusterDiscovery(true)
+        );
+
+        // fetch stream
+        
+        ui32 reads = 0;
+        while (reads < 2) {
+            auto ev = reader->GetEvent(true);
+            UNIT_ASSERT(ev);
+
+            NYdb::NPersQueue::TPartitionStream::TPtr pStream;
+            if (auto* data = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                pStream = data->GetPartitionStream();
+                for (const auto& item : data->GetMessages()) {
+                    Y_UNUSED(item);
+                    reads++;
+
+                    TString itemString{item.GetData()};
+                    NJson::TJsonValue itemJson;
+                    UNIT_ASSERT(NJson::ReadJsonTree(itemString, &itemJson));
+
+                    TString itemUser = itemJson["user"].GetString();
+                    UNIT_ASSERT_VALUES_EQUAL(itemUser, "ttl@system");
+                }
+            } 
+            else if (auto* create = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev)) {
+                pStream = create->GetPartitionStream();
+                create->Confirm();
+            } else if (auto* destroy = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
+                pStream = destroy->GetPartitionStream();
+                destroy->Confirm();
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*ev)) {
+                break;
+            }
+
+            if (pStream) {
+                UNIT_ASSERT_VALUES_EQUAL(pStream->GetTopicPath(), TString("/") + JoinPath({databaseName, tableName, streamName}));
+            }
+        }
     }
 
     Y_UNIT_TEST(EraseRowsShouldFailOnVariousErrors) {

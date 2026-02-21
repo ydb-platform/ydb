@@ -467,6 +467,8 @@ message Changefeed {
     Topic.PartitioningSettings topic_partitioning_settings = 10;
     // Emit schema change events or not
     bool schema_changes = 11;
+    // Emit user security identifier (SID) or not.
+    bool user_sids = 12;
 }
 
 message ChangefeedDescription {
@@ -510,6 +512,8 @@ message ChangefeedDescription {
     InitialScanProgress initial_scan_progress = 9;
     // State of emitting of schema change events
     bool schema_changes = 10;
+    // State of emitting of user security identifier (SID)
+    bool user_sids = 11;
 }
 
 message StoragePool {

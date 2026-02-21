@@ -79,7 +79,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     DataShard.ReleaseCache(*tx);
 
     if (tx->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx, tx->GetUserSID())) {
             case ERestoreDataStatus::Ok:
                 break;
 

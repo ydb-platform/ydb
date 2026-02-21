@@ -3040,6 +3040,11 @@ TChangefeedDescription& TChangefeedDescription::WithInitialScan() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithUserSIDs() {
+    UserSIDs_ = true;
+    return *this;
+}
+
 TChangefeedDescription& TChangefeedDescription::AddAttribute(const std::string& key, const std::string& value) {
     Attributes_[key] = value;
     return *this;
@@ -3090,6 +3095,10 @@ const std::optional<TDuration>& TChangefeedDescription::GetResolvedTimestamps() 
 
 bool TChangefeedDescription::GetInitialScan() const {
     return InitialScan_;
+}
+
+bool TChangefeedDescription::GetUserSIDs() const {
+    return UserSIDs_;
 }
 
 const std::unordered_map<std::string, std::string>& TChangefeedDescription::GetAttributes() const {
@@ -3151,6 +3160,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     if (proto.schema_changes()) {
         ret.WithSchemaChanges();
     }
+    if (proto.user_sids()) {
+        ret.WithUserSIDs();
+    }
     if (proto.has_resolved_timestamps_interval()) {
         ret.WithResolvedTimestamps(TDuration::MilliSeconds(
             ::google::protobuf::util::TimeUtil::DurationToMilliseconds(proto.resolved_timestamps_interval())));
@@ -3196,6 +3208,7 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_virtual_timestamps(VirtualTimestamps_);
     proto.set_schema_changes(SchemaChanges_);
     proto.set_aws_region(TStringType{AwsRegion_});
+    proto.set_user_sids(UserSIDs_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:

@@ -466,6 +466,8 @@ public:
     TChangefeedDescription& WithRetentionPeriod(const TDuration& value);
     // Initial scan will output the current state of the table first
     TChangefeedDescription& WithInitialScan();
+    // Enable UserSIDs
+    TChangefeedDescription& WithUserSIDs();
     // Attributes
     TChangefeedDescription& AddAttribute(const std::string& key, const std::string& value);
     TChangefeedDescription& SetAttributes(const std::unordered_map<std::string, std::string>& attrs);
@@ -481,6 +483,7 @@ public:
     bool GetSchemaChanges() const;
     const std::optional<TDuration>& GetResolvedTimestamps() const;
     bool GetInitialScan() const;
+    bool GetUserSIDs() const;
     const std::unordered_map<std::string, std::string>& GetAttributes() const;
     const std::string& GetAwsRegion() const;
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
@@ -510,6 +513,7 @@ private:
     std::optional<TDuration> ResolvedTimestamps_;
     std::optional<TDuration> RetentionPeriod_;
     bool InitialScan_ = false;
+    bool UserSIDs_ = false;
     std::unordered_map<std::string, std::string> Attributes_;
     std::string AwsRegion_;
     std::optional<TInitialScanProgress> InitialScanProgress_;

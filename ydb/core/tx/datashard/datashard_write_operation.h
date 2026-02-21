@@ -28,6 +28,7 @@ private:
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
     YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
+    YDB_READONLY_DEF(TString, UserSID);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {

@@ -18,4 +18,4 @@ class saveopts(option_base):
                 if src == "command line":
                     settings.setdefault(cmd, {})[opt] = val
 
-        edit_config(self.filename, settings, self.dry_run)
+        edit_config(self.filename, settings)

@@ -228,6 +228,16 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         if not chunks:
             return []
 
+        if self.max_lines is not None:
+            if self.max_lines > 1:
+                indent = self.subsequent_indent
+            else:
+                indent = self.initial_indent
+            if (self._width(indent)
+                    + self._width(self.placeholder.lstrip())
+                    > self.width):
+                raise ValueError("placeholder too large for max width")
+
         lines: list[str] = []
         is_first_line = True
 
@@ -296,48 +306,90 @@ class SequenceTextWrapper(textwrap.TextWrapper):
                     current_line[-1] = current_line[-1] + sequences
 
             if current_line:
-                line_content = ''.join(current_line)
+                # Check whether this is a normal append or max_lines
+                # truncation. Matches stdlib textwrap precedence:
+                # normal if max_lines not set, not yet reached, or no
+                # remaining visible content that would need truncation.
+                no_more_content = (
+                    not chunks or
+                    self.drop_whitespace and
+                    len(chunks) == 1 and
+                    not self._strip_sequences(chunks[0]).strip()
+                )
+                if (self.max_lines is None or
+                        len(lines) + 1 < self.max_lines or
+                        no_more_content
+                        and current_width <= line_width):
+                    line_content = ''.join(current_line)
 
-                # Track hyperlink state through this line's content
-                new_state = self._track_hyperlink_state(line_content, hyperlink_state)
+                    # Track hyperlink state through this line's content
+                    new_state = self._track_hyperlink_state(line_content, hyperlink_state)
 
-                # If we end inside a hyperlink, append close sequence
-                if new_state is not None:
-                    # Ensure we have an id for continuation
-                    if current_hyperlink_id is None:
-                        if 'id=' in new_state.params:
-                            current_hyperlink_id = new_state.params
-                        elif new_state.params:
-                            # Prepend id to existing params (per OSC 8 spec, params can have
-                            # multiple key=value pairs separated by :)
-                            current_hyperlink_id = (
-                                f'id={self._next_hyperlink_id()}:{new_state.params}')
-                        else:
-                            current_hyperlink_id = f'id={self._next_hyperlink_id()}'
-                    line_content = line_content + _make_hyperlink_close(new_state.terminator)
+                    # If we end inside a hyperlink, append close sequence
+                    if new_state is not None:
+                        # Ensure we have an id for continuation
+                        if current_hyperlink_id is None:
+                            if 'id=' in new_state.params:
+                                current_hyperlink_id = new_state.params
+                            elif new_state.params:
+                                # Prepend id to existing params (per OSC 8 spec, params can have
+                                # multiple key=value pairs separated by :)
+                                current_hyperlink_id = (
+                                    f'id={self._next_hyperlink_id()}:{new_state.params}')
+                            else:
+                                current_hyperlink_id = f'id={self._next_hyperlink_id()}'
+                        line_content += _make_hyperlink_close(new_state.terminator)
 
-                    # Also need to inject the id into the opening sequence if it didn't have one
-                    if 'id=' not in new_state.params:
-                        # Find and replace the original open sequence with one that has id
-                        old_open = _make_hyperlink_open(
-                            new_state.url, new_state.params, new_state.terminator)
-                        new_open = _make_hyperlink_open(
+                        # Also need to inject the id into the opening
+                        # sequence if it didn't have one
+                        if 'id=' not in new_state.params:
+                            # Find and replace the original open sequence with one that has id
+                            old_open = _make_hyperlink_open(
+                                new_state.url, new_state.params, new_state.terminator)
+                            new_open = _make_hyperlink_open(
+                                new_state.url, current_hyperlink_id, new_state.terminator)
+                            line_content = line_content.replace(old_open, new_open, 1)
+
+                        # Update state for next line, using computed id
+                        hyperlink_state = _HyperlinkState(
                             new_state.url, current_hyperlink_id, new_state.terminator)
-                        line_content = line_content.replace(old_open, new_open, 1)
+                    else:
+                        hyperlink_state = None
+                        current_hyperlink_id = None  # Reset id when hyperlink closes
 
-                    # Update state for next line, using computed id
-                    hyperlink_state = _HyperlinkState(
-                        new_state.url, current_hyperlink_id, new_state.terminator)
+                    # Strip trailing whitespace when drop_whitespace is enabled
+                    # (matches CPython #140627 fix behavior)
+                    if self.drop_whitespace:
+                        line_content = line_content.rstrip()
+                    lines.append(indent + line_content)
+                    is_first_line = False
                 else:
-                    hyperlink_state = None
-                    current_hyperlink_id = None  # Reset id when hyperlink closes
-
-                # Strip trailing whitespace when drop_whitespace is enabled
-                # (matches CPython #140627 fix behavior)
-                if self.drop_whitespace:
-                    line_content = line_content.rstrip()
-                lines.append(indent + line_content)
-                is_first_line = False
+                    # max_lines reached with remaining content —
+                    # pop chunks until placeholder fits, then break.
+                    placeholder_w = self._width(self.placeholder)
+                    while current_line:
+                        last_text = self._strip_sequences(current_line[-1])
+                        if (last_text.strip()
+                                and current_width + placeholder_w <= line_width):
+                            line_content = ''.join(current_line)
+                            new_state = self._track_hyperlink_state(
+                                line_content, hyperlink_state)
+                            if new_state is not None:
+                                line_content += _make_hyperlink_close(
+                                    new_state.terminator)
+                            lines.append(indent + line_content + self.placeholder)
+                            break
+                        current_width -= self._width(current_line[-1])
+                        del current_line[-1]
+                    else:
+                        if lines:
+                            prev_line = self._rstrip_visible(lines[-1])
+                            if (self._width(prev_line) + placeholder_w
+                                    <= self.width):
+                                lines[-1] = prev_line + self.placeholder
+                                break
+                        lines.append(indent + self.placeholder.lstrip())
+                    break
 
         return lines
 
@@ -461,15 +513,40 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         """Find the end position of the first grapheme."""
         return len(next(iter_graphemes(text)))
 
+    def _rstrip_visible(self, text: str) -> str:
+        """Strip trailing visible whitespace, preserving trailing sequences."""
+        segments = list(iter_sequences(text))
+        last_vis = -1
+        for i, (segment, is_seq) in enumerate(segments):
+            if not is_seq and segment.rstrip():
+                last_vis = i
+        if last_vis == -1:
+            return ''
+        result = []
+        for i, (segment, is_seq) in enumerate(segments):
+            if i < last_vis:
+                result.append(segment)
+            elif i == last_vis:
+                result.append(segment.rstrip())
+            elif is_seq:
+                result.append(segment)
+        return ''.join(result)
+
 
 def wrap(text: str, width: int = 70, *,
          control_codes: Literal['parse', 'strict', 'ignore'] = 'parse',
          tabsize: int = 8,
+         expand_tabs: bool = True,
+         replace_whitespace: bool = True,
          ambiguous_width: int = 1,
          initial_indent: str = '',
          subsequent_indent: str = '',
+         fix_sentence_endings: bool = False,
          break_long_words: bool = True,
          break_on_hyphens: bool = True,
+         drop_whitespace: bool = True,
+         max_lines: int | None = None,
+         placeholder: str = ' [...]',
          propagate_sgr: bool = True) -> list[str]:
     r"""
     Wrap text to fit within given width, returning a list of wrapped lines.
@@ -482,12 +559,28 @@ def wrap(text: str, width: int = 70, *,
     :param width: Maximum line width in display cells.
     :param control_codes: How to handle terminal sequences (see :func:`~.width`).
     :param tabsize: Tab stop width for tab expansion.
+    :param expand_tabs: If True (default), tab characters are expanded
+        to spaces using ``tabsize``.
+    :param replace_whitespace: If True (default), each whitespace character
+        is replaced with a single space after tab expansion. When False,
+        control whitespace like ``\n`` has zero display width (unlike
+        :func:`textwrap.wrap` which counts ``len()``), so wrap points
+        may differ from stdlib for non-space whitespace characters.
     :param ambiguous_width: Width to use for East Asian Ambiguous (A)
         characters. Default is ``1`` (narrow). Set to ``2`` for CJK contexts.
     :param initial_indent: String prepended to first line.
     :param subsequent_indent: String prepended to subsequent lines.
+    :param fix_sentence_endings: If True, ensure sentences are always
+        separated by exactly two spaces.
     :param break_long_words: If True, break words longer than width.
     :param break_on_hyphens: If True, allow breaking at hyphens.
+    :param drop_whitespace: If True (default), whitespace at the beginning
+        and end of each line (after wrapping but before indenting) is dropped.
+        Set to False to preserve whitespace.
+    :param max_lines: If set, output contains at most this many lines, with
+        ``placeholder`` appended to the last line if the text was truncated.
+    :param placeholder: String appended to the last line when text is
+        truncated by ``max_lines``. Default is ``' [...]'``.
     :param propagate_sgr: If True (default), SGR (terminal styling) sequences
         are propagated across wrapped lines. Each line ends with a reset
         sequence and the next line begins with the active style restored.
@@ -526,6 +619,10 @@ def wrap(text: str, width: int = 70, *,
     .. versionchanged:: 0.5.0
        Added ``propagate_sgr`` parameter (default True).
 
+    .. versionchanged:: 0.6.0
+       Added ``expand_tabs``, ``replace_whitespace``, ``fix_sentence_endings``,
+       ``drop_whitespace``, ``max_lines``, and ``placeholder`` parameters.
+
     Example::
 
         >>> from wcwidth import wrap
@@ -534,15 +631,22 @@ def wrap(text: str, width: int = 70, *,
         >>> wrap('中文字符', 4)  # CJK characters (2 cells each)
         ['中文', '字符']
     """
+    # pylint: disable=too-many-arguments,too-many-locals
     wrapper = SequenceTextWrapper(
         width=width,
         control_codes=control_codes,
         tabsize=tabsize,
+        expand_tabs=expand_tabs,
+        replace_whitespace=replace_whitespace,
         ambiguous_width=ambiguous_width,
         initial_indent=initial_indent,
         subsequent_indent=subsequent_indent,
+        fix_sentence_endings=fix_sentence_endings,
         break_long_words=break_long_words,
         break_on_hyphens=break_on_hyphens,
+        drop_whitespace=drop_whitespace,
+        max_lines=max_lines,
+        placeholder=placeholder,
     )
     lines = wrapper.wrap(text)
 

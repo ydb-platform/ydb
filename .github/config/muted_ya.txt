@@ -26,6 +26,8 @@ ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Ma
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleChangefeed
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_sequence_reboots TSequenceReboots.CreateSequencesWithIndexedTable
+ydb/core/tx/schemeshard/ut_sequence_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
@@ -65,6 +67,7 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_prestable-25-3_to_current]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-2-1_to_prestable-25-3]
+ydb/tests/datashard/async_replication test_async_replication.py.TestAsyncReplication.test_async_replication[table_index_2__SYNC-pk_types2-all_types2-index2---SYNC]
 ydb/tests/datashard/vector_index/large test_vector_index.py.TestVectorIndex.test_vector_index
 ydb/tests/datashard/vector_index/large test_vector_index_large_levels_and_clusters.py.TestVectorIndexLargeLevelsAndClusters.test_vecot_index_large_levels_and_clusters
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]

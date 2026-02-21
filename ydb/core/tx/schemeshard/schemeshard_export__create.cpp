@@ -177,7 +177,27 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         TExportInfo::TPtr exportInfo = nullptr;
 
-        auto processExportSettings = [&]<typename TSettings>(const TSettings& settings, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
+        auto processExportSettings = [&]<typename TSettings>(const NKikimrExport::TCreateExportRequest& createExportRequest, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
+            TSettings settings;
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
+                settings = createExportRequest.GetExportToS3Settings();
+                if (!settings.scheme()) {
+                    settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
+                }
+            } else if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToYtSettings>) {
+                settings = createExportRequest.GetExportToYtSettings();
+            } else {
+                settings = createExportRequest.GetExportToFsSettings();
+            }
+            if constexpr (HasIncludeIndexData<TSettings>) {
+                if (settings.include_index_data() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
+                    return Reply(
+                        std::move(response),
+                        Ydb::StatusIds::PRECONDITION_FAILED,
+                        "Index materialization is not enabled"
+                    );
+                }
+            }
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
             if constexpr (HasIncludeIndexData<TSettings>) {
                 exportInfo->IncludeIndexData = settings.include_index_data();
@@ -199,27 +219,14 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         switch (request.GetRequest().GetSettingsCase()) {
         case NKikimrExport::TCreateExportRequest::kExportToYtSettings:
-            if (processExportSettings(request.GetRequest().GetExportToYtSettings(), TExportInfo::EKind::YT, false)) {
+            if (processExportSettings.operator()<Ydb::Export::ExportToYtSettings>(request.GetRequest(), TExportInfo::EKind::YT, false)) {
                 return true;
             }
             break;
 
         case NKikimrExport::TCreateExportRequest::kExportToS3Settings:
-            {
-                auto settings = request.GetRequest().GetExportToS3Settings();
-                if (!settings.scheme()) {
-                    settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
-                }
-                if (settings.include_index_data() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::PRECONDITION_FAILED,
-                        "Index materialization is not enabled"
-                    );
-                }
-                if (processExportSettings(settings, TExportInfo::EKind::S3, true)) {
-                    return true;
-                }
+            if (processExportSettings.operator()<Ydb::Export::ExportToS3Settings>(request.GetRequest(), TExportInfo::EKind::S3, true)) {
+                return true;
             }
             break;
 
@@ -227,7 +234,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
                 return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
             }
-            if (processExportSettings(request.GetRequest().GetExportToFsSettings(), TExportInfo::EKind::FS, true)) {
+            if (processExportSettings.operator()<Ydb::Export::ExportToFsSettings>(request.GetRequest(), TExportInfo::EKind::FS, true)) {
                 return true;
             }
             break;

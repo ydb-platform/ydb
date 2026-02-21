@@ -867,7 +867,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
        RunTPCHBenchmark(/*columnstore*/ true, {1, 6, 14, 19}, /*new rbo*/ false);
     }
 
-    void RunTPCHYqlBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) {
+    void PrintStatus(const std::vector<bool>& queries) {
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const TString status = queries[i] ? "SUCCESS" : "FAIL";
+            Cout << "Q#" << i + 1 << " " << status << ";" << Endl;
+        }
+    }
+
+    void RunTPCHYqlBenchmark(const bool columnStore, std::set<ui32>&& queriesStatus, const bool newRbo, const bool printStatus = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -880,18 +887,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateTablesFromPath(session, "schema/tpch.sql", columnStore);
 
-        if (!queries.size()) {
-            for (ui32 i = 1; i <= 22; ++i) {
-                queries.push_back(i);
-            }
-        }
-
-        for (const auto qId : queries) {
+        std::vector<bool> queriesCurrentStatus;
+        std::vector<bool> queriesExpectedStatus;
+        for (ui32 qId = 1; qId <= 22; ++qId) {
+            queriesExpectedStatus.emplace_back(queriesStatus.empty() ? true : queriesStatus.contains(qId));
             TString q = GetFullPath("data/yql-tpch/q", ToString(qId) + ".yql");
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExplainDataQuery(q).GetValueSync();
-            Y_ENSURE(result.IsSuccess());
+            queriesCurrentStatus.emplace_back(result.IsSuccess());
         }
+
+        if (printStatus) {
+            PrintStatus(queriesCurrentStatus);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(queriesExpectedStatus, queriesCurrentStatus);
     }
 
     Y_UNIT_TEST(TPCH_YQL) {

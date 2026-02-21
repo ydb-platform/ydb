@@ -50,7 +50,7 @@ namespace NYdb::NConsoleClient {
             TotalSec.Seconds(), 0, Percentile, ErrorFlag);
     }
 
-    void TSqsWorkloadScenario::InitSqsClient() {
+    void TSqsWorkloadScenario::InitSqsClient(const TClientCommand::TConfig& config) {
         Aws::Client::ClientConfiguration sqsClientConfiguration;
 
         sqsClientConfiguration.endpointOverride =
@@ -90,7 +90,7 @@ namespace NYdb::NConsoleClient {
                 "json-sqs-client",
                 credentials,
                 sqsClientConfiguration,
-                CloudIamToken.Defined() ? Aws::String(CloudIamToken.GetRef().c_str(), CloudIamToken.GetRef().size()) : Aws::String());
+                config.UseIamAuth ? Aws::String(config.SecurityToken.c_str(), config.SecurityToken.size()) : Aws::String());
             SqsClient = Aws::MakeShared<TSQSClientWrapper>(
                 "sqs-client-wrapper", credentials, sqsClientConfiguration, jsonSqsClient, StatsCollector, ValidateMessagesOrder);
         }

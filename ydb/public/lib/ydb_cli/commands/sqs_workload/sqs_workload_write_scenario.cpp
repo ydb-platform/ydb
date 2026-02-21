@@ -4,17 +4,17 @@
 
 namespace NYdb::NConsoleClient {
 
-    int TSqsWorkloadWriteScenario::Run() {
+    int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig& config) {
         InitAwsSdk();
-        auto result = RunScenario();
+        auto result = RunScenario(config);
         DestroyAwsSdk();
         return result;
     }
 
-    int TSqsWorkloadWriteScenario::RunScenario() {
+    int TSqsWorkloadWriteScenario::RunScenario(const TClientCommand::TConfig& config) {
         InitStatsCollector(WorkersCount, 0);
         InitMeasuringHttpClient(StatsCollector);
-        InitSqsClient();
+        InitSqsClient(config);
 
         auto finishedFlag = std::make_shared<std::atomic_bool>(false);
         auto queueUrl = GetQueueUrl(Topic, Consumer, QueueName);

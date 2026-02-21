@@ -15,7 +15,7 @@ namespace NYdb::NConsoleClient {
         ui64 HandleMessageDelayMs;
 
     private:
-        int RunScenario();
+        int RunScenario(const TClientCommand::TConfig& config);
     };
 
 } // namespace NYdb::NConsoleClient

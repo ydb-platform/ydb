@@ -17,7 +17,7 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         // Common params
-        config.Opts->AddLongOption("http-endpoint", "HTTP endpoint.")
+        config.Opts->AddLongOption("sqs-endpoint", "SQS HTTP endpoint.")
             .Required()
             .StoreResult(&Scenario.Endpoint);
         config.Opts->AddLongOption("topic", "YDB topic name.")
@@ -55,8 +55,6 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Scenario.AwsAccessKeyId);
         config.Opts->AddLongOption("aws-session-token", "AWS session token.")
             .StoreResult(&Scenario.AwsSessionToken);
-        config.Opts->AddLongOption("cloud-iam-token", "Cloud IAM token. This parameter will be set to X-YaCloud-SubjectToken header")
-            .StoreResult(&Scenario.CloudIamToken);
         config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
             .StoreResult(&Scenario.AwsSecretKey);
         config.Opts->AddLongOption('b', "batch-size", "AWS batch size.")
@@ -94,8 +92,8 @@ namespace NYdb::NConsoleClient {
         TClientCommand::Parse(config);
     }
 
-    int TCommandWorkloadSqsRunWrite::Run(TConfig&) {
-        return Scenario.Run();
+    int TCommandWorkloadSqsRunWrite::Run(TConfig& config) {
+        return Scenario.Run(config);
     }
 
 } // namespace NYdb::NConsoleClient

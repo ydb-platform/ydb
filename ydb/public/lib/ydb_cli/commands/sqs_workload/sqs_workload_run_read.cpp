@@ -16,7 +16,7 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         // Common params
-        config.Opts->AddLongOption("http-endpoint", "HTTP endpoint.")
+        config.Opts->AddLongOption("sqs-endpoint", "SQS HTTP endpoint.")
             .Required()
             .StoreResult(&Scenario.Endpoint);
         config.Opts->AddLongOption("queue-name", "AWS queue name.")
@@ -58,11 +58,9 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Scenario.AwsAccessKeyId);
         config.Opts->AddLongOption("aws-session-token", "AWS session token.")
             .StoreResult(&Scenario.AwsSessionToken);
-        config.Opts->AddLongOption("cloud-iam-token", "Cloud IAM token. This parameter will be set to X-YaCloud-SubjectToken header")
-            .StoreResult(&Scenario.CloudIamToken);
         config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
             .StoreResult(&Scenario.AwsSecretKey);
-        config.Opts->AddLongOption("keep-error-every", "Keep every Nth error message in the queue (do not delete it). 0 = delete all error messages; 1 = keep all error messages")
+        config.Opts->AddLongOption("keep-error-every", "Keep every Nth error message in the queue (do not delete it). 0 = delete all messages; 1 = keep all messages")
             .StoreResult(&Scenario.ErrorMessagesRate);
         config.Opts
             ->AddLongOption("error-policy",

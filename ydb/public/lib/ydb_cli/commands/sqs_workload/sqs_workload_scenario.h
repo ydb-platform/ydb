@@ -39,13 +39,12 @@ namespace NYdb::NConsoleClient {
         ui32 WorkersCount;
         ui32 RequestTimeoutMs;
         bool UseXmlAPI;
-        TMaybe<TString> CloudIamToken;
         bool ValidateMessagesOrder;
 
         void InitAwsSdk();
         void DestroyAwsSdk();
         void InitStatsCollector(size_t writerCount, size_t readerCount);
-        void InitSqsClient();
+        void InitSqsClient(const TClientCommand::TConfig& config);
         void DestroySqsClient();
         TString GetQueueUrl(TString topic, TString consumer, TMaybe<TString> queueName = Nothing()) const;
 

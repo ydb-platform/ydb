@@ -1253,7 +1253,7 @@ bool IsExtractOrPredicatesOverEquiJoinEnabled(const TTypeAnnotationContext* type
 bool IsNormalizeEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
     static const char Flag[] = "NormalizeEqualityFilterOverJoin";
-    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
+    return !IsOptimizerDisabled<Flag>(*types);
 }
 
 struct TExtraInputPredicates {

@@ -3143,7 +3143,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
         for (auto& k : t.WriteInfo->BodyKeys) {
             LOG_D("add key " << k.Key.ToString());
-            auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, k.Timestamp, true);
+            auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);
             if (write && !write->Value.empty()) {
                 AddCmdWriteWithDeferredTimestamp(write, PersistRequest.Get(), ctx);
                 BlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());

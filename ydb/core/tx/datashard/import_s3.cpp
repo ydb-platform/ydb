@@ -557,7 +557,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             this->Send(client, new TEvents::TEvPoisonPill());
         }
 
-        Client = this->RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        Client = this->RegisterWithSameMailbox(CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         this->Become(&TThis::StateDownloadData);

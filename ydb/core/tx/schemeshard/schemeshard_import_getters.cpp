@@ -120,7 +120,7 @@ protected:
         if (Client) {
             this->Send(Client, new TEvents::TEvPoisonPill());
         }
-        Client = this->RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        Client = this->RegisterWithSameMailbox(CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
     }
 
     void PassAway() override {

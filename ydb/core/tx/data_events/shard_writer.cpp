@@ -62,6 +62,7 @@ namespace NKikimr::NEvWrite {
             ev->SetUserSID(UserCtx->GetUserSID());
             ev->SetUserTraceId(UserCtx->GetUserTraceId());
         }
+
         DataForShard->Serialize(*ev, TableId, SchemaVersion);
         if (Timeout) {
             ev->Record.SetTimeoutSeconds(Timeout->Seconds());

@@ -775,8 +775,8 @@ protected:
             TBlockItem b2 = (i % 2) ? TBlockItem(a) : TBlockItem();
             builder2->Add(b2);
 
-            TBlockItem b3items[] = {(i % 2) ? TBlockItem(i) : TBlockItem(), TBlockItem(a)};
-            TBlockItem b3 = (i % 7) ? TBlockItem(b3items) : TBlockItem();
+            auto b3items = std::to_array<TBlockItem>({(i % 2) ? TBlockItem(i) : TBlockItem(), TBlockItem(a)});
+            TBlockItem b3 = (i % 7) ? TBlockItem(b3items.data()) : TBlockItem();
             builder3->Add(b3);
 
             TBlockItem tzDate{i};
@@ -1252,12 +1252,12 @@ protected:
         auto* rowType = PgmBuilder_.NewMultiType({blockTupleType, scalarUi64Type});
 
         auto builder = MakeArrayBuilder(TTypeInfoHelper(), tupleType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tupleType)), nullptr);
-        NYql::NUdf::TBlockItem tuple1Items[] = {NYql::NUdf::TBlockItem(i32(1)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("a"))};
-        builder->Add(NYql::NUdf::TBlockItem(tuple1Items));
-        NYql::NUdf::TBlockItem tuple2Items[] = {NYql::NUdf::TBlockItem(i32(2)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("b"))};
-        builder->Add(NYql::NUdf::TBlockItem(tuple2Items));
-        NYql::NUdf::TBlockItem tuple3Items[] = {NYql::NUdf::TBlockItem(i32(3)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("c"))};
-        builder->Add(NYql::NUdf::TBlockItem(tuple3Items));
+        auto tuple1Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(1)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("a"))});
+        builder->Add(NYql::NUdf::TBlockItem(tuple1Items.data()));
+        auto tuple2Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(2)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("b"))});
+        builder->Add(NYql::NUdf::TBlockItem(tuple2Items.data()));
+        auto tuple3Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(3)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("c"))});
+        builder->Add(NYql::NUdf::TBlockItem(tuple3Items.data()));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
@@ -1286,11 +1286,11 @@ protected:
         auto* rowType = PgmBuilder_.NewMultiType({blockOptTupleType, scalarUi64Type});
 
         auto builder = MakeArrayBuilder(TTypeInfoHelper(), optTupleType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTupleType)), nullptr);
-        NYql::NUdf::TBlockItem tuple1Items[] = {NYql::NUdf::TBlockItem(i32(1)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("a"))};
-        builder->Add(NYql::NUdf::TBlockItem(tuple1Items));
+        auto tuple1Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(1)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("a"))});
+        builder->Add(NYql::NUdf::TBlockItem(tuple1Items.data()));
         builder->Add(NYql::NUdf::TBlockItem());
-        NYql::NUdf::TBlockItem tuple3Items[] = {NYql::NUdf::TBlockItem(i32(3)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("c"))};
-        builder->Add(NYql::NUdf::TBlockItem(tuple3Items));
+        auto tuple3Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(3)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("c"))});
+        builder->Add(NYql::NUdf::TBlockItem(tuple3Items.data()));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
@@ -1320,16 +1320,16 @@ protected:
         auto bigString = (TString("Very long string") * 1000000).substr(0, 2000000);
         auto builder = MakeArrayBuilder(TTypeInfoHelper(), tupleType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tupleType)), nullptr);
         {
-            TBlockItem tuple[] = {TBlockItem(1), TBlockItem(NYql::NUdf::TStringRef("Short string"))};
-            builder->Add(TBlockItem(tuple));
+            auto tuple = std::to_array<TBlockItem>({TBlockItem(1), TBlockItem(NYql::NUdf::TStringRef("Short string"))});
+            builder->Add(TBlockItem(tuple.data()));
         }
         {
-            TBlockItem tuple[] = {TBlockItem(2), TBlockItem(NYql::NUdf::TStringRef("Short string"))};
-            builder->Add(TBlockItem(tuple));
+            auto tuple = std::to_array<TBlockItem>({TBlockItem(2), TBlockItem(NYql::NUdf::TStringRef("Short string"))});
+            builder->Add(TBlockItem(tuple.data()));
         }
         {
-            TBlockItem tuple[] = {TBlockItem(3), TBlockItem(NYql::NUdf::TStringRef(bigString))};
-            builder->Add(TBlockItem(tuple));
+            auto tuple = std::to_array<TBlockItem>({TBlockItem(3), TBlockItem(NYql::NUdf::TStringRef(bigString))});
+            builder->Add(TBlockItem(tuple.data()));
         }
         auto buildResult = builder->Build(/*finish=*/true);
         UNIT_ASSERT_EQUAL(buildResult.kind(), arrow::Datum::CHUNKED_ARRAY);

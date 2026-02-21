@@ -33,7 +33,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         TGuardedSgList data,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 
     NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
@@ -42,7 +42,7 @@ public:
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,
         const ui64 lsn,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 
     NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>
@@ -53,7 +53,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 
     NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> Read(
         const NActors::TActorId serviceId,
@@ -61,7 +61,7 @@ public:
         const NKikimr::NDDisk::TBlockSelector selector,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 
     NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
@@ -72,7 +72,7 @@ public:
         const ui64 lsn,
         const std::tuple<ui32, ui32, ui32> ddiskId,
         const ui64 ddiskInstanceGuid,
-        NWilson::TTraceId traceId) override;
+        NWilson::TSpan& span) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -83,16 +83,16 @@ class TICStorageTransportActor
 private:
     ui64 RequestIdGenerator = 0;
 
-    TMap<ui64, TEvICStorageTransportPrivate::TEvConnect>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvConnect>
         ConnectEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvWritePersistentBuffer>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvWritePersistentBuffer>
         WritePersistentBufferEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvErasePersistentBuffer>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvErasePersistentBuffer>
         ErasePersistentBufferEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvReadPersistentBuffer>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvReadPersistentBuffer>
         ReadPersistentBufferEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvRead> ReadEventsByRequestId;
-    TMap<ui64, TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer>
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvRead> ReadEventsByRequestId;
+    THashMap<ui64, TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer>
         SyncEventsByRequestId;
 
 public:

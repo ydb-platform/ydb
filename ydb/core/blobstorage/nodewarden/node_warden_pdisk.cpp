@@ -136,7 +136,7 @@ namespace NKikimr::NStorage {
         // testlib uses SectorMap with fs-style path like "/place/vartmp/tmpAMjsJ0/pdisk_1.dat"
         if (auto it = Cfg->SectorMaps.find(path); it != Cfg->SectorMaps.end()) {
             pdiskConfig->SectorMap = it->second;
-            pdiskConfig->EnableSectorEncryption = !pdiskConfig->SectorMap;
+            pdiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(!pdiskConfig->SectorMap);
         }
 
         auto inferSettings = TInferPDiskSlotCountSettingsForDriveType(InferPDiskSlotCountSettings, deviceType);

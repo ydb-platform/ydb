@@ -485,7 +485,7 @@ class TExecutor
     ui64 TransactionUniqCounter = 0;
 
     bool LogBatchFlushScheduled = false;
-    bool NeedFollowerSnapshot = false;
+    bool NeedLogSnapshot = false;
 
     mutable bool HadRejectProbabilityByTxInFly = false;
     mutable bool HadRejectProbabilityByOverload = false;
@@ -584,6 +584,7 @@ class TExecutor
     void Handle(TEvPrivate::TEvLeaseExtend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvConfirmLeaderResult::TPtr &ev);
     void Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateLowExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx);

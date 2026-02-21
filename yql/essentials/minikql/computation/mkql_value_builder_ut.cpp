@@ -339,10 +339,10 @@ private:
             UNIT_ASSERT(!isScalar);
             UNIT_ASSERT_VALUES_EQUAL(length, 5);
 
-            ArrowArray arrs[2];
+            std::array<ArrowArray, 2> arrs;
             Builder_.ExportArrowBlock(val1, 0, &arrs[0]);
             Builder_.ExportArrowBlock(val1, 1, &arrs[1]);
-            NUdf::TUnboxedValue val2 = Builder_.ImportArrowBlock(arrs, 2, isScalar, *atype);
+            NUdf::TUnboxedValue val2 = Builder_.ImportArrowBlock(arrs.data(), 2, isScalar, *atype);
             const auto& d2 = TArrowBlock::From(val2).GetDatum();
             UNIT_ASSERT(d2.is_arraylike() && !d2.is_array());
             UNIT_ASSERT_VALUES_EQUAL(d2.length(), 5);

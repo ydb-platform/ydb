@@ -763,14 +763,14 @@ UDF_ASSERT_TYPE_SIZE(TBoxedValue, 32);
 ///////////////////////////////////////////////////////////////////////////////
 
 struct TRawEmbeddedValue {
-    char Buffer[0xE];
+    char Buffer[0xE]; // NOLINT(modernize-avoid-c-arrays)
     ui8 Size;
     ui8 Meta;
 };
 
 struct TRawBoxedValue {
     IBoxedValue* Value;
-    ui8 Reserved[7];
+    ui8 Reserved[7]; // NOLINT(modernize-avoid-c-arrays)
     ui8 Meta;
 };
 
@@ -781,7 +781,7 @@ struct TRawStringValue {
     ui32 Size;
     union {
         struct {
-            ui8 Skip[3];
+            ui8 Skip[3]; // NOLINT(modernize-avoid-c-arrays)
             ui8 Meta;
         };
         ui32 Offset;
@@ -953,7 +953,7 @@ public:
 
 protected:
     union TRaw {
-        ui64 Halfs[2] = {0, 0};
+        ui64 Halfs[2] = {0, 0}; // NOLINT(modernize-avoid-c-arrays)
 
         TRawEmbeddedValue Embedded;
 
@@ -973,7 +973,7 @@ protected:
                 ui64 FullMeta;
                 struct {
                     ui16 TimezoneId;
-                    ui8 Reserved[4];
+                    ui8 Reserved[4]; // NOLINT(modernize-avoid-c-arrays)
                     ui8 Size;
                     ui8 Meta;
                 };

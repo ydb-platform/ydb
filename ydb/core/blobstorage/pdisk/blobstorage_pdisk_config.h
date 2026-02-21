@@ -106,13 +106,11 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 StartOwnerRound = 1ull;  // set only by warden
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // set only by warden
-    bool EnableSectorEncryption = true;
 
-    // EnableSectorEncryption is not the same as the DISABLE_PDISK_ENCRYPTION macro:
+    // EnablePDiskDataEncryption feature flag is not the same as the DISABLE_PDISK_ENCRYPTION macro:
     // unlike the macro, it does not disable metadata encryption.
     // Tests need a runtime way to emulate DISABLE_PDISK_ENCRYPTION.
-    // Until runtime on/off encryption is fully supported, keep this hacky flag.
-    bool EnableFormatEncryption = true;
+    bool EnableFormatAndMetadataEncryption = true;
 
     ui32 ChunkSize = 128 << 20;
     ui32 SectorSize = 4 << 10;
@@ -176,6 +174,7 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui32 CompletionThreadsCount = 1;
     bool UseNoopScheduler = false;
+    bool UseBytesFlightControl = false;
 
     bool PlainDataChunks = false;
 
@@ -302,7 +301,7 @@ struct TPDiskConfig : public TThrRefBase {
         }
         str << " StartOwnerRound# " << StartOwnerRound << x;
         str << " SectorMap# " << (SectorMap ? "true" : "false") << x;
-        str << " EnableSectorEncryption # " << EnableSectorEncryption << x;
+        str << " EnableSectorEncryption # " << FeatureFlags.GetEnablePDiskDataEncryption() << x;
 
         str << " ChunkSize# " << ChunkSize << x;
         str << " SectorSize# " << SectorSize << x;
@@ -343,6 +342,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
+        str << " UseBytesFlightControl# " << (UseBytesFlightControl ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
         str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
         str << "}";
@@ -436,6 +436,9 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
+        }
+        if (cfg->HasUseBytesFlightControl()) {
+            UseBytesFlightControl = cfg->GetUseBytesFlightControl();
         }
         if (cfg->HasPlainDataChunks()) {
             PlainDataChunks = cfg->GetPlainDataChunks();

@@ -260,12 +260,12 @@ private:
         str.reserve(length);
         totalBytes += length;
         while (length > 0) {
-            char buffer[1024];
+            std::array<char, 1024> buffer;
             auto toRead = Min<ui32>(sizeof(buffer), length);
-            file.LoadOrFail(buffer, toRead);
+            file.LoadOrFail(buffer.data(), toRead);
             length -= toRead;
-            str.append(buffer, toRead);
-            checksum = crc64(buffer, toRead, checksum);
+            str.append(buffer.data(), toRead);
+            checksum = crc64(buffer.data(), toRead, checksum);
         }
     }
 

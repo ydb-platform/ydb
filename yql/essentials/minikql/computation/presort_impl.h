@@ -175,8 +175,8 @@ Y_FORCE_INLINE void EncodeString(TVector<ui8>& output, TStringBuf value) {
 
     while (!value.empty()) {
         union {
-            ui8 Buffer[BlockSize + 1];
-            ui64 Buffer64[BlockSizeUi64];
+            ui8 Buffer[BlockSize + 1];    // NOLINT(modernize-avoid-c-arrays)
+            ui64 Buffer64[BlockSizeUi64]; // NOLINT(modernize-avoid-c-arrays)
         };
 
         part = std::min(value.size(), BlockSize);
@@ -218,8 +218,8 @@ Y_FORCE_INLINE TStringBuf DecodeString(TStringBuf& input, TVector<ui8>& value) {
 
     while (code == BlockCode) {
         union {
-            ui8 Buffer[BlockSize + 1];
-            ui64 Buffer64[BlockSizeUi64];
+            ui8 Buffer[BlockSize + 1];    // NOLINT(modernize-avoid-c-arrays)
+            ui64 Buffer64[BlockSizeUi64]; // NOLINT(modernize-avoid-c-arrays)
         };
 
         EnsureInputSize(input, BlockSize + 1);

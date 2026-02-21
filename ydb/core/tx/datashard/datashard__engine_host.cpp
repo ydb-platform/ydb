@@ -405,8 +405,9 @@ public:
     {
         UserDb.IncrementRow(tableId, key, ops, insertMissing, userCtx);
     }
-    
+
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const NACLib::TUserContext::TPtr& userCtx) override {
+
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
             return;

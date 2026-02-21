@@ -73,7 +73,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 {
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
     Y_UNUSED(userCtx);
-    
+
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
     Y_ENSURE(key.size() == userTable->KeyColumnIds.size(), "Count doesn't match"
         << ": key# " << key.size()

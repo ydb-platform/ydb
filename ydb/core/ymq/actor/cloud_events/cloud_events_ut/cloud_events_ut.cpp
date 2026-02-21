@@ -373,6 +373,7 @@ Y_UNIT_TEST_SUITE(ProtoTests) {
 
         const auto& details = ev.details();
         UNIT_ASSERT_EQUAL(details.name(), evInfo.QueueName);
+        UNIT_ASSERT_EQUAL(details.queue_id(), evInfo.ResourceId);
         UNIT_ASSERT_EQUAL(details.labels_size(), 1);
         UNIT_ASSERT(details.labels().contains("k1"));
         UNIT_ASSERT_EQUAL(details.labels().at("k1"), "v1");

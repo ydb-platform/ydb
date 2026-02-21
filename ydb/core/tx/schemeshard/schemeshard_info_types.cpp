@@ -2112,8 +2112,9 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
     // Check that total load doesn't exceed the limits
     if (canMergeByLoad) {
-        if (shardLoad + totalLoad > cpuUsageThreshold)
+        if (shardLoad + totalLoad > cpuUsageThreshold) {
             return false;
+        }
 
         reason = TStringBuilder() << "merge by load ("
             << "shardLoad: " << shardLoad << ")";
@@ -2885,6 +2886,19 @@ void TImportInfo::TFillItemsFromSchemaMappingResult::AddError(const TString& err
         ErrorMessage += '\n';
     }
     ErrorMessage += err;
+}
+
+bool TForcedCompactionInfo::IsFinished() const {
+    return State == EState::Done || State == EState::Cancelled;
+}
+
+void TForcedCompactionInfo::AddNotifySubscriber(const TActorId& actorId) {
+    Y_ENSURE(!IsFinished());
+    Subscribers.insert(actorId);
+}
+
+float TForcedCompactionInfo::CalcProgress() const {
+    return TotalShardCount > 0 ? (100.f * DoneShardCount / TotalShardCount) : 0;
 }
 
 } // namespace NSchemeShard

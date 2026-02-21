@@ -47,7 +47,6 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     }
 }
 
-
 TEvKqp::TEvQueryRequest::TEvQueryRequest(const NACLib::TUserContext::TPtr& userCtx) : TEvQueryRequest()
 {
     UserCtx = userCtx;

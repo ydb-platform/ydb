@@ -162,7 +162,7 @@ message TFeatureFlags {
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
     optional bool EnableGranularTimecast = 137 [default = true];
     optional bool EnableAlterShardingInColumnShard = 138 [default = false];
-    optional bool EnablePgSyntax = 139 [default = true];
+    optional bool EnablePgSyntax = 139 [default = false];
     optional bool EnableTieringInColumnShard = 140 [default = false];
     optional bool EnableMetadataObjectsOnServerless = 141 [default = true];
     optional bool EnableOlapCompression = 142 [default = false];
@@ -254,4 +254,8 @@ message TFeatureFlags {
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
+    optional bool EnablePDiskDataEncryption = 230 [default = true];
+    optional bool EnableForcedCompactions = 231 [default = false];
+    optional bool EnableLocalBloomFilterIndex = 232 [default = false];
+    optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
 }

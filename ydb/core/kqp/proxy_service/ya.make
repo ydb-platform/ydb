@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/cms/console
     ydb/core/kqp/common
     ydb/core/kqp/common/events
+    ydb/core/kqp/compile_service
     ydb/core/kqp/counters
     ydb/core/kqp/gateway/behaviour/resource_pool_classifier
     ydb/core/kqp/gateway/behaviour/streaming_query

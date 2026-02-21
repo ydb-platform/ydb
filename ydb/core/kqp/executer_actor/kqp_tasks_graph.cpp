@@ -2482,10 +2482,16 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
 
     auto guard = TxAlloc->TypeEnv.BindAllocator();
     {
-        auto value = ExtractPhyValue(
-        stageInfo, fullTextSource.GetQuerySettings().GetQueryValue(),
-        TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-        settings->MutableQuerySettings()->SetQuery(TString(value.AsStringRef()));
+
+        TStringBuilder queryBuilder;
+        for (const auto& query : fullTextSource.GetQuerySettings().GetQueryValue()) {
+            auto value = ExtractPhyValue(
+                stageInfo, query,
+                TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+            queryBuilder << TString(value.AsStringRef());
+        }
+
+        settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
     }
 
 

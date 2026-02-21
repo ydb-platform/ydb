@@ -18,6 +18,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
+#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -503,6 +504,8 @@ public:
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+        InitSharedReading();
+        InitCheckpointStorage();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -953,9 +956,15 @@ public:
 
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
-            const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-            ui64 millis = sbs.GetBoardLookupIntervalMs();
-            TDuration d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            TDuration d;
+            if (!WarmupStarted && TableServiceConfig.HasCompileCacheWarmupConfig()) {
+                // Short polling interval until warmup starts
+                d = TDuration::Seconds(2);
+            } else {
+                const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+                ui64 millis = sbs.GetBoardLookupIntervalMs();
+                d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            }
             Schedule(d, new TEvPrivate::TEvCollectPeerProxyData());
         }
 
@@ -999,6 +1008,29 @@ public:
 
         PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
         TryKickSession();
+        TryStartWarmup();
+    }
+
+    void TryStartWarmup() {
+        if (WarmupStarted) {
+            return;
+        }
+
+        if (!TableServiceConfig.HasCompileCacheWarmupConfig()) {
+            return;
+        }
+
+        if (PeerProxyNodeResources.size() > 1) {
+            WarmupStarted = true;
+            TVector<ui32> nodeIds;
+            nodeIds.reserve(PeerProxyNodeResources.size());
+            for (const auto& resource : PeerProxyNodeResources) {
+                nodeIds.push_back(resource.GetNodeId());
+            }
+            KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size() 
+                << " proxy nodes, starting warmup");
+            Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
+        }
     }
 
     bool ShouldStartBalancing(const TSimpleResourceStats& stats, const double minResourceThreshold, const double currentResourceUsage) const {
@@ -1830,7 +1862,7 @@ private:
 
     void InitSharedReading() {
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-        if (!AppData()->FeatureFlags.GetEnableStreamingQueries() || !FederatedQuerySetup) {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || RowDispatcherService) {
             return;
         }
 
@@ -1846,7 +1878,7 @@ private:
             AppData()->Mon,
             Counters->GetKqpCounters(),
             {},
-            AppData()->FeatureFlags.GetEnableStreamingQueriesCounters());
+            FeatureFlags.GetEnableStreamingQueriesCounters());
 
         RowDispatcherService = TActivationContext::Register(rowDispatcher.release());
         TActivationContext::ActorSystem()->RegisterLocalService(
@@ -1854,7 +1886,7 @@ private:
     }
 
     void InitCheckpointStorage() {
-        if (!FederatedQuerySetup || !AppData()->FeatureFlags.GetEnableStreamingQueries()) {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || CheckpointStorageService) {
             return;
         }
 
@@ -1904,6 +1936,7 @@ private:
     TKqpQueryCachePtr QueryCache;
 
     bool ServerWorkerBalancerComplete = false;
+    bool WarmupStarted = false;
     std::optional<TString> SelfDataCenterId;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     std::vector<ui64> LocalDatacenterProxies;

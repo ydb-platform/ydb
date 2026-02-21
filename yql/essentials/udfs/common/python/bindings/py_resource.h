@@ -5,6 +5,7 @@
 
 namespace NPython {
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 extern const char ResourceCapsuleName[];
 
 TPyObjectPtr ToPyResource(

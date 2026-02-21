@@ -39,7 +39,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
     Files with this license:
-        include/__locale_dir/support/bsd_like.h [228:228]
+        include/__locale_dir/support/bsd_like.h [234:234]
 
 KEEP     NCSA AND MIT         1f7e00acb6cda5de868d4d4c1ffe3c2b
 BELONGS ya.make
@@ -415,6 +415,7 @@ BELONGS ya.make
         include/__chrono/exception.h [4:5]
         include/__chrono/file_clock.h [4:5]
         include/__chrono/formatter.h [4:5]
+        include/__chrono/gps_clock.h [4:5]
         include/__chrono/hh_mm_ss.h [4:5]
         include/__chrono/high_resolution_clock.h [4:5]
         include/__chrono/leap_second.h [4:5]
@@ -672,6 +673,7 @@ BELONGS ya.make
         include/__locale_dir/support/bsd_like.h [3:4]
         include/__locale_dir/support/freebsd.h [3:4]
         include/__locale_dir/support/fuchsia.h [3:4]
+        include/__locale_dir/support/linux.h [3:4]
         include/__locale_dir/support/no_locale/characters.h [3:4]
         include/__locale_dir/support/no_locale/strtonum.h [3:4]
         include/__locale_dir/support/windows.h [3:4]
@@ -1026,6 +1028,8 @@ BELONGS ya.make
         include/__type_traits/negation.h [3:4]
         include/__type_traits/promote.h [3:4]
         include/__type_traits/rank.h [3:4]
+        include/__type_traits/reference_constructs_from_temporary.h [3:4]
+        include/__type_traits/reference_converts_from_temporary.h [3:4]
         include/__type_traits/remove_all_extents.h [3:4]
         include/__type_traits/remove_const.h [3:4]
         include/__type_traits/remove_const_ref.h [3:4]
@@ -1594,6 +1598,7 @@ BELONGS ya.make
         include/__chrono/exception.h [4:5]
         include/__chrono/file_clock.h [4:5]
         include/__chrono/formatter.h [4:5]
+        include/__chrono/gps_clock.h [4:5]
         include/__chrono/hh_mm_ss.h [4:5]
         include/__chrono/high_resolution_clock.h [4:5]
         include/__chrono/leap_second.h [4:5]
@@ -1851,6 +1856,7 @@ BELONGS ya.make
         include/__locale_dir/support/bsd_like.h [3:4]
         include/__locale_dir/support/freebsd.h [3:4]
         include/__locale_dir/support/fuchsia.h [3:4]
+        include/__locale_dir/support/linux.h [3:4]
         include/__locale_dir/support/no_locale/characters.h [3:4]
         include/__locale_dir/support/no_locale/strtonum.h [3:4]
         include/__locale_dir/support/windows.h [3:4]
@@ -2205,6 +2211,8 @@ BELONGS ya.make
         include/__type_traits/negation.h [3:4]
         include/__type_traits/promote.h [3:4]
         include/__type_traits/rank.h [3:4]
+        include/__type_traits/reference_constructs_from_temporary.h [3:4]
+        include/__type_traits/reference_converts_from_temporary.h [3:4]
         include/__type_traits/remove_all_extents.h [3:4]
         include/__type_traits/remove_const.h [3:4]
         include/__type_traits/remove_const_ref.h [3:4]
@@ -2856,6 +2864,7 @@ BELONGS ya.make
         include/__chrono/exception.h [6:6]
         include/__chrono/file_clock.h [6:6]
         include/__chrono/formatter.h [6:6]
+        include/__chrono/gps_clock.h [6:6]
         include/__chrono/hh_mm_ss.h [6:6]
         include/__chrono/high_resolution_clock.h [6:6]
         include/__chrono/leap_second.h [6:6]
@@ -3113,6 +3122,7 @@ BELONGS ya.make
         include/__locale_dir/support/bsd_like.h [5:5]
         include/__locale_dir/support/freebsd.h [5:5]
         include/__locale_dir/support/fuchsia.h [5:5]
+        include/__locale_dir/support/linux.h [5:5]
         include/__locale_dir/support/no_locale/characters.h [5:5]
         include/__locale_dir/support/no_locale/strtonum.h [5:5]
         include/__locale_dir/support/windows.h [5:5]
@@ -3467,6 +3477,8 @@ BELONGS ya.make
         include/__type_traits/negation.h [5:5]
         include/__type_traits/promote.h [5:5]
         include/__type_traits/rank.h [5:5]
+        include/__type_traits/reference_constructs_from_temporary.h [5:5]
+        include/__type_traits/reference_converts_from_temporary.h [5:5]
         include/__type_traits/remove_all_extents.h [5:5]
         include/__type_traits/remove_const.h [5:5]
         include/__type_traits/remove_const_ref.h [5:5]
@@ -4049,6 +4061,7 @@ BELONGS ya.make
         include/__chrono/exception.h [6:6]
         include/__chrono/file_clock.h [6:6]
         include/__chrono/formatter.h [6:6]
+        include/__chrono/gps_clock.h [6:6]
         include/__chrono/hh_mm_ss.h [6:6]
         include/__chrono/high_resolution_clock.h [6:6]
         include/__chrono/leap_second.h [6:6]
@@ -4306,6 +4319,7 @@ BELONGS ya.make
         include/__locale_dir/support/bsd_like.h [5:5]
         include/__locale_dir/support/freebsd.h [5:5]
         include/__locale_dir/support/fuchsia.h [5:5]
+        include/__locale_dir/support/linux.h [5:5]
         include/__locale_dir/support/no_locale/characters.h [5:5]
         include/__locale_dir/support/no_locale/strtonum.h [5:5]
         include/__locale_dir/support/windows.h [5:5]
@@ -4660,6 +4674,8 @@ BELONGS ya.make
         include/__type_traits/negation.h [5:5]
         include/__type_traits/promote.h [5:5]
         include/__type_traits/rank.h [5:5]
+        include/__type_traits/reference_constructs_from_temporary.h [5:5]
+        include/__type_traits/reference_converts_from_temporary.h [5:5]
         include/__type_traits/remove_all_extents.h [5:5]
         include/__type_traits/remove_const.h [5:5]
         include/__type_traits/remove_const_ref.h [5:5]
@@ -5090,4 +5106,4 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
     Files with this license:
-        include/module.modulemap [1506:1506]
+        include/module.modulemap [1523:1523]

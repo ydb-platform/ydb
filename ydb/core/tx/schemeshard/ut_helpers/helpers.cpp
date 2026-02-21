@@ -1928,19 +1928,19 @@ namespace NSchemeShardUT_Private {
         switch (cfg.IndexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal: {
             auto& settings = *index.mutable_global_index()->mutable_settings();
-            if (cfg.GlobalIndexSettings) {
+            if (cfg.GlobalIndexSettings.size() == 1) {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
             auto& settings = *index.mutable_global_unique_index()->mutable_settings();
-            if (cfg.GlobalIndexSettings) {
+            if (cfg.GlobalIndexSettings.size() == 1) {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
             auto& settings = *index.mutable_global_async_index()->mutable_settings();
-            if (cfg.GlobalIndexSettings) {
+            if (cfg.GlobalIndexSettings.size() == 1) {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
@@ -1960,19 +1960,28 @@ namespace NSchemeShardUT_Private {
                 kmeansTreeSettings.set_levels(2);
             }
 
-            if (cfg.GlobalIndexSettings) {
-                cfg.GlobalIndexSettings[0].SerializeTo(*settings.mutable_level_table_settings());
-                if (cfg.GlobalIndexSettings.size() > 1) {
-                    cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
-                }
-                if (cfg.GlobalIndexSettings.size() > 2) {
-                    cfg.GlobalIndexSettings[2].SerializeTo(*settings.mutable_prefix_table_settings());
+            const bool isPrefixed = cfg.IndexColumns.size() > 1;
+            if (cfg.GlobalIndexSettings.size() == (isPrefixed ? 3 : 2)) {
+                cfg.GlobalIndexSettings[NTableIndex::NKMeans::LevelTablePosition].SerializeTo(*settings.mutable_level_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NKMeans::PostingTablePosition].SerializeTo(*settings.mutable_posting_table_settings());
+                if (isPrefixed) {
+                    cfg.GlobalIndexSettings[NTableIndex::NKMeans::PrefixTablePosition].SerializeTo(*settings.mutable_prefix_table_settings());
                 }
             }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+            if (cfg.GlobalIndexSettings.size() == 1) {
+                cfg.GlobalIndexSettings[0].SerializeTo(*index.mutable_global_fulltext_plain_index()->mutable_settings());
+            }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            auto& settings = *index.mutable_global_fulltext_relevance_index();
+            if (cfg.GlobalIndexSettings.size() == 4) {
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::DictTablePosition].SerializeTo(*settings.mutable_dict_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::DocsTablePosition].SerializeTo(*settings.mutable_docs_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::StatsTablePosition].SerializeTo(*settings.mutable_stats_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::PostingTablePosition].SerializeTo(*settings.mutable_posting_table_settings());
+            }
         } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
@@ -2230,15 +2239,16 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath) {
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
         NKikimrForcedCompaction::TForcedCompactionSettings settings;
         settings.set_source_path(tablePath);
+        settings.set_max_shards_in_flight(maxShardsInFlight);
         auto ev = MakeHolder<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath) {
-        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath);
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
+        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight);
     }
 
     void TestCompact(
@@ -2247,17 +2257,128 @@ namespace NSchemeShardUT_Private {
         ui64 id,
         const TString& dbName,
         const TString& tablePath,
+        ui32 maxShardsInFlight,
         Ydb::StatusIds::StatusCode expectedStatus)
     {
-        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath);
+        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, maxShardsInFlight);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCreateResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
     }
 
-    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, Ydb::StatusIds::StatusCode expectedStatus) {
-        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, expectedStatus);
+    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
+        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 id,
+        const TString& dbName,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvGetRequest(dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvGetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 id,
+        const TString& dbName,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestGetCompaction(runtime, TTestTxConfig::SchemeShard, id, dbName, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvCancelRequest(txId, dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCancelResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestCancelCompaction(runtime, TTestTxConfig::SchemeShard, txId, dbName, id, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvForgetRequest(txId, dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvForgetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestForgetCompaction(runtime, TTestTxConfig::SchemeShard, txId, dbName, id, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        const TString& dbName,
+        ui64 pageSize,
+        const TString& pageToken,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvListRequest(dbName, pageSize, pageToken));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvListResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(
+        TTestActorRuntime& runtime,
+        const TString& dbName,
+        ui64 pageSize,
+        const TString& pageToken,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestListCompactions(runtime, TTestTxConfig::SchemeShard, dbName, pageSize, pageToken, expectedStatus);
     }
 
     TPathId TestFindTabletSubDomainPathId(

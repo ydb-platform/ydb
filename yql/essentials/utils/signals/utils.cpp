@@ -8,7 +8,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/json/yson/json2yson.h>
 
-#include <string.h>
+#include <cstring>
 
 extern char** environ;
 
@@ -40,7 +40,7 @@ char* g_OriginalArgvLast = nullptr;
  *                                                     \/
  *                                         must be relocated elsewhere
  */
-void ProcTitleInit(int argc, const char* argv[])
+void ProcTitleInit(int argc, const char** argv)
 {
     Y_UNUSED(argc);
     Y_ABORT_UNLESS(!g_OriginalArgv, "ProcTitleInit() was already called");

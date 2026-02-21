@@ -98,6 +98,7 @@ public:
 
     TPDiskHashCalculator Hash;
     TPDiskStreamCypher Cypher;
+    const bool EnableSectorEncryption;
     std::shared_ptr<TPDiskCtx> PCtx;
     // TActorSystem *ActorSystem;
     // ui32 PDiskId;
@@ -112,7 +113,7 @@ public:
     TSectorWriter(TPDiskMon &mon, IBlockDevice &blockDevice, TDiskFormat &format, ui64 &nonce,
             const TKey &key, TBufferPool *pool, ui64 firstSectorIdx, ui64 endSectorIdx, ui64 dataMagic, ui32 chunkIdx,
             TLogChunkInfo *logChunkInfo, ui64 sectorIdx, TBuffer *buffer, std::shared_ptr<TPDiskCtx> pCtx,
-            TDriveModel *driveModel, bool enableEncrytion)
+            TDriveModel *driveModel, bool enableSectorEncryption)
         : Mon(mon)
         , BlockDevice(blockDevice)
         , Format(format)
@@ -127,7 +128,8 @@ public:
         , DataMagic(dataMagic)
         , LogChunkInfo(logChunkInfo)
         , Hash()
-        , Cypher(enableEncrytion)
+        , Cypher(enableSectorEncryption)
+        , EnableSectorEncryption(enableSectorEncryption)
         , PCtx(std::move(pCtx))
         , DriveModel(driveModel)
         , OnNewChunk(true)
@@ -298,7 +300,7 @@ public:
         }
 
         TDataSectorFooter &sectorFooter = *(TDataSectorFooter*)(sector + Format.SectorSize - sizeof(TDataSectorFooter));
-        sectorFooter.Version = PDISK_DATA_VERSION;
+        sectorFooter.SetVersionAndEncryption(EnableSectorEncryption);
         sectorFooter.Nonce = Nonce;
         sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize);
 

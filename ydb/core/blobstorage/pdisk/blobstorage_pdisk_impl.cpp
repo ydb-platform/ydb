@@ -48,7 +48,8 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , BlockDevice(CreateRealBlockDevice(cfg->GetDevicePath(), Mon,
                     HPCyclesMs(ReorderingMs), DriveModel.SeekTimeNs(), cfg->DeviceInFlight,
                     TDeviceMode::LockFile | (cfg->UseSpdkNvmeDriver ? TDeviceMode::UseSpdk : 0),
-                    cfg->MaxQueuedCompletionActions, cfg->CompletionThreadsCount, cfg->SectorMap, this, cfg->ReadOnly))
+                    cfg->MaxQueuedCompletionActions, cfg->CompletionThreadsCount, cfg->SectorMap,
+                    cfg->BufferPoolBufferSizeBytes, this, cfg->ReadOnly, cfg->UseBytesFlightControl))
     , Cfg(cfg)
     , CreationTime(TInstant::Now())
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
@@ -98,7 +99,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     AddCbs(OwnerUnallocated, GateTrim, "Trim", 0ull);
     ConfigureCbs(OwnerUnallocated, GateTrim, 16);
 
-    Format.Clear(Cfg->EnableFormatEncryption);
+    Format.Clear(Cfg->EnableFormatAndMetadataEncryption);
     *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Initial;
     *Mon.PDiskBriefState = TPDiskMon::TPDisk::Booting;
     ErrorStr = "PDisk is initializing now";
@@ -146,7 +147,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
 #endif
 
     for (ui32 k = 0; k < mainKeySize; ++k) {
-        TPDiskStreamCypher cypher(Cfg->EnableFormatEncryption);
+        TPDiskStreamCypher cypher(Cfg->EnableFormatAndMetadataEncryption);
         cypher.SetKey(mainKey.Keys[k]);
 
         ui32 lastGoodIdx = (ui32)-1;
@@ -160,7 +161,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
 
             cypher.StartMessage(footer->Nonce);
             alignas(16) TDiskFormat diskFormat;
-            diskFormat.SetEncryptFormat(Cfg->EnableFormatEncryption);
+            diskFormat.SetEncryptFormat(Cfg->EnableFormatAndMetadataEncryption);
             cypher.Encrypt(&diskFormat, formatSector, sizeof(TDiskFormat));
 
             isBad[i] = !diskFormat.IsHashOk(FormatSectorSize);
@@ -239,7 +240,7 @@ bool TPDisk::IsFormatMagicValid(ui8 *magicData8, ui32 magicDataSize, const TMain
         magicDataSize,
         mainKey,
         PCtx->PDiskLogPrefix,
-        Cfg->EnableFormatEncryption);
+        Cfg->EnableFormatAndMetadataEncryption);
     return format.has_value();
 }
 
@@ -979,7 +980,7 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
         TChunkWriter writer(Mon, *BlockDevice.Get(), Format, state.CurrentNonce, Format.ChunkKey, BufferPool.Get(),
                 desiredSectorIdx, dataChunkSizeSectors, Format.MagicDataChunk, chunkIdx, nullptr, desiredSectorIdx,
-                nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption);
+                nullptr, PCtx, &DriveModel, Cfg->FeatureFlags.GetEnablePDiskDataEncryption());
 
         guard.Release();
         bool end = ChunkWritePieceEncrypted(evChunkWrite, writer, pieceSize);
@@ -1759,7 +1760,7 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 
         // Encrypt chunk0 format record using mainKey
         ui64 nonce = 1;
-        bool encrypt = Cfg->EnableFormatEncryption;
+        bool encrypt = Cfg->EnableFormatAndMetadataEncryption;
         TSysLogWriter formatWriter(Mon, *BlockDevice.Get(), Format, nonce, mainKey, BufferPool.Get(),
                 0, ReplicationFactor, Format.MagicFormatChunk, 0, nullptr, 0, nullptr, PCtx,
                 &DriveModel, encrypt);
@@ -1789,7 +1790,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     TGuard<TMutex> guard(StateMutex);
     // Prepare format record
     alignas(16) TDiskFormat format;
-    format.Clear(Cfg->EnableFormatEncryption);
+    format.Clear(Cfg->EnableFormatAndMetadataEncryption);
     format.SetPlainDataChunks(plainDataChunks);
     format.DiskSize = diskSizeBytes;
     format.SectorSize = sectorSizeBytes;
@@ -1800,7 +1801,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     format.ChunkKey = chunkKey;
     format.LogKey = logKey;
     format.SysLogKey = sysLogKey;
-    bool randomizeMagic = !Cfg->EnableFormatEncryption || !Cfg->EnableSectorEncryption || plainDataChunks;
+    bool randomizeMagic = !Cfg->EnableFormatAndMetadataEncryption;
 #ifdef DISABLE_PDISK_ENCRYPTION
     randomizeMagic = true;
 #endif
@@ -1874,7 +1875,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     SysLogger.Reset(new TSysLogWriter(Mon, *BlockDevice.Get(), Format, SysLogRecord.Nonces.Value[NonceSysLog],
                 Format.SysLogKey, BufferPool.Get(), firstSectorIdx, endSectorIdx, Format.MagicSysLogChunk, 0,
                 nullptr, firstSectorIdx, nullptr, PCtx, &DriveModel,
-                Cfg->EnableSectorEncryption));
+                Cfg->FeatureFlags.GetEnablePDiskDataEncryption()));
 
     bool isFull = false;
     while (!isFull) {
@@ -1971,6 +1972,9 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     GetStartingPoints(owner, result->StartingPoints);
     if (evYardInit.GetDiskFd) {
         result->DiskFd = BlockDevice->DuplicateFd();
+        result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
+            delete ptr;
+        });
     }
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
@@ -2139,6 +2143,9 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
     if (evYardInit.GetDiskFd) {
         result->DiskFd = BlockDevice->DuplicateFd();
+        result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
+            delete ptr;
+        });
     }
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});

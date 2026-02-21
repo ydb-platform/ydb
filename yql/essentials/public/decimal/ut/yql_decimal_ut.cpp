@@ -18,13 +18,13 @@ void SimpleNegativeFormatTest(TInt128 v, ui8 precision, ui8 scale) {
 }
 
 void SimpleSerializeAndDeserialize(TInt128 v, size_t expectedSize) {
-    char buff[sizeof(TInt128)];
-    const auto s = Serialize(v, buff);
+    std::array<char, sizeof(TInt128)> buff;
+    const auto s = Serialize(v, buff.data());
     UNIT_ASSERT_VALUES_EQUAL(s, expectedSize);
-    const auto& des = Deserialize(buff, expectedSize);
+    const auto& des = Deserialize(buff.data(), expectedSize);
     UNIT_ASSERT_VALUES_EQUAL(des.second, expectedSize);
     UNIT_ASSERT(des.first == v);
-    const auto& e = Deserialize(buff, expectedSize - 1);
+    const auto& e = Deserialize(buff.data(), expectedSize - 1);
     UNIT_ASSERT(e.first == Err());
 }
 

@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index 016041c..29a255e 100644
+index 112012f..8a964dd 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1213,4 +1213,6 @@ typedef __char32_t char32_t;
+@@ -1222,4 +1222,6 @@ typedef __char32_t char32_t;
  
  #endif // __cplusplus
  

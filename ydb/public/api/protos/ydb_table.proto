@@ -318,8 +318,23 @@ message GlobalFulltextPlainIndex {
 }
 
 message GlobalFulltextRelevanceIndex {
-    GlobalIndexSettings settings = 1;
+    GlobalIndexSettings posting_table_settings = 1;
     FulltextIndexSettings fulltext_settings = 2;
+    GlobalIndexSettings dict_table_settings = 3;
+    GlobalIndexSettings docs_table_settings = 4;
+    GlobalIndexSettings stats_table_settings = 5;
+}
+
+message LocalBloomFilterIndex {
+    optional double false_positive_probability = 1;
+}
+
+message LocalBloomNgramFilterIndex {
+    uint32 ngram_size = 1;
+    uint32 hashes_count = 2;
+    uint32 filter_size_bytes = 3;
+    uint32 records_count = 4;
+    optional bool case_sensitive = 5;
 }
 
 // Represent table index
@@ -336,6 +351,8 @@ message TableIndex {
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
        GlobalFulltextPlainIndex global_fulltext_plain_index = 8;
        GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 9;
+       LocalBloomFilterIndex local_bloom_filter_index = 10;
+       LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -362,6 +379,8 @@ message TableIndexDescription {
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
        GlobalFulltextPlainIndex global_fulltext_plain_index = 10;
        GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 11;
+       LocalBloomFilterIndex local_bloom_filter_index = 12;
+       LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 13;
     }
     Status status = 4;
     // list of columns content to be copied in to index table
@@ -942,6 +961,31 @@ message RenameIndexItem {
     bool replace_destination = 3;
 }
 
+// State of compact operation
+message CompactState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_IN_PROGRESS = 1;
+        STATE_DONE = 2;
+        STATE_CANCELLED = 3;
+    }
+}
+
+message CompactItem {
+    // Compact table with all indices
+    optional bool cascade = 1;
+    // Max shards in flight per operation
+    optional uint32 max_shards_in_flight = 2;
+}
+
+message CompactMetadata {
+    optional string path = 1;
+    optional bool cascade = 2;
+    optional uint32 max_shards_in_flight = 3;
+    optional CompactState.State state = 4;
+    optional float progress = 5;
+}
+
 // Alter table with given path
 message AlterTableRequest {
     // Session identifier
@@ -988,6 +1032,8 @@ message AlterTableRequest {
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
     reserved 22, 23;
+    // Start compaction for table
+    CompactItem compact = 24;
 }
 
 message AlterTableResponse {

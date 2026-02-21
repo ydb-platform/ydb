@@ -1,6 +1,7 @@
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "google/protobuf/timestamp.proto";
 
 package NKikimrForcedCompaction;
@@ -19,6 +20,7 @@ message TForcedCompaction {
     optional google.protobuf.Timestamp StartTime = 4;
     optional google.protobuf.Timestamp EndTime = 5;
     optional string UserSID = 6;
+    optional Ydb.Table.CompactState.State State = 7;
 }
 
 message TEvCreateRequest {
@@ -34,4 +36,52 @@ message TEvCreateResponse {
     optional Ydb.StatusIds.StatusCode Status = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
     optional TForcedCompaction ForcedCompaction = 4;
+}
+
+message TEvGetRequest {
+    optional string DatabaseName = 1;
+    optional uint64 ForcedCompactionId = 2;
+}
+
+message TEvGetResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional TForcedCompaction ForcedCompaction = 3;
+}
+
+message TEvCancelRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional uint64 ForcedCompactionId = 3;
+}
+
+message TEvCancelResponse {
+    optional uint64 TxId = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+}
+
+message TEvForgetRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional uint64 ForcedCompactionId = 3;
+}
+
+message TEvForgetResponse {
+    optional uint64 TxId = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+}
+
+message TEvListRequest {
+    optional string DatabaseName = 1;
+    optional uint64 PageSize = 2;
+    optional string PageToken = 3;
+}
+
+message TEvListResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    repeated TForcedCompaction Entries = 3;
+    optional string NextPageToken = 4;
 }

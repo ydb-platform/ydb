@@ -54,8 +54,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(MkRmDir) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestMkDir(runtime, ++txId, "/", "DirA", {NKikimrScheme::StatusPathDoesNotExist});
         TestMkDir(runtime, ++txId, "/", "MyRoot", {NKikimrScheme::StatusPathDoesNotExist});
@@ -65,12 +68,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "DirB");
 
         env.TestWaitNotification(runtime, xrange(txId - 5, txId + 1));
+        expectedDomainPaths += 4;
 
         TestDescribeResult(DescribePath(runtime, "/"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                            NLs::PathsInsideDomain(4)});
+                            NLs::PathsInsideDomain(expectedDomainPaths)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::Finished,
@@ -88,8 +92,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestRmDir(runtime, ++txId, "/MyRoot/DirA", "SubDirA", {NKikimrScheme::StatusNameConflict});
         TestRmDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "DirB");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
+
         TestRmDir(runtime, ++txId, "/MyRoot/DirA", "SubDirA");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/SubDirA/DirB"), {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/SubDirA"), {NLs::PathNotExist});
@@ -103,24 +110,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA", {NKikimrScheme::StatusAlreadyExists});
         TestRmDir(runtime, ++txId, "/MyRoot", "DirA");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
+
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                            NLs::PathsInsideDomain(2)});
+                            NLs::PathsInsideDomain(expectedDomainPaths)});
 
         //
 
         TestRmDir(runtime, ++txId, "/MyRoot", "DirA");
         TestRmDir(runtime, ++txId, "/MyRoot", "DirB");
         env.TestWaitNotification(runtime, {txId-1, txId});
+        expectedDomainPaths -= 2;
+
         TestRmDir(runtime, ++txId, "/", "MyRoot", {NKikimrScheme::StatusNameConflict});
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::NoChildren,
-                            NLs::PathsInsideDomain(0),
+                           {NLs::ChildrenCount(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
@@ -574,15 +586,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ModifyACL) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::NoChildren,
-                            NLs::PathVersionEqual(3)});
+                           {NLs::ChildrenCount(1),
+                            NLs::PathVersionEqual(6)});
 
         {
             AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
+            expectedDomainPaths += 1;
 
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
@@ -596,7 +612,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1)});
+                           {NLs::PathsInsideDomain(expectedDomainPaths)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::PathVersionEqual(5),
                             NLs::HasEffectiveRight("+U:user0@builtin")});
@@ -610,7 +626,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::HasEffectiveRight("+U:user1@builtin:-")});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::PathVersionEqual(6),
@@ -620,6 +636,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         {
             TestMkDir(runtime, ++txId, "/MyRoot/DirA", "DirB");
             env.TestWaitNotification(runtime, txId);
+            expectedDomainPaths += 1;
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/DirB"),
@@ -631,8 +648,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(NameFormat) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
                         "Name: \"Table\""
@@ -671,6 +691,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2, txId-3});
+        expectedDomainPaths += 4;
 
         TSchemeLimits lowLimits;
         lowLimits.ExtraPathSymbolsAllowed = "_.-";
@@ -691,6 +712,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         env.TestWaitNotification(runtime, {txId, txId-1});
+        expectedDomainPaths += 2;
 
         lowLimits.ExtraPathSymbolsAllowed = "!";
         SetSchemeshardSchemaLimits(runtime, lowLimits);
@@ -709,15 +731,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         env.TestWaitNotification(runtime, {txId, txId-1});
+        expectedDomainPaths += 2;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(8),
-                            NLs::ChildrenCount(6)});
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ChildrenCount(7)});
     }
 
     Y_UNIT_TEST(CreateTable) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -842,7 +865,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, xrange(txId - 18, txId + 1));
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(1)});
+                           {NLs::ChildrenCount(2)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::PathVersionEqual(14),
                             NLs::ChildrenCount(5)});
@@ -1078,8 +1101,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ConsistentCopyTable) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 initialDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
 
@@ -1144,7 +1170,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(8),
                             NLs::Finished,
                             NLs::PathExist,
-                            NLs::PathsInsideDomain(1 + 1 * PathsInside),
+                            NLs::PathsInsideDomain(initialDomainPaths + 1 + 1 * PathsInside),
                             NLs::ShardsInsideDomain(1 * ShardsInside),
                             NLs::ChildrenCount(2)
                            });
@@ -1175,7 +1201,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                NLs::PathExist,
                                                NLs::Finished,
                                                NLs::PathExist,
-                                               NLs::PathsInsideDomain(1 + 2 * PathsInside),
+                                               NLs::PathsInsideDomain(initialDomainPaths + 1 + 2 * PathsInside),
                                                NLs::ShardsInsideDomain(2 * ShardsInside)});
 
         TestConsistentCopyTables(runtime, ++txId, "/", R"(
@@ -1194,7 +1220,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(18),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(1 + 3 * PathsInside),
+                            NLs::PathsInsideDomain(initialDomainPaths + 1 + 3 * PathsInside),
                             NLs::ShardsInsideDomain(3 * ShardsInside),
                             NLs::ChildrenCount(6)
                            });
@@ -1277,7 +1303,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(22),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(1 + 3 * PathsInside + PathsInsideWithoutIndexes),
+                            NLs::PathsInsideDomain(initialDomainPaths + 1 + 3 * PathsInside + PathsInsideWithoutIndexes),
                             NLs::ShardsInsideDomain(3 * ShardsInside + ShardsInsideWithoutIndexes),
                             NLs::ChildrenCount(8)
                            });
@@ -1293,8 +1319,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ConsistentCopyTableAwait) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
 
@@ -1314,12 +1343,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
+        expectedDomainPaths += 3;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::PathVersionEqual(7),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ChildrenCount(2),
                             NLs::ShardsInsideDomain(2)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/src1"),
@@ -1345,6 +1375,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId-1, txId});
+        expectedDomainPaths += 2;
 
         AsyncConsistentCopyTables(runtime, ++txId, "/", R"(
                        CopyTableDescriptions {
@@ -1358,13 +1389,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 )");
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::PathVersionEqual(7),
                             NLs::PathExist,
                             NLs::Finished,
                             NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(6),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(4)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
@@ -2384,7 +2416,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDrop) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -2409,8 +2441,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                            NLs::PathVersionEqual(6),
-                            NLs::ChildrenCount(1)});
+                            NLs::PathVersionEqual(9),
+                            NLs::ChildrenCount(2)});
 
         auto dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                               {NLs::Finished,
@@ -2423,15 +2455,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                            NLs::PathVersionEqual(8),
-                            NLs::ChildrenCount(0)});
+                            NLs::PathVersionEqual(11),
+                            NLs::ChildrenCount(1)});
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
     }
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDropSimultaneously) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -2466,14 +2498,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                            NLs::ChildrenCount(0)});
+                            NLs::ChildrenCount(1)});
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
     }
 
     Y_UNIT_TEST(DropIndexedTableAndForceDropSimultaneously) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -2510,7 +2542,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                            NLs::ChildrenCount(0)});
+                            NLs::ChildrenCount(1)});
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
     }
@@ -2894,7 +2926,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DependentOps) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 123;
 
         ++txId;
@@ -2912,7 +2944,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/"),
                            {NLs::Finished,
-                            NLs::ChildrenCount(2)});
+                            NLs::ChildrenCount(3)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                            {NLs::Finished,
                             NLs::PathVersionEqual(3),
@@ -3061,7 +3093,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CopyTableTwiceSimultaneously) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 123;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
@@ -3107,7 +3139,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                            NLs::ChildrenCount(2)});
+                            NLs::ChildrenCount(3)});
     }
 
     Y_UNIT_TEST(CopyTableAndConcurrentChanges) { //+
@@ -3378,9 +3410,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CopyTableWithAlterConfig) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
+        TLocalPathId firstTablePathId = GetNextLocalPathId(runtime, txId);
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             Columns { Name: "key"        Type: "Uint32"}
@@ -3563,25 +3596,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // /Root/Table
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, firstTablePathId);
             checker(NKikimrSchemeOp::EColumnCache::ColumnCacheEver, NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory)(tableDescription);
         }
 
         // /Root/CopyTable
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+4, TTestTxConfig::FakeHiveTablets+5}) {
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 3);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, firstTablePathId + 1);
             checker(NKikimrSchemeOp::EColumnCache::ColumnCacheOnce, NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeRegular)(tableDescription);
         }
 
         // /Root/CopyTable2
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+6, TTestTxConfig::FakeHiveTablets+7, TTestTxConfig::FakeHiveTablets+8}) {
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 4);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, firstTablePathId + 2);
             checker(NKikimrSchemeOp::EColumnCache::ColumnCacheNone, NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory, 2)(tableDescription);
         }
 
         // /Root/CopyTable3
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+9, TTestTxConfig::FakeHiveTablets+10, TTestTxConfig::FakeHiveTablets+11}) {
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 5);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, firstTablePathId + 3);
             checker(NKikimrSchemeOp::EColumnCache::ColumnCacheEver, NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory)(tableDescription);
         }
 
@@ -3666,7 +3699,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CopyTableForBackup) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         bool splitStarted = false;
@@ -3693,7 +3726,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TSchemeLimits limits;
         limits.MaxPaths = 4;
         limits.MaxShards = 4;
-        limits.MaxChildrenInDir = 3;
+        limits.MaxChildrenInDir = 4;
         SetSchemeshardSchemaLimits(runtime, limits);
 
         // create src table
@@ -4931,7 +4964,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(MultipleColumnFamilies) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
@@ -5014,6 +5047,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 }
                               }
                             })", {NKikimrScheme::StatusSchemeError});
+
+        TLocalPathId firstTablePathId = GetNextLocalPathId(runtime, txId);
 
         // Creating a table with family should be OK
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -5276,21 +5311,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // /MyRoot/Table1
         Cerr << "Checking tablets for Table1" << Endl;
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+0, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, firstTablePathId);
             schemaChecker()(tableDescription);
         }
 
         // /MyRoot/Table2
         Cerr << "Checking tablets for Table2" << Endl;
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+4, TTestTxConfig::FakeHiveTablets+5}) {
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 3);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, firstTablePathId + 1);
             schemaChecker()(tableDescription);
         }
 
         // /MyRoot/Table3
         Cerr << "Checking tablets for Table3" << Endl;
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+6, TTestTxConfig::FakeHiveTablets+7, TTestTxConfig::FakeHiveTablets+8}) {
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 4);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, firstTablePathId + 2);
             schemaChecker()(tableDescription);
         }
     }
@@ -5831,8 +5866,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterTableFollowers) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
@@ -5909,9 +5947,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             KeyColumnNames: ["key"]
                         )");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+                           {NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(1)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
@@ -5946,7 +5985,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+                           {NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(1)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
@@ -5975,7 +6014,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            });
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+                           {NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(1)});
 
 
         //////////
@@ -6341,7 +6380,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
           }
     }
 
-
     Y_UNIT_TEST(AlterTableSizeToSplit) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -6550,8 +6588,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreatePersQueueGroup) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 1000;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", "");
@@ -6570,10 +6611,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         env.TestWaitNotification(runtime, {txId-3, txId-2, txId-1, txId});
+        expectedDomainPaths += 3;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::Finished,
-                            NLs::PathsInsideDomain(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(7)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_2", true),
                            {NLs::CheckPartCount("PQGroup_2", 10, 10, 1, 10)});
@@ -6587,10 +6629,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
                         );
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
                            {NLs::CheckPartCount("PQGroup_1", 100, 10, 10, 100),
-                            NLs::PathsInsideDomain(4),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(18),
                             NLs::PathVersionEqual(2),
                             NLs::Finished});
@@ -6598,8 +6641,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterPersQueueGroup) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 1000;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
@@ -6607,9 +6653,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         "PartitionPerTablet: 3 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup"),
-                           {NLs::PathsInsideDomain(1),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         // invalid params
@@ -6634,7 +6681,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 4, 3, 2, 4),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
@@ -6646,7 +6693,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 6, 3, 2, 6),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(3)});
 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
@@ -6656,7 +6703,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 8, 3, 3, 8),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(4)});
 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
@@ -6667,7 +6714,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 8, 4, 3, 8),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(4)});
 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
@@ -6678,7 +6725,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 14, 4, 4, 14),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(5)});
 
         // Alter + Alter + reboot
@@ -6691,7 +6738,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 14, 4, 4, 14, NKikimrSchemeOp::EPathStateAlter),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(41)});
 
 
@@ -6701,7 +6748,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId-1);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 400, 10, 40, 400),
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(41)});
     }
 
@@ -7021,7 +7068,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropTableById) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 1000;
 
         TString tcfg = "Name: \"Table\""
@@ -7045,7 +7092,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::NoChildren});
+                           {NLs::ChildrenCount(1)});
 
         env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
     }
@@ -7688,7 +7735,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ManyDirs) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 initialDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         ui64 num = 500;
         ui64 txId = 123;
@@ -7701,8 +7751,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, ids);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(num),
-                            NLs::ChildrenCount(num)});
+                           {NLs::PathsInsideDomain(initialDomainPaths + num),
+                            NLs::ChildrenCount(1 + num)});
 
         ids.clear();
         for (ui32 id = 0; id < num; ++id) {
@@ -7712,13 +7762,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, ids);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(0),
-                            NLs::ChildrenCount(0)});
+                           {NLs::PathsInsideDomain(initialDomainPaths),
+                            NLs::ChildrenCount(1)});
     }
 
     Y_UNIT_TEST(NestedDirs) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 initialDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         ui64 txId = 123;
         TSchemeLimits limits;
@@ -7737,7 +7790,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestMkDir(runtime, ++txId, path, "fail", {NKikimrScheme::StatusSchemeError});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(limits.MaxDepth - 1)});
+                           {NLs::PathsInsideDomain(initialDomainPaths + limits.MaxDepth - 1)});
     }
 
     void VerifyEqualCells(const TCell& a, const TCell& b) {
@@ -7869,8 +7922,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-       TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
@@ -7911,9 +7967,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(3)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(3)});
 
         // Already exists
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
@@ -7923,8 +7980,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateBlockStoreVolumeWithVolumeChannelsProfiles) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
@@ -7946,15 +8006,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
     }
 
     Y_UNIT_TEST(CreateBlockStoreVolumeWithNonReplicatedPartitions) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
@@ -7968,15 +8032,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(1)});
     }
 
     Y_UNIT_TEST(AlterBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().NChannels(6).EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime, TTestEnvOptions().NChannels(6));
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
@@ -8009,10 +8077,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.MutableExplicitChannelProfiles(3)->SetDataKind(1);
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
         vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
 
         // Alter it into 2 bigger partitions
         vc.SetVersion(1);
@@ -8023,7 +8092,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(3)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(3)});
 
         vc.SetVersion(2);
 
@@ -8347,8 +8416,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterBlockStoreVolumeWithNonReplicatedPartitions) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
@@ -8364,10 +8436,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.SetDiskId("foo");
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
         vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(1)});
 
         // Alter it into 2 bigger partitions
         vc.SetVersion(1);
@@ -8382,7 +8455,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(1)});
 
         vc.SetVersion(2);
 
@@ -8399,8 +8472,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", 0, {NKikimrScheme::StatusPathDoesNotExist});
 
@@ -8417,25 +8493,31 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
 
         // Drop the volume
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
 
         env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(DropBlockStoreVolumeWithNonReplicatedPartitions) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
@@ -8451,27 +8533,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.SetDiskId("foo");
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
         vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(1)});
 
         // Drop the volume
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
 
         env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(DropBlockStoreVolume2) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         // Create volume with 1 partition
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -8486,13 +8573,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
 
         // Drop the volume twice in parallel
         AsyncDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         AsyncDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         TestModificationResult(runtime, txId-1);
+        expectedDomainPaths -= 1;
 
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
         UNIT_ASSERT(event);
@@ -8510,8 +8599,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropBlockStoreVolumeWithFillGeneration) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         auto createVolume = [&](const TString& volumeName, bool isFillFinished = false) {
             // Create volume with fill generation 713
@@ -8529,25 +8621,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
             TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
             env.TestWaitNotification(runtime, txId);
+            expectedDomainPaths += 1;
+
             TestDescribeResult(DescribePath(runtime, "/MyRoot/" + volumeName),
-                               {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                               {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
         };
 
         auto successfullyDropVolume = [&](const TString& volumeName, ui64 fillGeneration) {
             TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", volumeName, fillGeneration, {NKikimrScheme::StatusAccepted});
             env.TestWaitNotification(runtime, txId);
+            expectedDomainPaths -= 1;
+
             TestDescribeResult(DescribePath(runtime, "/MyRoot/" + volumeName),
                                {NLs::PathNotExist});
             env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                               {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+                               {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
         };
 
         auto failToDropVolume = [&](const TString& volumeName, ui64 fillGeneration) {
             TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", volumeName, fillGeneration, {NKikimrScheme::StatusSuccess});
             env.TestWaitNotification(runtime, txId);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/" + volumeName),
-                               {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                               {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
         };
 
         createVolume("BSVolume");
@@ -9253,8 +9349,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateAlterBlockStoreVolumeWithInvalidPoolKinds) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().NChannels(6).EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime, TTestEnvOptions().NChannels(6));
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
@@ -9274,10 +9373,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.MutableExplicitChannelProfiles(3)->SetPoolKind("pool-kind-1");
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
         vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
 
         vc.SetVersion(1);
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
@@ -9293,21 +9393,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
     }
 
     Y_UNIT_TEST(CreateDropKesus) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         // Create two kesus nodes
         TestCreateKesus(runtime, ++txId, "/MyRoot", "Name: \"Kesus1\"");
         TestCreateKesus(runtime, ++txId, "/MyRoot", "Name: \"Kesus2\"");
         env.TestWaitNotification(runtime, {txId, txId-1});
+        expectedDomainPaths += 2;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(2), NLs::ShardsInsideDomain(2)});
+                           {NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus1"),
                            {NLs::Finished});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus2"),
@@ -9320,6 +9424,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // Drop the first one
         TestDropKesus(runtime, ++txId, "/MyRoot", "Kesus1");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus1"),
                            {NLs::PathNotExist});
@@ -9328,17 +9433,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+                           {NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(1)});
 
         // Drop the second one
         TestDropKesus(runtime, ++txId, "/MyRoot", "Kesus2");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus2"),
                            {NLs::PathNotExist});
 
         env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 1);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+                           {NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(CreateAlterKesus) { //+
@@ -9385,14 +9492,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateDropSolomon) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
                                                       "PartitionCount: 40 ");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(40),
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(40),
                            [](const NKikimrScheme::TEvDescribeSchemeResult& result){
                                 const auto& desc = result.GetPathDescription().GetSolomonDescription();
                                 const auto& boundChannels = desc.GetBoundChannels();
@@ -9410,6 +9522,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDropSolomon(runtime, ++txId, "/MyRoot", "Solomon");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
                            {NLs::PathNotExist});
@@ -9417,7 +9530,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 40));
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
     }
 
     NKikimrSchemeOp::TCreateSolomonVolume
@@ -9449,15 +9562,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AdoptDropSolomon) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"JunkSolomon\" "
                                                       "PartitionCount: 5 ");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(5)});
 
         NKikimrScheme::TEvDescribeSchemeResult ls = DescribePath(runtime, "/MyRoot/JunkSolomon");
@@ -9467,17 +9584,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", volumeDescr.DebugString());
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
                            {NLs::Finished,
-                            NLs::PathsInsideDomain(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(10)});
 
         TestDropSolomon(runtime, ++txId, "/MyRoot", "Solomon");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
 
         TestDropSolomon(runtime, ++txId, "/MyRoot", "JunkSolomon");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
                            {NLs::PathNotExist});
@@ -9487,14 +9607,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateAlterDropSolomon) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
                                                       "PartitionCount: 2 ");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
 
         TestAlterSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
                                                      "PartitionCount: 4 "
@@ -9502,7 +9627,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(4),
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(4),
                            [](const NKikimrScheme::TEvDescribeSchemeResult& result){
                                 const auto& desc = result.GetPathDescription().GetSolomonDescription();
                                 const auto& boundChannels = desc.GetBoundChannels();
@@ -9515,6 +9640,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDropSolomon(runtime, ++txId, "/MyRoot", "Solomon");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
                            {NLs::PathNotExist});
@@ -9522,7 +9648,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 4));
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
     }
 
     void UpdateChannelsBindingSolomon(bool allow) {
@@ -9754,14 +9880,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(RejectAlterSolomon) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
                                                       "PartitionCount: 2 ");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
 
         TestAlterSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
                                                      "PartitionCount: 100000000 "
@@ -9861,8 +9992,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(SimultaneousDropForceDrop) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
@@ -9871,7 +10005,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             KeyColumnNames: ["key"]
         )");
 
-        env.TestWaitNotification(runtime, 101);
+        env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist});
@@ -9883,13 +10018,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncDropTable(runtime, ++txId,  "/MyRoot", "Table1");
         AsyncForceDropUnsafe(runtime, ++txId,  pathVer.PathId.LocalPathId);
         env.TestWaitNotification(runtime, {txId, txId-1});
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                            {NLs::PathNotExist});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::NoChildren,
-                            NLs::PathsInsideDomain(0),
+                           {NLs::ChildrenCount(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomainOneOf({0, 1})});
     }
 
@@ -10348,7 +10484,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             AlterUserAttrs({{"__document_api_version", "1"}}));
     }
 
-
     class TSchemaHelper {
     private:
         NScheme::TTypeRegistry TypeRegistry;
@@ -10724,8 +10859,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ListNotCreatedIndexCase) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TVector<THolder<IEventHandle>> suppressed;
         auto defObserver = SetSuppressObserver(runtime, suppressed, TEvTxProcessing::EvPlanStep);
@@ -10744,12 +10882,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         )");
         WaitForSuppressed(runtime, suppressed, 1, defObserver);
+        expectedDomainPaths += 4;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                           NLs::ChildrenCount(1),
+                           NLs::ChildrenCount(2),
                            NLs::ShardsInsideDomain(2),
-                           NLs::PathsInsideDomain(4)});
+                           NLs::PathsInsideDomain(expectedDomainPaths)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir"),
                            {NLs::NotFinished,
@@ -10781,9 +10920,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                           NLs::ChildrenCount(1),
+                           NLs::ChildrenCount(2),
                            NLs::ShardsInsideDomain(2),
-                           NLs::PathsInsideDomain(4)});
+                           NLs::PathsInsideDomain(expectedDomainPaths)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir"),
                            {NLs::Finished,
@@ -10808,8 +10947,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ConsistentCopyAfterDropIndexes) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
               Name: "Table1"
@@ -10818,6 +10960,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
 
         {
             auto fnWriteRow = [&] (ui64 tabletId, ui32 key) {
@@ -10839,22 +10982,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "Sync", {"value"});
         env.TestWaitNotification(runtime, txId, TTestTxConfig::SchemeShard);
+        expectedDomainPaths += 2;
 
         auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
         Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "Copy1", "/MyRoot/Table1");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 3;
 
         TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table1"
             IndexName: "Sync"
         )");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths -= 2;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(2),
-                            NLs::PathsInsideDomain(4),
+                           {NLs::ChildrenCount(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(4)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
@@ -10880,10 +11026,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                       }
          )");
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 4;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::ChildrenCount(4),
-                            NLs::PathsInsideDomain(8),
+                           {NLs::ChildrenCount(5),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(7)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),

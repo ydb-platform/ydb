@@ -76,7 +76,7 @@ public:
             const TArrayRef<const NIceDb::TUpdateOp> ops,
             bool insertMissing,
             const NACLib::TUserContext::TPtr& userCtx) = 0;
-    
+
     virtual void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,

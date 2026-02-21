@@ -454,10 +454,28 @@ namespace NSchemeShardUT_Private {
     NKikimrIndexBuilder::TEvForgetResponse TestForgetBuildIndex(TTestActorRuntime& runtime, const ui64 id, const ui64 schemeShard, const TString &dbName, const ui64 buildIndexId, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
     // forced compaction
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath);
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath);
-    void TestCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
-    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablaPath, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight = 1);
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight = 1);
+    void TestCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight = 1, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight = 1, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 id,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& dbName,
+            ui64 pageSize, const TString& pageToken,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(TTestActorRuntime& runtime, const TString& dbName,
+            ui64 pageSize, const TString& pageToken,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
     ////////// export
     TVector<TString> GetExportTargetPaths(const TString& requestStr);

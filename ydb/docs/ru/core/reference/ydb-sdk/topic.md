@@ -1847,6 +1847,20 @@
 
 - Go
 
+  {% note tip %}
+
+  В режиме читателя по умолчанию оффсеты до позиции, указанной через `res.StartFrom`, подтверждаются на сервере. После этого повторное чтение тех же сообщений путём сдвига позиции назад становится невозможным. Чтобы отключить автоматическое подтверждение, используйте режим без коммитов при создании читателя.
+
+  ```go
+  reader, err := db.Topic().StartReader(
+    consumerName,
+    topicoptions.ReadTopic(topicName),
+    topicoptions.WithReaderCommitMode(topicoptions.CommitModeNone),
+  )
+  ```
+
+  {% endnote %}
+
   ```go
   func ReadWithExplicitPartitionStartStopHandlerAndOwnReadProgressStorage(ctx context.Context, db ydb.Connection) error {
       readContext, stopReader := context.WithCancel(context.Background())

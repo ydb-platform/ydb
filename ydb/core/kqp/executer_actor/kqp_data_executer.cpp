@@ -1820,7 +1820,7 @@ private:
         evWriteTransaction->Record = evWrite;
         evWriteTransaction->Record.SetTxMode(ImmediateTx ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         evWriteTransaction->Record.SetTxId(TxId);
-
+        
         auto userCtx = GetUserCtx();
         if (userCtx != nullptr) {
             evWriteTransaction->Record.SetUserSID(userCtx->GetUserSID());

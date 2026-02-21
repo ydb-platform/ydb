@@ -131,4 +131,10 @@ message TTestResults
 
     // Number of requests completed
     uint64 RequestsCompleted = 11;
+
+    // Avg iops
+    uint64 Iops = 12;
+
+    // Avg throughput
+    uint64 ThroughputMbs = 13;
 }

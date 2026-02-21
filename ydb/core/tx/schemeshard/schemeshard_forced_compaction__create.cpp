@@ -32,9 +32,9 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 << "Forced compaction with id '" << id << "' already exists");
         }
 
-        const auto domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
+        const auto subdomainPath = TPath::Resolve(request.GetDatabaseName(), Self);
         {
-            const auto checks = domainPath.Check();
+            const auto checks = subdomainPath.Check();
             checks
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -58,7 +58,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 .NotUnderDeleting()
                 .IsTable()
                 .IsCommonSensePath()
-                .IsTheSameDomain(domainPath);
+                .IsTheSameDomain(subdomainPath);
 
             if (!checks) {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, checks.GetError());
@@ -69,9 +69,10 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         info->Id = id;
         info->State = TForcedCompactionInfo::EState::InProgress;
         info->TablePathId = tablePath.Base()->PathId;
+        info->SubdomainPathId = subdomainPath.Base()->PathId;
         info->Cascade = settings.cascade();
         info->MaxShardsInFlight = settings.max_shards_in_flight();
-        info->StartTime = TAppData::TimeProvider->Now();
+        info->StartTime = ctx.Now();
         if (request.HasUserSID()) {
             info->UserSID = request.GetUserSID();
         }
@@ -125,6 +126,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 
+private:
     void Reply(
         THolder<TEvForcedCompaction::TEvCreateResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,

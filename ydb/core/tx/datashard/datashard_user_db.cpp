@@ -195,6 +195,7 @@ void TDataShardUserDb::ReplaceRow(
     Y_ENSURE(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
 
     UpsertRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops, userCtx);
+
     IncreaseUpdateCounters(key, ops);
 }
 
@@ -835,6 +836,14 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
         ui64 skipLimit = Self.GetMaxLockedWritesPerKey();
         if (skipLimit > 0 && skipCount >= skipLimit) {
             throw TLockedWriteLimitException();
+        }
+    }
+
+    if (res.LockTxId != 0) {
+        if (LockTxId) {
+            AddWriteConflict(res.LockTxId);
+        } else {
+            BreakWriteConflict(res.LockTxId);
         }
     }
 }

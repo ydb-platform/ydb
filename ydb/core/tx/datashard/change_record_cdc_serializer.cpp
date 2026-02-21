@@ -620,7 +620,7 @@ protected:
         });
 
         auto userCtx = record.GetUserCtx();
-        if (userCtx!=nullptr) {
+        if (userCtx != nullptr) {
             if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
                 sourceJson["user"] = userCtx->GetUserSID();
             }

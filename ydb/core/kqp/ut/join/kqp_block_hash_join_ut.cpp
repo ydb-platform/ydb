@@ -118,8 +118,8 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), expectedRowsCount);
 
             TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-            UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
-            UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
+            UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() > 0);
+            UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() > 0);
 
         }
     }

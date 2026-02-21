@@ -75,7 +75,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 Ev = nullptr;
                 return true;
             }
-            
+
             TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, std::move(DatashardTransactionSpan), UserCtx);
 
             // Unsuccessful operation parse.

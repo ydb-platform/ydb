@@ -525,6 +525,7 @@ public:
         , NodeId(nodeId)
         , Subscribed(false)
         , GenMajor(0), GenMinor(0)
+        , PeerGenMajor(0), PeerGenMinor(0)
         , Limits(limits)
         , WaitersQueueSize(0)
         , Reconciliation(0)
@@ -594,8 +595,8 @@ public:
     ui64 InflightBytes = 0;
     // Receiver
     NActors::TActorId PeerActorId;
-    ui64 PeerGenMajor = 0;
-    ui64 PeerGenMinor = 0;
+    std::atomic<ui64> PeerGenMajor;
+    std::atomic<ui64> PeerGenMinor;
     ui64 ConfirmedSeqNo = 0;
     TEvDqCompute::TEvChannelDataV2::TPtr OutOfOrderMessage;
     // ...

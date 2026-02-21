@@ -1,6 +1,5 @@
 {
   "qp": "area/queryprocessor",
-  "Topics": "area/topics",
   "topics": "area/topics",
   "cs": [
     "area/cs"
@@ -25,8 +24,11 @@
   "ui-backend": "area/ui-backend",
   "appteam": "area/appteam",
   "duty": "area/duty",
-  "engineering": "area/engineering",
+  "engineering": [
+    "area/engineering",
+    "area/qa"
+  ],
   "postgres-compatibility": "area/pg",
-  "Security": "area/security",
+  "security": "area/security",
   "changelog-reviewers": "area/changelog"
 }

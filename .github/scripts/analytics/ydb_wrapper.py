@@ -496,6 +496,7 @@ class YDBWrapper:
 
                 results = []
                 batch_count = 0
+                scan_start = time.time()
 
                 while True:
                     try:
@@ -506,14 +507,13 @@ class YDBWrapper:
                         rows_affected += batch_size
 
                         if (batch_count % 50 == 0 or (rows_affected > 0 and rows_affected % 10000 == 0)) and rows_affected > 0:
-                            elapsed = time.time() - start_time
+                            elapsed = time.time() - scan_start
                             self._log("progress", f"Batch {batch_count}: {batch_size} rows (total: {rows_affected})", f"{elapsed:.2f}s")
 
                     except StopIteration:
                         break
 
-                end_time = time.time()
-                duration = end_time - start_time
+                duration = time.time() - scan_start
 
                 if rows_affected == 0:
                     self._log("success", f"Scan query completed", f"No results found, Duration: {duration:.2f}s")
@@ -537,9 +537,11 @@ class YDBWrapper:
                 result = operation_func(driver)
                 data, metadata = result
                 rows_affected = len(data) if isinstance(data, list) else 0
-
-                end_time = time.time()
-                duration = end_time - start_time
+                duration = getattr(self, "_last_scan_duration", None)
+                if duration is None:
+                    duration = time.time() - start_time
+                else:
+                    del self._last_scan_duration
 
                 if rows_affected == 0:
                     self._log("success", f"Scan query with metadata completed", f"No results found, Duration: {duration:.2f}s")
@@ -628,6 +630,7 @@ class YDBWrapper:
             
             results = []
             column_types = None
+            scan_start = time.time()
             
             while True:
                 try:
@@ -640,6 +643,7 @@ class YDBWrapper:
                 except StopIteration:
                     break
             
+            self._last_scan_duration = time.time() - scan_start
             # If no results, column_types may be None
             if column_types is None:
                 column_types = []

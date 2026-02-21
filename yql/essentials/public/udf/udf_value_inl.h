@@ -92,6 +92,12 @@ inline void IBoxedValue1::UnlockRef(i32 prev) noexcept {
 // TBoxedValueAccessor
 //////////////////////////////////////////////////////////////////////////////
 
+inline bool TBoxedValueAccessor::CheckPodSafety(const TUnboxedValuePod& original, const TUnboxedValuePod& current) {
+    bool isEq = std::memcmp(&current, &original, sizeof(TUnboxedValuePod)) == 0;
+    bool isNotComplex = !current.IsBoxed() && !current.IsString();
+    return isEq || isNotComplex;
+}
+
 inline bool TBoxedValueAccessor::HasFastListLength(const IBoxedValue& value) {
     Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
     return value.HasFastListLength();
@@ -214,7 +220,11 @@ inline TUnboxedValue TBoxedValueAccessor::GetVariantItem(const IBoxedValue& valu
 
 inline EFetchStatus TBoxedValueAccessor::Fetch(IBoxedValue& value, TUnboxedValue& result) {
     Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
-    return value.Fetch(result);
+    const TUnboxedValuePod savedResult(static_cast<const TUnboxedValuePod&>(result));
+    const auto ret = value.Fetch(result);
+    Y_DEBUG_ABORT_UNLESS(ret == EFetchStatus::Ok || CheckPodSafety(savedResult, static_cast<const TUnboxedValuePod&>(result)),
+                         "Fetch() returned non-Ok status but replaced result to non-trivial value, IBoxedValue dynamic type: %s", typeid(value).name());
+    return ret;
 }
 
 inline bool TBoxedValueAccessor::Skip(IBoxedValue& value) {
@@ -224,12 +234,23 @@ inline bool TBoxedValueAccessor::Skip(IBoxedValue& value) {
 
 inline bool TBoxedValueAccessor::Next(IBoxedValue& value, TUnboxedValue& result) {
     Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
-    return value.Next(result);
+    const TUnboxedValuePod savedResult(static_cast<const TUnboxedValuePod&>(result));
+    const auto ret = value.Next(result);
+    Y_DEBUG_ABORT_UNLESS(ret || CheckPodSafety(savedResult, static_cast<const TUnboxedValuePod&>(result)),
+                         "Next() returned false but replaced result to non-trivial value, IBoxedValue dynamic type: %s", typeid(value).name());
+    return ret;
 }
 
 inline bool TBoxedValueAccessor::NextPair(IBoxedValue& value, TUnboxedValue& key, TUnboxedValue& payload) {
     Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
-    return value.NextPair(key, payload);
+    const TUnboxedValuePod savedKey(static_cast<const TUnboxedValuePod&>(key));
+    const TUnboxedValuePod savedPayload(static_cast<const TUnboxedValuePod&>(payload));
+    const auto ret = value.NextPair(key, payload);
+    Y_DEBUG_ABORT_UNLESS(ret || CheckPodSafety(savedKey, static_cast<const TUnboxedValuePod&>(key)),
+                         "NextPair() returned false but replaced key to non-trivial value, IBoxedValue dynamic type: %s", typeid(value).name());
+    Y_DEBUG_ABORT_UNLESS(ret || CheckPodSafety(savedPayload, static_cast<const TUnboxedValuePod&>(payload)),
+                         "NextPair() returned false but replaced payload to non-trivial value, IBoxedValue dynamic type: %s", typeid(value).name());
+    return ret;
 }
 
 inline void TBoxedValueAccessor::Apply(IBoxedValue& value, IApplyContext& context) {

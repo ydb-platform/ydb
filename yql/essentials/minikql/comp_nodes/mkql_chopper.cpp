@@ -354,15 +354,17 @@ private:
             }
 
             while (true) {
-                switch (const auto status = Stream.Fetch(result)) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                switch (const auto status = Stream.Fetch(fetchResult)) {
                     case NUdf::EFetchStatus::Ok: {
-                        ItemArg->SetValue(Ctx, NUdf::TUnboxedValue(result));
+                        ItemArg->SetValue(Ctx, NUdf::TUnboxedValue(fetchResult));
 
                         if (Chop->GetValue(Ctx).Get<bool>()) {
                             state = EState::Chop;
                             return NUdf::EFetchStatus::Finish;
                         }
 
+                        result = std::move(fetchResult);
                         return status;
                     }
 

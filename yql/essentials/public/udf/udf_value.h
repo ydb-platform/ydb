@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <type_traits>
+#include <typeinfo>
 
 class IOutputStream;
 
@@ -102,14 +103,15 @@ private:
     virtual ui32 GetVariantIndex() const = 0;
     virtual TUnboxedValue GetVariantItem() const = 0;
 
-    // Either Done/Yield with empty result or Ready with non-empty result should be returned
+    // If returning non-Ok (Finish/Yield), either leave result unchanged or set it to empty or
+    // embedded; do not set to string or boxed.
     virtual EFetchStatus Fetch(TUnboxedValue& result) = 0;
 
     // Any iterator.
     virtual bool Skip() = 0;
-    // List iterator.
+    // List iterator. If returning false, either leave value unchanged or set to empty or embedded (not string or boxed).
     virtual bool Next(TUnboxedValue& value) = 0;
-    // Dict iterator.
+    // Dict iterator. If returning false, either leave key/payload unchanged or set to empty or embedded (not string or boxed).
     virtual bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) = 0;
 
     virtual void Apply(IApplyContext& context) const = 0;
@@ -183,6 +185,7 @@ class IBoxedValue6: public IBoxedValue5 {
     friend struct TBoxedValueAccessor;
 
 private:
+    // If returning non-Ok (Finish/Yield), for each result[i] either leave unchanged or set to empty or embedded (not string or boxed).
     virtual EFetchStatus WideFetch(TUnboxedValue* result, ui32 width) = 0;
 };
 #endif
@@ -631,6 +634,9 @@ struct TBoxedValueAccessor {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
     static inline bool Load2(IBoxedValue& value, const TUnboxedValue& data);
 #endif
+
+private:
+    static inline bool CheckPodSafety(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs);
 };
 
 #define MAP_HANDLER(xx)                                                                      \

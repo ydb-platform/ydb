@@ -195,13 +195,15 @@ public:
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            result = Flow->GetValue(CompCtx);
-            if (result.IsFinish()) {
+            NYql::NUdf::TUnboxedValue fetchResult;
+            fetchResult = Flow->GetValue(CompCtx);
+            if (fetchResult.IsFinish()) {
                 return NUdf::EFetchStatus::Finish;
             }
-            if (result.IsYield()) {
+            if (fetchResult.IsYield()) {
                 return NUdf::EFetchStatus::Yield;
             }
+            result = std::move(fetchResult);
             return NUdf::EFetchStatus::Ok;
         }
 
@@ -223,7 +225,12 @@ public:
 
     protected:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override Y_NO_SANITIZE("undefined") {
-            return FetchFunc(Ctx, result);
+            NUdf::TUnboxedValue fetchResult;
+            if (const auto status = FetchFunc(Ctx, fetchResult); NUdf::EFetchStatus::Ok != status) {
+                return status;
+            }
+            result = std::move(fetchResult);
+            return NUdf::EFetchStatus::Ok;
         }
 
         const TFetchPtr FetchFunc;

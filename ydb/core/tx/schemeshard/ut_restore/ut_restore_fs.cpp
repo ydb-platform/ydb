@@ -63,21 +63,24 @@ public:
     }
 
 private:
-    static void WriteDataFileWithChecksum(const TString& dirPath, const TString& csvData, ui32 partNum) {
-        const TString dataFileName = TStringBuilder() << "data_" << Sprintf("%02d", partNum) << ".csv";
-
-        TFileOutput file(dirPath + "/" + dataFileName);
-        file.Write(csvData);
+    static void WriteFileWithChecksum(const TString& dirPath, const TString& fileName, const TString& content) {
+        TFileOutput file(dirPath + "/" + fileName);
+        file.Write(content);
         file.Finish();
 
         // Create checksum file
-        const TString checksum = NBackup::ComputeChecksum(csvData);
-        const TString checksumFileName = dataFileName + ".sha256";
+        const TString checksum = NBackup::ComputeChecksum(content);
+        const TString checksumFileName = fileName + ".sha256";
         TFileOutput checksumFile(dirPath + "/" + checksumFileName);
         checksumFile.Write(checksum);
         checksumFile.Write(" ");
-        checksumFile.Write(dataFileName);
+        checksumFile.Write(fileName);
         checksumFile.Finish();
+    }
+
+    static void WriteDataFileWithChecksum(const TString& dirPath, const TString& csvData, ui32 partNum) {
+        const TString dataFileName = TStringBuilder() << "data_" << Sprintf("%02d", partNum) << ".csv";
+        WriteFileWithChecksum(dirPath, dataFileName, csvData);
     }
 
     static void CreateEmptyDataFile(const TString& dirPath) {
@@ -92,8 +95,7 @@ private:
 
         TString serialized = metadata.Serialize();
 
-        TFileOutput file(dirPath + "/metadata.json");
-        file.Write(serialized);
+        WriteFileWithChecksum(dirPath, "metadata.json", serialized);
     }
 
     static void CreateTableSchemeFile(const TString& dirPath, const TString& tableName,
@@ -131,8 +133,7 @@ private:
         TString serialized;
         Y_ABORT_UNLESS(google::protobuf::TextFormat::PrintToString(table, &serialized));
 
-        TFileOutput file(dirPath + "/" + NYdb::NDump::NFiles::TableScheme().FileName);
-        file.Write(serialized);
+        WriteFileWithChecksum(dirPath, NYdb::NDump::NFiles::TableScheme().FileName, serialized);
     }
 
     static void CreatePermissionsFile(const TString& dirPath) {
@@ -141,8 +142,7 @@ private:
         TString serialized;
         Y_ABORT_UNLESS(google::protobuf::TextFormat::PrintToString(permissions, &serialized));
 
-        TFileOutput file(dirPath + "/permissions.pb");
-        file.Write(serialized);
+        WriteFileWithChecksum(dirPath, "permissions.pb", serialized);
     }
 
     TTempDir TempDir;
@@ -281,16 +281,22 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
-        // Invalid destination path (empty) should fail validation
-        TestImport(runtime, ++txId, "/MyRoot", R"(
+        TTempBackupFiles backup;
+        backup.CreateTableBackup("backup/Table", "Table");
+
+        // Invalid destination path (empty)
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromFsSettings {
-              base_path: "/mnt/backups"
+              base_path: "%s"
               items {
                 source_path: "backup/Table"
                 destination_path: ""
               }
             }
-        )", "", "", Ydb::StatusIds::BAD_REQUEST);
+        )", backup.GetBasePath().c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST(ShouldFailOnDuplicateDestination) {
@@ -464,12 +470,13 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(totalRows, 4);
     }
 
-    Y_UNIT_TEST(ShouldExportThenImportWithDataValidation) {
+    void ExportImportWithDataValidationImpl(bool encrypted) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(encrypted);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
@@ -497,6 +504,17 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         ui32 originalRows = CountRows(runtime, "/MyRoot/OriginalTable");
         UNIT_ASSERT_VALUES_EQUAL(originalRows, 5);
 
+        // Prepare encryption settings
+        TString encryptionSettings;
+        if (encrypted) {
+            encryptionSettings = R"(encryption_settings {
+                encryption_algorithm: "ChaCha20-Poly1305"
+                symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                }
+            })";
+        }
+
         // Step 3: Export to FS
         TString basePath = tempDir.Path();
         TString exportSettings = Sprintf(R"(
@@ -506,8 +524,9 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
                 source_path: "/MyRoot/OriginalTable"
                 destination_path: "backup/OriginalTable"
               }
+              %s
             }
-        )", basePath.c_str());
+        )", basePath.c_str(), encryptionSettings.c_str());
 
         TestExport(runtime, ++txId, "/MyRoot", exportSettings);
         const ui64 exportId = txId;
@@ -528,8 +547,9 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
                 source_path: "backup/OriginalTable"
                 destination_path: "/MyRoot/RestoredTable"
               }
+              %s
             }
-        )", basePath.c_str());
+        )", basePath.c_str(), encryptionSettings.c_str());
 
         TestImport(runtime, ++txId, "/MyRoot", importSettings);
         const ui64 importId = txId;
@@ -569,5 +589,13 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         for (size_t i = 0; i < originalData.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(originalData[i], restoredData[i]);
         }
+    }
+
+    Y_UNIT_TEST(ShouldExportThenImportWithDataValidation) {
+        ExportImportWithDataValidationImpl(false);
+    }
+
+    Y_UNIT_TEST(ShouldExportThenImportWithDataValidationEncrypted) {
+        ExportImportWithDataValidationImpl(true);
     }
 }

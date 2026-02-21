@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/signals/signal_utils.h>
-#include <ydb/library/yql/dq/actors/compute/dq_info_aggregation_actor.h>
+#include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
@@ -120,7 +120,7 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
         ~TValueReporter() {
             if (ActorSystem) {
                 LastValue.ClearAction();
-                ActorSystem->Send(AggregatorActor, new NDq::TInfoAggregationActorEvents::TEvUpdateCounter(LastValue));
+                ActorSystem->Send(AggregatorActor, new NDq::TPqInfoAggregationActorEvents::TEvUpdateCounter(LastValue));
             }
         }
 
@@ -149,11 +149,11 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
             LastValue.SetSeqNo(LastValue.GetSeqNo() + 1);
 
             Y_VALIDATE(ActorSystem, "ActorSystem is null");
-            ActorSystem->Send(std::make_unique<IEventHandle>(AggregatorActor, SelfId, new NDq::TInfoAggregationActorEvents::TEvUpdateCounter(LastValue)));
+            ActorSystem->Send(std::make_unique<IEventHandle>(AggregatorActor, SelfId, new NDq::TPqInfoAggregationActorEvents::TEvUpdateCounter(LastValue)));
         }
 
         static TValueReporter ReadTimeValue(const TDqPqReadBalancerActor::TMetrics& metrics, const TCompositeTopicReadSessionSettings& settings) {
-            NDqProto::TEvUpdateCounterValue value;
+            NPq::NProto::TEvDqPqUpdateCounterValue value;
 
             value.SetCounterId(BuildCounterName(settings.BaseSettings.Topics_[0].Path_, "read_time"));
             value.SetAggMin(0);
@@ -166,7 +166,7 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
         }
 
         static TValueReporter PendingPartitionsCountValue(const TDqPqReadBalancerActor::TMetrics& metrics, const TCompositeTopicReadSessionSettings& settings) {
-            NDqProto::TEvUpdateCounterValue value;
+            NPq::NProto::TEvDqPqUpdateCounterValue value;
 
             const auto& topic = settings.BaseSettings.Topics_[0];
             value.SetCounterId(BuildCounterName(topic.Path_, "partition_counter"));
@@ -184,7 +184,7 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
             return TStringBuilder() << "group=distributed_topic_read_session;topic=" << topicPath << ";counter=" << counter;
         }
 
-        TValueReporter(const TString& name, const TDqPqReadBalancerActor::TMetrics& metrics, const TActorId& aggregatorActor, NDqProto::TEvUpdateCounterValue&& value)
+        TValueReporter(const TString& name, const TDqPqReadBalancerActor::TMetrics& metrics, const TActorId& aggregatorActor, NPq::NProto::TEvDqPqUpdateCounterValue&& value)
             : LastValue(std::move(value))
             , UpdatePeriod(NProtoInterop::CastFromProto(LastValue.GetSettings().GetReportPeriod()))
             , UpdateDeltaThreshold(LastValue.GetSettings().GetScalarAggDeltaThreshold())
@@ -196,9 +196,9 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
 
         i64 GetValue() {
             switch (LastValue.GetActionCase()) {
-                case NDqProto::TEvUpdateCounterValue::ActionCase::kAggMin:
+                case NPq::NProto::TEvDqPqUpdateCounterValue::ActionCase::kAggMin:
                     return LastValue.GetAggMin();
-                case NDqProto::TEvUpdateCounterValue::ActionCase::kAggSum:
+                case NPq::NProto::TEvDqPqUpdateCounterValue::ActionCase::kAggSum:
                     return LastValue.GetAggSum();
                 default:
                     Y_VALIDATE(false, "Unexpected action case: " << static_cast<ui64>(LastValue.GetActionCase()));
@@ -207,10 +207,10 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
 
         void SetValue(i64 value) {
             switch (LastValue.GetActionCase()) {
-                case NDqProto::TEvUpdateCounterValue::ActionCase::kAggMin:
+                case NPq::NProto::TEvDqPqUpdateCounterValue::ActionCase::kAggMin:
                     LastValue.SetAggMin(value);
                     break;
-                case NDqProto::TEvUpdateCounterValue::ActionCase::kAggSum:
+                case NPq::NProto::TEvDqPqUpdateCounterValue::ActionCase::kAggSum:
                     LastValue.SetAggSum(value);
                     break;
                 default:
@@ -218,7 +218,7 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
             }
         }
 
-        NDqProto::TEvUpdateCounterValue LastValue;
+        NPq::NProto::TEvDqPqUpdateCounterValue LastValue;
         const TDuration UpdatePeriod;
         const i64 UpdateDeltaThreshold = 0;
         const TActorId AggregatorActor;
@@ -256,7 +256,7 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(NDq::TInfoAggregationActorEvents::TEvOnAggregateUpdated, Handle);
+        hFunc(NDq::TPqInfoAggregationActorEvents::TEvOnAggregateUpdated, Handle);
         hFunc(TEvents::TEvPoison, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
     );
@@ -269,7 +269,7 @@ public:
     static constexpr char ActorName[] = "DQ_PQ_READ_BALANCER_ACTOR";
 
 private:
-    void Handle(NDq::TInfoAggregationActorEvents::TEvOnAggregateUpdated::TPtr& ev) {
+    void Handle(NDq::TPqInfoAggregationActorEvents::TEvOnAggregateUpdated::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const auto& counterId = record.GetCounterId();
         const auto value = record.GetScalar();

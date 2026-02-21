@@ -17,7 +17,7 @@ struct TCompositeTopicReadSessionSettings {
     NYdb::NTopic::TReadSessionSettings BaseSettings;
     TDuration IdleTimeout;
     TDuration MaxPartitionReadSkew;
-    NActors::TActorId AggregatorActor; // DqInfoAggregationActor
+    NActors::TActorId AggregatorActor; // TDqPqInfoAggregationActor
 };
 
 class ICompositeTopicReadSessionControl {

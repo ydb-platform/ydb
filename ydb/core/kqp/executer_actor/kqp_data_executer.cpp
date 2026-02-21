@@ -26,9 +26,9 @@
 #include <ydb/core/persqueue/events/global.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yql/dq/actors/compute/dq_info_aggregation_actor.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_info_aggregation_actor.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -1940,7 +1940,7 @@ private:
             if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
                 txId = GetUserRequestContext()->StreamingQueryPath;
             }
-            TasksGraph.GetMeta().DqInfoAggregator = Register(CreateDqInfoAggregationActor(txId));
+            TasksGraph.GetMeta().DqInfoAggregator = Register(CreateDqPqInfoAggregationActor(txId));
         }
 
         if (!WaitRequired()) {

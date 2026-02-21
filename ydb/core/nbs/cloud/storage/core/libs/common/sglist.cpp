@@ -215,4 +215,24 @@ TResultOrError<TSgList> SgListNormalize(TSgList sglist, ui32 blockSize)
     return result;
 }
 
+TSgList CreateSgList(const TRope& rope)
+{
+    TSgList result;
+    for (const auto& it: rope) {
+        result.push_back(TBlockDataRef(it.first, it.second));
+    }
+    return result;
+}
+
+TSgList CreateSgList(const TVector<TRope>& ropes)
+{
+    TSgList result;
+    for (const auto& rope: ropes) {
+        for (const auto& it: rope) {
+            result.push_back(TBlockDataRef(it.first, it.second));
+        }
+    }
+    return result;
+}
+
 }   // namespace NYdb::NBS

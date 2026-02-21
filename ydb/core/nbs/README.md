@@ -84,3 +84,8 @@ code workspace/workspace.code-workspace
     cd /home/barkovbg/ydb_bg/ydb/tests/tools/local_cluster/.ydbd_working_dir/local_cluster
     cat node_*/logfile_* | grep "NBS_PARTITION" | sort
     ```
+
+4) Run FIO from QEMU
+    ```
+    sudo fio --name=randomreadwritetest --blocksize=4096 --rw=randrw --direct=1 --buffered=0 --ioengine=libaio --iodepth=32 --runtime=30 --time_based --filename=/dev/vdb
+    ```

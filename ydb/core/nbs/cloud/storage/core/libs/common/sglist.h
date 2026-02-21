@@ -6,6 +6,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
+#include <ydb/library/actors/util/rope.h>
+
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 
@@ -22,5 +24,8 @@ size_t SgListCopy(const TSgList& src, TBlockDataRef dst);
 
 TResultOrError<TSgList> SgListNormalize(TBlockDataRef buffer, ui32 blockSize);
 TResultOrError<TSgList> SgListNormalize(TSgList sglist, ui32 blockSize);
+
+TSgList CreateSgList(const TRope& rope);
+TSgList CreateSgList(const TVector<TRope>& ropes);
 
 }   // namespace NYdb::NBS

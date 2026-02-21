@@ -9,10 +9,12 @@ SELECT
     COUNT(DISTINCT tm.full_name) AS muted_count,
     COUNT(DISTINCT CASE WHEN tm.days_in_mute_state >= 30 THEN tm.full_name ELSE NULL END) AS muted_count_more_30_days
 FROM `test_results/analytics/tests_monitor` AS tm
-WHERE tm.is_test_chunk = 0
+WHERE 
+  tm.date_window >= CurrentUtcDate() - 365 * Interval("P1D")
+  and tm.build_type = 'relwithdebinfo' 
+  and tm.is_test_chunk = 0
   AND tm.is_muted = 1
-  AND tm.date_window >= CurrentUtcDate() - 365 * Interval("P1D")
-  AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%' OR tm.branch LIKE 'stream-nb-2%')
+  
 GROUP BY
     tm.date_window,
     tm.owner,

@@ -2178,9 +2178,6 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
 }
 
 template<bool UseMigrationProtocol>
-<<<<<<< HEAD
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
-=======
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
     const auto delta = TInstant::Now() - LastActiveTime;
     if (delta < TDuration::Minutes(1)) {
@@ -2222,9 +2219,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
     LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "[SelfCheck] There is no ready events / inflight decompression since last: " << delta << ", most likely hanged after stop by back pressure");
 }
 
-template <>
-inline void TSingleClusterReadSessionImpl<false>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<false>* partitionStream, std::span<const ui32> childIds) {
->>>>>>> 9c0a1bceb7d (LOGBROKER-7430 fixed partition reading hanging in topic sdk (#34362))
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
     {
         std::lock_guard guard(HierarchyDataLock);
         ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());

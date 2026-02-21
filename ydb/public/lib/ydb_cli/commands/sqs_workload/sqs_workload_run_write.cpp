@@ -17,7 +17,7 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         // Common params
-        config.Opts->AddLongOption("sqs-endpoint", "SQS HTTP endpoint.")
+        config.Opts->AddLongOption("sqs-endpoint", "SQS HTTP endpoint of the queue.")
             .Required()
             .StoreResult(&Scenario.Endpoint);
         config.Opts->AddLongOption("topic", "YDB topic name.")

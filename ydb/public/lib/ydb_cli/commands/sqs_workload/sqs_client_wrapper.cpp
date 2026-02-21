@@ -125,4 +125,8 @@ namespace NYdb::NConsoleClient {
         return Client->DeleteMessageBatch(request);
     }
 
+    Aws::SQS::Model::GetQueueUrlOutcome TSQSClientWrapper::GetQueueUrl(const Aws::SQS::Model::GetQueueUrlRequest& request) const {
+        return Client->GetQueueUrl(request);
+    }
+
 } // namespace NYdb::NConsoleClient

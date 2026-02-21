@@ -99,7 +99,7 @@ namespace {
             return 1.0;
         }
 
-        return 0.3;
+        return 0.4;
     }
 
     // Estimates number of rows based on histogram and predicate type.

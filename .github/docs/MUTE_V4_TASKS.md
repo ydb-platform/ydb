@@ -56,6 +56,15 @@
 
 ---
 
+## Phase 5b: Pattern Rules
+
+- [x] **5b.1** Create pattern_rules.yaml with mute/unmute/delete/graduation rules
+- [x] **5b.2** Create pattern_rules_loader.py
+- [x] **5b.3** Refactor create_new_muted_ya to use rule params
+- [x] **5b.4** Add --build_type and --rules_file to create_new_muted_ya
+
+---
+
 ## Phase 6: Testing & Validation
 
 - [ ] **6.1** Test manual unmute flow: remove test, merge, verify quarantine
@@ -75,3 +84,4 @@
 | — | Phase 2: Quarantine (apply_quarantine, exclude from to_mute) | ✅ |
 | — | Phase 3: Manual vs auto detection (cache, detect_manual_unmutes) | ✅ |
 | — | Phase 4: Quarantine graduation (4 runs/1 day, 1+ pass) | ✅ |
+| — | Phase 5b: Pattern rules (pattern_rules.yaml, rule loader) | ✅ |

@@ -13,6 +13,14 @@ from collections import defaultdict
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from mute_check import YaMuteCheck
+from pattern_rules_loader import (
+    load_rules,
+    get_mute_rule,
+    get_unmute_rule,
+    get_delete_rule,
+    get_quarantine_graduation_rule,
+    get_rule_params,
+)
 from update_mute_issues import (
     create_and_add_issue_to_project,
     generate_github_issue_title_and_body,
@@ -32,10 +40,10 @@ repo_path = f"{dir}/../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
 quarantine_path = '.github/config/quarantine.txt'
 
-# Константы для временных окон mute-логики
-MUTE_DAYS = 4
-UNMUTE_DAYS = 7
-DELETE_DAYS = 7
+# Дефолты (если правила не загружены)
+DEFAULT_MUTE_DAYS = 4
+DEFAULT_UNMUTE_DAYS = 7
+DEFAULT_DELETE_DAYS = 7
 
 def is_chunk_test(test):
     # Сначала смотрим на поле is_test_chunk, если оно есть
@@ -345,95 +353,100 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
     return debug_string
 
-def is_mute_candidate(test, aggregated_data):
-    """Проверяет, является ли тест кандидатом на mute за указанный период"""
-    # Ищем наш тест в агрегированных данных
+def is_mute_candidate(test, aggregated_data, params=None):
+    """Проверяет, является ли тест кандидатом на mute за указанный период.
+    params: min_failures_high, min_failures_low, min_runs_threshold (from rule)
+    """
+    p = params or {}
+    min_fail_high = p.get('min_failures_high', 3)
+    min_fail_low = p.get('min_failures_low', 2)
+    min_runs_threshold = p.get('min_runs_threshold', 10)
+
     test_data = None
     for agg_test in aggregated_data:
         if agg_test['full_name'] == test.get('full_name'):
             test_data = agg_test
             break
-    
+
     if not test_data:
         return False
-    
-    # Обновляем данные теста для debug
+
     test['pass_count'] = test_data['pass_count']
     test['fail_count'] = test_data['fail_count']
     test['period_days'] = test_data.get('period_days')
     test['is_muted'] = test_data.get('is_muted', False)
-    
-    # Не считаем тест flaky, если он уже замьючен
+
     if test_data.get('is_muted', False):
         return False
-    
+
     total_runs = test_data['pass_count'] + test_data['fail_count']
-    result = (test_data['fail_count'] >= 3 and total_runs > 10) or (test_data['fail_count'] >= 2 and total_runs <= 10)
-    
-    # Добавляем детальное логирование для диагностики
-    if not test_data.get('is_muted', False):  # Логируем только для незамьюченных тестов
+    result = (
+        (test_data['fail_count'] >= min_fail_high and total_runs > min_runs_threshold)
+        or (test_data['fail_count'] >= min_fail_low and total_runs <= min_runs_threshold)
+    )
+
+    if not test_data.get('is_muted', False):
         logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{test_data['fail_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
-    
+
     return result
 
-def is_unmute_candidate(test, aggregated_data):
-    """Проверяет, является ли тест кандидатом на размьют за указанный период"""
-    # Ищем наш тест в агрегированных данных
+def is_unmute_candidate(test, aggregated_data, params=None):
+    """Проверяет, является ли тест кандидатом на размьют за указанный период.
+    params: min_runs, max_fails (from rule)
+    """
+    p = params or {}
+    min_runs = p.get('min_runs', 4)
+    max_fails = p.get('max_fails', 0)
+
     test_data = None
     for agg_test in aggregated_data:
         if agg_test['full_name'] == test.get('full_name'):
             test_data = agg_test
             break
-    
+
     if not test_data:
         return False
-    
-    # Обновляем данные теста для debug
+
     test['pass_count'] = test_data['pass_count']
     test['fail_count'] = test_data['fail_count']
     test['mute_count'] = test_data['mute_count']
     test['period_days'] = test_data.get('period_days')
     test['is_muted'] = test_data.get('is_muted', False)
-    
+
     total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count']
     total_fails = test_data['fail_count'] + test_data['mute_count']
-    
-    result = total_runs >= 4 and total_fails == 0
-    
-    # Добавляем детальное логирование для диагностики
-    if test_data.get('is_muted', False):  # Логируем только для замьюченных тестов
+
+    result = total_runs >= min_runs and total_fails <= max_fails
+
+    if test_data.get('is_muted', False):
         logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test_data['mute_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
-    
+
     return result
 
-def is_delete_candidate(test, aggregated_data):
+def is_delete_candidate(test, aggregated_data, params=None):
     """Проверяет, является ли тест кандидатом на удаление из mute за указанный период"""
-    # Ищем наш тест в агрегированных данных
     test_data = None
     for agg_test in aggregated_data:
         if agg_test['full_name'] == test.get('full_name'):
             test_data = agg_test
             break
-    
+
     if not test_data:
         return False
-    
-    # Обновляем данные теста для debug
+
     test['pass_count'] = test_data['pass_count']
     test['fail_count'] = test_data['fail_count']
     test['mute_count'] = test_data['mute_count']
     test['skip_count'] = test_data['skip_count']
     test['period_days'] = test_data.get('period_days')
     test['is_muted'] = test_data.get('is_muted', False)
-    
+
     total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count'] + test_data['skip_count']
-    
     result = total_runs == 0
-    
-    # Добавляем детальное логирование для диагностики
-    if test_data.get('is_muted', False):  # Логируем только для замьюченных тестов
+
+    if test_data.get('is_muted', False):
         logging.debug(f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, muted:{test_data.get('is_muted')}, result:{result}")
-    
+
     return result
 
 def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None, exclude_check=None):
@@ -512,17 +525,14 @@ def _parse_mute_file(path):
         )
 
 
-def get_quarantine_graduation(quarantine_tests, aggregated_1day):
+def get_quarantine_graduation(quarantine_tests, aggregated_1day, params=None):
     """
-    Rule: 4+ runs in 1 day AND 1+ pass → graduate (remove from quarantine).
-    Returns set of graduated test strings (suite test_name format).
+    Rule: min_runs in window AND min_passes → graduate (remove from quarantine).
+    params: min_runs, min_passes (from rule)
     """
-    # Build lookup: full_name -> test_string for aggregated data
-    full_name_to_test_str = {}
-    for t in aggregated_1day:
-        fn = t.get('full_name')
-        if fn:
-            full_name_to_test_str[fn] = create_test_string(t, use_wildcards=False)
+    p = params or {}
+    min_runs = p.get('min_runs', 4)
+    min_passes = p.get('min_passes', 1)
 
     graduated = set()
     for test_line in quarantine_tests:
@@ -536,15 +546,31 @@ def get_quarantine_graduation(quarantine_tests, aggregated_1day):
             continue
         total_runs = agg.get('pass_count', 0) + agg.get('fail_count', 0) + agg.get('mute_count', 0)
         pass_count = agg.get('pass_count', 0)
-        if total_runs >= 4 and pass_count >= 1:
+        if total_runs >= min_runs and pass_count >= min_passes:
             graduated.add(test_line)
             logging.info(f"Quarantine graduation: {test_line} (runs={total_runs}, pass={pass_count})")
     return graduated
 
 
-def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, quarantine_check=None, quarantine_path=None, to_graduated=None):
+def apply_and_add_mutes(
+    all_data,
+    output_path,
+    mute_check,
+    aggregated_for_mute,
+    aggregated_for_unmute,
+    aggregated_for_delete,
+    quarantine_check=None,
+    quarantine_path=None,
+    to_graduated=None,
+    mute_rule_params=None,
+    unmute_rule_params=None,
+    delete_rule_params=None,
+):
     output_path = os.path.join(output_path, 'mute_update')
     to_graduated = to_graduated or set()
+    mute_rule_params = mute_rule_params or {}
+    unmute_rule_params = unmute_rule_params or {}
+    delete_rule_params = delete_rule_params or {}
     logging.info(f"Creating mute files in directory: {output_path}")
     
     # Получаем уникальные тесты для обработки (используем максимальный период для получения всех тестов)
@@ -557,7 +583,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
     try:
         # 1. Кандидаты на mute (исключаем quarantine — защита от re-mute)
         def is_mute_candidate_wrapper(test):
-            return is_mute_candidate(test, aggregated_for_mute)
+            return is_mute_candidate(test, aggregated_for_mute, mute_rule_params)
         
         to_mute, to_mute_debug = create_file_set(
             aggregated_for_mute, is_mute_candidate_wrapper, use_wildcards=True, resolution='to_mute',
@@ -569,17 +595,19 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         def is_unmute_candidate_wrapper(test):
             if is_chunk_test(test):
                 return False  # Не размьючивать chunk поштучно
-            return is_unmute_candidate(test, aggregated_for_unmute)
-        
+            return is_unmute_candidate(test, aggregated_for_unmute, unmute_rule_params)
+
+
+        def _is_unmute_for_wildcard(test, agg):
+            return is_unmute_candidate(test, agg, unmute_rule_params)
+
         # Обычные тесты на размьют (по chunk'ам)
         to_unmute, to_unmute_debug = create_file_set(
             aggregated_for_unmute, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
         )
         
         # Wildcard-паттерны на размьют:
-        # Если все chunk'и паттерна проходят фильтр, то размьючивается весь паттерн (массовый размьют).
-        # Если хотя бы один chunk не проходит — паттерн не размьючивается.
-        wildcard_unmute = get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, is_unmute_candidate)
+        wildcard_unmute = get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, _is_unmute_for_wildcard)
         wildcard_unmute_patterns = [p for p, d in wildcard_unmute]
         wildcard_unmute_debugs = [d for p, d in wildcard_unmute]
         
@@ -593,17 +621,19 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         def is_delete_candidate_wrapper(test):
             if is_chunk_test(test):
                 return False  # Не удалять chunk поштучно
-            return is_delete_candidate(test, aggregated_for_delete)
-        
+            return is_delete_candidate(test, aggregated_for_delete, delete_rule_params)
+
+
+        def _is_delete_for_wildcard(test, agg):
+            return is_delete_candidate(test, agg, delete_rule_params)
+
         # Обычные тесты на delete (по chunk'ам)
         to_delete, to_delete_debug = create_file_set(
             aggregated_for_delete, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
         )
         
         # Wildcard-паттерны на delete:
-        # Если все chunk'и паттерна проходят фильтр, то удаляется mute по всему паттерну (массовое удаление).
-        # Если хотя бы один chunk не проходит — паттерн не удаляется.
-        wildcard_delete = get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_candidate)
+        wildcard_delete = get_wildcard_delete_candidates(aggregated_for_delete, mute_check, _is_delete_for_wildcard)
         wildcard_delete_patterns = [p for p, d in wildcard_delete]
         wildcard_delete_debugs = [d for p, d in wildcard_delete]
         
@@ -932,24 +962,42 @@ def mute_worker(args):
         else:
             logging.info(f"Quarantine file not found: {input_quarantine_path}, skipping")
 
+        # Загружаем правила
+        build_type = getattr(args, 'build_type', 'relwithdebinfo')
+        rules_path = getattr(args, 'rules_file', None)
+        rules = load_rules(rules_path)
+        mute_rule = get_mute_rule(rules, build_type)
+        unmute_rule = get_unmute_rule(rules, build_type)
+        delete_rule = get_delete_rule(rules, build_type)
+        graduation_rule = get_quarantine_graduation_rule(rules, build_type)
+
+        mute_days = get_rule_params(mute_rule, {}).get('window_days', DEFAULT_MUTE_DAYS) if mute_rule else DEFAULT_MUTE_DAYS
+        unmute_days = get_rule_params(unmute_rule, {}).get('window_days', DEFAULT_UNMUTE_DAYS) if unmute_rule else DEFAULT_UNMUTE_DAYS
+        delete_days = get_rule_params(delete_rule, {}).get('window_days', DEFAULT_DELETE_DAYS) if delete_rule else DEFAULT_DELETE_DAYS
+
+        mute_rule_params = get_rule_params(mute_rule, {}) if mute_rule else {}
+        unmute_rule_params = get_rule_params(unmute_rule, {}) if unmute_rule else {}
+        delete_rule_params = get_rule_params(delete_rule, {}) if delete_rule else {}
+        graduation_params = get_rule_params(graduation_rule, {}) if graduation_rule else {}
+
+        logging.info(f"Rules: mute_days={mute_days}, unmute_days={unmute_days}, delete_days={delete_days}")
+
         logging.info("Executing single query for 7 days window...")
-        
-        # Один запрос за максимальный период (7 дней)
         all_data = execute_query(args.branch, days_window=7)
         logging.info(f"Query returned {len(all_data)} test records")
-        
-        # Используем универсальную агрегацию для разных периодов
-        aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS дней для mute
-        aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS дней для unmute
-        aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS дней для delete
-        aggregated_1day = aggregate_test_data(all_data, 1)  # 1 день для quarantine graduation
+
+        aggregated_for_mute = aggregate_test_data(all_data, mute_days)
+        aggregated_for_unmute = aggregate_test_data(all_data, unmute_days)
+        aggregated_for_delete = aggregate_test_data(all_data, delete_days)
+        grad_window = graduation_params.get('window_days', 1)
+        aggregated_1day = aggregate_test_data(all_data, grad_window)
 
         logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
 
         to_graduated = set()
         if quarantine_check and input_quarantine_path and os.path.exists(input_quarantine_path):
             quarantine_tests = _parse_mute_file(input_quarantine_path)
-            to_graduated = get_quarantine_graduation(quarantine_tests, aggregated_1day)
+            to_graduated = get_quarantine_graduation(quarantine_tests, aggregated_1day, graduation_params)
             if to_graduated:
                 updated_quarantine = quarantine_tests - to_graduated
                 with open(input_quarantine_path, 'w') as f:
@@ -960,15 +1008,21 @@ def mute_worker(args):
             output_path = args.output_folder
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")
-            apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, quarantine_check=quarantine_check, to_graduated=to_graduated)
+            apply_and_add_mutes(
+                all_data, output_path, mute_check,
+                aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete,
+                quarantine_check=quarantine_check,
+                to_graduated=to_graduated,
+                mute_rule_params=mute_rule_params,
+                unmute_rule_params=unmute_rule_params,
+                delete_rule_params=delete_rule_params,
+            )
 
-    elif args.mode == 'create_issues':
-        file_path = args.file_path
-        logging.info(f"Creating issues from file: {file_path}")
-        
-        # Используем уже агрегированные данные за 3 дня
-        create_mute_issues(aggregated_for_mute, file_path, close_issues=args.close_issues)
-    
+        elif args.mode == 'create_issues':
+            file_path = args.file_path
+            logging.info(f"Creating issues from file: {file_path}")
+            create_mute_issues(aggregated_for_mute, file_path, close_issues=args.close_issues)
+
     logging.info("Mute worker completed successfully")
 
 
@@ -982,6 +1036,8 @@ if __name__ == "__main__":
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
     update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
     update_muted_ya_parser.add_argument('--quarantine_file', default=quarantine_path, help='Path to quarantine.txt (manually unmuted tests)')
+    update_muted_ya_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type for rule selection')
+    update_muted_ya_parser.add_argument('--rules_file', help='Path to pattern_rules.yaml (default: .github/config/pattern_rules.yaml)')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',

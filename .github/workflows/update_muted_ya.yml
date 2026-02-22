@@ -150,7 +150,8 @@ jobs:
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya \
             --branch=${{ env.BASE_BRANCH }} \
             --muted_ya_file=base_muted_ya.txt \
-            --quarantine_file=quarantine.txt
+            --quarantine_file=quarantine.txt \
+            --build_type=${{ env.BUILD_TYPE }}
 
       - name: Save mute state for next run
         run: |

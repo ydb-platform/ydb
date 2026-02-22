@@ -67,6 +67,10 @@ The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
 
 **Mute v4:** Manual unmutes are automatically detected and the test is placed in [quarantine.txt](.github/config/quarantine.txt). The test runs (not muted) but is protected from re-mute. When it passes 4+ runs in 1 day with 1+ success, it graduates (removed from quarantine).
 
+## 📐 Pattern Rules (Mute v4)
+
+Правила задаются в [pattern_rules.yaml](.github/config/pattern_rules.yaml). Пороги mute/unmute/delete настраиваются через `params` без изменения кода.
+
 ## 📁 Mute files per build type (Mute v4)
 
 | Build type | Mute file |

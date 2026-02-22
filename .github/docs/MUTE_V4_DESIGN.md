@@ -140,16 +140,28 @@ new_muted_ya.txt
 
 ---
 
-## 7. Future Extensions (Not in v4 Scope)
+## 7. Pattern Rules (pattern_rules.yaml)
 
-- **pattern_rules.yaml** — configurable rules (mute, alert, log) per pattern
+Правила задают логику mute/unmute/delete через конфиг:
+
+- **pattern**: test_flaky, test_stable, test_no_runs, quarantine_graduation
+- **scope**: regression | pr_check
+- **build_types**: для каких build type применяется
+- **params**: пороги (window_days, min_failures_high, min_runs, и т.д.)
+- **reaction**: mute | unmute | delete | remove_from_quarantine
+
+create_new_muted_ya загружает правила и использует params для порогов. Добавление нового правила не требует изменений кода.
+
+## 8. Future Extensions
+
 - **error_type** in mute — timeout vs non-timeout, detect error change
 - **PR-check patterns** — floating timeout detection, log/alert
+- **reaction: alert** | **log** — для паттернов без mute
 - **Fast unmute** — 1-day window for auto unmute
 
 ---
 
-## 8. Backward Compatibility
+## 9. Backward Compatibility
 
 - `muted_ya.txt` stays for relwithdebinfo
 - If quarantine.txt doesn't exist → empty set, no effect

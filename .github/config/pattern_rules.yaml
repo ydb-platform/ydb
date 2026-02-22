@@ -1,0 +1,58 @@
+# Mute v4 — Pattern Rules
+# Правила определяют: что искать (pattern), где (scope), с какими порогами (params), и что делать (reaction)
+#
+# pattern: тип паттерна (test_flaky, test_stable, test_no_runs, quarantine_graduation)
+# scope: regression | pr_check
+# build_types: для каких build type применяется (null = все)
+# params: пороги для проверки
+# reaction: mute | unmute | delete | remove_from_quarantine | alert | log
+
+rules:
+  # === Mute: добавить в muted_ya ===
+  - id: regression_flaky_mute
+    name: "Flaky в regression — mute"
+    pattern: test_flaky
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 4
+      # (fail_count >= min_failures_high AND total_runs > min_runs_threshold)
+      # OR (fail_count >= min_failures_low AND total_runs <= min_runs_threshold)
+      min_failures_high: 3
+      min_failures_low: 2
+      min_runs_threshold: 10
+    reaction: mute
+
+  # === Unmute: убрать из muted_ya ===
+  - id: regression_stable_unmute
+    name: "Stable в regression — unmute"
+    pattern: test_stable
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+      min_runs: 4
+      max_fails: 0  # total_fails (fail + mute) must be 0
+    reaction: unmute
+
+  # === Delete: убрать из muted_ya (нет запусков) ===
+  - id: regression_no_runs_delete
+    name: "No runs в regression — delete"
+    pattern: test_no_runs
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+    reaction: delete
+
+  # === Quarantine graduation ===
+  - id: quarantine_graduation
+    name: "Quarantine graduation"
+    pattern: quarantine_graduation
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 1
+      min_runs: 4
+      min_passes: 1
+    reaction: remove_from_quarantine

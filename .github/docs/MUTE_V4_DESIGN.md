@@ -141,6 +141,10 @@ Remove from quarantine when:
 
 В flaky_tests_window и tests_monitor нет **error_type** (timeout vs non-timeout). error_type есть только в test_results. Для правил с error_filter потребуется расширить агрегацию.
 
+### Исключение manual runs
+
+Запуски по `workflow_dispatch` (ручной запуск) получают `run_name` с суффиксом `_manual` (test_ya/action.yml). Такие запуски **исключаются** из аналитики (mute, patterns, flaky history): в запросах к test_results добавляется `AND (pull IS NULL OR pull NOT LIKE '%_manual%')`.
+
 ---
 
 ## 7. Data Flow (mute pipeline)

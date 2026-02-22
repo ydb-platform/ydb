@@ -24,7 +24,7 @@ from mute_decisions import write_pattern_matches
 sys.path.append(os.path.dirname(__file__))
 from pattern_rules_loader import load_rules, get_rules_for_build, get_rule_params
 from behavior_start import find_behavior_start
-from regression_jobs import regression_job_names_sql
+from regression_jobs import regression_job_names_sql, EXCLUDE_MANUAL_RUNS_SQL
 from pr_check_patterns import (
     pattern_floating_across_days,
     pattern_retry_recovered,
@@ -58,17 +58,13 @@ def fetch_pr_check_runs(ydb_wrapper, branch, build_type, days=7):
               OR job_name LIKE '%PR-check%'
               OR job_name LIKE '%PR_check%'
           )
+          {EXCLUDE_MANUAL_RUNS_SQL}
     """
     try:
         return list(ydb_wrapper.execute_scan_query(query, query_name="pr_check_runs"))
     except Exception as e:
         print(f"Error fetching PR-check data: {e}")
         return []
-
-
-def _regression_job_names_sql():
-    """Build SQL IN clause for regression job names."""
-    return ", ".join(f"'{j}'" for j in REGRESSION_JOB_NAMES)
 
 
 def fetch_regression_runs(ydb_wrapper, branch, build_type, days=7):
@@ -91,6 +87,7 @@ def fetch_regression_runs(ydb_wrapper, branch, build_type, days=7):
           AND build_type = '{build_type}'
           AND run_timestamp >= Date('{start_date}')
           AND job_name IN ({jobs})
+          {EXCLUDE_MANUAL_RUNS_SQL}
     """
     try:
         return list(ydb_wrapper.execute_scan_query(query, query_name="regression_runs"))
@@ -121,6 +118,7 @@ def fetch_regression_runs_with_duration(ydb_wrapper, branch, build_type, days=7)
           AND duration IS NOT NULL
           AND duration > 0
           AND job_name IN ({jobs})
+          {EXCLUDE_MANUAL_RUNS_SQL}
     """
     try:
         return list(ydb_wrapper.execute_scan_query(query, query_name="regression_runs_with_duration"))

@@ -4,7 +4,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from regression_jobs import REGRESSION_JOB_NAMES, regression_job_names_sql
+from regression_jobs import REGRESSION_JOB_NAMES, regression_job_names_sql, EXCLUDE_MANUAL_RUNS_SQL
 from pr_check_patterns import (
     pattern_floating_across_days,
     pattern_retry_recovered,
@@ -24,6 +24,11 @@ def test_regression_job_names_sql():
     sql = regression_job_names_sql()
     assert "'Regression-run'" in sql
     assert "'Nightly-run'" in sql
+
+
+def test_exclude_manual_runs_sql():
+    assert "_manual" in EXCLUDE_MANUAL_RUNS_SQL
+    assert "NOT LIKE" in EXCLUDE_MANUAL_RUNS_SQL or "not like" in EXCLUDE_MANUAL_RUNS_SQL.lower()
 
 
 def test_parse_date():

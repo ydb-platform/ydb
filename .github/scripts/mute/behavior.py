@@ -3,7 +3,7 @@ import datetime
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
-from pr_check_patterns import _parse_date
+from .patterns import _parse_date
 
 
 def find_behavior_start(
@@ -27,7 +27,6 @@ def find_behavior_start(
             if pred(r):
                 d = _to_date(r.get("run_timestamp"))
                 commit = r.get("commit") or r.get("commit_sha")
-                # Normalize pull to str or None (YDB/JSON may return int or str)
                 pull_raw = r.get("pull")
                 pull = str(pull_raw) if pull_raw is not None else None
                 return d, commit, pull

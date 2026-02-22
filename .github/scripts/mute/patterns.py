@@ -1,4 +1,4 @@
-"""Pure PR-check pattern logic — no YDB deps. Used by evaluate_pr_check_rules and tests."""
+"""Pure PR-check pattern logic — no YDB deps."""
 import datetime
 from collections import defaultdict
 

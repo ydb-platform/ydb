@@ -53,7 +53,7 @@ jobs:
 
       - name: Compare mute systems (legacy vs v4)
         run: |
-          python3 .github/scripts/tests/compare_mute_systems.py \
+          PYTHONPATH=.github/scripts python3 -m mute.compare \
             --branch=${{ env.BASE_BRANCH }} \
             --build_type=${{ env.BUILD_TYPE }} \
             --muted_ya_file=base_muted_ya.txt \

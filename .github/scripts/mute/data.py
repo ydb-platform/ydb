@@ -1,22 +1,9 @@
-#!/usr/bin/env python3
-"""
-Fetch and aggregate test data directly from test_results (test_runs_column).
-No dependency on flaky_tests_window or tests_monitor.
+"""Fetch and aggregate test data directly from test_results (test_runs_column)."""
 
-Returns rows in the same format as tests_monitor for use with mute_logic.aggregate_test_data.
-"""
-
-import datetime
 import logging
-import os
-import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
-from ydb_wrapper import YDBWrapper
+from .regression import EXCLUDE_MANUAL_RUNS_SQL, REGRESSION_JOB_NAMES
 
-from regression_jobs import REGRESSION_JOB_NAMES, EXCLUDE_MANUAL_RUNS_SQL
-
-# Filter out suite-level entries (same as create_new_muted_ya)
 SUITE_TEST_NAMES = {'unittest', 'py3test', 'gtest'}
 
 
@@ -25,11 +12,10 @@ def _regression_jobs_sql():
 
 
 def fetch_from_test_results(ydb_wrapper, branch, build_type, days_window=7, mute_check=None):
+    """ydb_wrapper: YDBWrapper instance. Caller must have analytics in sys.path."""
     """
     Fetch test runs from test_results, aggregate by (full_name, date_window).
-    Returns list of dicts compatible with mute_logic.aggregate_test_data.
-
-    mute_check: callable(suite_folder, test_name) -> bool, used to set is_muted per test.
+    Returns list of dicts compatible with mute.logic.aggregate_test_data.
     """
     table_path = ydb_wrapper.get_table_path("test_results")
     query = f"""
@@ -57,14 +43,12 @@ def fetch_from_test_results(ydb_wrapper, branch, build_type, days_window=7, mute
     logging.info(f"Fetching from test_results for branch={branch}, build_type={build_type}, days={days_window}")
     results = ydb_wrapper.execute_scan_query(query, query_name=f"fetch_test_results_{branch}_{build_type}")
 
-    # Filter suite-level tests
     filtered = [
         r for r in results
         if r.get('test_name') and r.get('test_name') not in SUITE_TEST_NAMES
     ]
-    logging.info(f"Fetched {len(results)} rows, after filtering suite tests: {len(filtered)}")
+    logging.info(f"Fetched {len(results)} rows, after filtering: {len(filtered)}")
 
-    # Add is_muted, owner, state, is_test_chunk
     for row in filtered:
         suite = row.get('suite_folder') or ''
         name = row.get('test_name') or ''

@@ -1,8 +1,4 @@
-#!/usr/bin/env python3
-"""
-Load and filter pattern rules from pattern_rules.yaml.
-Rules drive mute/unmute/delete logic in create_new_muted_ya.
-"""
+"""Load and filter pattern rules from pattern_rules.yaml."""
 
 import os
 import yaml
@@ -25,10 +21,7 @@ def load_rules(rules_path=None):
 
 
 def get_rules_for_build(rules, build_type, reaction=None):
-    """
-    Filter rules by build_type and optionally by reaction.
-    Skip rules with enabled: false.
-    """
+    """Filter rules by build_type and optionally by reaction."""
     result = []
     for r in rules:
         if r.get("enabled") is False:

@@ -1,4 +1,4 @@
-"""Regression/nightly job names and filters for test_results queries. Aligned with flaky_tests_history.py."""
+"""Regression/nightly job names and filters for test_results queries."""
 
 # workflow_dispatch runs get run_name with "_manual" suffix (test_ya/action.yml)
 # Exclude manual runs from analytics (mute, patterns, flaky history)

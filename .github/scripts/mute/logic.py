@@ -1,12 +1,9 @@
-"""
-Pure mute logic — no YDB, no external deps. Used by create_new_muted_ya and tests.
-"""
+"""Pure mute logic — no YDB, no external deps."""
 import datetime
 import logging
 import re
 from collections import defaultdict
 
-# Configure logging for library use
 _log = logging.getLogger(__name__)
 
 
@@ -163,10 +160,9 @@ def aggregate_test_data(all_data, period_days):
                 }
             else:
                 current = test.get('state')
-                current_date = test.get('date_window')
                 if current and (not aggregated[full_name]['state_history'] or aggregated[full_name]['state_history'][-1] != current):
                     aggregated[full_name]['state_history'].append(current)
-                    aggregated[full_name]['state_dates'].append(current_date)
+                    aggregated[full_name]['state_dates'].append(test.get('date_window'))
                 if _to_days(test.get('date_window', 0)) > _to_days(aggregated[full_name].get('is_muted_date', 0)):
                     aggregated[full_name]['is_muted'] = test.get('is_muted')
                     aggregated[full_name]['is_muted_date'] = test.get('date_window')
@@ -193,6 +189,50 @@ def aggregate_test_data(all_data, period_days):
                     state_with_dates.append(state)
             test_data['state'] = '->'.join(state_with_dates)
     return list(aggregated.values())
+
+
+def get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, is_unmute_candidate_fn):
+    """Return (pattern, debug_string) for wildcard patterns where all chunks pass unmute filter."""
+    wildcard_groups = {}
+    for test in aggregated_for_unmute:
+        if mute_check and mute_check(test.get('suite_folder'), test.get('test_name')):
+            wildcard_pattern = create_test_string(test, use_wildcards=True)
+            if wildcard_pattern not in wildcard_groups:
+                wildcard_groups[wildcard_pattern] = []
+            wildcard_groups[wildcard_pattern].append(test)
+    result = []
+    for pattern, chunks in wildcard_groups.items():
+        passed_chunks = [chunk for chunk in chunks if is_unmute_candidate_fn(chunk, aggregated_for_unmute)]
+        if len(passed_chunks) == len(chunks) and chunks:
+            debug = create_debug_string(
+                passed_chunks[0],
+                period_days=passed_chunks[0].get('period_days'),
+                date_window=passed_chunks[0].get('date_window')
+            )
+            result.append((pattern, debug))
+    return result
+
+
+def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_candidate_fn):
+    """Return (pattern, debug_string) for wildcard patterns where all chunks pass delete filter."""
+    wildcard_groups = {}
+    for test in aggregated_for_delete:
+        if mute_check and mute_check(test.get('suite_folder'), test.get('test_name')):
+            wildcard_pattern = create_test_string(test, use_wildcards=True)
+            if wildcard_pattern not in wildcard_groups:
+                wildcard_groups[wildcard_pattern] = []
+            wildcard_groups[wildcard_pattern].append(test)
+    result = []
+    for pattern, chunks in wildcard_groups.items():
+        passed_chunks = [chunk for chunk in chunks if is_delete_candidate_fn(chunk, aggregated_for_delete)]
+        if len(passed_chunks) == len(chunks) and chunks:
+            debug = create_debug_string(
+                passed_chunks[0],
+                period_days=passed_chunks[0].get('period_days'),
+                date_window=passed_chunks[0].get('date_window')
+            )
+            result.append((pattern, debug))
+    return result
 
 
 def get_quarantine_graduation(quarantine_tests, aggregated_1day, params=None):

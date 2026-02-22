@@ -2,9 +2,6 @@
 """
 Mute v4 Direct: reads from test_results (test_runs_column) only.
 No dependency on flaky_tests_window or tests_monitor.
-
-Uses the same mute/unmute/delete logic as create_new_muted_ya but with a different data source.
-Designed for parallel comparison with the legacy pipeline (tests_monitor).
 """
 
 import argparse
@@ -12,41 +9,40 @@ import logging
 import os
 import sys
 
-# Add paths for imports
-script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(script_dir)
-sys.path.append(os.path.join(script_dir, '..', 'analytics'))
+# Paths for imports from tests/ and analytics/
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_scripts_dir = os.path.dirname(_script_dir)
+sys.path.insert(0, os.path.join(_scripts_dir, 'tests'))
+sys.path.insert(0, os.path.join(_scripts_dir, 'analytics'))
 
 from mute_check import YaMuteCheck
-from mute_logic import aggregate_test_data
-from pattern_rules_loader import (
-    load_rules,
-    get_mute_rule,
-    get_unmute_rule,
-    get_delete_rule,
-    get_quarantine_graduation_rule,
-    get_rule_params,
-)
-from mute_data_from_test_results import fetch_from_test_results
 from ydb_wrapper import YDBWrapper
 from mute_decisions import write_mute_decisions
 
-# Import shared logic from create_new_muted_ya
-from create_new_muted_ya import (
-    apply_and_add_mutes,
-    _parse_mute_file,
-    muted_ya_path,
-    quarantine_path,
-    DEFAULT_MUTE_DAYS,
-    DEFAULT_UNMUTE_DAYS,
-    DEFAULT_DELETE_DAYS,
+from .logic import aggregate_test_data, get_quarantine_graduation
+from .rules import (
+    get_delete_rule,
+    get_mute_rule,
+    get_quarantine_graduation_rule,
+    get_rule_params,
+    get_unmute_rule,
+    load_rules,
 )
+from .data import fetch_from_test_results
+from .apply import apply_and_add_mutes
+from .utils import parse_mute_file
+
+DEFAULT_MUTE_DAYS = 4
+DEFAULT_UNMUTE_DAYS = 7
+DEFAULT_DELETE_DAYS = 7
+
+MUTED_YA_PATH = '.github/config/muted_ya.txt'
+QUARANTINE_PATH = '.github/config/quarantine.txt'
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def _aggregate_with_logging(all_data, period_days):
-    """Wrapper that adds logging around mute_logic.aggregate_test_data."""
     logging.info(f"Starting aggregation for {period_days} days period...")
     result = aggregate_test_data(all_data, period_days)
     logging.info(f"Aggregation completed: {len(result)} unique tests")
@@ -54,23 +50,21 @@ def _aggregate_with_logging(all_data, period_days):
 
 
 def run_v4_direct(args):
-    """
-    Run mute logic using test_results directly (no flaky_tests_window, no tests_monitor).
-    """
+    """Run mute logic using test_results directly."""
     with YDBWrapper() as ydb_wrapper:
         if not ydb_wrapper.check_credentials():
             return 1
 
-        logging.info("Starting mute v4 direct (test_results only, no flaky/monitor)")
+        logging.info("Starting mute v4 direct (test_results only)")
         logging.info(f"Branch: {args.branch}, build_type: {args.build_type}")
 
-        input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
+        input_muted_ya_path = getattr(args, 'muted_ya_file', MUTED_YA_PATH)
         mute_check = YaMuteCheck()
         mute_check.load(input_muted_ya_path)
         logging.info(f"Loaded muted_ya with {len(mute_check.regexps)} patterns")
 
         quarantine_check = None
-        input_quarantine_path = getattr(args, 'quarantine_file', quarantine_path)
+        input_quarantine_path = getattr(args, 'quarantine_file', QUARANTINE_PATH)
         if os.path.exists(input_quarantine_path):
             quarantine_check = YaMuteCheck()
             quarantine_check.load(input_quarantine_path)
@@ -90,13 +84,12 @@ def run_v4_direct(args):
         unmute_days = get_rule_params(unmute_rule, {}).get('window_days', DEFAULT_UNMUTE_DAYS) if unmute_rule else DEFAULT_UNMUTE_DAYS
         delete_days = get_rule_params(delete_rule, {}).get('window_days', DEFAULT_DELETE_DAYS) if delete_rule else DEFAULT_DELETE_DAYS
         graduation_params = get_rule_params(graduation_rule, {}) if graduation_rule else {}
+        grad_window = graduation_params.get('window_days', 1)
 
         mute_rule_params = get_rule_params(mute_rule, {}) if mute_rule else {}
         unmute_rule_params = get_rule_params(unmute_rule, {}) if unmute_rule else {}
         delete_rule_params = get_rule_params(delete_rule, {}) if delete_rule else {}
-        grad_window = graduation_params.get('window_days', 1)
 
-        # Fetch from test_results directly (no flaky_tests_history, no tests_monitor)
         all_data = fetch_from_test_results(
             ydb_wrapper, args.branch, build_type, days_window=7, mute_check=mute_check
         )
@@ -109,8 +102,7 @@ def run_v4_direct(args):
 
         to_graduated = set()
         if quarantine_check and input_quarantine_path and os.path.exists(input_quarantine_path):
-            from mute_logic import get_quarantine_graduation
-            quarantine_tests = _parse_mute_file(input_quarantine_path)
+            quarantine_tests = parse_mute_file(input_quarantine_path)
             to_graduated = get_quarantine_graduation(quarantine_tests, aggregated_1day, graduation_params)
             if to_graduated:
                 updated_quarantine = quarantine_tests - to_graduated
@@ -136,7 +128,6 @@ def run_v4_direct(args):
         )
         to_mute, to_unmute, to_delete, to_mute_debug, to_unmute_debug, to_delete_debug = result
 
-        # Write mute decisions to YDB
         try:
             mute_rule_id = mute_rule.get("id", "regression_flaky_mute") if mute_rule else "regression_flaky_mute"
             unmute_rule_id = unmute_rule.get("id", "regression_stable_unmute") if unmute_rule else "regression_stable_unmute"
@@ -164,21 +155,21 @@ def run_v4_direct(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Mute v4 Direct: test_results only, no flaky/monitor")
+    parser = argparse.ArgumentParser(description="Mute v4 Direct: test_results only")
     parser.add_argument("--branch", default="main")
     parser.add_argument("--build_type", default="relwithdebinfo")
     parser.add_argument("--muted_ya_file", default=None)
     parser.add_argument("--quarantine_file", default=None)
     parser.add_argument("--output_folder", default="comparison/v4_direct")
     parser.add_argument("--rules_file", default=None)
-    parser.add_argument("--system-version", "--system_version", dest="system_version", default="v4_direct", help="Suffix for mute_decisions (default: v4_direct)")
+    parser.add_argument("--output_file", default=None)
+    parser.add_argument("--system-version", "--system_version", dest="system_version", default="v4_direct")
     args = parser.parse_args()
 
+    repo_root = os.path.join(_script_dir, '..', '..', '..')
     if args.muted_ya_file is None:
-        repo_root = os.path.join(script_dir, '..', '..', '..')
         args.muted_ya_file = os.path.join(repo_root, '.github', 'config', 'muted_ya.txt')
     if args.quarantine_file is None:
-        repo_root = os.path.join(script_dir, '..', '..', '..')
         args.quarantine_file = os.path.join(repo_root, '.github', 'config', 'quarantine.txt')
 
     return run_v4_direct(args)

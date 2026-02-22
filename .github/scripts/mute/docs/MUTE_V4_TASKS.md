@@ -1,6 +1,6 @@
 # Mute v4 — Task List for Implementation
 
-**Design doc:** [MUTE_V4_DESIGN.md](MUTE_V4_DESIGN.md)
+**Design doc:** [MUTE_V4_DESIGN.md](./MUTE_V4_DESIGN.md)
 
 **Branch:** mute_version_4
 

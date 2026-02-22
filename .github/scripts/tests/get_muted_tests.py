@@ -178,7 +178,7 @@ def upload_muted_tests(tests):
             print(f'📊 Successfully uploaded {len(tests)} test records')
         except Exception as e:
             print(f'⚠️ Bulk upsert failed (table may need migration for build_type): {e}')
-            print('   Run ALTER or create new table. See MUTE_V4_TESTING_AND_SWITCH.md')
+            print('   Run ALTER or create new table. See .github/scripts/mute/docs/MUTE_V4_TESTING_AND_SWITCH.md')
 
 
 def to_str(data):

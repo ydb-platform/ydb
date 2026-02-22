@@ -1,63 +1,39 @@
 #!/usr/bin/env python3
 """
-Evaluate pattern rules (scope: pr_check, regression) from test_results/test_runs_column.
-
-Patterns:
-  - floating_across_days: timeout failures floating across different tests in a suite over days
-  - retry_recovered: fail on first attempt, pass on retry (same job)
-  - duration_increased: test duration grew significantly (baseline vs recent median)
-
-Usage:
-  evaluate_pr_check_rules.py --branch main --build_type relwithdebinfo [--days 7]
+Evaluate pattern rules (scope: pr_check, regression) from test_results.
 """
 
 import argparse
 import datetime
 import os
 import sys
-from collections import defaultdict
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_scripts_dir = os.path.dirname(_script_dir)
+sys.path.insert(0, os.path.join(_scripts_dir, 'analytics'))
 from ydb_wrapper import YDBWrapper
 from mute_decisions import write_pattern_matches
 
-sys.path.append(os.path.dirname(__file__))
-from pattern_rules_loader import load_rules, get_rules_for_build, get_rule_params
-from behavior_start import find_behavior_start
-from regression_jobs import regression_job_names_sql, EXCLUDE_MANUAL_RUNS_SQL
-from pr_check_patterns import (
-    pattern_floating_across_days,
-    pattern_retry_recovered,
-    pattern_muted_test_different_error,
+from .rules import get_rule_params, get_rules_for_build, load_rules
+from .behavior import find_behavior_start
+from .regression import EXCLUDE_MANUAL_RUNS_SQL, regression_job_names_sql
+from .patterns import (
     pattern_duration_increased,
+    pattern_floating_across_days,
+    pattern_muted_test_different_error,
+    pattern_retry_recovered,
 )
 
 
 def fetch_pr_check_runs(ydb_wrapper, branch, build_type, days=7):
-    """Fetch PR-check runs from test_results."""
     table = ydb_wrapper.get_table_path("test_results")
     start_date = datetime.date.today() - datetime.timedelta(days=days)
     query = f"""
-        SELECT
-            run_timestamp,
-            full_name,
-            suite_folder,
-            test_name,
-            status,
-            error_type,
-            job_id,
-            job_name,
-            commit,
-            pull
+        SELECT run_timestamp, full_name, suite_folder, test_name, status, error_type, job_id, job_name, commit, pull
         FROM `{table}`
-        WHERE branch = '{branch}'
-          AND build_type = '{build_type}'
+        WHERE branch = '{branch}' AND build_type = '{build_type}'
           AND run_timestamp >= Date('{start_date}')
-          AND (
-              job_name = 'PR-check'
-              OR job_name LIKE '%PR-check%'
-              OR job_name LIKE '%PR_check%'
-          )
+          AND (job_name = 'PR-check' OR job_name LIKE '%PR-check%' OR job_name LIKE '%PR_check%')
           {EXCLUDE_MANUAL_RUNS_SQL}
     """
     try:
@@ -68,23 +44,13 @@ def fetch_pr_check_runs(ydb_wrapper, branch, build_type, days=7):
 
 
 def fetch_regression_runs(ydb_wrapper, branch, build_type, days=7):
-    """Fetch all regression runs (for muted_test_different_error etc)."""
     table = ydb_wrapper.get_table_path("test_results")
     start_date = datetime.date.today() - datetime.timedelta(days=days)
     jobs = regression_job_names_sql()
     query = f"""
-        SELECT
-            run_timestamp,
-            full_name,
-            suite_folder,
-            test_name,
-            status,
-            error_type,
-            commit,
-            pull
+        SELECT run_timestamp, full_name, suite_folder, test_name, status, error_type, commit, pull
         FROM `{table}`
-        WHERE branch = '{branch}'
-          AND build_type = '{build_type}'
+        WHERE branch = '{branch}' AND build_type = '{build_type}'
           AND run_timestamp >= Date('{start_date}')
           AND job_name IN ({jobs})
           {EXCLUDE_MANUAL_RUNS_SQL}
@@ -97,26 +63,15 @@ def fetch_regression_runs(ydb_wrapper, branch, build_type, days=7):
 
 
 def fetch_regression_runs_with_duration(ydb_wrapper, branch, build_type, days=7):
-    """Fetch regression runs with duration from test_results."""
     table = ydb_wrapper.get_table_path("test_results")
     start_date = datetime.date.today() - datetime.timedelta(days=days)
     jobs = regression_job_names_sql()
     query = f"""
-        SELECT
-            run_timestamp,
-            full_name,
-            suite_folder,
-            test_name,
-            status,
-            duration,
-            commit,
-            pull
+        SELECT run_timestamp, full_name, suite_folder, test_name, status, duration, commit, pull
         FROM `{table}`
-        WHERE branch = '{branch}'
-          AND build_type = '{build_type}'
+        WHERE branch = '{branch}' AND build_type = '{build_type}'
           AND run_timestamp >= Date('{start_date}')
-          AND duration IS NOT NULL
-          AND duration > 0
+          AND duration IS NOT NULL AND duration > 0
           AND job_name IN ({jobs})
           {EXCLUDE_MANUAL_RUNS_SQL}
     """
@@ -128,12 +83,12 @@ def fetch_regression_runs_with_duration(ydb_wrapper, branch, build_type, days=7)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate pattern rules (PR-check, regression)")
+    parser = argparse.ArgumentParser(description="Evaluate pattern rules")
     parser.add_argument('--branch', default='main')
     parser.add_argument('--build_type', default='relwithdebinfo')
     parser.add_argument('--days', type=int, default=7)
-    parser.add_argument('--rules_file', help='Path to pattern_rules.yaml')
-    parser.add_argument('--muted_ya_file', help='Path to muted_ya.txt for muted_test_different_error')
+    parser.add_argument('--rules_file', default=None)
+    parser.add_argument('--muted_ya_file', default=None)
     args = parser.parse_args()
 
     rules = load_rules(args.rules_file)
@@ -162,21 +117,12 @@ def main():
             print("YDB credentials not available")
             return 1
 
-        pr_runs = []
-        if pr_rules:
-            pr_runs = fetch_pr_check_runs(ydb_wrapper, args.branch, args.build_type, args.days)
-            if not pr_runs and pr_rules:
-                print("No PR-check runs found")
-
+        pr_runs = fetch_pr_check_runs(ydb_wrapper, args.branch, args.build_type, args.days) if pr_rules else []
         regression_runs = []
         regression_runs_all = []
         duration_rules = [r for r in regression_rules if r.get('pattern') == 'duration_increased']
         if duration_rules:
-            regression_runs = fetch_regression_runs_with_duration(
-                ydb_wrapper, args.branch, args.build_type, args.days
-            )
-            if not regression_runs and duration_rules:
-                print("No regression runs with duration found")
+            regression_runs = fetch_regression_runs_with_duration(ydb_wrapper, args.branch, args.build_type, args.days)
         if any(r.get('pattern') == 'muted_test_different_error' for r in regression_rules):
             regression_runs_all = fetch_regression_runs(ydb_wrapper, args.branch, args.build_type, args.days)
 
@@ -185,14 +131,12 @@ def main():
             pattern = rule.get('pattern', '')
             params = get_rule_params(rule, {})
             reaction = rule.get('reaction', 'log')
-
             if pattern == 'floating_across_days':
                 matches = pattern_floating_across_days(pr_runs, params)
             elif pattern == 'retry_recovered':
                 matches = pattern_retry_recovered(pr_runs, params)
             else:
                 matches = []
-
             for m in matches:
                 m['rule_id'] = pid
                 m['reaction'] = reaction

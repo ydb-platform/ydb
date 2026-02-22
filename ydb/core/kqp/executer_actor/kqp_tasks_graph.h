@@ -16,6 +16,7 @@
 
 namespace NKikimrKqp {
     class TKqpFullTextSourceSettings;
+    class TKqpSysViewSourceSettings;
 }
 
 namespace NKikimr::NKqp {
@@ -266,6 +267,7 @@ struct TTaskInputMeta {
     // these message are allocated using the protobuf arena.
     NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings = nullptr;
     NKikimrKqp::TKqpFullTextSourceSettings* FullTextSourceSettings = nullptr;
+    NKikimrKqp::TKqpSysViewSourceSettings* SysViewSourceSettings = nullptr;
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
     NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
@@ -416,6 +418,7 @@ private:
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
     void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
+    void BuildSysViewTasksFromSource(TStageInfo& stageInfo);
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
     void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
     TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats);

@@ -447,6 +447,18 @@ message TKqpReadRangesSource {
     TKqpPhyVectorTopK VectorTopK = 11;
 }
 
+message TKqpSysViewSource {
+    TKqpPhyTableId Table = 1;
+    repeated TKqpPhyColumnId Columns = 2;
+    TKqpPhyValue ItemsLimit = 3;
+    bool Reverse = 4;
+
+    oneof RangesExpr {
+        TKqpPhyParamValue Ranges = 5;
+        TKqpPhyKeyRange KeyRange = 6;
+    }
+}
+
 message TKqpExternalSource {
     string Type = 1;
     google.protobuf.Any Settings = 2;
@@ -472,6 +484,7 @@ message TKqpSource {
         TKqpReadRangesSource ReadRangesSource = 3;
         TKqpExternalSource ExternalSource = 4;
         TKqpFullTextSource FullTextSource = 5;
+        TKqpSysViewSource SysViewSource = 6;
     }
 }
 

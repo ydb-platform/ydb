@@ -228,20 +228,29 @@ ALTER TABLE `test_results/analytics/mute_decisions` ADD COLUMN behavior_start_pr
 
 ---
 
-## 11. Parallel Testing (Legacy vs v4)
+## 11. Parallel Testing (Legacy vs Current vs v4_direct)
 
 Для проверки новой системы параллельно со старой:
 
-1. **Режим --legacy** в create_new_muted_ya: без quarantine, без graduation (как старая система).
-2. **compare_mute_systems.py** — запускает оба режима и строит diff по to_mute, to_unmute, to_delete, final muted_ya.
-3. **Workflow compare_mute_systems.yml** — еженедельно (воскресенье) или вручную (workflow_dispatch).
+1. **Legacy** — create_new_muted_ya --legacy: tests_monitor, без quarantine.
+2. **Current** — create_new_muted_ya: tests_monitor, с quarantine.
+3. **v4_direct** — create_new_muted_ya_v4: **test_results напрямую**, без flaky_tests_window и tests_monitor.
+4. **compare_mute_systems.py** — запускает все три режима и строит diff.
+5. **Workflow compare_mute_systems.yml** — еженедельно (воскресенье) или вручную.
 
 ```bash
-# Локально (после flaky_tests_history, tests_monitor):
+# Локально (legacy/current требуют flaky_tests_history, tests_monitor):
+python3 .github/scripts/analytics/flaky_tests_history.py --branch=main
+python3 .github/scripts/analytics/tests_monitor.py --branch=main
 python3 .github/scripts/tests/compare_mute_systems.py --branch main
+
+# Только v4_direct (без flaky/monitor):
+python3 .github/scripts/tests/compare_mute_systems.py --skip_legacy --skip_current
 ```
 
-Артефакт `mute-comparison-{branch}` содержит comparison_report.md и папки legacy/, current/.
+Артефакт `mute-comparison-{branch}` содержит comparison_report.md и папки legacy/, current/, v4_direct/.
+
+**v4_direct** — целевая новая версия: отказ от flaky_tests_window и tests_monitor, чтение только из test_results.
 
 ---
 

@@ -1,4 +1,14 @@
-# Сравнение старой и новой системы mute (Legacy vs v4)
+# Сравнение систем mute: Legacy vs Current vs v4_direct
+
+## Режимы сравнения
+
+| Режим | Скрипт | Источник данных | flaky_tests_window / tests_monitor |
+|-------|--------|-----------------|------------------------------------|
+| **Legacy** | create_new_muted_ya --legacy | tests_monitor | **Требуются** |
+| **Current** | create_new_muted_ya | tests_monitor | **Требуются** |
+| **v4_direct** | create_new_muted_ya_v4 | test_results | **Не используются** |
+
+**v4_direct** — новая версия, читает напрямую из `test_results` (test_runs_column). Отказ от flaky_tests_window и tests_monitor.
 
 ## Как сравнивать
 
@@ -12,56 +22,63 @@
 
 **Результат:**
 - Артефакт `mute-comparison-{branch}` (retention 14 дней)
-- Содержит: `comparison_report.md`, папки `legacy/`, `current/`
+- Содержит: `comparison_report.md`, папки `legacy/`, `current/`, `v4_direct/`
 - Step Summary в run содержит отчёт
 
-### 2. Локально
-
-Требуется доступ к YDB и предварительный запуск пайплайна данных:
+### 2. Локально (все три режима)
 
 ```bash
 # 1. Checkout main
 git checkout main
 
 # 2. Получить base файлы из целевой ветки
-BRANCH=main  # или stable-25-3 и т.д.
+BRANCH=main
 git fetch origin $BRANCH
 git show origin/$BRANCH:.github/config/muted_ya.txt > base_muted_ya.txt
 git show origin/$BRANCH:.github/config/quarantine.txt > quarantine.txt 2>/dev/null || touch quarantine.txt
 
-# 3. Заполнить данные (flaky_tests_history → flaky_tests_window, tests_monitor)
+# 3. Для legacy и current: заполнить flaky_tests_window и tests_monitor
 python3 .github/scripts/analytics/flaky_tests_history.py --branch=$BRANCH --build_type=relwithdebinfo
 python3 .github/scripts/analytics/tests_monitor.py --branch=$BRANCH --build_type=relwithdebinfo
 
-# 4. Запустить сравнение
+# 4. Запустить сравнение (legacy, current, v4_direct)
 python3 .github/scripts/tests/compare_mute_systems.py \
   --branch=$BRANCH \
   --build_type=relwithdebinfo \
   --muted_ya_file=base_muted_ya.txt \
   --quarantine_file=quarantine.txt
-
-# 5. Отчёт в comparison/comparison_report.md
-cat comparison/comparison_report.md
 ```
 
-### 3. Отдельный запуск legacy и current
+### 3. Только v4_direct (без flaky/monitor)
 
 ```bash
-# Legacy (без quarantine, без graduation)
+# v4_direct не требует flaky_tests_history и tests_monitor
+python3 .github/scripts/tests/compare_mute_systems.py \
+  --branch=main --build_type=relwithdebinfo \
+  --muted_ya_file=base_muted_ya.txt --quarantine_file=quarantine.txt \
+  --skip_legacy --skip_current
+```
+
+### 4. Отдельный запуск каждого режима
+
+```bash
+# Legacy (tests_monitor, без quarantine)
 python3 .github/scripts/tests/create_new_muted_ya.py update_muted_ya \
   --branch=main --build_type=relwithdebinfo \
   --muted_ya_file=base_muted_ya.txt --quarantine_file=quarantine.txt \
-  --output_folder=comparison/legacy \
-  --legacy
+  --output_folder=comparison/legacy --legacy
 
-# Current (v4 с quarantine, graduation)
+# Current (tests_monitor, с quarantine)
 python3 .github/scripts/tests/create_new_muted_ya.py update_muted_ya \
   --branch=main --build_type=relwithdebinfo \
   --muted_ya_file=base_muted_ya.txt --quarantine_file=quarantine.txt \
   --output_folder=comparison/current
 
-# Сравнить вручную
-diff comparison/legacy/mute_update/new_muted_ya.txt comparison/current/mute_update/new_muted_ya.txt
+# v4_direct (test_results только, без flaky/monitor)
+python3 .github/scripts/tests/create_new_muted_ya_v4.py \
+  --branch=main --build_type=relwithdebinfo \
+  --muted_ya_file=base_muted_ya.txt --quarantine_file=quarantine.txt \
+  --output_folder=comparison/v4_direct
 ```
 
 ## Что сравнивается
@@ -73,19 +90,20 @@ diff comparison/legacy/mute_update/new_muted_ya.txt comparison/current/mute_upda
 | to_delete.txt | Кандидаты на удаление (нет запусков) |
 | new_muted_ya.txt | Итоговый список замьюченных тестов |
 
-## Различия Legacy vs v4
+## Различия режимов
 
-| Аспект | Legacy | v4 |
-|--------|--------|-----|
-| Quarantine | Нет | Есть — защита от re-mute после ручного unmute |
-| Graduation | Нет | Есть — 4+ runs, 1+ pass в 1 день → выход из quarantine |
-| Исключение из to_mute | — | Тесты в quarantine не попадают в to_mute |
-| mute_decisions | Не пишется | Пишется в YDB |
+| Аспект | Legacy | Current | v4_direct |
+|--------|--------|---------|-----------|
+| Quarantine | Нет | Да | Да |
+| Graduation | Нет | Да | Да |
+| mute_decisions | Нет | Да | Да |
+| Источник данных | tests_monitor | tests_monitor | **test_results** |
+| flaky_tests_window | Да | Да | **Нет** |
+| tests_monitor | Да | Да | **Нет** |
 
-## Использование таблиц
+## Потоки данных
 
-Обе системы (legacy и v4) используют **одни и те же таблицы**:
-
+**Legacy / Current:**
 ```
 test_results (test_runs_column)
        ↓ flaky_tests_history.py
@@ -93,10 +111,16 @@ flaky_tests_window
        ↓ tests_monitor.py (+ all_tests_with_owner_and_mute)
 tests_monitor
        ↓ create_new_muted_ya.py (execute_query)
-mute/unmute/delete решения
+mute/unmute/delete
 ```
 
-- **flaky_tests_window** — агрегат по дням (pass/fail/mute/skip), заполняется flaky_tests_history из test_results
-- **tests_monitor** — статусы тестов по дням (state, is_muted, pass_count, fail_count…), заполняется tests_monitor из flaky_tests_window
+**v4_direct (новая версия):**
+```
+test_results (test_runs_column)
+       ↓ create_new_muted_ya_v4.py (mute_data_from_test_results.fetch_from_test_results)
+агрегация в памяти
+       ↓ mute_logic.aggregate_test_data
+mute/unmute/delete
+```
 
-create_new_muted_ya читает **только tests_monitor**. evaluate_pr_check_rules и pattern-алерты читают **test_results** напрямую (для PR-check и regression runs с duration).
+v4_direct не использует flaky_tests_window и tests_monitor.

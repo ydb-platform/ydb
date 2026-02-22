@@ -1970,11 +1970,11 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(owner, result->StartingPoints);
+    result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
+        delete ptr;
+    });
     if (evYardInit.GetDiskFd) {
         result->DiskFd = BlockDevice->DuplicateFd();
-        result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
-            delete ptr;
-        });
     }
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
@@ -2141,11 +2141,12 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
+    result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
+        delete ptr;
+    });
     if (evYardInit.GetDiskFd) {
         result->DiskFd = BlockDevice->DuplicateFd();
-        result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
-            delete ptr;
-        });
+
     }
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});

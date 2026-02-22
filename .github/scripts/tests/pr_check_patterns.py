@@ -87,3 +87,72 @@ def pattern_muted_test_different_error(runs, muted_tests, params):
                 'test_name': name,
             })
     return matches
+
+
+def _median(values):
+    """Median of non-empty list of numbers."""
+    if not values:
+        return None
+    sorted_vals = sorted(v for v in values if v is not None and v > 0)
+    if not sorted_vals:
+        return None
+    n = len(sorted_vals)
+    return sorted_vals[n // 2] if n % 2 else (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2
+
+
+def pattern_duration_increased(runs, params):
+    """
+    Detect tests whose duration has increased significantly.
+    Compares median duration in recent days vs baseline (older days).
+    """
+    window_days = params.get('window_days', 7)
+    baseline_days = params.get('baseline_days', window_days - 1)
+    recent_days = params.get('recent_days', 1)
+    min_baseline_runs = params.get('min_baseline_runs', 3)
+    min_recent_runs = params.get('min_recent_runs', 2)
+    growth_factor = params.get('growth_factor', 1.5)
+
+    by_test = defaultdict(lambda: [])
+    for r in runs:
+        full_name = r.get('full_name') or ''
+        duration = r.get('duration')
+        if not full_name or duration is None:
+            continue
+        ts = r.get('run_timestamp')
+        if ts is None:
+            continue
+        d = _parse_date(ts)
+        by_test[full_name].append((d, float(duration)))
+
+    today = max((d for runs_list in by_test.values() for d, _ in runs_list), default=None)
+    if today is None:
+        return []
+
+    baseline_end = today - datetime.timedelta(days=recent_days)
+    baseline_start = baseline_end - datetime.timedelta(days=baseline_days)
+    recent_start = baseline_end
+
+    matches = []
+    for full_name, events in by_test.items():
+        baseline_durations = [dur for d, dur in events if baseline_start <= d < baseline_end]
+        recent_durations = [dur for d, dur in events if d >= recent_start and dur > 0]
+
+        if len(baseline_durations) < min_baseline_runs or len(recent_durations) < min_recent_runs:
+            continue
+
+        median_baseline = _median(baseline_durations)
+        median_recent = _median(recent_durations)
+        if median_baseline is None or median_recent is None or median_baseline <= 0:
+            continue
+
+        if median_recent >= median_baseline * growth_factor:
+            matches.append({
+                'pattern': 'duration_increased',
+                'full_name': full_name,
+                'baseline_median': median_baseline,
+                'recent_median': median_recent,
+                'growth_ratio': median_recent / median_baseline,
+                'baseline_runs': len(baseline_durations),
+                'recent_runs': len(recent_durations),
+            })
+    return matches

@@ -177,6 +177,9 @@ create_new_muted_ya загружает правила и использует pa
 
 **Правила с scope: pr_check** (floating_across_days, retry_recovered) требуют отдельного скрипта — данные PR-check не попадают в tests_monitor. Нужен evaluate_pr_check_rules.py, который читает test_results с job_name=PR-check.
 
+**Правила с scope: regression и reaction: alert**:
+- **duration_increased** — выросла продолжительность теста (сравнение median baseline vs recent). Данные из test_results (duration), job_name = regression/nightly/postcommit.
+
 ## 9. Mute Decisions (mute_decisions)
 
 История решений mute/unmute/delete/graduation для трассировки.

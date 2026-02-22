@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Evaluate PR-check rules (scope: pr_check) from test_results/test_runs_column.
+Evaluate pattern rules (scope: pr_check, regression) from test_results/test_runs_column.
 
 Patterns:
   - floating_across_days: timeout failures floating across different tests in a suite over days
   - retry_recovered: fail on first attempt, pass on retry (same job)
+  - duration_increased: test duration grew significantly (baseline vs recent median)
 
 Usage:
   evaluate_pr_check_rules.py --branch main --build_type relwithdebinfo [--days 7]
@@ -26,6 +27,7 @@ from pr_check_patterns import (
     pattern_floating_across_days,
     pattern_retry_recovered,
     pattern_muted_test_different_error,
+    pattern_duration_increased,
 )
 
 
@@ -60,8 +62,44 @@ def fetch_pr_check_runs(ydb_wrapper, branch, build_type, days=7):
         return []
 
 
+def fetch_regression_runs_with_duration(ydb_wrapper, branch, build_type, days=7):
+    """Fetch regression runs with duration from test_results."""
+    table = ydb_wrapper.get_table_path("test_results")
+    start_date = datetime.date.today() - datetime.timedelta(days=days)
+    query = f"""
+        SELECT
+            run_timestamp,
+            full_name,
+            suite_folder,
+            test_name,
+            status,
+            duration
+        FROM `{table}`
+        WHERE branch = '{branch}'
+          AND build_type = '{build_type}'
+          AND run_timestamp >= Date('{start_date}')
+          AND duration IS NOT NULL
+          AND duration > 0
+          AND job_name IN (
+              'Nightly-run',
+              'Regression-run',
+              'Regression-run_Large',
+              'Regression-run_Small_and_Medium',
+              'Regression-run_compatibility',
+              'Regression-whitelist-run',
+              'Postcommit_relwithdebinfo',
+              'Postcommit_asan'
+          )
+    """
+    try:
+        return list(ydb_wrapper.execute_scan_query(query, query_name="regression_runs_with_duration"))
+    except Exception as e:
+        print(f"Error fetching regression duration data: {e}")
+        return []
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate PR-check rules")
+    parser = argparse.ArgumentParser(description="Evaluate pattern rules (PR-check, regression)")
     parser.add_argument('--branch', default='main')
     parser.add_argument('--build_type', default='relwithdebinfo')
     parser.add_argument('--days', type=int, default=7)
@@ -70,21 +108,36 @@ def main():
     args = parser.parse_args()
 
     rules = load_rules(args.rules_file)
-    pr_rules = [r for r in get_rules_for_build(rules, args.build_type) if r.get('scope') == 'pr_check']
-    if not pr_rules:
-        print("No PR-check rules found")
+    build_rules = get_rules_for_build(rules, args.build_type)
+    pr_rules = [r for r in build_rules if r.get('scope') == 'pr_check']
+    regression_rules = [r for r in build_rules if r.get('scope') == 'regression']
+
+    if not pr_rules and not regression_rules:
+        print("No rules found for this build_type")
         return 0
 
     with YDBWrapper() as ydb_wrapper:
         if not ydb_wrapper.check_credentials():
             print("YDB credentials not available")
             return 1
-        runs = fetch_pr_check_runs(ydb_wrapper, args.branch, args.build_type, args.days)
-        if not runs:
-            print("No PR-check runs found")
-            return 0
+
+        pr_runs = []
+        if pr_rules:
+            pr_runs = fetch_pr_check_runs(ydb_wrapper, args.branch, args.build_type, args.days)
+            if not pr_runs and pr_rules:
+                print("No PR-check runs found")
+
+        regression_runs = []
+        duration_rules = [r for r in regression_rules if r.get('pattern') == 'duration_increased']
+        if duration_rules:
+            regression_runs = fetch_regression_runs_with_duration(
+                ydb_wrapper, args.branch, args.build_type, args.days
+            )
+            if not regression_runs and duration_rules:
+                print("No regression runs with duration found")
 
     all_matches = []
+
     for rule in pr_rules:
         pid = rule.get('id', '')
         pattern = rule.get('pattern', '')
@@ -92,9 +145,9 @@ def main():
         reaction = rule.get('reaction', 'log')
 
         if pattern == 'floating_across_days':
-            matches = pattern_floating_across_days(runs, params)
+            matches = pattern_floating_across_days(pr_runs, params)
         elif pattern == 'retry_recovered':
-            matches = pattern_retry_recovered(runs, params)
+            matches = pattern_retry_recovered(pr_runs, params)
         elif pattern == 'muted_test_different_error':
             muted = set()
             if args.muted_ya_file and os.path.exists(args.muted_ya_file):
@@ -105,10 +158,20 @@ def main():
                             parts = line.split(' ', 1)
                             if len(parts) == 2:
                                 muted.add((parts[0], parts[1]))
-            matches = pattern_muted_test_different_error(runs, muted, params)
+            matches = pattern_muted_test_different_error(pr_runs, muted, params)
         else:
             matches = []
 
+        for m in matches:
+            m['rule_id'] = pid
+            m['reaction'] = reaction
+            all_matches.append(m)
+
+    for rule in duration_rules:
+        pid = rule.get('id', '')
+        params = get_rule_params(rule, {})
+        reaction = rule.get('reaction', 'alert')
+        matches = pattern_duration_increased(regression_runs, params)
         for m in matches:
             m['rule_id'] = pid
             m['reaction'] = reaction

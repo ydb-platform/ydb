@@ -104,3 +104,18 @@ rules:
     params: {}
     reaction: alert
     # Требует: mute с error_type, проверка при run
+
+  # === Рост продолжительности теста — алерт ===
+  - id: test_duration_increased
+    name: "Выросла продолжительность теста"
+    pattern: duration_increased
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+      baseline_days: 6  # дней для baseline (старые)
+      recent_days: 1    # дней для recent (последние)
+      min_baseline_runs: 3
+      min_recent_runs: 2
+      growth_factor: 1.5  # recent_median >= baseline_median * growth_factor
+    reaction: alert

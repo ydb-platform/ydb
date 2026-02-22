@@ -8,6 +8,7 @@ from pr_check_patterns import (
     pattern_floating_across_days,
     pattern_retry_recovered,
     pattern_muted_test_different_error,
+    pattern_duration_increased,
     _parse_date,
 )
 
@@ -90,3 +91,64 @@ def test_muted_test_different_error_skips_unmuted():
     ]
     matches = pattern_muted_test_different_error(runs, muted, {})
     assert len(matches) == 0
+
+
+def test_duration_increased_detects():
+    """Duration grew 2x: baseline median 10s, recent median 20s."""
+    today = datetime.date(2025, 2, 22)
+    runs = [
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=5), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=4), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=3), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today, "duration": 20.0},
+        {"full_name": "s/t1", "run_timestamp": today, "duration": 20.0},
+    ]
+    params = {"window_days": 7, "baseline_days": 6, "recent_days": 1, "min_baseline_runs": 3, "min_recent_runs": 2, "growth_factor": 1.5}
+    matches = pattern_duration_increased(runs, params)
+    assert len(matches) == 1
+    assert matches[0]["pattern"] == "duration_increased"
+    assert matches[0]["full_name"] == "s/t1"
+    assert matches[0]["growth_ratio"] >= 1.5
+
+
+def test_duration_increased_no_growth():
+    """Duration stable: no alert."""
+    today = datetime.date(2025, 2, 22)
+    runs = [
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=5), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=4), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=3), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today, "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today, "duration": 11.0},
+    ]
+    params = {"window_days": 7, "baseline_days": 6, "recent_days": 1, "min_baseline_runs": 3, "min_recent_runs": 2, "growth_factor": 1.5}
+    matches = pattern_duration_increased(runs, params)
+    assert len(matches) == 0
+
+
+def test_duration_increased_insufficient_baseline():
+    """Not enough baseline runs: no alert."""
+    today = datetime.date(2025, 2, 22)
+    runs = [
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=5), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today, "duration": 100.0},
+        {"full_name": "s/t1", "run_timestamp": today, "duration": 100.0},
+    ]
+    params = {"window_days": 7, "baseline_days": 6, "recent_days": 1, "min_baseline_runs": 3, "min_recent_runs": 2, "growth_factor": 1.5}
+    matches = pattern_duration_increased(runs, params)
+    assert len(matches) == 0
+
+
+def test_duration_increased_skips_zero_duration():
+    """Zero/None durations are excluded from median."""
+    today = datetime.date(2025, 2, 22)
+    runs = [
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=5), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=4), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today - datetime.timedelta(days=3), "duration": 10.0},
+        {"full_name": "s/t1", "run_timestamp": today, "duration": 0},
+        {"full_name": "s/t1", "run_timestamp": today, "duration": 20.0},
+    ]
+    params = {"window_days": 7, "baseline_days": 6, "recent_days": 1, "min_baseline_runs": 3, "min_recent_runs": 2, "growth_factor": 1.5}
+    matches = pattern_duration_increased(runs, params)
+    assert len(matches) == 0  # only 1 recent run with duration > 0

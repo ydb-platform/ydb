@@ -82,12 +82,13 @@
 - [ ] **5c.4** Добавить error_type в flaky_tests_window или отдельную агрегацию
 - [x] **5c.5** Реализовать error_filter в is_mute_candidate
 - [x] **5c.6** Реализовать muted_test_different_error (reaction: alert)
+- [x] **5c.7** Реализовать duration_increased (reaction: alert) — рост продолжительности теста
 
 ---
 
 ## Phase 6: Testing & Validation
 
-- [x] **6.0** Pytest unit tests (56 tests): mute_logic, pattern_rules, mute_utils, detect_manual_unmutes, pr_check_patterns, mute_decisions
+- [x] **6.0** Pytest unit tests (74 tests): mute_logic, pattern_rules, mute_utils, detect_manual_unmutes, pr_check_patterns, mute_decisions, duration_increased
 - [ ] **6.1** Test manual unmute flow: remove test, merge, verify quarantine
 - [ ] **6.2** Test quarantine graduation: 4 runs / 1 day with 1 pass
 - [ ] **6.3** Test that quarantine tests don't get re-muted

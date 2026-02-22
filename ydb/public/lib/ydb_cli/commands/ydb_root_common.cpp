@@ -17,11 +17,12 @@
 #include "ydb_yql.h"
 #include "ydb_workload.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
+
 #if !defined(_win32_)
 #include <ydb/core/base/backtrace.h>
 #endif
-#include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
-#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>

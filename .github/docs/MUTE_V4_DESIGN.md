@@ -120,7 +120,30 @@ Remove from quarantine when:
 
 ---
 
-## 6. Data Flow
+## 6. Data Storage: где хранятся статусы тестов
+
+### Текущая схема
+
+| Таблица | Содержимое | Ключ |
+|---------|------------|------|
+| **test_results/test_runs_column** | Сырые запуски (каждый run) | run_timestamp, build_type, branch, full_name, job_name, status, error_type |
+| **flaky_tests_window** | Агрегат по дням (только regression/nightly/postcommit) | full_name, date_window, build_type, branch |
+| **tests_monitor** | Статусы на каждый день по веткам и build_type | test_name, suite_folder, full_name, **date_window**, **build_type**, **branch** |
+
+**tests_monitor** — основное хранилище статусов: pass_count, fail_count, mute_count, skip_count, state (Flaky, Muted Flaky, Passed, etc.), is_muted. Одна строка = один тест на одну дату для одной ветки и build_type.
+
+### История запусков
+
+- Полная история — в **test_results** (все job_name, включая PR-check)
+- Для mute-логики — **tests_monitor** (агрегат из flaky_tests_window, только regression/nightly/postcommit)
+
+### Ограничение
+
+В flaky_tests_window и tests_monitor нет **error_type** (timeout vs non-timeout). error_type есть только в test_results. Для правил с error_filter потребуется расширить агрегацию.
+
+---
+
+## 7. Data Flow (mute pipeline)
 
 ```
 muted_ya.txt (from main)
@@ -140,7 +163,7 @@ new_muted_ya.txt
 
 ---
 
-## 7. Pattern Rules (pattern_rules.yaml)
+## 8. Pattern Rules (pattern_rules.yaml)
 
 Правила задают логику mute/unmute/delete через конфиг:
 
@@ -152,14 +175,7 @@ new_muted_ya.txt
 
 create_new_muted_ya загружает правила и использует params для порогов. Добавление нового правила не требует изменений кода.
 
-## 8. Future Extensions
-
-- **error_type** in mute — timeout vs non-timeout, detect error change
-- **PR-check patterns** — floating timeout detection, log/alert
-- **reaction: alert** | **log** — для паттернов без mute
-- **Fast unmute** — 1-day window for auto unmute
-
----
+**Правила с scope: pr_check** (floating_across_days, retry_recovered) требуют отдельного скрипта — данные PR-check не попадают в tests_monitor. Нужен evaluate_pr_check_rules.py, который читает test_results с job_name=PR-check.
 
 ## 9. Backward Compatibility
 

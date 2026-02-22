@@ -16,12 +16,28 @@ rules:
     build_types: [relwithdebinfo]
     params:
       window_days: 4
-      # (fail_count >= min_failures_high AND total_runs > min_runs_threshold)
-      # OR (fail_count >= min_failures_low AND total_runs <= min_runs_threshold)
       min_failures_high: 3
       min_failures_low: 2
       min_runs_threshold: 10
+      # error_filter: null = все типы, ["timeout"] = только timeout, ["!timeout"] = всё кроме timeout
+      # Требует error_type в данных (пока не реализовано)
+      error_filter: null
     reaction: mute
+
+  # Mute только timeout (когда будет error_type в агрегации)
+  - id: regression_flaky_timeout_mute
+    name: "Flaky timeout в regression — mute"
+    pattern: test_flaky
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 4
+      min_failures_high: 3
+      min_failures_low: 2
+      min_runs_threshold: 10
+      error_filter: ["timeout", "TIMEOUT"]
+    reaction: mute
+    enabled: false  # включить когда error_type будет в tests_monitor
 
   # === Unmute: убрать из muted_ya ===
   - id: regression_stable_unmute
@@ -56,3 +72,35 @@ rules:
       min_runs: 4
       min_passes: 1
     reaction: remove_from_quarantine
+
+  # === PR-check: детекция без mute (reaction: log) ===
+  - id: pr_check_floating_timeout
+    name: "Плавающий таймаут в PR-check (suite-level)"
+    pattern: floating_across_days
+    scope: pr_check
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+      min_total_fails: 3
+      max_per_test: 2
+    reaction: log
+    # Записывает в pattern_matches, не mute
+
+  - id: pr_check_retry_recovered
+    name: "Падает на attempt 1, проходит на retry"
+    pattern: retry_recovered
+    scope: pr_check
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+    reaction: log
+
+  # === Muted test с другим error_type — алерт ===
+  - id: muted_test_error_changed
+    name: "Muted тест упал с другим типом ошибки"
+    pattern: muted_test_different_error
+    scope: regression
+    build_types: [relwithdebinfo]
+    params: {}
+    reaction: alert
+    # Требует: mute с error_type, проверка при run

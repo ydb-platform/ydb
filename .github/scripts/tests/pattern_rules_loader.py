@@ -27,10 +27,12 @@ def load_rules(rules_path=None):
 def get_rules_for_build(rules, build_type, reaction=None):
     """
     Filter rules by build_type and optionally by reaction.
-    If rule has build_types and build_type not in it, skip.
+    Skip rules with enabled: false.
     """
     result = []
     for r in rules:
+        if r.get("enabled") is False:
+            continue
         bt = r.get("build_types")
         if bt is not None and build_type not in bt:
             continue

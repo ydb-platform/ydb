@@ -65,6 +65,17 @@
 
 ---
 
+## Phase 5c: PR-check rules & error_type
+
+- [ ] **5c.1** evaluate_pr_check_rules.py — скрипт для правил scope: pr_check (читает test_results)
+- [ ] **5c.2** Реализовать pattern: floating_across_days
+- [ ] **5c.3** Реализовать pattern: retry_recovered
+- [ ] **5c.4** Добавить error_type в flaky_tests_window или отдельную агрегацию
+- [ ] **5c.5** Реализовать error_filter в is_mute_candidate
+- [ ] **5c.6** Реализовать muted_test_different_error (reaction: alert)
+
+---
+
 ## Phase 6: Testing & Validation
 
 - [ ] **6.1** Test manual unmute flow: remove test, merge, verify quarantine

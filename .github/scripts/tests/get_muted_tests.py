@@ -117,16 +117,17 @@ def create_tables(ydb_wrapper, table_path):
     create_sql = f"""
         CREATE table IF NOT EXISTS `{table_path}` (
             `date` Date NOT NULL,
+            `build_type` Utf8 NOT NULL,
             `test_name` Utf8 NOT NULL,
             `suite_folder` Utf8 NOT NULL,
             `full_name` Utf8 NOT NULL,
             `run_timestamp_last` Timestamp NOT NULL,
             `owners` Utf8,
             `branch` Utf8 NOT NULL,
-            `is_muted` Uint32 ,
-            PRIMARY KEY (`date`,branch, `test_name`, `suite_folder`, `full_name`)
+            `is_muted` Uint32,
+            PRIMARY KEY (`date`, `branch`, `build_type`, `test_name`, `suite_folder`, `full_name`)
         )
-            PARTITION BY HASH(date,branch)
+            PARTITION BY HASH(date, branch, build_type)
             WITH (STORE = COLUMN)
         """
     
@@ -161,6 +162,7 @@ def upload_muted_tests(tests):
         column_types = (
             ydb.BulkUpsertColumns()
             .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -217,6 +219,7 @@ def mute_applier(args):
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
             test['branch'] = args.branch
+            test['build_type'] = args.build_type
             is_muted = int(mute_check(testsuite, testcase))
             test['is_muted'] = is_muted
             

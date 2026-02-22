@@ -13,6 +13,17 @@ from collections import defaultdict
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from mute_check import YaMuteCheck
+from mute_logic import (
+    _matches_error_filter,
+    is_mute_candidate,
+    is_unmute_candidate,
+    is_delete_candidate,
+    get_quarantine_graduation,
+    is_chunk_test,
+    create_test_string,
+    create_debug_string,
+    aggregate_test_data,
+)
 from pattern_rules_loader import (
     load_rules,
     get_mute_rule,
@@ -46,12 +57,6 @@ DEFAULT_MUTE_DAYS = 4
 DEFAULT_UNMUTE_DAYS = 7
 DEFAULT_DELETE_DAYS = 7
 
-def is_chunk_test(test):
-    # Сначала смотрим на поле is_test_chunk, если оно есть
-    if 'is_test_chunk' in test:
-        return bool(test['is_test_chunk'])
-    # Фоллбек на старую логику по имени
-    return "chunk" in test.get('test_name', '').lower()
 
 def get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, is_unmute_candidate):
     """
@@ -186,137 +191,18 @@ def add_lines_to_file(file_path, lines_to_add):
     except Exception as e:
         logging.error(f"Error adding lines to {file_path}: {e}")
 
-def aggregate_test_data(all_data, period_days):
-    """
-    Универсальная функция для агрегации тестовых данных за указанный период
-    """
-    today = datetime.date.today()
-    base_date = datetime.date(1970, 1, 1)
-    start_date = today - datetime.timedelta(days=period_days-1)
-    start_days = (start_date - base_date).days
-    
-    # Helper function to convert date to days if needed
-    def to_days(date_value):
-        if date_value is None:
-            return -1
-        if isinstance(date_value, datetime.date):
-            return (date_value - base_date).days
-        return date_value
-    
+def _aggregate_with_logging(all_data, period_days):
+    """Wrapper that adds logging around mute_logic.aggregate_test_data."""
     logging.info(f"Starting aggregation for {period_days} days period...")
-    logging.info(f"Processing {len(all_data)} test records...")
-    
-    # Агрегируем данные по full_name
-    aggregated = {}
-    processed_count = 0
-    total_count = len(all_data)
-    
-    # Сортируем записи по дате, чтобы история состояний формировалась в хронологическом порядке
-    sorted_data = sorted(
-        all_data,
-        key=lambda test: (
-            to_days(test.get('date_window')),
-            test.get('full_name') or ''
-        )
-    )
-    
-    for test in sorted_data:
-        processed_count += 1
-        # Показываем прогресс каждые 1000 записей или каждые 10%
-        if processed_count % 10000 == 0 or processed_count % max(1, total_count // 10) == 0:
-            progress_percent = (processed_count / total_count) * 100
-            logging.info(f"Aggregation progress: {processed_count}/{total_count} ({progress_percent:.1f}%)")
-        
-        if to_days(test.get('date_window', 0)) >= start_days:
-            full_name = test.get('full_name')
-            if full_name not in aggregated:
-                aggregated[full_name] = {
-                    'test_name': test.get('test_name'),
-                    'suite_folder': test.get('suite_folder'),
-                    'full_name': full_name,
-                    'build_type': test.get('build_type'),
-                    'branch': test.get('branch'),
-                    'pass_count': 0,
-                    'fail_count': 0,
-                    'mute_count': 0,
-                    'skip_count': 0,
-                    'owner': test.get('owner'),
-                    'is_muted': test.get('is_muted'),
-                    'is_muted_date': test.get('date_window'),  # Сохраняем дату для is_muted
-                    'state': test.get('state'),
-                    'state_history': [test.get('state')],  # Начинаем историю состояний
-                    'state_dates': [test.get('date_window')],  # История дат состояний
-                    'days_in_state': test.get('days_in_state'),
-                    'date_window': test.get('date_window'),
-                    'period_days': period_days,  # <--- добавляем сюда
-                    'is_test_chunk': test.get('is_test_chunk', 0),
-                }
-            else:
-                # Добавляем состояние в историю, если оно отличается от последнего
-                current_state = test.get('state')
-                current_date = test.get('date_window')
-                if current_state and (not aggregated[full_name]['state_history'] or aggregated[full_name]['state_history'][-1] != current_state):
-                    aggregated[full_name]['state_history'].append(current_state)
-                    aggregated[full_name]['state_dates'].append(current_date)
-                
-                # Обновляем is_muted если текущая дата новее
-                if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('is_muted_date', 0)):
-                    aggregated[full_name]['is_muted'] = test.get('is_muted')
-                    aggregated[full_name]['is_muted_date'] = test.get('date_window')
-            
-            # Суммируем статистику
-            aggregated[full_name]['pass_count'] += test.get('pass_count', 0)
-            aggregated[full_name]['fail_count'] += test.get('fail_count', 0)
-            aggregated[full_name]['mute_count'] += test.get('mute_count', 0)
-            aggregated[full_name]['skip_count'] += test.get('skip_count', 0)
-    
-    # Вычисляем success_rate, создаем summary и конкатенируем state для каждого теста
-    date_window_range = f"{start_date.strftime('%Y-%m-%d')}:{today.strftime('%Y-%m-%d')}"
-    for test_data in aggregated.values():
-        test_data['date_window'] = date_window_range
-        total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count'] + test_data['skip_count']
-        if total_runs > 0:
-            test_data['success_rate'] = round((test_data['pass_count'] / total_runs) * 100, 1)
-        else:
-            test_data['success_rate'] = 0.0
-        
-        # Создаем summary для тикета (без дублирования state, так как он уже есть в начале строки)
-        test_data['summary'] = f"p-{test_data['pass_count']}, f-{test_data['fail_count']}, m-{test_data['mute_count']}, s-{test_data['skip_count']}, total-{total_runs}"
-        
-        # Конкатенируем state по дням с датами
-        if 'state_history' in test_data and len(test_data['state_history']) > 1:
-            # Создаем строку с состояниями и датами
-            state_with_dates = []
-            for i, (state, date) in enumerate(zip(test_data['state_history'], test_data['state_dates'])):
-                if date:
-                    # Преобразуем дату в читаемый формат
-                    if isinstance(date, int):
-                        date_obj = base_date + datetime.timedelta(days=date)
-                    else:
-                        date_obj = date
-                    date_str = date_obj.strftime('%Y-%m-%d')
-                    state_with_dates.append(f"{state}({date_str})")
-                else:
-                    state_with_dates.append(state)
-            test_data['state'] = '->'.join(state_with_dates)
-        # Если только одно состояние, оставляем как есть
-    
-    logging.info(f"Aggregation completed: {len(aggregated)} unique tests aggregated from {total_count} records")
-    return list(aggregated.values())
+    result = aggregate_test_data(all_data, period_days)
+    logging.info(f"Aggregation completed: {len(result)} unique tests")
+    return result
 
 
 def calculate_success_rate(test):
     """Вычисляет success rate для теста"""
     runs = test.get('pass_count', 0) + test.get('fail_count', 0)
     return round((test.get('pass_count', 0) / runs * 100) if runs > 0 else 0, 1)
-
-def create_test_string(test, use_wildcards=False):
-    testsuite = test.get('suite_folder')
-    testcase = test.get('test_name')
-    test_string = f"{testsuite} {testcase}"
-    if use_wildcards:
-        test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
-    return test_string
 
 def sort_key_without_prefix(line):
     """Функция для сортировки строк, игнорирующая префиксы +++, ---, xxx"""
@@ -325,130 +211,6 @@ def sort_key_without_prefix(line):
         return line[4:]  # Убираем первые 4 символа (префикс + пробел)
     return line  # Для строк без префикса возвращаем как есть
 
-
-def create_debug_string(test, success_rate=None, period_days=None, date_window=None):
-    """Создает debug строку для теста"""
-    if success_rate is None:
-        success_rate = calculate_success_rate(test)
-    
-    testsuite = test.get('suite_folder')
-    testcase = test.get('test_name')
-    runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0) 
-    
-    debug_string = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {success_rate}%"
-    # Показываем оба периода: days и диапазон дат, если есть
-    if period_days is None:
-        period_days = test.get('period_days')
-    if date_window is None:
-        date_window = test.get('date_window')
-    if period_days:
-        debug_string += f" (last {period_days} days)"
-    if date_window:
-        debug_string += f" [{date_window}]"
-    state = test.get('state', 'N/A')
-    if is_chunk_test(test):
-        state = f"(chunk)"
-    
-    is_muted = test.get('is_muted', False)
-    mute_state = "muted" if is_muted else "not muted"
-    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
-    return debug_string
-
-def is_mute_candidate(test, aggregated_data, params=None):
-    """Проверяет, является ли тест кандидатом на mute за указанный период.
-    params: min_failures_high, min_failures_low, min_runs_threshold (from rule)
-    """
-    p = params or {}
-    min_fail_high = p.get('min_failures_high', 3)
-    min_fail_low = p.get('min_failures_low', 2)
-    min_runs_threshold = p.get('min_runs_threshold', 10)
-
-    test_data = None
-    for agg_test in aggregated_data:
-        if agg_test['full_name'] == test.get('full_name'):
-            test_data = agg_test
-            break
-
-    if not test_data:
-        return False
-
-    test['pass_count'] = test_data['pass_count']
-    test['fail_count'] = test_data['fail_count']
-    test['period_days'] = test_data.get('period_days')
-    test['is_muted'] = test_data.get('is_muted', False)
-
-    if test_data.get('is_muted', False):
-        return False
-
-    total_runs = test_data['pass_count'] + test_data['fail_count']
-    result = (
-        (test_data['fail_count'] >= min_fail_high and total_runs > min_runs_threshold)
-        or (test_data['fail_count'] >= min_fail_low and total_runs <= min_runs_threshold)
-    )
-
-    if not test_data.get('is_muted', False):
-        logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{test_data['fail_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
-
-    return result
-
-def is_unmute_candidate(test, aggregated_data, params=None):
-    """Проверяет, является ли тест кандидатом на размьют за указанный период.
-    params: min_runs, max_fails (from rule)
-    """
-    p = params or {}
-    min_runs = p.get('min_runs', 4)
-    max_fails = p.get('max_fails', 0)
-
-    test_data = None
-    for agg_test in aggregated_data:
-        if agg_test['full_name'] == test.get('full_name'):
-            test_data = agg_test
-            break
-
-    if not test_data:
-        return False
-
-    test['pass_count'] = test_data['pass_count']
-    test['fail_count'] = test_data['fail_count']
-    test['mute_count'] = test_data['mute_count']
-    test['period_days'] = test_data.get('period_days')
-    test['is_muted'] = test_data.get('is_muted', False)
-
-    total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count']
-    total_fails = test_data['fail_count'] + test_data['mute_count']
-
-    result = total_runs >= min_runs and total_fails <= max_fails
-
-    if test_data.get('is_muted', False):
-        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test_data['mute_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
-
-    return result
-
-def is_delete_candidate(test, aggregated_data, params=None):
-    """Проверяет, является ли тест кандидатом на удаление из mute за указанный период"""
-    test_data = None
-    for agg_test in aggregated_data:
-        if agg_test['full_name'] == test.get('full_name'):
-            test_data = agg_test
-            break
-
-    if not test_data:
-        return False
-
-    test['pass_count'] = test_data['pass_count']
-    test['fail_count'] = test_data['fail_count']
-    test['mute_count'] = test_data['mute_count']
-    test['skip_count'] = test_data['skip_count']
-    test['period_days'] = test_data.get('period_days')
-    test['is_muted'] = test_data.get('is_muted', False)
-
-    total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count'] + test_data['skip_count']
-    result = total_runs == 0
-
-    if test_data.get('is_muted', False):
-        logging.debug(f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, muted:{test_data.get('is_muted')}, result:{result}")
-
-    return result
 
 def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None, exclude_check=None):
     """Создает набор тестов для файла на основе фильтра"""
@@ -524,33 +286,6 @@ def _parse_mute_file(path):
             for l in f
             if l.strip() and not l.strip().startswith("#")
         )
-
-
-def get_quarantine_graduation(quarantine_tests, aggregated_1day, params=None):
-    """
-    Rule: min_runs in window AND min_passes → graduate (remove from quarantine).
-    params: min_runs, min_passes (from rule)
-    """
-    p = params or {}
-    min_runs = p.get('min_runs', 4)
-    min_passes = p.get('min_passes', 1)
-
-    graduated = set()
-    for test_line in quarantine_tests:
-        parts = test_line.split(" ", maxsplit=1)
-        if len(parts) != 2:
-            continue
-        suite, testcase = parts
-        full_name = f"{suite}/{testcase}"
-        agg = next((a for a in aggregated_1day if a.get('full_name') == full_name), None)
-        if not agg:
-            continue
-        total_runs = agg.get('pass_count', 0) + agg.get('fail_count', 0) + agg.get('mute_count', 0)
-        pass_count = agg.get('pass_count', 0)
-        if total_runs >= min_runs and pass_count >= min_passes:
-            graduated.add(test_line)
-            logging.info(f"Quarantine graduation: {test_line} (runs={total_runs}, pass={pass_count})")
-    return graduated
 
 
 def apply_and_add_mutes(
@@ -993,11 +728,11 @@ def mute_worker(args):
         all_data = execute_query(args.branch, days_window=7)
         logging.info(f"Query returned {len(all_data)} test records")
 
-        aggregated_for_mute = aggregate_test_data(all_data, mute_days)
-        aggregated_for_unmute = aggregate_test_data(all_data, unmute_days)
-        aggregated_for_delete = aggregate_test_data(all_data, delete_days)
+        aggregated_for_mute = _aggregate_with_logging(all_data, mute_days)
+        aggregated_for_unmute = _aggregate_with_logging(all_data, unmute_days)
+        aggregated_for_delete = _aggregate_with_logging(all_data, delete_days)
         grad_window = graduation_params.get('window_days', 1)
-        aggregated_1day = aggregate_test_data(all_data, grad_window)
+        aggregated_1day = _aggregate_with_logging(all_data, grad_window)
 
         logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
 

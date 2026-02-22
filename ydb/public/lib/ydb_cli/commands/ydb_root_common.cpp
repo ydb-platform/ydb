@@ -17,6 +17,9 @@
 #include "ydb_yql.h"
 #include "ydb_workload.h"
 
+#if !defined(_win32_)
+#include <ydb/core/base/backtrace.h>
+#endif
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
@@ -32,11 +35,59 @@
 #include <util/system/env.h>
 #include <util/system/execpath.h>
 
+namespace NYdb::NConsoleClient {
+
+namespace {
+
 #ifndef NDEBUG
-#include <ydb/library/testlib/common/test_utils.h>
+std::terminate_handler DefaultTerminateHandler;
+
+void TerminateHandler() {
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << colors.Red() << "======== exception call stack =========" << colors.Default() << Endl;
+        backtrace.PrintTo(Cerr);
+    }
+    Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
+
+    if (DefaultTerminateHandler) {
+        DefaultTerminateHandler();
+    } else {
+        abort();
+    }
+}
+
+TString SignalToString(int signal) {
+#ifndef _unix_
+    return TStringBuilder() << "signal " << signal;
+#else
+    return strsignal(signal);
+#endif
+}
+
+void BackTraceSignalHandler(int signal) {
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= " << SignalToString(signal) << " call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
+
+    abort();
+}
+
+void SetupSignalActions() {
+    DefaultTerminateHandler = std::set_terminate(&TerminateHandler);
+
+    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+        signal(sig, &BackTraceSignalHandler);
+    }
+}
 #endif
 
-namespace NYdb::NConsoleClient {
+} // anonymous namespace
 
 TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TClientSettings& settings)
     : TClientCommandRootBase(name)
@@ -138,8 +189,11 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
 }
 
 void TClientCommandRootCommon::Config(TConfig& config) {
+#if !defined(_win32_)
+    NKikimr::EnableYDBBacktraceFormat();
+#endif
 #ifndef NDEBUG
-    NTestUtils::SetupSignalHandlers();
+    SetupSignalActions();
 #endif
 
     FillConfig(config);

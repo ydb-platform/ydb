@@ -86,12 +86,6 @@ PEERDIR(
     yql/essentials/public/decimal
 )
 
-IF (NOT NDEBUG)
-PEERDIR(
-    ydb/library/testlib/common
-)
-ENDIF()
-
 IF (NOT OS_WINDOWS)
 PEERDIR(
     ydb/core/base

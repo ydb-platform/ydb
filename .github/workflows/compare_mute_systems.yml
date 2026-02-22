@@ -1,0 +1,75 @@
+name: Compare Mute Systems (Legacy vs v4)
+
+on:
+  schedule:
+    - cron: "0 6 * * 0"  # Weekly on Sunday 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to compare (e.g. main)"
+        required: false
+        default: "main"
+
+env:
+  BUILD_TYPE: relwithdebinfo
+
+jobs:
+  compare:
+    runs-on: [self-hosted, auto-provisioned, build-preset-analytic-node]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ydb[yc] codeowners pandas
+
+      - name: Setup YDB access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+      - name: Get base files from target branch
+        run: |
+          BRANCH="${{ github.event.inputs.branch || 'main' }}"
+          echo "BASE_BRANCH=$BRANCH" >> $GITHUB_ENV
+          git fetch origin $BRANCH
+          git show origin/$BRANCH:.github/config/muted_ya.txt > base_muted_ya.txt
+          git show origin/$BRANCH:.github/config/quarantine.txt > quarantine.txt 2>/dev/null || touch quarantine.txt
+          echo "Using branch: $BRANCH"
+
+      - name: Collect test history data
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+
+      - name: Update test monitor
+        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+
+      - name: Compare mute systems (legacy vs v4)
+        run: |
+          python3 .github/scripts/tests/compare_mute_systems.py \
+            --branch=${{ env.BASE_BRANCH }} \
+            --build_type=${{ env.BUILD_TYPE }} \
+            --muted_ya_file=base_muted_ya.txt \
+            --quarantine_file=quarantine.txt \
+            --output_dir=comparison
+
+      - name: Upload comparison report
+        uses: actions/upload-artifact@v4
+        with:
+          name: mute-comparison-${{ env.BASE_BRANCH }}
+          path: |
+            comparison/
+          retention-days: 14
+
+      - name: Add comparison to summary
+        run: |
+          echo "## Mute System Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f comparison/comparison_report.md ]; then
+            cat comparison/comparison_report.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Report not found" >> $GITHUB_STEP_SUMMARY
+          fi

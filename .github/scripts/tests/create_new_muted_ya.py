@@ -697,7 +697,10 @@ def mute_worker(args):
 
         quarantine_check = None
         input_quarantine_path = getattr(args, 'quarantine_file', quarantine_path)
-        if os.path.exists(input_quarantine_path):
+        legacy_mode = getattr(args, 'legacy', False)
+        if legacy_mode:
+            logging.info("Legacy mode: skipping quarantine and graduation")
+        elif os.path.exists(input_quarantine_path):
             quarantine_check = YaMuteCheck()
             quarantine_check.load(input_quarantine_path)
             logging.info(f"Loaded quarantine.txt with {len(quarantine_check.regexps)} tests (protected from re-mute)")
@@ -737,7 +740,7 @@ def mute_worker(args):
         logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
 
         to_graduated = set()
-        if quarantine_check and input_quarantine_path and os.path.exists(input_quarantine_path):
+        if not legacy_mode and quarantine_check and input_quarantine_path and os.path.exists(input_quarantine_path):
             quarantine_tests = _parse_mute_file(input_quarantine_path)
             to_graduated = get_quarantine_graduation(quarantine_tests, aggregated_1day, graduation_params)
             if to_graduated:
@@ -761,32 +764,33 @@ def mute_worker(args):
                 output_file=getattr(args, 'output_file', None),
             )
             to_mute, to_unmute, to_delete, to_mute_debug, to_unmute_debug, to_delete_debug = result
-            # Write mute decisions to YDB for traceability
-            try:
-                with YDBWrapper() as ydb_wrapper:
-                    if ydb_wrapper.check_credentials():
-                        mute_rule_id = mute_rule.get("id", "regression_flaky_mute") if mute_rule else "regression_flaky_mute"
-                        unmute_rule_id = unmute_rule.get("id", "regression_stable_unmute") if unmute_rule else "regression_stable_unmute"
-                        delete_rule_id = delete_rule.get("id", "regression_no_runs_delete") if delete_rule else "regression_no_runs_delete"
-                        grad_rule_id = graduation_rule.get("id", "quarantine_graduation") if graduation_rule else "quarantine_graduation"
-                        write_mute_decisions(
-                            ydb_wrapper,
-                            branch=args.branch,
-                            build_type=build_type,
-                            to_mute=to_mute,
-                            to_unmute=to_unmute,
-                            to_delete=to_delete,
-                            to_graduated=to_graduated,
-                            mute_rule_id=mute_rule_id,
-                            unmute_rule_id=unmute_rule_id,
-                            delete_rule_id=delete_rule_id,
-                            graduation_rule_id=grad_rule_id,
-                            to_mute_debug=to_mute_debug,
-                            to_unmute_debug=to_unmute_debug,
-                            to_delete_debug=to_delete_debug,
-                        )
-            except Exception as e:
-                logging.warning(f"Failed to write mute decisions to YDB: {e}")
+            # Write mute decisions to YDB for traceability (skip in legacy mode)
+            if not legacy_mode:
+                try:
+                    with YDBWrapper() as ydb_wrapper:
+                        if ydb_wrapper.check_credentials():
+                            mute_rule_id = mute_rule.get("id", "regression_flaky_mute") if mute_rule else "regression_flaky_mute"
+                            unmute_rule_id = unmute_rule.get("id", "regression_stable_unmute") if unmute_rule else "regression_stable_unmute"
+                            delete_rule_id = delete_rule.get("id", "regression_no_runs_delete") if delete_rule else "regression_no_runs_delete"
+                            grad_rule_id = graduation_rule.get("id", "quarantine_graduation") if graduation_rule else "quarantine_graduation"
+                            write_mute_decisions(
+                                ydb_wrapper,
+                                branch=args.branch,
+                                build_type=build_type,
+                                to_mute=to_mute,
+                                to_unmute=to_unmute,
+                                to_delete=to_delete,
+                                to_graduated=to_graduated,
+                                mute_rule_id=mute_rule_id,
+                                unmute_rule_id=unmute_rule_id,
+                                delete_rule_id=delete_rule_id,
+                                graduation_rule_id=grad_rule_id,
+                                to_mute_debug=to_mute_debug,
+                                to_unmute_debug=to_unmute_debug,
+                                to_delete_debug=to_delete_debug,
+                            )
+                except Exception as e:
+                    logging.warning(f"Failed to write mute decisions to YDB: {e}")
 
         elif args.mode == 'create_issues':
             file_path = args.file_path
@@ -809,6 +813,7 @@ if __name__ == "__main__":
     update_muted_ya_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type for rule selection')
     update_muted_ya_parser.add_argument('--rules_file', help='Path to pattern_rules.yaml (default: .github/config/pattern_rules.yaml)')
     update_muted_ya_parser.add_argument('--output_file', help='Output filename for final mute file (default: new_muted_ya.txt). Use for per-build-type, e.g. new_muted_ya_asan.txt')
+    update_muted_ya_parser.add_argument('--legacy', action='store_true', help='Legacy mode: no quarantine, no graduation (for comparison with old system)')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',

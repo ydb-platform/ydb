@@ -228,7 +228,24 @@ ALTER TABLE `test_results/analytics/mute_decisions` ADD COLUMN behavior_start_pr
 
 ---
 
-## 11. Backward Compatibility
+## 11. Parallel Testing (Legacy vs v4)
+
+Для проверки новой системы параллельно со старой:
+
+1. **Режим --legacy** в create_new_muted_ya: без quarantine, без graduation (как старая система).
+2. **compare_mute_systems.py** — запускает оба режима и строит diff по to_mute, to_unmute, to_delete, final muted_ya.
+3. **Workflow compare_mute_systems.yml** — еженедельно (воскресенье) или вручную (workflow_dispatch).
+
+```bash
+# Локально (после flaky_tests_history, tests_monitor):
+python3 .github/scripts/tests/compare_mute_systems.py --branch main
+```
+
+Артефакт `mute-comparison-{branch}` содержит comparison_report.md и папки legacy/, current/.
+
+---
+
+## 12. Backward Compatibility
 
 - `muted_ya.txt` stays for relwithdebinfo
 - If quarantine.txt doesn't exist → empty set, no effect

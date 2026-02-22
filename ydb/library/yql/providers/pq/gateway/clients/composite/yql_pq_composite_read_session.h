@@ -28,6 +28,8 @@ public:
     virtual ~ICompositeTopicReadSessionControl() = default;
 
     virtual void AdvancePartitionTime(ui64 partitionId, TInstant lastEventTime) = 0;
+
+    virtual TString GetInternalState() = 0;
 };
 
 std::pair<std::shared_ptr<NYdb::NTopic::IReadSession>, ICompositeTopicReadSessionControl::TPtr> CreateCompositeTopicReadSession(

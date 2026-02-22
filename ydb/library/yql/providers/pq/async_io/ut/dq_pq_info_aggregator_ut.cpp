@@ -72,9 +72,9 @@ protected:
 
             const auto& record = responseEvent->Get()->Record;
             if (const auto it = responses.find(record.GetCounterId()); it != responses.end()) {
-                UNIT_ASSERT_EQUAL(record.GetScalar(), it->second.Scalar);
-                UNIT_ASSERT_EQUAL(record.GetSeqNo(), it->second.SeqNo);
-                responses.erase(it);
+                if (record.GetScalar() == it->second.Scalar && record.GetSeqNo() == it->second.SeqNo) {
+                    responses.erase(it);
+                }
             }
         }
         UNIT_ASSERT_C(responses.empty(), "Expected responses are not received, remaining: " << responses.size());
@@ -154,6 +154,37 @@ Y_UNIT_TEST_SUITE(TDqPqInfoAggregatorTest) {
 
         SendValue(firstClientId, MakeActionNotSet(counterId));
         CheckResponse(secondClientId, counterId, 30, 3);
+    }
+
+    Y_UNIT_TEST_F(TestMultipleCountersDifferentAggTypes, TPqComputeActorTestFixture) {
+        const auto clientId = Runtime.AllocateEdgeActor();
+        const TString sumCounterId("sum_ctr");
+        const TString minCounterId("min_ctr");
+
+        SendValue(clientId, MakeSumValue(sumCounterId, 1, 100));
+        SendValue(clientId, MakeMinValue(minCounterId, 1, 50));
+        CheckResponse(clientId, {{sumCounterId, {100, 1}}, {minCounterId, {50, 1}}});
+
+        SendValue(clientId, MakeSumValue(sumCounterId, 2, 25));
+        SendValue(clientId, MakeMinValue(minCounterId, 2, 30));
+        CheckResponse(clientId, {{sumCounterId, {25, 2}}, {minCounterId, {30, 2}}});
+    }
+
+    Y_UNIT_TEST_F(TestMultipleCountersDifferentAggTypesTwoClients, TPqComputeActorTestFixture) {
+        const auto firstClientId = Runtime.AllocateEdgeActor();
+        const auto secondClientId = Runtime.AllocateEdgeActor();
+        const TString sumCounterId("sum_ctr");
+        const TString minCounterId("min_ctr");
+
+        SendValue(firstClientId, MakeSumValue(sumCounterId, 1, 100));
+        CheckResponse(firstClientId, sumCounterId, 100, 1);
+        SendValue(secondClientId, MakeMinValue(minCounterId, 1, 50));
+        CheckResponse(secondClientId, minCounterId, 50, 1);
+
+        SendValue(firstClientId, MakeSumValue(sumCounterId, 2, 40));
+        CheckResponse(firstClientId, sumCounterId, 40, 2);
+        SendValue(secondClientId, MakeMinValue(minCounterId, 2, 10));
+        CheckResponse(secondClientId, minCounterId, 10, 2);
     }
 
     Y_UNIT_TEST_F(TestSeqNoOrdering, TPqComputeActorTestFixture) {

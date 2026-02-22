@@ -49,8 +49,6 @@ public:
     virtual TInstant GetReadTime() = 0;
 
     virtual NThreading::TFuture<void> SubscribeOnUpdate() = 0;
-
-    virtual TString GetInternalState() = 0;
 };
 
 class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancerActor>, public IActorExceptionHandler {

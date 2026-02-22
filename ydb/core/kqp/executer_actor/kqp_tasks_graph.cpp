@@ -1527,7 +1527,7 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
     for (const auto& [taskParam, actorId] : stageInfo.Meta.ControlPlaneActors) {
         NActorsProto::TActorId actorIdProto;
         ActorIdToProto(actorId, &actorIdProto);
-        YQL_ENSURE(result->MutableTaskParams()->emplace(taskParam, actorIdProto.SerializeAsString()).second, "Duplicated task param: " << taskParam);
+        (*result->MutableTaskParams())[taskParam] = actorIdProto.SerializeAsString();
     }
 
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());

@@ -368,23 +368,59 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
     Y_UNIT_TEST_F(IdleTimeoutPartitionStillReceivesData, TCompositeClientTestFixture) {
         const TDuration shortIdle = TDuration::MilliSeconds(50);
+        const TDuration skew = TDuration::Seconds(1);
+        const TInstant T0 = TInstant::MilliSeconds(100);
+        const TInstant T1 = TInstant::MilliSeconds(900);
         auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0}, {}, shortIdle);
+        auto settings = MakeSettings("topic", {0, 1}, {}, shortIdle, skew);
 
         auto [session, control] = CreateSession(gateway.Get(), settings);
+        auto mockP0 = gateway->GetReadSession("topic", 0);
+        auto mockP1 = gateway->GetReadSession("topic", 1);
+        UNIT_ASSERT(mockP0 != nullptr);
+        UNIT_ASSERT(mockP1 != nullptr);
+
+        mockP0->AddDataReceivedEvent(0, "p0_first", T0);
+        mockP1->AddDataReceivedEvent(0, "p1_first", T1);
+        auto ev0 = session->GetEvent(
+            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        UNIT_ASSERT(ev0.has_value());
+        const auto* d0 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev0);
+        UNIT_ASSERT(d0 != nullptr);
+        control->AdvancePartitionTime(d0->GetPartitionSession()->GetPartitionId(), d0->GetPartitionSession()->GetPartitionId() == 0 ? T0 : T1);
+        auto ev1 = session->GetEvent(
+            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        UNIT_ASSERT(ev1.has_value());
+        const auto* d1 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev1);
+        UNIT_ASSERT(d1 != nullptr);
+        control->AdvancePartitionTime(d1->GetPartitionSession()->GetPartitionId(), d1->GetPartitionSession()->GetPartitionId() == 0 ? T0 : T1);
+
+        TString state = control->GetInternalState();
+        UNIT_ASSERT_C(state.Contains("SuspendedPartitions"), "Partition 1 should be suspended: " << state);
 
         Sleep(shortIdle + TDuration::MilliSeconds(30));
 
-        auto mockSession = gateway->ExtractReadSession("topic");
-        UNIT_ASSERT(mockSession != nullptr);
-        mockSession->AddDataReceivedEvent(0, "after_idle");
-
-        auto event = session->GetEvent(
+        mockP0->AddDataReceivedEvent(1, "after_idle");
+        mockP1->AddDataReceivedEvent(1, "p1_after_idle_unsuspend", T1);
+        session->WaitEvent().Wait(TDuration::Seconds(2));
+        auto event1 = session->GetEvent(
             NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
-        UNIT_ASSERT(event.has_value());
-        const auto* dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event);
-        UNIT_ASSERT(dataEv != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(std::string(dataEv->GetMessages()[0].GetData()), "after_idle");
+        UNIT_ASSERT(event1.has_value());
+        const auto* dataEv1 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event1);
+        UNIT_ASSERT(dataEv1 != nullptr);
+        TString content1(dataEv1->GetMessages()[0].GetData());
+        UNIT_ASSERT_C(content1 == "after_idle" || content1 == "p1_after_idle_unsuspend",
+            "Expected after_idle or p1_after_idle_unsuspend, got: " << content1);
+
+        session->WaitEvent().Wait(TDuration::Seconds(2));
+        auto event2 = session->GetEvent(
+            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        UNIT_ASSERT(event2.has_value());
+        const auto* dataEv2 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event2);
+        UNIT_ASSERT(dataEv2 != nullptr);
+        TString content2(dataEv2->GetMessages()[0].GetData());
+        UNIT_ASSERT_C(content2 == "after_idle" || content2 == "p1_after_idle_unsuspend", "Got: " << content2);
+        UNIT_ASSERT(content1 != content2);
     }
 
     Y_UNIT_TEST_F(PartitionBalancingInsideOneSession, TCompositeClientTestFixture) {
@@ -472,34 +508,127 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     }
 
     Y_UNIT_TEST_F(ReconnectSessionRecreationWithSameAggregator, TCompositeClientTestFixture) {
+        const TInstant T0 = TInstant::MilliSeconds(100);
+        const TInstant T1 = TInstant::MilliSeconds(200);
         auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto settings = MakeSettings("topic", {0, 1});
 
         auto [session1, control1] = CreateSession(gateway.Get(), settings);
-        auto mock1 = gateway->ExtractReadSession("topic");
-        UNIT_ASSERT(mock1 != nullptr);
-        mock1->AddDataReceivedEvent(0, "first_session");
+        auto mockP0_1 = gateway->GetReadSession("topic", 0);
+        auto mockP1_1 = gateway->GetReadSession("topic", 1);
+        UNIT_ASSERT(mockP0_1 != nullptr);
+        UNIT_ASSERT(mockP1_1 != nullptr);
+
+        mockP0_1->AddDataReceivedEvent(0, "first_p0", T0);
+        mockP1_1->AddDataReceivedEvent(0, "first_p1", T1);
+        auto ev0 = session1->GetEvent(
+            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        UNIT_ASSERT(ev0.has_value());
+        const auto* d0 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev0);
+        UNIT_ASSERT(d0 != nullptr);
+        ui64 pid0 = d0->GetPartitionSession()->GetPartitionId();
+        control1->AdvancePartitionTime(pid0, pid0 == 0 ? T0 : T1);
         auto ev1 = session1->GetEvent(
             NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
         UNIT_ASSERT(ev1.has_value());
-        const auto* data1 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev1);
-        UNIT_ASSERT(data1 != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(std::string(data1->GetMessages()[0].GetData()), "first_session");
+        const auto* d1 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev1);
+        UNIT_ASSERT(d1 != nullptr);
+        ui64 pid1 = d1->GetPartitionSession()->GetPartitionId();
+        control1->AdvancePartitionTime(pid1, pid1 == 0 ? T0 : T1);
+        UNIT_ASSERT(pid0 != pid1);
 
         UNIT_ASSERT(session1->Close(TDuration::Zero()));
 
         auto [session2, control2] = CreateSession(gateway.Get(), settings);
         UNIT_ASSERT(!session2->GetSessionId().empty());
-        auto mock2 = gateway->ExtractReadSession("topic");
-        UNIT_ASSERT(mock2 != nullptr);
-        mock2->AddDataReceivedEvent(0, "reconnected");
+        auto mockP0_2 = gateway->GetReadSession("topic", 0);
+        auto mockP1_2 = gateway->GetReadSession("topic", 1);
+        UNIT_ASSERT(mockP0_2 != nullptr);
+        UNIT_ASSERT(mockP1_2 != nullptr);
 
-        auto ev2 = session2->GetEvent(
+        mockP0_2->AddDataReceivedEvent(1, "reconnected_p0", T0);
+        mockP1_2->AddDataReceivedEvent(1, "reconnected_p1", T1);
+        auto ev2a = session2->GetEvent(
             NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
-        UNIT_ASSERT(ev2.has_value());
-        const auto* data2 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev2);
-        UNIT_ASSERT(data2 != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(std::string(data2->GetMessages()[0].GetData()), "reconnected");
+        UNIT_ASSERT(ev2a.has_value());
+        const auto* d2a = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev2a);
+        UNIT_ASSERT(d2a != nullptr);
+        TString content2a(d2a->GetMessages()[0].GetData());
+        UNIT_ASSERT(content2a == "reconnected_p0" || content2a == "reconnected_p1");
+        ui64 pid2a = d2a->GetPartitionSession()->GetPartitionId();
+        control2->AdvancePartitionTime(pid2a, pid2a == 0 ? T0 : T1);
+        session2->WaitEvent().Wait(TDuration::Seconds(2));
+        auto ev2b = session2->GetEvent(
+            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        UNIT_ASSERT(ev2b.has_value());
+        const auto* d2b = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev2b);
+        UNIT_ASSERT(d2b != nullptr);
+        TString content2b(d2b->GetMessages()[0].GetData());
+        UNIT_ASSERT(content2b == "reconnected_p0" || content2b == "reconnected_p1");
+        UNIT_ASSERT(content2a != content2b);
+    }
+
+    Y_UNIT_TEST_F(PartitionBalancingBetweenTwoSessions, TCompositeClientTestFixture) {
+        const TDuration skew = TDuration::Seconds(1);
+        const TInstant T0 = TInstant::MilliSeconds(100);
+        const TInstant T1 = TInstant::MilliSeconds(1200);
+        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
+
+        auto settingsA = MakeSettings("topic", {0}, {}, std::nullopt, skew, 0);
+        auto settingsB = MakeSettings("topic", {1}, {}, std::nullopt, skew, 0);
+        // Both sessions share one aggregator: use total partition count so AllPartitionsStarted
+        // becomes true when both have started and aggregator can propagate read_time.
+        settingsA.AmountPartitionsCount = 2;
+        settingsB.AmountPartitionsCount = 2;
+        auto [sessionA, controlA] = CreateSession(gateway.Get(), settingsA);
+        auto [sessionB, controlB] = CreateSession(gateway.Get(), settingsB);
+
+        auto mockP0 = gateway->GetReadSession("topic", 0);
+        auto mockP1 = gateway->GetReadSession("topic", 1);
+        UNIT_ASSERT(mockP0 != nullptr);
+        UNIT_ASSERT(mockP1 != nullptr);
+
+        mockP0->AddDataReceivedEvent(0, "p0_msg", T0);
+        auto evA = sessionA->GetEvent(
+            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        UNIT_ASSERT(evA.has_value());
+        const auto* dataA = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*evA);
+        UNIT_ASSERT(dataA != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(std::string(dataA->GetMessages()[0].GetData()), "p0_msg");
+        controlA->AdvancePartitionTime(0, T0);
+
+        mockP1->AddDataReceivedEvent(0, "p1_msg", T1);
+        auto evB = sessionB->GetEvent(
+            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        UNIT_ASSERT(evB.has_value());
+        const auto* dataB = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*evB);
+        UNIT_ASSERT(dataB != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(std::string(dataB->GetMessages()[0].GetData()), "p1_msg");
+        controlB->AdvancePartitionTime(1, T1);
+
+        TString stateB = controlB->GetInternalState();
+        UNIT_ASSERT_C(stateB.Contains("SuspendedPartitions"), "Session B should have suspended partition: " << stateB);
+
+        mockP1->AddDataReceivedEvent(1, "blocked_until_a_advances", T1);
+        auto evNone = sessionB->GetEvent(
+            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        UNIT_ASSERT_C(!evNone.has_value(), "Session B should not get event while its partition is suspended (waiting for A)");
+
+        controlA->AdvancePartitionTime(0, T1);
+        std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> evB2;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (TInstant::Now() < deadline) {
+            sessionB->WaitEvent().Wait(TDuration::Seconds(1));
+            evB2 = sessionB->GetEvent(
+                NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+            if (evB2.has_value()) {
+                break;
+            }
+        }
+        UNIT_ASSERT_C(evB2.has_value(), "Session B should receive blocked_until_a_advances after A advances (aggregator propagation)");
+        const auto* dataB2 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*evB2);
+        UNIT_ASSERT(dataB2 != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(std::string(dataB2->GetMessages()[0].GetData()), "blocked_until_a_advances");
     }
 }
 

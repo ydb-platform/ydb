@@ -179,6 +179,7 @@ def upload_muted_tests(tests):
         except Exception as e:
             print(f'⚠️ Bulk upsert failed (table may need migration for build_type): {e}')
             print('   Run ALTER or create new table. See .github/scripts/mute/docs/MUTE_V4_TESTING_AND_SWITCH.md')
+            # Non-critical data mart: continue without failing CI; migration can be done separately
 
 
 def to_str(data):

@@ -77,13 +77,20 @@ def main():
         print(f"v4 run failed: {rc.returncode}, using legacy output as fallback", file=sys.stderr)
         v4_mute_update = os.path.join(v4_dir, "mute_update")
         legacy_mute_update = os.path.join(legacy_dir, "mute_update")
-        os.makedirs(v4_mute_update, exist_ok=True)
-        for name in os.listdir(legacy_mute_update):
-            src = os.path.join(legacy_mute_update, name)
-            dst = os.path.join(v4_mute_update, name)
-            if os.path.isfile(src):
-                shutil.copy2(src, dst)
-        print("Copied legacy output to v4 dir as fallback")
+        if os.path.isdir(legacy_mute_update):
+            os.makedirs(v4_mute_update, exist_ok=True)
+            for name in os.listdir(legacy_mute_update):
+                src = os.path.join(legacy_mute_update, name)
+                dst = os.path.join(v4_mute_update, name)
+                if os.path.isfile(src):
+                    shutil.copy2(src, dst)
+            print("Copied legacy output to v4 dir as fallback")
+        else:
+            print(
+                f"Legacy output dir not found: {legacy_mute_update}, cannot copy fallback",
+                file=sys.stderr,
+            )
+        # Graceful degradation: continue so workflow can create PR with legacy output
 
     print("\n=== Done: legacy in mute_update_legacy/, v4 in mute_update_v4/ ===")
     return 0

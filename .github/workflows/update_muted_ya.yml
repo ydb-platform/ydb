@@ -93,6 +93,8 @@ jobs:
           PR_BRANCH="${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}"
           echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
 
+      # scripts_branch: use for testing PRs. Keep script interfaces backward-compatible
+      # (optional args, same paths/formats) so release branches can run with main scripts.
       - name: Set scripts branch
         id: scripts_branch
         run: |
@@ -117,13 +119,14 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
-      # Restore mute state from previous run (for manual unmute detection)
+      # Restore mute state from previous run (for manual unmute detection).
+      # Note: concurrent runs for same branch+build_type share cache; last write wins.
       - name: Restore mute state cache
         uses: actions/cache/restore@v4
         id: mute-state-cache
         with:
           path: mute_state
-          key: mute-state-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
+          key: v1-mute-state-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
 
       # Get base files from target branch
       - name: Get base files from target branch
@@ -176,7 +179,7 @@ jobs:
         if: always()
         with:
           path: mute_state
-          key: mute-state-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
+          key: v1-mute-state-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
 
       - name: Check if changes exist
         id: changes_check

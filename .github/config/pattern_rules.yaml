@@ -1,16 +1,16 @@
 # Mute v4 — Pattern Rules
-# Правила определяют: что искать (pattern), где (scope), с какими порогами (params), и что делать (reaction)
+# Rules define: what to search (pattern), where (scope), thresholds (params), and action (reaction)
 #
-# pattern: тип паттерна (test_flaky, test_stable, test_no_runs, quarantine_graduation)
+# pattern: test_flaky | test_stable | test_no_runs | quarantine_graduation
 # scope: regression | pr_check
-# build_types: для каких build type применяется (null = все)
-# params: пороги для проверки
+# build_types: which build types apply (null = all)
+# params: thresholds for checks
 # reaction: mute | unmute | delete | remove_from_quarantine | alert | log
 
 rules:
-  # === Mute: добавить в muted_ya ===
+  # === Mute: add to muted_ya ===
   - id: regression_flaky_mute
-    name: "Flaky в regression — mute"
+    name: "Flaky in regression — mute"
     pattern: test_flaky
     scope: regression
     build_types: [relwithdebinfo]
@@ -19,14 +19,14 @@ rules:
       min_failures_high: 3
       min_failures_low: 2
       min_runs_threshold: 10
-      # error_filter: null = все типы, ["timeout"] = только timeout, ["!timeout"] = всё кроме timeout
-      # Требует error_type в данных (пока не реализовано)
+      # error_filter: null = all types, ["timeout"] = only timeout, ["!timeout"] = all except timeout
+      # Requires error_type in data (not implemented yet)
       error_filter: null
     reaction: mute
 
-  # Mute только timeout (когда будет error_type в агрегации)
+  # Mute timeout only (when error_type is available in aggregation)
   - id: regression_flaky_timeout_mute
-    name: "Flaky timeout в regression — mute"
+    name: "Flaky timeout in regression — mute"
     pattern: test_flaky
     scope: regression
     build_types: [relwithdebinfo]
@@ -39,9 +39,9 @@ rules:
     reaction: mute
     enabled: false  # Enable when error_type is available in tests_monitor
 
-  # === Unmute: убрать из muted_ya ===
+  # === Unmute: remove from muted_ya ===
   - id: regression_stable_unmute
-    name: "Stable в regression — unmute"
+    name: "Stable in regression — unmute"
     pattern: test_stable
     scope: regression
     build_types: [relwithdebinfo]
@@ -51,9 +51,9 @@ rules:
       max_fails: 0  # total_fails (fail + mute) must be 0
     reaction: unmute
 
-  # === Delete: убрать из muted_ya (нет запусков) ===
+  # === Delete: remove from muted_ya (no runs) ===
   - id: regression_no_runs_delete
-    name: "No runs в regression — delete"
+    name: "No runs in regression — delete"
     pattern: test_no_runs
     scope: regression
     build_types: [relwithdebinfo]
@@ -73,9 +73,9 @@ rules:
       min_passes: 1
     reaction: remove_from_quarantine
 
-  # === PR-check: детекция без mute (reaction: log) ===
+  # === PR-check: detection without mute (reaction: log) ===
   - id: pr_check_floating_timeout
-    name: "Плавающий таймаут в PR-check (suite-level)"
+    name: "Floating timeout in PR-check (suite-level)"
     pattern: floating_across_days
     scope: pr_check
     build_types: [relwithdebinfo]
@@ -83,12 +83,12 @@ rules:
       window_days: 7
       min_total_fails: 3
       max_per_test: 2
-      find_behavior_start: true  # когда началось (commit, pr, date)
+      find_behavior_start: true  # find when behavior started (commit, pr, date)
     reaction: log
-    # Записывает в pattern_matches, не mute
+    # Writes to pattern_matches, does not mute
 
   - id: pr_check_retry_recovered
-    name: "Падает на attempt 1, проходит на retry"
+    name: "Fails on attempt 1, passes on retry"
     pattern: retry_recovered
     scope: pr_check
     build_types: [relwithdebinfo]
@@ -97,29 +97,29 @@ rules:
       find_behavior_start: true
     reaction: log
 
-  # === Muted test с другим error_type — алерт ===
+  # === Muted test with different error_type — alert ===
   - id: muted_test_error_changed
-    name: "Muted тест упал с другим типом ошибки"
+    name: "Muted test failed with different error type"
     pattern: muted_test_different_error
     scope: regression
     build_types: [relwithdebinfo]
     params:
-      find_behavior_start: true  # когда началось (commit, pr, date)
+      find_behavior_start: true  # find when behavior started (commit, pr, date)
     reaction: alert
-    # Требует: mute с error_type, проверка при run
+    # Requires: mute with error_type, check at run time
 
-  # === Рост продолжительности теста — алерт ===
+  # === Test duration growth — alert ===
   - id: test_duration_increased
-    name: "Выросла продолжительность теста"
+    name: "Test duration increased"
     pattern: duration_increased
     scope: regression
     build_types: [relwithdebinfo]
     params:
       window_days: 7
-      baseline_days: 6  # дней для baseline (старые)
-      recent_days: 1    # дней для recent (последние)
+      baseline_days: 6  # days for baseline (older)
+      recent_days: 1    # days for recent (latest)
       min_baseline_runs: 3
       min_recent_runs: 2
       growth_factor: 1.5  # recent_median >= baseline_median * growth_factor
-      find_behavior_start: true  # когда началось (commit, pr, date)
+      find_behavior_start: true  # find when behavior started (commit, pr, date)
     reaction: alert

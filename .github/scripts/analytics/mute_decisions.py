@@ -18,8 +18,12 @@ import ydb
 from ydb_wrapper import YDBWrapper
 
 
+# Optional columns added later — table may not have them. We fallback to base if write fails.
+_EXTRA_COLUMNS = ("match_details", "behavior_start_date", "behavior_start_commit", "behavior_start_pr")
+
+
 def _mute_decisions_column_types() -> ydb.BulkUpsertColumns:
-    """Shared column types for mute_decisions table."""
+    """Full column types for mute_decisions table."""
     ct = ydb.BulkUpsertColumns()
     ct.add_column("timestamp", ydb.PrimitiveType.Timestamp)
     ct.add_column("full_name", ydb.PrimitiveType.Utf8)
@@ -35,6 +39,26 @@ def _mute_decisions_column_types() -> ydb.BulkUpsertColumns:
     ct.add_column("behavior_start_commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
     ct.add_column("behavior_start_pr", ydb.OptionalType(ydb.PrimitiveType.Utf8))
     return ct
+
+
+def _mute_decisions_column_types_base() -> ydb.BulkUpsertColumns:
+    """Base columns only — for tables without match_details, behavior_start_*."""
+    ct = ydb.BulkUpsertColumns()
+    ct.add_column("timestamp", ydb.PrimitiveType.Timestamp)
+    ct.add_column("full_name", ydb.PrimitiveType.Utf8)
+    ct.add_column("build_type", ydb.PrimitiveType.Utf8)
+    ct.add_column("branch", ydb.PrimitiveType.Utf8)
+    ct.add_column("action", ydb.PrimitiveType.Utf8)
+    ct.add_column("rule_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ct.add_column("reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ct.add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ct.add_column("new_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    return ct
+
+
+def _strip_extra_columns(rows: list) -> list:
+    """Remove extra columns for fallback write to old schema."""
+    return [{k: v for k, v in r.items() if k not in _EXTRA_COLUMNS} for r in rows]
 
 
 def _test_line_to_full_name(line: str) -> str:
@@ -184,7 +208,13 @@ def write_mute_decisions(
         logging.info("No mute decisions to write")
         return 0
 
-    ydb_wrapper.bulk_upsert(table_path, rows, _mute_decisions_column_types())
+    try:
+        ydb_wrapper.bulk_upsert(table_path, rows, _mute_decisions_column_types())
+    except Exception as e:
+        logging.warning(f"bulk_upsert with extra columns failed: {e}. Retrying with base schema.")
+        ydb_wrapper.bulk_upsert(
+            table_path, _strip_extra_columns(rows), _mute_decisions_column_types_base()
+        )
     logging.info(f"Wrote {len(rows)} mute decisions to {table_path}")
     return len(rows)
 
@@ -239,6 +269,12 @@ def write_pattern_matches(
             "behavior_start_pr": m.get("behavior_start_pr"),
         })
 
-    ydb_wrapper.bulk_upsert(table_path, rows, _mute_decisions_column_types())
+    try:
+        ydb_wrapper.bulk_upsert(table_path, rows, _mute_decisions_column_types())
+    except Exception as e:
+        logging.warning(f"bulk_upsert with extra columns failed: {e}. Retrying with base schema.")
+        ydb_wrapper.bulk_upsert(
+            table_path, _strip_extra_columns(rows), _mute_decisions_column_types_base()
+        )
     logging.info(f"Wrote {len(rows)} pattern matches to {table_path}")
     return len(rows)

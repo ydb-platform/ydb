@@ -158,7 +158,7 @@ def upload_muted_tests(tests):
         print(f'📤 Starting bulk upsert to: {table_path}')
         print(f'   - Records to upload: {len(tests)}')
         
-        # Prepare column_types
+        # Prepare column_types (build_type in PK — table may need migration if it existed before)
         column_types = (
             ydb.BulkUpsertColumns()
             .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
@@ -172,11 +172,13 @@ def upload_muted_tests(tests):
             .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         )
         
-        # Use bulk_upsert_batches (wrapper will construct full path internally)
-        ydb_wrapper.bulk_upsert_batches(table_path, tests, column_types, batch_size=1000)
-        
-        print(f'✅ Bulk upsert completed successfully')
-        print(f'📊 Successfully uploaded {len(tests)} test records')
+        try:
+            ydb_wrapper.bulk_upsert_batches(table_path, tests, column_types, batch_size=1000)
+            print(f'✅ Bulk upsert completed successfully')
+            print(f'📊 Successfully uploaded {len(tests)} test records')
+        except Exception as e:
+            print(f'⚠️ Bulk upsert failed (table may need migration for build_type): {e}')
+            print('   Run ALTER or create new table. See MUTE_V4_TESTING_AND_SWITCH.md')
 
 
 def to_str(data):

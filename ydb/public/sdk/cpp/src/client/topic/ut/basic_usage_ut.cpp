@@ -29,7 +29,7 @@ static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_D
 namespace NYdb::inline Dev::NTopic::NTests {
 
 void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count,
-    TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10)
+    TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10)
 {
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
@@ -73,7 +73,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         WaitPlannedTasks(e, n);
         size_t completed = e->GetExecutedCount();
 
-        setup.GetServer().KillTopicPqrbTablet(JoinPath({TString(setup.MakeDriverConfig().GetDatabase()), TString(setup.GetTopicPath())}));
+        setup.GetServer().KillTopicPqrbTablet(JoinPath({"/Root", TString(setup.GetTopicPath())}));
         std::this_thread::sleep_for(100ms);
 
         e->StartFuncs(tasks);
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(ReadWithRestartsAndLargeData) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
-        auto compressor = std::make_shared<TSyncExecutor>();
+        auto compressor = MakeIntrusive<TSyncExecutor>();
         auto decompressor = CreateThreadPoolManagedExecutor(1);
 
         TReadSessionSettings readSettings;

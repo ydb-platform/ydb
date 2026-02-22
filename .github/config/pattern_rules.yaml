@@ -83,6 +83,7 @@ rules:
       window_days: 7
       min_total_fails: 3
       max_per_test: 2
+      find_behavior_start: true  # когда началось (commit, pr, date)
     reaction: log
     # Записывает в pattern_matches, не mute
 
@@ -93,6 +94,7 @@ rules:
     build_types: [relwithdebinfo]
     params:
       window_days: 7
+      find_behavior_start: true
     reaction: log
 
   # === Muted test с другим error_type — алерт ===
@@ -101,7 +103,8 @@ rules:
     pattern: muted_test_different_error
     scope: regression
     build_types: [relwithdebinfo]
-    params: {}
+    params:
+      find_behavior_start: true  # когда началось (commit, pr, date)
     reaction: alert
     # Требует: mute с error_type, проверка при run
 
@@ -118,4 +121,5 @@ rules:
       min_baseline_runs: 3
       min_recent_runs: 2
       growth_factor: 1.5  # recent_median >= baseline_median * growth_factor
+      find_behavior_start: true  # когда началось (commit, pr, date)
     reaction: alert

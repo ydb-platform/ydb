@@ -83,12 +83,14 @@
 - [x] **5c.5** Реализовать error_filter в is_mute_candidate
 - [x] **5c.6** Реализовать muted_test_different_error (reaction: alert)
 - [x] **5c.7** Реализовать duration_increased (reaction: alert) — рост продолжительности теста
+- [x] **5c.8** Писать все паттерны (alert/log) в mute_decisions с match_details и behavior_start_*
+- [x] **5c.9** Опция find_behavior_start в правилах — когда началось (commit, pr, date)
 
 ---
 
 ## Phase 6: Testing & Validation
 
-- [x] **6.0** Pytest unit tests (74 tests): mute_logic, pattern_rules, mute_utils, detect_manual_unmutes, pr_check_patterns, mute_decisions, duration_increased
+- [x] **6.0** Pytest unit tests (78 tests): mute_logic, pattern_rules, mute_utils, detect_manual_unmutes, pr_check_patterns, mute_decisions, duration_increased, behavior_start, write_pattern_matches
 - [ ] **6.1** Test manual unmute flow: remove test, merge, verify quarantine
 - [ ] **6.2** Test quarantine graduation: 4 runs / 1 day with 1 pass
 - [ ] **6.3** Test that quarantine tests don't get re-muted

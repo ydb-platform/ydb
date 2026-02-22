@@ -182,19 +182,33 @@ create_new_muted_ya загружает правила и использует pa
 
 ## 9. Mute Decisions (mute_decisions)
 
-История решений mute/unmute/delete/graduation для трассировки.
+История всех событий правил: mute/unmute/delete/graduation/alert/log.
 
 | Поле | Описание |
 |------|----------|
-| timestamp | Время решения |
-| full_name | suite/test_name |
+| timestamp | Время события |
+| full_name | suite/test_name (для suite-level: suite_folder) |
 | build_type, branch | Контекст |
-| action | mute \| unmute \| delete \| quarantine_graduation |
+| action | mute \| unmute \| delete \| quarantine_graduation \| alert:rule_id \| log:rule_id |
 | rule_id | ID правила из pattern_rules.yaml |
 | reason | Краткое описание (debug-строка) |
-| previous_state, new_state | muted \| unmuted \| quarantine |
+| previous_state, new_state | muted \| unmuted \| quarantine (null для alert/log) |
+| match_details | Json — полный контекст срабатывания (pattern, growth_ratio, …) |
+| behavior_start_date | Дата первого появления поведения |
+| behavior_start_commit | Коммит при первом появлении |
+| behavior_start_pr | PR при первом появлении |
 
-Таблица: `test_results/analytics/mute_decisions`. Пишется при каждом run `create_new_muted_ya`.
+Таблица: `test_results/analytics/mute_decisions`. Пишется при `create_new_muted_ya` — mute/unmute/delete/graduation; при `evaluate_pr_check_rules` — alert/log.
+
+**find_behavior_start** — опция в params правила: когда true, ищем первое появление (commit, PR, date) в данных.
+
+**Миграция:** если таблица создана до добавления match_details, behavior_start_* — выполнить:
+```sql
+ALTER TABLE `test_results/analytics/mute_decisions` ADD COLUMN match_details Json;
+ALTER TABLE `test_results/analytics/mute_decisions` ADD COLUMN behavior_start_date Date;
+ALTER TABLE `test_results/analytics/mute_decisions` ADD COLUMN behavior_start_commit Utf8;
+ALTER TABLE `test_results/analytics/mute_decisions` ADD COLUMN behavior_start_pr Utf8;
+```
 
 ---
 

@@ -57,6 +57,26 @@ def test_write_mute_decisions_with_data():
             assert rows[0]["full_name"] == "suite1/test1"
 
 
+def test_write_mute_decisions_with_system_version():
+    mock_wrapper = MagicMock()
+    mock_wrapper.get_table_path.return_value = "test_results/analytics/mute_decisions"
+    with patch.object(mock_wrapper, 'create_table'):
+        with patch.object(mock_wrapper, 'bulk_upsert') as bulk:
+            n = write_mute_decisions(
+                mock_wrapper,
+                branch="main",
+                build_type="relwithdebinfo",
+                to_mute=["suite1 test1"],
+                to_unmute=[],
+                to_delete=[],
+                to_graduated=set(),
+                system_version="legacy",
+            )
+            assert n == 1
+            rows = bulk.call_args[0][1]
+            assert rows[0]["action"] == "mute:legacy"
+
+
 def test_write_pattern_matches_empty():
     mock_wrapper = MagicMock()
     mock_wrapper.get_table_path.return_value = "test_results/analytics/mute_decisions"

@@ -764,8 +764,8 @@ def mute_worker(args):
                 output_file=getattr(args, 'output_file', None),
             )
             to_mute, to_unmute, to_delete, to_mute_debug, to_unmute_debug, to_delete_debug = result
-            # Write mute decisions to YDB for traceability (skip in legacy mode)
-            if not legacy_mode:
+            # Write mute decisions to YDB for traceability (skip in legacy mode unless system_version for parallel recording)
+            if not legacy_mode or getattr(args, 'system_version', None):
                 try:
                     with YDBWrapper() as ydb_wrapper:
                         if ydb_wrapper.check_credentials():
@@ -788,6 +788,7 @@ def mute_worker(args):
                                 to_mute_debug=to_mute_debug,
                                 to_unmute_debug=to_unmute_debug,
                                 to_delete_debug=to_delete_debug,
+                                system_version=getattr(args, 'system_version', None),
                             )
                 except Exception as e:
                     logging.warning(f"Failed to write mute decisions to YDB: {e}")
@@ -814,6 +815,7 @@ if __name__ == "__main__":
     update_muted_ya_parser.add_argument('--rules_file', help='Path to pattern_rules.yaml (default: .github/config/pattern_rules.yaml)')
     update_muted_ya_parser.add_argument('--output_file', help='Output filename for final mute file (default: new_muted_ya.txt). Use for per-build-type, e.g. new_muted_ya_asan.txt')
     update_muted_ya_parser.add_argument('--legacy', action='store_true', help='Legacy mode: no quarantine, no graduation (for comparison with old system)')
+    update_muted_ya_parser.add_argument('--system-version', '--system_version', dest='system_version', default=None, help='Suffix for mute_decisions action (e.g. legacy, v4_direct) when running parallel systems')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',

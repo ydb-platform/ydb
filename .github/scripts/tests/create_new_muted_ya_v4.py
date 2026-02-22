@@ -155,6 +155,7 @@ def run_v4_direct(args):
                 to_mute_debug=to_mute_debug,
                 to_unmute_debug=to_unmute_debug,
                 to_delete_debug=to_delete_debug,
+                system_version=getattr(args, "system_version", "v4_direct"),
             )
         except Exception as e:
             logging.warning(f"Failed to write mute_decisions: {e}")
@@ -170,6 +171,7 @@ def main():
     parser.add_argument("--quarantine_file", default=None)
     parser.add_argument("--output_folder", default="comparison/v4_direct")
     parser.add_argument("--rules_file", default=None)
+    parser.add_argument("--system-version", "--system_version", dest="system_version", default="v4_direct", help="Suffix for mute_decisions (default: v4_direct)")
     args = parser.parse_args()
 
     if args.muted_ya_file is None:

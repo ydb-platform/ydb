@@ -18,6 +18,8 @@ env:
   REVIEWERS: '["ci"]'
   LABELS: "mute-unmute,not-for-changelog,ok-to-test"
   BUILD_TYPE: relwithdebinfo
+  # legacy | v4_direct — which system produces the PR. Both run in parallel, both recorded to mute_decisions.
+  ACTIVE_SYSTEM: legacy
 
 jobs:
   setup:
@@ -145,9 +147,11 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Generate new muted_ya.txt
+      - name: Run parallel mute update (legacy + v4_direct, record both)
+        env:
+          ACTIVE_SYSTEM: ${{ env.ACTIVE_SYSTEM }}
         run: |
-          .github/scripts/tests/create_new_muted_ya.py update_muted_ya \
+          python3 .github/scripts/tests/run_parallel_mute_update.py \
             --branch=${{ env.BASE_BRANCH }} \
             --muted_ya_file=base_muted_ya.txt \
             --quarantine_file=quarantine.txt \

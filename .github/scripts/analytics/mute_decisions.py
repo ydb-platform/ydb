@@ -87,6 +87,7 @@ def write_mute_decisions(
     to_mute_debug: Optional[List[str]] = None,
     to_unmute_debug: Optional[List[str]] = None,
     to_delete_debug: Optional[List[str]] = None,
+    system_version: Optional[str] = None,
 ) -> int:
     """
     Write mute decisions to YDB for traceability.
@@ -98,6 +99,7 @@ def write_mute_decisions(
         to_graduated: set of "suite test_name" (quarantine graduation)
         *_rule_id: rule IDs from pattern_rules.yaml
         *_debug: optional parallel lists of reason strings (same order as to_*)
+        system_version: optional, e.g. "legacy" or "v4_direct" — suffixes action for PK uniqueness when running parallel systems
 
     Returns:
         Number of rows written.
@@ -111,6 +113,7 @@ def write_mute_decisions(
 
     now = datetime.datetime.now(datetime.timezone.utc)
     rows = []
+    action_suffix = f":{system_version}" if system_version else ""
 
     _empty_extra = {"match_details": None, "behavior_start_date": None, "behavior_start_commit": None, "behavior_start_pr": None}
 
@@ -122,7 +125,7 @@ def write_mute_decisions(
             "full_name": full_name,
             "build_type": build_type,
             "branch": branch,
-            "action": "mute",
+            "action": f"mute{action_suffix}",
             "rule_id": mute_rule_id,
             "reason": reason,
             "previous_state": "unmuted",
@@ -138,7 +141,7 @@ def write_mute_decisions(
             "full_name": full_name,
             "build_type": build_type,
             "branch": branch,
-            "action": "unmute",
+            "action": f"unmute{action_suffix}",
             "rule_id": unmute_rule_id,
             "reason": reason,
             "previous_state": "muted",
@@ -154,7 +157,7 @@ def write_mute_decisions(
             "full_name": full_name,
             "build_type": build_type,
             "branch": branch,
-            "action": "delete",
+            "action": f"delete{action_suffix}",
             "rule_id": delete_rule_id,
             "reason": reason,
             "previous_state": "muted",
@@ -169,7 +172,7 @@ def write_mute_decisions(
             "full_name": full_name,
             "build_type": build_type,
             "branch": branch,
-            "action": "quarantine_graduation",
+            "action": f"quarantine_graduation{action_suffix}",
             "rule_id": graduation_rule_id,
             "reason": "4+ runs, 1+ pass in 1 day",
             "previous_state": "quarantine",

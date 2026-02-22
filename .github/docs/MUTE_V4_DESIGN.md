@@ -254,8 +254,30 @@ python3 .github/scripts/tests/compare_mute_systems.py --skip_legacy --skip_curre
 
 ---
 
-## 12. Backward Compatibility
+## 12. Parallel Production Run & Switch
+
+После мержа в main обе системы работают **параллельно** при каждом update_muted_ya:
+
+1. **run_parallel_mute_update.py** запускает legacy и v4_direct
+2. Обе пишут в **mute_decisions** с суффиксом: `action` = `mute:legacy`, `mute:v4_direct` и т.д.
+3. **Активная** система определяет содержимое PR (muted_ya.txt, quarantine.txt)
+4. По mute_decisions можно симулировать: «как бы повлияла v4 за этот период»
+
+### Переключение на v4
+
+Изменить **одно** из:
+
+- **Workflow** `.github/workflows/update_muted_ya.yml`: `ACTIVE_SYSTEM: v4_direct`
+- **Config** `.github/config/active_mute_system.txt`: одна строка `v4_direct`
+- **Env** при запуске: `ACTIVE_SYSTEM=v4_direct`
+
+Приоритет: `--active_system` arg > env > config file > default (legacy).
+
+---
+
+## 13. Backward Compatibility
 
 - `muted_ya.txt` stays for relwithdebinfo
+- Default ACTIVE_SYSTEM=legacy — поведение не меняется до переключения
 - If quarantine.txt doesn't exist → empty set, no effect
 - If muted_ya_asan.txt etc. don't exist → create empty or skip (sanitizers may not have update_muted_ya initially)

@@ -4809,6 +4809,9 @@ public:
         if (IsImmediateCommit || PendingLocksBrokenError) {
             return false;
         }
+        if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            return false;
+        }
         PendingLocksBrokenError.emplace(NYql::NDqProto::StatusIds::ABORTED, std::move(issues));
         if (CurrentStateFunc() == &TThis::StateCommit) {
             if (TxManager->ConsumeCommitResult(shardId)) {

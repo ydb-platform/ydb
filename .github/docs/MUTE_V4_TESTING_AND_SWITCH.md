@@ -18,6 +18,15 @@
    - **v4 (mute/muted_ya.txt)** — to_mute, to_unmute, to_delete
 4. Сравнить расхождения между Legacy и v4
 
+### Шаг 1.1a. Запуск из тестовой ветки (до мержа в main)
+
+1. Создать PR в ydb-platform в тестовую ветку (например `test-mute-v4`)
+2. Actions → **Update Muted tests** → Run workflow
+3. Выбрать **ветку** с вашими изменениями (например `mute_version_4`) — кнопка «Use workflow from»
+4. Ввести **scripts_branch**: имя ветки с новым кодом (например `mute_version_4`)
+5. Ввести **branches**: целевую ветку для PR (например `test-mute-v4`)
+6. Запустить — workflow возьмёт скрипты из вашей ветки и создаст PR в `test-mute-v4`
+
 ### Шаг 1.2. Проверка через compare_mute_systems (разовое сравнение)
 
 1. Actions → **Compare Mute Systems (Legacy vs v4)** → Run workflow

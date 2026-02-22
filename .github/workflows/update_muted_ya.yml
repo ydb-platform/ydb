@@ -9,6 +9,10 @@ on:
         description: 'Comma-separated list of branches to process (empty = use branches from config file)'
         required: false
         default: ''
+      scripts_branch:
+        description: 'Branch to use for scripts (empty = main). Use for testing PR: put your branch name'
+        required: false
+        default: ''
 
 env:
   BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
@@ -89,12 +93,18 @@ jobs:
           PR_BRANCH="${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}"
           echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
 
-      # Always checkout main to get up-to-date scripts
-      - name: Checkout main branch
+      - name: Set scripts branch
+        id: scripts_branch
+        run: |
+          SCRIPTS="${{ github.event.inputs.scripts_branch }}"
+          echo "branch=${SCRIPTS:-main}" >> $GITHUB_OUTPUT
+          echo "Using scripts from: ${SCRIPTS:-main}"
+
+      - name: Checkout scripts branch
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
-          ref: main
+          ref: ${{ steps.scripts_branch.outputs.branch }}
           fetch-depth: 0
 
       - name: Install dependencies

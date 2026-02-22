@@ -31,6 +31,7 @@ from update_mute_issues import (
 # Add analytics directory to path for ydb_wrapper import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
 from ydb_wrapper import YDBWrapper
+from mute_decisions import write_mute_decisions
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -762,12 +763,16 @@ def apply_and_add_mutes(
         logging.info(f"muted_ya-to_delete: {len(muted_ya_minus_to_delete)}")
         logging.info(f"muted_ya-to_delete-to_unmute: {len(muted_ya_minus_to_delete_to_unmute)}")
         logging.info(f"muted_ya-to_delete-to_unmute+to_mute: {len(muted_ya_minus_to_delete_to_unmute_plus_to_mute)}")
-        
+        return (
+            to_mute, to_unmute, to_delete,
+            to_mute_debug, to_unmute_debug, to_delete_debug,
+        )
+
     except (KeyError, TypeError) as e:
         logging.error(f"Error processing test data: {e}. Check your query results for valid keys.")
-        return []
+        return ([], [], [], [], [], [])
 
-    return len(to_mute)
+    return ([], [], [], [], [], [])
 
 
 
@@ -1008,7 +1013,7 @@ def mute_worker(args):
             output_path = args.output_folder
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")
-            apply_and_add_mutes(
+            result = apply_and_add_mutes(
                 all_data, output_path, mute_check,
                 aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete,
                 quarantine_check=quarantine_check,
@@ -1017,6 +1022,33 @@ def mute_worker(args):
                 unmute_rule_params=unmute_rule_params,
                 delete_rule_params=delete_rule_params,
             )
+            to_mute, to_unmute, to_delete, to_mute_debug, to_unmute_debug, to_delete_debug = result
+            # Write mute decisions to YDB for traceability
+            try:
+                with YDBWrapper() as ydb_wrapper:
+                    if ydb_wrapper.check_credentials():
+                        mute_rule_id = mute_rule.get("id", "regression_flaky_mute") if mute_rule else "regression_flaky_mute"
+                        unmute_rule_id = unmute_rule.get("id", "regression_stable_unmute") if unmute_rule else "regression_stable_unmute"
+                        delete_rule_id = delete_rule.get("id", "regression_no_runs_delete") if delete_rule else "regression_no_runs_delete"
+                        grad_rule_id = graduation_rule.get("id", "quarantine_graduation") if graduation_rule else "quarantine_graduation"
+                        write_mute_decisions(
+                            ydb_wrapper,
+                            branch=args.branch,
+                            build_type=build_type,
+                            to_mute=to_mute,
+                            to_unmute=to_unmute,
+                            to_delete=to_delete,
+                            to_graduated=to_graduated,
+                            mute_rule_id=mute_rule_id,
+                            unmute_rule_id=unmute_rule_id,
+                            delete_rule_id=delete_rule_id,
+                            graduation_rule_id=grad_rule_id,
+                            to_mute_debug=to_mute_debug,
+                            to_unmute_debug=to_unmute_debug,
+                            to_delete_debug=to_delete_debug,
+                        )
+            except Exception as e:
+                logging.warning(f"Failed to write mute decisions to YDB: {e}")
 
         elif args.mode == 'create_issues':
             file_path = args.file_path

@@ -65,6 +65,15 @@
 
 ---
 
+## Phase 5d: Mute Decisions (YDB)
+
+- [x] **5d.1** Add mute_decisions table to ydb_qa_config.json
+- [x] **5d.2** Create mute_decisions.py (create table, write_mute_decisions)
+- [x] **5d.3** Integrate write_mute_decisions into create_new_muted_ya.py
+- [x] **5d.4** Document mute_decisions and architectural risks in MUTE_V4_DESIGN.md
+
+---
+
 ## Phase 5c: PR-check rules & error_type
 
 - [ ] **5c.1** evaluate_pr_check_rules.py — скрипт для правил scope: pr_check (читает test_results)
@@ -96,3 +105,4 @@
 | — | Phase 3: Manual vs auto detection (cache, detect_manual_unmutes) | ✅ |
 | — | Phase 4: Quarantine graduation (4 runs/1 day, 1+ pass) | ✅ |
 | — | Phase 5b: Pattern rules (pattern_rules.yaml, rule loader) | ✅ |
+| — | Phase 5d: Mute decisions table (mute_decisions, traceability) | ✅ |

@@ -177,7 +177,37 @@ create_new_muted_ya загружает правила и использует pa
 
 **Правила с scope: pr_check** (floating_across_days, retry_recovered) требуют отдельного скрипта — данные PR-check не попадают в tests_monitor. Нужен evaluate_pr_check_rules.py, который читает test_results с job_name=PR-check.
 
-## 9. Backward Compatibility
+## 9. Mute Decisions (mute_decisions)
+
+История решений mute/unmute/delete/graduation для трассировки.
+
+| Поле | Описание |
+|------|----------|
+| timestamp | Время решения |
+| full_name | suite/test_name |
+| build_type, branch | Контекст |
+| action | mute \| unmute \| delete \| quarantine_graduation |
+| rule_id | ID правила из pattern_rules.yaml |
+| reason | Краткое описание (debug-строка) |
+| previous_state, new_state | muted \| unmuted \| quarantine |
+
+Таблица: `test_results/analytics/mute_decisions`. Пишется при каждом run `create_new_muted_ya`.
+
+---
+
+## 10. Архитектурные риски
+
+| Риск | Описание | Митигация |
+|------|----------|-----------|
+| **Cache eviction** | GitHub Actions cache может быть удалён. Теряем previous_base, our_to_unmute → детекция manual unmute не сработает | При cache miss — skip detect_manual_unmutes. Следующий run восстановит state |
+| **Quarantine scope** | Один quarantine.txt на все build_type. Размьют в relwithdebinfo → тест размьючен и в asan | Пока приемлемо (dev починил — тест должен работать везде). При необходимости — quarantine per build_type |
+| **Graduation gap** | Тесты только в PR-check не попадают в tests_monitor → никогда не graduate | Добавить fallback: time-based graduation (N дней в quarantine без новых падений) |
+| **update_muted_ya только relwithdebinfo** | Workflow обновляет только muted_ya.txt, не muted_ya_asan.txt | Расширить matrix по build_type когда понадобится |
+| **Concurrency** | Параллельные runs по веткам — разные cache keys. OK | — |
+
+---
+
+## 11. Backward Compatibility
 
 - `muted_ya.txt` stays for relwithdebinfo
 - If quarantine.txt doesn't exist → empty set, no effect

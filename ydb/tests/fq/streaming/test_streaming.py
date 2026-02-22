@@ -2,7 +2,11 @@ import logging
 import pytest
 import random
 import string
+import yatest
 import time
+
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from ydb.tests.fq.streaming.common import StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
@@ -486,3 +490,97 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_formats(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(kikimr, "test_formats", local_topics, entity_name, partitions_count=10)
+
+        def test_format(kikimr, format, input):
+            sql = R'''
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    $in = SELECT time FROM {inp}
+                    WITH (
+                        FORMAT="{format}",
+                        SCHEMA=(time String NOT NULL, value Uint64 NOT NULL, is_error Bool))
+                    WHERE time like "%time to%";
+                    INSERT INTO {out} SELECT time FROM $in;
+                END DO;'''
+
+            query_name = f"test_{format}"
+            kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, format=format, out=out))
+            path = f"/Root/{query_name}"
+            self.wait_completed_checkpoints(kikimr, path)
+
+            expected_data = ['time to work', 'time to sleep']
+            self.write_stream(input, endpoint=endpoint)
+            assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+            kikimr.ydb_client.query(f'DROP STREAMING QUERY `{query_name}`;')
+
+        input = ['time,value,is_error\n"time to work",42,True\n"time to sleep",777,True']
+        test_format(kikimr, "csv_with_names", input)
+        input = ['time\tvalue\tis_error\ntime to work\t42\tTrue\ntime to sleep\t777\tTrue']
+        test_format(kikimr, "tsv_with_names", input)
+        input = ['[{"time": "time to work", "value": 42, "is_error": "True"}, {"time": "time to sleep", "value": 42, "is_error": "True"}]']
+        test_format(kikimr, "json_list", input)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_json_as_string(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(kikimr, "test_json_as_string", local_topics, entity_name, partitions_count=10)
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT Unwrap(CAST(JSON_VALUE(Data, "$.time") AS String)) AS time FROM {inp}
+                WITH (
+                    FORMAT="json_as_string",
+                    SCHEMA=(Data Json NOT NULL));
+                INSERT INTO {out} SELECT time FROM $in;
+            END DO;'''
+
+        query_name = "test_json_as_string"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        data = ['{"time": "time to work", "value": 42}']
+        expected_data = ['time to work']
+        self.write_stream(data, endpoint=endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        kikimr.ydb_client.query(f'DROP STREAMING QUERY `{query_name}`;')
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_parquet(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(kikimr, "test_parquet", local_topics, entity_name, partitions_count=10)
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT time FROM {inp}
+                WITH (
+                    FORMAT="parquet",
+                    SCHEMA=(time String NOT NULL, value Uint64 NOT NULL, is_error Bool));
+                INSERT INTO {out} SELECT time FROM $in;
+            END DO;'''
+
+        query_name = "test_parquet"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        schema = pa.schema([('time', pa.string()), ('value', pa.uint64()), ('is_error', pa.bool_())])
+        data = [['time to work'], [42], [True]]
+        table = pa.Table.from_arrays(data, schema=schema)
+        filename = 'test_parquet_data.parquet'
+        pq.write_table(table, yatest.common.work_path(filename))
+        with open(yatest.common.work_path(filename), 'rb') as f:
+            binary_data = f.read()
+
+        data = [binary_data]
+        expected_data = ['time to work']
+        self.write_stream(data, endpoint=endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        kikimr.ydb_client.query(f'DROP STREAMING QUERY `{query_name}`;')

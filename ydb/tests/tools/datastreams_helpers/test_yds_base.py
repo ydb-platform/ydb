@@ -4,7 +4,7 @@
 import time
 
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
-from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule
+from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule, update_stream
 from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream
 
 
@@ -36,6 +36,9 @@ class TestYdsBase(object):
         database, fqdn = self.__unwrap_endpoint(endpoint)
         topic = topic_path if topic_path else self.output_topic
         return read_stream(topic, messages_count, commit_after_processing, self.consumer_name, database=database, endpoint=fqdn, timeout=timeout)
+
+    def update_stream(self, path, partitions_count=1, endpoint=None):
+        update_stream(path, partitions_count=partitions_count, default_endpoint=endpoint)
 
     def wait_until(self, predicate, wait_time=plain_or_under_sanitizer(10, 50)):
         deadline = time.time() + wait_time

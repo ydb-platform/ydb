@@ -1727,6 +1727,61 @@ private:
                                 << "changeColumnConstraints can get exactly one token \\in {\"set_not_null\", \"drop_not_null\"}"));
                             return TStatus::Error;
                         }
+                    } else if (alterColumnAction == "setDefaultValue") {
+                        if (!SessionCtx->Config().FeatureFlags.GetEnableSetDropDefaultValue()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << "\". Set/drop default value is not enabled."));
+                            return TStatus::Error;
+                        }
+
+                        auto defaultExpr = alterColumnList.Item(1);
+                        auto defaultType = defaultExpr.Ref().GetTypeAnn();
+                        if (!defaultType) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Cannot determine type of default value expression"));
+                            return TStatus::Error;
+                        }
+                    } else if (alterColumnAction == "dropDefault") {
+                        if (!SessionCtx->Config().FeatureFlags.GetEnableSetDropDefaultValue()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << "\". Set/drop default value is not enabled."));
+                            return TStatus::Error;
+                        }
+
+                        auto* column = table->Metadata->Columns.FindPtr(name);
+                        if (table->Metadata->Kind == EKikimrTableKind::Olap) {
+                            ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                "Default values are not supported in column tables"));
+                            return TStatus::Error;
+                        }
+
+                        if (column) {
+                            if (!column->IsDefaultKindDefined()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name
+                                    << "\" has no default to drop"));
+                                return TStatus::Error;
+                            }
+                            if (column->IsDefaultFromSequence()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name
+                                    << "\". Cannot drop default for a serial/sequence column"));
+                                return TStatus::Error;
+                            }
+                            if (column->NotNull) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name
+                                    << "\". Cannot drop default for a NOT NULL column"));
+                                return TStatus::Error;
+                            }
+                        }
                     } else if (alterColumnAction == "changeCompression") {
                         const auto settings = alterColumnList.Item(1).Cast<TExprList>();
                         for (const auto setting : settings) {

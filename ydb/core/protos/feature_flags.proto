@@ -258,4 +258,5 @@ message TFeatureFlags {
     optional bool EnableForcedCompactions = 231 [default = false];
     optional bool EnableLocalBloomFilterIndex = 232 [default = false];
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
+    optional bool EnableSetDropDefaultValue = 234 [ default = false];
 }

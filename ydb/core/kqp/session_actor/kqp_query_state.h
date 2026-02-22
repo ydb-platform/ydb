@@ -104,9 +104,13 @@ public:
             KqpSessionSpan.Attribute("database", AppData()->TenantName);
         }
         if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
-            QuerySpanId = KqpSessionSpan ?
-                *reinterpret_cast<const ui64*>(KqpSessionSpan.GetTraceId().GetSpanIdPtr()) :
-                RandomNumber<ui64>();
+            if (KqpSessionSpan) {
+                QuerySpanId = *reinterpret_cast<const ui64*>(KqpSessionSpan.GetTraceId().GetSpanIdPtr());
+            } else {
+                while (QuerySpanId == 0) { // avoid 0 as query span id
+                    QuerySpanId = RandomNumber<ui64>();
+                }
+            }
         }
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();

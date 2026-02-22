@@ -57,9 +57,9 @@ def test_write_mute_decisions_with_data():
             assert rows[0]["full_name"] == "suite1/test1"
 
 
-def test_write_mute_decisions_with_system_version():
+def test_write_mute_decisions_v4_writes_to_mute_v4():
     mock_wrapper = MagicMock()
-    mock_wrapper.get_table_path.return_value = "test_results/analytics/mute_decisions"
+    mock_wrapper.get_table_path.return_value = "test_results/mute/v4_decisions"
     with patch.object(mock_wrapper, 'create_table'):
         with patch.object(mock_wrapper, 'bulk_upsert') as bulk:
             n = write_mute_decisions(
@@ -70,11 +70,12 @@ def test_write_mute_decisions_with_system_version():
                 to_unmute=[],
                 to_delete=[],
                 to_graduated=set(),
-                system_version="legacy",
+                system_version="v4_direct",
             )
             assert n == 1
+            mock_wrapper.get_table_path.assert_called_with("mute_decisions_v4")
             rows = bulk.call_args[0][1]
-            assert rows[0]["action"] == "mute:legacy"
+            assert rows[0]["action"] == "mute"
 
 
 def test_write_pattern_matches_empty():

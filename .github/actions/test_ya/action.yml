@@ -395,8 +395,15 @@ runs:
 
         MUTED_YAML_PATH="$PUBLIC_DIR/muted_tests.yaml"
         EFFECTIVE_MUTED_FILE="$TMP_DIR/effective_muted.txt"
-        python3 .github/scripts/tests/mute_utils.py apply_quarantine $MUTED_YA_FILE .github/config/quarantine.txt $EFFECTIVE_MUTED_FILE
-        python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml $EFFECTIVE_MUTED_FILE > $MUTED_YAML_PATH
+        if ! python3 .github/scripts/tests/mute_utils.py apply_quarantine "$MUTED_YA_FILE" .github/config/quarantine.txt "$EFFECTIVE_MUTED_FILE"; then
+          echo "WARNING: apply_quarantine failed, using original muted file" >&2
+          cp "$MUTED_YA_FILE" "$EFFECTIVE_MUTED_FILE"
+        fi
+        if [ ! -f "$EFFECTIVE_MUTED_FILE" ]; then
+          echo "WARNING: effective muted file was not created, using original" >&2
+          cp "$MUTED_YA_FILE" "$EFFECTIVE_MUTED_FILE"
+        fi
+        python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml "$EFFECTIVE_MUTED_FILE" > "$MUTED_YAML_PATH"
 
         BUILD_FAILED=0
 

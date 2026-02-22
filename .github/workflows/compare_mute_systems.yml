@@ -9,6 +9,10 @@ on:
         description: "Branch to compare (e.g. main)"
         required: false
         default: "main"
+      scripts_ref:
+        description: "Ref for scripts (empty = use workflow ref, e.g. branch running from)"
+        required: false
+        default: ""
 
 env:
   BUILD_TYPE: relwithdebinfo
@@ -20,7 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.inputs.scripts_ref || github.ref }}
 
       - name: Install dependencies
         run: |

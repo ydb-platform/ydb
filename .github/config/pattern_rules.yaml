@@ -37,7 +37,7 @@ rules:
       min_runs_threshold: 10
       error_filter: ["timeout", "TIMEOUT"]
     reaction: mute
-    enabled: false  # включить когда error_type будет в tests_monitor
+    enabled: false  # Enable when error_type is available in tests_monitor
 
   # === Unmute: убрать из muted_ya ===
   - id: regression_stable_unmute

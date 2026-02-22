@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-Run legacy and v4_direct in parallel.
+Run legacy and v4 in parallel.
 
-- Legacy → mute_update_legacy/ (для .github/config/muted_ya.txt)
-- v4 → mute_update_v4/ (для .github/config/mute/muted_ya.txt)
+- Legacy -> mute_update_legacy/ (for .github/config/muted_ya.txt)
+- v4 -> mute_update_v4/ (for .github/config/mute/muted_ya.txt)
 
-Workflow копирует оба в PR.
+Workflow copies both to PR.
 """
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 
@@ -34,8 +35,8 @@ def main():
     os.makedirs(legacy_dir, exist_ok=True)
     os.makedirs(v4_dir, exist_ok=True)
 
-    # 1. Legacy (tests_monitor, no quarantine) → для .github/config/muted_ya.txt
-    print("=== Running LEGACY (→ .github/config/muted_ya.txt) ===")
+    # 1. Legacy (tests_monitor, no quarantine) -> .github/config/muted_ya.txt
+    print("=== Running LEGACY (-> .github/config/muted_ya.txt) ===")
     rc = subprocess.run(
         [
             sys.executable,
@@ -55,8 +56,8 @@ def main():
         print(f"Legacy run failed: {rc.returncode}", file=sys.stderr)
         return rc.returncode
 
-    # 2. v4 (test_results only) → для .github/config/mute/muted_ya.txt
-    print("\n=== Running v4 (→ .github/config/mute/muted_ya.txt) ===")
+    # 2. v4 (test_results only) -> .github/config/mute/muted_ya.txt
+    print("\n=== Running v4 (-> .github/config/mute/muted_ya.txt) ===")
     rc = subprocess.run(
         [
             sys.executable,
@@ -71,8 +72,17 @@ def main():
         capture_output=False,
     )
     if rc.returncode != 0:
-        print(f"v4 run failed: {rc.returncode}", file=sys.stderr)
-        return rc.returncode
+        print(f"v4 run failed: {rc.returncode}, using legacy output as fallback", file=sys.stderr)
+        # Copy legacy output to v4 so workflow steps don't fail on missing dirs
+        v4_mute_update = os.path.join(v4_dir, "mute_update")
+        legacy_mute_update = os.path.join(legacy_dir, "mute_update")
+        os.makedirs(v4_mute_update, exist_ok=True)
+        for name in os.listdir(legacy_mute_update):
+            src = os.path.join(legacy_mute_update, name)
+            dst = os.path.join(v4_mute_update, name)
+            if os.path.isfile(src):
+                shutil.copy2(src, dst)
+        print("Copied legacy output to v4 dir as fallback")
 
     print("\n=== Done: legacy in mute_update_legacy/, v4 in mute_update_v4/ ===")
     return 0

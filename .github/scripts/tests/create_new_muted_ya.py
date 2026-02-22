@@ -208,7 +208,7 @@ def mute_worker(args):
             # Legacy: no mute_decisions write
             if getattr(args, 'system_version', None):
                 try:
-                    from mute_decisions import write_mute_decisions
+                    from mute.decisions import write_mute_decisions  # noqa: E402
                     if ydb_wrapper.check_credentials():
                         write_mute_decisions(
                             ydb_wrapper, branch=args.branch, build_type=getattr(args, 'build_type', 'relwithdebinfo'),

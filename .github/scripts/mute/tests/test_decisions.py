@@ -1,20 +1,17 @@
-"""Tests for mute_decisions module."""
-import sys
-import os
+"""Tests for mute.decisions module."""
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'analytics'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import pytest
 
-# Mock ydb before importing mute_decisions (it imports ydb via ydb_wrapper)
+# Mock ydb before importing mute.decisions (it imports ydb via ydb_wrapper)
 with patch.dict('sys.modules', {'ydb': MagicMock()}):
-    from mute_decisions import _test_line_to_full_name, write_mute_decisions, write_pattern_matches
+    from mute.decisions import _test_line_to_full_name, write_mute_decisions, write_pattern_matches
 
 
 def test_test_line_to_full_name():
     assert _test_line_to_full_name("suite1 test1") == "suite1/test1"
     assert _test_line_to_full_name("suite test.with.dots") == "suite/test.with.dots"
-    assert _test_line_to_full_name("a b c") == "a/b c"  # maxsplit=1
+    assert _test_line_to_full_name("a b c") == "a/b c"
 
 
 def test_write_mute_decisions_empty():

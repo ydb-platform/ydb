@@ -6,7 +6,7 @@ import sys
 _parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _parent not in sys.path:
     sys.path.insert(0, _parent)
-# Add analytics for ydb_wrapper, mute_decisions (tests may mock these)
+# Add analytics for ydb_wrapper (tests may mock these)
 _analytics = os.path.join(_parent, '..', 'analytics')
 if os.path.exists(_analytics) and _analytics not in sys.path:
     sys.path.insert(0, _analytics)

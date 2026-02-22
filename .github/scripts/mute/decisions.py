@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """
-Mute decisions history — хранит все события правил: mute/unmute/delete/graduation/alert/log.
+Mute decisions history — stores all rule events: mute/unmute/delete/graduation/alert/log.
 
-Использование:
-  - create_new_muted_ya.py вызывает write_mute_decisions() после apply_and_add_mutes
-  - evaluate_pr_check_rules.py вызывает write_pattern_matches() для alert/log
-  - Данные пишутся в test_results/analytics/mute_decisions
+Usage:
+  - create_new_muted_ya.py calls write_mute_decisions() after apply_and_add_mutes
+  - evaluate_pr.py calls write_pattern_matches() for alert/log
+  - Data written to test_results/analytics/mute_decisions
 """
 
 import datetime
 import json
 import logging
+import os
+import sys
 from typing import Any, Dict, List, Optional, Set
 
 import ydb
 
+# Add analytics for ydb_wrapper
+_scripts = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_analytics = os.path.join(_scripts, 'analytics')
+if _analytics not in sys.path:
+    sys.path.insert(0, _analytics)
 from ydb_wrapper import YDBWrapper
 
 
@@ -70,8 +77,7 @@ def _test_line_to_full_name(line: str) -> str:
 
 
 def create_mute_decisions_table(ydb_wrapper: YDBWrapper, table_path: str) -> None:
-    """Create mute_decisions table if not exists. PK allows one row per (ts, full_name, build_type, branch, action).
-    For alert/log: action = 'alert:rule_id' or 'log:rule_id' to allow multiple rules per test."""
+    """Create mute_decisions table if not exists."""
     create_sql = f"""
         CREATE TABLE IF NOT EXISTS `{table_path}` (
             `timestamp` Timestamp NOT NULL,
@@ -113,26 +119,11 @@ def write_mute_decisions(
     to_delete_debug: Optional[List[str]] = None,
     system_version: Optional[str] = None,
 ) -> int:
-    """
-    Write mute decisions to YDB for traceability.
-
-    Args:
-        ydb_wrapper: YDB connection
-        branch, build_type: context
-        to_mute, to_unmute, to_delete: lists of "suite test_name" strings
-        to_graduated: set of "suite test_name" (quarantine graduation)
-        *_rule_id: rule IDs from pattern_rules.yaml
-        *_debug: optional parallel lists of reason strings (same order as to_*)
-        system_version: when "v4_direct" — write to test_results/mute/v4_decisions; else write to mute_decisions with action="mute"
-
-    Returns:
-        Number of rows written.
-    """
+    """Write mute decisions to YDB for traceability."""
     to_mute_debug_map = dict(zip(to_mute, to_mute_debug)) if to_mute_debug and len(to_mute_debug) == len(to_mute) else {}
     to_unmute_debug_map = dict(zip(to_unmute, to_unmute_debug)) if to_unmute_debug and len(to_unmute_debug) == len(to_unmute) else {}
     to_delete_debug_map = dict(zip(to_delete, to_delete_debug)) if to_delete_debug and len(to_delete_debug) == len(to_delete) else {}
 
-    # v4 пишет в test_results/mute/v4_decisions, legacy — в mute_decisions
     table_path = ydb_wrapper.get_table_path("mute_decisions_v4" if system_version == "v4_direct" else "mute_decisions")
     create_mute_decisions_table(ydb_wrapper, table_path)
 
@@ -225,11 +216,7 @@ def write_pattern_matches(
     build_type: str,
     matches: List[Dict[str, Any]],
 ) -> int:
-    """
-    Write all pattern matches (alert, log) to mute_decisions.
-    action = 'alert:rule_id' or 'log:rule_id' for PK uniqueness per rule.
-    match_details = full context (JSON). behavior_start_* when find_behavior_start enabled.
-    """
+    """Write all pattern matches (alert, log) to mute_decisions."""
     if not matches:
         return 0
 

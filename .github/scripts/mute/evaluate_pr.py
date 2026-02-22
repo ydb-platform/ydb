@@ -12,7 +12,7 @@ _script_dir = os.path.dirname(os.path.abspath(__file__))
 _scripts_dir = os.path.dirname(_script_dir)
 sys.path.insert(0, os.path.join(_scripts_dir, 'analytics'))
 from ydb_wrapper import YDBWrapper
-from mute_decisions import write_pattern_matches
+from .decisions import write_pattern_matches
 
 from .rules import get_rule_params, get_rules_for_build, load_rules
 from .behavior import find_behavior_start

@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(_scripts_dir, 'analytics'))
 
 from mute_check import YaMuteCheck
 from ydb_wrapper import YDBWrapper
-from mute_decisions import write_mute_decisions
+from .decisions import write_mute_decisions
 
 from .logic import aggregate_test_data, get_quarantine_graduation
 from .rules import (

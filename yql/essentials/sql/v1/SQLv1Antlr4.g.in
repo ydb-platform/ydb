@@ -793,6 +793,8 @@ alter_table_action:
   | alter_table_alter_column_set_not_null
   | alter_table_alter_column_set_compression
   | alter_table_compact
+  | alter_table_alter_column_set_default
+  | alter_table_alter_column_drop_default
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -833,6 +835,8 @@ alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
 alter_table_compact: COMPACT with_compact_settings?;
 
 column_schema: an_id_schema type_name_or_bind column_option_list;
+alter_table_alter_column_set_default: ALTER COLUMN an_id SET default_value;
+alter_table_alter_column_drop_default: ALTER COLUMN an_id DROP DEFAULT;
 
 column_option_list: column_option_list_space | column_option_list_comma;
 column_option_list_space: (column_option)*;

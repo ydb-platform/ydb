@@ -756,6 +756,8 @@ struct TColumnSchema {
         SetNotNullConstraint,
         SetFamily,
         SetCompression,
+        SetDefault,
+        DropDefault,
     };
 
     TPosition Pos;

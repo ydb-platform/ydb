@@ -12849,6 +12849,240 @@ Y_UNIT_TEST(SelectOpIntersect) {
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
+Y_UNIT_TEST_SUITE(ColumnDefault) {
+
+Y_UNIT_TEST(AlterColumnSetDefault) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT 42;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultString) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT "hello"u;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultNull) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT NULL;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnDropDefault) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropDefault");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultDoesNotEmitCompression) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT 42;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("columnCompression"));
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("changeColumnConstraints"));
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnDropDefaultDoesNotEmitCompression) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_C(line.find("columnCompression") == TString::npos, line);
+            UNIT_ASSERT_C(line.find("changeColumnConstraints") == TString::npos, line);
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultWithOtherActions) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl
+            ALTER COLUMN val SET DEFAULT 42,
+            ALTER COLUMN other DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropDefault");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultMultipleColumns) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl
+            ALTER COLUMN a SET DEFAULT 1,
+            ALTER COLUMN b SET DEFAULT "hello"u,
+            ALTER COLUMN c DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    TVector<TString> lines;
+    Split(program, "\n", lines);
+
+    int setDefaultCount = 0;
+    int dropDefaultCount = 0;
+    for (const auto& line : lines) {
+        auto last = line.find("setDefaultValue");
+        while (last != TString::npos) {
+            ++setDefaultCount;
+            last = line.find("setDefaultValue", last + 1);
+        }
+        last = line.find("dropDefault");
+        while (last != TString::npos) {
+            ++dropDefaultCount;
+            last = line.find("dropDefault", last + 1);
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(2, setDefaultCount);
+    UNIT_ASSERT_VALUES_EQUAL(1, dropDefaultCount);
+}
+
+Y_UNIT_TEST(AlterColumnSetDefaultBoolLiteral) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET DEFAULT false;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setDefaultValue");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterExternalTableSetDefaultIsSyntaxError) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER EXTERNAL TABLE tbl ALTER COLUMN val SET DEFAULT 42;
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'ALTER' expecting");
+}
+
+Y_UNIT_TEST(AlterExternalTableDropDefaultIsSyntaxError) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER EXTERNAL TABLE tbl ALTER COLUMN val DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'ALTER' expecting");
+}
+
+Y_UNIT_TEST(AlterTableStoreSetDefaultIsSyntaxError) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLESTORE tbl ALTER COLUMN val SET DEFAULT 42;
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'ALTER' expecting");
+}
+
+Y_UNIT_TEST(AlterTableStoreDropDefaultIsSyntaxError) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLESTORE tbl ALTER COLUMN val DROP DEFAULT;
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'ALTER' expecting");
+}
+
+} // Y_UNIT_TEST_SUITE(ColumnDefault)
+
 Y_UNIT_TEST_SUITE(CreateViewNewSyntax) {
 
 Y_UNIT_TEST(DoesntWorkOnOldLangVersion) {

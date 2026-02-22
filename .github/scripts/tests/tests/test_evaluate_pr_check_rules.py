@@ -4,6 +4,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from regression_jobs import REGRESSION_JOB_NAMES, regression_job_names_sql
 from pr_check_patterns import (
     pattern_floating_across_days,
     pattern_retry_recovered,
@@ -11,6 +12,18 @@ from pr_check_patterns import (
     pattern_duration_increased,
     _parse_date,
 )
+
+
+def test_regression_job_names_constant():
+    assert len(REGRESSION_JOB_NAMES) == 8
+    assert "Regression-run" in REGRESSION_JOB_NAMES
+    assert "Nightly-run" in REGRESSION_JOB_NAMES
+
+
+def test_regression_job_names_sql():
+    sql = regression_job_names_sql()
+    assert "'Regression-run'" in sql
+    assert "'Nightly-run'" in sql
 
 
 def test_parse_date():

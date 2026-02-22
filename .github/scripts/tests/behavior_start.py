@@ -27,11 +27,9 @@ def find_behavior_start(
             if pred(r):
                 d = _to_date(r.get("run_timestamp"))
                 commit = r.get("commit") or r.get("commit_sha")
-                pull = r.get("pull")
-                if pull is not None and str(pull).isdigit():
-                    pass
-                else:
-                    pull = str(pull) if pull else None
+                # Normalize pull to str or None (YDB/JSON may return int or str)
+                pull_raw = r.get("pull")
+                pull = str(pull_raw) if pull_raw is not None else None
                 return d, commit, pull
         return None, None, None
 
@@ -93,7 +91,9 @@ def find_behavior_start(
                     run_ts = events[0][0]
                     r0 = next((r for r in runs if r.get("job_id") == jid and r.get("full_name") == full_name), None)
                     if r0:
-                        return _to_date(run_ts), r0.get("commit"), str(r0.get("pull")) if r0.get("pull") else None
+                        pull_raw = r0.get("pull")
+                        pull = str(pull_raw) if pull_raw is not None else None
+                        return _to_date(run_ts), r0.get("commit"), pull
         return None, None, None
 
     return None, None, None

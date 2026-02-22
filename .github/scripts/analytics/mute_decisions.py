@@ -18,6 +18,25 @@ import ydb
 from ydb_wrapper import YDBWrapper
 
 
+def _mute_decisions_column_types() -> ydb.BulkUpsertColumns:
+    """Shared column types for mute_decisions table."""
+    ct = ydb.BulkUpsertColumns()
+    ct.add_column("timestamp", ydb.PrimitiveType.Timestamp)
+    ct.add_column("full_name", ydb.PrimitiveType.Utf8)
+    ct.add_column("build_type", ydb.PrimitiveType.Utf8)
+    ct.add_column("branch", ydb.PrimitiveType.Utf8)
+    ct.add_column("action", ydb.PrimitiveType.Utf8)
+    ct.add_column("rule_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ct.add_column("reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ct.add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ct.add_column("new_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ct.add_column("match_details", ydb.OptionalType(ydb.PrimitiveType.Json))
+    ct.add_column("behavior_start_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+    ct.add_column("behavior_start_commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    ct.add_column("behavior_start_pr", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    return ct
+
+
 def _test_line_to_full_name(line: str) -> str:
     """Convert 'suite_folder test_name' to 'suite_folder/test_name'."""
     parts = line.strip().split(" ", maxsplit=1)
@@ -162,22 +181,7 @@ def write_mute_decisions(
         logging.info("No mute decisions to write")
         return 0
 
-    column_types = ydb.BulkUpsertColumns()
-    column_types.add_column("timestamp", ydb.PrimitiveType.Timestamp)
-    column_types.add_column("full_name", ydb.PrimitiveType.Utf8)
-    column_types.add_column("build_type", ydb.PrimitiveType.Utf8)
-    column_types.add_column("branch", ydb.PrimitiveType.Utf8)
-    column_types.add_column("action", ydb.PrimitiveType.Utf8)
-    column_types.add_column("rule_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("new_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("match_details", ydb.OptionalType(ydb.PrimitiveType.Json))
-    column_types.add_column("behavior_start_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-    column_types.add_column("behavior_start_commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("behavior_start_pr", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
+    ydb_wrapper.bulk_upsert(table_path, rows, _mute_decisions_column_types())
     logging.info(f"Wrote {len(rows)} mute decisions to {table_path}")
     return len(rows)
 
@@ -232,21 +236,6 @@ def write_pattern_matches(
             "behavior_start_pr": m.get("behavior_start_pr"),
         })
 
-    column_types = ydb.BulkUpsertColumns()
-    column_types.add_column("timestamp", ydb.PrimitiveType.Timestamp)
-    column_types.add_column("full_name", ydb.PrimitiveType.Utf8)
-    column_types.add_column("build_type", ydb.PrimitiveType.Utf8)
-    column_types.add_column("branch", ydb.PrimitiveType.Utf8)
-    column_types.add_column("action", ydb.PrimitiveType.Utf8)
-    column_types.add_column("rule_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("new_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("match_details", ydb.OptionalType(ydb.PrimitiveType.Json))
-    column_types.add_column("behavior_start_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-    column_types.add_column("behavior_start_commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column("behavior_start_pr", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
+    ydb_wrapper.bulk_upsert(table_path, rows, _mute_decisions_column_types())
     logging.info(f"Wrote {len(rows)} pattern matches to {table_path}")
     return len(rows)

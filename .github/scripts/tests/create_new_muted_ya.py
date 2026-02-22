@@ -47,8 +47,8 @@ from mute_decisions import write_mute_decisions
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-dir = os.path.dirname(__file__)
-repo_path = f"{dir}/../../../"
+script_dir = os.path.dirname(__file__)
+repo_path = f"{script_dir}/../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
 quarantine_path = '.github/config/quarantine.txt'
 

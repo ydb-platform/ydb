@@ -39,10 +39,10 @@
 
 ## Phase 4: Quarantine Graduation
 
-- [ ] **4.1** Add query/aggregation for 1-day window: runs and passes per test
-- [ ] **4.2** Implement graduation check: 4+ runs in 1 day AND 1+ pass
-- [ ] **4.3** For tests passing graduation: remove from quarantine, remove from muted_ya
-- [ ] **4.4** Integrate graduation into `create_new_muted_ya` or separate step in workflow
+- [x] **4.1** Add aggregation for 1-day window (aggregate_test_data period_days=1)
+- [x] **4.2** Implement get_quarantine_graduation: 4+ runs in 1 day AND 1+ pass
+- [x] **4.3** For tests passing graduation: remove from quarantine, exclude from muted_ya output
+- [x] **4.4** Integrate graduation into create_new_muted_ya mute_worker
 
 ---
 
@@ -74,3 +74,4 @@
 | — | Phase 1.1-1.3: Mute files per build type, test_ya action | ✅ |
 | — | Phase 2: Quarantine (apply_quarantine, exclude from to_mute) | ✅ |
 | — | Phase 3: Manual vs auto detection (cache, detect_manual_unmutes) | ✅ |
+| — | Phase 4: Quarantine graduation (4 runs/1 day, 1+ pass) | ✅ |

@@ -500,8 +500,51 @@ def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=F
         add_lines_to_file(debug_path, [line + '\n' for line in sorted_debug_list])
     logging.info(f"Created {os.path.basename(file_path)} with {len(sorted_test_set)} tests")
 
-def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, quarantine_check=None):
+def _parse_mute_file(path):
+    """Parse mute file, return set of non-empty, non-comment lines."""
+    if not path or not os.path.exists(path):
+        return set()
+    with open(path) as f:
+        return set(
+            l.strip()
+            for l in f
+            if l.strip() and not l.strip().startswith("#")
+        )
+
+
+def get_quarantine_graduation(quarantine_tests, aggregated_1day):
+    """
+    Rule: 4+ runs in 1 day AND 1+ pass → graduate (remove from quarantine).
+    Returns set of graduated test strings (suite test_name format).
+    """
+    # Build lookup: full_name -> test_string for aggregated data
+    full_name_to_test_str = {}
+    for t in aggregated_1day:
+        fn = t.get('full_name')
+        if fn:
+            full_name_to_test_str[fn] = create_test_string(t, use_wildcards=False)
+
+    graduated = set()
+    for test_line in quarantine_tests:
+        parts = test_line.split(" ", maxsplit=1)
+        if len(parts) != 2:
+            continue
+        suite, testcase = parts
+        full_name = f"{suite}/{testcase}"
+        agg = next((a for a in aggregated_1day if a.get('full_name') == full_name), None)
+        if not agg:
+            continue
+        total_runs = agg.get('pass_count', 0) + agg.get('fail_count', 0) + agg.get('mute_count', 0)
+        pass_count = agg.get('pass_count', 0)
+        if total_runs >= 4 and pass_count >= 1:
+            graduated.add(test_line)
+            logging.info(f"Quarantine graduation: {test_line} (runs={total_runs}, pass={pass_count})")
+    return graduated
+
+
+def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, quarantine_check=None, quarantine_path=None, to_graduated=None):
     output_path = os.path.join(output_path, 'mute_update')
+    to_graduated = to_graduated or set()
     logging.info(f"Creating mute files in directory: {output_path}")
     
     # Получаем уникальные тесты для обработки (используем максимальный период для получения всех тестов)
@@ -640,8 +683,8 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             muted_ya_minus_to_delete_debug.append(debug_val)
         write_file_set(os.path.join(output_path, 'muted_ya-to_delete.txt'), muted_ya_minus_to_delete, muted_ya_minus_to_delete_debug)
 
-        # 8. muted_ya-to-delete-to-unmute
-        muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete and t not in to_unmute]
+        # 8. muted_ya-to-delete-to-unmute-to_graduated (graduated = quarantine passed, remove from both)
+        muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete and t not in to_unmute and t not in to_graduated]
         muted_ya_minus_to_delete_to_unmute_debug = []
         for test in muted_ya_minus_to_delete_to_unmute:
             debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
@@ -897,16 +940,27 @@ def mute_worker(args):
         
         # Используем универсальную агрегацию для разных периодов
         aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS дней для mute
-    aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS дней для unmute
-    aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS дней для delete
-    
-    logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
-    
-    if args.mode == 'update_muted_ya':
-        output_path = args.output_folder
-        os.makedirs(output_path, exist_ok=True)
-        logging.info(f"Creating mute files in: {output_path}")
-        apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, quarantine_check=quarantine_check)
+        aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS дней для unmute
+        aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS дней для delete
+        aggregated_1day = aggregate_test_data(all_data, 1)  # 1 день для quarantine graduation
+
+        logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
+
+        to_graduated = set()
+        if quarantine_check and input_quarantine_path and os.path.exists(input_quarantine_path):
+            quarantine_tests = _parse_mute_file(input_quarantine_path)
+            to_graduated = get_quarantine_graduation(quarantine_tests, aggregated_1day)
+            if to_graduated:
+                updated_quarantine = quarantine_tests - to_graduated
+                with open(input_quarantine_path, 'w') as f:
+                    f.write('\n'.join(sorted(updated_quarantine)) + '\n')
+                logging.info(f"Quarantine graduation: removed {len(to_graduated)} tests from quarantine")
+
+        if args.mode == 'update_muted_ya':
+            output_path = args.output_folder
+            os.makedirs(output_path, exist_ok=True)
+            logging.info(f"Creating mute files in: {output_path}")
+            apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, quarantine_check=quarantine_check, to_graduated=to_graduated)
 
     elif args.mode == 'create_issues':
         file_path = args.file_path

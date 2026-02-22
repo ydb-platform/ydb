@@ -566,6 +566,7 @@ def apply_and_add_mutes(
     mute_rule_params=None,
     unmute_rule_params=None,
     delete_rule_params=None,
+    output_file=None,
 ):
     output_path = os.path.join(output_path, 'mute_update')
     to_graduated = to_graduated or set()
@@ -730,8 +731,9 @@ def apply_and_add_mutes(
             debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
             muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(debug_val)
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
-        # Сохраняем этот же файл как new_muted_ya.txt для совместимости с workflow
-        write_file_set(os.path.join(output_path, 'new_muted_ya.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
+        # Final output: new_muted_ya.txt or custom output_file (for per-build-type)
+        final_output = output_file or 'new_muted_ya.txt'
+        write_file_set(os.path.join(output_path, final_output), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         
         # 10. muted_ya_changes - файл с изменениями (новая логика)
         all_test_strings = sorted(all_muted_ya_set | to_mute_set | to_unmute_set | to_delete_set, key=sort_key_without_prefix)
@@ -1021,6 +1023,7 @@ def mute_worker(args):
                 mute_rule_params=mute_rule_params,
                 unmute_rule_params=unmute_rule_params,
                 delete_rule_params=delete_rule_params,
+                output_file=getattr(args, 'output_file', None),
             )
             to_mute, to_unmute, to_delete, to_mute_debug, to_unmute_debug, to_delete_debug = result
             # Write mute decisions to YDB for traceability
@@ -1070,6 +1073,7 @@ if __name__ == "__main__":
     update_muted_ya_parser.add_argument('--quarantine_file', default=quarantine_path, help='Path to quarantine.txt (manually unmuted tests)')
     update_muted_ya_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type for rule selection')
     update_muted_ya_parser.add_argument('--rules_file', help='Path to pattern_rules.yaml (default: .github/config/pattern_rules.yaml)')
+    update_muted_ya_parser.add_argument('--output_file', help='Output filename for final mute file (default: new_muted_ya.txt). Use for per-build-type, e.g. new_muted_ya_asan.txt')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',

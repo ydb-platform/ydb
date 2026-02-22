@@ -71,6 +71,10 @@ The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
 
 Правила задаются в [pattern_rules.yaml](.github/config/pattern_rules.yaml). Пороги mute/unmute/delete настраиваются через `params` без изменения кода.
 
+## 📊 Mute Decisions (Mute v4)
+
+История решений mute/unmute/delete/graduation пишется в YDB (`test_results/analytics/mute_decisions`) при каждом run `create_new_muted_ya`. Поля: timestamp, full_name, build_type, branch, action, rule_id, reason, previous_state, new_state. Используется для трассировки: почему тест замьючен или размьючен.
+
 ## 📁 Mute files per build type (Mute v4)
 
 | Build type | Mute file |

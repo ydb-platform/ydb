@@ -11,9 +11,9 @@
 - [x] **1.1** Create empty mute files for sanitizers: `muted_ya_asan.txt`, `muted_ya_tsan.txt`, `muted_ya_msan.txt`
 - [x] **1.2** Add helper to get mute file path by build_type: inline case in action.yml
 - [x] **1.3** Update `test_ya/action.yml` to use correct mute file based on `BUILD_PRESET`
-- [ ] **1.4** Update `mute_utils.py convert_muted_txt_to_yaml` to accept file path parameter
+- [x] **1.4** Update `mute_utils.py convert_muted_txt_to_yaml` to accept file path parameter
 - [ ] **1.5** Update `update_muted_ya.yml` to process per build_type (matrix or loop)
-- [ ] **1.6** Update `create_new_muted_ya.py` to accept `--muted_ya_file` and `--output_file` per build_type
+- [x] **1.6** Update `create_new_muted_ya.py` to accept `--muted_ya_file` and `--output_file` per build_type
 
 ---
 
@@ -48,11 +48,11 @@
 
 ## Phase 5: Integration & Workflow Updates
 
-- [ ] **5.1** Update `update_muted_ya.yml` full flow: cache restore → detection → quarantine load → create_new_muted_ya (with quarantine exclusion) → graduation → cache save
-- [ ] **5.2** Update `collect_analytics.yml` if it uses muted_ya (per build_type)
+- [x] **5.1** Update `update_muted_ya.yml` full flow: cache restore → detection → quarantine load → create_new_muted_ya (with quarantine exclusion) → graduation → cache save
+- [x] **5.2** Update `collect_analytics.yml` if it uses muted_ya (per build_type) — N/A: data marts read from tests_monitor, not muted_ya
 - [ ] **5.3** Update `create_issues_for_muted_tests.yml` for multi-file if needed
 - [ ] **5.4** Update `get_muted_tests.py upload_muted_tests` for per build_type files
-- [ ] **5.5** Update `mute_rules.md` documentation
+- [x] **5.5** Update `mute_rules.md` documentation
 
 ---
 

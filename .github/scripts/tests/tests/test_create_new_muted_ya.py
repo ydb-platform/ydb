@@ -41,6 +41,19 @@ def test_matches_error_filter_mixed():
     assert _matches_error_filter('TIMEOUT', ['timeout', '!other']) is True
 
 
+def test_matches_error_filter_multiple_includes():
+    """Any include matches -> pass."""
+    assert _matches_error_filter('REGULAR', ['timeout', 'REGULAR']) is True
+    assert _matches_error_filter('TIMEOUT', ['timeout', 'REGULAR']) is True
+    assert _matches_error_filter('UNKNOWN', ['timeout', 'REGULAR']) is False
+
+
+def test_matches_error_filter_empty_err():
+    """Empty error_type with include filter -> no match."""
+    assert _matches_error_filter('', ['timeout']) is False
+    assert _matches_error_filter(None, ['timeout']) is False
+
+
 # ============ is_mute_candidate ============
 
 def test_is_mute_candidate_high_failures():
@@ -75,6 +88,28 @@ def test_is_mute_candidate_error_filter():
     assert is_mute_candidate(test, agg, {"min_failures_high": 3, "error_filter": ["timeout"]}) is False  # REGULAR != timeout
 
 
+def test_is_mute_candidate_boundary_total_runs_eq_threshold():
+    """total_runs == min_runs_threshold: high path needs > threshold, so no mute."""
+    agg = [{"full_name": "s/t", "pass_count": 6, "fail_count": 4, "is_muted": False}]
+    test = {"full_name": "s/t"}
+    # total=10, fails=4. high path: fails>=3 and total>10 -> False. low path: fails>=2 and total<=10 -> True
+    assert is_mute_candidate(test, agg, {"min_failures_high": 3, "min_failures_low": 2, "min_runs_threshold": 10}) is True
+
+
+def test_is_mute_candidate_boundary_total_runs_gt_threshold_no_mute():
+    """total_runs=11, fails=3: high path applies, should mute."""
+    agg = [{"full_name": "s/t", "pass_count": 8, "fail_count": 3, "is_muted": False}]
+    test = {"full_name": "s/t"}
+    assert is_mute_candidate(test, agg, {"min_failures_high": 3, "min_runs_threshold": 10}) is True
+
+
+def test_is_mute_candidate_test_not_in_aggregated():
+    """Test not in aggregated_data -> False."""
+    agg = [{"full_name": "other/t", "pass_count": 5, "fail_count": 4, "is_muted": False}]
+    test = {"full_name": "s/t"}
+    assert is_mute_candidate(test, agg) is False
+
+
 # ============ is_unmute_candidate ============
 
 def test_is_unmute_candidate_stable():
@@ -101,6 +136,26 @@ def test_is_unmute_candidate_not_muted():
     assert is_unmute_candidate(test, agg, {"min_runs": 4, "max_fails": 0}) is True  # still qualifies
 
 
+def test_is_unmute_candidate_mute_count_counts_as_fail():
+    """mute_count is part of total_fails: 4 runs with 1 mute -> should NOT unmute (max_fails=0)."""
+    agg = [{"full_name": "s/t", "pass_count": 4, "fail_count": 0, "mute_count": 1, "is_muted": True}]
+    test = {"full_name": "s/t"}
+    assert is_unmute_candidate(test, agg, {"min_runs": 4, "max_fails": 0}) is False
+
+
+def test_is_unmute_candidate_boundary_exactly_4_runs():
+    """Exactly 4 runs, 0 fails -> should unmute."""
+    agg = [{"full_name": "s/t", "pass_count": 4, "fail_count": 0, "mute_count": 0, "is_muted": True}]
+    test = {"full_name": "s/t"}
+    assert is_unmute_candidate(test, agg, {"min_runs": 4, "max_fails": 0}) is True
+
+
+def test_is_unmute_candidate_test_not_in_aggregated():
+    agg = [{"full_name": "other/t", "pass_count": 5, "fail_count": 0, "mute_count": 0}]
+    test = {"full_name": "s/t"}
+    assert is_unmute_candidate(test, agg) is False
+
+
 # ============ is_delete_candidate ============
 
 def test_is_delete_candidate_no_runs():
@@ -111,6 +166,19 @@ def test_is_delete_candidate_no_runs():
 
 def test_is_delete_candidate_has_runs():
     agg = [{"full_name": "s/t", "pass_count": 1, "fail_count": 0, "mute_count": 0, "skip_count": 0, "is_muted": True}]
+    test = {"full_name": "s/t"}
+    assert is_delete_candidate(test, agg) is False
+
+
+def test_is_delete_candidate_skip_only():
+    """Only skip_count (no pass/fail/mute) -> total_runs=1, not 0, should NOT delete."""
+    agg = [{"full_name": "s/t", "pass_count": 0, "fail_count": 0, "mute_count": 0, "skip_count": 1, "is_muted": True}]
+    test = {"full_name": "s/t"}
+    assert is_delete_candidate(test, agg) is False
+
+
+def test_is_delete_candidate_test_not_in_aggregated():
+    agg = [{"full_name": "other/t", "pass_count": 0, "fail_count": 0, "mute_count": 0, "skip_count": 0}]
     test = {"full_name": "s/t"}
     assert is_delete_candidate(test, agg) is False
 
@@ -145,6 +213,23 @@ def test_quarantine_graduation_not_in_agg():
     agg = []
     result = get_quarantine_graduation(quarantine, agg, {"min_runs": 4, "min_passes": 1})
     assert result == set()
+
+
+def test_quarantine_graduation_malformed_line():
+    """Malformed quarantine line (no space) -> skipped."""
+    quarantine = {"suite1", "suite2 test2"}  # "suite1" has no test_name
+    agg = [{"full_name": "suite2/test2", "pass_count": 5, "fail_count": 0, "mute_count": 0}]
+    result = get_quarantine_graduation(quarantine, agg, {"min_runs": 4, "min_passes": 1})
+    assert "suite1" not in result
+    assert "suite2 test2" in result
+
+
+def test_quarantine_graduation_boundary_exactly_4_runs_1_pass():
+    """Exactly 4 runs, 1 pass -> should graduate."""
+    quarantine = {"suite1 test1"}
+    agg = [{"full_name": "suite1/test1", "pass_count": 1, "fail_count": 3, "mute_count": 0}]
+    result = get_quarantine_graduation(quarantine, agg, {"min_runs": 4, "min_passes": 1})
+    assert "suite1 test1" in result
 
 
 # ============ is_chunk_test ============

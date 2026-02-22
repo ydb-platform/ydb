@@ -96,6 +96,23 @@ def test_apply_quarantine_all_quarantined():
         os.unlink(quarantine)
 
 
+def test_apply_quarantine_partial_overlap():
+    """Muted has a,b,c; quarantine has b,d. Result: a,c (b removed, d ignored)."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as m:
+        m.write("a x\nb y\nc z\n")
+        muted = m.name
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as q:
+        q.write("b y\nd w\n")
+        quarantine = q.name
+    try:
+        out = apply_quarantine(muted, quarantine)
+        lines = [l for l in out.strip().split('\n') if l]
+        assert set(lines) == {'a x', 'c z'}
+    finally:
+        os.unlink(muted)
+        os.unlink(quarantine)
+
+
 def test_pattern_to_re_wildcard():
     p = pattern_to_re("suite*")
     assert p.startswith("(?:^")

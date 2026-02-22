@@ -29,7 +29,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V1, you need to per
 
     {% cut "More details" %}
 
-    The `--v2-internal-state` argument specifies that the full cluster configuration will be retrieved, including [State Storage](../../../reference/configuration/index.md#domains-state) and [static group](../../../reference/configuration/index.md#blob_storage_config) configuration parameters.
+    The `--v2-internal-state` argument specifies that the full cluster configuration will be retrieved, including State Storage and static group configuration parameters.
 
     {% endcut %}
 

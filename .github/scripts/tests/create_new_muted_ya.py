@@ -30,6 +30,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 dir = os.path.dirname(__file__)
 repo_path = f"{dir}/../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
+quarantine_path = '.github/config/quarantine.txt'
 
 # Константы для временных окон mute-логики
 MUTE_DAYS = 4
@@ -435,7 +436,7 @@ def is_delete_candidate(test, aggregated_data):
     
     return result
 
-def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):
+def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None, exclude_check=None):
     """Создает набор тестов для файла на основе фильтра"""
     result_set = set()
     debug_list = []
@@ -448,6 +449,9 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
         if not testsuite or not testcase:
             continue
         
+        # Исключаем тесты (напр. quarantine)
+        if exclude_check and exclude_check(testsuite, testcase):
+            continue
         # Проверяем mute_check если передан
         if mute_check and not mute_check(testsuite, testcase):
             continue
@@ -496,7 +500,7 @@ def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=F
         add_lines_to_file(debug_path, [line + '\n' for line in sorted_debug_list])
     logging.info(f"Created {os.path.basename(file_path)} with {len(sorted_test_set)} tests")
 
-def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete):
+def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, quarantine_check=None):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
     
@@ -508,12 +512,13 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
 
 
     try:
-        # 1. Кандидаты на mute
+        # 1. Кандидаты на mute (исключаем quarantine — защита от re-mute)
         def is_mute_candidate_wrapper(test):
             return is_mute_candidate(test, aggregated_for_mute)
         
         to_mute, to_mute_debug = create_file_set(
-            aggregated_for_mute, is_mute_candidate_wrapper, use_wildcards=True, resolution='to_mute'
+            aggregated_for_mute, is_mute_candidate_wrapper, use_wildcards=True, resolution='to_mute',
+            exclude_check=quarantine_check
         )
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
@@ -875,6 +880,15 @@ def mute_worker(args):
         mute_check.load(input_muted_ya_path)
         logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
+        quarantine_check = None
+        input_quarantine_path = getattr(args, 'quarantine_file', quarantine_path)
+        if os.path.exists(input_quarantine_path):
+            quarantine_check = YaMuteCheck()
+            quarantine_check.load(input_quarantine_path)
+            logging.info(f"Loaded quarantine.txt with {len(quarantine_check.regexps)} tests (protected from re-mute)")
+        else:
+            logging.info(f"Quarantine file not found: {input_quarantine_path}, skipping")
+
         logging.info("Executing single query for 7 days window...")
         
         # Один запрос за максимальный период (7 дней)
@@ -892,7 +906,7 @@ def mute_worker(args):
         output_path = args.output_folder
         os.makedirs(output_path, exist_ok=True)
         logging.info(f"Creating mute files in: {output_path}")
-        apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete)
+        apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, quarantine_check=quarantine_check)
 
     elif args.mode == 'create_issues':
         file_path = args.file_path
@@ -913,6 +927,7 @@ if __name__ == "__main__":
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
     update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
+    update_muted_ya_parser.add_argument('--quarantine_file', default=quarantine_path, help='Path to quarantine.txt (manually unmuted tests)')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',

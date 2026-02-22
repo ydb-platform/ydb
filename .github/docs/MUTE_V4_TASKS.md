@@ -19,11 +19,11 @@
 
 ## Phase 2: Quarantine Infrastructure
 
-- [ ] **2.1** Create `quarantine.txt` (empty initially)
-- [ ] **2.2** Add `YaQuarantineCheck` or extend mute_check to load quarantine
-- [ ] **2.3** Implement `effective_muted = muted - quarantine` in mute application logic
-- [ ] **2.4** Update `transform_build_results.py` / mute application to use effective_muted
-- [ ] **2.5** Exclude quarantine tests from `to_mute` in `create_new_muted_ya.py`
+- [x] **2.1** Create `quarantine.txt` (empty initially)
+- [x] **2.2** Reuse YaMuteCheck for quarantine loading
+- [x] **2.3** Implement `apply_quarantine` in mute_utils: effective_muted = muted - quarantine
+- [x] **2.4** Update test_ya action: use effective_muted for convert and transform_build_results
+- [x] **2.5** Exclude quarantine tests from `to_mute` in `create_new_muted_ya.py`
 
 ---
 
@@ -72,3 +72,4 @@
 | — | Design doc created | ✅ |
 | — | Task list created | ✅ |
 | — | Phase 1.1-1.3: Mute files per build type, test_ya action | ✅ |
+| — | Phase 2: Quarantine (apply_quarantine, exclude from to_mute) | ✅ |

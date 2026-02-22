@@ -54,7 +54,6 @@ ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Table
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
-ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
@@ -131,7 +130,6 @@ ydb/tests/functional/ydb_cli test_ydb_backup.py.TestClusterBackupRestore.test_cl
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test
-ydb/tests/olap zip_bomb.py.TestZipBomb.test
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
 ydb/tests/olap/ttl_tiering sole chunk chunk

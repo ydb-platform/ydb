@@ -51,7 +51,7 @@
 - [x] **5.1** Update `update_muted_ya.yml` full flow: cache restore → detection → quarantine load → create_new_muted_ya (with quarantine exclusion) → graduation → cache save
 - [x] **5.2** Update `collect_analytics.yml` if it uses muted_ya (per build_type) — N/A: data marts read from tests_monitor, not muted_ya
 - [ ] **5.3** Update `create_issues_for_muted_tests.yml` for multi-file if needed
-- [ ] **5.4** Update `get_muted_tests.py upload_muted_tests` for per build_type files
+- [x] **5.4** Update `get_muted_tests.py upload_muted_tests` for per build_type files
 - [x] **5.5** Update `mute_rules.md` documentation
 
 ---
@@ -76,21 +76,24 @@
 
 ## Phase 5c: PR-check rules & error_type
 
-- [ ] **5c.1** evaluate_pr_check_rules.py — скрипт для правил scope: pr_check (читает test_results)
-- [ ] **5c.2** Реализовать pattern: floating_across_days
-- [ ] **5c.3** Реализовать pattern: retry_recovered
+- [x] **5c.1** evaluate_pr_check_rules.py — скрипт для правил scope: pr_check (читает test_results)
+- [x] **5c.2** Реализовать pattern: floating_across_days
+- [x] **5c.3** Реализовать pattern: retry_recovered
 - [ ] **5c.4** Добавить error_type в flaky_tests_window или отдельную агрегацию
-- [ ] **5c.5** Реализовать error_filter в is_mute_candidate
-- [ ] **5c.6** Реализовать muted_test_different_error (reaction: alert)
+- [x] **5c.5** Реализовать error_filter в is_mute_candidate
+- [x] **5c.6** Реализовать muted_test_different_error (reaction: alert)
 
 ---
 
 ## Phase 6: Testing & Validation
 
+- [x] **6.0** Pytest unit tests (56 tests): mute_logic, pattern_rules, mute_utils, detect_manual_unmutes, pr_check_patterns, mute_decisions
 - [ ] **6.1** Test manual unmute flow: remove test, merge, verify quarantine
 - [ ] **6.2** Test quarantine graduation: 4 runs / 1 day with 1 pass
 - [ ] **6.3** Test that quarantine tests don't get re-muted
 - [ ] **6.4** Test per build_type mute file selection in CI
+
+**Run tests:** `cd .github/scripts/tests && python3 -m pytest tests/ -v`
 
 ---
 

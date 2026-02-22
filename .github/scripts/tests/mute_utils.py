@@ -10,6 +10,8 @@ from junit_utils import add_junit_property
 
 def _parse_mute_file(path):
     """Parse mute file, return set of non-empty, non-comment lines."""
+    if path is None or path == '':
+        return set()
     if not os.path.exists(path):
         return set()
     with open(path) as f:

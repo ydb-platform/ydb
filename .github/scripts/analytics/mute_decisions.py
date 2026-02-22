@@ -83,7 +83,7 @@ def write_mute_decisions(
     table_path = ydb_wrapper.get_table_path("mute_decisions")
     create_mute_decisions_table(ydb_wrapper, table_path)
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     rows = []
 
     for line in to_mute:

@@ -68,6 +68,8 @@ def get_quarantine_graduation_rule(rules, build_type="relwithdebinfo"):
 
 def get_rule_params(rule, defaults=None):
     """Get params from rule with defaults."""
+    if rule is None:
+        return dict(defaults) if defaults else {}
     params = rule.get("params", {}) or {}
     if defaults:
         for k, v in defaults.items():

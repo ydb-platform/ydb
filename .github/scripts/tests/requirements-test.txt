@@ -1,0 +1,2 @@
+# For running pytest (mute system tests)
+pytest>=7.0

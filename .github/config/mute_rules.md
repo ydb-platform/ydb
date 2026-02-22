@@ -65,6 +65,17 @@ The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
 - Get confirmation from the test owner.
 - After merging, move the issue to Unmuted status, link the PR and issue.
 
+**Mute v4:** Manual unmutes are automatically detected and the test is placed in [quarantine.txt](.github/config/quarantine.txt). The test runs (not muted) but is protected from re-mute. When it passes 4+ runs in 1 day with 1+ success, it graduates (removed from quarantine).
+
+## 📁 Mute files per build type (Mute v4)
+
+| Build type | Mute file |
+|------------|-----------|
+| relwithdebinfo | muted_ya.txt |
+| release-asan | muted_ya_asan.txt |
+| release-tsan | muted_ya_tsan.txt |
+| release-msan | muted_ya_msan.txt |
+
 ## 📊 Dashboard for analyzing muted and flaky tests
 
 For analyzing test status, finding mute/unmute candidates, and tracking stability, use the interactive dashboard:

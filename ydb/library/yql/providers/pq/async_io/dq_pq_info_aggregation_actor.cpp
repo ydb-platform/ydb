@@ -341,4 +341,10 @@ IActor* CreateDqPqInfoAggregationActor(const TTxId& txId) {
     return new TDqPqInfoAggregationActor(txId);
 }
 
+void RegisterDqPqInfoAggregationActorFactory(TDqAsyncIoFactory& factory) {
+    factory.RegisterControlPlane("PqInfoAggregator", [](IDqAsyncIoFactory::TControlPlaneArguments&& args) {
+        return CreateDqPqInfoAggregationActor(args.TxId);
+    });
+}
+
 } // namespace NYql::NDq

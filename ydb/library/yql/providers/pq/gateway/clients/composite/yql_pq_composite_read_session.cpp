@@ -155,7 +155,7 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
         static TValueReporter ReadTimeValue(const TDqPqReadBalancerActor::TMetrics& metrics, const TCompositeTopicReadSessionSettings& settings) {
             NPq::NProto::TEvDqPqUpdateCounterValue value;
 
-            value.SetCounterId(BuildCounterName(settings.BaseSettings.Topics_[0].Path_, "read_time"));
+            value.SetCounterId(BuildCounterName(settings.InputIndex, "read_time"));
             value.SetAggMin(0);
 
             auto& aggSettings = *value.MutableSettings();
@@ -168,9 +168,8 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
         static TValueReporter PendingPartitionsCountValue(const TDqPqReadBalancerActor::TMetrics& metrics, const TCompositeTopicReadSessionSettings& settings) {
             NPq::NProto::TEvDqPqUpdateCounterValue value;
 
-            const auto& topic = settings.BaseSettings.Topics_[0];
-            value.SetCounterId(BuildCounterName(topic.Path_, "partition_counter"));
-            value.SetAggSum(topic.PartitionIds_.size());
+            value.SetCounterId(BuildCounterName(settings.InputIndex, "partition_counter"));
+            value.SetAggSum(settings.BaseSettings.Topics_[0].PartitionIds_.size());
 
             auto& aggSettings = *value.MutableSettings();
             aggSettings.SetScalarAggDeltaThreshold(0);
@@ -180,8 +179,8 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
         }
 
     private:
-        static TString BuildCounterName(const std::string& topicPath, const TString& counter) {
-            return TStringBuilder() << "group=distributed_topic_read_session;topic=" << topicPath << ";counter=" << counter;
+        static TString BuildCounterName(ui64 inputIndex, const TString& counter) {
+            return TStringBuilder() << "group=distributed_topic_read_session;input_index=" << inputIndex << ";counter=" << counter;
         }
 
         TValueReporter(const TString& name, const TDqPqReadBalancerActor::TMetrics& metrics, const TActorId& aggregatorActor, NPq::NProto::TEvDqPqUpdateCounterValue&& value)

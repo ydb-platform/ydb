@@ -4,6 +4,7 @@
 #include "yql_pq_topic_key_parser.h"
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -207,6 +208,7 @@ public:
             auto settings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
                 NPq::NProto::TDqPqTopicSource srcDesc;
+                NDqProto::TDqIntegrationCommonSettings commonSettings;
                 TDqPqTopicSource topicSource = maybeTopicSource.Cast();
 
                 TPqTopic topic = topicSource.Topic();
@@ -242,6 +244,10 @@ public:
 
                 if (const auto maxPartitionReadSkew = State_->Configuration->MaxPartitionReadSkew.Get()) {
                     *srcDesc.MutableMaxPartitionReadSkew() = NProtoInterop::CastToProto(*maxPartitionReadSkew);
+
+                    NDqProto::TDqControlPlaneActorSettings aggregatorSettings;
+                    aggregatorSettings.SetType("PqInfoAggregator");
+                    YQL_ENSURE(commonSettings.MutableStageControlPlaneActors()->emplace("ControlPlane/PqSourcePartitionBalancerAggregatorId", aggregatorSettings).second);
                 }
 
                 bool sharedReading = false;
@@ -352,7 +358,8 @@ public:
                 TString watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
                 srcDesc.SetWatermarkExpr(watermarkExprSql);
 
-                protoSettings.PackFrom(srcDesc);
+                commonSettings.MutableSettings()->PackFrom(srcDesc);
+                protoSettings.PackFrom(commonSettings);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }

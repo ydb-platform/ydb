@@ -13,6 +13,7 @@ struct TCompositeTopicReadSessionSettings {
     ui64 TaskId = 0;
     TString Cluster;
     ui64 AmountPartitionsCount = 0;
+    ui64 InputIndex = 0;
     NMonitoring::TDynamicCounterPtr Counters;
     NYdb::NTopic::TReadSessionSettings BaseSettings;
     TDuration IdleTimeout;

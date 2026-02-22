@@ -675,6 +675,11 @@ public:
 
     std::vector<TReadSessionEvent::TEvent> GetEvents(const TReadSessionGetEventSettings& settings) final {
         Y_VALIDATE(!settings.Block_, "Block methods are not supported");
+
+        if (!settings.MaxByteSize_) {
+            return {};
+        }
+
         auto getEventSettings = TReadSessionGetEventSettings(settings)
             .MaxEventsCount(1)
             .MaxByteSize(settings.MaxByteSize_);
@@ -705,6 +710,10 @@ public:
 
     std::optional<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) final {
         Y_VALIDATE(!settings.Block_, "Block methods are not supported");
+
+        if (!settings.MaxByteSize_) {
+            return std::nullopt;
+        }
 
         auto maybeEvent = ReadEventFromReadyPartitions(settings);
 
@@ -923,16 +932,18 @@ private:
         auto event = key->GetEvent(settings);
         Y_VALIDATE(event, "Unexpected empty event for ready partition");
 
-        if (!key->GetReadTime()) {
-            // It was first event in this session, we should wait for time reports, so move partition to suspended
-            AdvancePartitionTime(key->GetPartitionId(), TInstant::Zero() + MaxPartitionReadSkew);
-        } else if (!key->WaitEvent().IsReady()) {
+        if (!key->WaitEvent().IsReady()) {
             // There are no ready events in this partition, so move it to pending / idle
             DistributePartitionSession(key);
             NextReadyPartition = ReadyPartitions.erase(NextReadyPartition);
         } else {
             // Move to next partition
             NextReadyPartition++;
+        }
+
+        if (!key->GetReadTime()) {
+            // It was first event in this session, we should wait for time reports, so move partition to suspended
+            AdvancePartitionTime(key->GetPartitionId(), TInstant::Zero() + MaxPartitionReadSkew);
         }
 
         UpdateMetrics();

@@ -2355,6 +2355,53 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessages(outputTopicName, allExpected, TInstant::Now() - TDuration::Seconds(100), /* sort */ true);
     }
 
+    Y_UNIT_TEST_F(IdleTimeoutPartitionSessionBalancer, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableWatermarks(true);
+
+        constexpr ui32 partitionCount = 2;
+        constexpr char inputTopicName[] = "idleTimeoutBalancerInputTopic";
+        constexpr char outputTopicName[] = "idleTimeoutBalancerOutputTopic";
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings()
+            .PartitioningSettings(partitionCount, partitionCount));
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.MaxPartitionReadSkew = "10s";
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String NOT NULL
+                    ),
+                    WATERMARK AS (SystemMetadata('write_time') - Interval('PT5S')),
+                    WATERMARK_IDLE_TIMEOUT = "PT5S"
+                );
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        TVector<TString> expectedOutputs;
+        for (ui32 i = 0; i < 10; ++i) {
+            TString value = fmt::format("v{}", i);
+            expectedOutputs.push_back("k" + value);
+            WriteTopicMessage(inputTopicName, fmt::format(R"({{"key": "k", "value": "{}"}})", value), 0);
+            ReadTopicMessages(outputTopicName, expectedOutputs);
+        }
+    }
+
     Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {
         constexpr ui64 executionsLimit = 3;
         constexpr char inputTopicName[] = "maxStreamingQueryExecutionsLimitInputTopic";

@@ -18,8 +18,6 @@ env:
   REVIEWERS: '["ci"]'
   LABELS: "mute-unmute,not-for-changelog,ok-to-test"
   BUILD_TYPE: relwithdebinfo
-  # legacy | v4_direct — which system produces the PR. Both run in parallel, both recorded to mute_decisions.
-  ACTIVE_SYSTEM: legacy
 
 jobs:
   setup:
@@ -118,13 +116,14 @@ jobs:
           key: mute-state-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
 
       # Get base files from target branch
-      - name: Get base muted_ya.txt from target branch
+      - name: Get base files from target branch
         run: |
-          echo "Getting base muted_ya.txt from branch: ${{ env.BASE_BRANCH }}"
+          echo "Getting base files from branch: ${{ env.BASE_BRANCH }}"
           git fetch origin ${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}
           git show origin/${{ env.BASE_BRANCH }}:.github/config/muted_ya.txt > base_muted_ya.txt
+          git show origin/${{ env.BASE_BRANCH }}:.github/config/mute/muted_ya.txt > base_mute_muted_ya.txt 2>/dev/null || cp base_muted_ya.txt base_mute_muted_ya.txt
           git show origin/${{ env.BASE_BRANCH }}:.github/config/quarantine.txt > quarantine.txt 2>/dev/null || touch quarantine.txt
-          echo "✓ Retrieved base muted_ya.txt and quarantine.txt from ${{ env.BASE_BRANCH }}"
+          echo "✓ Retrieved base files from ${{ env.BASE_BRANCH }}"
 
       - name: Detect manual unmutes and update quarantine
         run: |
@@ -147,13 +146,12 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Run parallel mute update (legacy + v4_direct, record both)
-        env:
-          ACTIVE_SYSTEM: ${{ env.ACTIVE_SYSTEM }}
+      - name: Run parallel mute update (legacy + v4)
         run: |
           python3 .github/scripts/tests/run_parallel_mute_update.py \
             --branch=${{ env.BASE_BRANCH }} \
             --muted_ya_file=base_muted_ya.txt \
+            --mute_muted_ya_file=base_mute_muted_ya.txt \
             --quarantine_file=quarantine.txt \
             --build_type=${{ env.BUILD_TYPE }}
 
@@ -161,7 +159,7 @@ jobs:
         run: |
           mkdir -p mute_state
           cp base_muted_ya.txt mute_state/previous_base.txt
-          cp mute_update/to_unmute.txt mute_state/our_to_unmute.txt 2>/dev/null || touch mute_state/our_to_unmute.txt
+          cp mute_update_legacy/mute_update/to_unmute.txt mute_state/our_to_unmute.txt 2>/dev/null || touch mute_state/our_to_unmute.txt
 
       - name: Cache mute state
         uses: actions/cache/save@v4
@@ -173,17 +171,23 @@ jobs:
       - name: Check if changes exist
         id: changes_check
         run: |
-          # Compare base_muted_ya.txt with newly generated file, and quarantine
-          MUTED_CHANGED=0
+          # Compare legacy (muted_ya.txt), v4 (mute/muted_ya.txt), quarantine
+          LEGACY_CHANGED=0
+          V4_CHANGED=0
           QUARANTINE_CHANGED=0
-          if ! git diff --no-index --quiet base_muted_ya.txt mute_update/new_muted_ya.txt 2>/dev/null; then
-            MUTED_CHANGED=1
+          if ! git diff --no-index --quiet base_muted_ya.txt mute_update_legacy/mute_update/new_muted_ya.txt 2>/dev/null; then
+            LEGACY_CHANGED=1
+          fi
+          mkdir -p .github/config/mute
+          git show origin/${{ env.BASE_BRANCH }}:.github/config/mute/muted_ya.txt > branch_mute_muted_ya.txt 2>/dev/null || touch branch_mute_muted_ya.txt
+          if ! diff -q branch_mute_muted_ya.txt mute_update_v4/mute_update/new_muted_ya.txt 2>/dev/null; then
+            V4_CHANGED=1
           fi
           git show origin/${{ env.BASE_BRANCH }}:.github/config/quarantine.txt > branch_quarantine.txt 2>/dev/null || touch branch_quarantine.txt
           if ! diff -q quarantine.txt branch_quarantine.txt 2>/dev/null; then
             QUARANTINE_CHANGED=1
           fi
-          if [ $MUTED_CHANGED -eq 1 ] || [ $QUARANTINE_CHANGED -eq 1 ]; then
+          if [ $LEGACY_CHANGED -eq 1 ] || [ $V4_CHANGED -eq 1 ] || [ $QUARANTINE_CHANGED -eq 1 ]; then
             echo "Changes detected"
             echo "changes=true" >> $GITHUB_ENV
           else
@@ -203,67 +207,83 @@ jobs:
           # Create PR branch from target branch
           git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
           
-          # Copy new file into PR branch
-          cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
+          # Legacy → .github/config/muted_ya.txt
           mkdir -p .github/config
+          cp mute_update_legacy/mute_update/new_muted_ya.txt .github/config/muted_ya.txt
+          
+          # v4 → .github/config/mute/muted_ya.txt
+          mkdir -p .github/config/mute
+          cp mute_update_v4/mute_update/new_muted_ya.txt .github/config/mute/muted_ya.txt
+          
+          # quarantine (v4 graduation)
           cp quarantine.txt .github/config/quarantine.txt
           
-          # Commit changes
-          git add .github/config/muted_ya.txt .github/config/quarantine.txt
-          git commit -m "Update muted YA file for ${{ env.BASE_BRANCH }}"
+          # Commit both files
+          git add .github/config/muted_ya.txt .github/config/mute/muted_ya.txt .github/config/quarantine.txt
+          git commit -m "Update muted YA files for ${{ env.BASE_BRANCH }} (legacy + v4)"
           
           echo "✓ PR branch ${{ env.PR_BRANCH }} created with changes"
 
       - name: Collect PR description
         if: env.changes == 'true'
         run: |
-          
           PR_BODY=''
           PR_BODY_FILE="pr_body_content.txt"
+          LEGACY="mute_update_legacy/mute_update"
+          V4="mute_update_v4/mute_update"
           
           PR_BODY+=$'# Muted tests update for ${{ env.BASE_BRANCH }}\n\n'
+          PR_BODY+=$'**Legacy** (.github/config/muted_ya.txt) + **v4** (.github/config/mute/muted_ya.txt)\n\n'
 
-          if [ -s mute_update/to_delete_debug.txt ]; then
-              DELETED_COUNT=$(wc -l < mute_update/to_delete_debug.txt)
+          PR_BODY+=$'## Legacy (muted_ya.txt)\n\n'
+          if [ -s "$LEGACY/to_delete_debug.txt" ]; then
+              DELETED_COUNT=$(wc -l < "$LEGACY/to_delete_debug.txt")
               PR_BODY+=$'**Removed from mute: '"${DELETED_COUNT}**"$'\n\n'
               PR_BODY+=$'```\n'
-              PR_BODY+=$(cat mute_update/to_delete_debug.txt)
+              PR_BODY+=$(cat "$LEGACY/to_delete_debug.txt")
               PR_BODY+=$'\n```\n\n'
           fi
-          if [ -s mute_update/to_mute_debug.txt ]; then
-              MUTED_COUNT=$(wc -l < mute_update/to_mute_debug.txt)
+          if [ -s "$LEGACY/to_mute_debug.txt" ]; then
+              MUTED_COUNT=$(wc -l < "$LEGACY/to_mute_debug.txt")
               PR_BODY+=$'**Muted flaky: '"${MUTED_COUNT}**"$'\n\n'
               PR_BODY+=$'```\n'
-              PR_BODY+=$(cat mute_update/to_mute_debug.txt)
+              PR_BODY+=$(cat "$LEGACY/to_mute_debug.txt")
               PR_BODY+=$'\n```\n\n'
-
-              if [ -s mute_update/to_mute.txt ]; then
+              if [ -s "$LEGACY/to_mute.txt" ]; then
                   BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
                   MAX_TESTS=50
                   TEST_COUNT=0
                   FULL_URL="${BASE_URL}"
                   while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
                     formatted_name=$(echo "${test_name}" | sed 's/ /\//')
-                    encoded_name=$(echo "${formatted_name}" \
-                      | sed 's/ /%20/g' \
-                      | sed 's/\//%2F/g' \
-                      | sed 's/\[/%5B/g' \
-                      | sed 's/\]/%5D/g' \
-                      | sed 's/+/%2B/g' \
-                      | sed 's/-/%2D/g')
+                    encoded_name=$(echo "${formatted_name}" | sed 's/ /%20/g' | sed 's/\//%2F/g' | sed 's/\[/%5B/g' | sed 's/\]/%5D/g' | sed 's/+/%2B/g' | sed 's/-/%2D/g')
                     FULL_URL="${FULL_URL}&full_name=${encoded_name}"
                     TEST_COUNT=$((TEST_COUNT+1))
-                  done < mute_update/to_mute.txt
+                  done < "$LEGACY/to_mute.txt"
                   PR_BODY+=$"[View history of muted flaky tests on Dashboard](${FULL_URL})"
                   PR_BODY+=$'\n'
               fi
           fi
-          if [ -s mute_update/to_unmute_debug.txt ]; then
-              UNMUTED_COUNT=$(wc -l < mute_update/to_unmute_debug.txt)
+          if [ -s "$LEGACY/to_unmute_debug.txt" ]; then
+              UNMUTED_COUNT=$(wc -l < "$LEGACY/to_unmute_debug.txt")
               PR_BODY+=$'**Unmuted stable: '"${UNMUTED_COUNT}**"$'\n\n'
               PR_BODY+=$'```\n'
-              PR_BODY+=$(cat mute_update/to_unmute_debug.txt)
+              PR_BODY+=$(cat "$LEGACY/to_unmute_debug.txt")
               PR_BODY+=$'\n```\n\n'
+          fi
+
+          PR_BODY+=$'## v4 (mute/muted_ya.txt)\n\n'
+          if [ -s "$V4/to_delete_debug.txt" ]; then
+              DELETED_COUNT=$(wc -l < "$V4/to_delete_debug.txt")
+              PR_BODY+=$'**Removed: '"${DELETED_COUNT}**"$'\n\n'
+          fi
+          if [ -s "$V4/to_mute_debug.txt" ]; then
+              MUTED_COUNT=$(wc -l < "$V4/to_mute_debug.txt")
+              PR_BODY+=$'**Muted: '"${MUTED_COUNT}**"$'\n\n'
+          fi
+          if [ -s "$V4/to_unmute_debug.txt" ]; then
+              UNMUTED_COUNT=$(wc -l < "$V4/to_unmute_debug.txt")
+              PR_BODY+=$'**Unmuted: '"${UNMUTED_COUNT}**"$'\n\n'
           fi
 
           echo "$PR_BODY" > "$PR_BODY_FILE"
@@ -275,7 +295,8 @@ jobs:
         with:
           name: muted-tests-all-files-${{ env.BASE_BRANCH }}
           path: |
-            mute_update/
+            mute_update_legacy/
+            mute_update_v4/
           retention-days: 7
 
       - name: Push PR branch

@@ -258,21 +258,15 @@ python3 .github/scripts/tests/compare_mute_systems.py --skip_legacy --skip_curre
 
 После мержа в main обе системы работают **параллельно** при каждом update_muted_ya:
 
-1. **run_parallel_mute_update.py** запускает legacy и v4_direct
-2. **Legacy** пишет в `test_results/analytics/mute_decisions` (action: mute, unmute, delete)
-3. **v4** пишет в `test_results/mute/v4_decisions` — наглядно отдельно
-4. **Активная** система определяет содержимое PR (muted_ya.txt, quarantine.txt)
-5. По v4_decisions можно симулировать: «как бы повлияла v4 за этот период»
+1. **run_parallel_mute_update.py** запускает legacy и v4
+2. **Legacy** → `.github/config/muted_ya.txt` (старое решение из main)
+3. **v4** → `.github/config/mute/muted_ya.txt` (новое решение)
+4. PR обновляет **оба** файла
+5. Legacy пишет в `mute_decisions`, v4 — в `test_results/mute/v4_decisions`
 
 ### Переключение на v4
 
-Изменить **одно** из:
-
-- **Workflow** `.github/workflows/update_muted_ya.yml`: `ACTIVE_SYSTEM: v4_direct`
-- **Config** `.github/config/active_mute_system.txt`: одна строка `v4_direct`
-- **Env** при запуске: `ACTIVE_SYSTEM=v4_direct`
-
-Приоритет: `--active_system` arg > env > config file > default (legacy).
+Изменить в test_ya/action.yml: `MUTED_YA_FILE=".github/config/mute/muted_ya.txt"`
 
 ---
 

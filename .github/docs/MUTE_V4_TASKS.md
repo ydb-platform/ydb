@@ -8,9 +8,9 @@
 
 ## Phase 1: Mute Files per Build Type
 
-- [ ] **1.1** Create empty mute files for sanitizers: `muted_ya_asan.txt`, `muted_ya_tsan.txt`, `muted_ya_msan.txt`
-- [ ] **1.2** Add helper to get mute file path by build_type: `get_muted_ya_path(build_type) -> path`
-- [ ] **1.3** Update `test_ya/action.yml` to use correct mute file based on `BUILD_PRESET`
+- [x] **1.1** Create empty mute files for sanitizers: `muted_ya_asan.txt`, `muted_ya_tsan.txt`, `muted_ya_msan.txt`
+- [x] **1.2** Add helper to get mute file path by build_type: inline case in action.yml
+- [x] **1.3** Update `test_ya/action.yml` to use correct mute file based on `BUILD_PRESET`
 - [ ] **1.4** Update `mute_utils.py convert_muted_txt_to_yaml` to accept file path parameter
 - [ ] **1.5** Update `update_muted_ya.yml` to process per build_type (matrix or loop)
 - [ ] **1.6** Update `create_new_muted_ya.py` to accept `--muted_ya_file` and `--output_file` per build_type
@@ -71,3 +71,4 @@
 |------|------|--------|
 | — | Design doc created | ✅ |
 | — | Task list created | ✅ |
+| — | Phase 1.1-1.3: Mute files per build type, test_ya action | ✅ |

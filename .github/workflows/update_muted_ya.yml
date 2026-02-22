@@ -107,13 +107,34 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
-      # Get base_muted_ya.txt from target branch
+      # Restore mute state from previous run (for manual unmute detection)
+      - name: Restore mute state cache
+        uses: actions/cache/restore@v4
+        id: mute-state-cache
+        with:
+          path: mute_state
+          key: mute-state-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
+
+      # Get base files from target branch
       - name: Get base muted_ya.txt from target branch
         run: |
           echo "Getting base muted_ya.txt from branch: ${{ env.BASE_BRANCH }}"
           git fetch origin ${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}
           git show origin/${{ env.BASE_BRANCH }}:.github/config/muted_ya.txt > base_muted_ya.txt
-          echo "✓ Retrieved base muted_ya.txt from ${{ env.BASE_BRANCH }}"
+          git show origin/${{ env.BASE_BRANCH }}:.github/config/quarantine.txt > quarantine.txt 2>/dev/null || touch quarantine.txt
+          echo "✓ Retrieved base muted_ya.txt and quarantine.txt from ${{ env.BASE_BRANCH }}"
+
+      - name: Detect manual unmutes and update quarantine
+        run: |
+          if [ -f mute_state/previous_base.txt ] && [ -f mute_state/our_to_unmute.txt ]; then
+            python3 .github/scripts/tests/detect_manual_unmutes.py \
+              --previous_base mute_state/previous_base.txt \
+              --current_base base_muted_ya.txt \
+              --to_unmute mute_state/our_to_unmute.txt \
+              --quarantine_file quarantine.txt
+          else
+            echo "No previous mute state (first run or cache miss), skipping manual unmute detection"
+          fi
     
       - name: Collect test history data
         run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
@@ -128,18 +149,41 @@ jobs:
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya \
             --branch=${{ env.BASE_BRANCH }} \
-            --muted_ya_file=base_muted_ya.txt
+            --muted_ya_file=base_muted_ya.txt \
+            --quarantine_file=quarantine.txt
+
+      - name: Save mute state for next run
+        run: |
+          mkdir -p mute_state
+          cp base_muted_ya.txt mute_state/previous_base.txt
+          cp mute_update/to_unmute.txt mute_state/our_to_unmute.txt 2>/dev/null || touch mute_state/our_to_unmute.txt
+
+      - name: Cache mute state
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: mute_state
+          key: mute-state-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
 
       - name: Check if changes exist
         id: changes_check
         run: |
-          # Compare base_muted_ya.txt with newly generated file
-          if git diff --no-index --quiet base_muted_ya.txt mute_update/new_muted_ya.txt; then
-            echo "No changes detected in muted_ya.txt"
-            echo "changes=false" >> $GITHUB_ENV
-          else
-            echo "Changes detected in muted_ya.txt"
+          # Compare base_muted_ya.txt with newly generated file, and quarantine
+          MUTED_CHANGED=0
+          QUARANTINE_CHANGED=0
+          if ! git diff --no-index --quiet base_muted_ya.txt mute_update/new_muted_ya.txt 2>/dev/null; then
+            MUTED_CHANGED=1
+          fi
+          git show origin/${{ env.BASE_BRANCH }}:.github/config/quarantine.txt > branch_quarantine.txt 2>/dev/null || touch branch_quarantine.txt
+          if ! diff -q quarantine.txt branch_quarantine.txt 2>/dev/null; then
+            QUARANTINE_CHANGED=1
+          fi
+          if [ $MUTED_CHANGED -eq 1 ] || [ $QUARANTINE_CHANGED -eq 1 ]; then
+            echo "Changes detected"
             echo "changes=true" >> $GITHUB_ENV
+          else
+            echo "No changes detected"
+            echo "changes=false" >> $GITHUB_ENV
           fi
 
       - name: Setup git config
@@ -154,11 +198,13 @@ jobs:
           # Create PR branch from target branch
           git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
           
-          # Copy new file into PR branch (file stays in working dir)
+          # Copy new file into PR branch
           cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
+          mkdir -p .github/config
+          cp quarantine.txt .github/config/quarantine.txt
           
           # Commit changes
-          git add .github/config/muted_ya.txt
+          git add .github/config/muted_ya.txt .github/config/quarantine.txt
           git commit -m "Update muted YA file for ${{ env.BASE_BRANCH }}"
           
           echo "✓ PR branch ${{ env.PR_BRANCH }} created with changes"

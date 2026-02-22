@@ -29,11 +29,11 @@
 
 ## Phase 3: Manual vs Auto Unmute Detection
 
-- [ ] **3.1** Add cache save/restore to `update_muted_ya.yml`: `mute_state` with keys: `previous_base_tests`, `our_to_unmute`, `our_new_muted_ya_hash`
-- [ ] **3.2** Implement detection logic: `removed = previous_base - current_base`
-- [ ] **3.3** For each removed test: if not in `our_to_unmute` → add to quarantine.txt
-- [ ] **3.4** Persist quarantine.txt changes in PR (when creating update PR)
-- [ ] **3.5** Handle first run (no cache): skip detection, no false manual unmutes
+- [x] **3.1** Add cache save/restore to `update_muted_ya.yml`: `mute_state` with previous_base.txt, our_to_unmute.txt
+- [x] **3.2** Implement detect_manual_unmutes.py: `removed = previous_base - current_base`
+- [x] **3.3** For each removed test: if not in `our_to_unmute` → add to quarantine.txt
+- [x] **3.4** Persist quarantine.txt changes in PR (when creating update PR)
+- [x] **3.5** Handle first run (no cache): skip detection when mute_state missing
 
 ---
 
@@ -73,3 +73,4 @@
 | — | Task list created | ✅ |
 | — | Phase 1.1-1.3: Mute files per build type, test_ya action | ✅ |
 | — | Phase 2: Quarantine (apply_quarantine, exclude from to_mute) | ✅ |
+| — | Phase 3: Manual vs auto detection (cache, detect_manual_unmutes) | ✅ |

@@ -394,16 +394,18 @@ runs:
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
         MUTED_YAML_PATH="$PUBLIC_DIR/muted_tests.yaml"
-        EFFECTIVE_MUTED_FILE="$TMP_DIR/effective_muted.txt"
-        if ! python3 .github/scripts/tests/mute_utils.py apply_quarantine "$MUTED_YA_FILE" .github/config/quarantine.txt "$EFFECTIVE_MUTED_FILE"; then
-          echo "WARNING: apply_quarantine failed, using original muted file" >&2
-          cp "$MUTED_YA_FILE" "$EFFECTIVE_MUTED_FILE"
+        # apply_quarantine only for v4 (mute/muted_ya.txt). Legacy: use file as-is, no behavior change.
+        if [[ "$MUTED_YA_FILE" == *"mute/muted_ya"* ]]; then
+          EFFECTIVE_MUTED_FILE="$TMP_DIR/effective_muted.txt"
+          if ! python3 .github/scripts/tests/mute_utils.py apply_quarantine "$MUTED_YA_FILE" .github/config/quarantine.txt "$EFFECTIVE_MUTED_FILE"; then
+            echo "WARNING: apply_quarantine failed, using original muted file" >&2
+            cp "$MUTED_YA_FILE" "$EFFECTIVE_MUTED_FILE"
+          fi
+          [ -f "$EFFECTIVE_MUTED_FILE" ] || cp "$MUTED_YA_FILE" "$EFFECTIVE_MUTED_FILE"
+          python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml "$EFFECTIVE_MUTED_FILE" > "$MUTED_YAML_PATH"
+        else
+          python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" > "$MUTED_YAML_PATH"
         fi
-        if [ ! -f "$EFFECTIVE_MUTED_FILE" ]; then
-          echo "WARNING: effective muted file was not created, using original" >&2
-          cp "$MUTED_YA_FILE" "$EFFECTIVE_MUTED_FILE"
-        fi
-        python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml "$EFFECTIVE_MUTED_FILE" > "$MUTED_YAML_PATH"
 
         BUILD_FAILED=0
 

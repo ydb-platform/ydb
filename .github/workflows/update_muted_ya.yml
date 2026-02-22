@@ -188,7 +188,6 @@ jobs:
           if ! git diff --no-index --quiet base_muted_ya.txt mute_update_legacy/mute_update/new_muted_ya.txt 2>/dev/null; then
             LEGACY_CHANGED=1
           fi
-          mkdir -p .github/config/mute
           git show origin/${{ env.BASE_BRANCH }}:.github/config/mute/muted_ya.txt > branch_mute_muted_ya.txt 2>/dev/null || touch branch_mute_muted_ya.txt
           if ! diff -q branch_mute_muted_ya.txt mute_update_v4/mute_update/new_muted_ya.txt 2>/dev/null; then
             V4_CHANGED=1

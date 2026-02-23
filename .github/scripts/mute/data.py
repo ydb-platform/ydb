@@ -32,7 +32,7 @@ def fetch_from_test_results(ydb_wrapper, branch, build_type, days_window=7, mute
         SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skip_count
     FROM (
         SELECT
-            full_name,
+            suite_folder || '/' || test_name AS full_name,
             suite_folder,
             test_name,
             CAST(run_timestamp AS Date) AS date_window,

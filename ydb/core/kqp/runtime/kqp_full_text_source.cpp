@@ -325,13 +325,15 @@ class TDocumentInfo : public TSimpleRefCount<TDocumentInfo> {
     TOwnedCellVec KeyCells;
     TOwnedCellVec RowCells;
     ui64 DocumentLength = std::numeric_limits<ui64>::max();
+
 public:
     using TPtr = TIntrusivePtr<TDocumentInfo>;
-
+    ui64 DocumentNumId = 0;
     std::vector<ui32> TokenFrequencies;
 
-    TDocumentInfo(TOwnedCellVec&& keyCells)
+    TDocumentInfo(TOwnedCellVec&& keyCells, ui64 documentNumId)
         : KeyCells(std::move(keyCells))
+        , DocumentNumId(documentNumId)
     {}
 
     void SetDocumentLength(ui64 documentLength) {
@@ -942,7 +944,7 @@ public:
                 break;
             }
 
-            auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(candidate)));
+            auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(candidate)), candidate.DocId);
             if (WithFrequencies) {
                 match->TokenFrequencies.resize(TokenCount, 0);
                 for (ui32 tokenIndex : MatchedTokens) {
@@ -1003,7 +1005,7 @@ public:
             }
 
             if (matchedTokens.size() >= MinShouldMatch) {
-                auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(doc)));
+                auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(doc)), doc.DocId);
                 if (WithFrequencies) {
                     match->TokenFrequencies.resize(TokenCount, 0);
                     for (ui32 tokenIndex : matchedTokens) {
@@ -1085,13 +1087,23 @@ public:
             resultKeyColumnIds.push_back(column.GetId());
         }
 
+        bool useArrowFormat = false;
+
+        // arrow format is only supported when key is a single Uint64 column
+        // doc_id (Uint64), [freq (Uint32)]
+        if (resultKeyColumnTypes.size() == 1 && resultKeyColumnTypes[0].GetTypeId() == NScheme::NTypeIds::Uint64) {
+            useArrowFormat = true;
+        }
+
         YQL_ENSURE(docLengthColumnIndex != -1);
         resultKeyColumnTypes.push_back(docLengthColumnType);
         resultKeyColumnIds.push_back(docLengthColumnIndex);
 
-        return MakeIntrusive<TDocsTableReader>(
+        auto reader = MakeIntrusive<TDocsTableReader>(
             indexDescription.GetSettings().layout(), counters,
             FromProto(info.GetTable()), snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+        reader->SetUseArrowFormat(useArrowFormat);
+        return reader;
     }
 
     ui64 GetDocumentLength(const TConstArrayRef<TCell>& row) const {
@@ -2403,7 +2415,53 @@ public:
         return row.subspan(0, MainTableReader->GetKeyColumnTypes().size());
     }
 
+    void DocumentStatsResultArrow(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
+
+        auto& readItems = DocsReadingQueue.GetReadItems(readId);
+        std::vector<TDocumentInfo::TPtr> documentInfos;
+        auto batch = msg.GetArrowBatch();
+        YQL_ENSURE(batch);
+        YQL_ENSURE(batch->columns().size() >= 2);
+        auto docIds = std::static_pointer_cast<arrow::UInt64Array>(batch->column(0));
+        YQL_ENSURE(docIds);
+        auto freq_array = std::static_pointer_cast<arrow::UInt32Array>(batch->column(1));
+        YQL_ENSURE(freq_array);
+        YQL_ENSURE(freq_array->length() == docIds->length());
+
+        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+            TDocumentInfo::TPtr doc = readItems.GetItem();
+            YQL_ENSURE(doc->DocumentNumId == docIds->Value(i), "detected out of order document reading");
+            doc->SetDocumentLength(freq_array->Value(i));
+
+            if (Limit > 0) {
+                TopKQueue.emplace_back(doc->GetBM25Score(QueryCtx.GetRef()), std::move(doc));
+                std::push_heap(TopKQueue.begin(), TopKQueue.end());
+                if (TopKQueue.size() > (size_t)Limit) {
+                    std::pop_heap(TopKQueue.begin(), TopKQueue.end());
+                    TopKQueue.pop_back();
+                }
+
+            } else {
+                documentInfos.emplace_back(std::move(doc));
+            }
+
+            readItems.PopItem();
+        }
+
+        DocsReadingQueue.UpdateReadStatus(readId, readItems, finished);
+
+        FetchDocumentDetails(documentInfos);
+
+        if (ReadsState.Empty()) {
+            ProcessTopKQueue();
+        }
+    }
+
     void DocumentStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
+        if (DocsTableReader->GetUseArrowFormat()) {
+            DocumentStatsResultArrow(msg, readId, finished);
+            return;
+        }
 
         auto& readItems = DocsReadingQueue.GetReadItems(readId);
         std::vector<TDocumentInfo::TPtr> documentInfos;

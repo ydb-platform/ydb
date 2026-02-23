@@ -774,6 +774,10 @@ public:
         return {};
     }
 
+    TMaybe<TString> GetUserTraceId() const override {
+        return {};
+    }
+
     // IRequestCtxBase
     //
     void AddAuditLogPart(const TStringBuf&, const TString&) override {
@@ -857,6 +861,7 @@ public:
     TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, TRequestAuxSettings auxSettings = {})
         : Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
+        , UserTraceId(GetPeerMetaValues(NYdb::YDB_USER_TRACE_ID_HEADER))
         , AuxSettings(std::move(auxSettings))
     {
         if (!TraceId) {
@@ -1027,6 +1032,10 @@ public:
         AuditLogHook = std::move(hook);
     }
 
+    TMaybe<TString> GetUserTraceId() const override {
+        return {};
+    }
+
     // IRequestProxyCtx
     //
     void StartTracing(NWilson::TSpan&& span) override {
@@ -1102,6 +1111,7 @@ private:
     bool IsTracingDecided_ = false;
     TULIDGenerator UlidGen;
     TMaybe<TString> TraceId;
+    TMaybe<TString> UserTraceId;
     const TRequestAuxSettings AuxSettings;
 
     TAuditLogParts AuditLogParts;
@@ -1226,6 +1236,7 @@ public:
     TGRpcRequestWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
         : Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
+        , UserTraceId(GetPeerMetaValues(NYdb::YDB_USER_TRACE_ID_HEADER))
     {
         if (!TraceId) {
             TraceId = UlidGen.Next().ToString();
@@ -1372,6 +1383,10 @@ public:
 
     TInstant GetDeadline() const override {
         return Ctx_->Deadline();
+    }
+
+    TMaybe<TString> GetUserTraceId() const override {
+        return UserTraceId;
     }
 
     const TMaybe<TString> GetRequestType() const override {
@@ -1562,6 +1577,7 @@ private:
     bool IsTracingDecided_ = false;
     TULIDGenerator UlidGen;
     TMaybe<TString> TraceId;
+    TMaybe<TString> UserTraceId;
 };
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
@@ -1996,6 +2012,9 @@ public:
         return deadline;
     }
 
+    TMaybe<TString> GetUserTraceId() const override {
+        return {};
+    }
 
     TMaybe<TString> GetSdkBuildInfo() const {
         return {};

@@ -9,6 +9,7 @@ namespace NYdb::inline Dev {
 
 struct TRpcRequestSettings {
     std::string TraceId;
+    std::string UserTraceId;
     std::string RequestType;
     std::vector<std::pair<std::string, std::string>> Header;
     TEndpointKey PreferredEndpoint = {};
@@ -27,6 +28,7 @@ struct TRpcRequestSettings {
                                     TEndpointPolicy endpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally) {
         TRpcRequestSettings rpcSettings;
         rpcSettings.TraceId = settings.TraceId_;
+        rpcSettings.UserTraceId = settings.UserTraceId_;
         rpcSettings.RequestType = settings.RequestType_;
         rpcSettings.Header = settings.Header_;
         rpcSettings.TraceParent = settings.TraceParent_;

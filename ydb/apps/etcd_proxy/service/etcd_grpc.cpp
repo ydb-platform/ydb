@@ -293,6 +293,10 @@ private:
     bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         Y_ABORT("Unimplemented!");
     }
+
+    TMaybe<TString> GetUserTraceId() const override {
+        return {};
+    }
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
     NYql::TIssueManager IssueManager;

@@ -464,6 +464,10 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
         meta.Aux.push_back({YDB_TRACE_ID_HEADER, requestSettings.TraceId});
     }
 
+    if (!requestSettings.UserTraceId.empty()) {
+        meta.Aux.push_back({YDB_USER_TRACE_ID_HEADER, requestSettings.UserTraceId});
+    }
+
     if (!requestSettings.RequestType.empty()) {
         meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
     }

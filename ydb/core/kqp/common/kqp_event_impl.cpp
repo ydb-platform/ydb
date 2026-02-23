@@ -45,6 +45,15 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
             CancelAfter = GetDuration(operationParams->cancel_after());
         }
     }
+
+    NACLib::TUserContextBuilder builder;
+    auto token = GetUserToken();
+    if (token != nullptr ) {
+        builder.WithUserSID(token->GetUserSID());
+    }
+    builder.WithUserTraceId(ctx->GetUserTraceId().GetOrEmplace(""));
+
+    UserCtx = builder.Build();
 }
 
 TEvKqp::TEvQueryRequest::TEvQueryRequest(const NACLib::TUserContext::TPtr& userCtx) : TEvQueryRequest()

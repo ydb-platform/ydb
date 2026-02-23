@@ -199,6 +199,9 @@ public:
         if (key == NYdb::YDB_TRACE_ID_HEADER) {
             return GetTraceId();
         }
+        if (key == NYdb::YDB_USER_TRACE_ID_HEADER) {
+            return GetUserTraceId();
+        }
         if (key == NYdb::YDB_REQUEST_TYPE_HEADER) {
             return GetRequestType();
         }
@@ -291,6 +294,10 @@ public:
 
     TInstant GetDeadline() const override {
         return Deadline;
+    }
+
+    TMaybe<TString> GetUserTraceId() const override {
+        return {};
     }
 
     const TMaybe<TString> GetRequestType() const override {

@@ -11,10 +11,10 @@
 --      — флаг is_muted_in_run_day.
 --   5. Ограничиваем выборку последними $lookback_days днями по last_run_timestamp.
 --
--- Параметры:
---   $lookback_days — окно выборки по дате прогона и по date_window в tests_monitor (дни). По умолчанию 30.
+-- Проверку правил mute (счётчики, met_mute_criteria, raw vs monitor, JSON) делаем в
+-- pr_failed_tests_validation_through_mute_rules.sql (там все падения PR-check, не только «blocked»).
 
-$lookback_days = 1;
+$lookback_days = 70;
 
 SELECT 
     t.full_name AS full_name,
@@ -27,6 +27,7 @@ SELECT
     t.branch AS branch,
     t.build_type AS build_type,
     t.status_description AS status_description,
+    t.stderr AS stderr,
     t.attempt_number AS attempt_number,
     t.is_last_run_in_pr AS is_last_run_in_pr,
     COALESCE(pr.base_ref_name, '') AS pr_target_branch,
@@ -82,42 +83,44 @@ ON
 LEFT JOIN
     (
         SELECT
-            full_name,
-            branch,
-            build_type,
+            full_name AS m_full_name,
+            branch AS m_branch,
+            build_type AS m_build_type,
             owner,
             is_muted
         FROM
             `test_results/analytics/tests_monitor`
         WHERE
-            date_window = CurrentUtcDate()
+            build_type = 'relwithdebinfo'
+            AND date_window = CurrentUtcDate()
     ) AS m
 ON
-    t.full_name = m.full_name
-    AND t.branch = m.branch
-    AND t.build_type = m.build_type
+    t.full_name = m.m_full_name
+    AND t.branch = m.m_branch
+    AND t.build_type = m.m_build_type
 LEFT JOIN
     (
         SELECT
-            full_name,
-            branch,
-            build_type,
+            full_name AS m_run_full_name,
+            branch AS m_run_branch,
+            build_type AS m_run_build_type,
             date_window,
             is_muted
         FROM
             `test_results/analytics/tests_monitor`
         WHERE
-            date_window >= CurrentUtcDate() - $lookback_days * Interval("P1D")
+            build_type = 'relwithdebinfo'
+            AND date_window >= CurrentUtcDate() - $lookback_days * Interval("P1D")
             AND date_window <= CurrentUtcDate()
     ) AS m_run
 ON
-    t.full_name = m_run.full_name
-    AND t.branch = m_run.branch
-    AND t.build_type = m_run.build_type
+    t.full_name = m_run.m_run_full_name
+    AND t.branch = m_run.m_run_branch
+    AND t.build_type = m_run.m_run_build_type
     AND m_run.date_window = CAST(t.last_run_timestamp AS Date)
 WHERE
     t.last_run_timestamp > CurrentUtcDate() - $lookback_days * Interval("P1D")
 ORDER BY 
-    last_run_timestamp DESC,
-    pr_number,
-    full_name
+    t.last_run_timestamp DESC,
+    t.pr_number,
+    t.full_name

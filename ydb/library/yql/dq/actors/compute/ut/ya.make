@@ -22,6 +22,7 @@ PEERDIR(
     ydb/library/actors/testlib
     ydb/library/actors/wilson
     ydb/library/services
+    ydb/library/testlib/common
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/compute/ut/proto
     ydb/library/yql/dq/actors/input_transforms

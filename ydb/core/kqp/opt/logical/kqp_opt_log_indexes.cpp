@@ -1327,7 +1327,7 @@ struct TFulltextQuery {
     TExprNode::TPtr NamedOptions;
     THashMap<std::string_view, TExprNode::TPtr> Settings;
     bool StartsWithAny = false;
-    bool EndsWithWithAny = false;
+    bool EndsWithAny = false;
 
     bool IsScoreQuery() const {
         return Node->Content() == "FulltextScore";
@@ -1351,8 +1351,19 @@ struct TFulltextQuery {
         return TString();
     }
 
-    bool IsValid() const {
-        if (!Node || !Column || !Query || !TExprBase(Column).Maybe<TCoMember>() || !StringOrAtomOrParameter(TExprBase(Query))) {
+    bool IsValid() {
+        if (!Node || !Column || !Query || !StringOrAtomOrParameter(TExprBase(Query))) {
+            return false;
+        }
+
+        if (TExprBase(Column).Maybe<TCoFlatMap>()) {
+            auto lambda = TExprBase(Column).Cast<TCoFlatMap>();
+            if (lambda.Lambda().Body().Maybe<TCoJust>() && lambda.Lambda().Body().Cast<TCoJust>().Ptr()->Head().Content() == "ToString") {
+                Column = TExprBase(Column).Cast<TCoFlatMap>().Input().Ptr();
+            }
+        }
+
+        if (!TExprBase(Column).Maybe<TCoMember>()) {
             return false;
         }
 
@@ -1431,11 +1442,21 @@ struct TFulltextQuery {
             return TFulltextQuery{.Node=node, .Column=column, .Query=query};
         } else if (node->Content() == "StartsWith") {
             auto query = TFulltextQuery{.Node=node, .Column=node->HeadPtr(), .Query=node->TailPtr()};
-            query.EndsWithWithAny = true;
+            query.EndsWithAny = true;
             return query;
         } else if (node->Content() == "EndsWith") {
             auto query = TFulltextQuery{.Node=node, .Column=node->HeadPtr(), .Query=node->TailPtr()};
             query.StartsWithAny = true;
+            return query;
+        } else if (node->Content() == "StringContains") {
+            auto query = TFulltextQuery{.Node=node, .Column=node->HeadPtr(), .Query=node->TailPtr()};
+            query.StartsWithAny = true;
+            query.EndsWithAny = true;
+            return query;
+        } else if (node->Content() == "==") {
+            auto query = TFulltextQuery{.Node=node, .Column=node->HeadPtr(), .Query=node->TailPtr()};
+            query.StartsWithAny = false;
+            query.EndsWithAny = false;
             return query;
         }
 
@@ -1454,21 +1475,14 @@ struct TFullTextApplyParseResult {
     TNodeOnNodeOwnedMap Replaces;
     std::vector<TFulltextQuery> Queries;
 
-    ui64 FulltextExprCount = 0;
+    ui64 FulltextMatch = 0;
+    ui64 FulltextScore = 0;
+
     bool IsScoreApply = false;
     bool HasErrors = false;
 
     TFullTextApplyParseResult()
     {}
-
-    bool ValidateRequiredSettings() {
-        for(const auto& query: Queries) {
-            if (!query.IsValid())
-                return false;
-        }
-
-        return true;
-    }
 
     TVector<TCoNameValueTuple> Settings(TExprContext& ctx, TPositionHandle pos) {
         TVector<TCoNameValueTuple> settings;
@@ -1620,14 +1634,16 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
 
     VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
         if (auto match = TFulltextQuery::Match(expr, ctx) ; match.IsValid()) {
-            result.FulltextExprCount++;
+            if (match.IsScoreQuery()) {
+                result.FulltextScore++;
+            } else {
+                result.FulltextMatch++;
+            }
             return false;
         }
 
         return true;
     });
-
-    bool hasValidApply = result.Queries.size() > 0;
 
     bool scoreRestrictionFound = result.ScoreRestriction != nullptr;
     if (!result.IsScoreApply) {
@@ -1639,21 +1655,26 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         result.Replaces.emplace(result.ScoreRestriction.Get(), newMember);
     }
 
-    if (!hasValidApply || result.FulltextExprCount != 1 || !scoreRestrictionFound) {
+    TString explain = "";
+    if (result.FulltextScore >= 1 && result.FulltextMatch >= 1) {
         result.HasErrors = true;
-        auto message = TStringBuilder{} << "Unsupported index access, index name: " << indexName << ".";
-        if (result.FulltextExprCount > 1) {
-            message << " Multiple fulltext predicates in a single read are not supported.";
-        } else if (result.FulltextExprCount == 0) {
-            message << " FulltextMatch/FulltextScore predicate is not specified to access index.";
-        } else if (result.Queries.empty()) {
-            message << " FulltextMatch/FulltextScore node is not reachable by conjunctions.";
-        } else if (!hasValidApply) {
-            message << " FulltextMatch/FulltextScore predicate is not valid.";
-        } else if (!scoreRestrictionFound) {
-            message << " Score restriction is not found in the predicate. It's required to put FulltextScore() > 0 constraint in the where clause.";
-        }
+        explain = " Multiple fulltext predicates in a single read are not supported.";
+    } else if (result.FulltextScore > 1) {
+        result.HasErrors = true;
+        explain = " Multiple fulltext score predicates in a single read are not supported.";
+    } else if (result.Queries.empty()) {
+        result.HasErrors = true;
+        explain = " FulltextMatch/FulltextScore node is not reachable by conjunctions.";
+    } else if (result.FulltextScore + result.FulltextMatch == 0) {
+        result.HasErrors = true;
+        explain = " FulltextMatch/FulltextScore predicate is not valid or not found.";
+    } else if (result.FulltextScore > 0 && !scoreRestrictionFound) {
+        result.HasErrors = true;
+        explain = " Score restriction is not found in the predicate. It's required to put FulltextScore() > 0 constraint in the where clause.";
+    }
 
+    if (result.HasErrors) {
+        auto message = TStringBuilder{} << "Unsupported index access, index name: " << indexName << ". " << explain;
         TIssue baseIssue{ctx.GetPosition(node.Pos()), message};
         SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, baseIssue);
 
@@ -1737,17 +1758,21 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         return {};
     }
 
-    YQL_ENSURE(result.Queries.size() == 1);
+    YQL_ENSURE(result.Queries.size() >= 1);
 
     TVector<TExprBase> queryData;
     for(const auto& query : result.Queries) {
+        if (!queryData.empty()) {
+            queryData.push_back(Build<TCoString>(ctx, node.Pos()).Literal().Build(" ").Done());
+        }
+
         if (query.StartsWithAny) {
             queryData.push_back(Build<TCoString>(ctx, node.Pos()).Literal().Build("%").Done());
         }
 
         queryData.push_back(TExprBase(query.Query));
 
-        if (query.EndsWithWithAny) {
+        if (query.EndsWithAny) {
             queryData.push_back(Build<TCoString>(ctx, node.Pos()).Literal().Build("%").Done());
         }
     }

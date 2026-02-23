@@ -467,15 +467,15 @@ namespace NKikimr::NDDisk {
 
         void SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force = false);
 
+        static constexpr ui32 MaxSectorsPerBufferRecord = 128;
+
         ui32 SectorSize;
         ui32 SectorInChunk;
         ui32 ChunkSize;
-        static constexpr ui32 MaxChunks = 256;
-        static constexpr ui32 PersistentBufferInitChunks = 4;
-        static constexpr ui32 MaxSectorsPerBufferRecord = 128;
-        static constexpr ui32 MaxPersistentBufferInMemoryCache = 128 << 20; // 128 MiB
-        static constexpr ui32 MaxPersistentBufferChunkRestoreInflight = 8;
-
+        ui32 MaxChunks;
+        ui32 PersistentBufferInitChunks;
+        ui32 MaxPersistentBufferInMemoryCache;
+        ui32 MaxPersistentBufferChunkRestoreInflight;
 
         struct TPersistentBufferHeader {
             static constexpr ui8 PersistentBufferHeaderSignature[16] = {249, 173, 163, 160, 196, 193, 69, 133, 83, 38, 34, 104, 170, 146, 237, 156};
@@ -528,7 +528,7 @@ namespace NKikimr::NDDisk {
         std::unordered_set<ui32> PersistentBufferAllocatedChunks;
         std::unordered_set<ui32> PersistentBufferRestoredChunks;
 
-        void InitPersistentBuffer();
+        void InitPersistentBuffer(NPDisk::TPersistentBufferFormatPtr&& format);
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);

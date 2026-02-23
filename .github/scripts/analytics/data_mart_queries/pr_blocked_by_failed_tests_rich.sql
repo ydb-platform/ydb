@@ -9,6 +9,8 @@
 --      - НЕ имеют failed или mute
 --   4. Это фильтрует "флакающие" тесты — остаются только те, что стабильно проходят
 --      в основной ветке, но упали в PR (вероятно, из-за изменений в PR).
+--   5. Для каждого PR берём последний по времени PR-check run; в выборку попадают
+--      только падения из этого последнего run'а (к ним затем подмерживают mute и т.д.).
 --
 -- Параметры:
 --   $pr_check_lookback_days — окно выборки PR-check failures (дни). По умолчанию 7.
@@ -222,66 +224,38 @@ $all_failures_with_pr = (
         ON f.pr_number = l.pr_number
 );
 
-$test_pr_failures = (
-    SELECT 
+-- Только падения из последнего по времени PR-check run по каждому PR
+$failures_in_last_pr_run = (
+    SELECT
         full_name,
         suite_folder,
         test_name,
         pr_number,
         job_id,
+        run_timestamp,
         branch,
-        MAX(run_timestamp) AS last_run_timestamp,
-        MAX_BY(status_description, run_timestamp) AS status_description,
-        MAX_BY(attempt_number, run_timestamp) AS attempt_number,
-        MAX_BY(is_last_run_in_pr, run_timestamp) AS is_last_run_in_pr
-    FROM 
+        status_description,
+        attempt_number
+    FROM
         $all_failures_with_pr
-    WHERE 
+    WHERE
         pr_number IS NOT NULL
         AND job_id IS NOT NULL
-    GROUP BY 
-        full_name,
-        suite_folder,
-        test_name,
-        pr_number,
-        job_id,
-        branch
+        AND is_last_run_in_pr = 1
 );
 
-$last_run_per_test_pr = (
-    SELECT 
-        full_name,
-        suite_folder,
-        test_name,
-        pr_number,
-        job_id,
-        branch,
-        last_run_timestamp,
-        status_description,
-        attempt_number,
-        is_last_run_in_pr,
-        ROW_NUMBER() OVER (
-            PARTITION BY full_name, pr_number, branch
-            ORDER BY last_run_timestamp DESC, job_id DESC
-        ) AS rn
-    FROM 
-        $test_pr_failures
-);
-
-SELECT 
+SELECT
     CAST(full_name AS String) AS full_name,
     CAST(suite_folder AS Utf8) AS suite_folder,
     CAST(test_name AS Utf8) AS test_name,
     CAST(COALESCE(pr_number, '0') AS String) AS pr_number,
     CAST(COALESCE(job_id, 0) AS Uint64) AS job_id,
     CAST(COALESCE('https://github.com/ydb-platform/ydb/actions/runs/' || CAST(job_id AS UTF8), 'FALLBACK_URL') AS String) AS run_url,
-    last_run_timestamp,
+    run_timestamp AS last_run_timestamp,
     CAST(branch AS Utf8) AS branch,
     CAST('relwithdebinfo' AS String) AS build_type,
     CAST(COALESCE(status_description, '') AS String) AS status_description,
     CAST(COALESCE(attempt_number, 1) AS Int32) AS attempt_number,
-    CAST(COALESCE(is_last_run_in_pr, 0) AS Int32) AS is_last_run_in_pr
-FROM 
-    $last_run_per_test_pr
-WHERE 
-    rn = 1;
+    1 AS is_last_run_in_pr
+FROM
+    $failures_in_last_pr_run;

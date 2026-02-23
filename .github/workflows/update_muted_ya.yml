@@ -314,6 +314,20 @@ jobs:
               PR_BODY+=$'*No mutes/unmutes/deletes. Total in muted_ya: '"${MUTED_TOTAL}"$'*\n\n'
           fi
 
+          PR_BODY+=$'## v4 (mute/muted_ya.txt)\n\n'
+          if [ -s "$V4/to_delete_debug.txt" ]; then
+              DELETED_COUNT=$(wc -l < "$V4/to_delete_debug.txt")
+              PR_BODY+=$'**Removed: '"${DELETED_COUNT}**"$'\n\n'
+          fi
+          if [ -s "$V4/to_mute_debug.txt" ]; then
+              MUTED_COUNT=$(wc -l < "$V4/to_mute_debug.txt")
+              PR_BODY+=$'**Muted: '"${MUTED_COUNT}**"$'\n\n'
+          fi
+          if [ -s "$V4/to_unmute_debug.txt" ]; then
+              UNMUTED_COUNT=$(wc -l < "$V4/to_unmute_debug.txt")
+              PR_BODY+=$'**Unmuted: '"${UNMUTED_COUNT}**"$'\n\n'
+          fi
+
           echo "$PR_BODY" > "$PR_BODY_FILE"
           echo "PR_BODY_PATH=$PR_BODY_FILE" >> $GITHUB_ENV
 

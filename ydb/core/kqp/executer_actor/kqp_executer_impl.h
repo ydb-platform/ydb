@@ -305,15 +305,15 @@ protected:
             }
         }
 
-        // TODO: do not resolve single shard in some cases - due to optimization in data executer.
-        // if (shardIds.size() > 1 || (TasksGraph.GetMeta().IsScan && shardIds.size() > 0)) {
         if (shardIds.size() > 0) {
             KQP_STLOG_D(KQPDATA, "Start resolving tablets nodes...",
                     (shard_ids_count, shardIds.size()),
                     (trace_id, TraceId()));
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
-            // TODO: Tasks graph UseFollowers is calculated later, but required now.
+
+            // TODO: actualize UseFollowers and use them.
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, false, std::move(shardIds));
+
             KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
             return WAIT_SHARDS;
         }

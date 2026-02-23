@@ -95,6 +95,22 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
     return scheme;
 }
 
+static NKikimr::NSchemeShard::ISubOperation::TPtr CreateAnyCopyTable(
+        const auto& srcPath, NKikimr::NSchemeShard::TOperationId id, const NKikimr::NSchemeShard::TTxTransaction& tx,
+        const THashSet<TString>& localSequences = { }, TMaybe<NKikimr::NSchemeShard::TPathElement::EPathState> targetState = {}) {
+    if (srcPath->IsTable()) {
+        return NKikimr::NSchemeShard::CreateCopyTable(id, tx, localSequences, targetState);
+    }
+    return NKikimr::NSchemeShard::CreateReadOnlyCopyColumnTable(id, tx);
+}
+
+static NKikimr::NSchemeShard::ISubOperation::TPtr CreateAnyCopyTable(const auto& srcPath, NKikimr::NSchemeShard::TOperationId id, NKikimr::NSchemeShard::TTxState::ETxState txState, NKikimr::NSchemeShard::TTxState* state) {
+    if (srcPath->IsTable()) {
+        return NKikimr::NSchemeShard::CreateCopyTable(id, txState, state);
+    }
+    return NKikimr::NSchemeShard::CreateReadOnlyCopyColumnTable(id, txState);
+}
+
 namespace NKikimr::NSchemeShard {
 
 bool CreateConsistentCopyTables(
@@ -182,13 +198,15 @@ bool CreateConsistentCopyTables(
         THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
         if (descr.HasTargetPathTargetState()) {
-            result.push_back(CreateCopyTable(
+            result.push_back(CreateAnyCopyTable(
+                                srcPath,
                                 NextPartId(nextId, result),
                                 CopyTableTask(srcPath, dstPath, descr),
                                 sequences,
                                 descr.GetTargetPathTargetState()));
         } else {
-            result.push_back(CreateCopyTable(
+            result.push_back(CreateAnyCopyTable(
+                                srcPath,
                                 NextPartId(nextId, result),
                                 CopyTableTask(srcPath, dstPath, descr),
                                 sequences));
@@ -219,6 +237,15 @@ bool CreateConsistentCopyTables(
                     << ", indexName: " << indexDesc.GetName()
                     << ", indexType: " << NKikimrSchemeOp::EIndexType_Name(indexDesc.GetType()));
             }
+        }
+        
+        // Log column table info if available
+        if (context.SS->ColumnTables.contains(srcPath.Base()->PathId)) {
+            TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(srcPath.Base()->PathId).GetPtr();
+            const auto& tableDesc = tableInfo->Description;
+            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CreateConsistentCopyTables: Column Table info"
+                << ", isBackup: " << tableDesc.GetIsBackup());
         }
 
         // Log all children

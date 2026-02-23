@@ -41,7 +41,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCopyTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxReadOnlyCopyColumnTable);
         Y_ABORT_UNLESS(txState->MinStep); // we have to have right minstep
 
         return true;
@@ -56,7 +56,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCopyTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxReadOnlyCopyColumnTable);
         Y_ABORT_UNLESS(txState->SourcePathId);
 
         TPath dstPath = TPath::Init(txState->TargetPathId, context.SS);
@@ -157,7 +157,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCopyTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxReadOnlyCopyColumnTable);
 
         auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
         auto dstPath = TPath::Init(txState->TargetPathId, context.SS);
@@ -198,7 +198,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCopyTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxReadOnlyCopyColumnTable);
         Y_ABORT_UNLESS(txState->SourcePathId);
         Y_ABORT_UNLESS(txState->MinStep);
 
@@ -206,7 +206,6 @@ public:
         for (const auto& shard : txState->Shards) {
             TShardIdx idx = shard.Idx;
             TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
-            TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
             auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
             context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
             shardSet.insert(tablet);
@@ -330,7 +329,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCopyTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxReadOnlyCopyColumnTable);
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -410,6 +409,11 @@ public:
         THolder<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
+
+        if (!opDescr.GetIsBackup()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Read-Only Copy Table is supported for backup only.");
+            return result;
+        }
 
         TString errStr;
 
@@ -570,7 +574,7 @@ public:
         IncAliveChildrenSafeWithUndo(OperationId, dstParent, context); // for correct discard of ChildrenExist prop
 
         // create tx state, do not catch shards right now
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCopyTable, dstPath.Base()->PathId, srcPath.Base()->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxReadOnlyCopyColumnTable, dstPath.Base()->PathId, srcPath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
         srcPath->PathState = TPathElement::EPathState::EPathStateCopying;

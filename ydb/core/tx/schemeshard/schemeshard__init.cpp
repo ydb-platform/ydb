@@ -3575,7 +3575,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 txState.NeedUpdateObject = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedUpdateObject>(false);
                 txState.NeedSyncHive = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedSyncHive>(false);
 
-                if (txState.TxType == TTxState::TxCopyTable && txState.SourcePathId) {
+                if ((txState.TxType == TTxState::TxCopyTable || txState.TxType == TTxState::TxReadOnlyCopyColumnTable) && txState.SourcePathId) {
                     Y_ABORT_UNLESS(txState.SourcePathId);
                     TPathElement::TPtr srcPath = Self->PathsById.at(txState.SourcePathId);
                     Y_VERIFY_S(srcPath, "Null path element, pathId: " << txState.SourcePathId);
@@ -3661,7 +3661,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (!path->UserAttrs->AlterData) {
                         path->UserAttrs->AlterData = new TUserAttributes(path->UserAttrs->AlterVersion + 1);
                     }
-                } else if (txState.TxType == TTxState::TxCopyTable) {
+                } else if (txState.TxType == TTxState::TxCopyTable || txState.TxType == TTxState::TxReadOnlyCopyColumnTable) {
                     if (!extraData.empty()) {
                         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
                         bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
@@ -3782,7 +3782,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!Self->ShardInfos.contains(shardIdx)) {
                     if (txState->CanDeleteParts()
-                        || ((txState->TxType == TTxState::TxAlterTable || txState->TxType == TTxState::TxCopyTable) //KIKIMR-7723
+                        || ((txState->TxType == TTxState::TxAlterTable || txState->TxType == TTxState::TxCopyTable || txState->TxType == TTxState::TxReadOnlyCopyColumnTable) //KIKIMR-7723
                             && (txState->State == TTxState::Waiting || txState->State == TTxState::CreateParts)))
                     {
                         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -3816,7 +3816,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         txState->TxType != TTxState::TxDropReplication &&
                         txState->TxType != TTxState::TxDropReplicationCascade)
                     {
-                        Y_VERIFY_S(txState->TxType == TTxState::TxCopyTable, "Only CopyTable Tx can have participating shards from a different table"
+                        Y_VERIFY_S(txState->TxType == TTxState::TxCopyTable || txState->TxType == TTxState::TxReadOnlyCopyColumnTable, "Only CopyTable Tx can have participating shards from a different table"
                                        << ", txId: " << operationId.GetTxId()
                                        << ", targetPathId: " << txState->TargetPathId
                                        << ", shardIdx: " << shardIdx

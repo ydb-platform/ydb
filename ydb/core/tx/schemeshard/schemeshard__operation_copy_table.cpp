@@ -942,13 +942,12 @@ public:
 namespace NKikimr::NSchemeShard {
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState) {
-    return tx.HasCreateColumnTable() ? CreateReadOnlyCopyColumnTable(id, tx) : MakeSubOperation<TCopyTable>(id, tx, localSequences, targetState);
+    return MakeSubOperation<TCopyTable>(id, tx, localSequences, targetState);
 }
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state, TOperationContext& context) {
+ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state) {
     Y_ABORT_UNLESS(txState != TTxState::Invalid);
-    TPath srcPath = TPath::Init(state->SourcePathId, context.SS);
-    return srcPath->IsColumnTable() ? CreateReadOnlyCopyColumnTable(id, txState) : MakeSubOperation<TCopyTable>(id, txState, state);
+    return MakeSubOperation<TCopyTable>(id, txState, state);
 }
 
 void FillCopyIndexes(TOperationId nextId, const TPath& srcPath, const TPath& dstPath, const NKikimrSchemeOp::TTableDescription& copying, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
@@ -1108,11 +1107,12 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             auto operation = schema.MutableCreateColumnTable();
             operation->SetName(name);
             operation->SetCopyFromTable(copyFromTable);
+            operation->SetIsBackup(copying.GetIsBackup());
         } else {
             Y_ABORT();
         }
 
-        result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
+        result.push_back(tx.HasCreateTable() ? CreateCopyTable(NextPartId(nextId, result), schema, sequences) : CreateReadOnlyCopyColumnTable(NextPartId(nextId, result), schema));
     }
 
     if (tx.HasCreateTable()) {

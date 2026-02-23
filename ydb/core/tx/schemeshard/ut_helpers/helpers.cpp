@@ -486,6 +486,7 @@ namespace NSchemeShardUT_Private {
         auto op = transaction->MutableCreateColumnTable();
         op->SetName(dstName);
         op->SetCopyFromTable(srcFullName);
+        op->SetIsBackup(true);
 
         SetApplyIf(*transaction, applyIf);
         return evTx;

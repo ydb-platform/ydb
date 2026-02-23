@@ -24,6 +24,7 @@ message TOAuthExchange {
         optional string TokenFile = 4;
 
         optional string Alg = 5;
+        reserved 6;
         optional string PrivateKey = 7;
         optional string Kid = 8;
         optional string Iss = 9;

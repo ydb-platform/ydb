@@ -13,7 +13,7 @@ generic:
     ssl_cert_file: path/to/ssl.crt
 
   auth:
-    token_file: ydb/mvp/meta/examples/token_file
+    token_file: ydb/mvp/meta/examples/token_file.json
 
 meta:
   meta_api_endpoint: grpc://meta.ydb.example.net:2135

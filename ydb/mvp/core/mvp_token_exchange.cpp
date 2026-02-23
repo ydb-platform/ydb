@@ -34,6 +34,18 @@ struct TLessNoCase {
 using TOauthCredentials = NMvp::TOAuthExchange::TCredentials;
 using TJwtSignerFn = TString(*)(const TOauthCredentials&, const std::chrono::system_clock::time_point&);
 
+TDuration ParseJwtTtl(TStringBuf ttlValue) {
+    if (ttlValue.empty()) {
+        return TDuration::Hours(1);
+    }
+    try {
+        return FromString<TDuration>(ttlValue);
+    } catch (const std::exception&) {
+        ythrow yexception() << "Invalid JWT ttl value: \"" << ttlValue
+                            << "\". Expected duration like \"1h\", \"30m\" or \"3600s\"";
+    }
+}
+
 size_t Base64OutputLen(TStringBuf input) {
     while (!input.empty() && (input.back() == '=' || input.back() == ',')) {
         input.remove_suffix(1);
@@ -58,10 +70,7 @@ size_t Base64OutputLen(TStringBuf input) {
 
 template <class TAlg>
 TString SignJwtWithAsymmetricAlg(const TOauthCredentials& creds, const std::chrono::system_clock::time_point& now) {
-    TDuration ttl = TDuration::Hours(1);
-    if (!creds.ttl().empty()) {
-        ttl = FromString<TDuration>(creds.ttl());
-    }
+    const TDuration ttl = ParseJwtTtl(creds.ttl());
     auto expiresAt = now + std::chrono::seconds(ttl.Seconds());
     auto builder = jwt::create()
         .set_issued_at(now)
@@ -91,10 +100,7 @@ TString SignJwtWithAsymmetricAlg(const TOauthCredentials& creds, const std::chro
 
 template <class TAlg>
 TString SignJwtWithHmacAlg(const TOauthCredentials& creds, const std::chrono::system_clock::time_point& now) {
-    TDuration ttl = TDuration::Hours(1);
-    if (!creds.ttl().empty()) {
-        ttl = FromString<TDuration>(creds.ttl());
-    }
+    const TDuration ttl = ParseJwtTtl(creds.ttl());
     auto expiresAt = now + std::chrono::seconds(ttl.Seconds());
     auto builder = jwt::create()
         .set_issued_at(now)

@@ -67,6 +67,9 @@ jobs:
     - name: Upload PR blocked by failed tests with PR info data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/pr_blocked_by_failed_tests_rich_with_pr_and_mute.sql --table_path test_results/analytics/pr_blocked_by_failed_tests_rich_with_pr_and_mute --store_type column --partition_keys last_run_timestamp --primary_keys last_run_timestamp full_name pr_number job_id
+    - name: Upload PR failed tests validation through mute rules data mart
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/pr_failed_tests_validation_through_mute_rules.sql --table_path test_results/analytics/pr_failed_tests_validation_through_mute_rules --store_type column --partition_keys last_run_timestamp --primary_keys last_run_timestamp full_name pr_number job_id
     - name: Upload PR with test failures (any failures, 1 day)
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/pr_with_test_failures.sql --table_path test_results/analytics/pr_blocked_by_tests --store_type column --partition_keys last_run_timestamp --primary_keys last_run_timestamp full_name pr_number job_id

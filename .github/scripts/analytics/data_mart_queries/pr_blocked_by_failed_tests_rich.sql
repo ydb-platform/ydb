@@ -19,8 +19,8 @@
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
-$pr_check_lookback_days = 7;
-$regression_window_days = 15;
+$pr_check_lookback_days = 1;  -- use 1 for one-day refresh
+$regression_window_days = 4;
 
 -- PR-check failures in the last $pr_check_lookback_days days (branch, full_name, run_timestamp)
 $pr_check_failures_1d = (
@@ -49,21 +49,19 @@ $pr_check_failures_1d = (
         run_timestamp
 );
 
--- For each (branch, full_name, run_ts) from PR-check: has regression passed in [run_ts - 15d, run_ts] and no failed/mute
-$pr_check_with_regression_ok = (
+-- Regression/postcommit runs with full_name precomputed (JOIN only on column equalities for YDB)
+$regression_runs = (
     SELECT
-        p.branch AS branch,
-        p.full_name AS full_name,
-        p.run_timestamp AS run_timestamp
+        branch,
+        suite_folder || '/' || test_name AS full_name,
+        run_timestamp,
+        status,
+        job_id
     FROM
-        $pr_check_failures_1d AS p
-    INNER JOIN
-        `test_results/test_runs_column` AS r
-        ON r.branch = p.branch
-        AND r.suite_folder || '/' || r.test_name = p.full_name
+        `test_results/test_runs_column`
     WHERE
-        r.build_type = 'relwithdebinfo'
-        AND r.job_name IN (
+        build_type = 'relwithdebinfo'
+        AND job_name IN (
             'Nightly-run',
             'Regression-run',
             'Regression-run_Large',
@@ -73,7 +71,26 @@ $pr_check_with_regression_ok = (
             'Postcommit_relwithdebinfo',
             'Postcommit_asan'
         )
-        AND r.run_timestamp >= p.run_timestamp - $regression_window_days * Interval("P1D")
+        AND run_timestamp > CurrentUtcDate() - ($pr_check_lookback_days + $regression_window_days) * Interval("P1D")
+        AND branch IS NOT NULL
+        AND suite_folder IS NOT NULL
+        AND test_name IS NOT NULL
+);
+
+-- For each (branch, full_name, run_ts) from PR-check: has regression passed in [run_ts - 15d, run_ts] and no failed/mute
+$pr_check_with_regression_ok = (
+    SELECT
+        p.branch AS branch,
+        p.full_name AS full_name,
+        p.run_timestamp AS run_timestamp
+    FROM
+        $pr_check_failures_1d AS p
+    INNER JOIN
+        $regression_runs AS r
+        ON r.branch = p.branch
+        AND r.full_name = p.full_name
+    WHERE
+        r.run_timestamp >= p.run_timestamp - $regression_window_days * Interval("P1D")
         AND r.run_timestamp <= p.run_timestamp
     GROUP BY
         p.branch,
@@ -103,6 +120,7 @@ $all_failures_with_pr_base = (
         base.run_timestamp AS run_timestamp,
         base.branch AS branch,
         base.status_description AS status_description,
+        base.stderr AS stderr,
         ListHead(
             Unicode::SplitToList(
                 CASE 
@@ -214,6 +232,7 @@ $all_failures_with_pr = (
         f.run_timestamp AS run_timestamp,
         f.branch AS branch,
         f.status_description AS status_description,
+        f.stderr AS stderr,
         f.pr_number AS pr_number,
         f.attempt_number AS attempt_number,
         CASE WHEN f.job_id = l.last_job_id THEN 1 ELSE 0 END AS is_last_run_in_pr
@@ -224,24 +243,31 @@ $all_failures_with_pr = (
         ON f.pr_number = l.pr_number
 );
 
--- Only failures from the latest PR-check run per PR
+-- Only failures from the latest PR-check run per PR that passed the regression check for that run
+-- (branch, full_name, run_timestamp) must be in $pr_check_with_regression_ok
 $failures_in_last_pr_run = (
     SELECT
-        full_name,
-        suite_folder,
-        test_name,
-        pr_number,
-        job_id,
-        run_timestamp,
-        branch,
-        status_description,
-        attempt_number
+        f.full_name AS full_name,
+        f.suite_folder AS suite_folder,
+        f.test_name AS test_name,
+        f.pr_number AS pr_number,
+        f.job_id AS job_id,
+        f.run_timestamp AS run_timestamp,
+        f.branch AS branch,
+        f.status_description AS status_description,
+        f.stderr AS stderr,
+        f.attempt_number AS attempt_number
     FROM
-        $all_failures_with_pr
+        $all_failures_with_pr AS f
+    INNER JOIN
+        $pr_check_with_regression_ok AS ok
+        ON ok.branch = f.branch
+        AND ok.full_name = f.full_name
+        AND ok.run_timestamp = f.run_timestamp
     WHERE
-        pr_number IS NOT NULL
-        AND job_id IS NOT NULL
-        AND is_last_run_in_pr = 1
+        f.pr_number IS NOT NULL
+        AND f.job_id IS NOT NULL
+        AND f.is_last_run_in_pr = 1
 );
 
 SELECT
@@ -255,6 +281,7 @@ SELECT
     CAST(branch AS Utf8) AS branch,
     CAST('relwithdebinfo' AS String) AS build_type,
     CAST(COALESCE(status_description, '') AS String) AS status_description,
+    CAST(COALESCE(stderr, '') AS String) AS stderr,
     CAST(COALESCE(attempt_number, 1) AS Int32) AS attempt_number,
     1 AS is_last_run_in_pr
 FROM

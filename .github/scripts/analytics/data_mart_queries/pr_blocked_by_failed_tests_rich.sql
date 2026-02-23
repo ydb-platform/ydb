@@ -1,26 +1,28 @@
--- Тесты, которые упали в PR-check и "должны проходить" (стабильны в regression/nightly).
+-- Tests that failed in PR-check and "should pass" (stable in regression/nightly).
 --
--- Логика:
---   1. Берём все падения тестов в PR-check за последние $pr_check_lookback_days дней.
---   2. Для каждого упавшего теста смотрим regression/nightly/postcommit прогоны
---      за $regression_window_days дней ДО момента падения в PR-check.
---   3. Оставляем только тесты, которые в этом окне:
---      - имеют хотя бы один passed в regression/nightly
---      - НЕ имеют failed или mute
---   4. Это фильтрует "флакающие" тесты — остаются только те, что стабильно проходят
---      в основной ветке, но упали в PR (вероятно, из-за изменений в PR).
+-- Logic:
+--   1. Take all PR-check test failures in the last $pr_check_lookback_days days.
+--   2. For each failed test, look at regression/nightly/postcommit runs
+--      in the $regression_window_days days before the PR-check failure.
+--   3. Keep only tests that in that window:
+--      - have at least one passed in regression/nightly
+--      - have no failed or mute
+--   4. This filters out flaky tests — only those that are stable on main
+--      but failed in the PR (likely due to PR changes) remain.
+--   5. For each PR we take the latest PR-check run by time; only failures
+--      from that last run are included (mute etc. are joined to these later).
 --
--- Параметры:
---   $pr_check_lookback_days — окно выборки PR-check failures (дни). По умолчанию 7.
---   $regression_window_days — окно для поиска passed regression/nightly тестов
---      относительно времени падения в PR-check. По умолчанию 15.
+-- Parameters:
+--   $pr_check_lookback_days — window for PR-check failures (days). Default 7.
+--   $regression_window_days — window for finding passed regression/nightly tests
+--      relative to the PR-check failure time. Default 15.
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
 $pr_check_lookback_days = 7;
 $regression_window_days = 15;
 
--- PR-check failures за последние $pr_check_lookback_days дней (branch, full_name, run_timestamp)
+-- PR-check failures in the last $pr_check_lookback_days days (branch, full_name, run_timestamp)
 $pr_check_failures_1d = (
     SELECT
         branch,
@@ -47,7 +49,7 @@ $pr_check_failures_1d = (
         run_timestamp
 );
 
--- Для каждого (branch, full_name, run_ts) из PR-check: есть ли regression passed в [run_ts - 15d, run_ts] и нет failed/mute
+-- For each (branch, full_name, run_ts) from PR-check: has regression passed in [run_ts - 15d, run_ts] and no failed/mute
 $pr_check_with_regression_ok = (
     SELECT
         p.branch AS branch,
@@ -83,7 +85,7 @@ $pr_check_with_regression_ok = (
         AND COUNT(DISTINCT CASE WHEN r.status = 'mute' THEN r.job_id ELSE NULL END) = 0
 );
 
--- Тесты, которые прошли фильтр: падали в PR-check (1 день) и по времени своего PR-check run имеют regression passed в окне 15 дней назад
+-- Tests that passed the filter: failed in PR-check and have regression passed in the 15-day window before that run
 $filtered_tests = (
     SELECT DISTINCT
         branch,
@@ -148,7 +150,7 @@ $all_failures_with_pr_base = (
 );
 
 $all_pr_check_runs = (
-    -- Все PR-check job'ы (не только failure), чтобы корректно определить последний запуск PR
+    -- All PR-check jobs (not only failures) so we can determine the latest PR run correctly
     SELECT
         job_id,
         pr_number,
@@ -222,66 +224,38 @@ $all_failures_with_pr = (
         ON f.pr_number = l.pr_number
 );
 
-$test_pr_failures = (
-    SELECT 
+-- Only failures from the latest PR-check run per PR
+$failures_in_last_pr_run = (
+    SELECT
         full_name,
         suite_folder,
         test_name,
         pr_number,
         job_id,
+        run_timestamp,
         branch,
-        MAX(run_timestamp) AS last_run_timestamp,
-        MAX_BY(status_description, run_timestamp) AS status_description,
-        MAX_BY(attempt_number, run_timestamp) AS attempt_number,
-        MAX_BY(is_last_run_in_pr, run_timestamp) AS is_last_run_in_pr
-    FROM 
+        status_description,
+        attempt_number
+    FROM
         $all_failures_with_pr
-    WHERE 
+    WHERE
         pr_number IS NOT NULL
         AND job_id IS NOT NULL
-    GROUP BY 
-        full_name,
-        suite_folder,
-        test_name,
-        pr_number,
-        job_id,
-        branch
+        AND is_last_run_in_pr = 1
 );
 
-$last_run_per_test_pr = (
-    SELECT 
-        full_name,
-        suite_folder,
-        test_name,
-        pr_number,
-        job_id,
-        branch,
-        last_run_timestamp,
-        status_description,
-        attempt_number,
-        is_last_run_in_pr,
-        ROW_NUMBER() OVER (
-            PARTITION BY full_name, pr_number, branch
-            ORDER BY last_run_timestamp DESC, job_id DESC
-        ) AS rn
-    FROM 
-        $test_pr_failures
-);
-
-SELECT 
+SELECT
     CAST(full_name AS String) AS full_name,
     CAST(suite_folder AS Utf8) AS suite_folder,
     CAST(test_name AS Utf8) AS test_name,
     CAST(COALESCE(pr_number, '0') AS String) AS pr_number,
     CAST(COALESCE(job_id, 0) AS Uint64) AS job_id,
     CAST(COALESCE('https://github.com/ydb-platform/ydb/actions/runs/' || CAST(job_id AS UTF8), 'FALLBACK_URL') AS String) AS run_url,
-    last_run_timestamp,
+    run_timestamp AS last_run_timestamp,
     CAST(branch AS Utf8) AS branch,
     CAST('relwithdebinfo' AS String) AS build_type,
     CAST(COALESCE(status_description, '') AS String) AS status_description,
     CAST(COALESCE(attempt_number, 1) AS Int32) AS attempt_number,
-    CAST(COALESCE(is_last_run_in_pr, 0) AS Int32) AS is_last_run_in_pr
-FROM 
-    $last_run_per_test_pr
-WHERE 
-    rn = 1;
+    1 AS is_last_run_in_pr
+FROM
+    $failures_in_last_pr_run;

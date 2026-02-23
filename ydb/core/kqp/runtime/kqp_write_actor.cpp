@@ -5154,7 +5154,6 @@ public:
             Settings.GetTable().GetVersion())
         , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor",
                 NWilson::EFlags::AUTO_END)
-        // , UserCtx(userCtx)
         , TransformOutput(ExtractTransformOutput(args))
     {
         Y_UNUSED(userCtx);
@@ -5439,7 +5438,6 @@ private:
 
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;
-    // NACLib::TUserContext::TPtr UserCtx;
     NYql::NDq::IDqOutputConsumer::TPtr TransformOutput;
 
 private:

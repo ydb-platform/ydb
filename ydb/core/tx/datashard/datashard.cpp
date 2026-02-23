@@ -1001,8 +1001,8 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userCtx!=nullptr?userCtx->GetUserSID():BUILTIN_ACL_CDC_WITHOUT_USER_SID),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userCtx!=nullptr?userCtx->GetUserTraceId():""));
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userCtx != nullptr ? userCtx->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID),
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userCtx != nullptr? userCtx->GetUserTraceId() : ""));
     }
 }
 

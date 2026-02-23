@@ -102,7 +102,10 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
                 .WithPathId(std::get<4>(record))
                 .WithSchemaVersion(std::get<5>(record))
                 .WithBody(std::get<2>(detail))
-                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(std::get<3>(detail)).Build())
+                .WithUserCtx(NACLib::TUserContextBuilder()
+                    .WithUserSID(std::get<3>(detail))
+                    .WithUserTraceId(std::get<4>(detail))
+                    .Build())
                 .Build()
         );
     }

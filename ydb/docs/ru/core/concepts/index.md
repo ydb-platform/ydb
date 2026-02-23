@@ -15,16 +15,9 @@
 - [Change Data Capture (CDC)](cdc.md)
 - [Time to Live (TTL) и вытеснение данных во внешнее хранилище](ttl.md)
 - [Ограничения базы данных](limits-ydb.md)
-<<<<<<< HEAD
-- [Многоверсионное управление конкурентностью (MVCC)](mvcc.md)
-- [Асинхронная репликация](async-replication.md)
-- [Оптимизатор запросов](optimizer.md)
-- [Федеративные запросы](federated_query/index.md)
-=======
 - [Асинхронная репликация](async-replication.md)
 - [Режим bridge](./bridge.md)
 - [Трансфер данных](./transfer.md)
->>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906))
 
 ## См. также {#see-also}
 

@@ -74,11 +74,7 @@
 
 ## Взаимодействие с контроллером памяти
 
-<<<<<<< HEAD:ydb/docs/ru/core/concepts/spilling.md
-При выполнении запросов {{ ydb-short-name }} старается умещаться в заданный лимит памяти, который устанавливается [контроллером памяти](../reference/configuration/index.md#memory-controller). Чтобы продолжать помещаться в этот лимит даже при росте промежуточных вычислений, используется спиллинг. Подробнее см. раздел [Управление памятью](../reference/configuration/table_service_config.md#memory-management).
-=======
 При выполнении запросов {{ ydb-short-name }} старается умещаться в заданный лимит памяти, который устанавливается [контроллером памяти](../../reference/configuration/memory_controller_config.md). Чтобы продолжать помещаться в этот лимит даже при росте промежуточных вычислений, используется спиллинг. Подробнее см. раздел [Управление памятью](../../reference/configuration/table_service_config.md#memory-management).
->>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906)):ydb/docs/ru/core/concepts/query_execution/spilling.md
 
 ## См. также
 

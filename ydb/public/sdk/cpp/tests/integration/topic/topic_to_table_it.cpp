@@ -350,13 +350,14 @@ void TxUsage::TearDown()
     }
     TopicReadSessions.clear();
 
-    // Stop clients and driver explicitly to ensure all gRPC operations finish.
-    QueryClient.reset();
-    TableClient.reset();
+    // Stop the driver first to ensure all gRPC operations finish, then
+    // destroy clients and the driver.
     if (Driver) {
         Driver->Stop(true);
-        Driver.reset();
     }
+    QueryClient.reset();
+    TableClient.reset();
+    Driver.reset();
 }
 
 TxUsage::TTableSession::TTableSession(NTable::TTableClient& client)

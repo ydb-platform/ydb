@@ -8,6 +8,7 @@
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
+#include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
@@ -41,6 +42,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return "[CancelIncrementalBackup]";
         case TOperationId::RESTORE:
             return "[CancelBackupCollectionRestore]";
+        case TOperationId::COMPACT:
+            return "[CancelForcedCompaction]";
         default:
             return "[Untagged]";
         }
@@ -54,6 +57,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return new TEvImport::TEvCancelImportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::BUILD_INDEX:
             return new TEvIndexBuilder::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::COMPACT:
+            return new TEvForcedCompaction::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -88,6 +93,15 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
         const auto& record = ev->Get()->Record;
 
         LOG_D("Handle TEvIndexBuilder::TEvCancelResponse"
+            << ": record# " << record.ShortDebugString());
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
+    void Handle(TEvForcedCompaction::TEvCancelResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvForcedCompaction::TEvCancelResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -140,6 +154,7 @@ public:
             hFunc(TEvExport::TEvCancelExportResponse, Handle);
             hFunc(TEvImport::TEvCancelImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvCancelResponse, Handle);
+            hFunc(TEvForcedCompaction::TEvCancelResponse, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperationResponse, Handle);
         default:
             return StateBase(ev);

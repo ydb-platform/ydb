@@ -10,6 +10,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
+#include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
@@ -41,6 +42,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return "[ForgetIncrementalBackup]";
         case TOperationId::RESTORE:
             return "[ForgetBackupCollectionRestore]";
+        case TOperationId::COMPACT:
+            return "[ForgetForcedCompaction]";
         default:
             return "[Untagged]";
         }
@@ -58,6 +61,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return new TEvBackup::TEvForgetIncrementalBackupRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::RESTORE:
             return new TEvBackup::TEvForgetBackupCollectionRestoreRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::COMPACT:
+            return new TEvForcedCompaction::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -94,6 +99,15 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
         const auto& record = ev->Get()->Record;
 
         LOG_D("Handle TEvIndexBuilder::TEvForgetResponse"
+            << ": record# " << record.ShortDebugString());
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
+    void Handle(TEvForcedCompaction::TEvForgetResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvForcedCompaction::TEvForgetResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -170,6 +184,7 @@ public:
             hFunc(TEvExport::TEvForgetExportResponse, Handle);
             hFunc(TEvImport::TEvForgetImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvForgetResponse, Handle);
+            hFunc(TEvForcedCompaction::TEvForgetResponse, Handle);
             hFunc(NKqp::TEvForgetScriptExecutionOperationResponse, Handle);
             hFunc(TEvBackup::TEvForgetIncrementalBackupResponse, Handle);
             hFunc(TEvBackup::TEvForgetBackupCollectionRestoreResponse, Handle);

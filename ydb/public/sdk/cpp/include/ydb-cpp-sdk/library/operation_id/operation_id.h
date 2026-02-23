@@ -28,6 +28,7 @@ public:
         SS_BG_TASKS = 10,
         INCREMENTAL_BACKUP = 11,
         RESTORE = 12,
+        COMPACT = 13,
     };
 
     struct TData {

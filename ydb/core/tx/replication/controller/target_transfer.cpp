@@ -84,7 +84,7 @@ public:
             }
             default:
                 break;
-        };
+        }
 
         return true;
     }
@@ -149,7 +149,6 @@ public:
 };
 
 struct TTransferCounters: public TTragetWithStreamCounters {
-
     NMonitoring::TDynamicCounterPtr AggeregatedCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingTime;
@@ -204,6 +203,7 @@ struct TTransferCounters: public TTragetWithStreamCounters {
             default:
                 return false;
         }
+
         return true;
     }
 };

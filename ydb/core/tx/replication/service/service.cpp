@@ -28,11 +28,13 @@ namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
     using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
+
     class TWorkerInfo {
         friend class TSessionInfo;
+
     public:
         const TActorId ActorId;
-        TMetricsConfig::EMetricsLevel MetricsLevel;
+        const TMetricsConfig::EMetricsLevel MetricsLevel;
         TRowVersion Heartbeat = TRowVersion::Min();
 
         explicit TWorkerInfo(const TActorId& actorId, const NKikimrReplication::TReplicationLocationConfig& location, TMetricsConfig::EMetricsLevel metricsLevel,
@@ -53,9 +55,11 @@ class TSessionInfo {
         operator TActorId() const {
             return ActorId;
         }
+
         void EnsureCounters(NMonitoring::TDynamicCounterPtr& countersRoot) {
-            if (MetricsLevel != TMetricsConfig::LEVEL_DETAILED || Location.GetPath().empty())
+            if (MetricsLevel != TMetricsConfig::LEVEL_DETAILED || Location.GetPath().empty()) {
                 return;
+            }
 
             auto subgroup = countersRoot->GetSubgroup("transfer_id", Location.GetPath())
                                 ->GetSubgroup("database_id", Location.GetYcResourceId())
@@ -88,6 +92,7 @@ class TSessionInfo {
                 WorkerCounters->WriteBytes->Add(stats.WriterStats->WriteBytes);
                 WorkerCounters->WriteErrors->Add(stats.WriterStats->WriteErrors);
             }
+
             WorkerCounters->Uptime->Set((Now() - StartTime).MilliSeconds());
         }
 
@@ -444,7 +449,7 @@ private:
 private:
     TActorId ActorId;
     ui64 Generation;
-    ui64 ControllerTabletId;
+    const ui64 ControllerTabletId;
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
     THashMap<TWorkerId, TMap<ui64, i64>> PendingStatsValues;
@@ -602,6 +607,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
             );
+
         if (AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
             topicReaderSettings.Decompress(false);
         }
@@ -840,6 +846,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvWorker::TEvStatsWakeup::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
+
         if (ev->Get()->SessionToAdd) {
             SessionsToWake.insert(ev->Get()->SessionToAdd);
         } else if (ev->Get()->SessionToRemove) {
@@ -847,12 +854,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         } else {
             StatsWakeupScheduled = false;
         }
+
         if (!SessionsToWake.empty() && !StatsWakeupScheduled) {
             Schedule(StatsWakeupInterval, new TEvWorker::TEvStatsWakeup());
             StatsWakeupScheduled = true;
         }
+
         if (!NextStatsUpdate || NextStatsUpdate <= Now()) {
-            for (auto sessionId : SessionsToWake) {
+            for (const auto& sessionId : SessionsToWake) {
                 auto sessionIter = Sessions.find(sessionId);
                 if (sessionIter != Sessions.end()) {
                     sessionIter->second.SendWorkersStats(this);

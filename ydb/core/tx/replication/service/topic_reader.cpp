@@ -114,18 +114,18 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         auto& response = ResponseQueue.front();
         auto& result = response.DataEv->Get()->Result;
-        TVector<TTopicMessage> records(::Reserve(result.Messages.size()));
-        auto msgCount = result.Messages.size();
-        ui64 maxOffset = result.Messages.back().GetOffset();
+        const auto msgCount = result.Messages.size();
+        TVector<TTopicMessage> records(::Reserve(msgCount));
+        const ui64 maxOffset = result.Messages.back().GetOffset();
         for (auto& msg : result.Messages) {
             totalSize += msg.GetData().size();
         }
 
-        auto* event = new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(result.Messages));
+        auto event = MakeHolder<TEvWorker::TEvData>(result.PartitionId, ToString(result.PartitionId), std::move(result.Messages));
 
         if (Settings.ReportStats_) {
             event->Stats = std::make_unique<TWorkerDetailedStats>(EWorkerOperation::NONE, std::make_unique<ReplicationTopicReadStats>(),
-                    nullptr);
+                nullptr);
             event->Stats->ReaderStats->ReadTime = response.ReadDuration;
             event->Stats->ReaderStats->DecompressCpu = response.DecompressionDone
                 ? TDuration::Seconds(GetElapsedTicksAsSeconds() - response.StartCpuUsageSec)
@@ -135,6 +135,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             event->Stats->ReaderStats->Messages = msgCount;
             event->Stats->ReaderStats->Bytes = totalSize;
         }
+
         ResponseQueue.pop_front();
         Send(Worker, event);
     }
@@ -204,11 +205,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {
             case DecompressWakeupTag:
-                DecompressData();
-                break;
+                return DecompressData();
             case DecompressionDoneWakeupTag:
-                ProcessData();
-                break;
+                return ProcessData();
             default:
                 LOG_W("Handle Wakeup with unexpected tag " << ev->Get()->Tag);
         }
@@ -282,7 +281,7 @@ private:
         TInstant ReadStartTime;
     };
 
-    struct TResponseDataTrancker {
+    struct TResponseDataTracker {
         double StartCpuUsageSec;
         TDuration ReadDuration;
         TEvYdbProxy::TEvReadTopicResponse::TPtr DataEv;
@@ -307,6 +306,7 @@ private:
 
     constexpr const static ui64 DecompressWakeupTag = 1;
     constexpr const static ui64 DecompressionDoneWakeupTag = 2;
+
 }; // TRemoteTopicReader
 
 IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts) {

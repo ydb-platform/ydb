@@ -166,7 +166,8 @@ bool TTargetWithStreamStats::UpdateWithSingleStatsItem(ui64 workerId, ui64 key, 
             break;
         default:
             return false;
-    };
+    }
+
     return true;
 }
 
@@ -183,8 +184,9 @@ void TTargetWithStreamStats::Serialize(NKikimrReplication::TEvDescribeReplicatio
 
 
 bool TTragetWithStreamCounters::UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) {
-    if (!CountersGroup)
+    if (!CountersGroup) {
         return false;
+    }
 
     Y_UNUSED(workerId);
 
@@ -217,6 +219,7 @@ bool TTragetWithStreamCounters::UpdateWithSingleStatsItem(ui64 workerId, ui64 ke
         default:
             return false;
     }
+
     return true;
 }
 
@@ -263,8 +266,9 @@ void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {
 }
 
 void TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
-    if (!Stats && !Counters)
+    if (!Stats && !Counters) {
         return;
+    }
 
     if (!HasWorker(workerId)) {
         if (Stats) {

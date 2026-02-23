@@ -113,7 +113,10 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
         DoTestIndexBuild(t, true, false);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Overlap, 4 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, true /*killOnCommit*/) {
+    // Overlap adds Filter/FilterBorders phases per level, roughly doubling the number of DB commits
+    // compared to BaseCase. Use 8 reboot buckets (like PrefixedOverlap) so each bucket runs ~16
+    // iterations and finishes well within the test timeout.
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Overlap, 8 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, true /*killOnCommit*/) {
         DoTestIndexBuild(t, false, true);
     }
 

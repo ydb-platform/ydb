@@ -1277,6 +1277,10 @@ public:
                     columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
                 }
 
+                if (col.LowCardinality) {
+                    columnConstraints = L(columnConstraints, Q(Y(Q("lowcardinality"))));
+                }
+
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
                 if (col.Compression) {
@@ -1626,6 +1630,10 @@ public:
                     columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
                 }
 
+                if (col.LowCardinality) {
+                    columnConstraints = L(columnConstraints, Q(Y(Q("lowcardinality"))));
+                }
+
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
                 auto familiesDesc = Y();
@@ -1716,6 +1724,19 @@ public:
                         columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
                         columnDesc = L(columnDesc, Q(Y(Q("dropDefault"))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::SetLowCardinality:
+                    case TColumnSchema::ETypeOfChange::DropLowCardinality: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        TString columnEncoding = col.TypeOfChange == TColumnSchema::ETypeOfChange::SetLowCardinality
+                                                 ? "set_lowcardinality"
+                                                 : "drop_lowcardinality";
+                        columnDesc = L(columnDesc, Q(Y(Q("changeLowCardinality"), Q(Y(Q(Y(Q(columnEncoding))))))));
                         columns = L(columns, Q(columnDesc));
 
                         break;

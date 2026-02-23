@@ -4098,6 +4098,114 @@ Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
 }
 
+Y_UNIT_TEST(AlterTableAlterColumnLowCardinalityAstCorrect) {
+    auto reqDropLowCardinality = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tableName ALTER COLUMN val DROP LOWCARDINALITY;
+        )sql");
+
+    UNIT_ASSERT_C(reqDropLowCardinality.IsOk(), reqDropLowCardinality.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
+        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find("'('changeLowCardinality '('('drop_lowcardinality)))"), line);
+    };
+
+    TWordCountHive elementStat({TString("\'mode \'alter")});
+    VerifyProgram(reqDropLowCardinality, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+}
+
+Y_UNIT_TEST(AlterTableAlterColumnSetLowCardinalityAstCorrect) {
+    auto reqSetLowCardinality = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tableName ALTER COLUMN val SET LOWCARDINALITY;
+        )sql");
+
+    UNIT_ASSERT_C(reqSetLowCardinality.IsOk(), reqSetLowCardinality.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
+        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find("'('changeLowCardinality '('('set_lowcardinality)))"), line);
+    };
+
+    TWordCountHive elementStat({TString("\'mode \'alter")});
+    VerifyProgram(reqSetLowCardinality, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+}
+
+Y_UNIT_TEST(CreateTableSetLowCardinalityAstCorrect) {
+    auto reqCreateLowCardinality = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tableName (
+                id Uint32 LOWCARDINALITY,
+                PRIMARY KEY (id)
+            );
+        )sql");
+
+    UNIT_ASSERT_C(reqCreateLowCardinality.IsOk(), reqCreateLowCardinality.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
+        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find("'('lowcardinality))"), line);
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(reqCreateLowCardinality, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateTableNotSetLowCardinalityAstCorrect) {
+    auto reqCreateLowCardinality = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tableName (
+                id Uint32,
+                PRIMARY KEY (id)
+            );
+        )sql");
+
+    UNIT_ASSERT_C(reqCreateLowCardinality.IsOk(), reqCreateLowCardinality.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
+        UNIT_ASSERT_VALUES_EQUAL_C(TString::npos, line.find("'('lowcardinality))"), line);
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(reqCreateLowCardinality, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterTableAddColumnSetLowCardinalityAstCorrect) {
+    auto reqDropLowCardinality = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tableName ADD COLUMN val Uint32 LOWCARDINALITY;
+        )sql");
+
+    UNIT_ASSERT_C(reqDropLowCardinality.IsOk(), reqDropLowCardinality.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
+        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find("'('lowcardinality))"), line);
+    };
+
+    TWordCountHive elementStat({TString("\'mode \'alter")});
+    VerifyProgram(reqDropLowCardinality, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+}
+
+Y_UNIT_TEST(AlterTableAddColumnNotSetLowCardinalityAstCorrect) {
+    auto reqSetLowCardinality = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tableName ADD COLUMN val Uint32;
+        )sql");
+
+    UNIT_ASSERT_C(reqSetLowCardinality.IsOk(), reqSetLowCardinality.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString&, const TString& line) {
+        UNIT_ASSERT_VALUES_EQUAL_C(TString::npos, line.find("'('lowcardinality))"), line);
+    };
+
+    TWordCountHive elementStat({TString("\'mode \'alter")});
+    VerifyProgram(reqSetLowCardinality, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+}
+
 Y_UNIT_TEST(AlterTableYtNotSupported) {
     ExpectFailWithError("ALTER TABLE plato.table ADD COLUMN a int32",
                         "<main>:1:19: Error: ALTER TABLE is not supported for yt provider.\n");

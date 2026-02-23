@@ -51,8 +51,9 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
                     break;
                 }
                 Sleep(TDuration::MilliSeconds(50));
-            } while (TInstant::Now() < deadline);
-            allDoneOk &= sessionDestroyed;
+            } while (!sessionDestroyed && TInstant::Now() < deadline);
+            UNIT_ASSERT_C(sessionDestroyed, "Query session '" << sessionId
+                << "' was not destroyed within the timeout after stream cancellation");
         }
 
         UNIT_ASSERT(allDoneOk);

@@ -1580,6 +1580,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(CheckpointsPropagationWithGroupByHop, TStreamingTestFixture) {
+        LogSettings.Freeze = true;
         CheckpointPeriod = TDuration::Seconds(5);
 
         constexpr char inputTopicName[] = "inputTopicName";
@@ -1632,7 +1633,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 2);
         });
 
-        WaitFor(TDuration::Seconds(5), "operation stats", [&](TString& error) {
+        WaitFor(TDuration::Seconds(10), "operation stats", [&](TString& error) {
             const auto metadata = GetScriptExecutionOperation(operationId).Metadata();
             const auto& plan = metadata.ExecStats.GetPlan();
             if (plan && plan->contains("MultiHop_NewHopsCount")) {

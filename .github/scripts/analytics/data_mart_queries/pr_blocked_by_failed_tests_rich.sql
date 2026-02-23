@@ -19,7 +19,7 @@
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
-$pr_check_lookback_days = 7;
+$pr_check_lookback_days = 60;
 $regression_window_days = 15;
 
 -- PR-check failures in the last $pr_check_lookback_days days (branch, full_name, run_timestamp)

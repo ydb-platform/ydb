@@ -32,26 +32,18 @@ class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInf
 
     struct TEvPrivate {
         enum EEv {
-            EvSendToNode = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvSendToBucket = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvRegularSending,
             EvRetrySubscriber,
             EvUpdateSnapshotState,
             EvRetryNode,
         };
 
-        struct TEvSendToNode :
-                public TEventLocal<TEvSendToNode, EEv::EvSendToNode> {
+        struct TEvSendToBucket :
+                public TEventLocal<TEvSendToBucket, EEv::EvSendToBucket> {
             ui32 BucketInd;
 
-            TEvSendToNode(ui32 bucketInd) : BucketInd(bucketInd) {
-            }
-        };
-
-        struct TEvRetryNode :
-                public TEventLocal<TEvRetryNode, EEv::EvRetryNode> {
-            ui32 BucketInd;
-
-            TEvRetryNode(ui32 bucketInd) : BucketInd(bucketInd) {
+            TEvSendToBucket(ui32 bucketInd) : BucketInd(bucketInd) {
             }
         };
 
@@ -76,7 +68,7 @@ class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInf
 
     struct TDelaySettings {
         TDuration StartDelayMs = TDuration::MilliSeconds(500);
-        TDuration MaxDelayMs = TDuration::MilliSeconds(2000);
+        TDuration MaxDelayMs = TDuration::MilliSeconds(10000);
     };
 
     struct TNodeState {
@@ -86,9 +78,7 @@ class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInf
 
     struct TBucketState {
         TDelayState RetryState;
-        TDelayState SendState;
         THashSet<ui32> NodeIdsToSend;
-        THashSet<ui32> NodeIdsToRetry;
     };
 
 public:
@@ -136,16 +126,16 @@ private:
     bool UpdateBoardRetrySettings(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TRetrySettings& settings,
             TBoardRetrySettings& retrySetting) {
-        bool ret = false;
+        bool updated = false;
         if (settings.HasStartDelayMs()) {
-            ret = true;
+            updated = true;
             retrySetting.StartDelayMs = TDuration::MilliSeconds(settings.GetStartDelayMs());
         }
         if (settings.HasMaxDelayMs()) {
-            ret = true;
+            updated = true;
             retrySetting.MaxDelayMs = TDuration::MilliSeconds(settings.GetMaxDelayMs());
         }
-        return ret;
+        return updated;
     }
 
     static TString MakeKqpInfoExchangerBoardPath(TStringBuf database) {
@@ -217,7 +207,6 @@ private:
                     NodesState.erase(nodesStateIt);
                     isChanged = true;
                     bucket.NodeIdsToSend.erase(publisherId.NodeId());
-                    bucket.NodeIdsToRetry.erase(publisherId.NodeId());
                 }
                 continue;
             }
@@ -333,36 +322,16 @@ private:
         ResourceSnapshotRetryState.LastRetryAt = now;
     }
 
-    void SendInfos(TVector<ui32> infoNodeIds, bool resending = false, TVector<ui32> nodeIds = {}) {
+    void SendInfos() {
         auto& nodeState = NodesState[SelfId().NodeId()];
         nodeState.NodeData.SetRound(Round++);
 
-        if (!nodeIds.empty()) {
-            auto snapshotMsg = CreateSnapshotMessage(infoNodeIds, resending);
+        ui64 bucketsDelay = CurrentNodesDelay.MilliSeconds() >> 5;
+        for (size_t idx = 0; idx < BUCKETS_COUNT; idx++) {
+            auto& bucket = Buckets[idx];
 
-            for (const auto& nodeId : nodeIds) {
-                auto nodesStateIt = NodesState.find(nodeId);
-
-                if (nodesStateIt == NodesState.end()) {
-                    continue;
-                }
-
-                auto owner = ActorIdFromProto(nodesStateIt->second.NodeData.GetResourceExchangeBoardData().GetOwner());
-                if (owner != SelfId()) {
-                    auto msg = MakeHolder<TEvKqpResourceInfoExchanger::TEvSendResources>();
-                    msg->Record = snapshotMsg;
-                    Send(owner, msg.Release(), IEventHandle::FlagSubscribeOnSession);
-                }
-            }
-        } else {
-            auto snapshotMsg = CreateSnapshotMessage(infoNodeIds, false);
-
-            for (size_t idx = 0; idx < BUCKETS_COUNT; idx++) {
-                auto& bucket = Buckets[idx];
-                if (!bucket.NodeIdsToSend.empty()) {
-                    SendingToBucketNodes(idx, bucket, false, {}, snapshotMsg);
-                }
-            }
+            bucket.RetryState.IsScheduled = true;
+            Schedule(TDuration::MilliSeconds(bucketsDelay), new TEvPrivate::TEvSendToBucket(idx));
         }
     }
 
@@ -460,6 +429,8 @@ private:
 
         LOG_I("Received tenant pool status for exchanger, serving tenant: " << BoardState.Tenant
             << ", board: " << BoardState.Path);
+        
+        DoRegularSending();
     }
 
 
@@ -478,7 +449,7 @@ private:
         auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->InfoEntries);
 
         if (!nodeIds.empty()) {
-            SendInfos({SelfId().NodeId()}, true, std::move(nodeIds));
+            UpdateCurrentNodesDelay();
         }
 
         if (isChanged) {
@@ -500,7 +471,7 @@ private:
         auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->Updates);
 
         if (!nodeIds.empty()) {
-            SendInfos({SelfId().NodeId()}, true, std::move(nodeIds));
+            UpdateCurrentNodesDelay();
         }
 
         if (isChanged) {
@@ -512,7 +483,7 @@ private:
         auto& nodeState = NodesState[SelfId().NodeId()];
 
         (*nodeState.NodeData.MutableResources()) = std::move(ev->Get()->Resources);
-        SendInfos({SelfId().NodeId()});
+        SendInfos();
 
         UpdateResourceSnapshotState();
     }
@@ -527,53 +498,19 @@ private:
 
         bool isChanged = UpdateResourceInfo(resourceInfos);
 
-        if (ev->Get()->Record.GetNeedResending()) {
-            auto nodesStateIt = NodesState.find(nodeId);
-
-            if (nodesStateIt != NodesState.end()) {
-                SendInfos({SelfId().NodeId()}, false, {nodesStateIt->first});
-            }
-        }
-
         if (isChanged) {
             UpdateResourceSnapshotState();
         }
     }
 
-    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-        const auto& nodeId = ev->Get()->NodeId;
-
-        if (NodesState.find(nodeId) == NodesState.end()) {
-            return;
-        }
-
-        auto bucketInd = GetBucketInd(nodeId);
-        auto& bucket = Buckets[bucketInd];
-
-        bucket.NodeIdsToRetry.insert(nodeId);
-
-        SendingToBucketNodes(bucketInd, bucket, true, {SelfId().NodeId()});
-    }
-
-    void Handle(TEvPrivate::TEvSendToNode::TPtr& ev) {
-        const auto& bucketInd = ev->Get()->BucketInd;
-        auto& bucket = Buckets[bucketInd];
-
-        bucket.SendState.IsScheduled = false;
-
-        if (!bucket.NodeIdsToSend.empty()) {
-            SendingToBucketNodes(bucketInd, bucket, false, {SelfId().NodeId()});
-        }
-    }
-
-    void Handle(TEvPrivate::TEvRetryNode::TPtr& ev) {
+    void Handle(TEvPrivate::TEvSendToBucket::TPtr& ev) {
         const auto& bucketInd = ev->Get()->BucketInd;
         auto& bucket = Buckets[bucketInd];
 
         bucket.RetryState.IsScheduled = false;
 
-        if (!bucket.NodeIdsToRetry.empty()) {
-            SendingToBucketNodes(bucketInd, bucket, true, {SelfId().NodeId()});
+        if (!bucket.NodeIdsToSend.empty()) {
+            SendingToBucketNodes(bucketInd, bucket);
         }
     }
 
@@ -592,11 +529,14 @@ private:
     }
 
     void Handle(TEvPrivate::TEvRegularSending::TPtr&) {
-        SendInfos({SelfId().NodeId()});
-
-        Schedule(TDuration::Seconds(2), new TEvPrivate::TEvRegularSending);
+        DoRegularSending();
     }
 
+    void DoRegularSending() {
+        SendInfos();
+
+        Schedule(CurrentNodesDelay, new TEvPrivate::TEvRegularSending);
+    }
 
 private:
     STATEFN(WorkState) {
@@ -610,16 +550,21 @@ private:
             hFunc(TEvKqpResourceInfoExchanger::TEvPublishResource, Handle);
             hFunc(TEvKqpResourceInfoExchanger::TEvSendResources, Handle);
             hFunc(TEvPrivate::TEvRetrySubscriber, Handle);
-            hFunc(TEvPrivate::TEvSendToNode, Handle);
-            hFunc(TEvPrivate::TEvRetryNode, Handle);
+            hFunc(TEvPrivate::TEvSendToBucket, Handle);
             hFunc(TEvPrivate::TEvRegularSending, Handle);
             hFunc(TEvPrivate::TEvUpdateSnapshotState, Handle);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvents::TEvPoison, Handle);
         }
     }
 
 private:
+
+    void UpdateCurrentNodesDelay() {
+        ui64 nodesCount = NodesState.size();
+        if (nodesCount >= 500) {
+            CurrentNodesDelay = std::max(CurrentNodesDelay, TDuration::MilliSeconds(nodesCount * 4));
+        }
+    }
 
     void PassAway() override {
         Send(BoardState.Publisher, new TEvents::TEvPoison);
@@ -632,15 +577,15 @@ private:
         if (state.CurrentDelay < ExchangerSettings.StartDelayMs) {
             state.CurrentDelay = ExchangerSettings.StartDelayMs;
         }
+        state.CurrentDelay = std::max(CurrentNodesDelay, state.CurrentDelay);
+        state.CurrentDelay = std::min(state.CurrentDelay, ExchangerSettings.MaxDelayMs);
         return state.CurrentDelay;
     }
 
     TDuration GetDelay(TDelayState& state) {
         auto newDelay = state.CurrentDelay;
         newDelay *= 2;
-        if (newDelay > ExchangerSettings.MaxDelayMs) {
-            newDelay = ExchangerSettings.MaxDelayMs;
-        }
+        newDelay = std::min(newDelay, ExchangerSettings.MaxDelayMs);
         newDelay *= AppData()->RandomProvider->Uniform(50, 200);
         newDelay /= 100;
         state.CurrentDelay = newDelay;
@@ -651,43 +596,26 @@ private:
         return nodeId & (BUCKETS_COUNT - 1);
     }
 
-    void SendingToBucketNodes(ui32 bucketInd, TBucketState& bucketState, bool retry,
-            TVector<ui32> nodeIdsForSnapshot = {}, NKikimrKqp::TResourceExchangeSnapshot snapshotMsg = {}) {
-        TDelayState* retryState;
-        if (retry) {
-            retryState = &bucketState.RetryState;
-        } else {
-            retryState = &bucketState.SendState;
-        }
+    void SendingToBucketNodes(ui32 bucketInd, TBucketState& bucketState) {
+        auto& retryState = bucketState.RetryState;
 
-        if (retryState->IsScheduled) {
+        if (retryState.IsScheduled) {
             return;
         }
 
         auto now = TlsActivationContext->Monotonic();
-        if (now - retryState->LastRetryAt < GetCurrentDelay(*retryState)) {
-            auto at = retryState->LastRetryAt + GetDelay(*retryState);
-            retryState->IsScheduled = true;
-            if (retry) {
-                Schedule(at - now, new TEvPrivate::TEvRetryNode(bucketInd));
-            } else {
-                Schedule(at - now, new TEvPrivate::TEvSendToNode(bucketInd));
-            }
+        if (now - retryState.LastRetryAt < GetCurrentDelay(retryState)) {
+            auto at = retryState.LastRetryAt + GetDelay(retryState);
+            retryState.IsScheduled = true;
+            Schedule(at - now, new TEvPrivate::TEvSendToBucket(bucketInd));
             return;
         }
 
-        if (!nodeIdsForSnapshot.empty()) {
-            snapshotMsg = CreateSnapshotMessage(nodeIdsForSnapshot);
-        }
+        auto snapshotMsg = CreateSnapshotMessage({SelfId().NodeId()});
 
-        THashSet<ui32>* nodeIds;
-        if (retry) {
-            nodeIds = &bucketState.NodeIdsToRetry;
-        } else {
-            nodeIds = &bucketState.NodeIdsToSend;
-        }
+        const auto& nodeIdsToSend = bucketState.NodeIdsToSend;
 
-        for (const auto& nodeId: *nodeIds) {
+        for (const auto& nodeId: nodeIdsToSend) {
             auto nodesStateIt = NodesState.find(nodeId);
             if (nodesStateIt == NodesState.end()) {
                 continue;
@@ -697,21 +625,15 @@ private:
             if (owner != SelfId()) {
                 auto msg = MakeHolder<TEvKqpResourceInfoExchanger::TEvSendResources>();
                 msg->Record = snapshotMsg;
-                Send(owner, msg.Release(), IEventHandle::FlagSubscribeOnSession);
+                Send(owner, msg.Release());
             }
         }
 
-        if (retry) {
-            bucketState.NodeIdsToRetry.clear();
-        }
-
-        retryState->LastRetryAt = now;
+        retryState.LastRetryAt = now;
     }
 
-    NKikimrKqp::TResourceExchangeSnapshot CreateSnapshotMessage(const TVector<ui32>& nodeIds,
-            bool needResending = false) {
+    NKikimrKqp::TResourceExchangeSnapshot CreateSnapshotMessage(const TVector<ui32>& nodeIds) {
         NKikimrKqp::TResourceExchangeSnapshot snapshotMsg;
-        snapshotMsg.SetNeedResending(needResending);
         auto snapshot = snapshotMsg.MutableSnapshot();
         snapshot->Reserve(nodeIds.size());
 
@@ -760,6 +682,8 @@ private:
 
     TIntrusivePtr<TKqpCounters> Counters;
     NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings Settings;
+
+    TDuration CurrentNodesDelay = TDuration::MilliSeconds(2000);
 };
 
 NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters> counters,

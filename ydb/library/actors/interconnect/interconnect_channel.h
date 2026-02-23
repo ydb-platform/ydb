@@ -146,29 +146,25 @@ namespace NActors {
         TEventSerializationInfo SerializationInfoContainer;
         const TEventSerializationInfo *SerializationInfo = nullptr;
         bool IsPartInline = false;
+        bool IsPartRdma = false;
+        NActorsInterconnect::TRdmaCreds RdmaCredsBuffer;
+        ui32 RdmaCredPartPos = 0;
+        float RdmaCredsPerByteAvg = 1.0f;
         size_t PartLenRemain = 0;
         size_t SectionIndex = 0;
         std::vector<char> XdcData;
         std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
-        struct TRdmaSerializationArtifacts {
-            NActorsInterconnect::TRdmaCreds RdmaCreds;
-            ui32 CheckSum = 0;
-            // Variable is used to split creds if the serialized size is grather than one IC packet
-            ui32 PartCredPos = 0;
-            float CredsPerByteAvg = 1.0 / RdmaCredsMinSizeSerialized;
-
-        };
-        std::optional<TRdmaSerializationArtifacts> SendViaRdma;
+        XXH3_state_t RdmaCumulativeChecksumState;
         const static ui32 RdmaCredsMinSizeSerialized;
 
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
-        bool SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ui32* checkSum, ssize_t rdmaDeviceIndex);
+        bool SerializeEventRdma(TEventHolder& event);
 
         bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex);
         std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event);
         std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event);
-        std::optional<bool> FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event);
+        std::optional<bool> FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex, bool checksumming);
 
         bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event);
 

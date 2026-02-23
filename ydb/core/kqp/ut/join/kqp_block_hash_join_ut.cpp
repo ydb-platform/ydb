@@ -641,6 +641,127 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         }
     }
 
+    Y_UNIT_TEST(FullJoinFallbackToGraceJoin) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/left_table` (
+                        id Int32 NOT NULL,
+                        data String NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/right_table` (
+                        id Int32 NOT NULL,
+                        data String NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/left_table` (id, data) VALUES
+                        (1, "a"),
+                        (2, "b"),
+                        (3, "c");
+
+                    INSERT INTO `/Root/right_table` (id, data) VALUES
+                        (2, "x"),
+                        (3, "y"),
+                        (4, "z");
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            TString hints = R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints=
+                    '
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e12)
+                    ';
+            )";
+            TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
+            TString select = R"(
+                SELECT L.id AS left_id, L.data AS left_data, R.id AS right_id, R.data AS right_data
+                FROM `left_table` AS L
+                FULL JOIN `right_table` AS R
+                ON L.id = R.id
+                ORDER BY left_id, right_id;
+            )";
+
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+
+            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto resultSet = status.GetResultSets()[0];
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+
+            TResultSetParser parser(resultSet);
+
+            ui32 leftOnlyCount = 0;
+            ui32 rightOnlyCount = 0;
+            ui32 matchedCount = 0;
+
+            while (parser.TryNextRow()) {
+                auto leftId = parser.ColumnParser("left_id").GetOptionalInt32();
+                auto leftData = parser.ColumnParser("left_data").GetOptionalString();
+                auto rightId = parser.ColumnParser("right_id").GetOptionalInt32();
+                auto rightData = parser.ColumnParser("right_data").GetOptionalString();
+
+                if (leftId.has_value() && !rightId.has_value()) {
+                    leftOnlyCount++;
+                    UNIT_ASSERT_VALUES_EQUAL(*leftId, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(*leftData, "a");
+                } else if (!leftId.has_value() && rightId.has_value()) {
+                    rightOnlyCount++;
+                    UNIT_ASSERT_VALUES_EQUAL(*rightId, 4);
+                    UNIT_ASSERT_VALUES_EQUAL(*rightData, "z");
+                } else {
+                    matchedCount++;
+                    UNIT_ASSERT(leftId.has_value() && rightId.has_value());
+                    UNIT_ASSERT_VALUES_EQUAL(*leftId, *rightId);
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(leftOnlyCount, 1, "Expected 1 left-only row (id=1)");
+            UNIT_ASSERT_VALUES_EQUAL_C(rightOnlyCount, 1, "Expected 1 right-only row (id=4)");
+            UNIT_ASSERT_VALUES_EQUAL_C(matchedCount, 2, "Expected 2 matched rows (id=2,3)");
+
+            auto explainResult = queryClient.ExecuteQuery(
+                joinQuery, 
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+            auto astOpt = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            TString ast = TString(*astOpt);
+            Cout << "AST (FULL JOIN with UseBlockHashJoin=true): " << ast << Endl;
+
+            UNIT_ASSERT_C(ast.Contains("GraceJoin"),
+                TStringBuilder() << "FULL JOIN should fall back to GraceJoin. Actual AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("BlockHashJoin") && !ast.Contains("DqBlockHashJoin"),
+                TStringBuilder() << "FULL JOIN should NOT use BlockHashJoin. Actual AST: " << ast);
+        }
+    }
+
     Y_UNIT_TEST(BlockHashJoinWithTypeRemapping) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

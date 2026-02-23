@@ -42,7 +42,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        README.md [249:249]
+        README.md [266:266]
 
 KEEP     MIT                  0a00f0d66f4f37595306dd8c6a25c63c
 BELONGS ya.make
@@ -54,7 +54,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [245:245]
+        README.md [262:262]
 
 SKIP     LicenseRef-scancode-unknown-license-reference 0d48e0b09865a98a90db20ea37b36bb8
 BELONGS ya.make
@@ -66,7 +66,7 @@ BELONGS ya.make
         Match type      : INTRO
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        README.md [253:253]
+        README.md [270:270]
 
 KEEP     Apache-2.0           13ec3cccf3036f38df47d2051a825972
 BELONGS ya.make
@@ -102,7 +102,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [222:222]
+        README.md [239:239]
 
 SKIP     BSL-1.0              2a9212d785cde4078c2f6803e544de21
 BELONGS ya.make
@@ -113,7 +113,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        README.md [249:249]
+        README.md [266:266]
 
 KEEP     MIT                  3e1ede6948a97e7ee3d75e0204a567f3
 BELONGS ya.make
@@ -125,7 +125,7 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [226:226]
+        README.md [243:243]
 
 SKIP     Apache-2.0           500a503129337bb5adf5977ce11879cd
 BELONGS ya.make
@@ -137,7 +137,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [245:245]
+        README.md [262:262]
 
 SKIP     BSL-1.0              77dd56e30840a227692d435b4aecdb95
 BELONGS ya.make
@@ -148,11 +148,11 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        README.md [249:249]
+        README.md [266:266]
 
 KEEP     MIT                  7f0bdbc0a0545831259b66259ac6b604
 BELONGS ya.make
-FILE_INCLUDE LICENSE-MIT found in files: README.md at line 225
+FILE_INCLUDE LICENSE-MIT found in files: README.md at line 242
     License text:
         [licensemit]: LICENSE-MIT
     Scancode info:
@@ -161,7 +161,7 @@ FILE_INCLUDE LICENSE-MIT found in files: README.md at line 225
         Match type      : TAG
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [225:225]
+        README.md [242:242]
 
 KEEP     Apache-2.0           82e76bbc1841bd5886297e795c72bfa5
 BELONGS ya.make
@@ -173,7 +173,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [245:245]
+        README.md [262:262]
 
 KEEP     MIT                  a6e9f2d79eb73e6e422759b53da6152a
 BELONGS ya.make
@@ -208,7 +208,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [251:251]
+        README.md [268:268]
 
 SKIP     Apache-2.0           c23a044f4165feb9568f486ca3b30fc8
 BELONGS ya.make
@@ -219,7 +219,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [249:249]
+        README.md [266:266]
 
 SKIP     BSD-3-Clause         d77bd60dc7ee5f9c3b221f6edd94bbac
 BELONGS ya.make
@@ -231,7 +231,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        README.md [253:253]
+        README.md [270:270]
 
 SKIP     MIT                  dd09705e3ec59af63c705c8f5f3eadb2
 BELONGS ya.make
@@ -243,7 +243,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [247:247]
+        README.md [264:264]
 
 KEEP     MIT                  f0fe4686586f118327c3bc63fe4027de
 BELONGS ya.make

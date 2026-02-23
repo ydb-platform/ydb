@@ -1,12 +1,8 @@
-/**
- * This file is part of the builder API. It is temporarily in the ondemand directory
- * but we will move it to a builder directory later.
- */
 #ifndef SIMDJSON_GENERIC_BUILDER_H
 
 #ifndef SIMDJSON_CONDITIONAL_INCLUDE
 #define SIMDJSON_GENERIC_STRING_BUILDER_H
-#error #include "simdjson/generic/builder/json_string_builder.h"
+#include "simdjson/generic/builder/json_string_builder.h"
 #include "simdjson/concepts.h"
 #endif // SIMDJSON_CONDITIONAL_INCLUDE
 #if SIMDJSON_STATIC_REFLECTION
@@ -279,7 +275,7 @@ simdjson_warn_unused simdjson_result<std::string> to_json_string(const Z &z, siz
 }
 
 template <class Z>
-simdjson_warn_unused simdjson_error to_json(const Z &z, std::string &s, size_t initial_capacity = string_builder::DEFAULT_INITIAL_CAPACITY) {
+simdjson_warn_unused error_code to_json(const Z &z, std::string &s, size_t initial_capacity = string_builder::DEFAULT_INITIAL_CAPACITY) {
   string_builder b(initial_capacity);
   append(b, z);
   std::string_view view;
@@ -356,7 +352,7 @@ simdjson_warn_unused simdjson_result<std::string> to_json(const Z &z, size_t ini
   return std::string(s);
 }
 template <class Z>
-simdjson_warn_unused simdjson_error to_json(const Z &z, std::string &s, size_t initial_capacity = SIMDJSON_IMPLEMENTATION::builder::string_builder::DEFAULT_INITIAL_CAPACITY) {
+simdjson_warn_unused error_code to_json(const Z &z, std::string &s, size_t initial_capacity = SIMDJSON_IMPLEMENTATION::builder::string_builder::DEFAULT_INITIAL_CAPACITY) {
   SIMDJSON_IMPLEMENTATION::builder::string_builder b(initial_capacity);
   SIMDJSON_IMPLEMENTATION::builder::append(b, z);
   std::string_view view;

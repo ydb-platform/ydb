@@ -7,15 +7,21 @@ simdjson = CMakeNinjaNixProject(
     arcdir="contrib/libs/simdjson",
     disable_includes=[
         "CppCoreCheck\\Warnings.h",
+        "simdjson/generic/ondemand/json_string_builder.h",
         "simdjson/nonstd/string_view.hpp",
+        # PPC64 arch support
         "simdjson/ppc64/",
-        "simdjson/generic/builder/json_string_builder.h",
-        "sys/byteorder.h",
         "ppc64.cpp",
+        "sys/byteorder.h",
+        # LASX arch support
         "lasx.cpp",
         "lasxintrin.h",
         "lsx.cpp",
         "lsxintrin.h",
+        # RISC-V arch support
+        "riscv_bitmanip.h",
+        "riscv_vector.h",
+        "rvv-vls.cpp",
         "meta",
         "experimental/meta",
     ],

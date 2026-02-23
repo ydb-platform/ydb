@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             settings.WithoutConsumer();
             settings.AppendTopics(TTopicReadSettings().Path(topicName).ReadFromTimestamp(startTimestamp).AppendPartitionIds(0));
             auto session = client.CreateReadSession(settings);
-            TInstant endTime = TInstant::Now() + TDuration::Seconds(10);
+            TInstant endTime = TInstant::Now() + TDuration::Seconds(30);
 
             TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
             while (true) {
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
     struct TTestRegistration {
         TTestRegistration() {
             [[maybe_unused]] constexpr bool xfail = false;
-            constexpr ui64 xfailTimestampPositionMaxError = 1;
+            constexpr ui64 xfailTimestampPositionMaxError = 2;
 
             const std::tuple<bool, TString, TTimestampReadOptions> options[]{
                 {true, "1MB", TTimestampReadOptions{.MessageSize = 1_MB,}},

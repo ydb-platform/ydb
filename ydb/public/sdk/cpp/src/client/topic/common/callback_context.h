@@ -58,7 +58,16 @@ public:
             Ptr = parent.GuardedObjectPtr.get();
         }
 
+        TBorrowed(TBorrowed&&) = delete;
+        TBorrowed(const TBorrowed&) = delete;
+        TBorrowed& operator=(const TBorrowed&) = delete;
+        TBorrowed& operator=(TBorrowed&&) = delete;
+
         ~TBorrowed() {
+            if (!SharedLockCounter) {
+                return;
+            }
+
             bool releaseLock = false;
 
             with_lock(*SharedLockCounterMutex) {

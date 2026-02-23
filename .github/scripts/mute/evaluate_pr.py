@@ -29,7 +29,7 @@ def fetch_pr_check_runs(ydb_wrapper, branch, build_type, days=7):
     table = ydb_wrapper.get_table_path("test_results")
     start_date = datetime.date.today() - datetime.timedelta(days=days)
     query = f"""
-        SELECT run_timestamp, full_name, suite_folder, test_name, status, error_type, job_id, job_name, commit, pull
+        SELECT run_timestamp, suite_folder || '/' || test_name AS full_name, suite_folder, test_name, status, error_type, job_id, job_name, commit, pull
         FROM `{table}`
         WHERE branch = '{branch}' AND build_type = '{build_type}'
           AND run_timestamp >= Date('{start_date}')
@@ -48,7 +48,7 @@ def fetch_regression_runs(ydb_wrapper, branch, build_type, days=7):
     start_date = datetime.date.today() - datetime.timedelta(days=days)
     jobs = regression_job_names_sql()
     query = f"""
-        SELECT run_timestamp, full_name, suite_folder, test_name, status, error_type, commit, pull
+        SELECT run_timestamp, suite_folder || '/' || test_name AS full_name, suite_folder, test_name, status, error_type, commit, pull
         FROM `{table}`
         WHERE branch = '{branch}' AND build_type = '{build_type}'
           AND run_timestamp >= Date('{start_date}')
@@ -67,7 +67,7 @@ def fetch_regression_runs_with_duration(ydb_wrapper, branch, build_type, days=7)
     start_date = datetime.date.today() - datetime.timedelta(days=days)
     jobs = regression_job_names_sql()
     query = f"""
-        SELECT run_timestamp, full_name, suite_folder, test_name, status, duration, commit, pull
+        SELECT run_timestamp, suite_folder || '/' || test_name AS full_name, suite_folder, test_name, status, duration, commit, pull
         FROM `{table}`
         WHERE branch = '{branch}' AND build_type = '{build_type}'
           AND run_timestamp >= Date('{start_date}')

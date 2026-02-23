@@ -16,7 +16,7 @@
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
 $pr_check_lookback_days = 20;
-$lookback_days = 70;
+$lookback_days = 1;
 $mute_days = 4;
 $mute_high_runs_bound = 10;
 $mute_fail_threshold_high = 3;

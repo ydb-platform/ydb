@@ -460,7 +460,7 @@ runs:
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
           ya_dir=$(pwd)
-          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
+          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl --detailed)
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true

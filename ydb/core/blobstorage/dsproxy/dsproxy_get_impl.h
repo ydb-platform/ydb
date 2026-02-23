@@ -186,6 +186,8 @@ public:
 
         BlockedGeneration = Max(BlockedGeneration, record.GetBlockedGeneration());
 
+        auto vgetResult = History.CreateVGetResult(orderNumber, status, record.GetErrorReason());
+
         Y_ABORT_UNLESS(record.ResultSize() > 0, "ev# %s vdisk# %s", ev.ToString().data(), vdisk.ToString().data());
         for (ui32 i = 0, e = (ui32)record.ResultSize(); i != e; ++i) {
             const NKikimrBlobStorage::TQueryResult &result = record.GetResult(i);
@@ -194,12 +196,14 @@ public:
             Y_ABORT_UNLESS(result.HasBlobID());
             const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(result.GetBlobID());
 
+            TRope resultBuffer = ev.GetBlobData(result);
+            ui32 resultShift = result.HasShift() ? result.GetShift() : 0;
+
+            vgetResult.AddSubrequestResult(blobId, replyStatus, resultShift, resultBuffer.size());
+
             if (ReportDetailedPartMap) {
                 Blackboard.ReportPartMapStatus(blobId, result.GetCookie(), ResponseIndex, replyStatus);
             }
-
-            TRope resultBuffer = ev.GetBlobData(result);
-            ui32 resultShift = result.HasShift() ? result.GetShift() : 0;
 
             // Currently CRC can be checked only if blob part is fully read
             if (resultShift == 0 && resultBuffer.size() == Info->Type.PartSize(blobId)) {
@@ -247,7 +251,7 @@ public:
         ++ResponseIndex;
 
         Step(logCtx, outVGets, outVPuts, outGetResult);
-        History.AddVGetResult(orderNumber, status, record.GetErrorReason());
+        History.AddVGetResult(std::move(vgetResult));
     }
 
     void OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &ev,
@@ -290,7 +294,7 @@ public:
     TString DumpFullState() const;
 
     TString PrintHistory() const {
-        return History.Print((QuerySize == 0) ? nullptr : &Queries[0].Id);
+        return History.Print();
     }
 
 protected:

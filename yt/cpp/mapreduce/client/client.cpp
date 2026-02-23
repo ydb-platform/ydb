@@ -16,6 +16,7 @@
 #include "transaction_pinger.h"
 #include "yt_poller.h"
 
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
@@ -75,6 +76,11 @@ void ApplyProxyUrlAliasingRules(
     ) {
         url = ruleIt->second;
     }
+}
+
+bool IsCrossCellDisabledError(const TErrorResponse& e)
+{
+    return e.GetError().ContainsErrorCode(NClusterErrorCodes::NObjectClient::CrossCellAdditionalPath);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -209,6 +215,8 @@ TNodeId TClientBase::Copy(
     const TYPath& destinationPath,
     const TCopyOptions& options)
 {
+    TExpectedErrorGuard guard(IsCrossCellDisabledError);
+
     try {
         return RequestWithRetry<TNodeId>(
             ClientRetryPolicy_->CreatePolicyForGenericRequest(),
@@ -216,7 +224,7 @@ TNodeId TClientBase::Copy(
                 return RawClient_->CopyInsideMasterCell(mutationId, TransactionId_, sourcePath, destinationPath, options);
             });
     } catch (const TErrorResponse& e) {
-        if (e.GetError().ContainsErrorCode(NClusterErrorCodes::NObjectClient::CrossCellAdditionalPath)) {
+        if (IsCrossCellDisabledError(e)) {
             // Do transaction for cross cell copying.
             return RequestWithRetry<TNodeId>(
                 ClientRetryPolicy_->CreatePolicyForGenericRequest(),

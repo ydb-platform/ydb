@@ -38,8 +38,21 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         UNIT_ASSERT(allDoneOk);
 
         {
-            // We expect session has been destroyed
-            CheckAttach(clientConfig, sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
+            // We expect session has been destroyed after stream cancellation.
+            // Session destruction by the server is asynchronous relative to stream cancellation,
+            // so we retry with backoff until the session is fully closed in KQP proxy.
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+            bool sessionDestroyed = false;
+            do {
+                bool ok = true;
+                CheckAttach(clientConfig, sessionId, Ydb::StatusIds::BAD_SESSION, ok);
+                if (ok) {
+                    sessionDestroyed = true;
+                    break;
+                }
+                Sleep(TDuration::MilliSeconds(50));
+            } while (TInstant::Now() < deadline);
+            allDoneOk &= sessionDestroyed;
         }
 
         UNIT_ASSERT(allDoneOk);

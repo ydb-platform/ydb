@@ -386,6 +386,7 @@ Y_UNIT_TEST(CreateTable) {
         {"create table user(user int32 (default 0, not null, family f))", "CREATE TABLE user (\n\tuser int32 (DEFAULT 0, NOT NULL, FAMILY f)\n);\n"},
         {"create table user(user int32 (default 0, family f, not null))", "CREATE TABLE user (\n\tuser int32 (DEFAULT 0, FAMILY f, NOT NULL)\n);\n"},
         {"create  table\tuser(key int32, val int64 compression(algorithm=lz4))", "CREATE TABLE user (\n\tkey int32,\n\tval int64 COMPRESSION (algorithm = lz4)\n);\n"},
+        {"create  table\tuser(key int32, val String lowcardinality)", "CREATE TABLE user (\n\tkey int32,\n\tval String LOWCARDINALITY\n);\n"},
     };
 
     TSetup setup;
@@ -605,6 +606,10 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE t\n\tALTER COLUMN c SET DEFAULT 42\n;\n"},
         {"alter table t alter column c drop default",
          "ALTER TABLE t\n\tALTER COLUMN c DROP DEFAULT\n;\n"},
+        {"alter table t alter column c set lowcardinality",
+         "ALTER TABLE t\n\tALTER COLUMN c SET LOWCARDINALITY\n;\n"},
+        {"alter table t alter column c drop lowcardinality",
+         "ALTER TABLE t\n\tALTER COLUMN c DROP LOWCARDINALITY\n;\n"},
     };
 
     TSetup setup;

@@ -333,7 +333,7 @@ protected:
                 json["user"] = userCtx->GetUserSID();
             }
             if (!userCtx->GetUserTraceId().empty()) {
-                json["trace_id"] = userCtx->GetUserTraceId();
+                json["user_trace_id"] = userCtx->GetUserTraceId();
             }
         }
 
@@ -552,9 +552,6 @@ protected:
                     userIdentityJson["principalId"] = userCtx->GetUserSID();
                 }
             }
-            if (!userCtx->GetUserTraceId().empty()) {
-                json["trace_id"] = userCtx->GetUserTraceId();
-            }
         }
     }
 
@@ -625,7 +622,7 @@ protected:
                 sourceJson["user"] = userCtx->GetUserSID();
             }
             if (!userCtx->GetUserTraceId().empty()) {
-                sourceJson["trace_id"] = userCtx->GetUserTraceId();
+                sourceJson["user_trace_id"] = userCtx->GetUserTraceId();
             }
         }
     }

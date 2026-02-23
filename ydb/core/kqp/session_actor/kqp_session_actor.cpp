@@ -2035,11 +2035,18 @@ public:
                 .Alloc = std::move(alloc)
             };
 
+            NACLib::TUserContextBuilder builder;
             if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
-                settings.UserCtx = NACLib::TUserContextBuilder().WithUserSID(QueryState->UserToken->GetUserSID()).Build();
-            } else {
-                settings.UserCtx = UserCtx;
+                builder.WithUserSID(QueryState->UserToken->GetUserSID());
+            } else if (UserCtx != nullptr) {
+                builder.WithUserSID(UserCtx->GetUserSID());
             }
+
+            if (QueryState !=nullptr) {
+                builder.WithUserTraceId(QueryState->UserTraceId);
+            }
+
+            settings.UserCtx = builder.Build();
 
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);

@@ -1603,7 +1603,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUser, PqRunner, YdsRunner, TopicRunner) {
+    Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserSID, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1624,10 +1624,63 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"user":"user@test","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
             R"({"user":"user@test","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
             R"({"user":"user@test","erase":{},"key":[1],"oldImage":{"value":100}})",
-        }, true, NACLib::TUserContextBuilder().WithUserSID("user@test").Build());
+        }, true, NACLib::TUserContextBuilder()
+            .WithUserSID("user@test")
+            .Build());
     }
 
-     Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserDisabled, PqRunner, YdsRunner, TopicRunner) {
+    Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserTraceId, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":10},"key":[1]})",
+            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":20},"key":[2]})",
+            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":30},"key":[3]})",
+            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
+            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
+            R"({"user_trace_id":"trace-id-value","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
+            R"({"user_trace_id":"trace-id-value","erase":{},"key":[1],"oldImage":{"value":100}})",
+        }, true, NACLib::TUserContextBuilder().WithUserTraceId("trace-id-value").Build());
+    }
+
+    Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserSIDAndTraceId, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            R"({"user":"user@test","user_trace_id":"trace-id-value","update":{},"newImage":{"value":10},"key":[1]})",
+            R"({"user":"user@test","user_trace_id":"trace-id-value","update":{},"newImage":{"value":20},"key":[2]})",
+            R"({"user":"user@test","user_trace_id":"trace-id-value","update":{},"newImage":{"value":30},"key":[3]})",
+            R"({"user":"user@test","user_trace_id":"trace-id-value","update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
+            R"({"user":"user@test","user_trace_id":"trace-id-value","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
+            R"({"user":"user@test","user_trace_id":"trace-id-value","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
+            R"({"user":"user@test","user_trace_id":"trace-id-value","erase":{},"key":[1],"oldImage":{"value":100}})",
+        }, true, NACLib::TUserContextBuilder()
+            .WithUserSID("user@test")
+            .WithUserTraceId("trace-id-value")
+            .Build());
+    }
+
+    Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserDisabled, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson, "Stream", false), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1675,9 +1728,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUser) {
-        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("user@test").Build();
-        TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
+    void CheckLogDebezium(NACLib::TUserContext::TPtr& userCtx, NACLib::TUserContext::TPtr& checkUserCtx, bool userSIDS = true) {
+        TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "Stream", userSIDS), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
             (2, 20),
@@ -1690,39 +1742,55 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
         )"}, {
-            {DebeziumBody("c", nullptr, R"({"key":1,"value":10})", false, userCtx), {{"__key", R"({"payload":{"key":1}})"}}},
-            {DebeziumBody("c", nullptr, R"({"key":2,"value":20})", false, userCtx), {{"__key", R"({"payload":{"key":2}})"}}},
-            {DebeziumBody("c", nullptr, R"({"key":3,"value":30})", false, userCtx), {{"__key", R"({"payload":{"key":3}})"}}},
-            {DebeziumBody("u", R"({"key":1,"value":10})", R"({"key":1,"value":100})", false, userCtx), {{"__key", R"({"payload":{"key":1}})"}}},
-            {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false, userCtx), {{"__key", R"({"payload":{"key":2}})"}}},
-            {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false, userCtx), {{"__key", R"({"payload":{"key":3}})"}}},
-            {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false, userCtx), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":1,"value":10})", false, checkUserCtx), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":2,"value":20})", false, checkUserCtx), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":3,"value":30})", false, checkUserCtx), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("u", R"({"key":1,"value":10})", R"({"key":1,"value":100})", false, checkUserCtx), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false, checkUserCtx), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false, checkUserCtx), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false, checkUserCtx), {{"__key", R"({"payload":{"key":1}})"}}},
         }, userCtx);
     }
 
-    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserDisabled) {
-        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("user@test").Build();
-        TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "Stream", false), {R"(
-            UPSERT INTO `/Root/Table` (key, value) VALUES
-            (1, 10),
-            (2, 20),
-            (3, 30);
-        )", R"(
-            UPSERT INTO `/Root/Table` (key, value) VALUES
-            (1, 100),
-            (2, 200),
-            (3, 300);
-        )", R"(
-            DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, {
-            {DebeziumBody("c", nullptr, R"({"key":1,"value":10})", false), {{"__key", R"({"payload":{"key":1}})"}}},
-            {DebeziumBody("c", nullptr, R"({"key":2,"value":20})", false), {{"__key", R"({"payload":{"key":2}})"}}},
-            {DebeziumBody("c", nullptr, R"({"key":3,"value":30})", false), {{"__key", R"({"payload":{"key":3}})"}}},
-            {DebeziumBody("u", R"({"key":1,"value":10})", R"({"key":1,"value":100})", false), {{"__key", R"({"payload":{"key":1}})"}}},
-            {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false), {{"__key", R"({"payload":{"key":2}})"}}},
-            {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false), {{"__key", R"({"payload":{"key":3}})"}}},
-            {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false), {{"__key", R"({"payload":{"key":1}})"}}},
-        }, userCtx);
+    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserSID) {
+        auto userCtx = NACLib::TUserContextBuilder()
+            .WithUserSID("user@test")
+            .Build();
+        CheckLogDebezium(userCtx, userCtx, true);
+    }
+
+    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserSIDDisabled) {
+        auto userCtx = NACLib::TUserContextBuilder()
+            .WithUserSID("user@test")
+            .Build();
+        auto checkUserCtx = NACLib::TUserContextBuilder().Build();
+        CheckLogDebezium(userCtx, checkUserCtx, false);
+    }
+
+    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserSIDAndTraceId) {
+        auto userCtx = NACLib::TUserContextBuilder()
+            .WithUserSID("user@test")
+            .WithUserTraceId("trace-id")
+            .Build();
+        CheckLogDebezium(userCtx, userCtx, true);
+    }
+
+    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserTraceId) {
+        auto userCtx = NACLib::TUserContextBuilder()
+            .WithUserTraceId("trace-id")
+            .Build();
+        CheckLogDebezium(userCtx, userCtx, true);
+    }
+
+    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserSIDDisabledAndTraceId) {
+        auto userCtx = NACLib::TUserContextBuilder()
+            .WithUserSID("user@test")
+            .WithUserTraceId("trace-id")
+            .Build();
+        auto checkUserCtx = NACLib::TUserContextBuilder()
+            .WithUserTraceId("trace-id")
+            .Build();
+        CheckLogDebezium(userCtx, checkUserCtx, false);
     }
 
     Y_UNIT_TEST(OldImageLogDebezium) {

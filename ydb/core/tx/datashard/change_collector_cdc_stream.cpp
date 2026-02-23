@@ -4,25 +4,6 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
-#if 0
-#include <filesystem>
-#include <fstream>
-
-namespace {
-std::mutex OutFileMutex;
-
-void WriteMyLog(const std::string& message)
-{
-    std::lock_guard lock(OutFileMutex);
-
-    const std::string filename{"/home/kseleznyov/dump.log"};
-    std::ofstream OutFile;
-    OutFile.open(filename, std::filesystem::exists(filename) ? std::ios_base::app : std::ios_base::out );
-    OutFile << message << std::endl;
-}
-}
-#endif
-
 namespace NKikimr {
 namespace NDataShard {
 

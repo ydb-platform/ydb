@@ -1033,8 +1033,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         });
     }
 
-    Y_UNIT_TEST(PassUserSID) {
-        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("cdcuser@test").Build();
+    void CheckPassUserContext(const NACLib::TUserContext::TPtr& userCtx) {
         Run("/Root/path", SimpleTable(), userCtx, TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 20);",
@@ -1052,6 +1051,24 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 TStructRecord(userCtx, NTable::ERowOp::Absent, {{"key", 3}}, {}, {}, {{"value", 30}}),
             }},
         });
+    }
+
+    Y_UNIT_TEST(PassUserSID) {
+        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("cdcuser@test").Build();
+        CheckPassUserContext(userCtx);
+    }
+
+    Y_UNIT_TEST(PassUserTraceId) {
+        auto userCtx = NACLib::TUserContextBuilder().WithUserTraceId("user-trace-id-value").Build();
+        CheckPassUserContext(userCtx);
+    }
+
+    Y_UNIT_TEST(PassUserSIDAndTraceId) {
+        auto userCtx = NACLib::TUserContextBuilder()
+            .WithUserSID("cdcuser@test")
+            .WithUserTraceId("user-trace-id-value")
+            .Build();
+        CheckPassUserContext(userCtx);
     }
 
     TShardedTableOptions IndexedTable() {

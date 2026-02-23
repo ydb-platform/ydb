@@ -251,12 +251,10 @@ public:
 
         const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
         const auto operationType = validatedOperation.GetOperationType();
-        const auto userSID = validatedOperation.GetUserSID();
-        const auto userTraceId = validatedOperation.GetUserTraceId();
-        const auto userCtx = NACLib::TUserContextBuilder()
-                        .WithUserSID(userSID)
-                        .WithUserTraceId(userTraceId)
-                        .Build();
+        auto userCtx = validatedOperation.GetUserCtx();
+        if (userCtx == nullptr) {
+            userCtx = NACLib::TUserContextBuilder().Build();
+        }
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;

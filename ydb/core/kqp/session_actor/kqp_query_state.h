@@ -70,6 +70,7 @@ public:
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
+        , UserTraceId(ev->Get()->GetUserCtx() != nullptr ? ev->Get()->GetUserCtx()->GetUserTraceId() : "")
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
@@ -165,6 +166,7 @@ public:
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString UserTraceId;
     TString ClientAddress;
     NActors::TMonotonic StartedAt;
     bool CompilationRunning = false;

@@ -22,6 +22,7 @@ struct TMinStats {
     ui64 MinValue = 0;
 
     void Resize(ui32 count);
+    void Set(ui32 index, ui64 value);
     void SetNonZero(ui32 index, ui64 value);
 };
 
@@ -231,7 +232,6 @@ struct TStageExecutionStats {
     TMinStats CurrentWaitInputTimeUs;
     TMinStats CurrentWaitOutputTimeUs;
     ui64 UpdateTimeMs = 0;
-    ui64 MaxFinishTimeMs = 0;
 
     TTimeSeriesStats SpillingComputeBytes;
     TTimeSeriesStats SpillingChannelBytes;
@@ -271,7 +271,7 @@ struct TStageExecutionStats {
     void SetHistorySampleCount(ui32 historySampleCount);
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 maxMemoryUsage, ui64 durationUs);
-    bool IsDeadlocked(ui64 deadline);
+    bool IsDeadlocked(ui64 deadline) const;
     bool IsFinished();
 };
 
@@ -331,13 +331,13 @@ struct TQueryExecutionStats {
 private:
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
     std::unordered_map<ui32, bool> UseLlvmByStageId;
-    THashMap<NYql::NDq::TStageId, TStageExecutionStats> StageStats;
     std::unordered_map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
     ui64 BaseTimeMs = 0;
     std::unordered_map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
 public:
+    THashMap<NYql::NDq::TStageId, TStageExecutionStats> StageStats;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
     const TKqpTasksGraph* const TasksGraph = nullptr;
     NYql::NDqProto::TDqExecutionStats* const Result;

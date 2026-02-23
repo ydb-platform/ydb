@@ -933,8 +933,8 @@ public:
                     // output is checked first => not waiting for output
                     Stats->CurrentWaitOutputStartTime = TInstant::Zero();
                     if (Y_LIKELY(InputConsumed)) {
-                        // did smth => waiting for nothing
-                        Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                        // reset waiting start time after each consumed value
+                        Stats->CurrentWaitInputStartTime = now;
                     } else {
                         StartWaitingInput();
                         if (Y_LIKELY(!Stats->CurrentWaitInputStartTime)) {

@@ -725,6 +725,40 @@ protected:
                 }
                 str << Endl;
 
+                str << Endl << "Stages:";
+                TABLE_SORTABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                            TABLEH() {str << "StageId";}
+                            TABLEH() {str << "Tasks";}
+                            TABLEH() {str << "Finished";}
+                            TABLEH() {str << "Deadlocked (1 min)";}
+                            TABLEH() {str << "UpdateTimeMs (ago)";}
+                            TABLEH() {str << "WaitInputTimeUs";}
+                            TABLEH() {str << "WaitOutputTimeUs";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (const auto& [stageId, stageStat] : Stats->StageStats) {
+                            TABLER() {
+                                TABLED() {str << stageId.TxId;}
+                                TABLED() {str << stageId.StageId;}
+                                TABLED() {str << stageStat.Task2Index.size();}
+                                TABLED() {str << stageStat.FinishedCount;}
+                                TABLED() {str << stageStat.IsDeadlocked(60'000'000);}
+                                TABLED() {
+                                    auto nowMs = TInstant::Now().MilliSeconds();
+                                    str << (nowMs > stageStat.UpdateTimeMs ? nowMs - stageStat.UpdateTimeMs : 0);
+                                }
+                                TABLED() {str << stageStat.CurrentWaitInputTimeUs.MinValue;}
+                                TABLED() {str << stageStat.CurrentWaitOutputTimeUs.MinValue;}
+                            }
+                        }
+                    }
+                }
+
+                str << Endl << "Tasks:";
                 TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {

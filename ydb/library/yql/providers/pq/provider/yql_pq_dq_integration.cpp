@@ -208,7 +208,6 @@ public:
             auto settings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
                 NPq::NProto::TDqPqTopicSource srcDesc;
-                NDqProto::TDqIntegrationCommonSettings commonSettings;
                 TDqPqTopicSource topicSource = maybeTopicSource.Cast();
 
                 TPqTopic topic = topicSource.Topic();
@@ -242,12 +241,14 @@ public:
                     srcDesc.SetReadSessionBufferBytes(*bufferSize);
                 }
 
+                std::optional<NDqProto::TDqIntegrationCommonSettings> commonSettings;
                 if (const auto maxPartitionReadSkew = State_->Configuration->MaxPartitionReadSkew.Get()) {
                     *srcDesc.MutableMaxPartitionReadSkew() = NProtoInterop::CastToProto(*maxPartitionReadSkew);
 
                     NDqProto::TDqControlPlaneActorSettings aggregatorSettings;
                     aggregatorSettings.SetType("PqInfoAggregator");
-                    YQL_ENSURE(commonSettings.MutableStageControlPlaneActors()->emplace("ControlPlane/PqSourcePartitionBalancerAggregatorId", aggregatorSettings).second);
+                    commonSettings = NDqProto::TDqIntegrationCommonSettings();
+                    YQL_ENSURE(commonSettings->MutableStageControlPlaneActors()->emplace("ControlPlane/PqSourcePartitionBalancerAggregatorId", aggregatorSettings).second);
                 }
 
                 bool sharedReading = false;
@@ -358,8 +359,13 @@ public:
                 TString watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
                 srcDesc.SetWatermarkExpr(watermarkExprSql);
 
-                commonSettings.MutableSettings()->PackFrom(srcDesc);
-                protoSettings.PackFrom(commonSettings);
+                if (commonSettings) {
+                    commonSettings->MutableSettings()->PackFrom(srcDesc);
+                    protoSettings.PackFrom(*commonSettings);
+                } else {
+                    protoSettings.PackFrom(srcDesc);
+                }
+
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }

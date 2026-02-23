@@ -5,6 +5,10 @@
 
 #include <util/datetime/base.h>
 
+#include <functional>
+#include <unordered_map>
+#include <optional>
+
 namespace NActors {
 
 class TTestActorRuntimeBase;

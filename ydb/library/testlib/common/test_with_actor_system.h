@@ -6,6 +6,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <memory>
+
 namespace NTestUtils {
 
 class TTestWithActorSystemFixture : public NUnitTest::TBaseFixture {

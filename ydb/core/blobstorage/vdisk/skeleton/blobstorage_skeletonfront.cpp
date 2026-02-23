@@ -225,7 +225,7 @@ namespace NKikimr {
                 , SkeletonFrontCostProcessed(MakeCounter(skeletonFrontGroup, "CostProcessed", true, true))
             {
                 SkeletonFrontMaxInFlightCount.Init(MakeCounter(skeletonFrontGroup, "MaxInFlightCount", false, false));
-                IdleLight.Initialize(skeletonFrontGroup, "BusyPeriods", "IdleTimeMsPerSec", "BusyTimeMsPerSec");
+                InitializeLight(IdleLight, skeletonFrontGroup, "BusyPeriods", "IdleTimeMsPerSec", "BusyTimeMsPerSec");
             }
 
             ::NMonitoring::TDynamicCounters::TCounterPtr MakeCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup, const TString& sensorType, bool derivative, bool reportOnlyIfExtendedSensors) {
@@ -233,6 +233,13 @@ namespace NKikimr {
                     return skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/" + sensorType, derivative, NMonitoring::TCountableBase::EVisibility::Private);
                 }
                 return skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/" + sensorType, derivative);
+            }
+
+            void InitializeLight(TLight& light, TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup, const TString& countName, const TString& redMsName, const TString& greenMsName) {
+                light.Initialize(skeletonFrontGroup,
+                    "SkeletonFront/" + Name + "/" + countName,
+                    "SkeletonFront/" + Name + "/" + redMsName,
+                    "SkeletonFront/" + Name + "/" + greenMsName);
             }
 
             ui64 GetSize() const {
@@ -347,7 +354,8 @@ namespace NKikimr {
                          << " msgCtx# " << msgCtx.ToString()
                          << " Deadlines# " << Deadlines);
 
-                IdleLight.Set(--InFlightCount == 0, ++IdleLightSeqNo);
+                --InFlightCount;
+                IdleLight.Set(InFlightCount == 0, ++IdleLightSeqNo);
                 InFlightCost -= msgCtx.Cost;
                 InFlightBytes -= msgCtx.RecByteSize;
 

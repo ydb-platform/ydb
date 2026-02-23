@@ -2166,18 +2166,23 @@ private:
     }
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
+        if (TasksGraph.GetMeta().StreamResult || TasksGraph.GetMeta().AllowOlapDataQuery) {
+            for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+                if (stageInfo.Meta.IsOlap()) {
+                    HasOlapTable = true;
+                    ResourceSnapshotRequired = true;
+                }
+            }
+        }
+
         auto resolveStatus = TBase::HandleResolve(ev);
 
         if (resolveStatus == ERROR) {
             return;
         }
 
-        // TODO: what is this strange condition about?
-        if (TasksGraph.GetMeta().StreamResult || IsEnabledReadsMerge() || TasksGraph.GetMeta().AllowOlapDataQuery) {
+        if (IsEnabledReadsMerge()) {
             for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
-                if (stageInfo.Meta.IsOlap()) {
-                    HasOlapTable = true;
-                }
                 const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     HasDatashardSourceScan = true;
@@ -2188,18 +2193,9 @@ private:
                 }
             }
 
-            TSet<ui64> shardIds;
-
-            if (HasOlapTable) {
-                for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
-                    if (stageInfo.Meta.ShardKey) {
-                        for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                            shardIds.insert(partition.ShardId);
-                        }
-                    }
-                }
-            }
             if (HasDatashardSourceScan) {
+                TSet<ui64> shardIds;
+
                 for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                     YQL_ENSURE(stageId == stageInfo.Id);
                     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -2210,14 +2206,10 @@ private:
                         }
                     }
                 }
-            }
 
-            if (shardIds.size() <= 1) {
-                HasDatashardSourceScan = false; // nothing to merge
-            }
-
-            if (HasOlapTable) {
-                ResourceSnapshotRequired = true;
+                if (shardIds.size() <= 1) {
+                    HasDatashardSourceScan = false; // nothing to merge
+                }
             }
         }
 
@@ -2227,12 +2219,9 @@ private:
     }
 
     void HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
-        if (!TBase::HandleResolve(ev)) {
-            return;
+        if (TBase::HandleResolve(ev)) {
+            DoExecute();
         }
-
-        ResourceSnapshotRequired = ResourceSnapshotRequired || HasOlapTable;
-        DoExecute();
     }
 
     void OnShardsResolve() {

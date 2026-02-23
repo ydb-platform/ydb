@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
             }
 
             if (readyOp.Metadata().ExecStatus == EExecStatus::Canceled) {
-                // Status cancelled inly in case of compilation timeout
+                // Status cancelled only in case of compilation timeout
                 UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Compilation timed out.");
             }
 

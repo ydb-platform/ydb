@@ -2677,6 +2677,26 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction23: {
+            // ALTER COLUMN id SET LOWCARDINALITY
+            const auto& alterRule = node.GetAlt_alter_table_action23().GetRule_alter_table_alter_column_set_lowcardinality1();
+
+            if (!AlterTableAlterColumnSetLowCardinality(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction24: {
+            // ALTER COLUMN id DROP LOWCARDINALITY
+            const auto& alterRule = node.GetAlt_alter_table_action24().GetRule_alter_table_alter_column_drop_lowcardinality1();
+
+            if (!AlterTableAlterColumnDropLowCardinality(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -3078,6 +3098,28 @@ bool TSqlQuery::AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_c
         .Pos = std::move(pos),
         .Name = std::move(name),
         .TypeOfChange = TColumnSchema::ETypeOfChange::DropDefault,
+    });
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnSetLowCardinality(const TRule_alter_table_alter_column_set_lowcardinality& node, TAlterTableParameters& params) {
+    const TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetLowCardinality,
+    });
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnDropLowCardinality(const TRule_alter_table_alter_column_drop_lowcardinality& node, TAlterTableParameters& params) {
+    const TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::DropLowCardinality,
     });
     return true;
 }

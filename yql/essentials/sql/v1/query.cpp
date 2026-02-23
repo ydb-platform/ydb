@@ -1300,6 +1300,14 @@ public:
                 }
 
                 columnDesc = L(columnDesc, Q(familiesDesc));
+
+                auto lowCardinality = Y();
+
+                if (col.LowCardinality) {
+                    lowCardinality = L(lowCardinality, Q(Y(Q("enabled"))));
+                }
+
+                columnDesc = L(columnDesc, Q(Y(Q("lowCardinality"), Q(lowCardinality))));
             }
 
             columns = L(columns, Q(columnDesc));
@@ -1716,6 +1724,19 @@ public:
                         columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
                         columnDesc = L(columnDesc, Q(Y(Q("dropDefault"))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::SetLowCardinality:
+                    case TColumnSchema::ETypeOfChange::DropLowCardinality: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        TString columnEncoding = col.TypeOfChange == TColumnSchema::ETypeOfChange::SetLowCardinality
+                                                 ? "set_lowcardinality"
+                                                 : "drop_lowcardinality";
+                        columnDesc = L(columnDesc, Q(Y(Q("changeLowCardinality"), Q(Y(Q(columnEncoding))))));
                         columns = L(columns, Q(columnDesc));
 
                         break;

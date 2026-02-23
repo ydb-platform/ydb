@@ -1,17 +1,17 @@
--- Все падения PR-check (последний прогон по PR) без фильтра по postcommit/regression + данные по PR и mute-политике.
+-- All PR-check failures (latest run per PR) with no postcommit/regression filter + PR data and mute policy.
 --
--- Отличие от pr_blocked_by_failed_tests_rich: не отсекаем тесты, которые падали в regression/postcommit.
--- Здесь в выборку попадают все падения PR-check из последнего прогона по PR — в т.ч. флаки и тесты,
--- которые уже падают в postcommit. Поэтому проверки правил мьюта (met_mute_criteria, raw, raw_custom)
--- дают осмысленные результаты: можно смотреть, какие из падений подходили бы под mute.
+-- Unlike pr_blocked_by_failed_tests_rich: we do not filter out tests that failed in regression/postcommit.
+-- Here the result set includes all PR-check failures from the latest run per PR — including flaky tests
+-- and tests that already fail in postcommit. So mute rule checks (met_mute_criteria, raw, raw_custom)
+-- give meaningful results: you can see which failures would have qualified for mute.
 --
--- Логика:
---   1. Все падения PR-check за $pr_check_lookback_days дней с pr_number, job_id и т.д.
---   2. Для каждого PR берём последний по времени PR-check run; оставляем только падения из этого run.
---   3. Джойним PR из github_data, tests_monitor (сегодня, день запуска), агрегаты за $mute_days дней (monitor + raw).
---   4. mute_resolution_json, mute_resolution_match, mute_resolution_match_custom — как в pr_blocked_by_failed_tests_rich_with_pr_and_mute.
+-- Logic:
+--   1. All PR-check failures in the last $pr_check_lookback_days days with pr_number, job_id, etc.
+--   2. For each PR take the latest PR-check run by time; keep only failures from that run.
+--   3. Join PR from github_data, tests_monitor (today, run day), aggregates over $mute_days (monitor + raw).
+--   4. mute_resolution_json, mute_resolution_match, mute_resolution_match_custom — same as in pr_blocked_by_failed_tests_rich_with_pr_and_mute.
 --
--- Параметры: те же, что в pr_blocked_by_failed_tests_rich_with_pr_and_mute ($lookback_days, $mute_days, пороги mute и custom).
+-- Parameters: same as in pr_blocked_by_failed_tests_rich_with_pr_and_mute ($lookback_days, $mute_days, mute and custom thresholds).
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
@@ -25,7 +25,7 @@ $mute_custom_high_runs_bound = 5;
 $mute_custom_fail_threshold_low = 1;
 $mute_custom_fail_threshold_high = 2;
 
--- Все падения PR-check с pr_number (без фильтра по regression/postcommit)
+-- All PR-check failures with pr_number (no regression/postcommit filter)
 $all_failures_with_pr_base = (
     SELECT
         base.suite_folder || '/' || base.test_name AS full_name,
@@ -151,7 +151,7 @@ $all_failures_with_pr = (
         ON f.pr_number = l.pr_number
 );
 
--- Только падения из последнего прогона по PR (без фильтра по regression)
+-- Only failures from the latest run per PR (no regression filter)
 $failures_in_last_pr_run = (
     SELECT
         full_name,
@@ -173,7 +173,7 @@ $failures_in_last_pr_run = (
         AND run_timestamp > CurrentUtcDate() - $lookback_days * Interval("P1D")
 );
 
--- Уникальные (full_name, branch, build_type, run_date) по выборке
+-- Distinct (full_name, branch, build_type, run_date) from the result set
 $keys_mute_window = (
     SELECT DISTINCT
         full_name,
@@ -184,7 +184,7 @@ $keys_mute_window = (
         $failures_in_last_pr_run
 );
 
--- Агрегат tests_monitor за $mute_days дней до дня падения (включительно)
+-- tests_monitor aggregate over $mute_days days up to and including the failure day
 $monitor_mute_window = (
     SELECT
         k.full_name AS am_full_name,
@@ -261,7 +261,7 @@ $raw_mute_window = (
         k.run_date
 );
 
--- Прогоны не из regression/postcommit (PR-check, Run-tests и т.д.) за то же окно — только счётчики для контекста.
+-- Runs that are not regression/postcommit (PR-check, Run-tests, etc.) in the same window — counts only for context.
 $non_regression_runs_for_window = (
     SELECT
         branch,

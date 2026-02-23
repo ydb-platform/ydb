@@ -1,18 +1,18 @@
--- PR blocked by failed tests (rich) + данные по PR и флаги мьюта.
+-- PR blocked by failed tests (rich) + PR data and mute flags.
 --
--- Логика:
---   1. Берём данные из test_results/analytics/pr_blocked_by_failed_tests_rich
---      (тесты, упавшие в PR-check при стабильности в regression/nightly).
---   2. Джойним актуальное состояние PR из github_data/pull_requests
---      (последняя запись по pr_number: base_ref_name, state, merged, title, url и т.д.).
---   3. Джойним tests_monitor на «сегодня» (date_window = CurrentUtcDate())
---      — флаг is_muted_today и owner_today.
---   4. Джойним tests_monitor на день запуска (date_window = день last_run_timestamp)
---      — флаг is_muted_in_run_day.
---   5. Ограничиваем выборку последними $lookback_days днями по last_run_timestamp.
+-- Logic:
+--   1. Take data from test_results/analytics/pr_blocked_by_failed_tests_rich
+--      (tests that failed in PR-check while stable in regression/nightly).
+--   2. Join current PR state from github_data/pull_requests
+--      (latest row per pr_number: base_ref_name, state, merged, title, url, etc.).
+--   3. Join tests_monitor for "today" (date_window = CurrentUtcDate())
+--      — is_muted_today and owner_today.
+--   4. Join tests_monitor for the run day (date_window = day of last_run_timestamp)
+--      — is_muted_in_run_day.
+--   5. Restrict the result set to the last $lookback_days by last_run_timestamp.
 --
--- Проверку правил mute (счётчики, met_mute_criteria, raw vs monitor, JSON) делаем в
--- pr_failed_tests_validation_through_mute_rules.sql (там все падения PR-check, не только «blocked»).
+-- Mute rule checks (counts, met_mute_criteria, raw vs monitor, JSON) are done in
+-- pr_failed_tests_validation_through_mute_rules.sql (all PR-check failures there, not only "blocked").
 
 $lookback_days = 70;
 

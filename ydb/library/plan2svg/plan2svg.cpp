@@ -2639,7 +2639,7 @@ void TPlan::PrintNodes(TStringBuilder& builder) {
         << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", "clone")
         << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", "clone")
         << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", "clone")
-        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, TStringBuilder() << "Nodes (" << Nodes.size() << ')')
+        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, TStringBuilder() << "Cluster of " << Nodes.size() << " node(s)")
         << "<g><g class='plus button'>"
         << SvgRect(INTERNAL_GAP_X, GAP_Y, CONN_SIZE, CONN_SIZE, "transparent")
         << "<use href='#icon_minus' class='icon_minus' transform='translate(" << INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/>" << Endl
@@ -2657,7 +2657,7 @@ void TPlan::PrintNodes(TStringBuilder& builder) {
             << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", "stage")
             << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", "stage")
             << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", "stage")
-            << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, "NodeId = " + ToString(node->NodeId));
+            << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, "NodeId = " + ToString(node->NodeId));
 
         ui32 y0 = INTERNAL_GAP_Y;
 

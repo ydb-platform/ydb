@@ -103,6 +103,7 @@ $all_failures_with_pr_base = (
         base.run_timestamp AS run_timestamp,
         base.branch AS branch,
         base.status_description AS status_description,
+        base.stderr AS stderr,
         ListHead(
             Unicode::SplitToList(
                 CASE 
@@ -214,6 +215,7 @@ $all_failures_with_pr = (
         f.run_timestamp AS run_timestamp,
         f.branch AS branch,
         f.status_description AS status_description,
+        f.stderr AS stderr,
         f.pr_number AS pr_number,
         f.attempt_number AS attempt_number,
         CASE WHEN f.job_id = l.last_job_id THEN 1 ELSE 0 END AS is_last_run_in_pr
@@ -235,6 +237,7 @@ $failures_in_last_pr_run = (
         run_timestamp,
         branch,
         status_description,
+        stderr,
         attempt_number
     FROM
         $all_failures_with_pr
@@ -255,6 +258,7 @@ SELECT
     CAST(branch AS Utf8) AS branch,
     CAST('relwithdebinfo' AS String) AS build_type,
     CAST(COALESCE(status_description, '') AS String) AS status_description,
+    CAST(COALESCE(stderr, '') AS String) AS stderr,
     CAST(COALESCE(attempt_number, 1) AS Int32) AS attempt_number,
     1 AS is_last_run_in_pr
 FROM

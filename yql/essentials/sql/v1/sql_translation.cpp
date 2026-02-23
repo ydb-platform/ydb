@@ -1668,6 +1668,7 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
     TVector<TIdentifier> families;
     TMaybe<TCompression> compression;
     bool nullable = true;
+    bool lowCardinality = false;
 
     const auto& optionsList = node.GetRule_column_option_list3();
 
@@ -1676,9 +1677,10 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
         NotNull,
         DefaultValue,
         Compression,
+        LowCardinality,
     };
 
-    TVector<TRule_column_option> columnOptions(Reserve(static_cast<size_t>(EOption::Compression) + 1));
+    TVector<TRule_column_option> columnOptions(Reserve(static_cast<size_t>(EOption::LowCardinality) + 1));
 
     {
         switch (optionsList.Alt_case()) {
@@ -1796,6 +1798,19 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
                     compression = ColumnCompression(opt, ctx);
                     break;
                 }
+                case TRule_column_option::kAltColumnOption5: { // lowcardinality
+                    const auto opt = rule.GetAlt_column_option5().GetRule_lowcardinality1();
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::LowCardinality) != usedOptions.end()) {
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
+                        ctx.Context().Error(pos) << "'LOWCARDINALITY' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::LowCardinality);
+
+                    lowCardinality = true;
+                    break;
+                }
                 case TRule_column_option::ALT_NOT_SET:
                     Y_UNREACHABLE();
             }
@@ -1806,7 +1821,9 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
         .DefaultExpr = std::move(defaultExpr),
         .Families = std::move(families),
         .Compression = std::move(compression),
-        .Nullable = nullable};
+        .Nullable = nullable,
+        .LowCardinality = lowCardinality,
+    };
 }
 
 TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schema& node) {
@@ -1820,7 +1837,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         return {};
     }
 
-    const auto [defaultExpr, families, compression, nullable] = columnOptions.GetRef();
+    const auto [defaultExpr, families, compression, nullable, lowCardinality] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1839,6 +1856,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         .Compression = compression,
         .Nullable = nullable,
         .Serial = serial,
+        .LowCardinality = lowCardinality,
     };
 }
 

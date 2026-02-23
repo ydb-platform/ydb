@@ -748,6 +748,7 @@ struct TColumnOptions {
     TVector<TIdentifier> Families;
     TMaybe<TCompression> Compression;
     bool Nullable = true;
+    bool LowCardinality = false;
 };
 
 struct TColumnSchema {
@@ -759,6 +760,8 @@ struct TColumnSchema {
         SetCompression,
         SetDefault,
         DropDefault,
+        SetLowCardinality,
+        DropLowCardinality,
     };
 
     TPosition Pos;
@@ -770,6 +773,7 @@ struct TColumnSchema {
     const ETypeOfChange TypeOfChange = ETypeOfChange::Nothing;
     bool Nullable = false;
     bool Serial = false;
+    bool LowCardinality = false;
 };
 
 struct TColumns: public TSimpleRefCount<TColumns> {

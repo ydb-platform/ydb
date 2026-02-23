@@ -10,6 +10,10 @@ from ydb_wrapper import YDBWrapper
 BASE_DATE = datetime.date(1970, 1, 1)
 DEFAULT_MONTHS_BACK = 180  # 6 months
 
+# workflow_dispatch runs get run_name with "_manual" in pull (test_ya/action.yml)
+# Exclude manual runs from flaky history / mute logic
+EXCLUDE_MANUAL_RUNS_SQL = "AND (pull IS NULL OR pull NOT LIKE '%_manual%')"
+
 
 def parse_arguments():
     """Parse command line arguments."""
@@ -177,7 +181,8 @@ def build_history_query(date, test_runs_table, testowners_table, build_type, bra
                             'Regression-whitelist-run',
                             'Postcommit_relwithdebinfo', 
                             'Postcommit_asan'
-                        ) 
+                        )
+                        {EXCLUDE_MANUAL_RUNS_SQL}
                         and build_type = '{build_type}'
                         and branch = '{branch}'
                     order by full_name,run_timestamp desc

@@ -1,0 +1,125 @@
+# Mute v4 — Pattern Rules
+# Rules define: what to search (pattern), where (scope), thresholds (params), and action (reaction)
+#
+# pattern: test_flaky | test_stable | test_no_runs | quarantine_graduation
+# scope: regression | pr_check
+# build_types: which build types apply (null = all)
+# params: thresholds for checks
+# reaction: mute | unmute | delete | remove_from_quarantine | alert | log
+
+rules:
+  # === Mute: add to muted_ya ===
+  - id: regression_flaky_mute
+    name: "Flaky in regression — mute"
+    pattern: test_flaky
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 4
+      min_failures_high: 3
+      min_failures_low: 2
+      min_runs_threshold: 10
+      # error_filter: null = all types, ["timeout"] = only timeout, ["!timeout"] = all except timeout
+      # Requires error_type in data (not implemented yet)
+      error_filter: null
+    reaction: mute
+
+  # Mute timeout only (when error_type is available in aggregation)
+  - id: regression_flaky_timeout_mute
+    name: "Flaky timeout in regression — mute"
+    pattern: test_flaky
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 4
+      min_failures_high: 3
+      min_failures_low: 2
+      min_runs_threshold: 10
+      error_filter: ["timeout", "TIMEOUT"]
+    reaction: mute
+    enabled: false  # Enable when error_type is available in tests_monitor
+
+  # === Unmute: remove from muted_ya ===
+  - id: regression_stable_unmute
+    name: "Stable in regression — unmute"
+    pattern: test_stable
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+      min_runs: 4
+      max_fails: 0  # total_fails (fail + mute) must be 0
+    reaction: unmute
+
+  # === Delete: remove from muted_ya (no runs) ===
+  - id: regression_no_runs_delete
+    name: "No runs in regression — delete"
+    pattern: test_no_runs
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+    reaction: delete
+
+  # === Quarantine graduation ===
+  - id: quarantine_graduation
+    name: "Quarantine graduation"
+    pattern: quarantine_graduation
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 1
+      min_runs: 4
+      min_passes: 1
+    reaction: remove_from_quarantine
+
+  # === PR-check: detection without mute (reaction: log) ===
+  - id: pr_check_floating_timeout
+    name: "Floating timeout in PR-check (suite-level)"
+    pattern: floating_across_days
+    scope: pr_check
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+      min_total_fails: 3
+      max_per_test: 2
+      find_behavior_start: true  # find when behavior started (commit, pr, date)
+    reaction: log
+    # Writes to pattern_matches, does not mute
+
+  - id: pr_check_retry_recovered
+    name: "Fails on attempt 1, passes on retry"
+    pattern: retry_recovered
+    scope: pr_check
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+      find_behavior_start: true
+    reaction: log
+
+  # === Muted test with different error_type — alert ===
+  - id: muted_test_error_changed
+    name: "Muted test failed with different error type"
+    pattern: muted_test_different_error
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      find_behavior_start: true  # find when behavior started (commit, pr, date)
+    reaction: alert
+    # Requires: mute with error_type, check at run time
+
+  # === Test duration growth — alert ===
+  - id: test_duration_increased
+    name: "Test duration increased"
+    pattern: duration_increased
+    scope: regression
+    build_types: [relwithdebinfo]
+    params:
+      window_days: 7
+      baseline_days: 6  # days for baseline (older)
+      recent_days: 1    # days for recent (latest)
+      min_baseline_runs: 3
+      min_recent_runs: 2
+      growth_factor: 1.5  # recent_median >= baseline_median * growth_factor
+      find_behavior_start: true  # find when behavior started (commit, pr, date)
+    reaction: alert

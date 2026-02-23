@@ -1,10 +1,41 @@
 import operator
+import os
 import re
 import xml.etree.ElementTree as ET
 import sys
 import yaml
 
 from junit_utils import add_junit_property
+
+
+def _parse_mute_file(path):
+    """Parse mute file, return set of non-empty, non-comment lines."""
+    if path is None or path == '':
+        return set()
+    if not os.path.exists(path):
+        return set()
+    with open(path) as f:
+        return set(
+            l.strip()
+            for l in f
+            if l.strip() and not l.strip().startswith("#")
+        )
+
+
+def apply_quarantine(muted_path, quarantine_path, output_path=None):
+    """
+    Compute effective muted = muted - quarantine.
+    Returns path to file with effective muted list, or writes to output_path.
+    """
+    muted_lines = _parse_mute_file(muted_path)
+    quarantine_lines = _parse_mute_file(quarantine_path)
+    effective = sorted(muted_lines - quarantine_lines)
+    out = "\n".join(effective) + ("\n" if effective else "")
+    if output_path:
+        with open(output_path, "w") as f:
+            f.write(out)
+        return output_path
+    return out
 
 
 def pattern_to_re(pattern):
@@ -172,4 +203,14 @@ def convert_muted_txt_to_yaml(muted_txt_path: str):
 
 if __name__ == "__main__":
     args = sys.argv
-    globals()[args[1]](*args[2:])
+    if len(args) < 2:
+        sys.exit("Usage: mute_utils.py <command> [args...]")
+    if args[1] == "apply_quarantine":
+        muted_path = args[2]
+        quarantine_path = args[3]
+        output_path = args[4] if len(args) > 4 else None
+        result = apply_quarantine(muted_path, quarantine_path, output_path)
+        if output_path is None:
+            print(result)
+    else:
+        globals()[args[1]](*args[2:])

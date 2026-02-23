@@ -495,7 +495,9 @@ def main():
                     AND hist.suite_folder = owners_t.suite_folder
                     AND hist.date_window = owners_t.date;
             """
-            results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
+            results = ydb_wrapper.execute_scan_query(
+                query_get_history, query_name=f"get_monitor_history_for_date_{branch}"
+            )
 
             if results:
                 for row in results:

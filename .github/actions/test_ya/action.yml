@@ -239,6 +239,16 @@ runs:
             ;;
         esac
 
+        # Mute file per build type (Mute v4)
+        case "$BUILD_PRESET" in
+          relwithdebinfo) MUTED_YA_FILE=".github/config/muted_ya.txt" ;;
+          release-asan)   MUTED_YA_FILE=".github/config/muted_ya_asan.txt" ;;
+          release-tsan)   MUTED_YA_FILE=".github/config/muted_ya_tsan.txt" ;;
+          release-msan)   MUTED_YA_FILE=".github/config/muted_ya_msan.txt" ;;
+          *)              MUTED_YA_FILE=".github/config/muted_ya.txt" ;;
+        esac
+        echo "MUTED_YA_FILE=$MUTED_YA_FILE" >> $GITHUB_ENV
+
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
         if [ -z $TEST_RETRY_COUNT ]; then
@@ -383,6 +393,21 @@ runs:
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
+        MUTED_YAML_PATH="$PUBLIC_DIR/muted_tests.yaml"
+        # apply_quarantine only for v4 (.github/config/mute/muted_ya*.txt). Legacy: use file as-is, no behavior change.
+        if [[ "$MUTED_YA_FILE" == *".github/config/mute/muted_ya"* ]]; then
+          EFFECTIVE_MUTED_FILE="$TMP_DIR/effective_muted.txt"
+          if ! python3 .github/scripts/tests/mute_utils.py apply_quarantine "$MUTED_YA_FILE" .github/config/quarantine.txt "$EFFECTIVE_MUTED_FILE"; then
+            echo "WARNING: apply_quarantine failed, using original muted file" >&2
+            cp "$MUTED_YA_FILE" "$EFFECTIVE_MUTED_FILE"
+          fi
+          [ -f "$EFFECTIVE_MUTED_FILE" ] || cp "$MUTED_YA_FILE" "$EFFECTIVE_MUTED_FILE"
+          python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml "$EFFECTIVE_MUTED_FILE" > "$MUTED_YAML_PATH"
+        else
+          EFFECTIVE_MUTED_FILE="$MUTED_YA_FILE"
+          python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" > "$MUTED_YAML_PATH"
+        fi
+
         BUILD_FAILED=0
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
@@ -487,7 +512,7 @@ runs:
           .github/scripts/tests/transform_build_results.py \
             --build-results-report "$CURRENT_REPORT" \
             --test_dir="$TEST_META_INFO" \
-            -m .github/config/muted_ya.txt \
+            -m "${EFFECTIVE_MUTED_FILE:-$MUTED_YA_FILE}" \
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
@@ -642,7 +667,7 @@ runs:
       run: |
         # Use ORIGINAL_HEAD from build step (saved before any git operations)
         get_file_diff_script=.github/scripts/tests/get_diff_lines_of_file.py
-        file_to_check=.github/config/muted_ya.txt
+        file_to_check=$MUTED_YA_FILE
         check_result=`$get_file_diff_script --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --file_path $file_to_check`
         if [[ ${check_result} == *"not changed" ]];then
             echo file ${file_to_check} NOT changed

@@ -123,10 +123,10 @@ def create_tables(ydb_wrapper, table_path):
             `run_timestamp_last` Timestamp NOT NULL,
             `owners` Utf8,
             `branch` Utf8 NOT NULL,
-            `is_muted` Uint32 ,
-            PRIMARY KEY (`date`,branch, `test_name`, `suite_folder`, `full_name`)
+            `is_muted` Uint32,
+            PRIMARY KEY (`date`, branch, `test_name`, `suite_folder`, `full_name`)
         )
-            PARTITION BY HASH(date,branch)
+            PARTITION BY HASH(date, branch)
             WITH (STORE = COLUMN)
         """
     
@@ -170,9 +170,7 @@ def upload_muted_tests(tests):
             .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         )
         
-        # Use bulk_upsert_batches (wrapper will construct full path internally)
         ydb_wrapper.bulk_upsert_batches(table_path, tests, column_types, batch_size=1000)
-        
         print(f'✅ Bulk upsert completed successfully')
         print(f'📊 Successfully uploaded {len(tests)} test records')
 

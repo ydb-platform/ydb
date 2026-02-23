@@ -68,7 +68,8 @@ bool TKeyedWriteSessionEventLoop::WaitForAcks(size_t count, TDuration timeout) {
         Session_->WaitEvent().Wait(deadline);
         Run();
     }
-    return false;
+    std::lock_guard lock(Lock_);
+    return AckedSeqNos_.size() >= count;
 }
 
 void TKeyedWriteSessionEventLoop::CheckAcksOrder() {

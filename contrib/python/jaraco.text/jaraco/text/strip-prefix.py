@@ -3,7 +3,7 @@ import sys
 from jaraco.text import Stripper
 
 
-def strip_prefix():
+def strip_prefix() -> None:
     r"""
     Strip any common prefix from stdin.
 

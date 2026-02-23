@@ -37,7 +37,6 @@ PEERDIR(
     yql/essentials/minikql/computation
     yql/essentials/minikql/invoke_builtins
     yql/essentials/providers/common/comp_nodes
-    yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
 )
 

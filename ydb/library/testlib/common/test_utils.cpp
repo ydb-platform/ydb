@@ -37,11 +37,11 @@ void TerminateHandler() {
 }
 
 TString SignalToString(int signal) {
-    #ifndef _unix_
-        return TStringBuilder() << "signal " << signal;
-    #else
-        return strsignal(signal);
-    #endif
+#ifndef _unix_
+    return TStringBuilder() << "signal " << signal;
+#else
+    return strsignal(signal);
+#endif
 }
 
 void BackTraceSignalHandler(int signal) {

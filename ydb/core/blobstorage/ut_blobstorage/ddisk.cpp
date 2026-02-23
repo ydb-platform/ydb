@@ -511,7 +511,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
     }
 
     Y_UNIT_TEST(PersistentBufferFreeSpace) {
-        const ui32 maxChunks = 128;
+        const ui32 maxChunks = 256;
         const ui32 sectorInChunk = 32768;
         TDDiskTestContext f(1_MB);
         auto groups = f.AllocateDDiskBlockGroup();

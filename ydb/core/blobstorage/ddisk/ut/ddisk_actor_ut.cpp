@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/ddisk/ddisk_actor.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 
@@ -127,6 +128,12 @@ public:
             false,
             BlockSize,
             "");
+
+        NPDisk::TDiskFormat format;
+        format.Clear(false);
+        initReply->DiskFormat = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(format), +[](NPDisk::TDiskFormat* ptr) {
+            delete ptr;
+        });
         SendPDiskResponse(disk, *init, initReply.release());
 
         auto readLog = WaitPDiskRequest<NPDisk::TEvReadLog>(disk);

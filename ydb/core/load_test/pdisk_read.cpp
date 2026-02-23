@@ -398,7 +398,10 @@ public:
             }
 
             ui64 w = (ui64(Rng()) << 32 | Rng()) % accumWeight;
-            auto it = std::prev(std::upper_bound(Chunks.begin(), Chunks.end(), w, TChunkInfo::TFindByWeight()));
+            auto it = std::upper_bound(Chunks.begin(), Chunks.end(), w, TChunkInfo::TFindByWeight());
+            if (it == Chunks.end()) {
+                it = std::prev(Chunks.end());
+            }
             TChunkInfo& chunkInfo = *it;
 
             TChunkIdx chunkIdx = chunkInfo.Idx;

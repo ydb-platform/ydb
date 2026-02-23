@@ -454,7 +454,7 @@ namespace NKikimr::NDDisk {
                 std::map<ui32, TRope> DataParts;
                 ui32 PartsCount;
 
-                TRope JoinData();
+                TRope JoinData(ui32 sectorSize);
             };
 
             std::map<ui64, TRecord> Records;
@@ -467,13 +467,13 @@ namespace NKikimr::NDDisk {
 
         void SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force = false);
 
-        static constexpr ui32 SectorSize = 4096;
-        static constexpr ui32 SectorInChunk = 32768;
-        static constexpr ui32 ChunkSize = SectorSize * SectorInChunk;
-        static constexpr ui32 MaxChunks = 128;
+        ui32 SectorSize;
+        ui32 SectorInChunk;
+        ui32 ChunkSize;
+        static constexpr ui32 MaxChunks = 256;
         static constexpr ui32 PersistentBufferInitChunks = 4;
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
-        static constexpr ui32 MaxPersistentBufferInMemoryCache = ChunkSize;
+        static constexpr ui32 MaxPersistentBufferInMemoryCache = 128 << 20; // 128 MiB
         static constexpr ui32 MaxPersistentBufferChunkRestoreInflight = 8;
 
 
@@ -491,7 +491,6 @@ namespace NKikimr::NDDisk {
             ui64 Lsn;
             TPersistentBufferSectorInfo Locations[MaxSectorsPerBufferRecord];
         };
-        static_assert(sizeof(TPersistentBufferHeader) <= ChunkSize);
 
         bool IssuePersistentBufferChunkAllocationInflight = false;
         struct TPersistentBufferToDiskWriteInFlight {
@@ -529,6 +528,7 @@ namespace NKikimr::NDDisk {
         std::unordered_set<ui32> PersistentBufferAllocatedChunks;
         std::unordered_set<ui32> PersistentBufferRestoredChunks;
 
+        void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);

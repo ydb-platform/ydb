@@ -1,5 +1,6 @@
 #include "ddisk_actor.h"
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/pb.h>
 
@@ -7,6 +8,16 @@
 #include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr::NDDisk {
+
+    void TDDiskActor::InitPersistentBuffer() {
+        Y_ABORT_UNLESS(DiskFormat);
+        SectorSize = DiskFormat->SectorSize;
+        Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferHeader));
+        ChunkSize = DiskFormat->ChunkSize;
+        Y_ABORT_UNLESS(ChunkSize % SectorSize == 0);
+        SectorInChunk = ChunkSize / SectorSize;
+        PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);
+    }
 
     void TDDiskActor::Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev) {
         auto chunkIdx = ev->Get()->ChunkIndex;
@@ -380,7 +391,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::GetPersistentBufferRecordData(TDDiskActor::TPersistentBuffer::TRecord& pr, std::function<void(TRope data)> callback) {
         if (!pr.DataParts.empty()) {
             Y_ABORT_UNLESS(pr.DataParts.size() == pr.PartsCount);
-            callback(pr.JoinData());
+            callback(pr.JoinData(SectorSize));
         } else {
             Y_ABORT_UNLESS(pr.DataParts.empty() && pr.PartsCount == 0 && pr.Sectors.size() > 1);
             // Zero sector contains persistent buffer header, we skip it
@@ -399,7 +410,7 @@ namespace NKikimr::NDDisk {
                         pr.DataParts.emplace(partIdx, std::move(ev.Data));
                         if (pr.DataParts.size() == pr.PartsCount) {
                             PersistentBufferInMemoryCacheSize += pr.Size;
-                            callback(pr.JoinData());
+                            callback(pr.JoinData(SectorSize));
                             SanitizePersistentBufferInMemoryCache(pr);
                         }
                     }});
@@ -420,7 +431,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    TRope TDDiskActor::TPersistentBuffer::TRecord::JoinData() {
+    TRope TDDiskActor::TPersistentBuffer::TRecord::JoinData(ui32 sectorSize) {
         Y_ABORT_UNLESS(DataParts.size() == PartsCount && PartsCount > 0);
         while (DataParts.size() > 1) {
             auto first = DataParts.begin();
@@ -432,7 +443,7 @@ namespace NKikimr::NDDisk {
         auto& payload = DataParts.begin()->second;
         for (ui32 i = 1; i < Sectors.size(); i++) {
             if (Sectors[i].HasSignatureCorrection) {
-                *payload.Position(SectorSize * (i - 1)).ContiguousDataMut() = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
+                *payload.Position(sectorSize * (i - 1)).ContiguousDataMut() = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
             }
         }
         return DataParts.begin()->second;

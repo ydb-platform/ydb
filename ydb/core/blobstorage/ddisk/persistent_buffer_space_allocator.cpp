@@ -112,9 +112,8 @@ namespace NKikimr::NDDisk {
         OwnerChunksQueue.insert(GetRank());
     }
 
-    TPersistentBufferSpaceAllocator::TPersistentBufferSpaceAllocator(ui32 sectorsInChunk, ui32 maxChunks)
+    TPersistentBufferSpaceAllocator::TPersistentBufferSpaceAllocator(ui32 sectorsInChunk)
         : SectorsInChunk(sectorsInChunk)
-        , MaxChunks(maxChunks)
     {}
 
     std::vector<TPersistentBufferSectorInfo> TPersistentBufferSpaceAllocator::Occupy(ui32 sectorsCount) {

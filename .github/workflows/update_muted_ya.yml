@@ -248,7 +248,9 @@ jobs:
           PR_BODY+=$'**Legacy** (.github/config/muted_ya.txt) + **v4** (.github/config/mute/muted_ya.txt)\n\n'
 
           PR_BODY+=$'## Legacy (muted_ya.txt)\n\n'
+          LEGACY_HAS_CONTENT=0
           if [ -s "$LEGACY/to_delete_debug.txt" ]; then
+              LEGACY_HAS_CONTENT=1
               DELETED_COUNT=$(wc -l < "$LEGACY/to_delete_debug.txt")
               PR_BODY+=$'**Removed from mute: '"${DELETED_COUNT}**"$'\n\n'
               PR_BODY+=$'```\n'
@@ -256,6 +258,7 @@ jobs:
               PR_BODY+=$'\n```\n\n'
           fi
           if [ -s "$LEGACY/to_mute_debug.txt" ]; then
+              LEGACY_HAS_CONTENT=1
               MUTED_COUNT=$(wc -l < "$LEGACY/to_mute_debug.txt")
               PR_BODY+=$'**Muted flaky: '"${MUTED_COUNT}**"$'\n\n'
               PR_BODY+=$'```\n'
@@ -277,11 +280,38 @@ jobs:
               fi
           fi
           if [ -s "$LEGACY/to_unmute_debug.txt" ]; then
+              LEGACY_HAS_CONTENT=1
               UNMUTED_COUNT=$(wc -l < "$LEGACY/to_unmute_debug.txt")
               PR_BODY+=$'**Unmuted stable: '"${UNMUTED_COUNT}**"$'\n\n'
               PR_BODY+=$'```\n'
               PR_BODY+=$(cat "$LEGACY/to_unmute_debug.txt")
               PR_BODY+=$'\n```\n\n'
+          fi
+          if [ $LEGACY_HAS_CONTENT -eq 0 ]; then
+              MUTED_TOTAL=$(wc -l < "$LEGACY/new_muted_ya.txt" 2>/dev/null || echo 0)
+              PR_BODY+=$'*No mutes/unmutes/deletes. Total in muted_ya: '"${MUTED_TOTAL}"$'*\n\n'
+          fi
+
+          PR_BODY+=$'## v4 (mute/muted_ya.txt)\n\n'
+          V4_HAS_CONTENT=0
+          if [ -s "$V4/to_delete_debug.txt" ]; then
+              V4_HAS_CONTENT=1
+              DELETED_COUNT=$(wc -l < "$V4/to_delete_debug.txt")
+              PR_BODY+=$'**Removed: '"${DELETED_COUNT}**"$'\n\n'
+          fi
+          if [ -s "$V4/to_mute_debug.txt" ]; then
+              V4_HAS_CONTENT=1
+              MUTED_COUNT=$(wc -l < "$V4/to_mute_debug.txt")
+              PR_BODY+=$'**Muted: '"${MUTED_COUNT}**"$'\n\n'
+          fi
+          if [ -s "$V4/to_unmute_debug.txt" ]; then
+              V4_HAS_CONTENT=1
+              UNMUTED_COUNT=$(wc -l < "$V4/to_unmute_debug.txt")
+              PR_BODY+=$'**Unmuted: '"${UNMUTED_COUNT}**"$'\n\n'
+          fi
+          if [ $V4_HAS_CONTENT -eq 0 ]; then
+              MUTED_TOTAL=$(wc -l < "$V4/new_muted_ya.txt" 2>/dev/null || echo 0)
+              PR_BODY+=$'*No mutes/unmutes/deletes. Total in muted_ya: '"${MUTED_TOTAL}"$'*\n\n'
           fi
 
           PR_BODY+=$'## v4 (mute/muted_ya.txt)\n\n'
